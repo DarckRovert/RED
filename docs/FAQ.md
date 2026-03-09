@@ -237,17 +237,16 @@ Ambos usuarios deben hacer esto.
 
 ### ¿Hay recompensas por encontrar bugs?
 
-Sí, tenemos un programa de bug bounty para vulnerabilidades de seguridad. Contacta: security@red.network
+Sí, tenemos un programa de bug bounty para vulnerabilidades de seguridad. Contacta: darckrovert@gmail.com
 
 ---
 
 ## Contacto
 
-- **Discord**: https://discord.gg/red-network
-- **GitHub**: https://github.com/red-network/red
-- **Email**: support@red.network
-- **Twitter**: @red_network
+- **GitHub**: https://github.com/DarckRovert/RED
+- **Email**: darckrovert@gmail.com
+- **Twitter**: @DarckRovert
 
 ---
 
-¿Tienes una pregunta que no está aquí? ¡Pregúntanos en Discord!
+¿Tienes una pregunta que no está aquí? ¡Pregúntanos en Twitter!

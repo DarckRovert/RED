@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["RED Team"]
 description = "Core library for RED - Decentralized Encrypted Network"
 license = "AGPL-3.0"
-repository = "https://github.com/red-network/red"
+repository = "https://github.com/DarckRovert/RED"
 keywords = ["privacy", "messaging", "p2p", "encryption", "blockchain"]
 categories = ["cryptography", "network-programming"]
 

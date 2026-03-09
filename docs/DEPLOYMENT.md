@@ -54,7 +54,7 @@ Esta guía cubre el despliegue de nodos RED en diferentes entornos.
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/red-network/red.git
+git clone https://github.com/DarckRovert/RED.git
 cd red
 
 # Compilar en modo release
@@ -139,7 +139,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 
 # 4. Clonar y compilar
-git clone https://github.com/red-network/red.git
+git clone https://github.com/DarckRovert/RED.git
 cd red
 cargo build --release --package red-node
 
@@ -667,6 +667,6 @@ red-node export-key --output node-key.enc --password
 
 ## Soporte
 
-- **Documentación**: https://docs.red.network/deployment
-- **Discord**: https://discord.gg/red-network (canal #node-operators)
-- **GitHub Issues**: https://github.com/red-network/red/issues
+- **Documentación**: https://github.com/DarckRovert/RED
+- **X / Twitter**: https://x.com/DarckRovert
+- **GitHub Issues**: https://github.com/DarckRovert/RED/issues

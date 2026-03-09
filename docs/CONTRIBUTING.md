@@ -75,7 +75,7 @@ git clone https://github.com/TU_USUARIO/red.git
 cd red
 
 # 3. Agregar upstream
-git remote add upstream https://github.com/red-network/red.git
+git remote add upstream https://github.com/DarckRovert/RED.git
 
 # 4. Instalar dependencias de desarrollo
 cargo build
@@ -406,9 +406,9 @@ Todos los contribuidores serán reconocidos en:
 
 ¿Tienes preguntas? Contáctanos:
 
-- **Discord**: https://discord.gg/red-network
-- **GitHub Discussions**: https://github.com/red-network/red/discussions
-- **Email**: contributors@red.network
+- **X / Twitter**: https://x.com/DarckRovert
+- **GitHub Discussions**: https://github.com/DarckRovert/RED/discussions
+- **Email**: darckrovert@gmail.com
 
 ---
 

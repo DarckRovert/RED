@@ -40,7 +40,7 @@ git --version
 
 ```bash
 # 1. Clonar el repositorio
-git clone https://github.com/red-network/red.git
+git clone https://github.com/DarckRovert/RED.git
 cd red
 
 # 2. Compilar en modo release
@@ -58,10 +58,10 @@ cargo install --path node
 
 ```bash
 # Windows (PowerShell)
-irm https://red.network/install.ps1 | iex
+irm https://raw.githubusercontent.com/DarckRovert/RED/main/install.ps1 | iex
 
 # macOS/Linux
-curl -fsSL https://red.network/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DarckRovert/RED/main/install.sh | bash
 ```
 
 ### Opción 3: Docker
@@ -365,16 +365,16 @@ red send "Alice" "mensaje" --retry
 1. 📖 Lee la [Documentación Completa](./SPECIFICATION.md)
 2. 🔐 Aprende sobre [Seguridad](./SECURITY_AUDIT.md)
 3. 🛠️ Explora la [API](./API.md)
-4. 💬 Únete a nuestra [Comunidad](https://discord.gg/red-network)
+4. 💬 Únete a nuestra [Comunidad en X](https://x.com/DarckRovert)
 
 ---
 
 ## ¿Necesitas Ayuda?
 
-- 📚 **Documentación**: https://docs.red.network
-- 💬 **Discord**: https://discord.gg/red-network
-- 🐛 **Reportar Bug**: https://github.com/red-network/red/issues
-- 📧 **Email**: support@red.network
+- 📚 **Documentación**: https://github.com/DarckRovert/RED
+- 💬 **X / Twitter**: https://x.com/DarckRovert
+- 🐛 **Reportar Bug**: https://github.com/DarckRovert/RED/issues
+- 📧 **Email**: darckrovert@gmail.com
 
 ---
 

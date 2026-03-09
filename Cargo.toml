@@ -11,7 +11,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["RED Team"]
 license = "AGPL-3.0"
-repository = "https://github.com/red-network/red"
+repository = "https://github.com/DarckRovert/RED"
 
 [workspace.dependencies]
 tokio = { version = "1.35", features = ["full"] }
