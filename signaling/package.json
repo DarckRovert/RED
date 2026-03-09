@@ -1,0 +1,18 @@
+{
+  "name": "red-signaling",
+  "version": "1.0.0",
+  "description": "RED WebRTC Signaling Server — routes SDP and ICE without seeing message content",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node -e \"const s=require('./server'); setTimeout(()=>process.exit(0),500)\""
+  },
+  "keywords": ["webrtc", "signaling", "p2p", "websocket"],
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "ws": "^8.16.0"
+  }
+}

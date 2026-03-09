@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "core",
+    "blockchain",
+    "node",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["RED Team"]
+license = "AGPL-3.0"
+repository = "https://github.com/red-network/red"
+
+[workspace.dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+tracing = "0.1"

@@ -1,0 +1,11 @@
+F:\RED\target\release\deps\anstyle_parse-994ee643ca6ad516.d: C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\lib.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\params.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\mod.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\definitions.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\table.rs
+
+F:\RED\target\release\deps\libanstyle_parse-994ee643ca6ad516.rlib: C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\lib.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\params.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\mod.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\definitions.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\table.rs
+
+F:\RED\target\release\deps\libanstyle_parse-994ee643ca6ad516.rmeta: C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\lib.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\params.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\mod.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\definitions.rs C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\table.rs
+
+C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\lib.rs:
+C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\params.rs:
+C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\mod.rs:
+C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\definitions.rs:
+C:\Users\darck\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\anstyle-parse-0.2.7\src\state\table.rs:

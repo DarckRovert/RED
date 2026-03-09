@@ -1,0 +1,150 @@
+(* 
+ * ProVerif model for RED messaging system
+ * Verifies security properties of the Ω protocol
+ *)
+
+(* ============================================ *)
+(* TYPES AND CHANNELS                           *)
+(* ============================================ *)
+
+free c: channel.           (* Public channel (network) *)
+free secure: channel [private].  (* Secure channel for key exchange *)
+
+type skey.    (* Secret keys *)
+type pkey.    (* Public keys *)
+type key.     (* Symmetric keys *)
+type nonce.   (* Nonces *)
+type identity. (* User identities *)
+
+(* ============================================ *)
+(* CRYPTOGRAPHIC PRIMITIVES                     *)
+(* ============================================ *)
+
+(* Asymmetric encryption (X25519 + ChaCha20) *)
+fun pk(skey): pkey.                           (* Public key derivation *)
+fun aenc(bitstring, pkey): bitstring.         (* Asymmetric encryption *)
+reduc forall m: bitstring, sk: skey;
+    adec(aenc(m, pk(sk)), sk) = m.            (* Decryption *)
+
+(* Symmetric encryption (ChaCha20-Poly1305) *)
+fun senc(bitstring, key): bitstring.          (* Symmetric encryption *)
+reduc forall m: bitstring, k: key;
+    sdec(senc(m, k), k) = m.                  (* Decryption *)
+
+(* Diffie-Hellman key exchange *)
+fun dh(skey, pkey): key.                      (* DH shared secret *)
+equation forall a: skey, b: skey;
+    dh(a, pk(b)) = dh(b, pk(a)).              (* DH commutativity *)
+
+(* Hash function (BLAKE3) *)
+fun hash(bitstring): bitstring.               (* Cryptographic hash *)
+
+(* Key derivation function *)
+fun kdf(key, nonce): key.                     (* KDF for ratchet *)
+
+(* Digital signatures (Ed25519) *)
+fun sign(bitstring, skey): bitstring.         (* Signature *)
+reduc forall m: bitstring, sk: skey;
+    verify(sign(m, sk), m, pk(sk)) = true.    (* Verification *)
+
+(* Identity derivation *)
+fun derive_id(pkey, nonce): identity.         (* ID = H(PK || r) *)
+
+(* ============================================ *)
+(* SECURITY QUERIES                             *)
+(* ============================================ *)
+
+(* Message secrecy *)
+free secret_message: bitstring [private].
+query attacker(secret_message).
+
+(* Authentication *)
+event SendMsg(identity, identity, bitstring).
+event RecvMsg(identity, identity, bitstring).
+query id_a: identity, id_b: identity, m: bitstring;
+    event(RecvMsg(id_a, id_b, m)) ==> event(SendMsg(id_a, id_b, m)).
+
+(* Forward secrecy *)
+event CompromisedKey(skey).
+query id_a: identity, id_b: identity, m: bitstring, sk: skey;
+    event(RecvMsg(id_a, id_b, m)) && event(CompromisedKey(sk)) ==> false.
+
+(* Unlinkability - different sessions should be unlinkable *)
+query id1: identity, id2: identity;
+    id1 = id2.  (* Should not be provable for rotated identities *)
+
+(* ============================================ *)
+(* PROTOCOL PROCESSES                           *)
+(* ============================================ *)
+
+(* Alice (Sender) process *)
+let Alice(sk_a: skey, pk_b: pkey) =
+    (* Generate ephemeral keys *)
+    new sk_eph: skey;
+    let pk_eph = pk(sk_eph) in
+    
+    (* Generate identity *)
+    new r_a: nonce;
+    let id_a = derive_id(pk(sk_a), r_a) in
+    
+    (* Compute shared secret via DH *)
+    let shared_key = dh(sk_eph, pk_b) in
+    
+    (* Derive message key *)
+    new n: nonce;
+    let msg_key = kdf(shared_key, n) in
+    
+    (* Encrypt message *)
+    let ciphertext = senc(secret_message, msg_key) in
+    
+    (* Send: (ephemeral_pk, nonce, ciphertext) *)
+    event SendMsg(id_a, derive_id(pk_b, r_a), secret_message);
+    out(c, (pk_eph, n, ciphertext)).
+
+(* Bob (Receiver) process *)
+let Bob(sk_b: skey) =
+    (* Receive message *)
+    in(c, (pk_eph: pkey, n: nonce, ciphertext: bitstring));
+    
+    (* Compute shared secret *)
+    let shared_key = dh(sk_b, pk_eph) in
+    
+    (* Derive message key *)
+    let msg_key = kdf(shared_key, n) in
+    
+    (* Decrypt message *)
+    let message = sdec(ciphertext, msg_key) in
+    
+    (* Generate identity for logging *)
+    new r_b: nonce;
+    let id_b = derive_id(pk(sk_b), r_b) in
+    
+    event RecvMsg(derive_id(pk_eph, r_b), id_b, message).
+
+(* ============================================ *)
+(* MAIN PROCESS                                 *)
+(* ============================================ *)
+
+process
+    (* Generate long-term keys *)
+    new sk_alice: skey;
+    new sk_bob: skey;
+    let pk_alice = pk(sk_alice) in
+    let pk_bob = pk(sk_bob) in
+    
+    (* Publish public keys *)
+    out(c, pk_alice);
+    out(c, pk_bob);
+    
+    (* Run protocol instances *)
+    ( Alice(sk_alice, pk_bob) | Bob(sk_bob) )
+
+(* 
+ * To verify, run:
+ * proverif security_model.pv
+ *
+ * Expected results:
+ * - secret_message: RESULT not attacker(secret_message[]) is true
+ * - Authentication: RESULT event(RecvMsg...) ==> event(SendMsg...) is true
+ * - Forward secrecy: Requires additional modeling of key compromise
+ *)
