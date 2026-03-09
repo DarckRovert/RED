@@ -162,7 +162,7 @@
 (function initDownload() {
   // Hook up download cards to actual release links (can be updated when builds are ready)
   const downloadMap = {
-    'android': 'https://github.com/DarckRovert/RED/releases/latest/download/red.apk',
+    'android': 'https://github.com/DarckRovert/RED',
     'web': 'https://red-descentralizada.netlify.app/',
     'github': 'https://github.com/DarckRovert/RED',
   };
