@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,16660,e=>{"use strict";var t=e.i(82568);class n extends t.WebPlugin{async enable(){throw this.unimplemented("Not implemented on web.")}async disable(){throw this.unimplemented("Not implemented on web.")}}e.s(["PrivacyScreenWeb",()=>n])}]);

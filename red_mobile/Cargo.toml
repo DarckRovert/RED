@@ -1,0 +1,29 @@
+[package]
+name = "red_mobile"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "red_mobile"
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21.1"
+tokio = { version = "1.35", features = ["full"] }
+red-core = { path = "../core" }
+red-blockchain = { path = "../blockchain" }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+axum = { version = "0.7", features = ["http1", "json"] }
+tower = { version = "0.4", features = ["util"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ed25519-dalek = "2.0"
+futures = "0.3"
+async-stream = "0.3"
+hex = "0.4"
+base64 = "0.22"
+
