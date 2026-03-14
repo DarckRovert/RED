@@ -62,6 +62,9 @@ interface RedState {
     // P2P/Node Status
     nodeStatus: 'online' | 'offline';
     peers: LocalPeerEntry[];
+    // FIX L1: declare setNodeStatus in the interface
+    setNodeStatus: (s: 'online' | 'offline') => void;
+    fetchPeers: () => Promise<void>; // FIX M4
 
     notification: { title: string; message: string } | null;
     replyTarget: MessageItem | null;
@@ -125,7 +128,6 @@ interface RedState {
     updateMyLocation: (loc: LiveLocation) => void;
     updatePeerLocation: (peerId: string, loc: LiveLocation) => void;
 }
-
 export const useRedStore = create<RedState>((set, get) => ({
     identity: null,
     status: null,
@@ -147,6 +149,24 @@ export const useRedStore = create<RedState>((set, get) => ({
     nodeStatus: 'offline',
     peers: [],
     setNodeStatus: (status: 'online' | 'offline') => set({ nodeStatus: status }),
+
+    // FIX M4: fetch live peers from the backend node and update store
+    fetchPeers: async () => {
+        try {
+            const rawPeers = await RedAPI.getPeers();
+            const peers: LocalPeerEntry[] = rawPeers.map((p: any) => ({
+                id: String(p.id),
+                name: p.id ? String(p.id).substring(0, 8) : 'Unknown',
+                transport: 'internet' as const,
+                connected: p.is_connected ?? false,
+                lastSeen: Date.now(),
+                rssi: p.latency_ms,
+            }));
+            set({ peers, nodeStatus: peers.length > 0 ? 'online' : get().nodeStatus });
+        } catch {
+            // Backend not available — silently fail (don't break the UI)
+        }
+    },
 
     notification: null,
     replyTarget: null,
@@ -467,14 +487,21 @@ export const useRedStore = create<RedState>((set, get) => ({
         set({ starredMessages: updated });
     },
 
+    // FIX L4: forwardMessage now correctly sets currentConversationId before sending
     forwardMessage: (msg: MessageItem, targetConvId: string) => {
-        const { conversations } = get();
+        const { conversations, currentConversationId } = get();
         const targetConv = conversations.find(c => c.id === targetConvId);
         if (targetConv) {
-             get().sendMessage(msg.content, undefined, {
+            const prevConvId = currentConversationId;
+            // Temporarily switch to target conversation so sendMessage sends to the right peer
+            set({ currentConversationId: targetConvId });
+            get().sendMessage(msg.content, undefined, {
                 msg_type: msg.msg_type,
                 media_data: msg.media_data,
                 mime_type: msg.mime_type
+            }).finally(() => {
+                // Restore original conversation
+                set({ currentConversationId: prevConvId });
             });
         }
     },
@@ -509,22 +536,22 @@ export const useRedStore = create<RedState>((set, get) => ({
     },
 
 
+    // FIX L3: addContact now correctly calls POST /api/contacts instead of sending a message
     addContact: async (identityHash: string, displayName: string) => {
         try {
-            await RedAPI.sendMessage(identityHash, "¡Hola! Te he añadido a mis contactos en RED.");
-            await get().fetchConversations();
+            await RedAPI.addContact(identityHash, displayName);
             await get().fetchContacts();
         } catch (err) {
-            console.warn('Backend not reached, adding contact to local mock state');
+            console.warn('Backend not reached, adding contact to local state');
             const newContact = { id: Math.random().toString(36), identity_hash: identityHash, displayName };
             set({ contacts: [...get().contacts, newContact] });
 
-            // Also create a mock conversation for the new contact
-            const newConv: ConversationItem = { 
-                id: 'conv_' + identityHash, 
-                peer: displayName, 
-                message_count: 0, 
-                last_message: '¡Añadido!',
+            // Also create a placeholder conversation for the new contact
+            const newConv: ConversationItem = {
+                id: 'conv_' + identityHash,
+                peer: displayName,
+                message_count: 0,
+                last_message: null,
                 last_timestamp: Date.now() / 1000,
                 unread_count: 0
             };
@@ -617,6 +644,7 @@ export const useRedStore = create<RedState>((set, get) => ({
         set({ searchQuery: query });
     },
 
+    // FIX A6: scheduleMessage captures convId in the closure and uses it correctly
     scheduleMessage: (convId: string, content: string, sendAt: number) => {
         const id = 'sched_' + Date.now();
         const entry = { id, convId, content, sendAt };
@@ -624,10 +652,18 @@ export const useRedStore = create<RedState>((set, get) => ({
         const delay = sendAt - Date.now();
         if (delay > 0) {
             setTimeout(() => {
-                const prev = get().currentConversationId;
-                // Temporarily switch to target conv if needed, then send
-                get().sendMessage(content);
-                set({ scheduledMessages: get().scheduledMessages.filter(s => s.id !== id) });
+                // Check the scheduled message still exists (not cancelled)
+                const still = get().scheduledMessages.find(s => s.id === id);
+                if (!still) return;
+                // Temporarily switch to the right conversation, send, then restore
+                const prevConvId = get().currentConversationId;
+                set({ currentConversationId: convId });
+                get().sendMessage(content).finally(() => {
+                    set({
+                        currentConversationId: prevConvId,
+                        scheduledMessages: get().scheduledMessages.filter(s => s.id !== id)
+                    });
+                });
             }, delay);
         }
     },

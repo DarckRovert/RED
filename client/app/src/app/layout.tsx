@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const [ready, setReady] = useState(false);
-  const { init, hydrateFromStorage } = useRedStore();
+  const { init, hydrateFromStorage, fetchPeers } = useRedStore();
 
   const [errorLog, setErrorLog] = useState<string[]>([]);
 
@@ -28,9 +28,35 @@ export default function RootLayout({
     window.onerror = handleError;
     window.onunhandledrejection = (e) => handleError(`Promise Rejection: ${e.reason}`);
 
+    let peersPoll: NodeJS.Timeout | undefined;
+
     const initApp = async () => {
       try {
         console.log("[RED] Application handshake starting...");
+
+        // FIX M6: Dead Man's Switch — check if timer has expired before doing anything
+        try {
+          const timerHrs = parseInt(localStorage.getItem('red_destruct_timer_hrs') || '0', 10);
+          const lastActivity = parseInt(localStorage.getItem('red_last_activity') || '0', 10);
+          if (timerHrs > 0 && lastActivity > 0) {
+            const elapsedHrs = (Date.now() - lastActivity) / 3_600_000;
+            if (elapsedHrs >= timerHrs) {
+              // Timer expired — purge all local RED data (account + keys)
+              const keysToDelete = Object.keys(localStorage).filter(k => k.startsWith('red_'));
+              keysToDelete.forEach(k => localStorage.removeItem(k));
+              console.warn('[RED] Dead Man\'s Switch triggered — local data purged.');
+              // Also clear sessionStorage
+              sessionStorage.clear();
+            } else {
+              // Update last_activity timestamp
+              localStorage.setItem('red_last_activity', Date.now().toString());
+            }
+          } else if (timerHrs > 0) {
+            // Timer configured but no baseline yet — set it now
+            localStorage.setItem('red_last_activity', Date.now().toString());
+          }
+        } catch { /* localStorage not available */ }
+
         hydrateFromStorage();
 
         // Restore theme
@@ -76,6 +102,10 @@ export default function RootLayout({
 
         setReady(true);
         console.log("[RED] Handshake complete.");
+
+        // FIX M4: Start polling peers every 30 seconds
+        peersPoll = setInterval(() => fetchPeers().catch(() => {}), 30_000);
+        fetchPeers().catch(() => {}); // initial fetch
       } catch (err: any) {
         handleError("Critical App Failure: " + (err.message || String(err)));
       }

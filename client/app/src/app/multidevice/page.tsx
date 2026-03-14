@@ -19,6 +19,22 @@ export default function MultidevicePage() {
     const [devices, setDevices] = useState<LinkedDevice[]>(INITIAL_DEVICES);
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
     const [refreshCount, setRefreshCount] = useState(0);
+    const [countdown, setCountdown] = useState(60); // FIX M3: real 60s countdown
+
+    // FIX M3: auto-refresh QR every 60 seconds and show countdown
+    useEffect(() => {
+        setCountdown(60);
+        const interval = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    setRefreshCount(c => c + 1); // triggers QR regeneration
+                    return 60;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [refreshCount]);
 
     const qrContent = `red://link-device/${identity?.identity_hash || "pending"}?session=${Date.now()}&name=${encodeURIComponent(displayName)}`;
 
@@ -57,7 +73,9 @@ export default function MultidevicePage() {
                             : <div style={{ width: 200, height: 200, background: "rgba(255,255,255,0.05)", borderRadius: 12, display: "grid", placeItems: "center" }}>⏳</div>
                         }
                     </div>
-                    <div className="qr-label">QR expira en 60s · Error correction: H</div>
+                    <div className="qr-label">
+                        QR expira en <strong style={{ color: countdown <= 10 ? '#ef4444' : 'var(--text-primary)' }}>{countdown}s</strong> · Error correction: H
+                    </div>
                     <button className="btn-secondary" style={{ fontSize: "0.8rem" }} onClick={refresh}>🔄 Regenerar QR</button>
                 </div>
 

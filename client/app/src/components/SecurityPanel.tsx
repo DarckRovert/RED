@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { PrivacyScreen } from '@capacitor-community/privacy-screen';
+import { useRouter } from 'next/navigation';
 
 export default function SecurityPanel() {
   const { identity, status } = useRedStore();
+  const router = useRouter();
   const [showKey, setShowKey] = useState(false);
 
   const linkedDevices: Array<{ name: string; lastUsed: string; active: boolean }> = [];
@@ -82,7 +84,19 @@ export default function SecurityPanel() {
         </div>
         <div className="did-display">
           <code>did:red:{identity?.identity_hash || "Cargando..."}</code>
-          <button className="copy-btn">📋</button>
+          {/* FIX C4: copy DID to clipboard */}
+          <button
+            className="copy-btn"
+            title="Copiar DID"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`did:red:${identity?.identity_hash}`);
+                showToast('✅ DID copiado al portapapeles');
+              } catch {
+                showToast('❌ No se pudo copiar');
+              }
+            }}
+          >📋</button>
         </div>
         <div className="security-notice">
           <p>⚠️ Tu identidad está vinculada a la blockchain de RED. Nadie puede suplantarte ni censurarte.</p>
@@ -92,14 +106,19 @@ export default function SecurityPanel() {
       <div className="security-grid">
         <div className="security-item glass">
           <h4>Copia de Seguridad</h4>
-          <p>Exporta tu clave privada para recuperar tu cuenta en otro dispositivo.</p>
+          <p>Exporta tu identidad RED para recuperar tu cuenta en otro dispositivo.</p>
+          {/* FIX A1: removed fake key text — show full DID, not a fake private key string */}
           {showKey ? (
             <div className="private-key-display">
-              <code>{identity?.identity_hash}7x92k...redsecret</code>
-              <button className="btn-secondary" onClick={() => setShowKey(false)}>Ocultar</button>
+              <p style={{ fontSize: '0.72rem', color: 'var(--warning, #ff9800)', marginBottom: '0.5rem' }}>
+                ⚠️ Tu identidad DID está protegida dentro del nodo. Usa "Dispositivos Vinculados" para
+                vincular un nuevo dispositivo con acceso a tu cuenta.
+              </p>
+              <code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>did:red:{identity?.identity_hash || '—'}</code>
+              <button className="btn-secondary" onClick={() => setShowKey(false)} style={{ marginTop: '0.5rem' }}>Ocultar</button>
             </div>
           ) : (
-            <button className="btn-primary-small" onClick={() => setShowKey(true)}>Mostrar Clave</button>
+            <button className="btn-primary-small" onClick={() => setShowKey(true)}>Ver DID completo</button>
           )}
         </div>
 
@@ -120,7 +139,12 @@ export default function SecurityPanel() {
               ))
             )}
           </div>
-          <button className="btn-primary-small" style={{ marginTop: '1rem', width: '100%' }}>Vincular nuevo dispositivo</button>
+          {/* FIX A7: navigate to multidevice page */}
+          <button
+            className="btn-primary-small"
+            style={{ marginTop: '1rem', width: '100%' }}
+            onClick={() => router.push('/multidevice')}
+          >📱 Vincular nuevo dispositivo</button>
         </div>
       </div>
 
@@ -202,13 +226,14 @@ export default function SecurityPanel() {
             <span className="label">Pares P2P: </span>
             <span className="value">{status?.peer_count || 0}</span>
           </div>
+          {/* FIX A4: show real chain_height and gossip_latency from backend */}
           <div className="stat">
             <span className="label">Bloque Actual: </span>
-            <span className="value">Sincronizando...</span>
+            <span className="value">{(status as any)?.chain_height != null ? `#${(status as any).chain_height}` : 'Sincronizando...'}</span>
           </div>
           <div className="stat">
             <span className="label">Latencia (Gossip): </span>
-            <span className="value">{status?.peer_count ? '< 50ms' : '-'}</span>
+            <span className="value">{(status as any)?.gossip_latency_ms ? `${(status as any).gossip_latency_ms}ms` : (status?.peer_count ? '< 50ms' : '—')}</span>
           </div>
         </div>
       </section>

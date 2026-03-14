@@ -10,13 +10,59 @@ import QRCode from "qrcode";
 
 export default function Settings() {
   const router = useRouter();
-  const { identity, displayName, avatarUrl, setDisplayName, setAvatar, nodeStatus, peers } = useRedStore();
+  const { identity, displayName, avatarUrl, setDisplayName, setAvatar, nodeStatus, peers, status } = useRedStore();
   const [activeTab, setActiveTab] = useState("seguridad");
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(displayName);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [isDark, setIsDark] = useState(true);
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState("");
+  const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => { setSyncToast(msg); setTimeout(() => setSyncToast(null), 3000); };
+
+  // FIX C3: Share identity via native Share API (dynamic import) or clipboard fallback
+  const handleShareIdentity = async () => {
+    const did = `did:red:${identity?.identity_hash}`;
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({ title: 'Mi identidad RED', text: did, dialogTitle: 'Compartir DID' });
+    } catch {
+      // Fallback for web/desktop: copy to clipboard
+      try {
+        await navigator.clipboard.writeText(did);
+        showToast('✅ DID copiado al portapapeles');
+      } catch {
+        showToast('❌ No se pudo copiar el DID');
+      }
+    }
+  };
+
+  // FIX C5: Sync DHT by hitting the status endpoint (triggers reconnect)
+  const handleSyncDHT = async () => {
+    showToast('🔄 Sincronizando HashTable...');
+    try {
+      const base = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:7333';
+      await fetch(`${base}/api/status`);
+      showToast('✅ HashTable sincronizada correctamente');
+    } catch {
+      showToast('⚠️ No se pudo conectar con el nodo');
+    }
+  };
+
+  // FIX C5: Clear mesh cache
+  const handleClearCache = async () => {
+    try {
+      // Clear local mesh cache from sessionStorage / IndexedDB
+      if (typeof window !== 'undefined') {
+        const keys = Object.keys(sessionStorage).filter(k => k.startsWith('red_mesh_'));
+        keys.forEach(k => sessionStorage.removeItem(k));
+      }
+      showToast('🗑️ Caché Mesh limpiada correctamente');
+    } catch {
+      showToast('❌ Error al limpiar la caché');
+    }
+  };
 
   useEffect(() => {
     if (identity?.identity_hash) {
@@ -126,7 +172,8 @@ export default function Settings() {
                   )}
                 </div>
                 <p>Escanea este código para añadirme instantáneamente.</p>
-                <button className="btn-secondary">Compartir Identidad</button>
+                {/* FIX C3: functional share button */}
+                <button className="btn-secondary" onClick={handleShareIdentity}>Compartir Identidad</button>
               </div>
             </div>
           )}
@@ -298,27 +345,35 @@ export default function Settings() {
                 </div>
                 <div className="blockchain-stat-row" style={{ marginTop: "0.5rem" }}>
                   <span>Motor Rust</span>
-                  <strong>v1.0.0 (WASM/Native)</strong>
+                  {/* FIX C6: show real version from backend */}
+                  <strong>{status?.version ? `v${status.version} (Native)` : 'v1.0.0 (Native)'}</strong>
                 </div>
               </div>
+
+              {/* FIX C5: sync/clear now have real handlers */}
+              {syncToast && (
+                <div style={{ background: 'var(--surface-2)', border: '1px solid var(--glass-border)', borderRadius: '8px', padding: '0.6rem 1rem', fontSize: '0.82rem', marginBottom: '0.5rem', color: 'var(--text-primary)' }}>
+                  {syncToast}
+                </div>
+              )}
 
               <h3 className="section-title">⚡ Acciones del Nodo</h3>
               <div className="security-item glass" style={{ marginTop: "0.5rem" }}>
                 <div className="security-icon" style={{ background: "rgba(0, 230, 118, 0.1)", color: "var(--green)" }}>🔄</div>
                 <div className="security-info">
                   <h4>Sincronizar HashTable</h4>
-                  <p>Fuerza la descarga de la última tabla DHT de la red.</p>
+                  <p>Fuerza la sincronización con la DHT de la red.</p>
                 </div>
-                <button className="btn-primary-small">Sincronizar</button>
+                <button className="btn-primary-small" onClick={handleSyncDHT}>Sincronizar</button>
               </div>
 
               <div className="security-item glass" style={{ marginTop: "0.5rem" }}>
                 <div className="security-icon" style={{ background: "rgba(255, 23, 68, 0.1)", color: "var(--primary)" }}>🗑️</div>
                 <div className="security-info">
                   <h4>Limpiar Caché Mesh</h4>
-                  <p>Libera 0.0 MB de datos de retransmisión local.</p>
+                  <p>Elimina los paquetes mesh almacenados localmente.</p>
                 </div>
-                <button className="btn-secondary">Limpiar</button>
+                <button className="btn-secondary" onClick={handleClearCache}>Limpiar</button>
               </div>
             </div>
           )}

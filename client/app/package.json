@@ -17,6 +17,7 @@
     "@capacitor/core": "^8.2.0",
     "@capacitor/geolocation": "^8.1.0",
     "@capacitor/ios": "^8.1.0",
+    "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@types/leaflet": "^1.9.21",
     "leaflet": "^1.9.4",

@@ -27,6 +27,9 @@ export interface StatusResponse {
     peer_count: number;
     identity_hash: string;
     version: string;
+    // FIX A4: enriched fields from backend
+    chain_height?: number;
+    gossip_latency_ms?: number;
 }
 
 export interface ConversationItem {
@@ -128,8 +131,9 @@ export class RedAPI {
         return res.json();
     }
 
+    // FIX: correct endpoint — backend uses POST /groups not /groups/create
     static async createGroup(name: string): Promise<any> {
-        const res = await fetch(`${BASE_URL}/groups/create`, {
+        const res = await fetch(`${BASE_URL}/groups`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name }),
@@ -142,10 +146,29 @@ export class RedAPI {
         const payload = { content, ...options };
         const res = await fetch(`${BASE_URL}/groups/${groupId}/send`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error('Failed to send group message');
         return { ok: true };
+    }
+
+    // FIX L3: addContact calls POST /api/contacts
+    static async addContact(identityHash: string, displayName: string): Promise<{ ok: boolean }> {
+        const res = await fetch(`${BASE_URL}/contacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identity_hash: identityHash, display_name: displayName }),
+        });
+        if (!res.ok) throw new Error('Failed to add contact');
+        return { ok: true };
+    }
+
+    // FIX M4: get list of connected P2P peers
+    static async getPeers(): Promise<any[]> {
+        const res = await fetch(`${BASE_URL}/peers`, { mode: 'cors' });
+        if (!res.ok) return [];
+        return res.json();
     }
 
     static async sendMessage(recipient: string, content: string, options?: SendMessageOptions): Promise<{ ok: boolean }> {
