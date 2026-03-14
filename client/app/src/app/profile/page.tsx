@@ -7,8 +7,11 @@ import Logo from "../../components/Logo";
 import Link from "next/link";
 import QRCode from "qrcode";
 
+import { useRouter } from "next/navigation";
+
 export default function Profile() {
-  const { identity, displayName } = useRedStore();
+  const router = useRouter();
+  const { identity, displayName, setDisplayName } = useRedStore();
   const [qrSvg, setQrSvg] = useState<string>("");
 
   useEffect(() => {
@@ -21,6 +24,24 @@ export default function Profile() {
       errorCorrectionLevel: "M",
     }).then(setQrSvg).catch(console.error);
   }, [identity, displayName]);
+  const handleShare = async () => {
+    const data = `red://add-contact/${identity?.identity_hash || "pending"}?name=${encodeURIComponent(displayName)}`;
+    try {
+      const { Share } = await import('@capacitor/share');
+      await Share.share({ title: "Mi Perfil RED", text: "Únete a RED y chateemos", url: data });
+    } catch {
+      navigator.clipboard.writeText(data).catch(() => {});
+      alert("Enlace copiado al portapapeles (Web/Desktop)");
+    }
+  };
+
+  const handleEditAlias = () => {
+    const newAlias = prompt("Introduce tu nuevo alias:", displayName);
+    if (newAlias && newAlias.trim()) {
+      setDisplayName(newAlias.trim());
+      // Notificar al backend si hubiera un endpoint para cambiar nombre público
+    }
+  };
 
   return (
     <main className="main-layout bg-dark">
@@ -60,13 +81,13 @@ export default function Profile() {
             <div className="qr-info">
               <h4>Escanea para añadirme</h4>
               <p>Cualquier usuario de RED puede escanear este código para iniciar un chat cifrado contigo.</p>
-              <button className="btn-primary">Compartir Perfil</button>
+              <button className="btn-primary" onClick={handleShare}>Compartir Perfil</button>
             </div>
           </div>
 
           <div className="profile-actions">
-            <button className="btn-secondary">Editar Alias</button>
-            <button className="btn-secondary">Gestionar Identidad</button>
+            <button className="btn-secondary" onClick={handleEditAlias}>Editar Alias</button>
+            <button className="btn-secondary" onClick={() => router.push('/crypto')}>Gestionar Identidad</button>
           </div>
         </div>
       </section>

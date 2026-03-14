@@ -40,25 +40,54 @@ export default function UsageStatsPage() {
 
     // Calulate live stats
     const s = useMemo(() => {
-        let sent = 0, received = 0;
-        messages.forEach(m => { if (m.is_mine) sent++; else received++; });
-        
-        let multiplier = period === "7d" ? 1 : period === "30d" ? 4 : 12;
-        if(messages.length === 0) multiplier = 0;
+        let sent = 0;
+        let received = 0;
+        let calls = 0;
+        let dataBytes = 0;
 
-        return {
-            sent,
-            received,
-            calls: 0,
-            voiceMins: 0,
-            dataMB: (sent + received) * 0.015, // Approx 15kb per msg payload
-            nodes: contacts.length > 0 ? contacts.length + 1 : 1
+        // Daily chart bins for the last 7 days
+        const dailyCounts = new Array(7).fill(0);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const todayMs = now.getTime();
+
+        messages.forEach(m => {
+            if (m.is_mine) sent++; else received++;
+            if (m.msg_type === "call" || m.msg_type === "video") calls++;
+            dataBytes += m.content.length + (m.media_data ? m.media_data.length : 0);
+            
+            // Calculate which bin (0=today, 1=yesterday, ..., 6=6 days ago)
+            const msgDate = new Date(m.timestamp * 1000);
+            msgDate.setHours(0, 0, 0, 0);
+            const diffDays = Math.floor((todayMs - msgDate.getTime()) / (1000 * 60 * 60 * 24));
+            if (diffDays >= 0 && diffDays < 7) {
+                dailyCounts[6 - diffDays]++; // 6 is today, 0 is 6 days ago in chart L-R
+            }
+        });
+
+        // Map groups
+        const breakdown = Object.entries(
+            messages.reduce((acc, m) => {
+                const target = m.is_mine ? m.sender : m.sender; // simplified group by sender string
+                acc[target] = (acc[target] || 0) + 1;
+                return acc;
+            }, {} as Record<string, number>)
+        ).map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 4);
+
+        const nodes = contacts.length > 0 ? contacts.length + 1 : 1;
+        const voiceMins = 0;
+        const dataMB = dataBytes / 1024 / 1024 + ((sent + received) * 0.015);
+
+        return { 
+            sent, received, sentMB: dataBytes / 1024 / 1024, recvMB: dataBytes * 1.5 / 1024 / 1024, calls, breakdown, dailyCounts,
+            nodes, voiceMins, dataMB
         };
     }, [messages, contacts, period]);
 
     const DAYS = ["L", "M", "X", "J", "V", "S", "D"];
-    // Empty chart array until actual historical data is added to store
-    const chartData = messages.length > 0 ? [12, 45, 23, 89, 34, 12, Math.min(messages.length, 100)] : [0,0,0,0,0,0,0];
+    const chartData = s.dailyCounts;
 
     // Read real grouped conversations
     const convStats = useMemo(() => {

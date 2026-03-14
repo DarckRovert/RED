@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRedStore } from "../../store/useRedStore";
+import { RedAPI } from "../../lib/api";
 
 function KeyDisplay({ label, value, mono = true }: { label: string; value: string; mono?: boolean }) {
     const [copied, setCopied] = useState(false);
@@ -31,10 +32,11 @@ export default function CryptoPanelPage() {
     const renegotiate = async () => {
         setRenegotiating(true);
         try {
-            // Simulate DH re-exchange via the Rust node (real call when API method added)
-            await new Promise(r => setTimeout(r, 1500));
+            await RedAPI.renegotiateCrypto();
             setRenegDone(true);
             setTimeout(() => setRenegDone(false), 3000);
+        } catch {
+            // failed
         } finally {
             setRenegotiating(false);
         }

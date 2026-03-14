@@ -30,6 +30,7 @@ export default function Sidebar() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalType, setModalType] = useState<"contact" | "group">("contact");
   const [inputValue, setInputValue] = useState("");
+  const [aliasValue, setAliasValue] = useState(""); // FIX M10: alias input
   const [showSearch, setShowSearch] = useState(false);
 
   // init() is called in layout.tsx — do not call it again here to prevent double-initialization
@@ -46,17 +47,24 @@ export default function Sidebar() {
   const handleAddAction = async () => {
     if (!inputValue.trim()) return;
     if (modalType === "contact") {
-      await addContact(inputValue, "Nuevo Contacto");
+      // FIX M10: Use aliasValue or default
+      await addContact(inputValue.trim(), aliasValue.trim() || "Contacto");
     } else {
-      await createGroup(inputValue);
+      await createGroup(inputValue.trim());
     }
-    setInputValue("");
-    setShowAddModal(false);
+    closeModal();
   };
 
   const openModal = (type: "contact" | "group") => {
     setModalType(type);
     setShowAddModal(true);
+  };
+
+  // FIX L8: explicitly clear inputs when closing
+  const closeModal = () => {
+    setShowAddModal(false);
+    setInputValue("");
+    setAliasValue("");
   };
 
   const getAvatarColor = (name: string) => {
@@ -239,19 +247,43 @@ export default function Sidebar() {
 
       {
         showAddModal && (
-          <div className="modal-overlay">
+          <div className="modal-overlay" onClick={(e) => { if(e.target === e.currentTarget) closeModal(); }}>
             <div className="modal glass animate-fade">
               <h3>{modalType === "contact" ? "Añadir Contacto" : "Crear Grupo"}</h3>
-              <p>{modalType === "contact" ? "Introduce el DID del contacto:" : "Nombre del grupo descentralizado:"}</p>
-              <input
-                type="text"
-                className="modal-input"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                placeholder={modalType === "contact" ? "f3a2..." : "RED Core Team"}
-              />
-              <div className="modal-actions">
-                <button className="btn-secondary" onClick={() => setShowAddModal(false)}>Cancelar</button>
+              {modalType === "contact" && (
+                <>
+                  <p>Introduce el DID del contacto:</p>
+                  <input
+                    type="text"
+                    className="modal-input"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="f3a2..."
+                  />
+                  <p style={{ marginTop: '10px' }}>Alias (tu nombre para este contacto):</p>
+                  <input
+                    type="text"
+                    className="modal-input"
+                    value={aliasValue}
+                    onChange={(e) => setAliasValue(e.target.value)}
+                    placeholder="Ej. Juan Pérez"
+                  />
+                </>
+              )}
+              {modalType === "group" && (
+                <>
+                  <p>Nombre del grupo descentralizado:</p>
+                  <input
+                    type="text"
+                    className="modal-input"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="RED Core Team"
+                  />
+                </>
+              )}
+              <div className="modal-actions" style={{ marginTop: '16px' }}>
+                <button className="btn-secondary" onClick={closeModal}>Cancelar</button>
                 <button className="btn-primary" onClick={handleAddAction}>Confirmar</button>
               </div>
             </div>

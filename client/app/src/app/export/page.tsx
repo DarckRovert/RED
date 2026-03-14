@@ -18,11 +18,37 @@ export default function ExportPage() {
     const { messages, conversations, currentConversationId, identity } = useRedStore();
     const convName = conversations.find(c => c.id === currentConversationId)?.peer || "chat";
 
-    const exportTxt = () => {
-        const lines = messages.map(m =>
-            `[${new Date(m.timestamp * 1000).toLocaleString()}] ${m.is_mine ? (identity?.short_id || "Tú") : m.sender.substring(0, 12)}: ${m.isDeleted ? "[mensaje eliminado]" : m.content}`
-        );
-        downloadFile(lines.join("\n"), `${convName}_export.txt`, "text/plain");
+    const exportHtml = () => {
+        const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Exportación de Chat - RED: ${convName}</title>
+    <style>
+        body { font-family: sans-serif; background: #0f1015; color: #fff; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .msg { margin: 10px 0; display: flex; flex-direction: column; }
+        .msg.me { align-items: flex-end; }
+        .msg.them { align-items: flex-start; }
+        .bubble { max-width: 70%; padding: 10px 14px; border-radius: 12px; font-size: 15px; line-height: 1.4; }
+        .me .bubble { background: #E8001C; border-bottom-right-radius: 2px; }
+        .them .bubble { background: #1c1d25; border-bottom-left-radius: 2px; }
+        .meta { font-size: 11px; color: #888; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <h2 style="text-align: center; border-bottom: 1px solid #333; padding-bottom: 10px;">Chat: ${convName}</h2>
+    <div class="chat-container">
+        ${messages.map(m => `
+            <div class="msg ${m.is_mine ? 'me' : 'them'}">
+                <div class="bubble">${m.isDeleted ? '<em>Mensaje eliminado</em>' : (m.content || '[Archivo adjunto]')}</div>
+                <div class="meta">${new Date(m.timestamp * 1000).toLocaleString()}</div>
+            </div>
+        `).join('')}
+    </div>
+</body>
+</html>`;
+        downloadFile(html, `${convName}_export.html`, "text/html");
     };
 
     const exportJson = () => {
@@ -58,11 +84,11 @@ export default function ExportPage() {
                 </div>
 
                 <div className="export-options glass">
-                    <button className="export-btn" onClick={exportTxt}>
-                        <span className="export-btn-icon">📝</span>
+                    <button className="export-btn" onClick={exportHtml}>
+                        <span className="export-btn-icon">🌐</span>
                         <div>
-                            <strong>Exportar como texto (.txt)</strong>
-                            <p>Format legible, sin adjuntos</p>
+                            <strong>Exportar como HTML</strong>
+                            <p>Formato visual con burbujas como el chat real</p>
                         </div>
                     </button>
                     <button className="export-btn" onClick={exportJson}>

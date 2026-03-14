@@ -171,6 +171,13 @@ export class RedAPI {
         return res.json();
     }
 
+    // FIX M8: crypto reneg
+    static async renegotiateCrypto(): Promise<{ status: string, message: string }> {
+        const res = await fetch(`${BASE_URL}/crypto/renegotiate`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to renegotiate DH keys');
+        return res.json();
+    }
+
     static async sendMessage(recipient: string, content: string, options?: SendMessageOptions): Promise<{ ok: boolean }> {
         const payload = { recipient, content, ...options };
         const res = await fetch(`${BASE_URL}/messages/send`, {

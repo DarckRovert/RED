@@ -15,7 +15,7 @@ interface BroadcastList {
 const INITIAL_LISTS: BroadcastList[] = [];
 
 export default function BroadcastPage() {
-    const { contacts, sendMessage } = useRedStore();
+    const { contacts, groups, scheduleMessage } = useRedStore();
     const [lists, setLists] = useState<BroadcastList[]>(INITIAL_LISTS);
     const [creating, setCreating] = useState(false);
     const [newName, setNewName] = useState("");
@@ -53,6 +53,11 @@ export default function BroadcastPage() {
                     await RedAPI.sendMessage(recipientName, `📢 ${broadcastText}`);
                 } catch {
                     errors++;
+                    // FIX L5: Schedule offline retry for 1 hour later (store-and-forward local relay)
+                    // Obtain a conversation ID for this recipient if possible
+                    const recipientContact = contacts.find(c => c.displayName === recipientName);
+                    const convId = recipientContact ? recipientContact.identity_hash : recipientName;
+                    scheduleMessage(convId, `📢 ${broadcastText}`, Date.now() + 3600000); 
                 }
             }
         }

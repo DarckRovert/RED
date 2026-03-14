@@ -81,10 +81,12 @@ interface RedState {
     isSharingLocation: boolean;
     myLocation: LiveLocation | null;
     peerLocations: Record<string, LiveLocation>;
-
+    mutedConversations: Record<string, number>; // M12
+    
     // Actions
     hydrateFromStorage: () => void;
     init: () => Promise<void>;
+    loadNotifSettings: () => void;
     fetchConversations: () => Promise<void>;
     fetchGroups: () => Promise<void>;
     fetchContacts: () => Promise<void>;
@@ -148,7 +150,6 @@ export const useRedStore = create<RedState>((set, get) => ({
 
     nodeStatus: 'offline',
     peers: [],
-    setNodeStatus: (status: 'online' | 'offline') => set({ nodeStatus: status }),
 
     // FIX M4: fetch live peers from the backend node and update store
     fetchPeers: async () => {
@@ -183,6 +184,9 @@ export const useRedStore = create<RedState>((set, get) => ({
     isSharingLocation: false,
     myLocation: null,
     peerLocations: {},
+    mutedConversations: {},
+
+    setNodeStatus: (status) => set({ nodeStatus: status }),
 
     // Safely read localStorage after mount — called from layout.tsx useEffect
     hydrateFromStorage: () => {
@@ -222,6 +226,7 @@ export const useRedStore = create<RedState>((set, get) => ({
                 });
 
                 // Initial fetch of data
+                get().loadNotifSettings();
                 await Promise.all([
                     get().fetchConversations(),
                     get().fetchGroups(),
@@ -244,13 +249,27 @@ export const useRedStore = create<RedState>((set, get) => ({
                         is_running: false,
                         peer_count: 0,
                         identity_hash: 'offline_mode',
-                        version: '4.0.0'
+                        version: '5.0.0'
                     };
                     set({ identity: offlineIdentity, status: offlineStatus, isLoading: false, error: "Nodo local Inaccesible" });
                 }
             }
         };
         connectLoop();
+    },
+
+    loadNotifSettings: () => {
+        if (typeof window === "undefined") return;
+        const mutes: Record<string, number> = {};
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key?.startsWith("red_mute_")) {
+                const convId = key.replace("red_mute_", "");
+                const val = parseInt(localStorage.getItem(key) || "0");
+                if (val !== 0) mutes[convId] = val;
+            }
+        }
+        set({ mutedConversations: mutes });
     },
 
     fetchConversations: async () => {
@@ -625,13 +644,19 @@ export const useRedStore = create<RedState>((set, get) => ({
         if (currentConversationId) {
             set({ messages: [...messages, newMessage] });
         } else {
-            // Background message notification
-            set({
-                notification: {
-                    title: "Nuevo mensaje de " + data.from.substring(0, 8),
-                    message: data.content.length > 30 ? data.content.substring(0, 30) + "..." : data.content
-                }
-            });
+            // Check if muted before notifying
+            const muteUntil = get().mutedConversations[data.from];
+            const isMuted = muteUntil !== undefined && (muteUntil === -1 || muteUntil > Date.now());
+            
+            if (!isMuted) {
+                // Background message notification
+                set({
+                    notification: {
+                        title: "Nuevo mensaje de " + data.from.substring(0, 8),
+                        message: data.content.length > 30 ? data.content.substring(0, 30) + "..." : data.content
+                    }
+                });
+            }
         }
         get().fetchConversations();
     },

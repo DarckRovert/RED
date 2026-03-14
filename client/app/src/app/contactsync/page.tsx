@@ -16,13 +16,23 @@ export default function ContactSyncPage() {
     const [exported, setExported] = useState(false);
 
     const handleImport = async () => {
-        if (!importLink.trim()) return;
+        const input = importLink.trim();
+        if (!input) return;
         setSyncing(true);
         await new Promise(r => setTimeout(r, 1200));
         try {
-            const url = new URL(importLink.trim());
-            const hash = url.pathname.replace("/add-contact/", "").replace("/", "");
-            const name = url.searchParams.get("name") || "Contacto importado";
+            let hash = "";
+            let name = "Contacto importado";
+            
+            if (input.startsWith("red://")) {
+                const url = new URL(input);
+                hash = url.pathname.replace("/add-contact/", "").replace("/", "");
+                name = url.searchParams.get("name") || name;
+            } else {
+                // If it's a raw DID, typical length is 52 for ED25519 p2p id, but allowing lengths > 8
+                hash = input.replace(/[^a-zA-Z0-9_-]/g, ""); 
+            }
+
             if (hash.length > 8) {
                 await addContact(hash, name);
                 setResult("success");
@@ -67,10 +77,10 @@ export default function ContactSyncPage() {
                 <section className="sync-section animate-fade" style={{ padding: '0 1rem' }}>
                     <div className="sync-card" style={{ background: 'var(--surface-2)', border: '1px solid var(--glass-border)', padding: '1.2rem', borderRadius: '12px' }}>
                         <h3>📥 Importar contacto</h3>
-                        <p>Pega un enlace RED de contacto (red://add-contact/...)</p>
+                        <p>Pega un enlace RED o directamente el DID del contacto</p>
                         <input
                             className="poll-input"
-                            placeholder="red://add-contact/..."
+                            placeholder="red://add-contact/... o 12D3KooW..."
                             value={importLink}
                             onChange={e => setImportLink(e.target.value)}
                         />

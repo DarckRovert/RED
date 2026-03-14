@@ -23,6 +23,24 @@ export default function ChatNotifSettings({ convId, convName, onClose }: ChatNot
     const [vibrate, setVibrate] = useState(true);
     const [showMedia, setShowMedia] = useState(true);
     const [saved, setSaved] = useState(false);
+    const { loadNotifSettings } = useRedStore();
+
+    React.useEffect(() => {
+        if (typeof window !== "undefined") {
+            const m = localStorage.getItem(`red_mute_${convId}`);
+            if (m) setMuteUntil(parseInt(m));
+            
+            const conf = localStorage.getItem(`red_notif_${convId}`);
+            if (conf) {
+                try {
+                    const parsed = JSON.parse(conf);
+                    if (parsed.tone !== undefined) setTone(parsed.tone);
+                    if (parsed.vibrate !== undefined) setVibrate(parsed.vibrate);
+                    if (parsed.showMedia !== undefined) setShowMedia(parsed.showMedia);
+                } catch {}
+            }
+        }
+    }, [convId]);
 
     const muteChat = (ms: number) => {
         const until = ms === -1 ? -1 : Date.now() + ms;
@@ -35,7 +53,14 @@ export default function ChatNotifSettings({ convId, convName, onClose }: ChatNot
     const save = () => {
         if (typeof window !== "undefined") {
             localStorage.setItem(`red_notif_${convId}`, JSON.stringify({ tone, vibrate, showMedia, muteUntil }));
+            // Remove mute item if null/0 rather than leaving a stale record
+            if (muteUntil === null) {
+                localStorage.removeItem(`red_mute_${convId}`);
+            } else {
+                localStorage.setItem(`red_mute_${convId}`, String(muteUntil));
+            }
         }
+        loadNotifSettings(); // update global store
         setSaved(true);
         setTimeout(() => { setSaved(false); onClose(); }, 1200);
     };

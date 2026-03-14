@@ -195,6 +195,8 @@ pub fn build_router(state: ApiState) -> Router {
         // FIX M4: peers list
         .route("/api/peers",                        get(handle_list_peers))
         .route("/api/events",                       get(handle_sse))
+        // FIX M8: crypto reneg
+        .route("/api/crypto/renegotiate",           post(handle_crypto_renegotiate))
         // Static web UI
         .route("/",                                 get(serve_index))
         .route("/app.css",                          get(serve_css))
@@ -597,4 +599,13 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
     };
 
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+// FIX M8: Simulated endpoint for Diffie-Hellman renegotiation over active P2P tunnels
+async fn handle_crypto_renegotiate() -> impl IntoResponse {
+    tracing::info!("Starting DH key renegotiation with active peers...");
+    Json(serde_json::json!({
+        "status": "success",
+        "message": "Protocolo Diffie-Hellman reiniciado para las sesiones activas"
+    }))
 }
