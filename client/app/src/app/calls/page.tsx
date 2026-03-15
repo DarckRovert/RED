@@ -2,20 +2,9 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-
-type CallType = "voice" | "video";
-type CallDir = "incoming" | "outgoing";
-type CallStatus = "answered" | "missed" | "declined";
-
-interface CallRecord {
-    id: string;
-    peer: string;
-    type: CallType;
-    direction: CallDir;
-    status: CallStatus;
-    duration?: number; // seconds
-    timestamp: number;
-}
+import { useRedStore } from "../../store/useRedStore";
+// Import CallRecord type from store if needed or redefine minimally since it's exported
+import type { CallRecord } from "../../store/useRedStore";
 
 function formatDuration(s: number) {
     const m = Math.floor(s / 60);
@@ -32,9 +21,9 @@ function relTime(ts: number) {
 
 export default function CallHistoryPage() {
     const [filter, setFilter] = useState<"all" | "missed">("all");
+    const { callHistory } = useRedStore();
 
-    // Eventually loaded from persistent storage/store
-    const calls: CallRecord[] = [];
+    const calls = filter === "all" ? callHistory : callHistory.filter(c => c.status === "missed");
 
     return (
         <main className="call-history-page bg-dark">

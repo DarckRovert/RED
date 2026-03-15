@@ -7,8 +7,6 @@ import { useRedStore } from "../../store/useRedStore";
 
 interface MediaItem { type: string; url?: string; caption?: string; name?: string; size?: string; icon?: string; }
 
-const SHARED_MEDIA_MOCK: MediaItem[] = [];
-
 const TABS = ["Info", "Multimedia", "Archivos", "Links"];
 
 function ContactProfileContent() {
@@ -24,8 +22,24 @@ function ContactProfileContent() {
         ?? { id: "demo", displayName: "Desconocido", identity_hash: "00000000000000000000000000000000" };
     const conv = conversations.find(c => c.peer === contact.displayName);
 
-    const media = SHARED_MEDIA_MOCK.filter(m => m.type === "image");
-    const files = SHARED_MEDIA_MOCK.filter(m => m.type === "file");
+    // FIX L10: Real shared media extraction
+    const [chatMsgs, setChatMsgs] = useState<any[]>([]);
+
+    React.useEffect(() => {
+        if (conv) {
+            import("../../lib/api").then(({ RedAPI }) => {
+                RedAPI.getMessages(conv.id).then(msgs => setChatMsgs(msgs)).catch(() => {});
+            });
+        }
+    }, [conv]);
+
+    const media: MediaItem[] = chatMsgs
+        .filter(m => m.msg_type === "image" && m.media_data)
+        .map(m => ({ type: "image", url: `data:${m.mime_type || "image/jpeg"};base64,${m.media_data}`, caption: m.content }));
+        
+    const files: MediaItem[] = chatMsgs
+        .filter(m => m.msg_type === "file" && m.media_data)
+        .map(m => ({ type: "file", name: m.content || "Archivo Adjunto", size: "Unknown", icon: "📁" }));
 
     return (
         <main className="contact-profile-page bg-dark">

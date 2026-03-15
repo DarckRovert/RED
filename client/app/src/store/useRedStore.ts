@@ -40,6 +40,20 @@ export interface LiveLocation {
     timestamp: number;
 }
 
+export type CallType = "voice" | "video";
+export type CallDir = "incoming" | "outgoing";
+export type CallStatus = "answered" | "missed" | "declined";
+
+export interface CallRecord {
+    id: string;
+    peer: string;
+    type: CallType;
+    direction: CallDir;
+    status: CallStatus;
+    duration?: number; // seconds
+    timestamp: number;
+}
+
 interface RedState {
     identity: IdentityResponse | null;
     status: StatusResponse | null;
@@ -48,6 +62,7 @@ interface RedState {
     groups: GroupItem[];
     currentConversationId: string | null;
     messages: MessageItem[];
+    callHistory: CallRecord[]; // FIX A2
     isLoading: boolean;
     error: string | null;
     starredMessages: MessageItem[];
@@ -113,6 +128,10 @@ interface RedState {
     addStatusItem: (content: string, type: 'text' | 'image') => void;
     scheduleMessage: (convId: string, content: string, sendAt: number) => void;
     cancelScheduled: (id: string) => void;
+    
+    // FIX A2
+    addCallRecord: (record: CallRecord) => void;
+    clearCallHistory: () => void;
 
     // ─── Offline / Local Transport Actions ───
     setOfflineMode: (mode: TransportMode) => void;
@@ -138,6 +157,7 @@ export const useRedStore = create<RedState>((set, get) => ({
     groups: [],
     currentConversationId: null,
     messages: [],
+    callHistory: [],
     isLoading: false,
     error: null,
     starredMessages: [],
@@ -204,6 +224,10 @@ export const useRedStore = create<RedState>((set, get) => ({
         try {
             const av = localStorage.getItem('red_avatar');
             if (av) set({ avatarUrl: av });
+        } catch { }
+        try {
+            const ch = localStorage.getItem('red_call_history');
+            if (ch) set({ callHistory: JSON.parse(ch) });
         } catch { }
     },
 

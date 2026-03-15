@@ -55,7 +55,7 @@ function SignalBar({ strength }: { strength: number }) {
     );
 }
 
-function RadarCanvas() {
+function RadarCanvas({ peerCount }: { peerCount: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
@@ -63,7 +63,6 @@ function RadarCanvas() {
         if (!canvas) return;
         const rawCtx = canvas.getContext('2d');
         if (!rawCtx) return;
-        // Reassign to non-nullable type so closures keep the narrowed type
         const ctx: CanvasRenderingContext2D = rawCtx;
         const SIZE = 180;
         canvas.width = SIZE;
@@ -72,9 +71,12 @@ function RadarCanvas() {
         let angle = 0;
         let raf: number;
 
-        const DOTS = [
-            { a: 0.8, d: 48 }, { a: 2.2, d: 65 }, { a: 3.9, d: 42 }, { a: 5.1, d: 70 },
-        ];
+        // FIX M2: Generate dots based on peer count dynamically
+        const DOTS = Array.from({ length: peerCount }).map((_, i) => {
+            const a = ((i * 1.6180339887) % 1) * Math.PI * 2;
+            const d = 30 + (((i * 0.4321) % 1) * 45); // distance between 30 and 75
+            return { a, d };
+        });
 
         function draw() {
             ctx.clearRect(0, 0, SIZE, SIZE);
@@ -135,7 +137,7 @@ function RadarCanvas() {
         }
         draw();
         return () => cancelAnimationFrame(raf);
-    }, []);
+    }, [peerCount]);
 
     return (
         <canvas
@@ -252,7 +254,7 @@ export default function NearbyDevicesPanel({ localId, onPeerConnected }: NearbyD
 
             {/* Radar + controls */}
             <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', marginBottom: '24px' }}>
-                <RadarCanvas />
+                <RadarCanvas peerCount={peers.length} />
 
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <button

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { SignalingClient } from "../lib/signalingClient";
 import type { SignalingMessage } from "../lib/signalingClient";
+import { useRedStore } from "../store/useRedStore";
 
 interface CallScreenProps {
     peer: string;
@@ -75,6 +76,7 @@ export default function CallScreen({ peer, peerId, localPeerId, roomId, mode, in
     const [isSpeaker, setIsSpeaker] = useState(false);
     const [iceState, setIceState] = useState<string>("new");
     const [signalingConnected, setSignalingConnected] = useState(false);
+    const { addCallRecord } = useRedStore();
 
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -262,12 +264,27 @@ export default function CallScreen({ peer, peerId, localPeerId, roomId, mode, in
     // ── Hangup ───────────────────────────────────────────────────────────────
     const handleHangup = useCallback(() => {
         timerRef.current && clearInterval(timerRef.current);
+        const dur = duration;
+        
+        // Registrar en historial si es que llegó a conectarse o conectando (missed si < 0)
+        // Solo guardar quien colgó / terminó.
+        addCallRecord({
+            id: `call_${Date.now()}`,
+            peer,
+            direction: incoming ? "incoming" : "outgoing",
+            type: mode,
+            // si la llamada está conectada -> answered, si estamns llamando y duracion es 0 -> missed
+            status: dur > 0 ? "answered" : (incoming ? "missed" : "declined"),
+            duration: dur,
+            timestamp: Math.floor(Date.now() / 1000)
+        });
+
         localStreamRef.current?.getTracks().forEach(t => t.stop());
         pcRef.current?.close();
         sigRef.current?.send({ type: "hangup" });
         sigRef.current?.close();
         onHangup();
-    }, [onHangup]);
+    }, [onHangup, duration, incoming, mode, peer, addCallRecord]);
 
     // ── Track controls ───────────────────────────────────────────────────────
     const handleMute = () => {
