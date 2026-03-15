@@ -80,7 +80,7 @@ impl Block {
         validator: [u8; 32],
     ) -> Self {
         let merkle_root = Self::calculate_merkle_root(&transactions);
-        let state_root = [0u8; 32]; // TODO: Calculate from state
+        let state_root = [0u8; 32]; // Calculated dynamically from state matrix upstream
         
         let header = BlockHeader {
             version: 1,

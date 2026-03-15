@@ -10,7 +10,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use tracing::{info, error, debug, warn, Level};
 use tracing_subscriber::FmtSubscriber;
-use red_core::storage::{Storage, Profile};
+use red_core::storage::Storage;
 use red_core::identity::Identity;
 use red_core::crypto::hashing::derive_symmetric_key;
 use red_core::network::{Node, NetworkConfig};
@@ -219,7 +219,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         };
 
         // Rate limiter: 200 req/min for localhost, 30 for remote
-        let limiter = RateLimiter::new(200, Duration::from_secs(60));
+        let _limiter = RateLimiter::new(200, std::time::Duration::from_secs(60));
 
         // Print API token to logs for the user to use
         if let Ok(pwd) = std::env::var("RED_PASSWORD") {

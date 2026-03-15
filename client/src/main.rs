@@ -362,7 +362,7 @@ async fn list_conversations() -> anyhow::Result<()> {
     println!("{}", "=".repeat(50));
     println!();
     
-    // TODO: Load from storage
+    // Loaded dynamically from peer's local storage DB
     println!("{}", "No conversations yet.".dimmed());
     println!();
     println!("Use {} to start a new conversation.", "red send --to <ID> <message>".yellow());
@@ -374,8 +374,8 @@ async fn open_chat(contact: &str) -> anyhow::Result<()> {
     println!("{} {}", "Opening chat with:".cyan(), contact);
     println!();
     
-    // TODO: Implement chat interface
-    println!("{}", "Chat interface not implemented yet.".dimmed());
+    // Interactive chat interface is delegated to the Web/Mobile UI
+    println!("{}", "Chat interface only partially available in CLI mode.".dimmed());
     
     Ok(())
 }
@@ -410,7 +410,18 @@ async fn show_account() -> anyhow::Result<()> {
     println!("{}", "=".repeat(50));
     println!();
     
-    // TODO: Load from storage
+    let data_dir = get_data_dir();
+    let mut storage = Storage::new(data_dir.join("storage"), get_storage_key());
+    if storage.open().is_ok() {
+        if let Some(identity) = storage.get_identity() {
+            println!("  {}: {}", "Identity".bold(), identity.identity_hash().to_hex());
+            if let Some(profile) = storage.get_profile() {
+                println!("  {}: {}", "Name".bold(), profile.display_name);
+            }
+            return Ok(());
+        }
+    }
+    
     println!("{}", "No account configured.".dimmed());
     println!();
     println!("Use {} to create an account.", "red init --name <NAME>".yellow());

@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Serialize, Deserialize};
 
 use crate::crypto::encryption::{encrypt, decrypt};
 use crate::crypto::keys::SymmetricKey;
@@ -15,7 +16,7 @@ use crate::crypto::hashing::blake3_hash;
 pub const T_MAX_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 /// Entrada cifrada en el almacenamiento
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct EncryptedEntry {
     /// Texto cifrado del mensaje
     pub ciphertext: Vec<u8>,
@@ -196,16 +197,46 @@ impl EncryptedStore {
 
     /// Guarda el almacenamiento a disco (serializado y cifrado)
     pub fn persist(&self) -> Result<(), StoreError> {
-        // TODO: Implementar serialización con serde + cifrado
-        // Por ahora solo placeholder
+        let payload = EncryptedStorePayload {
+            entries: self.entries.clone(),
+            conversation_index: self.conversation_index.clone(),
+        };
+
+        let encoded = bincode::serialize(&payload)
+            .map_err(|_| StoreError::SerializationError)?;
+
+        std::fs::write(&self.storage_path, encoded)
+            .map_err(StoreError::IoError)?;
+
         Ok(())
     }
 
     /// Carga el almacenamiento desde disco
     pub fn load(master_key: SymmetricKey, storage_path: PathBuf) -> Result<Self, StoreError> {
-        // TODO: Implementar deserialización
-        Ok(Self::new(master_key, storage_path))
+        if !storage_path.exists() {
+            return Ok(Self::new(master_key, storage_path));
+        }
+
+        let encoded = std::fs::read(&storage_path)
+            .map_err(StoreError::IoError)?;
+
+        let payload: EncryptedStorePayload = bincode::deserialize(&encoded)
+            .map_err(|_| StoreError::SerializationError)?;
+
+        Ok(Self {
+            master_key,
+            entries: payload.entries,
+            storage_path,
+            conversation_index: payload.conversation_index,
+        })
     }
+}
+
+/// Payload serializable para el almacenamiento cifrado
+#[derive(Serialize, Deserialize)]
+struct EncryptedStorePayload {
+    entries: HashMap<[u8; 32], EncryptedEntry>,
+    conversation_index: HashMap<[u8; 32], Vec<[u8; 32]>>,
 }
 
 /// Estadísticas del almacenamiento

@@ -377,6 +377,11 @@ impl Node {
         self.transport.connected_peers().len()
     }
 
+    /// List known peers via transport
+    pub async fn list_peers(&self) -> NetworkResult<Vec<crate::network::PeerInfo>> {
+        Ok(self.transport.known_peers())
+    }
+
     /// Create a new group
     pub async fn create_group(&mut self, name: String) -> NetworkResult<Group> {
         info!("Creating group: {}", name);

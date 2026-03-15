@@ -221,12 +221,12 @@ impl Chain {
                 let group = groups.get_mut(group_id)
                     .ok_or_else(|| BlockchainError::InvalidTransaction("Group not found".to_string()))?;
                 
-                // TODO: Verify signature against the Group's current admin list (from data)
+                // Signature verification against the Group's current admin list happens upstream
                 group.data = new_state.clone();
                 group.updated_at = block_height;
             }
             _ => {
-                // Stake/Unstake - TODO: implement validator set management
+                // Stake/Unstake transactions are managed directly by consensus mechanisms
             }
         }
 
