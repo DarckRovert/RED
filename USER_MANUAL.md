@@ -1,4 +1,4 @@
-# 🔴 RED - Manual del Usuario (v5.0)
+# 🔴 RED - Manual del Usuario (v5.1.0 - Masterpiece Edition)
 
 Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería soberana, ahora con una interfaz más sólida y capacidades de hardware directo.
 
@@ -52,6 +52,7 @@ RED v5.0 presenta un diseño inspirado en la mensajería clásica pero con priva
 - **Dead Man's Switch:** Configura una purga automática si no accedes a la app en X días.
 - **Bóveda Señuelo Autopoblada (Coacción):** Si te obligan a abrir tu teléfono, ingresa el **PIN Señuelo** (Configurable en Ajustes > Seguridad). RED abrirá una "Bóveda Falsa" (Decoy Vault) e instantáneamente generará docenas de chats mundanos con contactos creíbles, con fechas de la última semana. A los ojos de cualquier interrogador, serás un ciudadano común chateando con su familia.
 - **PIN de Pánico:** Ingresa tu **PIN destructivo** (Configurable en Ajustes) en el bloqueo de pantalla para destruir electromagnéticamente la base de datos local y borrar tus rastros de inmediato.
+- **App Disguise (Calculadora):** Activa el modo camuflaje para que el icono de RED se transforme en una calculadora funcional. Solo al ingresar tu PIN maestro en el teclado numérico de la calculadora se revelará la interfaz real de RED.
 
 ---
 

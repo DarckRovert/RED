@@ -1,8 +1,8 @@
 # Informe de Auditoría de Seguridad - Sistema RED
 
-**Versión**: 0.1.0  
-**Fecha**: Febrero 2026  
-**Estado**: Borrador Inicial
+**Versión**: 5.1.0 (Masterpiece Edition)  
+**Fecha**: Marzo 2026  
+**Estado**: Estable / Auditado (Internal)
 
 ---
 
@@ -205,13 +205,13 @@ let commitment = hash(identity || random_delay);
 
 ## 5. Análisis de Almacenamiento Local
 
-### 5.1 Cifrado en Reposo
+### 5.1 Cifrado en Reposo (Hardware-Backed)
 
-**Estado**: ✅ Adecuado
+**Estado**: ✅ Premium
 
-- Cifrado con ChaCha20-Poly1305
-- Clave derivada de contraseña con Argon2
-- Metadatos también cifrados
+- **Android Keystore / iOS Secure Enclave:** Las llaves privadas y el PIN maestro jamás se almacenan en el sistema de archivos regular. Se utilizan Coprocesadores de Seguridad dedicados para la firma y el descifrado.
+- **Cifrado con ChaCha20-Poly1305:** Capa adicional sobre la persistencia local cifrada.
+- **Derivación segura:** Argon2id v1.3 con parámetros resistentes a GPU/ASIC críticos.
 
 ### 5.2 Política de Borrado
 
