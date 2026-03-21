@@ -1,4 +1,4 @@
-# 🔴 RED - Manual del Administrador (Node Ops v5.0)
+# 🔴 RED - Manual del Administrador (Node Ops v5.1.0)
 
 Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED, ahora con soporte nativo para Android 14 y comunicaciones P2P directas.
 
