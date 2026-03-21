@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio (v5.0 "Solid Gold")
+# 🔴 RED — Guía de Inicio (v5.1.0 "Masterpiece Edition")
 
 RED es un sistema de mensajería soberana, descentralizada y cifrada end-to-end que ahora cuenta con una interfaz sólida estilo WhatsApp/Telegram y capacidades de hardware directo (BLE/WiFi Mesh).
 
