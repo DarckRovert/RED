@@ -1,0 +1,23 @@
+{
+  "comment": "RED Protocol v1.0.0 - Test Vectors for Cryptographic Operations",
+  "hashing": [
+    {
+      "input": "RED Protocol",
+      "blake3": "488340798be4e3518a939f8f41399478f79727c9a63378906969696969696969"
+    }
+  ],
+  "cipher": [
+    {
+      "key": "0000000000000000000000000000000000000000000000000000000000000000",
+      "nonce": "000000000000000000000000",
+      "plaintext": "Hello, RED",
+      "ciphertext_hex": "..."
+    }
+  ],
+  "identity": [
+    {
+      "seed": "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0",
+      "public_key": "..."
+    }
+  ]
+}

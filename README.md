@@ -221,11 +221,14 @@ npx cap open android
 
 ## 🤝 Contribuir
 
-RED es open-source. Las áreas prioritarias de contribución son:
-1. **Core protocol**: Implementación WebRTC real peer-to-peer
-2. **Backend node**: Rust gossip node con DHT Kademlia real
-3. **Crypto**: Auditoría de la implementación criptográfica
-4. **Mobile**: Testing en dispositivos físicos iOS/Android
+RED es open-source. Puedes revisar nuestra [Guía de Contribución](docs/CONTRIBUTING.md) y nuestro [Código de Conducta](CODE_OF_CONDUCT.md). Las áreas prioritarias son:
+
+1. **Core protocol**: Implementación WebRTC real peer-to-peer.
+2. **Backend node**: Rust gossip node con DHT Kademlia real.
+3. **Crypto**: Auditoría de la implementación criptográfica.
+4. **Mobile**: Testing en dispositivos físicos iOS/Android.
+
+Consulta la lista de [Contribuidores](CONTRIBUTORS.md) actuales.
 
 ---
 

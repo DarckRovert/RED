@@ -6,7 +6,7 @@
 
 ## 🎯 Código de Conducta
 
-Al participar en este proyecto, aceptas seguir nuestro [Código de Conducta](CODE_OF_CONDUCT.md). Esperamos que todos los contribuidores:
+Al participar en este proyecto, aceptas seguir nuestro [Código de Conducta](../CODE_OF_CONDUCT.md). Esperamos que todos los contribuidores:
 
 - Sean respetuosos y considerados
 - Acepten críticas constructivas

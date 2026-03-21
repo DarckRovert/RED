@@ -63,7 +63,7 @@ Los payloads BLE son **pre-cifrados** por la capa RED E2E (X25519 + AES-256-GCM)
 
 ### Implementación
 
-Archivo: [`client/app/src/lib/bluetoothTransport.ts`](../client/app/src/lib/bluetoothTransport.ts)
+Archivo: [`client/app/src/lib/mesh/bluetoothTransport.ts`](../client/app/src/lib/mesh/bluetoothTransport.ts)
 
 Clases principales:
 - `BluetoothTransport` — clase singleton exportada como `bluetoothTransport`
@@ -114,7 +114,7 @@ binaryType = 'arraybuffer'
 
 ### Implementación
 
-Archivo: [`client/app/src/lib/wifiDirectTransport.ts`](../client/app/src/lib/wifiDirectTransport.ts)
+Archivo: [`client/app/src/lib/mesh/wifiDirectTransport.ts`](../client/app/src/lib/mesh/wifiDirectTransport.ts)
 
 ---
 
@@ -165,17 +165,15 @@ meshProtocol.getGossipBatch(excludeFrom, maxCount=10)
 
 ### Persistencia
 
-Los mensajes mesh se persisten en `localStorage` con la clave `red_mesh_store`, sobreviven recargas pero respetan el TTL al cargar.
+Los mensajes mesh son inyectados desde la capa de transporte (BLE/WiFi) hacia el nodo local en el puerto `4555` vía REST, donde el core en Rust gestiona la persistencia en la base de datos cifrada y el reenvío oportuno.
 
-### Implementación
-
-Archivo: [`client/app/src/lib/meshProtocol.ts`](../client/app/src/lib/meshProtocol.ts)
+Archivo: [`node/src/api.rs`](../node/src/api.rs) (Manejo de Relay en Rust)
 
 ---
 
 ## 4. Capa Unificada (LocalTransport)
 
-Archivo: [`client/app/src/lib/localTransport.ts`](../client/app/src/lib/localTransport.ts)
+Archivo: [`client/app/src/lib/mesh/localTransport.ts`](../client/app/src/lib/mesh/localTransport.ts)
 
 ```typescript
 // Obtener el singleton (se inicializa con el DID local)
