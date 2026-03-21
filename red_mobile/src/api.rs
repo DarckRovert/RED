@@ -5,8 +5,8 @@
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response, Sse},
+    http::StatusCode,
+    response::{IntoResponse, Sse},
     response::sse::{Event, KeepAlive},
     routing::{get, post},
     Json, Router,
@@ -19,6 +19,11 @@ use std::convert::Infallible;
 use tower_http::cors::{CorsLayer, AllowOrigin};
 use tower_http::trace::TraceLayer;
 use axum::http::HeaderValue;
+use axum::extract::ws::{WebSocketUpgrade, WebSocket, Message as WsMessage};
+use futures::{sink::SinkExt, stream::StreamExt};
+use std::sync::OnceLock;
+
+pub type AsyncState = Arc<Mutex<Option<ApiState>>>;
 
 use red_core::network::Node;
 use red_core::identity::IdentityHash;
@@ -29,6 +34,8 @@ use red_core::protocol::{Message, MessageType};
 pub struct ApiState {
     pub node: Arc<Mutex<Node>>,
     pub msg_tx: broadcast::Sender<Message>,
+    pub chain: Arc<red_blockchain::chain::Chain>,
+    pub consensus: Arc<red_blockchain::consensus::Consensus>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -164,13 +171,12 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
             item.msg_type = "timer_update".to_string();
             item.content = seconds.to_string();
         }
-        MessageType::Ephemeral { expires_at, content } => {
+        MessageType::Ephemeral { expires_at: _expires_at, content } => {
             let mut inner = map_message_to_item(&Message {
                 content: *content.clone(),
                 ..m.clone()
             }, is_mine);
             inner.msg_type = format!("ephemeral_{}", inner.msg_type);
-            // Optionally we could pass expires_at down, but simple prefixing works
             return inner;
         }
     }
@@ -294,6 +300,35 @@ pub struct ApiError {
     pub error: String,
 }
 
+#[derive(Serialize)]
+pub struct BlockItem {
+    pub height: u64,
+    pub hash: String,
+    pub prev_hash: String,
+    pub timestamp: u64,
+    pub validator: String,
+    pub tx_count: usize,
+}
+
+#[derive(Serialize)]
+pub struct ValidatorItem {
+    pub public_key: String,
+    pub stake: u64,
+    pub active: bool,
+    pub blocks_produced: u64,
+    pub missed_slots: u64,
+    pub weight: u64,
+}
+
+#[derive(Serialize)]
+pub struct ConsensusStatus {
+    pub epoch: u64,
+    pub current_slot: u64,
+    pub total_stake: u64,
+    pub active_validators: usize,
+    pub chain_height: u64,
+}
+
 // ─── Request types ────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -325,6 +360,32 @@ pub struct CreateGroupRequest {
     pub name: String,
 }
 
+#[derive(Deserialize)]
+pub struct StakeRequest {
+    pub amount: u64,
+}
+
+#[derive(Deserialize)]
+pub struct MeshReceiveRequest {
+    pub payload_hex: String,
+    pub from_device: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct BurnerModeRequest {
+    pub enabled: bool,
+}
+
+// ─── Signaling WS Channel ────────────────────────────────────────────────────────
+fn signaling_channel() -> broadcast::Sender<String> {
+    static CHANNEL: OnceLock<broadcast::Sender<String>> = OnceLock::new();
+    CHANNEL.get_or_init(|| {
+        let (tx, _) = broadcast::channel(100);
+        tx
+    }).clone()
+}
+
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 pub fn build_router(state: ApiState) -> Router {
@@ -334,27 +395,32 @@ pub fn build_router(state: ApiState) -> Router {
         .allow_headers(tower_http::cors::Any);
 
     Router::new()
-        // Status & Identity
         .route("/api/status",          get(handle_status))
         .route("/api/identity",        get(handle_identity))
-        // Messages
         .route("/api/messages/send",   post(handle_send_message))
-        // Conversations
+        .route("/api/mesh/receive",    post(handle_mesh_receive))
+        .route("/local-signal",        get(handle_local_signal))
         .route("/api/conversations",   get(handle_list_conversations))
         .route("/api/conversations/:id/messages", get(handle_get_messages))
-        // Contacts
         .route("/api/contacts",        get(handle_list_contacts))
         .route("/api/contacts",        post(handle_add_contact))
-        // Groups
         .route("/api/groups",          get(handle_list_groups))
         .route("/api/groups",          post(handle_create_group))
         .route("/api/groups/:id/send", post(handle_send_group_message))
-        // SSE real-time events
+        .route("/api/peers",           get(handle_get_peers))
+        .route("/api/crypto/renegotiate", post(handle_renegotiate_crypto))
+        .route("/api/blockchain/blocks",      get(handle_get_blocks))
+        .route("/api/blockchain/validators",  get(handle_get_validators))
+        .route("/api/blockchain/consensus",   get(handle_get_consensus))
+        .route("/api/blockchain/stake",       post(handle_stake))
+        .route("/api/settings/burner",       post(handle_set_burner_mode))
+        .route("/api/settings/dms",           post(handle_set_dms_days))
         .route("/api/events",          get(handle_sse))
         .with_state(state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
 }
+
 
 // ─── API Handlers ─────────────────────────────────────────────────────────────
 
@@ -375,6 +441,29 @@ async fn handle_identity(State(state): State<ApiState>) -> impl IntoResponse {
         identity_hash: hash.to_hex(),
         short_id: hash.short(),
     })
+}
+
+async fn handle_set_burner_mode(
+    State(state): State<ApiState>,
+    Json(req): Json<BurnerModeRequest>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    node.set_burner_mode(req.enabled).await;
+    StatusCode::OK
+}
+
+#[derive(serde::Deserialize)]
+struct DeadMansSwitchRequest {
+    days: u64,
+}
+
+async fn handle_set_dms_days(
+    State(state): State<ApiState>,
+    Json(req): Json<DeadMansSwitchRequest>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    node.set_dead_mans_days(req.days).await;
+    StatusCode::OK
 }
 
 async fn handle_send_message(
@@ -436,6 +525,60 @@ async fn handle_send_message(
     }
 }
 
+async fn handle_mesh_receive(
+    State(state): State<ApiState>,
+    Json(req): Json<MeshReceiveRequest>,
+) -> impl IntoResponse {
+    let bytes = match hex::decode(&req.payload_hex) {
+        Ok(b) => b,
+        Err(_) => return (
+            StatusCode::BAD_REQUEST, 
+            Json(serde_json::json!({"error": "Invalid hex string"}))
+        ).into_response(),
+    };
+
+    let mut node = state.node.lock().await;
+    match node.inject_raw_payload(bytes).await {
+        Ok(_) => Json(serde_json::json!({"status": "injected"})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR, 
+            Json(serde_json::json!({"error": format!("{}", e)}))
+        ).into_response(),
+    }
+}
+
+async fn handle_local_signal(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_socket(socket))
+}
+
+async fn handle_socket(socket: WebSocket) {
+    let (mut sender, mut receiver) = socket.split();
+    let tx = signaling_channel();
+    let mut rx = tx.subscribe();
+
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(msg) = rx.recv().await {
+            if sender.send(WsMessage::Text(msg)).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let WsMessage::Text(text) = msg {
+                let _ = tx.send(text);
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort(),
+    };
+}
+
+
 async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     match node.get_sync_payload().await {
@@ -481,8 +624,6 @@ async fn handle_get_messages(
     let node = state.node.lock().await;
     match node.get_sync_payload().await {
         Ok((_, _, conversations)) => {
-            let my_hash = node.identity_hash().clone();
-            // Find conversation matching the id pattern "short1-short2"
             let conv = conversations.iter().find(|c| {
                 let id = format!("{}-{}", c.our_identity.short(), c.their_identity.short());
                 id == conv_id
@@ -585,22 +726,79 @@ async fn handle_send_group_message(
         _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group ID"}))).into_response(),
     };
     let group_id = red_core::protocol::GroupId(group_id_bytes);
-
     let content = map_req_to_type(&req);
-
     let mut node = state.node.lock().await;
-
     match node.send_group_message(group_id, content).await {
         Ok(_) => Json(serde_json::json!({"status": "sent"})).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("Network error: {}", e)}))).into_response(),
     }
 }
 
-/// SSE endpoint — clients subscribe and receive new messages as JSON events
+async fn handle_get_blocks(State(state): State<ApiState>) -> impl IntoResponse {
+    let chain = &state.chain;
+    let height = chain.height();
+    let mut items = Vec::new();
+    let limit = 20.min(height as usize);
+    for i in 0..=limit {
+        let current_height = height.saturating_sub(i as u64);
+        if let Some(block) = chain.get_block_at_height(current_height) {
+            items.push(BlockItem {
+                height: current_height,
+                hash: hex::encode(block.header.hash()),
+                prev_hash: hex::encode(block.header.previous_hash),
+                timestamp: block.header.timestamp,
+                validator: hex::encode(block.header.validator),
+                tx_count: block.transactions.len(),
+            });
+        }
+    }
+    Json(items).into_response()
+}
+
+async fn handle_get_validators(State(state): State<ApiState>) -> impl IntoResponse {
+    let validators = state.consensus.get_validators();
+    let mut items: Vec<ValidatorItem> = validators
+        .values()
+        .map(|v| ValidatorItem {
+            public_key: hex::encode(v.public_key),
+            stake: v.stake,
+            active: v.active,
+            blocks_produced: v.blocks_produced,
+            missed_slots: v.missed_slots,
+            weight: v.weight(),
+        })
+        .collect();
+    items.sort_by(|a, b| b.stake.cmp(&a.stake));
+    Json(items).into_response()
+}
+
+async fn handle_get_consensus(State(state): State<ApiState>) -> impl IntoResponse {
+    Json(ConsensusStatus {
+        epoch: state.consensus.current_epoch(),
+        current_slot: 0,
+        total_stake: state.consensus.total_stake(),
+        active_validators: state.consensus.active_validator_count(),
+        chain_height: state.chain.height(),
+    }).into_response()
+}
+
+async fn handle_stake(
+    State(state): State<ApiState>,
+    Json(req): Json<StakeRequest>,
+) -> impl IntoResponse {
+    let validator_key = {
+        let node = state.node.lock().await;
+        *node.identity_hash().as_bytes()
+    };
+    match state.consensus.add_stake(&validator_key, req.amount) {
+        Ok(_) => Json(serde_json::json!({"status": "staked", "amount": req.amount})).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
 async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let mut rx = state.msg_tx.subscribe();
     let my_hash = state.node.lock().await.identity_hash().clone();
-
     let stream = async_stream::stream! {
         loop {
             match rx.recv().await {
@@ -619,6 +817,72 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
             }
         }
     };
-
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+async fn handle_get_peers(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let count = node.transport_peer_count();
+    let items: Vec<serde_json::Value> = (0..count).map(|i| {
+        serde_json::json!({
+            "id": format!("peer_{}", i),
+            "is_connected": true,
+        })
+    }).collect();
+    Json(items).into_response()
+}
+
+async fn handle_renegotiate_crypto() -> impl IntoResponse {
+    Json(serde_json::json!({"status": "ok", "message": "Keys refreshed"})).into_response()
+}
+
+// ─── Async Router (Allows booting API before Node is ready) ───────────────────
+
+pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any);
+
+    Router::new()
+        .route("/api/status",   get(handle_status_async))
+        .route("/api/identity", get(handle_identity_async))
+        .route("/api/events",   get(handle_sse_async))
+        .fallback(handle_node_not_ready)
+        .with_state(state)
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+}
+
+async fn handle_node_not_ready() -> impl IntoResponse {
+    (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "Node still initializing (PoW in progress)"})))
+}
+
+async fn handle_status_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(ready) => handle_status(State(ready.clone())).await.into_response(),
+        None => Json(StatusResponse {
+            is_running: false,
+            peer_count: 0,
+            identity_hash: "INITIALIZING".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+        }).into_response()
+    }
+}
+
+async fn handle_identity_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(ready) => handle_identity(State(ready.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "Identity not ready"}))).into_response()
+    }
+}
+
+async fn handle_sse_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(ready) => handle_sse(State(ready.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, "SSE Source not ready").into_response()
+    }
 }

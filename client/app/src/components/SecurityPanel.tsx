@@ -2,241 +2,349 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
-import { PrivacyScreen } from '@capacitor-community/privacy-screen';
-import { useRouter } from 'next/navigation';
+import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
+import { toast } from "./Toast";
+import { registerPlugin } from '@capacitor/core';
+
+const RedDisguise = registerPlugin<any>('RedDisguise');
+
+// Simple inline tooltip component
+const InfoTooltip = ({ text }: { text: string }) => {
+    const [show, setShow] = useState(false);
+    return (
+        <span 
+            onMouseEnter={() => setShow(true)}
+            onMouseLeave={() => setShow(false)}
+            onClick={() => setShow(!show)}
+            style={{ 
+                position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 20, height: 20, borderRadius: 10, background: 'var(--bg-lifted)', color: 'var(--primary)',
+                fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer', marginLeft: 8
+            }}
+        >
+            ?
+            {show && (
+                <div style={{
+                    position: 'absolute', bottom: '120%', left: '50%', transform: 'translateX(-50%)',
+                    background: 'var(--primary)', color: 'white', padding: '8px 12px', borderRadius: 8,
+                    fontSize: '0.75rem', width: 220, textAlign: 'center', zIndex: 100,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.5)', fontWeight: 'normal', lineHeight: 1.4
+                }}>
+                    {text}
+                    <div style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%) rotate(45deg)', width: 8, height: 8, background: 'var(--primary)' }} />
+                </div>
+            )}
+        </span>
+    );
+};
+
+// Helper to read/write from the Android Keystore
+async function setSecurePin(key: string, value: string) {
+    await SecureStoragePlugin.set({ key, value });
+}
+async function getSecurePin(key: string): Promise<string> {
+    try {
+        const { value } = await SecureStoragePlugin.get({ key });
+        return value || "";
+    } catch { return ""; }
+}
 
 export default function SecurityPanel() {
-  const { identity, status } = useRedStore();
-  const router = useRouter();
-  const [showKey, setShowKey] = useState(false);
+    const { goBack } = useRedStore();
+    const [privacyScreenEnabled, setPrivacyScreenEnabled] = useState(false);
+    const [panicPin, setPanicPin] = useState("");
+    const [savedPined, setSavedPined] = useState("");
+    
+    // Phase 19: New Tactical Settings
+    const [decoyPin, setDecoyPin] = useState("");
+    const [deadMansDays, setDeadMansDays] = useState("30");
+    const [burnerChatsEnabled, setBurnerChatsEnabled] = useState(false);
+    const [deadManSwitchDays, setDeadManSwitchDays] = useState(7);
+    const [screenshotBlockEnabled, setScreenshotBlockEnabled] = useState(false);
 
-  const linkedDevices: Array<{ name: string; lastUsed: string; active: boolean }> = [];
+    const [disguiseEnabled, setDisguiseEnabled] = useState(false);
+    const [calcPin, setCalcPin] = useState("");
 
-  const [privacyEnabled, setPrivacyEnabled] = useState(false);
-  const [panicPin, setPanicPin] = useState("");
-  const [destructTimer, setDestructTimer] = useState("0");
-  const [toast, setToast] = useState<string | null>(null);
+    useEffect(() => {
+        // Load settings
+        const savedPrivacy = localStorage.getItem("red_privacy_screen") === "true";
+        setSavedPined("");
+        setPanicPin("");
+        setDecoyPin("");
+        
+        // Load security PINs from Keystore (async)
+        getSecurePin("panic_pin").then(v => { setPanicPin(v); setSavedPined(v); });
+        getSecurePin("decoy_pin").then(v => setDecoyPin(v));
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+        setDeadMansDays(localStorage.getItem("red_dead_mans_days") || "30");
+        setScreenshotBlockEnabled(localStorage.getItem("red_screenshot_block") === "true");
+        setBurnerChatsEnabled(localStorage.getItem("red_burner_chats") === "true");
+        // Initialize backend burner state
+        if (localStorage.getItem("red_burner_chats") === "true") {
+            import("../lib/api").then(({ RedAPI }) => RedAPI.setBurnerMode(true));
+        }
 
-  useEffect(() => {
-    // Check initial state from local storage since plugin doesn't have isEnabled() getter
-    const savedState = localStorage.getItem('red_privacy_screen') === 'true';
-    setPrivacyEnabled(savedState);
-    if (savedState) {
-      PrivacyScreen.enable().catch(() => { });
-    }
+        const disguise = localStorage.getItem("red_disguise_mode") === "true";
+        setDisguiseEnabled(disguise);
+        // Load calc_pin from Keystore (async) 
+        getSecurePin("calc_pin").then(v => setCalcPin(v));
 
-    const savedTimer = localStorage.getItem('red_destruct_timer_hrs') || "0";
-    setDestructTimer(savedTimer);
-  }, []);
+        applyPrivacyScreen(savedPrivacy);
+    }, []);
 
-  const togglePrivacyScreen = async () => {
-    try {
-      if (privacyEnabled) {
-        await PrivacyScreen.disable();
-        setPrivacyEnabled(false);
-        localStorage.setItem('red_privacy_screen', 'false');
-      } else {
-        await PrivacyScreen.enable();
-        setPrivacyEnabled(true);
-        localStorage.setItem('red_privacy_screen', 'true');
-      }
-    } catch (err) {
-      console.warn("[PrivacyScreen] Error toggling:", err);
-      // Fallback for web testing
-      setPrivacyEnabled(!privacyEnabled);
-    }
-  };
+    const applyPrivacyScreen = async (enabled: boolean) => {
+        try {
+            const { Capacitor, registerPlugin } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const PrivacyScreen = registerPlugin<any>('PrivacyScreen');
+                if (enabled) {
+                    await PrivacyScreen.enable();
+                } else {
+                    await PrivacyScreen.disable();
+                }
+            }
+        } catch (e) {
+            console.warn("PrivacyScreen plugin not configured locally", e);
+        }
+    };
 
-  const handleSetPanicPin = () => {
-    if (panicPin.length < 4) {
-      showToast("❌ El PIN debe tener al menos 4 dígitos");
-      return;
-    }
-    localStorage.setItem("red_panic_pin", panicPin);
-    showToast("✅ PIN de Pánico configurado. La base de datos se destruirá si se introduce en el bloqueo.");
-    setPanicPin("");
-  };
+    const togglePrivacyScreen = () => {
+        const nextState = !privacyScreenEnabled;
+        setPrivacyScreenEnabled(nextState);
+        localStorage.setItem("red_privacy_screen", nextState.toString());
+        applyPrivacyScreen(nextState);
+    };
 
-  const handleSetDestructTimer = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    setDestructTimer(val);
-    localStorage.setItem("red_destruct_timer_hrs", val);
+    const savePanicPin = async () => {
+        if (!panicPin || panicPin.length < 4) return;
+        await setSecurePin("panic_pin", panicPin);
+        setSavedPined(panicPin);
+    };
 
-    if (val !== "0") {
-      // Save current time as the baseline
-      localStorage.setItem("red_last_activity", Date.now().toString());
-    }
-  };
+    const saveDecoyPin = async () => {
+        if (!decoyPin || decoyPin.length < 4) return;
+        await setSecurePin("decoy_pin", decoyPin);
+    };
 
-  return (
-    <div className="security-container animate-fade">
-      <header className="section-header">
-        <h2>Seguridad y Privacidad</h2>
-        <p>Gestiona tu identidad descentralizada y dispositivos vinculados.</p>
-      </header>
+    const saveDeadMansTimer = async () => {
+        if (!deadMansDays) return;
+        localStorage.setItem("red_dead_mans_days", deadMansDays);
+        // Sync to Rust backend so the actual switch activates
+        import("../lib/api").then(({ RedAPI }) => RedAPI.setDeadMansDays(parseInt(deadMansDays, 10)));
+    };
 
-      <section className="identity-card glass">
-        <div className="card-header">
-          <span className="badge-identity">DID Activo</span>
-          <h3>Mi Identidad RED</h3>
-        </div>
-        <div className="did-display">
-          <code>did:red:{identity?.identity_hash || "Cargando..."}</code>
-          {/* FIX C4: copy DID to clipboard */}
-          <button
-            className="copy-btn"
-            title="Copiar DID"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(`did:red:${identity?.identity_hash}`);
-                showToast('✅ DID copiado al portapapeles');
-              } catch {
-                showToast('❌ No se pudo copiar');
-              }
-            }}
-          >📋</button>
-        </div>
-        <div className="security-notice">
-          <p>⚠️ Tu identidad está vinculada a la blockchain de RED. Nadie puede suplantarte ni censurarte.</p>
-        </div>
-      </section>
+    const toggleBurnerChats = () => {
+        const nextState = !burnerChatsEnabled;
+        setBurnerChatsEnabled(nextState);
+        localStorage.setItem("red_burner_chats", nextState.toString());
+        import("../lib/api").then(({ RedAPI }) => RedAPI.setBurnerMode(nextState));
+    };
 
-      <div className="security-grid">
-        <div className="security-item glass">
-          <h4>Copia de Seguridad</h4>
-          <p>Exporta tu identidad RED para recuperar tu cuenta en otro dispositivo.</p>
-          {/* FIX A1: removed fake key text — show full DID, not a fake private key string */}
-          {showKey ? (
-            <div className="private-key-display">
-              <p style={{ fontSize: '0.72rem', color: 'var(--warning, #ff9800)', marginBottom: '0.5rem' }}>
-                ⚠️ Tu identidad DID está protegida dentro del nodo. Usa "Dispositivos Vinculados" para
-                vincular un nuevo dispositivo con acceso a tu cuenta.
-              </p>
-              <code style={{ wordBreak: 'break-all', fontSize: '0.75rem' }}>did:red:{identity?.identity_hash || '—'}</code>
-              <button className="btn-secondary" onClick={() => setShowKey(false)} style={{ marginTop: '0.5rem' }}>Ocultar</button>
-            </div>
-          ) : (
-            <button className="btn-primary-small" onClick={() => setShowKey(true)}>Ver DID completo</button>
-          )}
-        </div>
+    const toggleDisguise = async () => {
+        const nextState = !disguiseEnabled;
+        setDisguiseEnabled(nextState);
+        localStorage.setItem("red_disguise_mode", nextState.toString());
+        
+        // Trigger native Android component change
+        try {
+            await RedDisguise.setDisguiseMode({ enabled: nextState });
+            if (nextState) {
+                toast.success("Camuflaje activado. El icono de la app cambiará pronto.");
+            } else {
+                toast.info("Camuflaje desactivado. Icono RED restaurado.");
+            }
+        } catch (e) {
+            console.warn("Disguise plugin not available or failed", e);
+            if (nextState) toast.warning("Icono nativo no cambió (solo modo web).");
+        }
+    };
 
-        <div className="security-item glass">
-          <h4>Dispositivos Vinculados</h4>
-          <div className="device-list">
-            {linkedDevices.length === 0 ? (
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem 0' }}>No hay dispositivos adicionales vinculados.</p>
-            ) : (
-              linkedDevices.map((device, idx) => (
-                <div key={idx} className="device-item">
-                  <div className="device-icon">{device.name.includes("iPhone") ? "📱" : "💻"}</div>
-                  <div className="device-info">
-                    <span className="device-name">{device.name} {device.active && <span className="active-tag"> (Este dispositivo)</span>}</span>
-                    <span className="device-time">{device.lastUsed}</span>
-                  </div>
+    const saveCalcPin = async () => {
+        if (!calcPin || calcPin.length < 4) return;
+        await setSecurePin("calc_pin", calcPin);
+        // Remove from localStorage if it was stored there previously
+        localStorage.removeItem("red_calculator_pin");
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-surface)' }}>
+            
+            <header style={{ padding: '16px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <button onClick={goBack} style={{ background: 'transparent', color: 'var(--primary)', fontSize: '1.4rem' }}>←</button>
+                <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.3rem' }}>Seguridad Táctica</h2>
+            </header>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                
+                {/* Privacy Screen Toggle */}
+                <div style={{ background: 'var(--bg-lifted)', padding: '16px', borderRadius: '16px', border: '1px solid var(--solid-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem' }}>Bloqueo de Capturas</h3>
+                            <InfoTooltip text="Oculta la pantalla en recientes y evita capturas de pantalla a nivel del sistema operativo." />
+                        </div>
+                        
+                        <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '28px' }}>
+                            <input type="checkbox" checked={privacyScreenEnabled} onChange={togglePrivacyScreen} style={{ opacity: 0, width: 0, height: 0 }} />
+                            <span className="slider round" style={{
+                                position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0,
+                                backgroundColor: privacyScreenEnabled ? 'var(--primary)' : 'var(--solid-highlight)',
+                                borderRadius: '34px', transition: '.4s'
+                            }}>
+                                <span style={{
+                                    position: 'absolute', content: '""', height: '20px', width: '20px', left: privacyScreenEnabled ? '26px' : '4px', top: '4px',
+                                    background: 'white', transition: '.4s', borderRadius: '50%'
+                                }} />
+                            </span>
+                        </label>
+                    </div>
                 </div>
-              ))
-            )}
-          </div>
-          {/* FIX A7: navigate to multidevice page */}
-          <button
-            className="btn-primary-small"
-            style={{ marginTop: '1rem', width: '100%' }}
-            onClick={() => router.push('/multidevice')}
-          >📱 Vincular nuevo dispositivo</button>
-        </div>
-      </div>
 
-      <section className="forensics-panel glass" style={{ marginTop: '1.5rem', borderColor: 'var(--primary)' }}>
-        <h4 style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          🛡️ Defensa Anti-Forense
-        </h4>
-        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-          Protección avanzada contra extracción física y monitoreo del OS.
-        </p>
+                {/* Anti-Forensic Disguise Mode */}
+                <div style={{ background: 'var(--bg-lifted)', padding: '16px', borderRadius: '16px', border: '1px solid var(--solid-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <div>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem' }}>Modo Camuflaje (Disguise)</h3>
+                            <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Transforma el Login en una Calculadora.</p>
+                        </div>
+                        <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '28px' }}>
+                            <input type="checkbox" checked={disguiseEnabled} onChange={toggleDisguise} style={{ opacity: 0, width: 0, height: 0 }} />
+                            <span className="slider round" style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: disguiseEnabled ? 'var(--primary)' : 'var(--solid-highlight)', borderRadius: '34px', transition: '.4s' }}>
+                                <span style={{ position: 'absolute', height: '20px', width: '20px', left: disguiseEnabled ? '26px' : '4px', top: '4px', background: 'white', transition: '.4s', borderRadius: '50%' }} />
+                            </span>
+                        </label>
+                    </div>
 
-        <div className="security-item" style={{ background: 'var(--bg-2)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <h5>Bloquear Capturas de Pantalla (FLAG_SECURE)</h5>
-            <button
-              className={`theme-toggle ${privacyEnabled ? "dark" : "light"}`}
-              onClick={togglePrivacyScreen}
-              style={{ background: privacyEnabled ? 'var(--primary)' : 'var(--surface)' }}
-            >
-              <div className="theme-toggle-thumb" style={{ background: '#fff' }} />
-            </button>
-          </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            Impide que el sistema operativo o aplicaciones espía graben la pantalla de RED.
-          </p>
-        </div>
+                    {disguiseEnabled && (
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                            <input 
+                                type="number" 
+                                placeholder="PIN de Desbloqueo Cálculadora" 
+                                value={calcPin}
+                                onChange={(e) => setCalcPin(e.target.value.substring(0, 6))}
+                                style={{ flex: 1, padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', color: 'var(--text-primary)', borderRadius: '8px', fontSize: '1.1rem' }} 
+                            />
+                            <button 
+                                onClick={saveCalcPin}
+                                disabled={calcPin.length < 4}
+                                style={{ background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 16px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid var(--primary)', opacity: calcPin.length < 4 ? 0.3 : 1 }}
+                            >
+                                Set PIN
+                            </button>
+                        </div>
+                    )}
+                </div>
 
-        <div className="security-item" style={{ background: 'var(--bg-2)', marginTop: '0.8rem' }}>
-          <h5>PIN de Pánico (Data Wipe)</h5>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
-            Configura un PIN falso. Si se introduce bajo coacción, borrará las claves criptográficas localmente de inmediato.
-          </p>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="password"
-              inputMode="numeric"
-              className="modal-input"
-              placeholder="Ej. 9999"
-              value={panicPin}
-              onChange={(e) => setPanicPin(e.target.value.replace(/\D/g, ''))}
-              style={{ width: '120px', margin: 0 }}
-              maxLength={8}
-            />
-            <button className="btn-secondary" onClick={handleSetPanicPin}>Activar</button>
-          </div>
-        </div>
+                {/* Panic PIN */}
+                <div style={{ background: 'var(--bg-lifted)', padding: '16px', borderRadius: '16px', border: '1px solid var(--solid-border)' }}>
+                    <h3 style={{ margin: 0, color: 'var(--danger)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        ⚠ PIN de Pánico (Wipe)
+                        <InfoTooltip text="Si te obligan a desbloquear la app, introduce este PIN. La aplicación destruirá silenciosamente tu bóveda entera y simulará un perfil vacío." />
+                    </h3>
+                    <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        Si ingresas este PIN en la pantalla de bloqueo local, la base de datos de Rust y todas tus claves de sesión se destruirán **irreversiblemente**.
+                    </p>
+                    
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <input 
+                            type="number" 
+                            placeholder="Ej. 9911" 
+                            value={panicPin}
+                            onChange={(e) => setPanicPin(e.target.value.substring(0, 6))}
+                            style={{ 
+                                flex: 1, padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', 
+                                color: 'var(--text-primary)', borderRadius: '8px', fontSize: '1.2rem', letterSpacing: '4px', textAlign: 'center'
+                            }} 
+                        />
+                        <button 
+                            onClick={savePanicPin}
+                            disabled={panicPin.length < 4 || panicPin === savedPined}
+                            style={{ 
+                                background: 'var(--danger)', color: 'white', padding: '0 24px', borderRadius: '8px', fontWeight: 'bold',
+                                opacity: (panicPin.length < 4 || panicPin === savedPined) ? 0.3 : 1
+                            }}
+                        >
+                            {savedPined && panicPin === savedPined ? 'Activo' : 'Guardar'}
+                        </button>
+                    </div>
+                </div>
 
-        <div className="security-item" style={{ background: 'var(--bg-2)', marginTop: '0.8rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <h5>Dead Man's Switch (Auto-destrucción)</h5>
-            <select
-              value={destructTimer}
-              onChange={handleSetDestructTimer}
-              style={{
-                background: 'var(--surface)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--glass-border)',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                fontSize: '0.8rem'
-              }}
-            >
-              <option value="0">Desactivado</option>
-              <option value="24">24 Horas</option>
-              <option value="168">1 Semana (168h)</option>
-              <option value="720">1 Mes (720h)</option>
-            </select>
-          </div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            Si no abres la aplicación durante este periodo, tu cuenta de RED y todos tus datos (claves, chats, base de datos) se purgarán automáticamente.
-          </p>
-        </div>
-      </section>
+                {/* Decoy Vault (Bóveda Señuelo) */}
+                <div style={{ background: 'var(--bg-lifted)', padding: '16px', borderRadius: '16px', border: '1px solid var(--solid-border)' }}>
+                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🛡️ Bóveda Señuelo (Decoy)
+                        <InfoTooltip text="Un perfil falso con chats de mentira. Úsalo si te obligan a abrir RED y el PIN de Pánico es demasiado sospechoso." />
+                    </h3>
+                    <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        Ingresar este PIN en la pantalla de bloqueo forzará al nodo a conectarse a una base de datos vacía auto-poblada con mensajes mundanos.
+                    </p>
+                    
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <input 
+                            type="number" 
+                            placeholder="Ej. 9999" 
+                            value={decoyPin}
+                            onChange={(e) => setDecoyPin(e.target.value.substring(0, 6))}
+                            style={{ 
+                                flex: 1, padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', 
+                                color: 'var(--text-primary)', borderRadius: '8px', fontSize: '1.2rem', letterSpacing: '4px', textAlign: 'center'
+                            }} 
+                        />
+                        <button 
+                            onClick={saveDecoyPin}
+                            disabled={decoyPin.length < 4}
+                            style={{ 
+                                background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 24px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid var(--primary)',
+                                opacity: decoyPin.length < 4 ? 0.3 : 1
+                            }}
+                        >
+                            Guardar
+                        </button>
+                    </div>
+                </div>
 
-      <section className="network-status-panel glass">
-        <h4>Estado de la Red Descentralizada</h4>
-        <div className="stats-row">
-          <div className="stat">
-            <span className="label">Pares P2P: </span>
-            <span className="value">{status?.peer_count || 0}</span>
-          </div>
-          {/* FIX A4: show real chain_height and gossip_latency from backend */}
-          <div className="stat">
-            <span className="label">Bloque Actual: </span>
-            <span className="value">{(status as any)?.chain_height != null ? `#${(status as any).chain_height}` : 'Sincronizando...'}</span>
-          </div>
-          <div className="stat">
-            <span className="label">Latencia (Gossip): </span>
-            <span className="value">{(status as any)?.gossip_latency_ms ? `${(status as any).gossip_latency_ms}ms` : (status?.peer_count ? '< 50ms' : '—')}</span>
-          </div>
+                {/* Dead Man's Switch */}
+                <div style={{ background: 'var(--bg-lifted)', padding: '16px', borderRadius: '16px', border: '1px solid var(--solid-border)' }}>
+                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center' }}>
+                        💀 Dead Man's Switch
+                        <InfoTooltip text="Si no abres la app en el número de días establecido, el nodo purgará toda tu identidad y chats automáticamente por seguridad." />
+                    </h3>
+                    <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                        Días de inactividad antes de que el nodo purgue toda la base de datos de SQLite local asumiendo que el dispositivo fue interceptado.
+                    </p>
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <input 
+                            type="number" 
+                            value={deadMansDays}
+                            onChange={(e) => setDeadMansDays(e.target.value)}
+                            style={{ width: '80px', padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', color: 'var(--text-primary)', borderRadius: '8px', textAlign: 'center', fontSize: '1.2rem' }}
+                        />
+                        <span style={{ color: 'var(--text-secondary)' }}>Días</span>
+                        <div style={{ flex: 1 }} />
+                        <button onClick={saveDeadMansTimer} style={{ background: 'var(--solid-bg)', color: 'var(--primary)', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid var(--primary)' }}>Set Timer</button>
+                    </div>
+                </div>
+
+                {/* Burner Chats */}
+                <div style={{ background: 'var(--bg-lifted)', padding: '16px', borderRadius: '16px', border: '1px solid var(--solid-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem' }}>🔥 Burner Chats (RAM-Only)</h3>
+                                <InfoTooltip text="Los mensajes nuevos solo vivirán en la memoria RAM. Al cerrar la app, desaparecerán para siempre. No tocan el disco duro." />
+                            </div>
+                            <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Los mensajes evaden SQLite por completo.</p>
+                        </div>
+                        <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '28px' }}>
+                            <input type="checkbox" checked={burnerChatsEnabled} onChange={toggleBurnerChats} style={{ opacity: 0, width: 0, height: 0 }} />
+                            <span className="slider round" style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: burnerChatsEnabled ? 'var(--primary)' : 'var(--solid-highlight)', borderRadius: '34px', transition: '.4s' }}>
+                                <span style={{ position: 'absolute', height: '20px', width: '20px', left: burnerChatsEnabled ? '26px' : '4px', top: '4px', background: 'white', transition: '.4s', borderRadius: '50%' }} />
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+            </div>
         </div>
-      </section>
-    </div>
-  );
+    );
 }

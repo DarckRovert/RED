@@ -250,6 +250,61 @@ impl std::fmt::Display for SchedulerError {
 
 impl std::error::Error for SchedulerError {}
 
+/// Phase 18: Decoy Vault Auto-Population
+/// Injects organic-looking fake contacts and mundane conversation history into a fresh SQLite vault.
+/// This ensures interrogators do not see a suspiciously empty app when the Duress PIN is entered.
+pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate::identity::IdentityHash) {
+    let fake_contacts = vec![
+        ("Mamá", "Hola hijo, ¿vas a venir a cenar hoy?"),
+        ("Suscripción de Streaming", "Su factura ha sido pagada. Su plan termina el 30."),
+        ("Carlos Universidad", "¿Ya hiciste la tarea de finanzas? Está imposible hermano"),
+    ];
+
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+
+    for (i, (name, first_msg)) in fake_contacts.iter().enumerate() {
+        use crate::identity::IdentityBuilder;
+        let fake_id = IdentityBuilder::new().build().unwrap();
+        let fake_hash = fake_id.identity_hash().clone();
+        
+        let contact = crate::storage::Contact {
+            identity_hash: fake_hash.clone(),
+            display_name: name.to_string(),
+            public_key: *fake_id.public_key().as_bytes(),
+            added_at: now - (i as u64 * 3600),
+            verified: false,
+            blocked: false,
+            notes: None,
+        };
+        let _ = storage.add_contact(contact);
+
+        let msg = crate::protocol::Message {
+            id: crate::protocol::MessageId::generate(),
+            sender: fake_hash.clone(),
+            recipient: my_id.clone(),
+            timestamp: now - (i as u64 * 8000) - 600,
+            content: crate::protocol::MessageType::Text(first_msg.to_string()),
+            reply_to: None,
+            status: crate::protocol::MessageStatus::Delivered,
+        };
+        let _ = storage.add_message(msg);
+        
+        let reply = crate::protocol::Message {
+            id: crate::protocol::MessageId::generate(),
+            sender: my_id.clone(),
+            recipient: fake_hash.clone(),
+            timestamp: now - (i as u64 * 8000),
+            content: crate::protocol::MessageType::Text("Claro, todo bien.".to_string()),
+            reply_to: None,
+            status: crate::protocol::MessageStatus::Sent,
+        };
+        let _ = storage.add_message(reply);
+    }
+    
+    let _ = storage.save_conversations();
+    tracing::info!("Decoy Vault autonomously populated with mundane conversation history.");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

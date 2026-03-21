@@ -62,11 +62,15 @@ rust.err
 *.swp
 
 # Debug artifacts / build logs (txt)
-# These temporary files from build/debug sessions should not be in the repo    
 node_trace.log
 cf_tunnel.log
 clean_errors*.txt
 check_results*.txt
 *_errors*.txt
 *_error.txt
+*_err.txt
+*_log.txt
+logcat_*.txt
 last_build.log
+screen.png
+wasm-check-log.txt

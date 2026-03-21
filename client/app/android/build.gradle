@@ -1,17 +1,14 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:9.1.0'
-        classpath 'com.google.gms:google-services:4.4.4'
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
+        // Usamos la 8.2.2 que es muy estable para SDK 34
+        classpath 'com.android.tools.build:gradle:8.2.2'
+        classpath 'com.google.gms:google-services:4.4.2'
     }
 }
 
@@ -21,6 +18,32 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url "https://plugins.gradle.org/m2/" }
+    }
+}
+
+subprojects {
+    afterEvaluate { project ->
+        if (project.extensions.findByName('android') != null) {
+            project.android {
+                compileSdk = rootProject.ext.compileSdkVersion
+                defaultConfig {
+                    if (rootProject.ext.has("minSdkVersion")) {
+                        minSdkVersion rootProject.ext.minSdkVersion
+                    }
+                    if (rootProject.ext.has("targetSdkVersion")) {
+                        targetSdkVersion rootProject.ext.targetSdkVersion
+                    }
+                }
+            }
+        }
+    }
+    
+    // Permitiendo que las dependencias se resuelvan de forma natural para SDK 35
+    configurations.all {
+        resolutionStrategy {
+            // Se eliminan los force de versiones antiguas (1.12.x) que chocan con SDK 35
+        }
     }
 }
 

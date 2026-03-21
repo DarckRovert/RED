@@ -1,0 +1,9 @@
+@echo off
+echo Capturando pantalla del moto G22...
+adb exec-out screencap -p > f:\RED\screen.png
+cd /d f:\RED\client\app
+echo Compilando Frontend React...
+call npm run build
+echo Sincronizando con Capacitor...
+call npx cap sync android
+echo DONE

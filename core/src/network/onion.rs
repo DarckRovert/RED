@@ -8,6 +8,7 @@
 use crate::crypto::encryption::{encrypt, decrypt};
 use crate::crypto::keys::{EphemeralKeyPair, x25519_diffie_hellman};
 use crate::crypto::hashing::blake3_hash;
+use subtle::ConstantTimeEq;
 
 /// Number of onion routing hops (L = 3)
 pub const ONION_HOPS: usize = 3;
@@ -172,10 +173,20 @@ pub fn peel_onion(
     // Derive decryption key
     let key = derive_layer_key(&shared_secret);
 
-    // Decrypt payload
+    // Verify MAC before decryption (SEC-A, SEC-B)
+    let expected_mac = compute_mac(&key, &packet.payload);
+    if expected_mac.ct_eq(&packet.mac).unwrap_u8() == 0 {
+        return Err(OnionError::DecryptionFailed);
+    }
+
+    // Decrypt payload with AAD (SEC-C)
+    // The AAD is the node's public key, which was used as recipient_pk during encryption
+    let static_secret = x25519_dalek::StaticSecret::from(*node_sk);
+    let node_pk_bytes = x25519_dalek::PublicKey::from(&static_secret).to_bytes();
+    
     let encrypted_data = crate::crypto::encryption::EncryptedData::from_bytes(&packet.payload)
         .map_err(|_| OnionError::DecryptionFailed)?;
-    let decrypted = decrypt(&key, &encrypted_data)
+    let decrypted = crate::crypto::encryption::decrypt_with_aad(&key, &encrypted_data, &node_pk_bytes)
         .map_err(|_| OnionError::DecryptionFailed)?;
 
     // Parse decrypted data
@@ -235,8 +246,8 @@ fn encrypt_layer(
     }
     plaintext.extend_from_slice(payload);
 
-    // Encrypt
-    let ciphertext = encrypt(&key, &plaintext)
+    // Encrypt with AAD (SEC-C)
+    let ciphertext = crate::crypto::encryption::encrypt_with_aad(&key, &plaintext, recipient_pk)
         .map_err(|_| OnionError::EncryptionFailed)?;
 
     // Compute MAC
@@ -399,5 +410,46 @@ mod tests {
         assert_eq!(restored.ephemeral_pk, pk);
         assert_eq!(restored.payload, payload);
         assert_eq!(restored.mac, mac);
+    }
+
+    #[test]
+    fn test_onion_peel_aad_integrity() {
+        let node_sk = [0x01u8; 32];
+        let static_secret = x25519_dalek::StaticSecret::from(node_sk);
+        let node_pk = x25519_dalek::PublicKey::from(&static_secret);
+        let node_pk_bytes = node_pk.to_bytes();
+
+        let message = b"Confidential Payload";
+        let route = OnionRoute::new(vec![], HopInfo { 
+            node_pk: node_pk_bytes, 
+            address: "127.0.0.1:7331".to_string() 
+        });
+
+        // Test single layer peel
+        // We simulate a raw encrypt_layer for direct testing of the peel logic.
+        // Important: encrypted payload must be padded as build_onion does.
+        let padded = pad_message(message);
+        let (packet, _) = encrypt_layer(&padded, &node_pk_bytes, &[0u8; 32], None).unwrap();
+        
+        // Correct peel
+        let (decrypted, next) = peel_onion(&packet, &node_sk).unwrap();
+        assert_eq!(decrypted, message);
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn test_onion_mac_tamper_rejected() {
+        let node_sk = [0x01u8; 32];
+        let static_secret = x25519_dalek::StaticSecret::from(node_sk);
+        let node_pk_bytes = x25519_dalek::PublicKey::from(&static_secret).to_bytes();
+
+        let message = b"Tamper test";
+        let (mut packet, _) = encrypt_layer(message, &node_pk_bytes, &[0u8; 32], None).unwrap();
+        
+        // Tamper with MAC
+        packet.mac[0] ^= 0xFF;
+        
+        let result = peel_onion(&packet, &node_sk);
+        assert!(result.is_err(), "Peel should fail if MAC is tampered");
     }
 }

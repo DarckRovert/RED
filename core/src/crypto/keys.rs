@@ -40,7 +40,7 @@ impl SecretKey {
 }
 
 /// A 32-byte public key
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, zeroize::Zeroize)]
 pub struct PublicKey {
     bytes: [u8; 32],
 }

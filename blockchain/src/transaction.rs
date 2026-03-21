@@ -37,8 +37,10 @@ pub enum TransactionType {
         old_identity_hash: [u8; 32],
         /// New identity hash
         new_identity_hash: [u8; 32],
-        /// New public key
+        /// New public key for key exchange
         new_public_key: [u8; 32],
+        /// New verifying key for signatures (SEC-FIX C-7: was missing, old key was silently reused)
+        new_verifying_key: Option<[u8; 32]>,
         /// Proof signed with old key
         #[serde(with = "crate::serde_utils")]
         signature: [u8; 64],

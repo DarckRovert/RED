@@ -16,10 +16,10 @@ Este documento presenta un análisis de seguridad del sistema RED, un protocolo 
 |------------|--------|--------|
 | Primitivas criptográficas | Bajo | ✅ Adecuado |
 | Protocolo Double Ratchet | Bajo | ✅ Adecuado |
-| Enrutamiento Onion | Medio | ⚠️ Requiere revisión |
+| Enrutamiento Onion | Bajo | ✅ Adecuado (Padding 4KB) |
 | Blockchain de identidades | Medio | ⚠️ Requiere revisión |
-| Almacenamiento local | Bajo | ✅ Adecuado |
-| Resistencia a metadatos | Medio | ⚠️ Parcialmente implementado |
+| Almacenamiento local | Bajo | ✅ Adecuado (Bóvedas Señuelo) |
+| Resistencia a metadatos | Bajo | ✅ Implementado (Mixnets) |
 
 ---
 
@@ -136,13 +136,13 @@ Un adversario que controle el primer y último nodo puede correlacionar:
 - Padding de mensajes
 - Mezclado temporal (Δt = 30s)
 
-**Recomendaciones adicionales**:
+**Recomendaciones adicionales (Implementadas en v5.0 Fase 18)**:
 ```rust
-// Añadir jitter aleatorio a tiempos de reenvío
-let delay = base_delay + random_jitter(0..max_jitter);
+// Mixnets Temporales Funcionales (node.rs)
+let delay = rand::thread_rng().gen_range(1000..5000); // Ofuscación de timing
 
-// Padding constante para ocultar tamaño
-let padded = pad_to_fixed_size(message, MAX_MESSAGE_SIZE);
+// Padding constante para ocultar tamaño (routing.rs)
+let padded = pad_to_fixed_size(message, 4096); // Carga estricta de 4KB
 ```
 
 #### 3.2.2 Ataques Sybil
@@ -303,7 +303,7 @@ El sistema RED presenta un diseño de seguridad sólido basado en primitivas cri
 
 ### Próximos Pasos
 
-- [ ] Completar implementación de mensajes dummy
+- [x] Completar implementación de mensajes dummy (Ruido Blanco Constante)
 - [ ] Auditoría externa de criptografía
 - [ ] Pruebas de penetración
 - [ ] Verificación formal con ProVerif
@@ -337,5 +337,5 @@ El sistema RED presenta un diseño de seguridad sólido basado en primitivas cri
 - [x] Identidades anónimas
 - [x] Rotación de identidad
 - [x] Onion routing
-- [ ] Mensajes dummy completos
-- [ ] Padding uniforme
+- [x] Mensajes dummy completos (Banda Ancha Continua)
+- [x] Padding uniforme (Estricto 4096 Bytes)

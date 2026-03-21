@@ -20,7 +20,7 @@ RED es un ecosistema de mensajería soberana que opera bajo un modelo de **Malla
 │     CAPA NATIVA      ││     CAPA RUST        ││CAPA DE RED  │
 │Capacitor 8 (Android) ││Core P2P (Axum Node)  ││P2P Mesh     │
 │BLE Advertiser (Java) ││Double Ratchet        ││Local Radar  │
-│Storage / Foreground  ││RocksDB Encrypted     ││Onion Routing│
+│Storage / Foreground  ││Onion / Mixnets       ││LoRaWAN Radio│
 └────────┬──────────────┘└──────┬───────────────┘└─────┬───────┘
          │                      │                      │
 ┌────────┴──────────────────────┴──────────────────────┴───────┐
@@ -53,8 +53,8 @@ El frontend utiliza un Store centralizado en **Zustand** (`useRedStore.ts`) que 
 
 ### core/ (Protocolo Rust)
 - `crypto/`: Double Ratchet, X25519 y ChaCha20.
-- `network/`: Implementación de libp2p, GossipSub y DHT.
-- `node/`: Servidor Axum que expone la API REST al frontend Capacitor.
+- `network/`: Implementación de libp2p, GossipSub, DHT, **Mesh Mixnets** y **LoRaWAN bridge**.
+- `node/`: Servidor Axum que expone la API REST, incluyendo distribuidor descentralizado de instaladores P2P (`/api/mesh/apk`).
 
 ### client/ (Frontend)
 - `Solid UI`: Sistema de diseño con variables CSS dinámicas.
@@ -65,10 +65,11 @@ El frontend utiliza un Store centralizado en **Zustand** (`useRedStore.ts`) que 
 | Capa | Implementación |
 |------|----------------|
 | **Carga Útil** | ChaCha20-Poly1305 (AEAD) |
-| **Identidad** | Ed25519 Signatures |
+| **Identidad** | Ed25519 Signatures con **Hashcash PoW (Protección Kademlia Sybil)** |
 | **PFS** | Diffie-Hellman Ratchet (X25519) |
-| **Anonimato** | 3-hop Onion Routing |
-| **Persistence** | Foreground Service Android 14 stable |
+| **Anonimato** | 3-hop Onion Routing + **Buffer Constante de 4096 bytes** |
+| **Ofuscación** | Mixnets Temporales + **Ruido Blanco Constante** (Continuous Pending) |
+| **Persistence** | Foreground Service Android + Bóvedas Señuelo Inyectadas Mágicamente |
 
 ---
 **RED Architecture Docs** — Diseñando la resistencia mediante descentralización total.

@@ -8,9 +8,10 @@ Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará pa
 
 A diferencia de otras aplicaciones, en RED no necesitas un número de teléfono ni un correo electrónico. Tu identidad es un **DID (Decentralized Identifier)** generado localmente en tu dispositivo.
 
-1. **Pantalla de Onboarding**: Al abrir RED por primera vez, verás el asistente de configuración.
-2. **Generación de Claves**: La aplicación generará tus claves criptográficas. Este proceso es 100% privado y ocurre en tu dispositivo.
-3. **Copia de Seguridad (CRÍTICO)**: Se te mostrará tu **Identity Hash**. **Guárdala en un lugar seguro**. Si pierdes este hash y desinstalas la app, perderás tu cuenta para siempre.
+1. **Pantalla de Onboarding**: Al abrir RED por primera vez, verás el asistente de configuración de la bóveda.
+2. **Creación de PIN Maestro**: Deberás crear un PIN numérico seguro de al menos 6 dígitos. Este PIN se cifrará a nivel hardware en el Keystore de tu teléfono. **No existe opción de recuperación.**
+3. **Generación de Claves**: La aplicación generará tus claves criptográficas (DID). Este proceso es 100% privado.
+4. **Biometría (Opcional)**: En tu próximo inicio de sesión, podrás usar tu huella dactilar o FaceID para acceder rápidamente a tu bóveda.
 
 ---
 
@@ -46,10 +47,11 @@ RED v5.0 presenta un diseño inspirado en la mensajería clásica pero con priva
 
 ## 🔐 4. Seguridad y Herramientas Tácticas
 
-### Defensa Anti-Forense
+### Defensa Anti-Forense (Nivel Dios)
 - **Bloqueo de Capturas:** La aplicación impide capturas de pantalla y grabaciones para proteger tus chats de software espía.
 - **Dead Man's Switch:** Configura una purga automática si no accedes a la app en X días.
-- **PIN de Pánico:** Ingresa un PIN especial en el bloqueo de pantalla para destruir instantáneamente la base de datos local bajo coacción.
+- **Bóveda Señuelo Autopoblada (Coacción):** Si te obligan a abrir tu teléfono, ingresa el **PIN Señuelo** (Configurable en Ajustes > Seguridad). RED abrirá una "Bóveda Falsa" (Decoy Vault) e instantáneamente generará docenas de chats mundanos con contactos creíbles, con fechas de la última semana. A los ojos de cualquier interrogador, serás un ciudadano común chateando con su familia.
+- **PIN de Pánico:** Ingresa tu **PIN destructivo** (Configurable en Ajustes) en el bloqueo de pantalla para destruir electromagnéticamente la base de datos local y borrar tus rastros de inmediato.
 
 ---
 
@@ -57,6 +59,8 @@ RED v5.0 presenta un diseño inspirado en la mensajería clásica pero con priva
 
 Si no tienes acceso a la red de internet global, RED sigue funcionando:
 - **Malla Mesh:** Los mensajes se almacenan y reenvían automáticamente entre nodos cercanos (vía Bluetooth/WiFi).
+- **Puente LoRaWAN Sub-GHz:** Si existe un Módulo LoRa conectado por Serial/USB-C, la app enviará la telemetría P2P codificada rebotando hasta a 15Km de distancia saltándose toda infraestructura de telecomunicación moderna.
+- **Mesh APK Updater (Inmune a App Stores):** Si RED es eliminado de internet, un solo teléfono puede propagar el archivo `.apk` a los teléfonos vecinos enviándolos a la ruta `http://<ip-radar>:7331/api/mesh/apk`.
 - **HUD de Conexión:** Revisa en la barra superior o en el Explorador de Nodos si tu tráfico está fluyendo vía LAN, BLE o Internet.
 
 ---

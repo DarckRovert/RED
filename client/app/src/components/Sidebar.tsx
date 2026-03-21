@@ -1,295 +1,177 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
-import Logo from "./Logo";
-import MessageSearch from "./MessageSearch";
-
-type Tab = "chats" | "groups" | "contacts";
+import { toast } from "./Toast";
 
 export default function Sidebar() {
-  const router = useRouter();
-  const {
-    conversations,
-    contacts,
-    groups,
-    selectConversation,
-    currentConversationId,
-    identity,
-    addContact,
-    createGroup,
-    isMobileChatActive,
-    searchQuery,
-    setSearchQuery,
-    localPeers,
-  } = useRedStore();
+    const { 
+        identity, 
+        conversations, 
+        contacts,
+        nodeOnline,
+        navigate 
+    } = useRedStore();
 
-  const [activeTab, setActiveTab] = useState<Tab>("chats");
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [modalType, setModalType] = useState<"contact" | "group">("contact");
-  const [inputValue, setInputValue] = useState("");
-  const [aliasValue, setAliasValue] = useState(""); // FIX M10: alias input
-  const [showSearch, setShowSearch] = useState(false);
+    const [activeTab, setActiveTab] = useState<'chats'|'groups'|'contacts'>('chats');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [menuOpen, setMenuOpen] = useState(false);
 
-  // init() is called in layout.tsx — do not call it again here to prevent double-initialization
+    // Bulletproof filters
+    const filteredConvs = (conversations || []).filter(c => 
+        (c?.peer || "").toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
-  const filteredConversations = conversations.filter(c =>
-    c.peer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.last_message && c.last_message.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const filteredGroups = groups.filter(g =>
-    g.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const handleAddAction = async () => {
-    if (!inputValue.trim()) return;
-    if (modalType === "contact") {
-      // FIX M10: Use aliasValue or default
-      await addContact(inputValue.trim(), aliasValue.trim() || "Contacto");
-    } else {
-      await createGroup(inputValue.trim());
-    }
-    closeModal();
-  };
-
-  const openModal = (type: "contact" | "group") => {
-    setModalType(type);
-    setShowAddModal(true);
-  };
-
-  // FIX L8: explicitly clear inputs when closing
-  const closeModal = () => {
-    setShowAddModal(false);
-    setInputValue("");
-    setAliasValue("");
-  };
-
-  const getAvatarColor = (name: string) => {
-    const colors = ['#00a884', '#53bdeb', '#f5a623', '#d500f9', '#ef5350', '#8e24aa', '#3949ab', '#e0004f', '#009688'];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  return (
-    <aside className={`sidebar glass ${isMobileChatActive ? 'mobile-hidden' : ''}`} style={{ borderRight: '1px solid var(--glass-border-highlight)' }}>
-      {/* Phase 25 — Search overlay */}
-      {showSearch && <MessageSearch onClose={() => setShowSearch(false)} />}
-
-      <header className="sidebar-header" style={{
-        padding: '20px',
-        borderBottom: '1px solid var(--glass-border)',
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.4), transparent)'
-      }}>
-        <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-          <Logo size={42} />
-          <div className="user-info" style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="username" style={{ fontFamily: 'var(--font-display)', fontSize: '1.2rem', fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>Mi Identidad</span>
-            <span className="status font-mono" style={{ fontSize: '0.75rem', color: 'var(--primary)', textShadow: '0 0 8px var(--primary-glow)' }}>
-              {identity?.short_id || "Conectando..."}
-            </span>
-          </div>
-        </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start' }}>
-          <button className="icon-btn glass" style={{ width: '42px', height: '42px', borderRadius: '12px' }} title="Buscar" onClick={() => setShowSearch(true)}>🔍</button>
-          <button className="icon-btn glass" style={{ width: '42px', height: '42px', borderRadius: '12px' }} onClick={() => openModal(activeTab === "groups" ? "group" : "contact")}>➕</button>
-          <button
-            onClick={() => router.push('/offline')}
-            id="sidebar-offline-btn"
-            className="icon-btn glass"
-            title={localPeers.filter(p => p.connected).length > 0
-              ? `${localPeers.filter(p => p.connected).length} peer(s) local(es) conectado(s)`
-              : "Modo sin conexión (BLE / WiFi)"}
-            style={{ position: "relative", width: '42px', height: '42px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            📡
-            {localPeers.filter(p => p.connected).length > 0 && (
-              <span style={{
-                position: "absolute",
-                top: "-2px",
-                right: "-2px",
-                width: "12px",
-                height: "12px",
-                borderRadius: "50%",
-                background: "var(--green)",
-                boxShadow: "0 0 10px var(--green)",
-                border: "2px solid var(--surface-2)",
-                display: "block",
-              }} />
+    return (
+        <aside style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-surface)' }}>
+            
+            {/* Context Menu Overlay */}
+            {menuOpen && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 40 }} onClick={() => setMenuOpen(false)}>
+                    <div className="glass-panel animate-enter" style={{ position: 'absolute', top: 60, right: 16, width: 220, borderRadius: 12, overflow: 'hidden', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} onClick={() => navigate('contacts')}>👤 Nuevo contacto</button>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} onClick={() => navigate('status')}>✨ Estados</button>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} onClick={() => navigate('broadcast')}>📢 Difusión</button>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} onClick={() => navigate('crypto')}>🔐 Bóveda Criptográfica</button>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} onClick={() => navigate('explorer')}>🔗 Omega Protocol L1</button>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)' }} onClick={() => navigate('network')}>🛰️ Red & Emisión</button>
+                        <button style={{ padding: '14px', textAlign: 'left', background: 'transparent', color: 'var(--text-primary)' }} onClick={() => navigate('settings')}>⚙️ Ajustes Avanzados</button>
+                    </div>
+                </div>
             )}
-          </button>
-          <button onClick={() => router.push('/settings')} className="icon-btn glass" style={{ width: '42px', height: '42px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⚙️</button>
-        </div>
-      </header>
 
-      <nav className="sidebar-tabs" style={{ padding: '0 20px', marginTop: '16px', display: 'flex', gap: '8px' }}>
-        <button className={`tab-btn ${activeTab === "chats" ? "active" : ""}`} onClick={() => setActiveTab("chats")} style={activeTab === 'chats' ? { background: 'var(--surface-hover)', borderRadius: 'var(--radius-pill)', padding: '6px 16px', color: '#fff', fontSize: '0.85rem', fontWeight: 600 } : { padding: '6px 16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Chats</button>
-        <button className={`tab-btn ${activeTab === "groups" ? "active" : ""}`} onClick={() => setActiveTab("groups")} style={activeTab === 'groups' ? { background: 'var(--surface-hover)', borderRadius: 'var(--radius-pill)', padding: '6px 16px', color: '#fff', fontSize: '0.85rem', fontWeight: 600 } : { padding: '6px 16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Grupos</button>
-        <button className={`tab-btn ${activeTab === "contacts" ? "active" : ""}`} onClick={() => setActiveTab("contacts")} style={activeTab === 'contacts' ? { background: 'var(--surface-hover)', borderRadius: 'var(--radius-pill)', padding: '6px 16px', color: '#fff', fontSize: '0.85rem', fontWeight: 600 } : { padding: '6px 16px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>Contactos</button>
-        <div style={{ flex: 1 }} />
-        <Link href="/broadcast" className="icon-btn glass" style={{ width: '32px', height: '32px', borderRadius: '50%', fontSize: '0.9rem' }} title="Difusión">📢</Link>
-      </nav>
+            {/* Header */}
+            <header className="glass-panel" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ position: 'relative' }}>
+                        <img src="/red_icon.png" alt="RED Logo" style={{ width: 40, height: 40, filter: 'drop-shadow(0 0 8px var(--primary-glow))' }} />
+                        <div style={{
+                            position: 'absolute', bottom: -2, right: -2, width: 14, height: 14, borderRadius: 7,
+                            background: nodeOnline ? '#2ecc71' : 'var(--danger)',
+                            border: '2px solid var(--bg-surface)', boxShadow: '0 0 4px rgba(0,0,0,0.5)'
+                        }} />
+                    </div>
 
-      <div className="search-container" style={{ padding: '12px 20px 4px 20px' }}>
-        <div style={{ position: 'relative' }}>
-          <input
-            type="text"
-            placeholder={`Buscar en ${activeTab}...`}
-            className="search-input"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              background: 'var(--surface-2)',
-              borderRadius: 'var(--radius-pill)',
-              paddingLeft: '38px',
-              border: '1px solid var(--glass-border-highlight)',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
-            }}
-          />
-          <span style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5, fontSize: '0.9rem' }}>🔍</span>
-        </div>
-      </div>
-
-      <div className="list-area scrollbar-hide" style={{ padding: '8px', paddingTop: '12px' }}>
-        {activeTab === "chats" && (
-          <div className="chat-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {filteredConversations.length === 0 && <div className="empty-state">No se encontraron chats.</div>}
-            {[...filteredConversations].sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)).map((chat) => (
-              <div
-                key={chat.id}
-                className={`item ${currentConversationId === chat.id ? 'active' : ''}`}
-                onClick={() => selectConversation(chat.id)}
-              >
-                <div className={`avatar-circle ${chat.is_burner ? 'burner-avatar' : ''}`}
-                  style={{
-                    background: chat.is_burner ? 'rgba(255, 23, 68, 0.1)' : getAvatarColor(chat.peer || '?'),
-                    border: chat.is_burner ? '1px solid var(--primary)' : 'none',
-                    color: chat.is_burner ? 'var(--primary)' : '#fff',
-                  }}
-                >
-                  {chat.is_burner ? '🔥' : (chat.peer?.[0] ?? '?').toUpperCase()}
+                    <div>
+                        <h2 style={{ fontSize: '1.2rem', color: 'var(--text-primary)' }}>RED</h2>
+                        <p style={{ fontSize: '0.75rem', color: nodeOnline ? 'var(--primary)' : 'var(--danger)', textShadow: nodeOnline ? '0 0 8px var(--primary-glow)' : 'none' }}>
+                            {nodeOnline ? (identity ? identity.short_id : 'Conectado') : 'Offline (Buscando pares...)'}
+                        </p>
+                    </div>
                 </div>
-                <div className="item-info" style={{ flex: 1, overflow: 'hidden' }}>
-                  <div className="item-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                    <span className="item-name" style={{
-                      color: chat.is_burner ? 'var(--primary)' : 'var(--text-primary)',
-                      fontWeight: (chat.unread_count && chat.unread_count > 0) ? 700 : 600,
-                      fontSize: (chat.unread_count && chat.unread_count > 0) ? '0.98rem' : '0.95rem'
-                    }}>
-                      {chat.is_pinned && <span className="pin-icon">📌 </span>}
-                      {chat.peer} {chat.is_burner && <span style={{ fontSize: '0.6rem' }}>[RAM]</span>}
-                    </span>
-                    <span className="item-meta">
-                      <span className="item-time-rel">
-                        {chat.last_timestamp ? (() => {
-                          const diff = Date.now() / 1000 - chat.last_timestamp;
-                          if (diff < 60) return "ahora";
-                          if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-                          if (diff < 86400) return new Date(chat.last_timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                          return ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][new Date(chat.last_timestamp * 1000).getDay()];
-                        })() : ''}
-                      </span>
-                      {chat.unread_count && chat.unread_count > 0 ? (
-                        <span className="unread-badge">{chat.unread_count}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <span className="item-msg" style={{
-                    fontSize: '0.86rem',
-                    color: (chat.unread_count && chat.unread_count > 0) ? 'var(--text-primary)' : 'var(--text-secondary)',
-                    fontWeight: (chat.unread_count && chat.unread_count > 0) ? 500 : 400,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: 'block'
-                  }}>
-                    {chat.last_message || "Sin mensajes"}
-                  </span>
+                
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--glass-highlight)', color: 'white', display: 'flex', alignItems:'center', justifyContent:'center' }}>🔍</button>
+                    <button onClick={() => setMenuOpen(true)} style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--glass-highlight)', color: 'white', display: 'flex', alignItems:'center', justifyContent:'center' }}>⋮</button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+            </header>
 
-        {activeTab === "groups" && (
-          <div className="group-list">
-            {filteredGroups.length === 0 && <div className="empty-state">No se encontraron grupos.</div>}
-            {filteredGroups.map((group) => (
-              <div key={group.id} className="item">
-                <div className="avatar-circle" style={{ background: getAvatarColor(group.name || '?') }}>{group.name[0]?.toUpperCase() || '#'}</div>
-                <div className="item-info">
-                  <span className="item-name">{group.name}</span>
-                  <span className="item-msg">{group.members.length} miembros</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+            {/* Tabs */}
+            <nav style={{ display: 'flex', padding: '12px 16px', gap: '8px' }}>
+                {['chats', 'groups', 'contacts'].map((tab) => (
+                    <button 
+                        key={tab}
+                        onClick={() => setActiveTab(tab as any)}
+                        style={{
+                            padding: '8px 16px', borderRadius: 999, fontSize: '0.9rem', fontWeight: 600, textTransform: 'capitalize',
+                            background: activeTab === tab ? 'var(--primary-subtle)' : 'transparent',
+                            color: activeTab === tab ? 'var(--primary)' : 'var(--text-muted)'
+                        }}
+                    >
+                        {tab}
+                    </button>
+                ))}
+            </nav>
 
-        {activeTab === "contacts" && (
-          <div className="contact-list">
-            {contacts.length === 0 && <div className="empty-state">No tienes contactos guardados.</div>}
-            {contacts.filter(c => c.displayName.toLowerCase().includes(searchQuery.toLowerCase())).map((contact) => (
-              <div key={contact.id} className="item" onClick={() => selectConversation(contact.identity_hash)}>
-                <div className="avatar-circle" style={{ background: getAvatarColor(contact.displayName || '?') }}>{contact.displayName[0]?.toUpperCase() || '👤'}</div>
-                <div className="item-info">
-                  <span className="item-name">{contact.displayName}</span>
-                  <span className="item-msg font-mono">did:red:{contact.identity_hash.substring(0, 8)}...</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+            {/* Chat List */}
+            <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}>
+                {activeTab === 'chats' && filteredConvs.length === 0 && (
+                    <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📭</div>
+                        <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)' }}>Sin Chats Activos</h3>
+                        <p style={{ fontSize: '0.9rem', marginBottom: '24px' }}>Escanea el código QR de un par para iniciar una comunicación cifrada e2e.</p>
+                        <button onClick={() => navigate('contacts')} className="btn-primary" style={{ padding: '10px 20px', borderRadius: 999, fontSize: '0.9rem' }}>
+                            Agregar Contacto
+                        </button>
+                    </div>
+                )}
+                
+                {activeTab === 'groups' && (
+                    <div style={{ padding: '16px' }}>
+                        <button onClick={() => navigate('groupAdmin')} className="btn-primary" style={{ width: '100%', padding: '12px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold' }}>
+                            + Administrar Grupos P2P
+                        </button>
+                    </div>
+                )}
+                
+                {activeTab === 'chats' && filteredConvs.map(chat => (
+                    <div key={chat.id} 
+                         onClick={() => navigate('chat', chat.id)}
+                         style={{ display: 'flex', alignItems: 'center', padding: '12px', gap: '16px', borderRadius: 12, cursor: 'pointer', transition: 'background 0.2s' }}
+                         onMouseOver={e => e.currentTarget.style.background = 'var(--glass-highlight)'}
+                         onMouseOut={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                        <div style={{ width: 48, height: 48, borderRadius: 24, background: '#1c2833', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.2rem', fontWeight: 600, flexShrink: 0 }}>
+                            {chat.peer.substring(0, 1).toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <span style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{chat.peer}</span>
+                                <span style={{ fontSize: '0.75rem', color: chat.unread_count ? 'var(--primary)' : 'var(--text-muted)', fontWeight: chat.unread_count ? 'bold' : 'normal' }}>
+                                    {chat.last_timestamp ? new Date(chat.last_timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : ''}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontSize: '0.85rem', color: chat.unread_count ? 'white' : 'var(--text-secondary)', fontWeight: chat.unread_count ? 'bold' : 'normal', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                    {chat.last_message || 'Inicia una conversación p2p'}
+                                </div>
+                                {chat.unread_count ? (
+                                    <div style={{ background: 'var(--primary)', color: 'white', fontSize: '0.7rem', fontWeight: 'bold', padding: '2px 6px', borderRadius: '10px', minWidth: '20px', textAlign: 'center' }}>
+                                        {chat.unread_count}
+                                    </div>
+                                ) : null}
+                            </div>
+                        </div>
+                    </div>
+                ))}
 
-      {
-        showAddModal && (
-          <div className="modal-overlay" onClick={(e) => { if(e.target === e.currentTarget) closeModal(); }}>
-            <div className="modal glass animate-fade">
-              <h3>{modalType === "contact" ? "Añadir Contacto" : "Crear Grupo"}</h3>
-              {modalType === "contact" && (
-                <>
-                  <p>Introduce el DID del contacto:</p>
-                  <input
-                    type="text"
-                    className="modal-input"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="f3a2..."
-                  />
-                  <p style={{ marginTop: '10px' }}>Alias (tu nombre para este contacto):</p>
-                  <input
-                    type="text"
-                    className="modal-input"
-                    value={aliasValue}
-                    onChange={(e) => setAliasValue(e.target.value)}
-                    placeholder="Ej. Juan Pérez"
-                  />
-                </>
-              )}
-              {modalType === "group" && (
-                <>
-                  <p>Nombre del grupo descentralizado:</p>
-                  <input
-                    type="text"
-                    className="modal-input"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="RED Core Team"
-                  />
-                </>
-              )}
-              <div className="modal-actions" style={{ marginTop: '16px' }}>
-                <button className="btn-secondary" onClick={closeModal}>Cancelar</button>
-                <button className="btn-primary" onClick={handleAddAction}>Confirmar</button>
-              </div>
+                {activeTab === 'contacts' && (
+                    <div style={{ padding: '16px 8px' }}>
+                        <button onClick={() => navigate('contacts')} className="btn-primary" style={{ width: '100%', padding: '12px', borderRadius: '12px', fontSize: '1rem', fontWeight: 'bold', marginBottom: '16px' }}>
+                            + Escanear QR / Agregar
+                        </button>
+                        
+                        {contacts.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '20px' }}>
+                                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📇</div>
+                                <h3 style={{ margin: '0 0 8px 0', color: 'var(--text-primary)' }}>Directorio Vacío</h3>
+                                <p style={{ fontSize: '0.85rem' }}>Añade tu primer contacto para empezar.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {contacts.map(c => (
+                                    <div key={c.identity_hash} style={{ display: 'flex', alignItems: 'center', padding: '12px', background: 'var(--bg-lifted)', borderRadius: '12px', border: '1px solid var(--solid-border)' }}>
+                                        <div style={{ width: 40, height: 40, borderRadius: 20, background: 'var(--solid-highlight)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.2rem', fontWeight: 600, marginRight: '16px' }}>
+                                            {c.display_name.substring(0, 1).toUpperCase()}
+                                        </div>
+                                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                                            <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{c.display_name}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--primary)', fontFamily: 'monospace', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{c.identity_hash.substring(0,16)}...</div>
+                                        </div>
+                                        <button 
+                                            // The activeConversationId in RED is exactly the identity_hash of the peer (or group id)
+                                            onClick={() => navigate('chat', c.identity_hash)} 
+                                            style={{ background: 'transparent', color: 'var(--primary)', fontSize: '1.2rem', padding: '8px' }}
+                                        >
+                                            ✉️
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
-          </div>
-        )
-      }
-    </aside >
-  );
+        </aside>
+    );
 }

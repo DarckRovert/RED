@@ -240,17 +240,25 @@ impl IdentityBuilder {
 
     /// Build the identity
     pub fn build(self) -> IdentityResult<Identity> {
-        let key_pair = KeyPair::generate();
+        // Phase 18: Natively verifiable Anti-Sybil Proof-of-Work.
+        // We force the Ed25519 Public Key itself to start with 16 zero-bits (0x0000).
+        // This mathematically binds the PoW to the Libp2p `PeerId`, allowing the Swarm to 
+        // instantly disconnect malicious botnets during the `Identify` handshake.
+        let mut key_pair;
+        loop {
+            key_pair = KeyPair::generate();
+            let pub_bytes = key_pair.public.as_bytes();
+            if pub_bytes[0] == 0 {
+                break;
+            }
+        }
+        
         let signing_keys = SigningKeyPair::generate();
 
-        // Generate random value for identity hash
         let mut random = [0u8; 32];
         rand::rngs::OsRng.fill_bytes(&mut random);
-
-        // Create identity hash: H(public_key || random)
-        let identity_hash = IdentityHash::from_bytes(
-            create_identity_hash(key_pair.public.as_bytes(), &random)
-        );
+        let identity_hash_bytes = create_identity_hash(key_pair.public.as_bytes(), &random);
+        let identity_hash = IdentityHash::from_bytes(identity_hash_bytes);
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)

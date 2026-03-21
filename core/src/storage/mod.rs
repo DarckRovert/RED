@@ -90,8 +90,12 @@ pub struct Storage {
     authorized_devices: HashMap<DeviceId, AuthorizedDevice>,
     /// Conversations (TD-2 FIX: store conversations for sync)
     conversations: HashMap<ConversationId, Conversation>,
+    /// Global configuration (Dead Man's Switch, etc.)
+    config: HashMap<String, String>,
     /// Is storage open
     is_open: bool,
+    /// Burner Mode (RAM-Only chat storage)
+    pub burner_mode: bool,
 }
 
 impl Storage {
@@ -106,7 +110,9 @@ impl Storage {
             groups: HashMap::new(),
             authorized_devices: HashMap::new(),
             conversations: HashMap::new(),
+            config: HashMap::new(),
             is_open: false,
+            burner_mode: false,
         }
     }
 
@@ -176,6 +182,16 @@ impl Storage {
                 .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         }
 
+        // Load config
+        let config_path = self.path.join("config.enc");
+        if config_path.exists() {
+            let encrypted_data = std::fs::read(&config_path)?;
+            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
+            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
+            self.config = bincode::deserialize(&decrypted)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        }
+
         self.is_open = true;
         Ok(())
     }
@@ -188,60 +204,101 @@ impl Storage {
         self.save_groups()?;
         self.save_authorized_devices()?;
         self.save_conversations()?;
+        self.save_config()?;
         self.is_open = false;
+        Ok(())
+    }
+
+    /// Wipes all encrypted data from disk and clears memory (Dead Man's Switch Trigger)
+    pub fn self_destruct(&mut self) -> StorageResult<()> {
+        // 1. Clear memory
+        self.contacts.clear();
+        self.profile = None;
+        self.identity = None;
+        self.groups.clear();
+        self.authorized_devices.clear();
+        self.conversations.clear();
+        self.config.clear();
+        self.is_open = false;
+
+        // 2. Erase encrypted files securely (standard filesystem delete for now)
+        let files_to_delete = [
+            "contacts.enc", "profile.enc", "identity.enc", 
+            "groups.enc", "devices.enc", "conversations.enc", 
+            "config.enc", "app.db" // just in case SQLite was used earlier
+        ];
+
+        for file in files_to_delete.iter() {
+            let file_path = self.path.join(file);
+            if file_path.exists() {
+                // Ignore errors during panic wipe
+                let _ = std::fs::remove_file(file_path);
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Save config to disk
+    fn save_config(&self) -> StorageResult<()> {
+        if !self.is_open { return Ok(()); }
+        let serialized = bincode::serialize(&self.config)
+            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        let encrypted = encrypt(&self.encryption_key, &serialized)?;
+        std::fs::write(self.path.join("config.enc"), encrypted.to_bytes())?;
         Ok(())
     }
 
     /// Save contacts to disk
     fn save_contacts(&self) -> StorageResult<()> {
+        if !self.is_open { return Ok(()); }
         let serialized = bincode::serialize(&self.contacts)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        let contacts_path = self.path.join("contacts.enc");
-        std::fs::write(contacts_path, encrypted.to_bytes())?;
+        std::fs::write(self.path.join("contacts.enc"), encrypted.to_bytes())?;
         Ok(())
     }
 
     /// Save profile to disk
     fn save_profile(&self) -> StorageResult<()> {
-        if let Some(ref profile) = self.profile {
+        if !self.is_open { return Ok(()); }
+        if let Some(profile) = &self.profile {
             let serialized = bincode::serialize(profile)
                 .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             let encrypted = encrypt(&self.encryption_key, &serialized)?;
-            let profile_path = self.path.join("profile.enc");
-            std::fs::write(profile_path, encrypted.to_bytes())?;
+            std::fs::write(self.path.join("profile.enc"), encrypted.to_bytes())?;
         }
         Ok(())
     }
 
     /// Save groups to disk
     fn save_groups(&self) -> StorageResult<()> {
+        if !self.is_open { return Ok(()); }
         let serialized = bincode::serialize(&self.groups)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        let groups_path = self.path.join("groups.enc");
-        std::fs::write(groups_path, encrypted.to_bytes())?;
+        std::fs::write(self.path.join("groups.enc"), encrypted.to_bytes())?;
         Ok(())
     }
 
     /// Save authorized devices to disk
     fn save_authorized_devices(&self) -> StorageResult<()> {
+        if !self.is_open { return Ok(()); }
         let serialized = bincode::serialize(&self.authorized_devices)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
         let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        let devices_path = self.path.join("devices.enc");
-        std::fs::write(devices_path, encrypted.to_bytes())?;
+        std::fs::write(self.path.join("devices.enc"), encrypted.to_bytes())?;
         Ok(())
     }
 
-    /// Save identity to disk (fixed: removed duplicate save_groups above)
+    /// Save identity to disk
     pub fn save_identity(&self) -> StorageResult<()> {
-        if let Some(ref identity) = self.identity {
+        if !self.is_open { return Ok(()); }
+        if let Some(identity) = &self.identity {
             let serialized = bincode::serialize(identity)
                 .map_err(|e| StorageError::SerializationError(e.to_string()))?;
             let encrypted = encrypt(&self.encryption_key, &serialized)?;
-            let identity_path = self.path.join("identity.enc");
-            std::fs::write(identity_path, encrypted.to_bytes())?;
+            std::fs::write(self.path.join("identity.enc"), encrypted.to_bytes())?;
         }
         Ok(())
     }
@@ -370,9 +427,20 @@ impl Storage {
 
     // ─── Conversations & Messages (TD-2 FIX) ───────────────────────────────────
 
+    /// Set burner mode (RAM-Only flag)
+    pub fn set_burner_mode(&mut self, enabled: bool) {
+        self.burner_mode = enabled;
+    }
+
     /// Persist a received/sent message into its conversation.
-    /// Creates the conversation if it doesn't exist yet.
+    /// Creates the conversation if it doesn't exist yet. // MODIFIED FOR BURNER CHATS
     pub fn add_message(&mut self, message: Message) -> StorageResult<()> {
+        if self.burner_mode {
+            // Burner Mode is active: DO NOT save anything to the conversation map.
+            // The message lives purely in the frontend's RAM (Zustand state).
+            return Ok(());
+        }
+
         // Conversation ID = deterministic ID from the two participant hashes
         let conv_id = ConversationId::from_participants(&message.sender, &message.recipient);
         let conv = self.conversations.entry(conv_id).or_insert_with(|| {
@@ -380,7 +448,8 @@ impl Storage {
         });
         conv.add_message(message)
             .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        self.save_conversations()
+        // Mano Pesada: local disk persistence happens later via save_conversations
+        Ok(())
     }
 
     /// Prune all expired messages across all conversations
@@ -424,6 +493,18 @@ impl Storage {
         let path = self.path.join("conversations.enc");
         std::fs::write(path, encrypted.to_bytes())?;
         Ok(())
+    }
+
+    /// Update a configuration value
+    pub fn set_config(&mut self, key: impl Into<String>, value: impl Into<String>) -> StorageResult<()> {
+        self.config.insert(key.into(), value.into());
+        self.save_config()?;
+        Ok(())
+    }
+
+    /// Get a configuration value
+    pub fn get_config(&self, key: &str) -> Option<String> {
+        self.config.get(key).cloned()
     }
 }
 

@@ -260,6 +260,17 @@ pub struct EncryptedMessage {
     pub timestamp: u64,
 }
 
+/// A 3-hop Onion Routing envelope ensuring total anonymity
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OnionPacket {
+    /// The target relay or final destination for this hop (IdentityHash/PeerId)
+    pub target_node: [u8; 32],
+    /// The encrypted inner payload (either another OnionPacket or an EncryptedMessage)
+    pub payload: Vec<u8>,
+    /// Ephemeral public key used exclusively to decrypt this specific routing layer
+    pub ephemeral_key: [u8; 32],
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

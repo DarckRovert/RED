@@ -307,6 +307,8 @@ impl Consensus {
         info!("Starting block production for validator: {}", hex::encode(public_key));
 
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(BLOCK_TIME_SECS));
+        let mut consecutive_failures = 0;
+        const MAX_CONSECUTIVE_FAILURES: u32 = 5;
 
         loop {
             interval.tick().await;
@@ -338,9 +340,15 @@ impl Consensus {
                     // Add to local chain
                     if let Err(e) = chain.add_block(block) {
                         error!("Failed to add self-produced block: {:?}", e);
+                        consecutive_failures += 1;
+                        if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                            error!("CRITICAL: Validator reached MAX_CONSECUTIVE_FAILURES ({}). Stopping block production.", MAX_CONSECUTIVE_FAILURES);
+                            break;
+                        }
                     } else {
                         info!("Successfully produced and added block at height {}", height);
                         self.record_block_produced(&public_key);
+                        consecutive_failures = 0; // Reset on success
                     }
                 } else {
                     debug!("Slot {}: Leader is {}", current_slot, hex::encode(leader));

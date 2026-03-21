@@ -124,8 +124,23 @@ impl Libp2pTransport {
                 tokio::select! {
                     event = swarm.select_next_some() => {
                         match event {
-                            // Identify protocol: peer announced their addresses
                             SwarmEvent::Behaviour(RedBehaviourEvent::Identify(identify::Event::Received { peer_id, info, .. })) => {
+                                // Phase 18: Sybil Ejection Filter
+                                // Cryptographically verify the connecting node performed the required Proof-of-Work.
+                                // If their Ed25519 key does not start with 0x0000, they are part of a botnet eclipse attack.
+                                if let Ok(ed25519_key) = info.public_key.clone().try_into_ed25519() {
+                                    let pub_bytes = ed25519_key.to_bytes();
+                                    if pub_bytes[0] != 0 || pub_bytes[1] != 0 {
+                                        tracing::warn!("Sybil Attack Blocked: Disconnecting impure node {}", peer_id);
+                                        let _ = swarm.disconnect_peer_id(peer_id);
+                                        continue;
+                                    }
+                                } else {
+                                    tracing::warn!("Invalid Key Format: Disconnecting impure node {}", peer_id);
+                                    let _ = swarm.disconnect_peer_id(peer_id);
+                                    continue;
+                                }
+
                                 for addr in info.listen_addrs {
                                     info!("Identify: peer {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
@@ -162,7 +177,15 @@ impl Libp2pTransport {
                                 } else {
                                     PeerId::from_bytes([0u8; 32]) // Fallback
                                 };
-                                let _ = msg_tx.send((peer, TransportMessage::Data { payload: message.data })).await;
+
+                                // Topic-based routing
+                                if message.topic.as_str() == "red-routing" {
+                                    if let Ok(packet) = bincode::deserialize::<crate::network::routing::OnionPacket>(&message.data) {
+                                        let _ = msg_tx.send((peer, TransportMessage::Onion(packet))).await;
+                                    }
+                                } else {
+                                    let _ = msg_tx.send((peer, TransportMessage::Data { payload: message.data })).await;
+                                }
                             }
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 info!("Local node is listening on {}", address);

@@ -2,27 +2,23 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'f.red.app',
-  appName: 'Calculadora', // App Disguise (Phase F)
+  appName: 'RED',
   webDir: 'out',
   android: {
-    backgroundColor: '#0a0c0e',  // Match --bg to prevent white flash on startup
-    allowMixedContent: true,     // Allow http API calls from https context
-    loggingBehavior: 'none',     // Reduce log spam in production
-    webContentsDebuggingEnabled: false,
+    backgroundColor: '#0b141a',
+    allowMixedContent: true,
+    webContentsDebuggingEnabled: true,
   },
   server: {
-    cleartext: true,             // CRITICAL: Allows HTTP API calls to 127.0.0.1 in Android 9+
-    hostname: 'localhost'
-  },
-  ios: {
-    backgroundColor: '#0a0c0e',
-    contentInset: 'automatic',
-    scrollEnabled: true,
+    androidScheme: 'http',
+    hostname: 'localhost',
+    cleartext: true
   },
   plugins: {
     SplashScreen: {
-      launchAutoHide: false,     // We control the splash manually
-      backgroundColor: '#0a0c0e',
+      launchAutoHide: true,
+      launchShowDuration: 3000,
+      backgroundColor: '#0b141a',
       androidSplashResourceName: 'splash',
       showSpinner: false,
     },

@@ -1,0 +1,4 @@
+# Archivo .aiexclude - Permitir acceso a node_modules/@capacitor
+# Usar ! para negar exclusiones predeterminadas
+!node_modules/
+!node_modules/**

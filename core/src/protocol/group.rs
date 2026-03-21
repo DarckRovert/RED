@@ -259,12 +259,12 @@ impl Group {
     /// Distribute our sender key to a member
     pub fn distribute_sender_key(
         &self,
-        _recipient_pk: &PublicKey,
-        our_sk: &[u8; 32],
+        recipient_pk: &PublicKey,
+        our_keypair: &crate::crypto::keys::KeyPair,
     ) -> Result<DistributedSenderKey, GroupError> {
-        // Encrypt chain key for recipient using their public key
-        // In practice, this would use the pairwise session
-        let encrypted_chain_key = encrypt(our_sk, &self.our_sender_key.chain_key)
+        // SEC-FIX A-3: Use ECDH with recipient's public key
+        let shared_secret = our_keypair.key_exchange(recipient_pk);
+        let encrypted_chain_key = encrypt(&shared_secret, &self.our_sender_key.chain_key)
             .map_err(|_| GroupError::EncryptionFailed)?
             .to_bytes();
 
@@ -355,7 +355,7 @@ mod tests {
         let mut group = Group::create("Test Group".to_string(), creator);
         
         let member = GroupMember {
-            identity_hash: IdentityHash::from_bytes([0x02u8; 32]),
+            identity_hash: IdentityHash::from_bytes([0x88u8; 32]), // Use distinct hash
             public_key: KeyPair::generate().public,
             joined_at: 0,
             role: MemberRole::Member,

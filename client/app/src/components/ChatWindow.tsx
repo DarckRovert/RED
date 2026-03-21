@@ -1,400 +1,335 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem } from "../lib/api";
-import CallScreen from "./CallScreen";
-import LinkPreview, { extractUrl } from "./LinkPreview";
-import { PollBubble, PollComposer } from "./PollComponents";
-import dynamic from 'next/dynamic';
-
-// Next.js dynamic import for Leaflet because it relies on `window` and breaks SSR
-const LocationMapView = dynamic(() => import('./LocationMapView'), { ssr: false });
-
-const EMOJI_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
-
-function relativeTime(ts: number): string {
-  const diff = Date.now() / 1000 - ts;
-  if (diff < 60) return "ahora";
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  if (diff < 86400) return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  if (diff < 604800) return ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"][new Date(ts * 1000).getDay()];
-  return new Date(ts * 1000).toLocaleDateString([], { day: "2-digit", month: "2-digit" });
-}
-
-function statusIcon(status?: string) {
-  if (status === "sent") return <span className="tick-sent">✓</span>;
-  if (status === "delivered") return <span className="tick-delivered">✓✓</span>;
-  if (status === "read") return <span className="tick-read">✓✓</span>;
-  return null;
-}
-
-interface MessageBubbleProps {
-  msg: MessageItem;
-  onReply: (msg: MessageItem) => void;
-  onDelete: (id: string) => void;
-  onReact: (id: string, emoji: string) => void;
-  onStar: (msg: MessageItem) => void;
-  onForward: (msg: MessageItem) => void;
-  isStarred: boolean;
-}
-
-function MessageBubble({ msg, onReply, onDelete, onReact, onStar, onForward, isStarred }: MessageBubbleProps) {
-  const [showCtx, setShowCtx] = useState(false);
-  const [showEmoji, setShowEmoji] = useState(false);
-
-  if (msg.isDeleted) {
-    return (
-      <div className={`message-wrapper ${msg.is_mine ? "me" : "other"}`}>
-        <div className="message-bubble deleted-bubble">
-          <p className="message-deleted">🚫 Mensaje eliminado</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={`message-wrapper animate-slide-up ${msg.is_mine ? "me" : "other"}`}
-      onContextMenu={(e) => { e.preventDefault(); setShowCtx(true); }}
-      style={{ animationDuration: '0.4s', animationTimingFunction: 'var(--ease-spring)' }}
-    >
-      <div className={`message-bubble ${msg.is_mine ? "primary-bubble" : "glass"}`} onClick={() => setShowCtx(false)}>
-
-        {/* Reply preview */}
-        {msg.replyTo && (
-          <div className="reply-preview">
-            <span className="reply-bar" />
-            <div className="reply-content">
-              <span className="reply-sender">{msg.replyTo.sender === "me" ? "Tú" : msg.replyTo.sender.substring(0, 8)}</span>
-              <span className="reply-text">{msg.replyTo.content.substring(0, 60)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Media */}
-        {msg.media_data && msg.msg_type === "image" && (
-          <img src={`data:${msg.mime_type || 'image/jpeg'};base64,${msg.media_data}`} alt="img" className="media-image" />
-        )}
-        {msg.media_data && msg.msg_type === "voice" && (
-          <audio controls src={`data:${msg.mime_type || 'audio/webm'};base64,${msg.media_data}`} className="media-audio" />
-        )}
-        {msg.media_data && msg.msg_type === "file" && (
-          <div className="media-file glass">📄 {msg.content}</div>
-        )}
-
-        {/* Live Location Block */}
-        {msg.content.includes("LOC_UPDATE") ? (
-          <div style={{ marginTop: 8, marginBottom: 8 }}>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>📍 Transmisión de Ubicación GPS Activa</p>
-            <LocationMapView peerId={msg.is_mine ? undefined : msg.sender} />
-          </div>
-        ) : (
-          /* Text + Link Preview */
-          (!msg.media_data || msg.msg_type === "file") && (
-            <>
-              <p className="message-text">
-                {msg.content}
-                {/* Floating Footer inside the text flow for modern look */}
-                <span className="message-footer">
-                  {msg.msg_type.startsWith("ephemeral_") && (
-                    <span className="burning-tag" title="Vencimiento sincronizado" style={{ color: 'var(--primary)', marginRight: '4px' }}>🔥</span>
-                  )}
-                  {msg.editedAt && <span className="edited-tag" style={{ marginRight: '4px' }}>editado</span>}
-                  <span className="message-time">{relativeTime(msg.timestamp)}</span>
-                  {msg.is_mine && <span className="message-status" style={{ marginLeft: '4px' }}>{statusIcon(msg.status)}</span>}
-                </span>
-              </p>
-              {extractUrl(msg.content) && <LinkPreview text={msg.content} />}
-            </>
-          )
-        )}
-
-        {/* Reactions */}
-        {msg.reactions && msg.reactions.length > 0 && (
-          <div className="reactions-bar">
-            {msg.reactions.map(r => (
-              <button key={r.emoji} className="reaction-pill" onClick={() => onReact(msg.id, r.emoji)}>
-                {r.emoji} {r.senders.length > 1 && r.senders.length}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Context menu */}
-      {showCtx && (
-        <div className="ctx-menu glass animate-fade">
-          <button onClick={() => { onReply(msg); setShowCtx(false); }}>↩️ Responder</button>
-          <button onClick={() => { setShowEmoji(true); setShowCtx(false); }}>😊 Reaccionar</button>
-          <button onClick={() => { onStar(msg); setShowCtx(false); }}>{isStarred ? "⭐ Quitar estrella" : "☆ Guardar"}</button>
-          <button onClick={() => { onForward(msg); setShowCtx(false); }}>📨 Reenviar</button>
-          {msg.is_mine && <button className="danger" onClick={() => { onDelete(msg.id); setShowCtx(false); }}>🗑️ Eliminar</button>}
-        </div>
-      )}
-
-      {/* Emoji picker */}
-      {showEmoji && (
-        <div className="emoji-picker glass animate-fade">
-          {EMOJI_REACTIONS.map(e => (
-            <button key={e} onClick={() => { onReact(msg.id, e); setShowEmoji(false); }}>{e}</button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default function ChatWindow() {
-  const {
-    messages,
-    currentConversationId,
-    conversations,
-    groups,
-    sendMessage,
-    sendMedia,
-    deleteMessage,
-    reactToMessage,
-    isLoading,
-    isMobileChatActive,
-    closeMobileChat,
-    replyTarget,
-    setReplyTarget,
-    typingMap,
-    broadcastTyping,
-    starredMessages,
-    toggleStarMessage,
-    forwardMessage,
-    conversations: allConvs,
-    disappearingTimers,
-    setDisappearingTimer,
-    isSharingLocation,
-    startLocationSharing,
-    stopLocationSharing,
-  } = useRedStore();
+    const { 
+        activeConversationId, 
+        conversations, 
+        messages, 
+        sendMessage, 
+        goBack 
+    } = useRedStore();
 
-  const [inputText, setInputText] = useState("");
-  const [callMode, setCallMode] = useState<null | "voice" | "video">(null);
-  const [showPoll, setShowPoll] = useState(false);
-  const [forwardMsg, setForwardMsg] = useState<MessageItem | null>(null);
-  const [voiceToast, setVoiceToast] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [inputText, setInputText] = useState("");
+    const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeConv = conversations.find(c => c.id === currentConversationId);
-  const activeGroup = groups.find(g => g.id === currentConversationId);
-  const isTyping = currentConversationId ? typingMap[currentConversationId] : false;
+    const activeConv = conversations.find(c => c.id === activeConversationId);
+    const peerName = activeConv ? activeConv.peer : "Desconocido";
+    const avatarLetter = peerName.substring(0, 1).toUpperCase();
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    // Auto-scroll to bottom
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages]);
 
-  const handleSend = useCallback(async () => {
-    if (!inputText.trim() || !currentConversationId) return;
-    await sendMessage(inputText, replyTarget || undefined);
-    setInputText("");
-    // Note: typing broadcast is sent by the store; do NOT fake-send typing here
-  }, [inputText, currentConversationId, replyTarget, sendMessage]);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordDuration, setRecordDuration] = useState(0);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
+    const startRecording = async () => {
+        try {
+            const { VoiceRecorder } = await import('capacitor-voice-recorder');
+            const hasPermission = await VoiceRecorder.hasAudioRecordingPermission();
+            if (!hasPermission.value) {
+                const request = await VoiceRecorder.requestAudioRecordingPermission();
+                if (!request.value) return;
+            }
+            
+            await VoiceRecorder.startRecording();
+            setIsRecording(true);
+            setRecordDuration(0);
+            timerRef.current = setInterval(() => {
+                setRecordDuration(prev => prev + 1);
+            }, 1000);
+        } catch (e) {
+            console.error("Failed to start recording:", e);
+        }
+    };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) sendMedia(file);
-    e.target.value = "";
-  };
+    const stopRecording = async () => {
+        try {
+            if (timerRef.current) clearInterval(timerRef.current);
+            setIsRecording(false);
+            
+            const { VoiceRecorder } = await import('capacitor-voice-recorder');
+            const result = await VoiceRecorder.stopRecording();
+            
+            if (result.value && result.value.recordDataBase64) {
+                sendMessage("🎤 Nota de Voz", {
+                    msg_type: "voice",
+                    media_data: `data:${result.value.mimeType};base64,${result.value.recordDataBase64}`,
+                    mime_type: result.value.mimeType,
+                    duration_ms: result.value.msDuration
+                });
+            }
+        } catch (e) {
+            console.error("Failed to stop recording:", e);
+        }
+    };
 
-  const handleMic = async () => {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      setVoiceToast('Grabación de voz no disponible en este dispositivo.');
-      setTimeout(() => setVoiceToast(null), 3000);
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "audio/webm" });
-        sendMedia(new File([blob], "nota_de_voz.webm", { type: "audio/webm" }));
-        stream.getTracks().forEach(t => t.stop());
-      };
-      recorder.start();
-      setTimeout(() => recorder.stop(), 10000); // max 10s
-    } catch (err) {
-      console.warn('[Mic] Error:', err);
-      alert('Permiso de micrófono denegado o no disponible.');
-    }
-  };
+    const handleLocation = async () => {
+        try {
+            const { Geolocation } = await import('@capacitor/geolocation');
+            const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+            
+            sendMessage("📍 Ubicación GPS", {
+                msg_type: "location",
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            });
+        } catch (e) {
+            console.error("[RED] Geolocation failed", e);
+        }
+    };
 
-  if (!currentConversationId) {
+    const handleSend = () => {
+        if (!inputText.trim()) return;
+        sendMessage(inputText.trim());
+        setInputText("");
+    };
+
+    const handleCamera = async () => {
+        try {
+            const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+            const image = await Camera.getPhoto({
+                quality: 60,
+                allowEditing: false,
+                resultType: CameraResultType.Base64,
+                source: CameraSource.Prompt,
+                width: 1280
+            });
+            
+            if (image.base64String) {
+                const mimeType = `image/${image.format || 'jpeg'}`;
+                sendMessage("📷 Foto Cifrada", {
+                    msg_type: "image",
+                    media_data: `data:${mimeType};base64,${image.base64String}`,
+                    mime_type: mimeType
+                });
+            }
+        } catch (e) {
+            console.error("[RED] Camera cancelled/failed", e);
+        }
+    };
+    const handlePoll = () => {
+        const question = prompt("Pregunta de la Encuesta:");
+        if (!question) return;
+        const opt1 = prompt("Opción 1:");
+        const opt2 = prompt("Opción 2:");
+        if (!opt1 || !opt2) return;
+        
+        sendMessage("📊 Encuesta", {
+            msg_type: "poll",
+            poll_data: { question, options: [opt1, opt2], votes: [] }
+        });
+    };
+
+    const toggleStar = (msgId: string) => {
+        const el = document.getElementById(`msg-${msgId}-star`);
+        if (el) el.style.color = el.style.color === 'var(--warning)' ? 'transparent' : 'var(--warning)';
+    };
+
     return (
-      <section className={`chat-window empty ${isMobileChatActive ? "active-mobile" : ""}`}>
-        <div className="empty-message animate-fade">
-          <div className="logo-placeholder">RED</div>
-          <h3>Selecciona una conversación</h3>
-          <p>Tus mensajes están protegidos con cifrado P2P y deniabilidad perfecta.</p>
-        </div>
-      </section>
-    );
-  }
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)' }}>
+            
+            {/* Header (Solid UI) */}
+            <header style={{ 
+                padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '16px', 
+                background: 'var(--solid-bg)', borderBottom: '1px solid var(--solid-border)', zIndex: 10 
+            }}>
+                <button 
+                    onClick={goBack}
+                    style={{ background: 'transparent', color: 'var(--primary)', fontSize: '1.4rem', padding: '4px 8px 4px 0' }}
+                >
+                    ←
+                </button>
+                
+                <div style={{ width: 44, height: 44, borderRadius: 22, background: 'var(--solid-highlight)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '1.2rem', fontWeight: 700 }}>
+                    {avatarLetter}
+                </div>
+                
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', margin: 0 }}>
+                        {peerName}
+                    </h2>
+                    <p style={{ fontSize: '0.85rem', color: '#4CAF50', margin: 0, fontWeight: 500 }}>en línea a través de P2P</p>
+                </div>
 
-  const peerName = activeGroup ? activeGroup.name : (activeConv?.peer || "Desconocido");
-  const currentTimer = currentConversationId ? (disappearingTimers[currentConversationId] || 0) : 0;
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    <button onClick={() => useRedStore.getState().navigate('call')} style={{ background: 'transparent', color: 'var(--text-primary)', padding: '8px', fontSize: '1.2rem' }}>📞</button>
+                    <button style={{ background: 'transparent', color: 'var(--text-primary)', padding: '8px', fontSize: '1.2rem' }}>⋮</button>
+                </div>
+            </header>
 
-  const toggleTimer = () => {
-    if (!currentConversationId) return;
-    const cycle = [0, 5, 3600, 86400, 604800]; // Off, 5s, 1h, 1d, 7d
-    const next = cycle[(cycle.indexOf(currentTimer) + 1) % cycle.length];
-    setDisappearingTimer(currentConversationId, next);
-  };
+            {/* Message List */}
+            <div className="no-scrollbar" style={{ 
+                flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px',
+                backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'20\' height=\'20\' viewBox=\'0 0 20 20\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23162029\' fill-opacity=\'0.4\' fill-rule=\'evenodd\'%3E%3Ccircle cx=\'3\' cy=\'3\' r=\'3\'/%3E%3Ccircle cx=\'13\' cy=\'13\' r=\'3\'/%3E%3C/g%3E%3C/svg%3E")'
+            }}>
+                {messages.length === 0 && (
+                    <div style={{ 
+                        margin: 'auto', textAlign: 'center', color: 'var(--text-secondary)', 
+                        background: 'var(--solid-highlight)', padding: '12px 20px', borderRadius: 12, 
+                        fontSize: '0.9rem', boxShadow: '0 2px 8px rgba(0,0,0,0.5)' 
+                    }}>
+                        🔐 <strong>Cifrado P2P Completo</strong><br/>
+                        Ningún servidor guarda esta conversación.
+                    </div>
+                )}
+                
+                {messages.map((msg, index) => {
+                    const isMine = msg.is_mine;
+                    // Detect if previous message is from same sender to group tails
+                    const prevMsg = index > 0 ? messages[index - 1] : null;
+                    const isFirstInGroup = prevMsg ? prevMsg.is_mine !== isMine : true;
+                    
+                    return (
+                        <div key={msg.id} style={{
+                            display: 'flex', 
+                            justifyContent: isMine ? 'flex-end' : 'flex-start',
+                            width: '100%',
+                            marginTop: isFirstInGroup ? '6px' : '0px'
+                        }}>
+                            <div style={{
+                                maxWidth: '85%',
+                                padding: '8px 12px',
+                                borderRadius: '16px',
+                                // Advanced Directional Tails
+                                borderTopRightRadius: (isMine && isFirstInGroup) ? '16px' : (isMine ? '4px' : '16px'),
+                                borderTopLeftRadius: (!isMine && isFirstInGroup) ? '16px' : (!isMine ? '4px' : '16px'),
+                                borderBottomRightRadius: isMine ? '0px' : '16px',
+                                borderBottomLeftRadius: !isMine ? '0px' : '16px',
+                                
+                                background: isMine ? '#0b5345' : 'var(--solid-highlight)', // True Solid Deep Green / Grey
+                                color: 'var(--text-primary)',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                                display: 'flex',
+                                flexDirection: 'column'
+                            }}>
+                                {msg.msg_type === 'image' && msg.media_data ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <img src={msg.media_data} alt="Adjunto Cifrado" style={{ width: '100%', borderRadius: '8px', objectFit: 'contain', maxHeight: '300px' }} />
+                                        {msg.content !== "📷 Foto Cifrada" && <span style={{ wordBreak: 'break-word', fontSize: '1rem', lineHeight: '1.4' }}>{msg.content}</span>}
+                                    </div>
+                                ) : msg.msg_type === 'voice' && msg.media_data ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '220px' }}>
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>🎤 Nota de Voz</span>
+                                        <audio controls src={msg.media_data} style={{ width: '100%', height: '36px' }} />
+                                    </div>
+                                ) : msg.msg_type === 'location' && msg.latitude && msg.longitude ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', minWidth: '220px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ fontSize: '1.5rem' }}>📍</span>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Ubicación Cifrada</span>
+                                                <span style={{ fontSize: '0.75rem', color: isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }}>
+                                                    ±{Math.round(msg.accuracy || 0)}m de precisión
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => window.open(`https://maps.google.com/?q=${msg.latitude},${msg.longitude}`, '_blank')}
+                                            style={{ background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '8px', color: '#3498db', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}
+                                        >
+                                            Ver Ubicación
+                                        </button>
+                                    </div>
+                                ) : msg.msg_type === 'poll' ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', minWidth: '220px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                                            <span style={{ fontSize: '1.5rem' }}>📊</span>
+                                            <span style={{ fontSize: '1rem', fontWeight: 'bold' }}>{(msg as any).poll_data?.question || 'Encuesta P2P'}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            {(msg as any).poll_data?.options?.map((opt: string, i: number) => (
+                                                <button key={i} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', color: 'inherit', textAlign: 'left', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}>
+                                                    <span>{opt}</span>
+                                                    <span>0%</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <span style={{ wordBreak: 'break-word', fontSize: '1rem', lineHeight: '1.4' }}>{msg.content}</span>
+                                )}
+                                
+                                <div style={{ 
+                                    display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px',
+                                    marginTop: '2px', fontSize: '0.7rem', color: isMine ? 'rgba(255,255,255,0.7)' : 'var(--text-muted)' 
+                                }}>
+                                    <span id={`msg-${msg.id}-star`} style={{ color: 'transparent', transition: 'color 0.2s', marginRight: '4px', fontSize: '0.8rem', cursor: 'pointer' }} onClick={() => toggleStar(msg.id)}>⭐</span>
+                                    {new Date(msg.timestamp * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                                    {isMine && (
+                                        <span style={{ color: '#3498db', fontWeight: 'bold', fontSize: '0.85rem', letterSpacing: '-2px' }}>
+                                            ✓✓
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+                <div ref={messagesEndRef} />
+            </div>
 
-  return (
-    <section className={`chat-window ${isMobileChatActive ? "active-mobile" : ""}`}>
-      {/* Call overlay (Phase 13) */}
-      {callMode && (
-        <CallScreen
-          peer={peerName}
-          mode={callMode}
-          onHangup={() => setCallMode(null)}
-        />
-      )}
-
-      {/* Header */}
-      <header className="chat-header glass" style={{
-        padding: '16px 20px',
-        borderBottom: '1px solid var(--glass-border)',
-        background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-      }}>
-        <div className="recipient-info" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <button className="back-btn icon-btn glass" style={{ width: '40px', height: '40px' }} onClick={closeMobileChat}>←</button>
-          <div className={`avatar-circle-small ${activeGroup ? "group" : ""} ${activeConv?.is_burner ? "burner-avatar" : ""}`}
-            style={{
-              width: '42px', height: '42px', borderRadius: '50%',
-              background: activeConv?.is_burner ? 'rgba(255, 23, 68, 0.1)' : 'var(--surface-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.1rem', fontWeight: 600,
-              border: activeConv?.is_burner ? '1px solid var(--primary)' : '1px solid var(--glass-border-highlight)',
-              color: activeConv?.is_burner ? 'var(--primary)' : 'var(--text-primary)'
-            }}
-          >
-            {activeGroup ? "#" : activeConv?.is_burner ? "🔥" : (activeConv?.peer?.[0] ?? '?').toUpperCase()}
-          </div>
-          <div className="recipient-details" style={{ display: 'flex', flexDirection: 'column' }}>
-            <span className="recipient-name" style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 600, color: activeConv?.is_burner ? 'var(--primary)' : 'var(--text-primary)' }}>
-              {activeGroup ? activeGroup.name : (activeConv?.peer || "Desconocido")}
-              {activeConv?.is_burner && <span style={{ fontSize: '0.7rem', marginLeft: '6px', color: 'var(--primary)' }}>[VOLATILE]</span>}
-            </span>
-            <span className="recipient-status" style={{ fontSize: '0.8rem', color: isTyping ? 'var(--primary)' : 'var(--text-secondary)' }}>
-              {isTyping ? <span className="typing-indicator">escribiendo...</span> : "En línea"}
-            </span>
-          </div>
-        </div>
-        <div className="header-actions" style={{ display: 'flex', gap: '8px' }}>
-          <button 
-            className={`icon-btn glass ${currentTimer > 0 ? "active-burner" : ""}`} 
-            style={{ 
-                width: '40px', height: '40px', borderRadius: '12px',
-                color: currentTimer > 0 ? 'var(--primary)' : 'inherit',
-                borderColor: currentTimer > 0 ? 'var(--primary)' : 'var(--glass-border)',
-                position: 'relative'
-            }} 
-            title="Chat Efímero (Mensaje que desaparece)"
-            onClick={toggleTimer}
-          >
-            🔥
-            {currentTimer > 0 && (
-                <span style={{ 
-                    position: 'absolute', top: '-4px', right: '-4px', 
-                    background: 'var(--primary)', color: 'white', 
-                    fontSize: '0.6rem', padding: '2px 4px', borderRadius: '6px'
+            {/* Input Capsular Area */}
+            <footer style={{ 
+                padding: '10px 14px', display: 'flex', gap: '8px', alignItems: 'flex-end', 
+                background: 'var(--solid-bg)' 
+            }}>
+                {/* Replaces standard input mapping with Capsular Input */}
+                <div style={{
+                    flex: 1, display: 'flex', alignItems: 'center', background: 'var(--bg-lifted)',
+                    borderRadius: '24px', padding: '4px 6px', minHeight: '48px', overflow: 'hidden'
                 }}>
-                    {currentTimer < 60 ? `${currentTimer}s` : currentTimer < 86400 ? `${Math.floor(currentTimer/3600)}h` : `${Math.floor(currentTimer/86400)}d`}
-                </span>
-            )}
-          </button>
-          <button className="icon-btn glass" style={{ width: '40px', height: '40px', borderRadius: '12px' }} title="Llamada de voz" onClick={() => setCallMode("voice")}>📞</button>
-          <button className="icon-btn glass" style={{ width: '40px', height: '40px', borderRadius: '12px' }} title="Videollamada" onClick={() => setCallMode("video")}>📹</button>
-          <button
-            className="icon-btn glass"
-            title={isSharingLocation ? "Detener Ubicación" : "Compartir Ubicación en Vivo"}
-            onClick={() => isSharingLocation ? stopLocationSharing() : startLocationSharing(60)}
-            style={{ width: '40px', height: '40px', borderRadius: '12px', color: isSharingLocation ? 'var(--primary)' : 'inherit', borderColor: isSharingLocation ? 'var(--primary)' : 'var(--glass-border)' }}
-          >
-            📍
-          </button>
+                    <button style={{ padding: '8px 12px', color: 'var(--text-muted)', background: 'transparent', fontSize: '1.2rem' }}>😊</button>
+                    
+                    {isRecording ? (
+                        <div style={{ flex: 1, color: 'var(--danger)', fontWeight: 'bold', display: 'flex', alignItems: 'center', paddingLeft: '8px' }}>
+                            <span style={{ animation: 'pulse 1s infinite', marginRight: '8px' }}>🔴</span> Grabando... {Math.floor(recordDuration / 60)}:{(recordDuration % 60).toString().padStart(2, '0')}
+                        </div>
+                    ) : (
+                        <input 
+                            type="text" 
+                            placeholder="Mensaje" 
+                            value={inputText}
+                            onChange={e => setInputText(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleSend()}
+                            style={{
+                                flex: 1, background: 'transparent', border: 'none', color: 'var(--text-primary)',
+                                fontSize: '1.05rem', padding: '8px 4px', outline: 'none'
+                            }} 
+                        />
+                    )}
+                    
+                    {!isRecording && (
+                        <>
+                            <button onClick={handlePoll} style={{ padding: '8px', color: 'var(--text-muted)', background: 'transparent', fontSize: '1.2rem' }}>📊</button>
+                            <button onClick={handleLocation} style={{ padding: '8px', color: 'var(--text-muted)', background: 'transparent', fontSize: '1.2rem' }}>📍</button>
+                            {inputText.length === 0 && (
+                                <button onClick={handleCamera} style={{ padding: '8px 12px 8px 8px', color: 'var(--text-muted)', background: 'transparent', fontSize: '1.2rem' }}>📷</button>
+                            )}
+                        </>
+                    )}
+                </div>
+                
+                <button 
+                    className={inputText.trim() ? "btn-primary animate-enter" : "animate-enter"}
+                    onClick={inputText.trim() ? handleSend : (isRecording ? stopRecording : startRecording)}
+                    style={{ 
+                        width: 48, height: 48, borderRadius: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                        background: inputText.trim() ? 'var(--primary)' : (isRecording ? 'var(--danger)' : 'var(--solid-highlight)'), 
+                        color: 'white', fontSize: '1.2rem', flexShrink: 0,
+                        transition: 'background 0.2s', border: 'none'
+                    }}
+                >
+                    {inputText.trim() ? '➤' : (isRecording ? '⏹' : '🎤')}
+                </button>
+            </footer>
         </div>
-      </header>
-
-      {/* Burner Warning Banner */}
-      {activeConv?.is_burner && (
-        <div style={{ background: 'rgba(255, 23, 68, 0.1)', borderBottom: '1px solid var(--primary)', padding: '0.5rem', textAlign: 'center' }}>
-          <p className="font-mono" style={{ color: 'var(--primary)', fontSize: '0.75rem', margin: 0 }}>
-            ⚠️ MODO BURNER: Los mensajes solo existen en la memoria RAM y se destruirán al cerrar el chat.
-          </p>
-        </div>
-      )}
-
-      {/* Messages */}
-      <div className="messages-area scrollbar-hide">
-        {isLoading && <div className="loading-spinner"><div className="loader" /></div>}
-        {messages.map(msg => (
-          <MessageBubble
-            key={msg.id}
-            msg={msg}
-            onReply={setReplyTarget}
-            onDelete={deleteMessage}
-            onReact={reactToMessage}
-            onStar={toggleStarMessage}
-            onForward={setForwardMsg}
-            isStarred={starredMessages.some(s => s.id === msg.id)}
-          />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Reply banner */}
-      {replyTarget && (
-        <div className="reply-banner glass animate-fade">
-          <div className="reply-banner-content">
-            <span className="reply-banner-name">{replyTarget.is_mine ? "Tú" : replyTarget.sender.substring(0, 12)}</span>
-            <span className="reply-banner-text">{replyTarget.content.substring(0, 60)}</span>
-          </div>
-          <button className="reply-close" onClick={() => setReplyTarget(null)}>✕</button>
-        </div>
-      )}
-
-      {/* Footer */}
-      <footer className="chat-footer">
-        <input type="file" ref={fileInputRef} style={{ display: "none" }} accept="image/*,audio/*,.pdf,.doc,.docx" onChange={handleFileSelect} />
-        
-        <div className="input-group">
-          <button className="icon-btn action" onClick={() => fileInputRef.current?.click()} title="Adjuntar">📎</button>
-          <textarea
-            rows={1}
-            placeholder="Escribe un mensaje..."
-            className="message-input scrollbar-hide"
-            value={inputText}
-            onChange={e => setInputText(e.target.value)}
-            onKeyDown={handleKeyPress}
-          />
-          <button className="icon-btn action" onClick={() => { fileInputRef.current?.setAttribute("accept", "image/*"); fileInputRef.current?.click(); }} title="Foto">📷</button>
-        </div>
-        
-        {inputText.trim() ? (
-          <button className="send-btn animate-fade" onClick={handleSend} title="Enviar">
-            <span style={{ transform: 'translateY(1px) translateX(1px)' }}>➤</span>
-          </button>
-        ) : (
-          <button className="mic-btn animate-fade" onClick={handleMic} title="Nota de voz">
-            🎤
-          </button>
-        )}
-      </footer>
-    </section>
-  );
+    );
 }

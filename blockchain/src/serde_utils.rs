@@ -48,5 +48,5 @@ where
         }
     }
 
-    deserializer.deserialize_any(ArrayVisitor)
+    deserializer.deserialize_tuple(64, ArrayVisitor)
 }

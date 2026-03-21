@@ -31,6 +31,8 @@ pub struct Node {
     transport: Arc<dyn Transport>,
     /// Channel for notifying API of new messages
     msg_notifier: Option<tokio::sync::broadcast::Sender<Message>>,
+    /// Hardware LoRa bridge (Phase 18)
+    pub lora_bridge: Option<crate::network::lora_bridge::LoraBridge>,
     /// Is the node running
     is_running: bool,
 }
@@ -54,8 +56,23 @@ impl Node {
             onion_router,
             transport,
             msg_notifier: None,
+            lora_bridge: None,
             is_running: false,
         })
+    }
+
+    /// Set burner mode (RAM-Only flag)
+    pub async fn set_burner_mode(&mut self, enabled: bool) {
+        let mut storage = self.storage.lock().await;
+        storage.set_burner_mode(enabled);
+    }
+
+    /// Set Dead Man's Switch inactivity period in days
+    pub async fn set_dead_mans_days(&mut self, days: u64) {
+        let mut storage = self.storage.lock().await;
+        if let Err(e) = storage.set_config("dms_days", &days.to_string()) {
+            tracing::warn!("Failed to persist DMS days config: {}", e);
+        }
     }
 
     /// Start the node
@@ -64,6 +81,35 @@ impl Node {
         if n.is_running {
             return Ok(());
         }
+
+        // --- PHASE 19: DEAD MAN'S SWITCH CHECK ---
+        {
+            let mut storage = n.storage.lock().await;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+
+            if let Some(days_str) = storage.get_config("dms_days") {
+                if let Ok(days) = days_str.parse::<u64>() {
+                    if days > 0 {
+                        if let Some(last_str) = storage.get_config("dms_last_active") {
+                            if let Ok(last) = last_str.parse::<u64>() {
+                                if now.saturating_sub(last) > days * 86400 {
+                                    tracing::error!("DEAD MAN'S SWITCH TRIGGERED: Node inactive for > {} days. Initiating DB Wipe.", days);
+                                    let _ = storage.self_destruct();
+                                    return Err(crate::network::error::NetworkError::Io(std::io::Error::new(
+                                        std::io::ErrorKind::Other, 
+                                        "Dead Man's Switch Triggered. Data Wiped."
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update last active if it didn't trigger
+            let _ = storage.set_config("dms_last_active", &now.to_string());
+        }
+        // ----------------------------------------
 
         info!("Starting RED node with identity: {}", n.identity.identity_hash().short());
         
@@ -80,6 +126,15 @@ impl Node {
 
         n.is_running = true;
         info!("RED node is now running on {}", n.config.listen_addr);
+
+        // Phase 18: Spin up the 915MHz LoRaWAN Radio Link
+        let mut lora = crate::network::lora_bridge::LoraBridge::new(
+            node_ref.clone(), 
+            if cfg!(windows) { "COM3".into() } else { "/dev/ttyUSB0".into() }, 
+            115200
+        );
+        let _ = lora.start().await;
+        n.lora_bridge = Some(lora);
 
         // Start background tasks
         Self::start_background_tasks(node_ref.clone()).await;
@@ -100,6 +155,46 @@ impl Node {
                     Ok(count) if count > 0 => info!("Background prune: removed {} expired messages", count),
                     Err(e) => error!("Background prune error: {:?}", e),
                     _ => {}
+                }
+            }
+        });
+
+        // Phase 17: Constant-Rate Traffic Padding (Anti-Censorship/NSA)
+        // Continuously emits 1KB background noise to flatten ISP bandwidth analysis graphs.
+        let node_ref_padding = node_ref.clone();
+        tokio::spawn(async move {
+            debug!("Mixnet/Padding: Starting continuous traffic obfuscation worker");
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                let n: tokio::sync::MutexGuard<'_, Self> = node_ref_padding.lock().await;
+                let peers = n.transport.connected_peers();
+                if !peers.is_empty() {
+                    // Extract data synchronously to drop the !Send ThreadRng before awaiting the transport
+                    let (random_peer, noise) = {
+                        use rand::Rng;
+                        let mut rng = rand::thread_rng();
+                        let peer = peers[rng.gen_range(0..peers.len())].clone();
+                        let mut noise_buf = vec![0u8; 1024];
+                        rand::RngCore::fill_bytes(&mut rng, &mut noise_buf);
+                        (peer, noise_buf)
+                    };
+                    
+                    // Wrap the noise inside a structurally valid OnionLayer so it compiles and travels,
+                    // but the recipient will fail to decrypt it and drop it silently.
+                    let fake_layer = crate::network::routing::OnionLayer {
+                        ephemeral_pk: [0u8; 32],
+                        encrypted: crate::crypto::encryption::EncryptedData {
+                            nonce: [0u8; 12],
+                            ciphertext: noise,
+                        }
+                    };
+                    
+                    let fake_packet = crate::network::routing::OnionPacket {
+                        layers: vec![fake_layer],
+                    };
+                    
+                    let _ = n.transport.send(&random_peer, crate::network::transport::TransportMessage::Onion(fake_packet)).await;
+                    trace!("Transmitted 1KB of obfuscation noise padding");
                 }
             }
         });
@@ -157,12 +252,21 @@ impl Node {
         // In RED, the ephemeral key is matched against our identity
         let secret = self.identity.key_exchange(&crate::crypto::keys::PublicKey::from_bytes(layer.ephemeral_pk));
         
-        match self.onion_router.peel_layer(layer, &secret) {
+        match self.onion_router.peel_layer(layer, &secret).await {
             Ok(routing_info) => {
                 if let Some(next_hop_addr) = routing_info.next_hop {
                     // Forward to next hop
                     debug!("Forwarding onion packet to {}", next_hop_addr);
                     packet.layers.remove(0);
+                    
+                    // Phase 17: Mixnet Timing Obfuscation (Anti-NSA)
+                    // Deliberately hold the packet for a randomized interval before re-transmitting 
+                    // to mathematically destroy any temporal correlation between Sender A and Receiver C.
+                    use rand::Rng;
+                    let delay_ms = rand::thread_rng().gen_range(1000..=5000);
+                    debug!("Mixnet Active: Obfuscating metadata, delaying transmission by {}ms", delay_ms);
+                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+
                     if let Ok(addr) = next_hop_addr.parse::<std::net::SocketAddr>() {
                         if let Ok(next_peer_id) = self.transport.connect(addr).await {
                             let _ = self.transport.send(&next_peer_id, crate::network::transport::TransportMessage::Onion(packet)).await;
@@ -179,6 +283,25 @@ impl Node {
                 // Not for us or corrupted
                 trace!("Failed to peel onion layer");
             }
+        }
+    }
+
+    /// Inject a raw encrypted byte payload received out-of-band (e.g. from Bluetooth Mesh)
+    /// allowing the Core node to decrypt strings without libp2p internet.
+    pub async fn inject_raw_payload(&mut self, data: Vec<u8>) -> crate::network::NetworkResult<()> {
+        let dummy_peer = crate::network::PeerId::from_bytes([0; 32]);
+        self.handle_gossip_message(dummy_peer, data).await;
+        Ok(())
+    }
+
+    /// Handle an incoming gossip message
+    async fn handle_gossip_message(&mut self, _sender: PeerId, data: Vec<u8>) {
+        debug!("Received gossip message ({} bytes)", data.len());
+        // Gossip messages are currently expected to be encrypted OnionPackets
+        if let Ok(packet) = bincode::deserialize::<crate::network::routing::OnionPacket>(&data) {
+            self.handle_onion_packet(_sender, packet).await;
+        } else {
+            error!("Failed to deserialize gossip message as OnionPacket");
         }
     }
 
@@ -273,12 +396,30 @@ impl Node {
             .map_err(|_| NetworkError::TransportError("Group encryption failed".to_string()))?;
 
         // Save updated group state (advanced sender key iteration)
+        let my_hash = self.identity.identity_hash().clone();
         {
-            let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
+            let mut s = self.storage.lock().await;
             s.add_group(group.clone()).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+            
+            // FIX 5.1: Save outbound group message to local storage
+            let dummy_recipient = IdentityHash::from_bytes(group_id.0);
+            let outbound_msg = Message {
+                id: MessageId::generate(),
+                sender: my_hash.clone(),
+                recipient: dummy_recipient,
+                content: message_type.clone(),
+                timestamp: std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64,
+                reply_to: None,
+                status: crate::protocol::MessageStatus::Sent,
+            };
+            if let Err(e) = s.add_message(outbound_msg) {
+                error!("Failed to save outgoing group message to local storage: {:?}", e);
+            }
         }
 
-        let my_hash = self.identity.identity_hash().clone();
         let members: Vec<_> = group.members().cloned().collect();
 
         // Send encrypted group payload individually to each member via Onion Routing
@@ -311,6 +452,14 @@ impl Node {
     /// Send a message to a recipient
     pub async fn send_message(&mut self, recipient: IdentityHash, message: Message) -> NetworkResult<()> {
         debug!("Sending message to recipient: {}", recipient.short());
+        
+        // FIX 5.1: Save outbound message to local encrypted storage before transmitting
+        {
+            let mut s = self.storage.lock().await;
+            if let Err(e) = s.add_message(message.clone()) {
+                error!("Failed to save outgoing message to local storage: {:?}", e);
+            }
+        }
         
         // 1. Resolve recipient IdentityHash to PeerId/Info (via DHT)
         let peer_id = self.transport.resolve(&recipient).await?;

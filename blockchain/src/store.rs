@@ -37,12 +37,13 @@ impl BlockStore {
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
         batch.insert(format!("b:{}", hex::encode(hash)).as_bytes(), block_data);
         
-        // Save height index
-        batch.insert(format!("h:{}", height).as_bytes(), hash.to_vec());
-        
         // Update tip and height
         batch.insert(KEY_TIP, hash.to_vec());
         batch.insert(KEY_HEIGHT, height.to_le_bytes().to_vec());
+        
+        // Save height index with big-endian bytes for proper lexicographical sorting in sled
+        batch.insert([b"h", &height.to_be_bytes()[..]].concat(), hash.to_vec());
+
         
         self.db.apply_batch(batch)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
@@ -71,10 +72,13 @@ impl BlockStore {
 
     /// Get a block hash by height
     pub fn get_hash_at_height(&self, height: u64) -> BlockchainResult<Option<BlockHash>> {
-        let data = self.db.get(format!("h:{}", height))
+        let key = [b"h", &height.to_be_bytes()[..]].concat();
+        let data = self.db.get(key)
             .map_err(|e| BlockchainError::StorageError(e.to_string()))?;
             
         match data {
+
+
             Some(bytes) => {
                 let arr: [u8; 32] = bytes.to_vec().try_into()
                     .map_err(|_| BlockchainError::StorageError("Invalid hash length in DB".to_string()))?;

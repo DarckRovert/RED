@@ -7,6 +7,34 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [5.1.0] - 2026-03-21
+
+### Añadido — Website Masterpiece Edition & Auditoría Final
+
+**Landing Page de Nueva Generación**
+- **Motor de Scroll Ultra-Fluido:** Integración corregida de GSAP + Lenis con sincronización de frames para 60FPS constantes sin stuttering.
+- **Visuales 3D High-End:** Implementación isométrica de la arquitectura en CSS3 puro y tarjetas de comparación con efecto dinámico Glassmorphism.
+- **Narrativa Profesional:** Revisión completa de textos (Copywriting) eliminando informalidades y adoptando un tono corporativo-militar de alta autoridad.
+- **Resiliencia de Navegación:** Parche lógico en `script.js` para manejo robusto de anclas y menús móviles.
+
+**Refinamientos de Seguridad Táctica**
+- **Auditoría de Datos v5.1.0:** Sincronización de todas las métricas, versiones y características en la web y la app.
+- **Bóveda de Grado Militar:** Presentación refinada de las capacidades de PIN de Pánico, Camuflaje y Secure Enclave.
+- **Clean Audit:** Eliminación de archivos basura, logs redundantes y depuración del repositorio Git.
+
+## [5.0.1] - 2026-03-20
+
+### Añadido — Seguridad Biométrica & Keystore (Fases 34-36)
+
+**Arquitectura de Autenticación Cero Confianza**
+- **Migración a Android Keystore / iOS Secure Enclave (`SecureStoragePlugin`):** Almacenamiento criptográfico respaldado por hardware del PIN Maestro, PIN de Pánico, PIN Señuelo y Banderas de Onboarding.
+- **Biometría Nativa Integrada (`BiometricAuth`):** Permite el desbloqueo rápido de la bóveda mediante Huella Dactilar o FaceID validado por el sistema operativo.
+- **Onboarding Interactivo Riguroso:** Nuevo flujo de configuración donde el usuario debe crear y confirmar su PIN maestro irrecuperable.
+- **Remoción de Hardcodes:** Eliminación definitiva de llaves maestras estáticas (ej. "1234", "9999"). El usuario es el único propietario del acceso.
+- **SSR Hydration Anti-Crash Guard:** Prevención de "pantallas negras" en React Server Components al aislar los plugins de Capacitor hasta la completa hidratación del cliente.
+
+---
+
 ## [5.0.0] - 2026-03-13
 
 ### Añadido — Rediseño "Solid UI" & Hardware Real (Fases 25-33)

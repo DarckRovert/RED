@@ -92,7 +92,7 @@ const HASH_SIZE: usize = 32;                 // bytes
 // Parámetros de red
 const ONION_HOPS: usize = 3;                 // número de saltos
 const MIX_INTERVAL: u64 = 30;                // segundos
-const MAX_MESSAGE_SIZE: usize = 65536;       // bytes
+const FIXED_PACKET_SIZE: usize = 4096;       // bytes de relleno estricto
 const GRAPH_DEGREE: usize = 8;               // grado del grafo
 
 // Parámetros de almacenamiento
@@ -464,7 +464,8 @@ function DummyTrafficGenerator(rate_lambda):
 function CreateDummyPacket():
     // Crear paquete indistinguible de uno real
     path = SelectRandomPath(ONION_HOPS)
-    payload = random_bytes(random_size())
+    // El padding forzado empareja matemáticamente a 4096 bytes
+    payload = random_bytes(FIXED_PACKET_SIZE) 
     return CreateOnionPacket(path, payload, path[-1])
 ```
 
@@ -782,7 +783,11 @@ Para cualquier par de usuarios:
 2. **Timing attacks**: Usar operaciones de tiempo constante
 3. **Side channels**: Evitar branches dependientes de secretos
 4. **RNG**: Usar CSPRNG del sistema operativo
-5. **Validación**: Validar todos los inputs de red
+5. **Mitigación**:
+    - **Proof-of-Work Activo (Hashcash)**: Kademlia Swarm descarta cualquier conexión entrante cuya clave pública Ed25519 no comience con `0x0000` (16 bits nulos). Generar una identidad cuesta computacionalmente, imposibilitando spamear la red.
+    - Reputación basada en uptime.
+    - Selección ponderada de nodos.
+6. **Tamaño de Paquete Constante**: Todos los paquetes de red deben tener un tamaño fijo de 4096 bytes para dificultar el análisis de tráfico.
 
 ---
 

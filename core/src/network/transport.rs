@@ -74,10 +74,12 @@ pub trait Transport: Send + Sync + 'static {
 
 /// Placeholder transport implementation
 /// In production, this would use libp2p
+#[cfg(debug_assertions)]
 pub struct PlaceholderTransport {
     connected: Arc<Mutex<Vec<PeerId>>>,
 }
 
+#[cfg(debug_assertions)]
 impl PlaceholderTransport {
     /// Create a new placeholder transport
     pub fn new() -> Self {
@@ -87,12 +89,14 @@ impl PlaceholderTransport {
     }
 }
 
+#[cfg(debug_assertions)]
 impl Default for PlaceholderTransport {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(debug_assertions)]
 #[async_trait]
 impl Transport for PlaceholderTransport {
     async fn listen(&self, _addr: SocketAddr) -> NetworkResult<()> {

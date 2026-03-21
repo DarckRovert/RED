@@ -16,6 +16,7 @@ pub mod onion;
 pub mod dummy_traffic;
 pub mod gossip;
 pub mod libp2p_transport;
+pub mod lora_bridge;
 
 pub use config::NetworkConfig;
 pub use peer::{Peer, PeerId, PeerInfo};

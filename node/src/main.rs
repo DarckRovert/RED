@@ -193,6 +193,36 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         consensus_clone.run_block_production(chain_clone, signing_key).await;
     });
 
+    // SEC-FIX A-4: Dead Man's Switch background task
+    let storage_dms = storage.clone();
+    let data_dir_dms = data_dir.clone();
+    tokio::spawn(async move {
+        info!("Dead Man's Switch task started.");
+        loop {
+            tokio::time::sleep(Duration::from_secs(3600)).await; // Check hourly
+            let (is_active, days_limit) = {
+                let s = storage_dms.lock().await;
+                // These would be set via the SecurityPanel UI in a real app
+                let active = s.get_config("dead_man_switch_enabled").unwrap_or("false") == "true";
+                let days = s.get_config("dead_man_switch_days").unwrap_or("7").parse::<u64>().unwrap_or(7);
+                (active, days)
+            };
+
+            if is_active {
+                let last_activity = {
+                    let s = storage_dms.lock().await;
+                    s.get_config("last_activity_timestamp").unwrap_or("0").parse::<u64>().unwrap_or(0)
+                };
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                if now > last_activity + (days_limit * 24 * 3600) {
+                    warn!("🔴 DEAD MAN'S SWITCH TRIGGERED. INACTIVITY LIMIT EXCEEDED.");
+                    let _ = std::fs::remove_dir_all(&data_dir_dms);
+                    std::process::exit(1);
+                }
+            }
+        }
+    });
+
     // Message broadcast channel for API subscriptions
     let (msg_tx, _) = tokio::sync::broadcast::channel(100);
     let msg_tx_api = msg_tx.clone();
@@ -212,14 +242,18 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     // ── HTTP REST API (port 7333, serves Web UI + REST endpoints) ──────────
     let http_node = node.clone();
     let http_msg_tx = msg_tx_api.clone();
+    let chain_api = chain.clone();
     tokio::spawn(async move {
+        // Rate limiter: 200 req/min for localhost, 30 for remote
+        let limiter = RateLimiter::new(200, std::time::Duration::from_secs(60));
+
         let state = ApiState {
             node: http_node,
+            chain: chain_api,
             msg_tx: http_msg_tx,
+            limiter,
         };
 
-        // Rate limiter: 200 req/min for localhost, 30 for remote
-        let _limiter = RateLimiter::new(200, std::time::Duration::from_secs(60));
 
         // Print API token to logs for the user to use
         if let Ok(pwd) = std::env::var("RED_PASSWORD") {
@@ -367,12 +401,14 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let mut n = node_ref.lock().await;
                                 match n.add_group_member(group_id, member).await {
                                     Ok(_) => {
-                                        let resp = bincode::serialize(&NodeResponse::Ok).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Ok) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(format!("{:?}", e))).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(format!("{:?}", e))) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -398,12 +434,14 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let n = node_ref.lock().await;
                                 match n.list_groups().await {
                                     Ok(groups) => {
-                                        let resp = bincode::serialize(&NodeResponse::GroupList(groups)).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::GroupList(groups)) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(format!("{:?}", e))).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(format!("{:?}", e))) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -437,12 +475,14 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let n = node_ref.lock().await;
                                 match n.list_devices().await {
                                     Ok(devices) => {
-                                        let resp = bincode::serialize(&NodeResponse::DeviceList(devices)).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::DeviceList(devices)) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(format!("{:?}", e))).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(format!("{:?}", e))) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -521,7 +561,15 @@ max_size_gb = 10
     // Save identity to storage
     let mut storage = Storage::new(data_dir.join("storage"), get_storage_key());
     storage.open()?;
-    storage.set_identity(identity)?;
+    storage.set_identity(identity.clone())?;
+    
+    // Phase 18: Autonomous Decoy Vault Generation
+    // When the Java/UI layer commands a stealth login via the Duress PIN (9999), it spawns 
+    // the node with a '_decoy' data_dir suffix. We instantly forge a believable SQLite history.
+    if data_dir.to_string_lossy().ends_with("_decoy") {
+        red_core::network::dummy_traffic::populate_decoy_vault(&mut storage, identity.identity_hash());
+    }
+    
     storage.close()?;
     info!("Identity saved to storage.");
     

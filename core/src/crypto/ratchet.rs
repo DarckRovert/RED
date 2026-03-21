@@ -59,16 +59,16 @@ impl RatchetState {
         let dh_output = dh_self.key_exchange(&their_public);
         
         // Derive root key and sending chain key
+        let chain_key_send = derive_symmetric_key(
+            &shared_secret,
+            &dh_output,
+            b"RED-chain-send",
+        )?;
+
         let derived = derive_symmetric_key(
             &shared_secret,
             &dh_output,
-            b"RED-ratchet-init",
-        )?;
-        
-        let chain_key_send = derive_symmetric_key(
-            &derived,
-            b"",
-            b"RED-chain-send",
+            b"RED-root-update",
         )?;
 
         Ok(Self {
@@ -258,6 +258,8 @@ impl DoubleRatchet {
         // Derive receiving chain key
         if let Some(ref dh_self) = self.state.dh_self {
             let dh_output = dh_self.key_exchange(their_public);
+            // SEC-FIX C-2: Receive chain uses distinct label from send chain.
+            // Previously both used b"RED-chain-send" → identical keys → broken E2E.
             let recv_chain = derive_symmetric_key(
                 &self.state.root_key,
                 &dh_output,

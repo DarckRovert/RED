@@ -43,6 +43,7 @@ Para iOS, **necesitas un Mac con Xcode instalado**:
 *   **Migración de Estilos**: He movido todos los estilos de `styled-jsx` a un archivo CSS global (`components.css`). Esto era crítico porque las versiones modernas de Next.js fallaban al compilar para móvil con estilos inline.
 *   **Static Export**: He configurado `next.config.ts` para que la app sea 100% estática, requisito de Capacitor.
 *   **Sincronización**: He ejecutado `cap sync`, por lo que el proyecto Android ya tiene la última versión del código visual "WOW".
+*   **Autenticación Nivel Dios**: He configurado el Keystore Nativo (`SecureStoragePlugin`) y la Biometría (`BiometricAuth`). El bypass "1234" ya no existe; al abrir el APK por primera vez, el usuario enfrentará un verdadero Onboarding para crear su PIN maestro irrecuperable.
 
 ---
 **RED** — Listo para testear. Compartir privacidad nunca fue tan fácil.

@@ -1,16 +1,17 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v5.0** — La alternativa soberana a WhatsApp: Solid UI, hardware real P2P (BLE/WiFi), resistente a censura y con seguridad militar.
+> **v5.1.0 (Masterpiece Edition)** — La alternativa soberana a WhatsApp: Solid UI, hardware real P2P, resistente a censura, con seguridad nativa basada en Keystore (Android/iOS) y Bóveda Táctica Anti-Forense.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Routes](https://img.shields.io/badge/Rutas_Producción-22-blue)]() [![Phases](https://img.shields.io/badge/Fases_Completadas-53-gold)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Routes](https://img.shields.io/badge/Rutas_Producción-22-blue)]() [![Phases](https://img.shields.io/badge/Fases_Completadas-36%2B-gold)]()
 
 ## 🎯 Visión
 
 RED es un protocolo de comunicación que garantiza:
 - **Privacidad total**: Cifrado X25519 + AES-256-GCM con deniabilidad perfecta
-- **Descentralización**: Sin servidores centrales, red P2P pura
+- **Descentralización**: Sin servidores centrales, red P2P pura (100% P2P)
+- **Seguridad Táctica**: PIN de Pánico, Modo Camuflaje y Borrado de Seguridad (DMS)
 - **Anonimato**: Identidades DID efímeras, sin metadatos expuestos
-- **Resistencia a censura**: Imposible de bloquear o censurar
+- **Resistencia a censura**: Operación vía BLE/WiFi-Direct y Mesh LoRa
 - **Paridad con WhatsApp**: Todas las características principales más capacidades exclusivas
 
 ## 🏗️ Arquitectura
@@ -145,21 +146,27 @@ npx cap open android
 | "Escribiendo..." | ✅ |
 | Perfil detallado de contacto | ✅ |
 
-### 🔒 Seguridad & Anti-Forense
+### 🔒 Seguridad & Anti-Forense (Nivel Dios)
 | Característica | Estado |
 |---|---|
 | Cifrado X25519 + AES-256-GCM | ✅ |
 | Perfect Forward Secrecy | ✅ |
 | Deniabilidad de mensajes | ✅ |
+| **Bóveda Señuelo (Configurable por Usuario)** | ✅ |
+| **Defensa Anti-Sybil (Hashcash)** | ✅ |
+| **Mixnets (Ofuscación Temporal)** | ✅ |
+| **Padding Constante 4KB (Anti-NSA Sizing)** | ✅ |
+| **Ruido Blanco Constante (Tráfico Background)** | ✅ |
 | Panel de criptografía | ✅ |
 | Renegociación DH | ✅ |
 | DID descentralizado | ✅ |
 | **Burner Chats (RAM-Only)** | ✅ |
 | **Bloqueo Capturas de Pantalla** | ✅ |
 | **Dead Man's Switch (Auto-destrucción)** | ✅ |
-| **PIN de Pánico (Wipe Lockscreen)** | ✅ |
+| **PIN de Pánico y Bóveda Cifrados en Keystore** | ✅ |
 | **App Disguise (Calculadora)** | ✅ |
 | Auditoría del Dispositivo (Secure Enclave) | ✅ |
+| **Autenticación Biométrica Nativa (Huella/FaceID)** | ✅ |
 
 ### 🌐 Red & Descentralización
 | Característica | Estado |
@@ -170,6 +177,8 @@ npx cap open android
 | **Bluetooth Advertiser (GATT)**| ✅ |
 | **WiFi Direct (P2P LAN)** | ✅ |
 | **Mesh Store-and-Forward** | ✅ |
+| **Mesh APK Updater (Inmunidad App Store)** | ✅ |
+| **Puente LoRaWAN Sub-GHz (Anti-Apagón)** | ✅ |
 | **Modo Offline Autónomo** | ✅ |
 
 ### 🎨 UX & Personalización
@@ -220,5 +229,5 @@ RED es open-source. Las áreas prioritarias de contribución son:
 
 ---
 
-*RED v4.0 — Suite de Seguridad Total implementada · Build: Passing ✅*
-*Nuevo: 🛡️ **Defensa Anti-Forense** · 🔥 **Burner Chats** · 💀 **Dead Man's Switch** · 📍 **Live Location Tracking***
+*RED v5.1.0 — Suite de Seguridad Total implementada · Build: Passing ✅*
+*🛡️ **Integración Nativa de Keystore** · 🔥 **Biometría Nativa** · 💀 **Dead Man's Switch***

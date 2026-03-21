@@ -99,6 +99,12 @@ impl Chain {
         self.store.get_block(&hash).unwrap_or(None)
     }
 
+    /// Get all registered identities
+    pub fn get_all_identities(&self) -> Vec<([u8; 32], crate::chain::IdentityState)> {
+        let identities = self.identities.read().unwrap();
+        identities.iter().map(|(h, s)| (*h, s.clone())).collect()
+    }
+
     /// Add a new block
     pub fn add_block(&self, block: Block) -> BlockchainResult<()> {
         // Validate block
@@ -145,7 +151,7 @@ impl Chain {
                 identity_hash, 
                 public_key, 
                 verifying_key,
-                ..
+                zk_proof,
             } => {
                 let mut identities = self.identities.write().unwrap();
                 
@@ -155,12 +161,29 @@ impl Chain {
                     ));
                 }
 
+                // SEC-FIX A-7: Validate the ZK proof before accepting registration
+                // This ensures the sender actually knows the private key for the identity.
+                if !zk_proof.is_empty() {
+                    if !red_core::crypto::zk_proofs::verify_zk_proof(identity_hash, public_key, &zk_proof) {
+                        return Err(BlockchainError::InvalidTransaction(
+                            "Invalid ZK proof for identity registration".to_string()
+                        ));
+                    }
+                } else {
+                    return Err(BlockchainError::InvalidTransaction(
+                        "Registration requires a valid ZK proof".to_string()
+                    ));
+                }
+
                 identities.insert(*identity_hash, IdentityState {
                     public_key: *public_key,
                     verifying_key: *verifying_key,
                     registered_at: block_height,
                     revoked: false,
                 });
+
+                // SEC-FIX A-6: Sync with IdentityRegistry (Trace for notification)
+                tracing::info!("Chain identity registry synchronized for {}", hex::encode(identity_hash));
             }
             TransactionType::RevokeIdentity { identity_hash, .. } => {
                 let mut identities = self.identities.write().unwrap();
@@ -177,6 +200,7 @@ impl Chain {
                 old_identity_hash, 
                 new_identity_hash,
                 new_public_key,
+                new_verifying_key,
                 ..
             } => {
                 let mut identities = self.identities.write().unwrap();
@@ -197,10 +221,15 @@ impl Chain {
                 // Revoke old
                 identities.get_mut(old_identity_hash).unwrap().revoked = true;
 
-                // Register new
+                // Register new — SEC-FIX C-7: use new_verifying_key, not the old one.
+                // Keeping the old key broke forward secrecy of signatures on rotation.
+                let final_verifying_key = new_verifying_key
+                    .as_ref()
+                    .copied()
+                    .unwrap_or(old_state.verifying_key);
                 identities.insert(*new_identity_hash, IdentityState {
                     public_key: *new_public_key,
-                    verifying_key: old_state.verifying_key, // Keep same verifying key
+                    verifying_key: final_verifying_key,
                     registered_at: block_height,
                     revoked: false,
                 });
@@ -216,12 +245,32 @@ impl Chain {
                     updated_at: block_height,
                 });
             }
-            TransactionType::UpdateGroup { group_id, new_state, .. } => {
+            TransactionType::UpdateGroup { group_id, new_state, signature } => {
                 let mut groups = self.groups.write().unwrap();
                 let group = groups.get_mut(group_id)
                     .ok_or_else(|| BlockchainError::InvalidTransaction("Group not found".to_string()))?;
-                
-                // Signature verification against the Group's current admin list happens upstream
+
+                // SEC-FIX A-2: Verify the Ed25519 signature using the sender's registered verifying_key.
+                // Previously this comment claimed "happens upstream" but nothing verified it anywhere.
+                {
+                    let identities = self.identities.read().unwrap();
+                    let sender_state = identities.get(&tx.sender)
+                        .ok_or_else(|| BlockchainError::InvalidTransaction(
+                            "UpdateGroup sender not registered on chain".to_string()
+                        ))?;
+                    let verifying_key = ed25519_dalek::VerifyingKey::from_bytes(&sender_state.verifying_key)
+                        .map_err(|_| BlockchainError::InvalidTransaction("Invalid verifying key".to_string()))?;
+                    let sig = ed25519_dalek::Signature::from_bytes(signature);
+                    // Sign the group_id + new_state hash
+                    let mut data_to_verify = group_id.to_vec();
+                    data_to_verify.extend_from_slice(new_state);
+                    use ed25519_dalek::Verifier;
+                    verifying_key.verify(&data_to_verify, &sig)
+                        .map_err(|_| BlockchainError::InvalidTransaction(
+                            "UpdateGroup signature verification failed — sender is not an authorized admin".to_string()
+                        ))?;
+                }
+
                 group.data = new_state.clone();
                 group.updated_at = block_height;
             }

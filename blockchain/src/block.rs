@@ -176,7 +176,7 @@ impl Block {
         }
 
         // Validate signature
-        if self.header.height > 0 && self.header.signature != [0u8; 64] {
+        if self.header.height > 0 {
             self.verify_signature()?;
         }
 

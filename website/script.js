@@ -42,15 +42,27 @@ const initNavigation = () => {
   navLinksItems.forEach(link => {
     link.addEventListener('click', e => {
       const href = link.getAttribute('href');
-      if (href.startsWith('#')) {
+      if (href && href.startsWith('#')) {
         e.preventDefault();
+        
+        if (navLinks) navLinks.classList.remove('active');
+        if (navToggle) navToggle.textContent = '☰';
+
+        if (href === '#') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+
         const target = $(href);
         if (target) {
-          if (navLinks) navLinks.classList.remove('active');
-          if (navToggle) navToggle.textContent = '☰';
-          
+          const offset = 80;
+          const bodyRect = document.body.getBoundingClientRect().top;
+          const elementRect = target.getBoundingClientRect().top;
+          const elementPosition = elementRect - bodyRect;
+          const offsetPosition = elementPosition - offset;
+
           window.scrollTo({
-            top: target.offsetTop - 80,
+            top: offsetPosition,
             behavior: 'smooth'
           });
         }
@@ -83,7 +95,9 @@ const initNavigation = () => {
 /* ─── INITIALIZATION ────────────────────────────────────── */
 // Fire everything
 const init = () => {
+  initSmoothScroll();
   initCyberMesh();
+  initMagneticButtons();
   initPreloader();
   initCustomCursor();
   initObservers();
@@ -158,65 +172,152 @@ const animateCounter = (el) => {
 };
 
 /* ─── CYBER-MESH (Interactive Background) ───────────────── */
+/* ─── SMOOTH SCROLL (Lenis & GSAP) ──────────────────────── */
+const initSmoothScroll = () => {
+  if (typeof Lenis === 'undefined') return;
+  const lenis = new Lenis({
+    smoothWheel: true,
+    lerp: 0.1,
+    wheelMultiplier: 1.1,
+  });
+  
+  if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
+    gsap.registerPlugin(ScrollTrigger);
+    
+    // Sync ScrollTrigger with Lenis
+    lenis.on('scroll', ScrollTrigger.update);
+    
+    gsap.ticker.add((time) => { lenis.raf(time * 1000) });
+    gsap.ticker.lagSmoothing(0);
+    
+    // Parallax
+    if($('.hero__glow')) gsap.to('.hero__glow', { yPercent: 40, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    if($('.hero-peru-badge')) gsap.to('.hero-peru-badge', { yPercent: -50, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
+    if($('.neon-inca-pattern')) gsap.to('.neon-inca-pattern', { yPercent: 20, ease: 'none', scrollTrigger: { trigger: 'body', start: 'top top', end: 'bottom bottom', scrub: true } });
+  } else {
+    // Basic RAF fallback if GSAP fails
+    const raf = (time) => { lenis.raf(time); requestAnimationFrame(raf); };
+    requestAnimationFrame(raf);
+  }
+};
+
+/* ─── MAGNETIC BUTTONS ──────────────────────────────────── */
+const initMagneticButtons = () => {
+  if (typeof gsap === 'undefined') return;
+  const magnets = $$('.btn-primary, .btn-secondary, .nav__cta');
+  
+  magnets.forEach(btn => {
+    const xTo = gsap.quickTo(btn, "x", {duration: 0.4, ease: "power3"}),
+          yTo = gsap.quickTo(btn, "y", {duration: 0.4, ease: "power3"});
+          
+    btn.addEventListener('mousemove', (e) => {
+      const rect = btn.getBoundingClientRect();
+      const x = (e.clientX - rect.left) - rect.width/2;
+      const y = (e.clientY - rect.top) - rect.height/2;
+      xTo(x * 0.35); // Magnetic pull factor
+      yTo(y * 0.35);
+    });
+    btn.addEventListener('mouseleave', () => {
+      xTo(0); yTo(0);
+    });
+  });
+};
+
+/* ─── CYBER-MESH (Organic Particle Fluid) ───────────────── */
 const initCyberMesh = () => {
   const canvas = $('#bg-mesh-canvas');
   if (!canvas) return;
 
-  const ctx = canvas.getContext('2d');
-  let w, h, points = [];
-  const spacing = 60;
-  const mouse = { x: -1000, y: -1000, radius: 280 };
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let w = canvas.width = window.innerWidth;
+  let h = canvas.height = window.innerHeight;
+  let particles = [];
+  const count = window.innerWidth > 768 ? 200 : 80;
+  
+  const mouse = { x: -1000, y: -1000, vx: 0, vy: 0 };
+  let lastMouse = { x: -1000, y: -1000 };
 
   const resize = () => {
     w = canvas.width = window.innerWidth;
     h = canvas.height = window.innerHeight;
-    points = [];
-    for (let x = -spacing; x < w + spacing; x += spacing) {
-      for (let y = -spacing; y < h + spacing; y += spacing) {
-        points.push({ x, y, ox: x, oy: y });
-      }
-    }
   };
+  window.addEventListener('resize', resize);
 
   window.addEventListener('mousemove', e => {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
+    lastMouse.x = mouse.x; lastMouse.y = mouse.y;
+    mouse.x = e.clientX; mouse.y = e.clientY;
+    mouse.vx = mouse.x - lastMouse.x;
+    mouse.vy = mouse.y - lastMouse.y;
   });
 
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x: Math.random() * w, y: Math.random() * h,
+      vx: (Math.random() - 0.5) * 0.8, vy: (Math.random() - 0.5) * 0.8,
+      baseSize: Math.random() * 2 + 1,
+      angle: Math.random() * Math.PI * 2
+    });
+  }
+
   const animate = () => {
-    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#020205'; // bg-deep void color
+    ctx.fillRect(0, 0, w, h);
     
-    points.forEach(p => {
-      const dx = mouse.x - p.ox;
-      const dy = mouse.y - p.oy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+    // Decay mouse velocity
+    mouse.vx *= 0.9; mouse.vy *= 0.9;
+
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      p.angle += 0.01;
       
-      if (dist < mouse.radius) {
-        const f = (mouse.radius - dist) / mouse.radius;
-        p.x = p.ox - dx * f * 0.6;
-        p.y = p.oy - dy * f * 0.6;
+      // Wrap around
+      if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+      if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+      
+      // Interaction with mouse
+      const dx = mouse.x - p.x;
+      const dy = mouse.y - p.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      if (dist < 200) {
+        const force = (200 - dist) / 200;
+        p.x += mouse.vx * force * 0.04;
+        p.y += mouse.vy * force * 0.04;
         
         ctx.beginPath();
         ctx.moveTo(p.x, p.y);
         ctx.lineTo(mouse.x, mouse.y);
-        ctx.strokeStyle = `rgba(232, 0, 28, ${f * 0.15})`;
+        ctx.strokeStyle = `rgba(232, 0, 28, ${force * 0.3})`;
         ctx.lineWidth = 0.5;
         ctx.stroke();
-        
-        ctx.fillStyle = `rgba(232, 0, 28, ${f * 0.8})`;
-      } else {
-        p.x += (p.ox - p.x) * 0.1;
-        p.y += (p.oy - p.y) * 0.1;
-        ctx.fillStyle = 'rgba(232, 0, 28, 0.12)';
       }
       
-      ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+      // Draw particle
+      ctx.fillStyle = dist < 200 ? `rgba(232, 0, 28, ${0.4 + (200-dist)/200})` : 'rgba(232, 0, 28, 0.2)';
+      const size = p.baseSize + Math.sin(p.angle) * 0.8;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+      ctx.fill();
     });
+    
+    // Connect particles nearby
+    for (let i = 0; i < count; i++) {
+      for (let j = i + 1; j < count; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = dx*dx + dy*dy;
+        if (dist < 8000) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(232, 0, 28, ${0.1 * (1 - dist/8000)})`;
+          ctx.stroke();
+        }
+      }
+    }
+    
     requestAnimationFrame(animate);
   };
-
-  window.addEventListener('resize', resize);
-  resize();
   animate();
 };
 

@@ -47,10 +47,12 @@ impl MessageId {
 /// Gossip message wrapper
 #[derive(Clone, Debug)]
 pub struct GossipMessage {
-    /// Unique message identifier
+    /// Unique message identifier (includes nonce for entropy)
     pub id: MessageId,
     /// Message payload
     pub payload: Vec<u8>,
+    /// SEC-FIX M-6: Nonce for ID entropy
+    pub nonce: u64,
     /// Time-to-live (remaining hops)
     pub ttl: u8,
     /// Original sender (may be anonymous)
@@ -71,6 +73,7 @@ impl GossipMessage {
         Self {
             id,
             payload,
+            nonce: 0,
             ttl,
             origin,
             timestamp,
@@ -86,6 +89,7 @@ impl GossipMessage {
         Some(Self {
             id: self.id.clone(),
             payload: self.payload.clone(),
+            nonce: self.nonce,
             ttl: self.ttl - 1,
             origin: self.origin,
             timestamp: self.timestamp,

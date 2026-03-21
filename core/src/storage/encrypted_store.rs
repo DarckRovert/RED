@@ -8,9 +8,10 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 
-use crate::crypto::encryption::{encrypt, decrypt};
+use crate::crypto::encryption::{encrypt, decrypt, EncryptedData};
 use crate::crypto::keys::SymmetricKey;
 use crate::crypto::hashing::blake3_hash;
+
 
 /// Duración máxima de retención de mensajes (30 días en segundos)
 pub const T_MAX_SECONDS: u64 = 30 * 24 * 60 * 60;
@@ -18,16 +19,12 @@ pub const T_MAX_SECONDS: u64 = 30 * 24 * 60 * 60;
 /// Entrada cifrada en el almacenamiento
 #[derive(Clone, Serialize, Deserialize)]
 pub struct EncryptedEntry {
-    /// Texto cifrado del mensaje
-    pub ciphertext: Vec<u8>,
-    /// Nonce usado para cifrado
-    pub nonce: [u8; 12],
+    /// Datos del mensaje cifrados (incluye nonce y ciphertext)
+    pub data: EncryptedData,
     /// Timestamp de creación
     pub timestamp: u64,
     /// Metadatos cifrados (ID del contacto, etc.)
-    pub encrypted_metadata: Vec<u8>,
-    /// Nonce para metadatos
-    pub metadata_nonce: [u8; 12],
+    pub metadata: EncryptedData,
 }
 
 /// Almacenamiento cifrado local
@@ -61,34 +58,27 @@ impl EncryptedStore {
     ) -> Result<[u8; 32], StoreError> {
         let timestamp = current_timestamp();
         
-        // Generar nonces aleatorios
-        let mut nonce = [0u8; 12];
-        let mut metadata_nonce = [0u8; 12];
-        getrandom::getrandom(&mut nonce).map_err(|_| StoreError::RandomError)?;
-        getrandom::getrandom(&mut metadata_nonce).map_err(|_| StoreError::RandomError)?;
-
         // Cifrar mensaje
-        let ciphertext = encrypt(&self.master_key.0, &nonce, message)
+        let data = encrypt(&self.master_key.0, message)
             .map_err(|_| StoreError::EncryptionError)?;
-
+            
         // Cifrar metadatos (contact_id || timestamp)
-        let mut metadata = Vec::with_capacity(40);
-        metadata.extend_from_slice(contact_id);
-        metadata.extend_from_slice(&timestamp.to_le_bytes());
+        let mut metadata_raw = Vec::with_capacity(40);
+        metadata_raw.extend_from_slice(contact_id);
+        metadata_raw.extend_from_slice(&timestamp.to_le_bytes());
         
-        let encrypted_metadata = encrypt(&self.master_key.0, &metadata_nonce, &metadata)
+        let metadata = encrypt(&self.master_key.0, &metadata_raw)
             .map_err(|_| StoreError::EncryptionError)?;
-
-        // Generar ID único para la entrada
-        let entry_id = blake3_hash(&[&ciphertext, &timestamp.to_le_bytes()].concat());
-
+            
+        // Generar ID único para la entrada (usando hash del mensaje cifrado y timestamp)
+        let entry_id = blake3_hash(&[&data.ciphertext, &timestamp.to_le_bytes()].concat());
+        
         let entry = EncryptedEntry {
-            ciphertext,
-            nonce,
+            data,
             timestamp,
-            encrypted_metadata,
-            metadata_nonce,
+            metadata,
         };
+
 
         // Almacenar entrada
         self.entries.insert(entry_id, entry);
@@ -106,8 +96,8 @@ impl EncryptedStore {
     pub fn retrieve_message(&self, entry_id: &[u8; 32]) -> Result<Vec<u8>, StoreError> {
         let entry = self.entries.get(entry_id)
             .ok_or(StoreError::NotFound)?;
-
-        decrypt(&self.master_key.0, &entry.nonce, &entry.ciphertext)
+            
+        decrypt(&self.master_key.0, &entry.data)
             .map_err(|_| StoreError::DecryptionError)
     }
 
@@ -158,13 +148,14 @@ impl EncryptedStore {
 
     /// Elimina un mensaje específico (borrado seguro)
     pub fn secure_delete(&mut self, entry_id: &[u8; 32]) -> Result<(), StoreError> {
-        // Sobrescribir con ceros antes de eliminar
+        // SEC-FIX C-5: Corrected field names. EncryptedEntry has `data` and `metadata`,
+        // not `ciphertext`/`encrypted_metadata` (those are the inner fields of EncryptedData).
         if let Some(entry) = self.entries.get_mut(entry_id) {
-            // Sobrescribir datos sensibles
-            for byte in entry.ciphertext.iter_mut() {
+            // Zero-out the inner ciphertext bytes of each EncryptedData
+            for byte in entry.data.ciphertext.iter_mut() {
                 *byte = 0;
             }
-            for byte in entry.encrypted_metadata.iter_mut() {
+            for byte in entry.metadata.ciphertext.iter_mut() {
                 *byte = 0;
             }
         }
@@ -195,19 +186,21 @@ impl EncryptedStore {
         }
     }
 
-    /// Guarda el almacenamiento a disco (serializado y cifrado)
+    /// Guarda el almacenamiento a disco (serializado y cifrado con la clave maestra)
     pub fn persist(&self) -> Result<(), StoreError> {
-        let payload = EncryptedStorePayload {
-            entries: self.entries.clone(),
-            conversation_index: self.conversation_index.clone(),
-        };
-
-        let encoded = bincode::serialize(&payload)
-            .map_err(|_| StoreError::SerializationError)?;
-
-        std::fs::write(&self.storage_path, encoded)
-            .map_err(StoreError::IoError)?;
-
+        // SEC-FIX C-4: real disk persistence — previous stub returned Ok(()) doing nothing.
+        use std::io::Write;
+        let serialized = bincode::serialize(&self.entries)
+            .map_err(|e| StoreError::SerializationError(e.to_string()))?;
+        // Encrypt with master key before writing
+        let encrypted = encrypt(&self.master_key.0, &serialized)
+            .map_err(|_| StoreError::EncryptionError)?;
+        let enc_bytes = bincode::serialize(&encrypted)
+            .map_err(|e| StoreError::SerializationError(e.to_string()))?;
+        let mut f = std::fs::File::create(&self.storage_path)
+            .map_err(|e| StoreError::IoError(e))?;
+        f.write_all(&enc_bytes)
+            .map_err(|e| StoreError::IoError(e))?;
         Ok(())
     }
 
