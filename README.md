@@ -234,3 +234,10 @@ Consulta la lista de [Contribuidores](CONTRIBUTORS.md) actuales.
 
 *RED v5.1.0 — Suite de Seguridad Total implementada · Build: Passing ✅*
 *🛡️ **Integración Nativa de Keystore** · 🔥 **Biometría Nativa** · 💀 **Dead Man's Switch***
+
+---
+<p align="center">
+  <a href="https://www.netlify.com">
+    <img src="https://www.netlify.com/img/global/badges/netlify-color-accent.svg" alt="Deploys by Netlify" />
+  </a>
+</p>
