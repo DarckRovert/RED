@@ -470,11 +470,15 @@ const initGeoParticles = () => {
   }
 };
 
+let terminalInterval = null;
+let terminalPaused = false;
+
 const initLiveNodeTerminal = () => {
   const output = $('#node-status-output');
   if (!output) return;
 
   const checkStatus = async () => {
+    if (terminalPaused) return;
     try {
       const res = await fetch('http://localhost:7333/api/status');
       if (res.ok) {
@@ -505,7 +509,91 @@ const initLiveNodeTerminal = () => {
   };
 
   checkStatus();
-  setInterval(checkStatus, 5000);
+  terminalInterval = setInterval(checkStatus, 5000);
+};
+
+// Simulated CLI Commands Engine
+window.simulateTerminalCommand = (cmdType) => {
+  terminalPaused = true;
+  const cmdSpan = $('#terminal-cmd');
+  const output = $('#node-status-output');
+  const resumeBtn = $('#term-resume-btn');
+  if (!cmdSpan || !output) return;
+
+  // Show resume button
+  if (resumeBtn) resumeBtn.style.display = 'inline-block';
+
+  let cmdText = '';
+  let responseText = '';
+
+  switch (cmdType) {
+    case 'peers':
+      cmdText = 'red-cli --list-peers';
+      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: RUNNING MESH AUDIT...</span>\n\n` +
+        `<span class="info">🔍 Escaneando topología de malla vía BLE & WiFi Direct...</span>\n` +
+        `<span class="info">[OK] Se encontraron 4 pares activos en rango físico directo:</span>\n` +
+        `--------------------------------------------------------------\n` +
+        `<span class="highlight">PEER ID          MÉTODO       RSSI     ESTADO</span>\n` +
+        `did:red:alice73  BLE          -68dBm   Conectado (Verificado)\n` +
+        `did:red:bob99ff  WiFi-Direct  -42dBm   Conectado (Verificado)\n` +
+        `did:red:charlie  BLE          -85dBm   Ruteo Hop-Onion\n` +
+        `did:red:dave112  LoRa         -94dBm   Puente Serial (12.4 Km)\n` +
+        `--------------------------------------------------------------\n` +
+        `<span class="info">Rutas activas totales: 4 | Protocolo: RED Mesh v7.2.0</span>`;
+      break;
+    case 'ratchet':
+      cmdText = 'red-cli --ratchet-status';
+      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: KEY EXCHANGE AUDIT</span>\n\n` +
+        `<span class="info">🔒 Sesión Criptográfica Activa con:</span> did:red:bob99ff\n` +
+        `--------------------------------------------------------------\n` +
+        `<span class="info">- Clave de Cadena KDF:</span> [32 bytes] e2a5f1d93ac8bb92...\n` +
+        `<span class="info">- Trinquete DH:</span>        X25519 (Llaves efímeras rotadas hoy)\n` +
+        `<span class="info">- Motor AEAD:</span>         ChaCha20-Poly1305 (Cifrado autenticado)\n` +
+        `<span class="info">- Huella de Seguridad:</span> <span class="highlight">84729 11928 33481 00293</span>\n` +
+        `<span class="info">- Verificación:</span>        Múltiple Confianza (Fingerprint Match)\n` +
+        `<span class="info">- PFS State:</span>           Perfect Forward Secrecy ACTIVO y saludable\n` +
+        `--------------------------------------------------------------`;
+      break;
+    case 'dtn':
+      cmdText = 'red-cli --dtn-queue';
+      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: DELAY-TOLERANT RETRY WORKER</span>\n\n` +
+        `<span class="info">📬 Consultando árbol "pending_deliveries" de base de datos Sled...</span>\n` +
+        `<span class="info">Se encontró 1 sobre en cola de espera offline:</span>\n` +
+        `--------------------------------------------------------------\n` +
+        `<span class="highlight">MSG ID   DESTINATARIO     TAMAÑO   TIEMPO   REINTENTOS</span>\n` +
+        `#8291a   did:red:charlie  1.2 KB   2m 14s   8 veces\n` +
+        `--------------------------------------------------------------\n` +
+        `<span class="info">Estado actual:</span> Esperando a que 'charlie' entre en rango físico...\n` +
+        `<span class="info">Próximo escaneo del worker en 8 segundos (Intervalo: 15s)</span>`;
+      break;
+    case 'sybil':
+      cmdText = 'red-cli --mitigate-sybil';
+      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: SYBIL MITIGATION SYSTEM</span>\n\n` +
+        `<span class="info">🛡️ Evaluando solicitudes de tablas de ruteo Kademlia...</span>\n` +
+        `<span class="info">- Validando dificultad Proof-of-Work: Hashcash (24 bits)</span>\n` +
+        `<span class="info">- Evaluando hash cash de peer did:red:attacker99...</span>\n` +
+        `<span class="error">[FAIL] Dificultad insuficiente. Nonce inválido.</span>\n` +
+        `<span class="warning">[ACCION] Drop instantáneo del peer attacker99 del DHT.</span>\n` +
+        `--------------------------------------------------------------\n` +
+        `<span class="highlight">[OK] Auditoría de Sybil completada. Nodo RED seguro.</span>`;
+      break;
+  }
+
+  cmdSpan.textContent = cmdText;
+  output.innerHTML = responseText;
+};
+
+window.resumeLiveTerminal = () => {
+  terminalPaused = false;
+  const cmdSpan = $('#terminal-cmd');
+  const resumeBtn = $('#term-resume-btn');
+  if (cmdSpan) cmdSpan.textContent = 'status-check --mesh';
+  if (resumeBtn) resumeBtn.style.display = 'none';
+  // Trigger check immediately
+  const output = $('#node-status-output');
+  if (output) {
+    output.innerHTML = `<span class="pulse-offline">●</span> Buscando nodo RED local activo en puerto 7333...`;
+  }
 };
 
 // Fire everything

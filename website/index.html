@@ -25,6 +25,17 @@
   <title>RED — Red Encriptada Descentralizada</title>
   <link rel="stylesheet" href="styles.css?v=5" />
   <link rel="icon" href="assets/icon.png" />
+  <style>
+    .term-action-btn:hover {
+      background: rgba(232, 0, 28, 0.18) !important;
+      border-color: rgba(232, 0, 28, 0.5) !important;
+      color: #fff !important;
+      transform: translateY(-1px);
+    }
+    .term-action-btn:active {
+      transform: translateY(0);
+    }
+  </style>
 </head>
 
 <body>
@@ -289,10 +300,19 @@
           <div class="terminal-hud__title font-mono">SOVEREIGN-NODE@RED-MESSENGER:~</div>
         </div>
         <div class="terminal-hud__body font-mono">
-          <div class="terminal-line"><span class="terminal-prompt">$</span> status-check --mesh</div>
+          <div class="terminal-line"><span class="terminal-prompt">$</span> <span id="terminal-cmd">status-check --mesh</span></div>
           <div id="node-status-output" class="terminal-output">
             <span class="pulse-offline">●</span> Buscando nodo RED local activo en puerto 7333...
           </div>
+        </div>
+
+        <div class="terminal-hud__actions font-mono" style="padding: 16px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; background: rgba(0,0,0,0.15);">
+          <span style="color: var(--text-muted); font-size: 0.75rem; align-self: center; margin-right: 8px;">SIMULADOR CLI:</span>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('peers')" style="background: rgba(232,0,28,0.08); border: 1px solid rgba(232,0,28,0.2); color: var(--primary-bright); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--list-peers</button>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('ratchet')" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--ratchet-status</button>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('dtn')" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--dtn-queue</button>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('sybil')" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--mitigate-sybil</button>
+          <button class="term-action-btn" id="term-resume-btn" onclick="resumeLiveTerminal()" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; display: none; transition: all 0.15s ease;">● Reanudar Live</button>
         </div>
       </div>
     </div>
