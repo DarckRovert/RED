@@ -183,26 +183,45 @@ impl Node {
             let mut storage = n.storage.lock().await;
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
 
-            if let Some(days_str) = storage.get_config("dms_days") {
-                if let Ok(days) = days_str.parse::<u64>() {
-                    if days > 0 {
-                        if let Some(last_str) = storage.get_config("dms_last_active") {
-                            if let Ok(last) = last_str.parse::<u64>() {
-                                if now.saturating_sub(last) > days * 86400 {
-                                    tracing::error!("DEAD MAN'S SWITCH TRIGGERED: Node inactive for > {} days. Initiating DB Wipe.", days);
-                                    let _ = storage.self_destruct();
-                                    return Err(NetworkError::IoError(std::io::Error::new(
-                                        std::io::ErrorKind::Other, 
-                                        "Dead Man's Switch Triggered. Data Wiped."
-                                    )));
-                                }
+            // Only check if the user explicitly enabled the switch
+            let dms_enabled = storage.get_config("dms_enabled").map(|v| v == "true").unwrap_or(false);
+
+            if dms_enabled {
+                // dms_trigger_hours is the canonical key written by set_dms_config().
+                // dms_days is a legacy alias written by set_dead_mans_days(); we derive hours
+                // from it as a fallback so old configs still work.
+                let trigger_hours: u64 = storage
+                    .get_config("dms_trigger_hours")
+                    .and_then(|v| v.parse().ok())
+                    .unwrap_or_else(|| {
+                        storage
+                            .get_config("dms_days")
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .map(|days| days * 24)
+                            .unwrap_or(0)
+                    });
+
+                if trigger_hours > 0 {
+                    if let Some(last_str) = storage.get_config("dms_last_active") {
+                        if let Ok(last) = last_str.parse::<u64>() {
+                            let elapsed_hours = now.saturating_sub(last) / 3600;
+                            if elapsed_hours >= trigger_hours {
+                                tracing::error!(
+                                    "DEAD MAN'S SWITCH TRIGGERED: Node inactive for {} hours (threshold: {}h). Initiating DB Wipe.",
+                                    elapsed_hours, trigger_hours
+                                );
+                                let _ = storage.self_destruct();
+                                return Err(NetworkError::IoError(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "Dead Man's Switch Triggered. Data Wiped."
+                                )));
                             }
                         }
                     }
                 }
             }
 
-            // Update last active if it didn't trigger
+            // Update last active timestamp whether or not DMS fired
             let _ = storage.set_config("dms_last_active", &now.to_string());
         }
         // ----------------------------------------

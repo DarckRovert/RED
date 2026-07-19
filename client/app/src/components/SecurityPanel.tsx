@@ -57,10 +57,7 @@ export default function SecurityPanel() {
     
     // Phase 19: New Tactical Settings
     const [decoyPin, setDecoyPin] = useState("");
-    const [deadMansDays, setDeadMansDays] = useState("30");
     const [burnerChatsEnabled, setBurnerChatsEnabled] = useState(false);
-    const [deadManSwitchDays, setDeadManSwitchDays] = useState(7);
-    const [screenshotBlockEnabled, setScreenshotBlockEnabled] = useState(false);
 
     const [disguiseEnabled, setDisguiseEnabled] = useState(false);
     const [calcPin, setCalcPin] = useState("");
@@ -76,8 +73,6 @@ export default function SecurityPanel() {
         getSecurePin("panic_pin").then(v => { setPanicPin(v); setSavedPined(v); });
         getSecurePin("decoy_pin").then(v => setDecoyPin(v));
 
-        setDeadMansDays(localStorage.getItem("red_dead_mans_days") || "30");
-        setScreenshotBlockEnabled(localStorage.getItem("red_screenshot_block") === "true");
         setBurnerChatsEnabled(localStorage.getItem("red_burner_chats") === "true");
         // Initialize backend burner state
         if (localStorage.getItem("red_burner_chats") === "true") {
@@ -126,12 +121,7 @@ export default function SecurityPanel() {
         await setSecurePin("decoy_pin", decoyPin);
     };
 
-    const saveDeadMansTimer = async () => {
-        if (!deadMansDays) return;
-        localStorage.setItem("red_dead_mans_days", deadMansDays);
-        // Sync to Rust backend so the actual switch activates
-        import("../lib/api").then(({ RedAPI }) => RedAPI.setDeadMansDays(parseInt(deadMansDays, 10)));
-    };
+
 
     const toggleBurnerChats = () => {
         const nextState = !burnerChatsEnabled;
@@ -323,25 +313,29 @@ export default function SecurityPanel() {
                     </div>
                 </div>
 
-                {/* Dead Man's Switch */}
+                {/* Dead Man's Switch — navigate to dedicated screen */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center' }}>
-                        💀 Dead Man's Switch
-                        <InfoTooltip text="Si no abres la app en el número de días establecido, el nodo purgará toda tu identidad y chats automáticamente por seguridad." />
-                    </h3>
-                    <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
-                        Días de inactividad antes de que el nodo purgue toda la base de datos de SQLite local asumiendo que el dispositivo fue interceptado.
-                    </p>
-                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                        <input 
-                            type="number" 
-                            value={deadMansDays}
-                            onChange={(e) => setDeadMansDays(e.target.value)}
-                            style={{ width: '80px', padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', color: 'var(--text-primary)', borderRadius: '8px', textAlign: 'center', fontSize: '1.2rem' }}
-                        />
-                        <span style={{ color: 'var(--text-secondary)' }}>Días</span>
-                        <div style={{ flex: 1 }} />
-                        <button onClick={saveDeadMansTimer} style={{ background: 'var(--solid-bg)', color: 'var(--primary)', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid var(--primary)' }}>Set Timer</button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                💀 Dead Man's Switch
+                                <InfoTooltip text="Si no abres la app en el período configurado, el nodo purgará toda tu identidad y chats automáticamente." />
+                            </h3>
+                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                Autodestrucción por inactividad — configuración avanzada
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => import('../store/useRedStore').then(({ useRedStore }) => useRedStore.getState().navigate('dms'))}
+                            style={{
+                                background: 'var(--solid-bg)', color: 'var(--primary)',
+                                padding: '10px 18px', borderRadius: '10px', fontWeight: 700,
+                                border: '1px solid var(--primary)', cursor: 'pointer',
+                                fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}
+                        >
+                            Configurar →
+                        </button>
                     </div>
                 </div>
 

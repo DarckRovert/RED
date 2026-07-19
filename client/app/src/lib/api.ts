@@ -310,8 +310,28 @@ class RedAPIClient {
         await this.req('/settings/burner', { method: 'POST', body: JSON.stringify({ enabled }) }).catch(() => {});
     }
 
+    /** 
+     * Update only the trigger window of the Dead Man's Switch.
+     * Reads the current DMS config first so we don't clobber wipe_messages /
+     * wipe_identity flags that the user may have set in DMSSettings.
+     */
     async setDeadMansDays(days: number): Promise<void> {
-        await this.req('/settings/dms', { method: 'POST', body: JSON.stringify({ days }) }).catch(() => {});
+        try {
+            const current = await this.req<any>('/settings/dms').catch(() => ({}));
+            const updated = {
+                enabled: current?.enabled ?? true,
+                trigger_hours: days * 24,
+                wipe_messages: current?.wipe_messages ?? true,
+                wipe_identity: current?.wipe_identity ?? false,
+                dead_message: current?.dead_message ?? '',
+            };
+            await this.req('/settings/dms', {
+                method: 'POST',
+                body: JSON.stringify(updated),
+            });
+        } catch {
+            // Node not ready yet — silently ignore
+        }
     }
 
     // ── SSE / Real-time ───────────────────────────────────────────────────────
