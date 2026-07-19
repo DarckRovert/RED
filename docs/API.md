@@ -394,3 +394,59 @@ See the `/examples` directory for complete working examples:
 - `group_chat.rs` - Group messaging
 - `file_transfer.rs` - Encrypted file sharing
 - `cli_client.rs` - Command-line client
+
+---
+
+## HTTP REST API Reference
+
+The local node exposes an HTTP REST API on `http://localhost:7333` for UI communication.
+
+### Contacts Management
+
+#### 1. Add Contact
+* **Endpoint:** `POST /api/contacts`
+* **Request Body:**
+  ```json
+  {
+    "identity_hash": "hex_string",
+    "display_name": "string",
+    "public_key": "hex_string_optional"
+  }
+  ```
+
+#### 2. Block Contact
+* **Endpoint:** `POST /api/contacts/:hash/block`
+* **Description:** Prevents the node from processing incoming messages from this contact and discards them at the network layer.
+
+#### 3. Unblock Contact
+* **Endpoint:** `POST /api/contacts/:hash/unblock`
+
+#### 4. Toggle Verify Contact
+* **Endpoint:** `POST /api/contacts/:hash/verify`
+* **Response Body:**
+  ```json
+  {
+    "ok": true,
+    "verified": true
+  }
+  ```
+
+### Messaging
+
+#### 1. Send Message
+* **Endpoint:** `POST /api/messages/send`
+* **Request Body:**
+  ```json
+  {
+    "recipient": "hex_identity_hash",
+    "content": "string_content"
+  }
+  ```
+* **Description:** Attempts to deliver the message. If the recipient is offline, it is saved in the `pending_deliveries` Sled tree and retried every 15 seconds.
+
+#### 2. Get Messages
+* **Endpoint:** `GET /api/conversations/:id/messages`
+
+#### 3. Mark Conversation as Read
+* **Endpoint:** `POST /api/conversations/:id/read`
+

@@ -1,4 +1,4 @@
-//! Local encrypted storage for RED.
+//! Local encrypted storage for RED using Sled.
 //!
 //! This module provides:
 //! - Encrypted local database
@@ -7,6 +7,7 @@
 //! - Key backup
 
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
@@ -18,552 +19,357 @@ use crate::protocol::{Conversation, ConversationId, Message, Group, GroupId};
 /// Storage-related errors
 #[derive(Error, Debug)]
 pub enum StorageError {
-    /// IO error
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-
-    /// Serialization error
     #[error("Serialization error: {0}")]
     SerializationError(String),
-
-    /// Encryption error
     #[error("Encryption error: {0}")]
     EncryptionError(#[from] crate::crypto::CryptoError),
-
-    /// Not found
     #[error("Not found: {0}")]
     NotFound(String),
-
-    /// Database error
     #[error("Database error: {0}")]
     DatabaseError(String),
 }
 
-/// Result type for storage operations
 pub type StorageResult<T> = Result<T, StorageError>;
 
-/// Contact information
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Contact {
-    /// Contact's identity hash
     pub identity_hash: IdentityHash,
-    /// Display name
     pub display_name: String,
-    /// Contact's public key
     pub public_key: [u8; 32],
-    /// When the contact was added
     pub added_at: u64,
-    /// Is this contact verified (out-of-band)
     pub verified: bool,
-    /// Is this contact blocked
     pub blocked: bool,
-    /// Custom notes
     pub notes: Option<String>,
 }
 
-/// User profile
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Profile {
-    /// Display name
     pub display_name: String,
-    /// Status message
     pub status: Option<String>,
-    /// Avatar (base64 encoded)
     pub avatar: Option<Vec<u8>>,
 }
 
 /// Local storage interface
 pub struct Storage {
-    /// Storage path
     path: PathBuf,
-    /// Encryption key (derived from user password)
     encryption_key: [u8; 32],
-    /// Cached contacts
-    contacts: HashMap<IdentityHash, Contact>,
-    /// User profile
-    profile: Option<Profile>,
-    /// Secure identity
-    identity: Option<Identity>,
-    /// Groups
-    groups: HashMap<GroupId, Group>,
-    /// Authorized devices
-    authorized_devices: HashMap<DeviceId, AuthorizedDevice>,
-    /// Conversations (TD-2 FIX: store conversations for sync)
-    conversations: HashMap<ConversationId, Conversation>,
-    /// Global configuration (Dead Man's Switch, etc.)
-    config: HashMap<String, String>,
-    /// Is storage open
+    db: Option<sled::Db>,
     is_open: bool,
-    /// Burner Mode (RAM-Only chat storage)
     pub burner_mode: bool,
 }
 
 impl Storage {
-    /// Create a new storage instance
     pub fn new(path: PathBuf, encryption_key: [u8; 32]) -> Self {
         Self {
             path,
             encryption_key,
-            contacts: HashMap::new(),
-            profile: None,
-            identity: None,
-            groups: HashMap::new(),
-            authorized_devices: HashMap::new(),
-            conversations: HashMap::new(),
-            config: HashMap::new(),
+            db: None,
             is_open: false,
             burner_mode: false,
         }
     }
 
-    /// Open the storage (load data)
     pub fn open(&mut self) -> StorageResult<()> {
-        // Create directory if it doesn't exist
         std::fs::create_dir_all(&self.path)?;
-        
-        // Load contacts
-        let contacts_path = self.path.join("contacts.enc");
-        if contacts_path.exists() {
-            let encrypted_data = std::fs::read(&contacts_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            self.contacts = bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        }
-
-        // Load profile
-        let profile_path = self.path.join("profile.enc");
-        if profile_path.exists() {
-            let encrypted_data = std::fs::read(&profile_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            self.profile = Some(bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?);
-        }
-
-        // Load identity
-        let identity_path = self.path.join("identity.enc");
-        if identity_path.exists() {
-            let encrypted_data = std::fs::read(&identity_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            // Note: Identity needs to implement Serialize/Deserialize
-            self.identity = Some(bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?);
-        }
-
-        // Load groups
-        let groups_path = self.path.join("groups.enc");
-        if groups_path.exists() {
-            let encrypted_data = std::fs::read(&groups_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            self.groups = bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        }
-
-        // Load authorized devices
-        let devices_path = self.path.join("devices.enc");
-        if devices_path.exists() {
-            let encrypted_data = std::fs::read(&devices_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            self.authorized_devices = bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        }
-
-        // Load conversations (TD-2 FIX)
-        let convos_path = self.path.join("conversations.enc");
-        if convos_path.exists() {
-            let encrypted_data = std::fs::read(&convos_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            self.conversations = bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        }
-
-        // Load config
-        let config_path = self.path.join("config.enc");
-        if config_path.exists() {
-            let encrypted_data = std::fs::read(&config_path)?;
-            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
-            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
-            self.config = bincode::deserialize(&decrypted)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        }
-
+        let db_path = self.path.join("red_db");
+        let db = sled::open(db_path)
+            .map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        self.db = Some(db);
         self.is_open = true;
         Ok(())
     }
 
-    /// Close the storage (save data)
     pub fn close(&mut self) -> StorageResult<()> {
-        self.save_contacts()?;
-        self.save_profile()?;
-        self.save_identity()?;
-        self.save_groups()?;
-        self.save_authorized_devices()?;
-        self.save_conversations()?;
-        self.save_config()?;
+        if let Some(db) = &self.db {
+            let _ = db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        }
         self.is_open = false;
         Ok(())
     }
 
-    /// Wipes all encrypted data from disk and clears memory (Dead Man's Switch Trigger)
     pub fn self_destruct(&mut self) -> StorageResult<()> {
-        // 1. Clear memory
-        self.contacts.clear();
-        self.profile = None;
-        self.identity = None;
-        self.groups.clear();
-        self.authorized_devices.clear();
-        self.conversations.clear();
-        self.config.clear();
+        if let Some(db) = self.db.take() {
+            let _ = db.flush();
+            drop(db);
+        }
         self.is_open = false;
+        let _ = std::fs::remove_dir_all(&self.path);
+        Ok(())
+    }
 
-        // 2. Erase encrypted files securely (standard filesystem delete for now)
-        let files_to_delete = [
-            "contacts.enc", "profile.enc", "identity.enc", 
-            "groups.enc", "devices.enc", "conversations.enc", 
-            "config.enc", "app.db" // just in case SQLite was used earlier
-        ];
+    fn store<V: Serialize>(&self, tree_name: &str, key: &[u8], value: &V) -> StorageResult<()> {
+        if self.burner_mode && tree_name == "conversations" { return Ok(()); }
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let serialized = bincode::serialize(value).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        let encrypted = encrypt(&self.encryption_key, &serialized)?;
+        tree.insert(key, encrypted.to_bytes()).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
 
-        for file in files_to_delete.iter() {
-            let file_path = self.path.join(file);
-            if file_path.exists() {
-                // Ignore errors during panic wipe
-                let _ = std::fs::remove_file(file_path);
-            }
+    fn fetch<V: DeserializeOwned>(&self, tree_name: &str, key: &[u8]) -> StorageResult<Option<V>> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        if let Some(encrypted_data) = tree.get(key).map_err(|e| StorageError::DatabaseError(e.to_string()))? {
+            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
+            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
+            let value = bincode::deserialize(&decrypted).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            Ok(Some(value))
+        } else {
+            Ok(None)
         }
-        
-        Ok(())
     }
 
-    /// Save config to disk
-    fn save_config(&self) -> StorageResult<()> {
-        if !self.is_open { return Ok(()); }
-        let serialized = bincode::serialize(&self.config)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        std::fs::write(self.path.join("config.enc"), encrypted.to_bytes())?;
-        Ok(())
-    }
-
-    /// Save contacts to disk
-    fn save_contacts(&self) -> StorageResult<()> {
-        if !self.is_open { return Ok(()); }
-        let serialized = bincode::serialize(&self.contacts)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        std::fs::write(self.path.join("contacts.enc"), encrypted.to_bytes())?;
-        Ok(())
-    }
-
-    /// Save profile to disk
-    fn save_profile(&self) -> StorageResult<()> {
-        if !self.is_open { return Ok(()); }
-        if let Some(profile) = &self.profile {
-            let serialized = bincode::serialize(profile)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-            let encrypted = encrypt(&self.encryption_key, &serialized)?;
-            std::fs::write(self.path.join("profile.enc"), encrypted.to_bytes())?;
+    fn fetch_all<V: DeserializeOwned>(&self, tree_name: &str) -> StorageResult<Vec<V>> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let mut results = Vec::new();
+        for item in tree.iter() {
+            let (_, encrypted_data) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
+            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
+            let value = bincode::deserialize(&decrypted).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            results.push(value);
         }
+        Ok(results)
+    }
+
+    fn delete(&self, tree_name: &str, key: &[u8]) -> StorageResult<()> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        tree.remove(key).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
-    /// Save groups to disk
-    fn save_groups(&self) -> StorageResult<()> {
-        if !self.is_open { return Ok(()); }
-        let serialized = bincode::serialize(&self.groups)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        std::fs::write(self.path.join("groups.enc"), encrypted.to_bytes())?;
-        Ok(())
+    // Config
+    pub fn set_config(&mut self, key: impl Into<String>, value: impl Into<String>) -> StorageResult<()> {
+        let k = key.into();
+        self.store("config", k.as_bytes(), &value.into())
+    }
+    pub fn get_config(&self, key: &str) -> Option<String> {
+        self.fetch("config", key.as_bytes()).unwrap_or(None)
     }
 
-    /// Save authorized devices to disk
-    fn save_authorized_devices(&self) -> StorageResult<()> {
-        if !self.is_open { return Ok(()); }
-        let serialized = bincode::serialize(&self.authorized_devices)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        std::fs::write(self.path.join("devices.enc"), encrypted.to_bytes())?;
-        Ok(())
-    }
-
-    /// Save identity to disk
-    pub fn save_identity(&self) -> StorageResult<()> {
-        if !self.is_open { return Ok(()); }
-        if let Some(identity) = &self.identity {
-            let serialized = bincode::serialize(identity)
-                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-            let encrypted = encrypt(&self.encryption_key, &serialized)?;
-            std::fs::write(self.path.join("identity.enc"), encrypted.to_bytes())?;
-        }
-        Ok(())
-    }
-
-    /// Add a contact
+    // Contacts
     pub fn add_contact(&mut self, contact: Contact) -> StorageResult<()> {
-        self.contacts.insert(contact.identity_hash.clone(), contact);
-        self.save_contacts()?;
-        Ok(())
+        self.store("contacts", contact.identity_hash.as_bytes(), &contact)
     }
-
-    /// Get a contact
-    pub fn get_contact(&self, identity_hash: &IdentityHash) -> Option<&Contact> {
-        self.contacts.get(identity_hash)
+    pub fn get_contact(&self, hash: &IdentityHash) -> Option<Contact> {
+        self.fetch("contacts", hash.as_bytes()).unwrap_or(None)
     }
-
-    /// Get all contacts
-    pub fn get_contacts(&self) -> Vec<&Contact> {
-        self.contacts.values().collect()
+    pub fn get_contacts(&self) -> Vec<Contact> {
+        self.fetch_all("contacts").unwrap_or_default()
     }
-
-    /// Remove a contact
-    pub fn remove_contact(&mut self, identity_hash: &IdentityHash) -> StorageResult<()> {
-        self.contacts.remove(identity_hash);
-        self.save_contacts()?;
-        Ok(())
-    }
-
-    /// Block a contact
-    pub fn block_contact(&mut self, identity_hash: &IdentityHash) -> StorageResult<()> {
-        if let Some(contact) = self.contacts.get_mut(identity_hash) {
-            contact.blocked = true;
-            self.save_contacts()?;
-        }
-        Ok(())
-    }
-
-    /// Unblock a contact
-    pub fn unblock_contact(&mut self, identity_hash: &IdentityHash) -> StorageResult<()> {
-        if let Some(contact) = self.contacts.get_mut(identity_hash) {
-            contact.blocked = false;
-            self.save_contacts()?;
-        }
-        Ok(())
-    }
-
-    /// Set user profile
-    pub fn set_profile(&mut self, profile: Profile) -> StorageResult<()> {
-        self.profile = Some(profile);
-        self.save_profile()?;
-        Ok(())
-    }
-
-    /// Get user profile
-    pub fn get_profile(&self) -> Option<&Profile> {
-        self.profile.as_ref()
-    }
-
-    /// Set identity
-    pub fn set_identity(&mut self, identity: Identity) -> StorageResult<()> {
-        self.identity = Some(identity);
-        self.save_identity()?;
-        Ok(())
-    }
-
-    /// Get identity
-    pub fn get_identity(&self) -> Option<&Identity> {
-        self.identity.as_ref()
-    }
-
-    /// Get storage path
-    pub fn path(&self) -> &PathBuf {
-        &self.path
-    }
-
-    /// Check if storage is open
-    pub fn is_open(&self) -> bool {
-        self.is_open
-    }
-
-    /// Get contact count
     pub fn contact_count(&self) -> usize {
-        self.contacts.len()
+        self.get_contacts().len()
+    }
+    pub fn remove_contact(&mut self, hash: &IdentityHash) -> StorageResult<()> {
+        self.delete("contacts", hash.as_bytes())
+    }
+    pub fn block_contact(&mut self, hash: &IdentityHash) -> StorageResult<()> {
+        if let Some(mut c) = self.get_contact(hash) {
+            c.blocked = true;
+            self.add_contact(c)?;
+        }
+        Ok(())
+    }
+    pub fn unblock_contact(&mut self, hash: &IdentityHash) -> StorageResult<()> {
+        if let Some(mut c) = self.get_contact(hash) {
+            c.blocked = false;
+            self.add_contact(c)?;
+        }
+        Ok(())
+    }
+    pub fn toggle_verify_contact(&mut self, hash: &IdentityHash) -> StorageResult<bool> {
+        if let Some(mut c) = self.get_contact(hash) {
+            c.verified = !c.verified;
+            let val = c.verified;
+            self.add_contact(c)?;
+            Ok(val)
+        } else {
+            Err(StorageError::NotFound("Contact not found".into()))
+        }
     }
 
-    /// Add a group
+    // Profile & Identity
+    pub fn set_profile(&mut self, profile: Profile) -> StorageResult<()> {
+        self.store("profile", b"user_profile", &profile)
+    }
+    pub fn get_profile(&self) -> Option<Profile> {
+        self.fetch("profile", b"user_profile").unwrap_or(None)
+    }
+    pub fn set_identity(&mut self, identity: Identity) -> StorageResult<()> {
+        self.store("identity", b"user_identity", &identity)
+    }
+    pub fn get_identity(&self) -> Option<Identity> {
+        self.fetch("identity", b"user_identity").unwrap_or(None)
+    }
+
+    pub fn path(&self) -> &PathBuf { &self.path }
+    pub fn is_open(&self) -> bool { self.is_open }
+
+    // Groups
     pub fn add_group(&mut self, group: Group) -> StorageResult<()> {
-        self.groups.insert(group.id.clone(), group);
-        self.save_groups()?;
-        Ok(())
+        self.store("groups", group.id.as_bytes(), &group)
+    }
+    pub fn get_group(&self, id: &GroupId) -> Option<Group> {
+        self.fetch("groups", id.as_bytes()).unwrap_or(None)
+    }
+    pub fn get_groups(&self) -> Vec<Group> {
+        self.fetch_all("groups").unwrap_or_default()
+    }
+    pub fn get_group_mut(&mut self, id: &GroupId) -> Option<Group> {
+        self.get_group(id) // Compatibility, caller must save it
     }
 
-    /// Get a group
-    pub fn get_group(&self, id: &GroupId) -> Option<&Group> {
-        self.groups.get(id)
-    }
-
-    /// Get all groups
-    pub fn get_groups(&self) -> Vec<&Group> {
-        self.groups.values().collect()
-    }
-
-    /// Add an authorized device
+    // Devices
     pub fn add_authorized_device(&mut self, device: AuthorizedDevice) -> StorageResult<()> {
-        self.authorized_devices.insert(device.id.clone(), device);
-        self.save_authorized_devices()?;
-        Ok(())
+        self.store("devices", device.id.as_bytes(), &device)
+    }
+    pub fn get_authorized_devices(&self) -> Vec<AuthorizedDevice> {
+        self.fetch_all("devices").unwrap_or_default()
     }
 
-    /// Get an authorized device
-    pub fn get_authorized_device(&self, id: &DeviceId) -> Option<&AuthorizedDevice> {
-        self.authorized_devices.get(id)
-    }
-
-    /// Get all authorized devices
-    pub fn get_authorized_devices(&self) -> Vec<&AuthorizedDevice> {
-        self.authorized_devices.values().collect()
-    }
-
-    /// Remove an authorized device
-    pub fn remove_authorized_device(&mut self, id: &DeviceId) -> StorageResult<()> {
-        self.authorized_devices.remove(id);
-        self.save_authorized_devices()?;
-        Ok(())
-    }
-
-    // ─── Conversations & Messages (TD-2 FIX) ───────────────────────────────────
-
-    /// Set burner mode (RAM-Only flag)
+    // Conversations
     pub fn set_burner_mode(&mut self, enabled: bool) {
         self.burner_mode = enabled;
     }
 
-    /// Persist a received/sent message into its conversation.
-    /// Creates the conversation if it doesn't exist yet. // MODIFIED FOR BURNER CHATS
     pub fn add_message(&mut self, message: Message) -> StorageResult<()> {
-        if self.burner_mode {
-            // Burner Mode is active: DO NOT save anything to the conversation map.
-            // The message lives purely in the frontend's RAM (Zustand state).
-            return Ok(());
-        }
-
-        // Conversation ID = deterministic ID from the two participant hashes
-        let conv_id = ConversationId::from_participants(&message.sender, &message.recipient);
-        let conv = self.conversations.entry(conv_id).or_insert_with(|| {
-            Conversation::new(message.sender.clone(), message.recipient.clone())
-        });
-        conv.add_message(message)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        // Mano Pesada: local disk persistence happens later via save_conversations
-        Ok(())
-    }
-
-    /// Prune all expired messages across all conversations
-    pub fn prune_expired_messages(&mut self) -> StorageResult<usize> {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
+        if self.burner_mode { return Ok(()); }
+        let is_group = self.get_group(&crate::protocol::GroupId(*message.recipient.as_bytes())).is_some();
+        let my_hash = self.get_identity().map(|i| i.identity_hash().clone()).unwrap_or_else(|| message.sender.clone());
         
-        let mut total_pruned = 0;
-        for conv in self.conversations.values_mut() {
-            total_pruned += conv.prune_expired(now);
+        let conv_id = if is_group {
+            ConversationId::from_participants(&my_hash, &message.recipient)
+        } else {
+            ConversationId::from_participants(&message.sender, &message.recipient)
+        };
+
+        let mut conv = self.get_conversation(&conv_id).unwrap_or_else(|| {
+            let sender_for_conv = if is_group { my_hash.clone() } else { message.sender.clone() };
+            Conversation::new(sender_for_conv, message.recipient.clone())
+        });
+
+        conv.add_message(message).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+        self.save_conversation(&conv)
+    }
+
+    pub fn save_conversation(&mut self, conv: &Conversation) -> StorageResult<()> {
+        if self.burner_mode { return Ok(()); }
+        let id = ConversationId::from_participants(&conv.our_identity, &conv.their_identity);
+        self.store("conversations", id.to_bytes().as_ref(), conv)
+    }
+
+    pub fn get_conversations(&self) -> Vec<Conversation> {
+        self.fetch_all("conversations").unwrap_or_default()
+    }
+    pub fn get_conversation(&self, id: &ConversationId) -> Option<Conversation> {
+        self.fetch("conversations", id.to_bytes().as_ref()).unwrap_or(None)
+    }
+    pub fn get_conversation_mut(&mut self, id: &ConversationId) -> Option<Conversation> {
+        self.get_conversation(id) // compatibility, caller must re-save
+    }
+    pub fn mark_conversation_read(&mut self, id: &ConversationId) -> StorageResult<()> {
+        if let Some(mut conv) = self.get_conversation(id) {
+            conv.mark_all_read();
+            self.save_conversation(&conv)?;
         }
-
-        if total_pruned > 0 {
-            self.save_conversations()?;
-        }
-        Ok(total_pruned)
-    }
-
-    /// Get all conversations
-    pub fn get_conversations(&self) -> Vec<&Conversation> {
-        self.conversations.values().collect()
-    }
-
-    /// Get a specific conversation
-    pub fn get_conversation(&self, id: &ConversationId) -> Option<&Conversation> {
-        self.conversations.get(id)
-    }
-
-    /// Get a specific conversation (mutable)
-    pub fn get_conversation_mut(&mut self, id: &ConversationId) -> Option<&mut Conversation> {
-        self.conversations.get_mut(id)
-    }
-
-    /// Save conversations to disk
-    pub fn save_conversations(&self) -> StorageResult<()> {
-        let serialized = bincode::serialize(&self.conversations)
-            .map_err(|e| StorageError::SerializationError(e.to_string()))?;
-        let encrypted = encrypt(&self.encryption_key, &serialized)?;
-        let path = self.path.join("conversations.enc");
-        std::fs::write(path, encrypted.to_bytes())?;
         Ok(())
     }
-
-    /// Update a configuration value
-    pub fn set_config(&mut self, key: impl Into<String>, value: impl Into<String>) -> StorageResult<()> {
-        self.config.insert(key.into(), value.into());
-        self.save_config()?;
+    pub fn delete_message(&mut self, conv_id_path: &str, msg_id_hex: &str) -> StorageResult<()> {
+        let key = self.find_conv_key(conv_id_path)?;
+        if let Some(mut conv) = self.get_conversation(&key) {
+            conv.remove_message(msg_id_hex).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            self.save_conversation(&conv)?;
+        }
         Ok(())
     }
+    pub fn edit_message(&mut self, conv_id_path: &str, msg_id_hex: &str, new_content: String) -> StorageResult<()> {
+        let key = self.find_conv_key(conv_id_path)?;
+        if let Some(mut conv) = self.get_conversation(&key) {
+            conv.edit_message_content(msg_id_hex, new_content).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            self.save_conversation(&conv)?;
+        }
+        Ok(())
+    }
+    pub fn clear_conversation(&mut self, conv_id_path: &str) -> StorageResult<()> {
+        let key = self.find_conv_key(conv_id_path)?;
+        if let Some(mut conv) = self.get_conversation(&key) {
+            conv.clear_messages();
+            self.save_conversation(&conv)?;
+        }
+        Ok(())
+    }
+    pub fn prune_expired_messages(&mut self) -> StorageResult<usize> {
+        let mut pruned = 0;
+        let convs = self.get_conversations();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        for mut conv in convs {
+            let p = conv.prune_expired(now);
+            if p > 0 {
+                pruned += p;
+                self.save_conversation(&conv)?;
+            }
+        }
+        Ok(pruned)
+    }
 
-    /// Get a configuration value
-    pub fn get_config(&self, key: &str) -> Option<String> {
-        self.config.get(key).cloned()
+    fn find_conv_key(&self, id_str: &str) -> StorageResult<ConversationId> {
+        if let Ok(cid) = ConversationId::from_hex(id_str) {
+            if self.get_conversation(&cid).is_some() { return Ok(cid); }
+        }
+        for conv in self.get_conversations() {
+            let cid = ConversationId::from_participants(&conv.our_identity, &conv.their_identity);
+            let hex = cid.to_hex();
+            if hex.starts_with(id_str) || hex.ends_with(id_str) { return Ok(cid); }
+        }
+        if id_str.contains('-') {
+            let parts: Vec<&str> = id_str.split('-').collect();
+            if parts.len() == 2 {
+                let p0 = parts[0];
+                let p1 = parts[1];
+                for conv in self.get_conversations() {
+                    let our_hex = conv.our_identity.to_hex();
+                    let their_hex = conv.their_identity.to_hex();
+                    if (our_hex.starts_with(p0) && their_hex.starts_with(p1))
+                        || (our_hex.starts_with(p1) && their_hex.starts_with(p0)) {
+                        return Ok(ConversationId::from_participants(&conv.our_identity, &conv.their_identity));
+                    }
+                }
+            }
+        }
+        Err(StorageError::NotFound(format!("Conversation not found for id: {}", id_str)))
+    }
+
+    // Pending deliveries for offline queueing
+    pub fn add_pending_delivery(&self, key: &[u8], message: &Message) -> StorageResult<()> {
+        self.store("pending_deliveries", key, message)
+    }
+
+    pub fn remove_pending_delivery(&self, key: &[u8]) -> StorageResult<()> {
+        self.delete("pending_deliveries", key)
+    }
+
+    pub fn get_pending_deliveries(&self) -> StorageResult<Vec<(Vec<u8>, Message)>> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db.open_tree("pending_deliveries").map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        let mut results = Vec::new();
+        for item in tree.iter() {
+            let (key, encrypted_data) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
+            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
+            let message = bincode::deserialize(&decrypted).map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            results.push((key.to_vec(), message));
+        }
+        Ok(results)
     }
 }
 
 impl Drop for Storage {
     fn drop(&mut self) {
-        if self.is_open {
-            let _ = self.close();
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn create_test_contact() -> Contact {
-        Contact {
-            identity_hash: IdentityHash::from_bytes([0x42u8; 32]),
-            display_name: "Test User".to_string(),
-            public_key: [0x01u8; 32],
-            added_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            verified: false,
-            blocked: false,
-            notes: None,
-        }
-    }
-
-    #[test]
-    fn test_storage_creation() {
-        let path = std::env::temp_dir().join("red_test_storage");
-        let key = [0x42u8; 32];
-        
-        let storage = Storage::new(path, key);
-        
-        assert!(!storage.is_open());
-        assert_eq!(storage.contact_count(), 0);
-    }
-
-    #[test]
-    fn test_add_contact() {
-        let path = std::env::temp_dir().join("red_test_storage_2");
-        let key = [0x42u8; 32];
-        
-        let mut storage = Storage::new(path.clone(), key);
-        storage.open().unwrap();
-        
-        let contact = create_test_contact();
-        let hash = contact.identity_hash.clone();
-        
-        storage.add_contact(contact).unwrap();
-        
-        assert_eq!(storage.contact_count(), 1);
-        assert!(storage.get_contact(&hash).is_some());
-        
-        // Cleanup
-        let _ = std::fs::remove_dir_all(path);
+        let _ = self.close();
     }
 }

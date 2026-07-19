@@ -64,7 +64,15 @@ pub struct GossipMessage {
 impl GossipMessage {
     /// Create a new gossip message
     pub fn new(payload: Vec<u8>, ttl: u8, origin: Option<[u8; 32]>) -> Self {
-        let id = MessageId::from_content(&payload);
+        // BUG 9 FIX: Generate random nonce so identical payloads get unique IDs
+        let nonce: u64 = {
+            use rand::RngCore;
+            rand::thread_rng().next_u64()
+        };
+        // Include nonce in ID to prevent duplicate-filtering of legitimately distinct messages
+        let mut id_input = payload.clone();
+        id_input.extend_from_slice(&nonce.to_le_bytes());
+        let id = MessageId::from_content(&id_input);
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -73,7 +81,7 @@ impl GossipMessage {
         Self {
             id,
             payload,
-            nonce: 0,
+            nonce,
             ttl,
             origin,
             timestamp,

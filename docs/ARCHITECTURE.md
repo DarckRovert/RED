@@ -32,18 +32,19 @@ RED es un ecosistema de mensajería soberana que opera bajo un modelo de **Malla
 ## Flujo de Mensajes y Sincronización
 
 ### 1. Mensajería Mesh (Propagación)
-1. **Composición:** El cliente Next.js compone el mensaje y lo envía al nodo Rust local via `/api/v1/message/send`.
+1. **Composición:** El cliente Next.js compone el mensaje y lo envía al nodo Rust local via `/api/messages/send`.
 2. **Cifrado:** El nodo Rust aplica el Double Ratchet y envuelve la carga en capas de Onion Routing.
-3. **Transporte:** Dependiendo de la disponibilidad, el mensaje se emite vía:
-   - **Internet:** libp2p pubsub.
-   - **Local:** Inyección en la cola de Mesh Nearby (WiFi/BLE).
-4. **Almacenamiento:** Los nodos vecinos guardan el mensaje (*Store-and-Forward*) hasta encontrar al destinatario.
+3. **Transporte y Cola de Retransmisión Offline:** 
+   - Si el destinatario está disponible en los peers locales, se entrega de inmediato.
+   - Si está offline, se guarda de forma persistente en el árbol transaccional `pending_deliveries` de la base de datos local **Sled**.
+   - Un worker secundario en segundo plano (`node_ref_retry`) monitorea la topología cada 15 segundos y auto-entrega los mensajes en espera cuando el peer entra en rango.
+4. **Almacenamiento:** Los nodos vecinos y locales guardan el mensaje de forma cifrada en disco, liberando RAM.
 
 ### 2. Sincronización de Estado (Zustand <-> Rust)
 El frontend utiliza un Store centralizado en **Zustand** (`useRedStore.ts`) que orquestra:
 - **SSE (Server-Sent Events):** Escucha continua del flujo de eventos de Rust (`/api/v1/events`).
 - **Handshake:** Verificación de salud del nodo nativo al arranque.
-- **Re-hidratación:** Estado persistente en localStorage/IndexedDB sincronizado con la base de datos distribuida.
+- **Re-hidratación:** Estado persistente sincronizado mediante llamadas a la API Axum local.
 
 ## Módulos del Core (Rust + Java)
 
@@ -54,7 +55,8 @@ El frontend utiliza un Store centralizado en **Zustand** (`useRedStore.ts`) que 
 ### core/ (Protocolo Rust)
 - `crypto/`: Double Ratchet, X25519 y ChaCha20.
 - `network/`: Implementación de libp2p, GossipSub, DHT, **Mesh Mixnets** y **LoRaWAN bridge**.
-- `node/`: Servidor Axum que expone la API REST, incluyendo distribuidor descentralizado de instaladores P2P (`/api/mesh/apk`).
+- `storage/`: Base de datos **Sled** de alto rendimiento en disco. Cifra y persiste la configuración, mensajes, perfiles, grupos e identidades en árboles de clave-valor.
+- `node/`: Servidor Axum que expone la API REST, incluyendo endpoints de bloqueo de contactos y códigos de seguridad.
 
 ### client/ (Frontend)
 - `Solid UI`: Sistema de diseño con variables CSS dinámicas.

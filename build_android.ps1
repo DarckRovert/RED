@@ -80,10 +80,29 @@ if (-not (Test-Path $DestDir)) {
 Copy-Item -Path $SourceSo -Destination "$DestDir\libred_mobile.so" -Force
 Write-Host "Success: JNI motor injected into Android project." -ForegroundColor Green
 
+# --- Step 5: Compile Production APK ---
+
+Write-Header "Step 5: Compiling Production APK (assembleRelease)"
+Set-Location $ANDROID_PATH
+if (Test-Path "gradlew.bat") {
+    Write-Host "Running Gradle build..." -ForegroundColor Gray
+    cmd.exe /c "gradlew.bat assembleRelease"
+    
+    $ApkPath = "$ANDROID_PATH\app\build\outputs\apk\release\app-release-unsigned.apk"
+    if (Test-Path $ApkPath) {
+        Write-Host "`n[OK] Release APK successfully built!" -ForegroundColor Green
+        Write-Host "Path: $ApkPath" -ForegroundColor Cyan
+    } else {
+        Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "Error: gradlew.bat not found in $ANDROID_PATH" -ForegroundColor Red
+}
+
 # --- Finish ---
 
 Set-Location $RED_ROOT
 Write-Header "BUILD COMPLETE - RED is ready"
-Write-Host "PRO-TIP: Open Android Studio and choose the folder '$ANDROID_PATH'." -ForegroundColor Yellow
-Write-Host "Then press the Run button (the green triangle) to deploy to your device." -ForegroundColor Green
+Write-Host "PRO-TIP: Your production APK is ready to deploy!" -ForegroundColor Green
+Write-Host "You can find it at: $ApkPath" -ForegroundColor Yellow
 Write-Host ""

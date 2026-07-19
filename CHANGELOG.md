@@ -5,6 +5,40 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [7.2.0] - 2026-07-19
+
+### Añadido — Zero-RAM Storage Engine (Sled), Paridad de Seguridad y Compilación Automatizada
+
+**Base de Datos & Rendimiento (Fase 1)**
+- **Motor de base de datos embebida Sled:** Migración completa del almacenamiento volátil en memoria (`HashMap`) a Sled transaccional persistente, cifrando individualmente registros en disco (conversaciones, mensajes, configuración, perfiles, identidades, dispositivos y grupos).
+
+**Seguridad y Red Descentralizada (Fase 4)**
+- **Bloqueo Inbound en Capa P2P:** Los mensajes provenientes de peers bloqueados son interceptados y descartados en caliente en `node.rs` en la recepción del transporte, impidiendo que lleguen a disco o UI.
+- **Cola de Reintentos Offline (Delay-Tolerant Networking):** Si un peer está offline al enviar, el mensaje se almacena temporalmente de forma persistente y un loop de 15 segundos en segundo plano reintenta la transmisión cuando el peer vuelve a estar visible en la topología local.
+- **Safety Numbers & UI de Criptografía:** Pantalla de perfil de chat rediseñada con huella de seguridad (Safety Number) determinista de 20 dígitos y botones nativos para verificar y bloquear contactos con actualización de estado síncrona en React.
+- **Correcciones JNI y CLI:** Saneamiento de punteros y de-referenciaciones de tipos owned tras la migración a Sled para prevenir crashes en `red_mobile` (JNI Android) y CLI de escritorio (`node/src/main.rs`).
+
+**Automatización de Despliegue (Fase 5)**
+- **Pipeline Automático de APK de Producción:** Paso 5 integrado en `build_android.ps1` que compila el frontend, sincroniza Capacitor, compila Rust NDK arm64, y ejecuta el wrapper Gradle `./gradlew.bat assembleRelease` para empaquetar el APK firmado en un solo comando de consola.
+
+---
+
+## [7.1.0] - 2026-03-30
+
+### Añadido — RED P2P Mesh Networking Finalization (Offline-First)
+
+**Core P2P & Transport Layer**
+- **WebRTC Nativo (Sin STUN):** Eliminación total de dependencias de servidores STUN externos. Todo el signaling WebRTC ahora ocurre 100% offline-first a través de `/local-signal` (SSE y websockets locales) o BLE.
+- **NodeMap Interactivo (Real-Data):** El mapa 3D de geometría de nodos ahora representa conexiones reales extraídas del `localTransport.allPeers`. Las coordenadas se derivan determinísticamente de los hashes Ed25519 de los nodos.
+- **LoRaWAN Config Bridge:** El panel de red ahora envía la configuración de baud rate y puerto serial directamente al nodo Rust mediante el nuevo endpoint `POST /api/settings/lora` para hot-reloading del bridge de radio.
+
+**Correcciones Críticas (Auditoría Cero-Fallas)**
+- **CallScreen Telemetry:** El peer ahora recibe correctamente la señal de `hangup` (colgar) para destruir el peer connection remoto. Añadidas validaciones estrictas para evitar crashes cuando `peerHash` es null.
+- **Mensajería & Estado:** Implementada deduplicación de mensajes por ID en `useRedStore` para manejar reconexiones del EventSource (SSE) sin duplicar las burbujas de chat.
+- **Confirmación de Lectura (Read Receipts):** Nuevo endpoint `POST /api/conversations/{id}/read` en el nodo Rust. La interfaz ahora notifica al nodo cuando una conversación es abierta, permitiendo que el remitente vea la doble palomita azul de forma fidedigna.
+- **Audio Decoding:** Corrección del parseo base64 para mensajes de voz, prefijando correctamente el tipo MIME `data:audio/ogg;base64,` antes de inyectarlo en el DOM.
+- **Blockchain Explorer:** Corrección de la renderización del epoch time de las identidades registradas, y uso real de los datos del Gossip Protocol.
+
 ---
 
 ## [5.1.0] - 2026-03-21

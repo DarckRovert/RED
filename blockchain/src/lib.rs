@@ -9,7 +9,7 @@
 //!
 //! Messages are NOT stored on the blockchain.
 
-#![warn(missing_docs)]
+#![allow(missing_docs)]
 #![forbid(unsafe_code)]
 
 pub mod block;

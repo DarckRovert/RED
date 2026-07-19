@@ -84,16 +84,22 @@ function removePeer(peerId) {
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 wss.on("connection", (ws, req) => {
-    // SEC-FIX M-3: Mandatory Token Authentication
-    // Prevents unauthorized clients from connecting to the signaling rooms.
+    // SEC-FIX M-3: Mandatory Token Authentication (Enforced only if configured)
+    // Prevents unauthorized clients from connecting in production, while remaining
+    // open and zero-config for development/local testing.
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token");
+    const requiredToken = process.env.SIGNALING_TOKEN;
 
-    if (!token || token !== (process.env.SIGNALING_TOKEN || "RED_SIGNAL_2026")) {
-        console.error(`[RED Signaling] Unauthorized connection attempt from ${req.socket.remoteAddress} — missing or invalid token`);
-        ws.send(JSON.stringify({ type: "error", message: "Unauthorized: Invalid signaling token" }));
-        ws.close();
-        return;
+    if (requiredToken) {
+        if (!token || token !== requiredToken) {
+            console.error(`[RED Signaling] Unauthorized connection attempt from ${req.socket.remoteAddress} — missing or invalid token`);
+            ws.send(JSON.stringify({ type: "error", message: "Unauthorized: Invalid signaling token" }));
+            ws.close();
+            return;
+        }
+    } else {
+        console.log(`[RED Signaling] Connection from ${req.socket.remoteAddress} accepted without token (development mode)`);
     }
 
     const ip = req.socket.remoteAddress;

@@ -25,6 +25,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelUuid;
 import android.os.PowerManager;
+import android.net.wifi.WifiManager;
 import android.util.Log;
 import androidx.annotation.Nullable;
 import java.util.UUID;
@@ -43,6 +44,7 @@ public class RedNodeService extends Service {
     private AdvertiseCallback advertiseCallback = null;
     private BluetoothGattServer gattServer = null;
     private PowerManager.WakeLock wakeLock = null;
+    private WifiManager.MulticastLock multicastLock = null;
 
     @Override
     public void onCreate() {
@@ -55,6 +57,15 @@ public class RedNodeService extends Service {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "RedNode:WakeLock");
             wakeLock.acquire(10 * 60 * 1000L); // 10 minutes timeout, renewable
             Log.i(TAG, "WakeLock acquired: Node will stay active in background");
+        }
+
+        // Acquire MulticastLock to allow mDNS (UDP 224.0.0.251) packets to reach Rust libp2p
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        if (wifiManager != null) {
+            multicastLock = wifiManager.createMulticastLock("RedNode:mDNSLock");
+            multicastLock.setReferenceCounted(true);
+            multicastLock.acquire();
+            Log.i(TAG, "MulticastLock acquired: Android Firewall unblocked for mDNS P2P discovery");
         }
     }
 
@@ -208,6 +219,12 @@ public class RedNodeService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) {
             wakeLock.release();
             Log.i(TAG, "WakeLock released.");
+        }
+
+        // Release MulticastLock
+        if (multicastLock != null && multicastLock.isHeld()) {
+            multicastLock.release();
+            Log.i(TAG, "MulticastLock released.");
         }
 
         // Clean up BLE advertising when service is stopped

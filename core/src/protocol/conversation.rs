@@ -41,6 +41,17 @@ impl ConversationId {
     pub fn to_hex(&self) -> String {
         hex::encode(&self.0)
     }
+
+    /// Parse from 64-char hex string
+    pub fn from_hex(s: &str) -> Result<Self, String> {
+        let bytes = hex::decode(s).map_err(|e| e.to_string())?;
+        if bytes.len() != 32 {
+            return Err(format!("Expected 32 bytes, got {}", bytes.len()));
+        }
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        Ok(Self(arr))
+    }
 }
 
 impl std::fmt::Display for ConversationId {
@@ -223,14 +234,39 @@ impl Conversation {
         }
     }
 
-    /// Get message count
-    pub fn message_count(&self) -> usize {
-        self.messages.len()
+    /// Remove a message by its hex ID (A2: delete message)
+    pub fn remove_message(&mut self, msg_id_hex: &str) -> ProtocolResult<()> {
+        // Find the index via the message_index map
+        let target_id = MessageId::from_hex(msg_id_hex)
+            .map_err(|_| ProtocolError::InvalidFormat(format!("Invalid message id: {}", msg_id_hex)))?;
+        let idx = *self.message_index.get(&target_id)
+            .ok_or_else(|| ProtocolError::InvalidFormat(format!("Message not found: {}", msg_id_hex)))?;
+        // Remove from vec
+        self.messages.remove(idx);
+        // Rebuild full index (indices shift after removal)
+        self.message_index.clear();
+        for (i, m) in self.messages.iter().enumerate() {
+            self.message_index.insert(m.id.clone(), i);
+        }
+        Ok(())
     }
 
-    /// Check if conversation is initialized
-    pub fn is_initialized(&self) -> bool {
-        self.ratchet.is_some()
+    /// Replace the text content of a message in-place (A3: edit message)
+    pub fn edit_message_content(&mut self, msg_id_hex: &str, new_text: String) -> ProtocolResult<()> {
+        let target_id = MessageId::from_hex(msg_id_hex)
+            .map_err(|_| ProtocolError::InvalidFormat(format!("Invalid message id: {}", msg_id_hex)))?;
+        let idx = *self.message_index.get(&target_id)
+            .ok_or_else(|| ProtocolError::InvalidFormat(format!("Message not found: {}", msg_id_hex)))?;
+        self.messages[idx].content = MessageType::Text(new_text);
+        self.messages[idx].edited = true;
+        Ok(())
+    }
+
+    /// Clear all messages in the conversation
+    pub fn clear_messages(&mut self) {
+        self.messages.clear();
+        self.message_index.clear();
+        self.unread_count = 0;
     }
 }
 

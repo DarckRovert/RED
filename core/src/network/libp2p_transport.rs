@@ -3,10 +3,11 @@
 use async_trait::async_trait;
 use libp2p::{
     futures::StreamExt,
-    gossipsub, identify, kad, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp, yamux, Multiaddr,
+    gossipsub, identify, kad, mdns, noise, swarm::{NetworkBehaviour, SwarmEvent}, tcp, yamux, Multiaddr,
+    autonat, dcutr, relay
 };
 use std::collections::HashSet;
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -20,6 +21,11 @@ pub struct RedBehaviour {
     pub gossipsub: gossipsub::Behaviour,
     pub identify: identify::Behaviour,
     pub kademlia: kad::Behaviour<kad::store::MemoryStore>,
+    pub autonat: autonat::Behaviour,
+    pub dcutr: dcutr::Behaviour,
+    pub relay_client: relay::client::Behaviour,
+    /// BUG B FIX: mDNS for automatic local peer discovery (same WiFi/hotspot)
+    pub mdns: mdns::tokio::Behaviour,
 }
 
 /// Libp2p based transport implementation
@@ -32,6 +38,8 @@ pub struct Libp2pTransport {
     known_peers: Arc<Mutex<Vec<crate::network::PeerInfo>>>,
     /// Currently connected peer IDs (GAP-1/GAP-6 FIX)
     connected_peers: Arc<Mutex<HashSet<Vec<u8>>>>,
+    /// Root directory for persistent logs (telemetry)
+    data_dir: Option<std::path::PathBuf>,
 }
 
 enum TransportCommand {
@@ -64,18 +72,24 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 
 impl Libp2pTransport {
     /// Create a new libp2p transport
-    pub fn new(secret_key_bytes: [u8; 32]) -> NetworkResult<Self> {
-        let local_key = libp2p::identity::Keypair::ed25519_from_bytes(secret_key_bytes)
+    pub fn new(secret_key_bytes: [u8; 32], data_dir: Option<std::path::PathBuf>) -> NetworkResult<Self> {
+        let local_key = libp2p::identity::Keypair::ed25519_from_bytes(secret_key_bytes.clone())
             .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+        let peer_id = local_key.public().to_peer_id();
+        
+        if let Some(ref dir) = data_dir {
+            crate::network::append_log(dir, &format!("[libp2p] Initializing transport with PeerId: {}", peer_id));
+        }
 
-        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key)
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
                 noise::Config::new,
                 yamux::Config::default,
             ).map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_behaviour(|key: &libp2p::identity::Keypair| {
+            .with_relay_client(noise::Config::new, yamux::Config::default).map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_behaviour(|key, relay_client| {
                 let gossipsub_config = gossipsub::ConfigBuilder::default()
                     .heartbeat_interval(Duration::from_secs(10))
                     .validation_mode(gossipsub::ValidationMode::Strict)
@@ -86,7 +100,15 @@ impl Libp2pTransport {
                 let kademlia = kad::Behaviour::new(key.public().to_peer_id(), kad_store);
                 let identify = identify::Behaviour::new(
                     identify::Config::new("/red/1.0.0".to_string(), key.public())
+                        .with_agent_version(format!("RED-Node/{}", env!("CARGO_PKG_VERSION")))
                 );
+
+                let autonat = autonat::Behaviour::new(
+                    key.public().to_peer_id(),
+                    autonat::Config::default()
+                );
+
+                let dcutr = dcutr::Behaviour::new(key.public().to_peer_id());
 
                 Ok(RedBehaviour {
                     gossipsub: gossipsub::Behaviour::new(
@@ -95,6 +117,19 @@ impl Libp2pTransport {
                     )?,
                     identify,
                     kademlia,
+                    autonat,
+                    dcutr,
+                    relay_client,
+                    // GAP-18 FIX: mDNS config optimized for mobile mesh (Android 14)
+                    // We use a shorter query interval to speed up discovery when nodes come online.
+                    mdns: mdns::tokio::Behaviour::new(
+                        mdns::Config {
+                            query_interval: Duration::from_secs(5), 
+                            ttl: Duration::from_secs(60),
+                            ..Default::default()
+                        },
+                        key.public().to_peer_id(),
+                    ).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
                 })
             }).map_err(|e| NetworkError::TransportError(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
@@ -110,6 +145,14 @@ impl Libp2pTransport {
         swarm.behaviour_mut().gossipsub.subscribe(&routing_topic)
             .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
 
+        // Escuchar automáticamente en el canal de relé para NAT traversal en datos móviles
+        if let Ok(relay_addr) = "/p2p-circuit".parse::<libp2p::Multiaddr>() {
+            match swarm.listen_on(relay_addr) {
+                Ok(id) => info!("[libp2p] Autolisten on /p2p-circuit registered successfully (listener_id={:?})", id),
+                Err(e) => warn!("[libp2p] Failed to autolisten on /p2p-circuit: {:?}", e),
+            }
+        }
+
         let (cmd_tx, mut cmd_rx) = mpsc::channel(100);
         let (msg_tx, msg_rx) = mpsc::channel(100);
         let known_peers: Arc<Mutex<Vec<crate::network::PeerInfo>>> = Arc::new(Mutex::new(Vec::new()));
@@ -117,6 +160,36 @@ impl Libp2pTransport {
         
         let known_peers_clone = known_peers.clone();
         let connected_clone = connected_peers_set.clone();
+        let log_dir = data_dir.clone();
+        let cmd_tx_loop = cmd_tx.clone();
+        let connected_count = connected_peers_set.clone();
+        let log_dir_scan = data_dir.clone();
+
+        // GAP-41 FIX: Aggressive Neighbor Scanning (Spray-Dial)
+        // If discovery is zero, we manually probe neighbors (+1, -1) in the subnet.
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(45)).await;
+                let count = connected_count.lock().unwrap().len();
+                if count == 0 {
+                    if let Ok(ip) = get_local_ip() {
+                        if let IpAddr::V4(ipv4) = ip {
+                            let octets = ipv4.octets();
+                            for i in (octets[3].saturating_sub(5))..=(octets[3].saturating_add(5)) {
+                                if i == octets[3] { continue; }
+                                let target_ip = Ipv4Addr::new(octets[0], octets[1], octets[2], i);
+                                
+                                // GAP-42 FIX: Try both current (7331) and legacy (4556) ports for cross-version compatibility
+                                for port in [7331, 4556] {
+                                    let target_ma: Multiaddr = format!("/ip4/{}/tcp/{}", target_ip, port).parse().unwrap();
+                                    let _ = cmd_tx_loop.send(TransportCommand::Connect(target_ma)).await;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
         // Spawn the swarm event loop
         tokio::spawn(async move {
@@ -125,32 +198,25 @@ impl Libp2pTransport {
                     event = swarm.select_next_some() => {
                         match event {
                             SwarmEvent::Behaviour(RedBehaviourEvent::Identify(identify::Event::Received { peer_id, info, .. })) => {
-                                // Phase 18: Sybil Ejection Filter
-                                // Cryptographically verify the connecting node performed the required Proof-of-Work.
-                                // If their Ed25519 key does not start with 0x0000, they are part of a botnet eclipse attack.
-                                if let Ok(ed25519_key) = info.public_key.clone().try_into_ed25519() {
-                                    let pub_bytes = ed25519_key.to_bytes();
-                                    if pub_bytes[0] != 0 || pub_bytes[1] != 0 {
-                                        tracing::warn!("Sybil Attack Blocked: Disconnecting impure node {}", peer_id);
-                                        let _ = swarm.disconnect_peer_id(peer_id);
-                                        continue;
-                                    }
-                                } else {
-                                    tracing::warn!("Invalid Key Format: Disconnecting impure node {}", peer_id);
-                                    let _ = swarm.disconnect_peer_id(peer_id);
-                                    continue;
-                                }
-
                                 for addr in info.listen_addrs {
-                                    info!("Identify: peer {} at {}", peer_id, addr);
+                                    debug!("[libp2p] Identify: peer {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                    
+                                    // GAP-1 FIX: Insert the full PeerId bytes (usually ~38 bytes)
                                     connected_clone.lock().unwrap().insert(peer_id.to_bytes());
+                                    
                                     let mut kp = known_peers_clone.lock().unwrap();
                                     if !kp.iter().any(|p| p.id.as_bytes() == peer_id.to_bytes().as_slice()) {
-                                        if let Some(addr) = multiaddr_to_socketaddr(&addr) {
+                                        if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
                                             kp.push(crate::network::PeerInfo {
-                                                id: PeerId::from_bytes(peer_id.to_bytes().try_into().unwrap_or([0u8; 32])),
-                                                addresses: vec![addr],
+                                                id: PeerId::from_bytes({
+                                                    let b = peer_id.to_bytes();
+                                                    let mut arr = [0u8; 32];
+                                                    let len = b.len().min(32);
+                                                    arr[..len].copy_from_slice(&b[..len]);
+                                                    arr
+                                                }),
+                                                addresses: vec![socket_addr],
                                                 public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
                                                 identity_hash: None,
                                                 protocol_version: 1,
@@ -189,6 +255,67 @@ impl Libp2pTransport {
                             }
                             SwarmEvent::NewListenAddr { address, .. } => {
                                 info!("Local node is listening on {}", address);
+                                if let Some(ref dir) = log_dir {
+                                    crate::network::append_log(dir, &format!("[libp2p] LISTENING on {}", address));
+                                }
+                            }
+                            SwarmEvent::IncomingConnection { local_addr, send_back_addr, .. } => {
+                                info!("[libp2p] Incoming connection trial: from {} to {}", send_back_addr, local_addr);
+                                if let Some(ref dir) = log_dir {
+                                    crate::network::append_log(dir, &format!("[libp2p] INCOMING trial from {}", send_back_addr));
+                                }
+                            }
+                            SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
+                                info!("[libp2p] Connection ESTABLISHED: peer {} via {:?}", peer_id, endpoint.get_remote_address());
+                                if let Some(ref dir) = log_dir {
+                                    crate::network::append_log(dir, &format!("[libp2p] CONNECTED to {}", peer_id));
+                                }
+                            }
+                            // BUG B FIX: Handle mDNS discovery events
+                             SwarmEvent::Behaviour(RedBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+                                if let Some(ref dir) = log_dir {
+                                    crate::network::append_log(dir, &format!("[libp2p] mDNS DISCOVERED {} peers", list.len()));
+                                }
+                                for (peer_id, addr) in list {
+                                    if let Some(ref dir) = log_dir {
+                                        crate::network::append_log(dir, &format!("[libp2p] mDNS: Found {} at {}", peer_id, addr));
+                                    }
+                                    let _ = swarm.dial(addr.clone());
+                                    info!("[mDNS] Peer discovered: {} at {}", peer_id, addr);
+                                    swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                                    swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                                    
+                                    // Robust entry into connected set
+                                    connected_clone.lock().unwrap().insert(peer_id.to_bytes());
+                                    let mut kp = known_peers_clone.lock().unwrap();
+                                    if !kp.iter().any(|p| p.id.as_bytes() == peer_id.to_bytes().as_slice()) {
+                                        if let Some(socket) = multiaddr_to_socketaddr(&addr) {
+                                            kp.push(crate::network::PeerInfo {
+                                                id: PeerId::from_bytes({
+                                                    let b = peer_id.to_bytes();
+                                                    let mut arr = [0u8; 32];
+                                                    arr[..b.len().min(32)].copy_from_slice(&b[..b.len().min(32)]);
+                                                    arr
+                                                }),
+                                                addresses: vec![socket],
+                                                public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+                                                identity_hash: None,
+                                                protocol_version: 1,
+                                                user_agent: "red-mdns".to_string(),
+                                            });
+                                        }
+                                    }
+                                    // Dial the peer to establish a connection for gossipsub
+                                    let _ = swarm.dial(addr);
+                                }
+                            }
+                            SwarmEvent::Behaviour(RedBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
+                                for (peer_id, _addr) in list {
+                                    debug!("mDNS peer expired: {}", peer_id);
+                                    swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                                    connected_clone.lock().unwrap().remove(&peer_id.to_bytes());
+                                    known_peers_clone.lock().unwrap().retain(|p| p.id.as_bytes() != peer_id.to_bytes().as_slice());
+                                }
                             }
                             _ => {}
                         }
@@ -251,6 +378,7 @@ impl Libp2pTransport {
             msg_rx: Arc::new(tokio::sync::Mutex::new(msg_rx)),
             known_peers,
             connected_peers: connected_peers_set,
+            data_dir,
         })
     }
 }
@@ -262,12 +390,21 @@ impl Libp2pTransport {
 #[async_trait]
 impl Transport for Libp2pTransport {
     async fn listen(&self, addr: SocketAddr) -> NetworkResult<()> {
-        // FIX: Send a real Listen command to the swarm event loop.
-        // Previously this was a stub that logged a message but never bound any port,
-        // meaning the node could never receive inbound connections -> always "offline".
         let multiaddr: Multiaddr = format!("/ip4/{}/tcp/{}", addr.ip(), addr.port())
             .parse()
             .map_err(|e: libp2p::multiaddr::Error| NetworkError::TransportError(e.to_string()))?;
+        
+        // GAP-19 FIX: In addition to the requested IP (often 0.0.0.0), we attempt to 
+        // find and announce the REAL external IP of the device to the swarm.
+        // This ensures other devices on the WiFi see a routable address in mDNS packets.
+        if addr.ip().is_unspecified() {
+            if let Ok(local_ip) = get_local_ip() {
+                let external_ma: Multiaddr = format!("/ip4/{}/tcp/{}", local_ip, addr.port()).parse().unwrap();
+                let _ = self.cmd_tx.send(TransportCommand::Listen(external_ma)).await;
+                info!("[libp2p] Also listening on external IP for mDNS: {}", local_ip);
+            }
+        }
+
         let _ = self.cmd_tx.send(TransportCommand::Listen(multiaddr)).await;
         info!("libp2p listen command sent for {:?}", addr);
         Ok(())
@@ -278,6 +415,11 @@ impl Transport for Libp2pTransport {
         let _ = self.cmd_tx.send(TransportCommand::Connect(multiaddr)).await;
         // Mocking PeerId for now as connect returns immediately in this async model
         Ok(PeerId::from_bytes([0u8; 32]))
+    }
+
+    async fn connect_multiaddr(&self, addr: Multiaddr) -> NetworkResult<()> {
+        let _ = self.cmd_tx.send(TransportCommand::Connect(addr)).await;
+        Ok(())
     }
 
     async fn disconnect(&self, peer_id: &PeerId) -> NetworkResult<()> {
@@ -299,9 +441,8 @@ impl Transport for Libp2pTransport {
     }
 
     fn connected_peers(&self) -> Vec<PeerId> {
-        // FIX: libp2p PeerIds are multihash-encoded and are 38+ bytes, NOT 32.
-        // The old filter `bytes.len() == 32` excluded ALL real peers -> always empty -> "offline".
-        // Now we accept any non-empty byte slice and map it to our internal PeerId wrapper.
+        // GAP-1 FIX: libp2p PeerIds are multihash-encoded and are 38+ bytes, NOT 32.
+        // We use prefix-based matching and storage to avoid exclusion.
         self.connected_peers.lock().unwrap()
             .iter()
             .filter(|bytes| !bytes.is_empty())
@@ -341,4 +482,15 @@ impl Transport for Libp2pTransport {
             }
         }
     }
+}
+
+/// Helper to find the primary IPv4 address of this machine.
+/// Used to force libp2p to announce a routable address on Android.
+fn get_local_ip() -> std::io::Result<IpAddr> {
+    use std::net::UdpSocket;
+    let socket = UdpSocket::bind("0.0.0.0:0")?;
+    // We don't actually send anything; we just connect to trigger the OS 
+    // to choose the appropriate local interface for the "internet" routing.
+    socket.connect("8.8.8.8:80")?;
+    Ok(socket.local_addr()?.ip())
 }

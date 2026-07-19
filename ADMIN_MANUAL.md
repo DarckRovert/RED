@@ -1,4 +1,4 @@
-# 🔴 RED - Manual del Administrador (Node Ops v5.1.0)
+# 🔴 RED - Manual del Administrador (Node Ops v7.1.0)
 
 Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED, ahora con soporte nativo para Android 14 y comunicaciones P2P directas.
 
@@ -16,12 +16,13 @@ Para el correcto funcionamiento en dispositivos móviles con Android 14+, es obl
 1. **Foreground Service:** El nodo Rust se ejecuta dentro de un `RedNodeService.java`.
 2. **Foreground Type:** Se debe declarar `android:foregroundServiceType="dataSync"` en el `AndroidManifest.xml`.
 3. **Optimización de Batería:** Se requiere inyectar `WAKE_LOCK` para evitar que el sistema operativo suspenda los hilos de red P2P.
+4. **Compilación Automatizada (APK):** Ejecuta `./build_android.ps1` desde la raíz para compilar Next.js, sincronizar Capacitor, compilar el motor de Rust y empaquetar el APK de producción (`app-release-unsigned.apk`) usando Gradle de forma desatendida.
 
 ### Administración del Frontend
 RED utiliza **Next.js Static Export** sincronizado vía Capacitor:
 1. `npm run build` en `client/app`.
 2. `npx cap sync android`.
-3. El build estático se inyecta en `assets/public` del contenedor Android.
+3. El build estático se inyecta en `assets/public` del contenedor Android (automatizado mediante el script `./build_android.ps1`).
 
 ---
 
@@ -35,6 +36,7 @@ El dispositivo ahora actúa como un Periférico GATT (Advertiser).
 ### WiFi Direct & Mesh
 - **WiFi Direct:** Proporciona un canal de alta velocidad para ruteo local.
 - **Mesh Storage:** El nodo implementa una política de *Store-and-Forward* para mensajes volátiles en la red táctica local.
+- **WebRTC Offline (Sin STUN):** Todo el signaling ocurre mediante sockets locales. Como operador, no necesitas desplegar servidores STUN/TURN (ej: Coturn). Todo el tráfico P2P WebRTC se establece en LAN.
 
 ---
 
@@ -43,13 +45,16 @@ El dispositivo ahora actúa como un Periférico GATT (Advertiser).
 El nodo expone una API REST (puerto 7333) y eventos SSE.
 - **Handshake Crítico:** Tras el inicio exitoso del node Rust, el frontend debe realizar un handshake explícito para mutar el estado a `online` en el store de Zustand.
 - **Eventos SSE:** `/api/v1/events` es el canal principal para recibir mensajes entrantes e indicadores de latencia de la red mesh.
+- **LoRaWAN Bridge (`POST /api/settings/lora`):** Recibe la configuración en caliente `{"port": "COM3", "baud": 115200}` para que el nodo Rust inicie la interfaz serial hacia el transceptor físico.
+- **Read Receipts (`POST /api/conversations/{id}/read`):** Actualiza el horizonte de lectura de la base de datos Sled para una conversación sin necesidad de leer todo su historial de mensajes.
+- **Bloqueo y Verificación:** Expone endpoints Axum `/api/contacts/:hash/block` y `/verify` para actualizar la base de datos de contactos local y forzar filtros en caliente a nivel de transporte.
 
 ---
 
 ## 🔒 4. Hardening y Seguridad
 
 ### Cifrado de Almacenamiento
-La base de datos RocksDB utiliza cifrado basado en la `identity_hash` del dispositivo. No se almacenan claves privadas en texto claro.
+La base de datos **Sled** utiliza árboles transaccionales (`conversations`, `contacts`, `profile`, `pending_deliveries`, `config`, `identity`, `groups`, `devices`) cifrados individualmente en reposo ( ChaCha20-Poly1305) mediante derivación HKDF a partir del PIN/Contraseña maestro del usuario (`RED_PASSWORD`). No se almacenan claves privadas en texto claro.
 
 ### Firewall
 - **Port 7331 (UDP/TCP):** Tráfico P2P (libp2p).

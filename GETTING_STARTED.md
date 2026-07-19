@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio (v5.1.0 "Masterpiece Edition")
+# 🔴 RED — Guía de Inicio (v7.1.0 "Mesh/Offline Edition")
 
 RED es un sistema de mensajería soberana, descentralizada y cifrada end-to-end que ahora cuenta con una interfaz sólida estilo WhatsApp/Telegram y capacidades de hardware directo (BLE/WiFi Mesh).
 
@@ -14,9 +14,12 @@ RED es un sistema de mensajería soberana, descentralizada y cifrada end-to-end 
 cd client/app
 npm install
 
-# Compilar el core Rust
+# Compilar el core Rust de escritorio
 cd ../..
 cargo build --release
+
+# O COMPILAR TODO PARA ANDROID AUTOMÁTICAMENTE:
+./build_android.ps1
 ```
 
 ## Uso Rápido
@@ -40,10 +43,11 @@ npm run dev
 2. Tu dispositivo generará una identidad **DID** única.
 3. **CRÍTICO:** Copia y guarda tu **Identity Hash**. RED no tiene "recuperación de contraseña" por correo; si pierdes este código, pierdes tu cuenta.
 
-## Características de la v5.0
-- **Solid UI:** Interfaz premium, rápida y minimalista.
+## Características de la v7.1.0
+- **Solid UI:** Interfaz premium, rápida y minimalista sin stuns externos para WebRTC.
+- **NodeMap + LoRa:** Mapa 3D de nodos con hardware radio bridge para largo alcance real P2P.
 - **RED Nearby:** Radar de contactos por Bluetooth BLE sin necesidad de internet.
-- **Mesh Storage:** Los mensajes se reenvían entre nodos cercanos automáticamente.
+- **Mesh Storage:** Los mensajes se reenvían entre nodos cercanos automáticamente (Store-and-Forward).
 - **Anti-Forense:** Bloqueo de capturas y PIN de pánico integrados.
 
 ---

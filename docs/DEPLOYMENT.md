@@ -8,6 +8,15 @@ Esta guía cubre el despliegue de la infraestructura de RED en dispositivos móv
 
 RED se despliega como una aplicación híbrida de alto rendimiento.
 
+### Compilación Automatizada del APK (Recomendado)
+Para compilar automáticamente todo el frontend Next.js, sincronizarlo con Capacitor, compilar el motor Rust (aarch64) y empaquetar el APK de producción (lanzamiento) usando Gradle:
+```bash
+./build_android.ps1
+```
+El archivo APK final estará en `client/app/android/app/build/outputs/apk/release/app-release-unsigned.apk`.
+
+### Compilación Manual Paso a Paso
+
 ### 1. Preparación del Frontend
 El frontend en `client/app` debe compilarse como un export estático:
 ```bash
@@ -17,7 +26,7 @@ npm run build # Genera la carpeta /out
 ### 2. Sincronización con Android
 ```bash
 npx cap sync android
-npx cap open android # Abre Android Studio
+npx cap open android # Abre Android Studio para compilar manualmente
 ```
 
 ### 3. Configuraciones Críticas de Android 14 (API 34)

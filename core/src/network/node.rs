@@ -31,6 +31,10 @@ pub struct Node {
     transport: Arc<dyn Transport>,
     /// Channel for notifying API of new messages
     msg_notifier: Option<tokio::sync::broadcast::Sender<Message>>,
+    /// Identity registry for verification
+    pub identity_registry: crate::identity::registry::IdentityRegistry,
+    /// Send channel for outbound data (for mobile integration)
+    pub outbound_payload_tx: Option<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>,
     /// Hardware LoRa bridge (Phase 18)
     pub lora_bridge: Option<crate::network::lora_bridge::LoraBridge>,
     /// Is the node running
@@ -47,7 +51,7 @@ impl Node {
         let onion_router = OnionRouter::new(config.onion_path_length);
         
         let signing_key_bytes = identity.signing_key_bytes();
-        let transport = Arc::new(Libp2pTransport::new(signing_key_bytes)?);
+        let transport = Arc::new(Libp2pTransport::new(signing_key_bytes, config.data_dir.clone())?);
 
         Ok(Self {
             identity,
@@ -56,6 +60,8 @@ impl Node {
             onion_router,
             transport,
             msg_notifier: None,
+            identity_registry: crate::identity::registry::IdentityRegistry::new(),
+            outbound_payload_tx: Some(tokio::sync::mpsc::unbounded_channel().0),
             lora_bridge: None,
             is_running: false,
         })
@@ -74,6 +80,87 @@ impl Node {
             tracing::warn!("Failed to persist DMS days config: {}", e);
         }
     }
+
+    /// Read full DMS config from storage for the API GET endpoint
+    pub fn dms_enabled(&self) -> bool {
+        // Synchronous read from cached storage — the lock-free config cache
+        // We can't await here (no async), so we use try_lock which is safe for reads
+        if let Ok(s) = self.storage.try_lock() {
+            return s.get_config("dms_enabled").map(|v| v == "true").unwrap_or(false);
+        }
+        false
+    }
+
+    pub fn dms_trigger_hours(&self) -> u64 {
+        if let Ok(s) = self.storage.try_lock() {
+            if let Some(v) = s.get_config("dms_trigger_hours") {
+                return v.parse().unwrap_or(72);
+            }
+        }
+        72
+    }
+
+    pub fn dms_wipe_messages(&self) -> bool {
+        if let Ok(s) = self.storage.try_lock() {
+            return s.get_config("dms_wipe_messages").map(|v| v != "false").unwrap_or(true);
+        }
+        true
+    }
+
+    pub fn dms_wipe_identity(&self) -> bool {
+        if let Ok(s) = self.storage.try_lock() {
+            return s.get_config("dms_wipe_identity").map(|v| v == "true").unwrap_or(false);
+        }
+        false
+    }
+
+    pub fn dms_dead_message(&self) -> Option<String> {
+        if let Ok(s) = self.storage.try_lock() {
+            let v = s.get_config("dms_dead_message").unwrap_or_default();
+            if !v.is_empty() { return Some(v); }
+        }
+        None
+    }
+
+    /// Persist full DMS config to storage
+    pub async fn set_dms_config(
+        &mut self,
+        enabled: bool,
+        trigger_hours: u64,
+        wipe_messages: bool,
+        wipe_identity: bool,
+        dead_message: String,
+    ) {
+        let mut storage = self.storage.lock().await;
+        let _ = storage.set_config("dms_enabled", if enabled { "true" } else { "false" });
+        let _ = storage.set_config("dms_trigger_hours", &trigger_hours.to_string());
+        let _ = storage.set_config("dms_wipe_messages", if wipe_messages { "true" } else { "false" });
+        let _ = storage.set_config("dms_wipe_identity", if wipe_identity { "true" } else { "false" });
+        let _ = storage.set_config("dms_dead_message", &dead_message);
+    }
+
+    /// Set user nickname in storage
+    pub async fn set_nickname(&mut self, nickname: &str) {
+        let mut storage = self.storage.lock().await;
+        let _ = storage.set_config("nickname", nickname);
+    }
+
+    /// Get user nickname from storage
+    pub fn get_nickname(&self) -> Option<String> {
+        if let Ok(s) = self.storage.try_lock() {
+            return s.get_config("nickname");
+        }
+        None
+    }
+
+    /// Connect to a peer manually using a Multiaddr string (for manual WiFi P2P test)
+    pub async fn connect_peer(&self, addr_str: &str) -> NetworkResult<()> {
+        let multiaddr: libp2p::Multiaddr = addr_str
+            .parse()
+            .map_err(|e: libp2p::multiaddr::Error| NetworkError::TransportError(e.to_string()))?;
+        self.transport.connect_multiaddr(multiaddr).await
+    }
+
 
     /// Start the node
     pub async fn start(node_ref: Arc<Mutex<Self>>) -> NetworkResult<()> {
@@ -95,7 +182,7 @@ impl Node {
                                 if now.saturating_sub(last) > days * 86400 {
                                     tracing::error!("DEAD MAN'S SWITCH TRIGGERED: Node inactive for > {} days. Initiating DB Wipe.", days);
                                     let _ = storage.self_destruct();
-                                    return Err(crate::network::error::NetworkError::Io(std::io::Error::new(
+                                    return Err(NetworkError::IoError(std::io::Error::new(
                                         std::io::ErrorKind::Other, 
                                         "Dead Man's Switch Triggered. Data Wiped."
                                     )));
@@ -116,10 +203,10 @@ impl Node {
         // Start transport listener
         n.transport.listen(n.config.listen_addr).await?;
         
-        // Connect to bootstrap nodes
+        // Connect to bootstrap nodes via Multiaddr (IPFS-compatible)
         for addr in &n.config.bootstrap_nodes {
             debug!("Connecting to bootstrap node: {}", addr);
-            if let Err(e) = n.transport.connect(*addr).await {
+            if let Err(e) = n.transport.connect_multiaddr(addr.clone()).await {
                 error!("Failed to connect to bootstrap node {}: {}", addr, e);
             }
         }
@@ -159,43 +246,69 @@ impl Node {
             }
         });
 
+        let node_ref_retry = node_ref.clone();
+        tokio::spawn(async move {
+            info!("Starting background pending delivery retry loop (15s interval)");
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                
+                let pending = {
+                    let n = node_ref_retry.lock().await;
+                    let s = n.storage.lock().await;
+                    s.get_pending_deliveries().unwrap_or_default()
+                };
+
+                for (key, message) in pending {
+                    let mut n = node_ref_retry.lock().await;
+                    let available_peers = n.transport.known_peers();
+                    let is_recipient_online = available_peers.iter().any(|p| p.identity_hash.as_ref() == Some(&message.recipient));
+                    
+                    if is_recipient_online {
+                        info!("Peer {} came online. Retrying delivery of message {}", message.recipient.short(), message.id.to_hex());
+                        match n.deliver_message(&message.recipient, &message).await {
+                            Ok(_) => {
+                                info!("Delivery of pending message {} succeeded.", message.id.to_hex());
+                                let s = n.storage.lock().await;
+                                let _ = s.remove_pending_delivery(&key);
+                            }
+                            Err(e) => {
+                                error!("Delivery retry failed: {:?}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
         // Phase 17: Constant-Rate Traffic Padding (Anti-Censorship/NSA)
         // Continuously emits 1KB background noise to flatten ISP bandwidth analysis graphs.
-        let node_ref_padding = node_ref.clone();
+        let node_for_padding = node_ref.clone();
         tokio::spawn(async move {
             debug!("Mixnet/Padding: Starting continuous traffic obfuscation worker");
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                let n: tokio::sync::MutexGuard<'_, Self> = node_ref_padding.lock().await;
-                let peers = n.transport.connected_peers();
-                if !peers.is_empty() {
-                    // Extract data synchronously to drop the !Send ThreadRng before awaiting the transport
-                    let (random_peer, noise) = {
-                        use rand::Rng;
-                        let mut rng = rand::thread_rng();
-                        let peer = peers[rng.gen_range(0..peers.len())].clone();
-                        let mut noise_buf = vec![0u8; 1024];
-                        rand::RngCore::fill_bytes(&mut rng, &mut noise_buf);
-                        (peer, noise_buf)
-                    };
-                    
-                    // Wrap the noise inside a structurally valid OnionLayer so it compiles and travels,
-                    // but the recipient will fail to decrypt it and drop it silently.
-                    let fake_layer = crate::network::routing::OnionLayer {
-                        ephemeral_pk: [0u8; 32],
-                        encrypted: crate::crypto::encryption::EncryptedData {
-                            nonce: [0u8; 12],
-                            ciphertext: noise,
-                        }
-                    };
-                    
-                    let fake_packet = crate::network::routing::OnionPacket {
-                        layers: vec![fake_layer],
-                    };
-                    
-                    let _ = n.transport.send(&random_peer, crate::network::transport::TransportMessage::Onion(fake_packet)).await;
-                    trace!("Transmitted 1KB of obfuscation noise padding");
-                }
+                use rand::{Rng, RngCore};
+                let wait_secs = rand::thread_rng().gen_range(3..=7);
+                tokio::time::sleep(tokio::time::Duration::from_secs(wait_secs)).await;
+                
+                // Phase 18: Anti-Traffic Analysis (Zero-Overhead Dummy Traffic)
+                let mut noise = vec![0u8; 1024];
+                rand::thread_rng().fill_bytes(&mut noise);
+                
+                let dummy_recipient = crate::identity::IdentityHash::from_bytes([0u8; 32]);
+                let my_hash = node_for_padding.lock().await.identity.identity_hash().clone();
+                
+                // Wrap in a valid Message structure to satisfy the type system
+                let dummy_msg = crate::protocol::Message {
+                    id: crate::protocol::MessageId::generate(),
+                    sender: my_hash,
+                    recipient: dummy_recipient.clone(),
+                    content: crate::protocol::MessageType::Text(hex::encode(noise)),
+                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
+                    reply_to: None,
+                    status: crate::protocol::MessageStatus::Pending,
+                };
+
+                let _ = node_for_padding.lock().await.send_message(dummy_recipient, dummy_msg).await;
             }
         });
     }
@@ -226,7 +339,10 @@ impl Node {
                                 n.handle_onion_packet(peer_id, packet).await;
                             }
                             crate::network::transport::TransportMessage::Data { payload } => {
-                                if let Ok(message) = Message::deserialize(&payload) {
+                                // First try to deserialize as an encrypted OnionPacket (Gossipsub direct path)
+                                if let Ok(packet) = bincode::deserialize::<crate::network::routing::OnionPacket>(&payload) {
+                                    n.handle_onion_packet(peer_id, packet).await;
+                                } else if let Ok(message) = Message::deserialize(&payload) {
                                     n.handle_incoming_message(message).await;
                                 }
                             }
@@ -263,7 +379,7 @@ impl Node {
                     // Deliberately hold the packet for a randomized interval before re-transmitting 
                     // to mathematically destroy any temporal correlation between Sender A and Receiver C.
                     use rand::Rng;
-                    let delay_ms = rand::thread_rng().gen_range(1000..=5000);
+                    let delay_ms = rand::thread_rng().gen_range(500..=2500);
                     debug!("Mixnet Active: Obfuscating metadata, delaying transmission by {}ms", delay_ms);
                     tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
 
@@ -307,6 +423,29 @@ impl Node {
 
     /// Process a final incoming message
     async fn handle_incoming_message(&mut self, mut message: Message) {
+        let my_hash = self.identity.identity_hash().clone();
+
+        // Drop messages from blocked senders (Security blocklist check)
+        {
+            let s = self.storage.lock().await;
+            if let Some(contact) = s.get_contact(&message.sender) {
+                if contact.blocked {
+                    info!("Discarding message from blocked sender: {}", message.sender.short());
+                    return;
+                }
+            }
+        }
+
+        // BUG B COMPANION FIX: In direct gossipsub mode, ALL peers receive ALL
+        // messages. Discard messages not addressed to us (unless we are the sender,
+        // which is handled by the outbound save path). This prevents ghost messages
+        // appearing in the wrong conversation on the wrong device.
+        if message.recipient != my_hash && message.sender != my_hash {
+            trace!("Discarding gossipsub message not addressed to us: {} -> {}",
+                message.sender.short(), message.recipient.short());
+            return;
+        }
+
         info!("Received message: {} -> {}", message.sender.short(), message.recipient.short());
         
         // Intercept GroupPayload for decryption and re-routing
@@ -334,17 +473,13 @@ impl Node {
         // Save to storage
         {
             let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-            
-            // 1. Perspective: If this is an Ephemeral message from them, we should ensure it has an expires_at 
-            // set if it doesn't already (though it should be set by the sender).
-            // Actually, we trust the sender's expires_at for now.
 
-            // 2. Add message to conversation
+            // Add message to conversation
             if let Err(e) = s.add_message(message.clone()) {
                 error!("Failed to save incoming message: {:?}", e);
             }
 
-            // 3. Special handling for TimerUpdate to persist the setting
+            // Special handling for TimerUpdate to persist the setting
             if let MessageType::TimerUpdate { seconds } = message.content {
                 let conv_id = ConversationId::from_participants(&message.sender, &message.recipient);
                 if let Some(conv) = s.get_conversation_mut(&conv_id) {
@@ -355,7 +490,7 @@ impl Node {
             }
         }
 
-        // Notify API if subscribed
+        // Notify API (SSE endpoint) that a new message arrived
         if let Some(tx) = &self.msg_notifier {
             let _ = tx.send(message);
         }
@@ -453,7 +588,7 @@ impl Node {
     pub async fn send_message(&mut self, recipient: IdentityHash, message: Message) -> NetworkResult<()> {
         debug!("Sending message to recipient: {}", recipient.short());
         
-        // FIX 5.1: Save outbound message to local encrypted storage before transmitting
+        // Always save the outbound message locally first
         {
             let mut s = self.storage.lock().await;
             if let Err(e) = s.add_message(message.clone()) {
@@ -461,13 +596,38 @@ impl Node {
             }
         }
         
-        // 1. Resolve recipient IdentityHash to PeerId/Info (via DHT)
-        let peer_id = self.transport.resolve(&recipient).await?;
+        // SEC-Z: Hide origin timing by delaying initial message dispatch
+        use rand::Rng;
+        let origin_delay = rand::thread_rng().gen_range(200..=800);
+        tokio::time::sleep(std::time::Duration::from_millis(origin_delay)).await;
+
+        match self.deliver_message(&recipient, &message).await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                warn!("Message delivery to {} failed ({:?}). Queuing in pending deliveries.", recipient.short(), e);
+                let s = self.storage.lock().await;
+                let key = format!("{}:{}", recipient.to_hex(), message.id.to_hex());
+                let _ = s.add_pending_delivery(key.as_bytes(), &message);
+                Ok(()) // Return Ok so HTTP API displays it as sent/pending locally
+            }
+        }
+    }
+
+    /// Internal message delivery logic
+    async fn deliver_message(&mut self, recipient: &IdentityHash, message: &Message) -> NetworkResult<()> {
+        let available_peers = self.transport.known_peers();
+        let is_recipient_online = available_peers.iter().any(|p| p.identity_hash.as_ref() == Some(recipient));
         
-        // TD-4 FIX: Guard against peers with no known addresses
-        let destination = {
-            let peers = self.transport.known_peers();
-            peers.into_iter().find(|p| p.identity_hash.as_ref() == Some(&recipient))
+        let payload = message.serialize()
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+
+        if available_peers.len() >= 3 {
+            // ── FULL ONION ROUTING PATH ──
+            // Resolve recipient IdentityHash to PeerId (via DHT or known_peers)
+            let peer_id = self.transport.resolve(recipient).await?;
+            
+            let destination = available_peers.into_iter()
+                .find(|p| p.identity_hash.as_ref() == Some(recipient))
                 .unwrap_or_else(|| crate::network::PeerInfo {
                     id: peer_id.clone(),
                     public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
@@ -475,39 +635,93 @@ impl Node {
                     protocol_version: 1,
                     user_agent: "red-node".to_string(),
                     addresses: vec!["127.0.0.1:7331".parse().unwrap()],
-                })
-        };
+                });
 
-        // Verify destination has usable addresses
-        if destination.addresses.is_empty() {
-            return Err(NetworkError::RoutingFailed("Destination has no known addresses".to_string()));
+            if destination.addresses.is_empty() {
+                return Err(NetworkError::RoutingFailed("Destination has no known addresses".to_string()));
+            }
+
+            let all_peers = self.transport.known_peers();
+            let route = self.onion_router.select_route(&all_peers, &destination)?;
+
+            let mut shared_secrets = Vec::new();
+            for hop in &route.hops {
+                let secret = self.identity.key_exchange(&hop.public_key);
+                shared_secrets.push(secret);
+            }
+
+            let packet = self.onion_router.create_packet(&route, &payload, &shared_secrets)
+                .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+
+            let first_hop = &route.hops[0].peer_id;
+            use crate::network::transport::TransportMessage;
+            self.transport.send(first_hop, TransportMessage::Onion(packet.clone())).await?;
+            info!("Onion message sent to first hop: {} (3-hop routing)", first_hop.to_hex());
+
+            // BUG FIX: Also emit multi-hop packet to frontend for BLE relay
+            if let Some(tx) = &self.outbound_payload_tx {
+                if let Ok(serialized_packet) = bincode::serialize(&packet) {
+                    let _ = tx.send(serialized_packet);
+                }
+            }
+
+        } else {
+            // ── DIRECT GOSSIPSUB PATH (≤2 peers, e.g. 2-phone demo) ──
+            if !is_recipient_online {
+                return Err(NetworkError::RoutingFailed("Recipient offline in direct mode".to_string()));
+            }
+
+            // We MUST encrypt the payload. Since we drop Libp2p's TCP Noise layer
+            // for offline BLE meshes, we wrap the message in a literal 1-hop OnionPacket.
+            let contact_pub_key = {
+                let s = self.storage.lock().await;
+                s.get_contact(recipient).map(|c| c.public_key)
+            };
+
+            let destination = available_peers.into_iter()
+                .find(|p| p.identity_hash.as_ref() == Some(recipient))
+                .unwrap_or_else(|| {
+                    let pub_key = contact_pub_key
+                        .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                        .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
+
+                    crate::network::PeerInfo {
+                        id: PeerId::from_bytes([0u8; 32]),
+                        public_key: pub_key,
+                        identity_hash: Some(recipient.clone()),
+                        protocol_version: 1,
+                        user_agent: "red-node".to_string(),
+                        addresses: vec![],
+                    }
+                });
+
+            let shared_secret = self.identity.key_exchange(&destination.public_key);
+            let single_hop_route = crate::network::routing::Route {
+                hops: vec![crate::network::routing::RouteHop {
+                    peer_id: destination.id.clone(),
+                    public_key: destination.public_key.clone(),
+                    address: destination.addresses.first().copied().unwrap_or_else(|| "127.0.0.1:0".parse().unwrap()),
+                }],
+            };
+
+            if let Ok(packet) = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret]) {
+                // Publish for internal Libp2p mesh (if any)
+                use crate::network::transport::TransportMessage;
+                let dummy_peer = PeerId::from_bytes([0u8; 32]);
+                let _ = self.transport.send(&dummy_peer, TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }).await;
+                info!("Direct encrypted 1-hop Onion message dispatched (direct mode)");
+
+                // BUG FIX: Emit the encrypted packet to the frontend for Bluetooth LE / WiFi-Direct transmission
+                if let Some(tx) = &self.outbound_payload_tx {
+                    if let Ok(serialized_packet) = bincode::serialize(&packet) {
+                        let _ = tx.send(serialized_packet);
+                    }
+                }
+            } else {
+                return Err(NetworkError::TransportError("Failed to encrypt 1-hop OnionPacket for offline mesh mode".to_string()));
+            }
         }
 
-        // 2. Select route for onion routing (3 hops)
-        let available_peers = self.transport.known_peers();
-        let route = self.onion_router.select_route(&available_peers, &destination)?;
-
-        // 3. Derive shared secrets for each hop
-        let mut shared_secrets = Vec::new();
-        for hop in &route.hops {
-            let secret = self.identity.key_exchange(&hop.public_key);
-            shared_secrets.push(secret);
-        }
-
-        // 4. Encrypt message layers using OnionRouter
-        let payload = message.serialize()
-            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
-            
-        let packet = self.onion_router.create_packet(&route, &payload, &shared_secrets)
-            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
-
-        // 5. Send the OnionPacket to the first hop
-        let first_hop = &route.hops[0].peer_id;
-        use crate::network::transport::TransportMessage;
-        self.transport.send(first_hop, TransportMessage::Onion(packet)).await?;
-        
-        info!("Onion message successfully sent to first hop: {}", first_hop.to_hex());
-        
         Ok(())
     }
 
@@ -521,6 +735,11 @@ impl Node {
         self.identity.identity_hash()
     }
 
+    /// Get node public key for key exchange
+    pub fn public_key(&self) -> crate::crypto::keys::PublicKey {
+        self.identity.public_key().clone()
+    }
+
     /// Get the number of currently connected peers (for API status response)
     pub fn transport_peer_count(&self) -> usize {
         self.transport.connected_peers().len()
@@ -529,6 +748,12 @@ impl Node {
     /// List known peers via transport
     pub async fn list_peers(&self) -> NetworkResult<Vec<crate::network::PeerInfo>> {
         Ok(self.transport.known_peers())
+    }
+
+    /// Mark a conversation as read in the underlying storage database
+    pub async fn mark_conversation_read_in_storage(&self, id: &ConversationId) -> crate::storage::StorageResult<()> {
+        let mut s = self.storage.lock().await;
+        s.mark_conversation_read(id)
     }
 
     /// Create a new group
@@ -569,10 +794,9 @@ impl Node {
         }
     }
 
-    /// List all groups
     pub async fn list_groups(&self) -> NetworkResult<Vec<Group>> {
         let s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-        Ok(s.get_groups().into_iter().cloned().collect())
+        Ok(s.get_groups())
     }
 
     /// Generate a cryptographic pairing code (SEC-2 FIX)
@@ -655,7 +879,7 @@ impl Node {
     /// List authorized devices
     pub async fn list_devices(&self) -> NetworkResult<Vec<AuthorizedDevice>> {
         let s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-        Ok(s.get_authorized_devices().into_iter().cloned().collect())
+        Ok(s.get_authorized_devices())
     }
 
     /// Add a contact to local storage (used by the HTTP API)
@@ -668,10 +892,95 @@ impl Node {
     /// Get synchronization payload (TD-2 FIX: return real conversations)
     pub async fn get_sync_payload(&self) -> NetworkResult<(Vec<crate::storage::Contact>, Vec<Group>, Vec<Conversation>)> {
         let s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-        let contacts = s.get_contacts().into_iter().cloned().collect();
-        let groups = s.get_groups().into_iter().cloned().collect();
+        let contacts = s.get_contacts();
+        let groups = s.get_groups();
         // TD-2 FIX: Collect conversations from storage
-        let conversations = s.get_conversations().into_iter().cloned().collect();
+        let conversations = s.get_conversations();
         Ok((contacts, groups, conversations))
     }
+
+    /// Get current list of known peers from transport
+    pub async fn get_peers(&self) -> NetworkResult<Vec<crate::network::PeerInfo>> {
+        Ok(self.transport.known_peers())
+    }
+
+    /// Get user profile
+    pub async fn get_profile(&self) -> Option<crate::storage::Profile> {
+        let s = self.storage.lock().await;
+        s.get_profile()
+    }
+
+    /// Set user profile
+    pub async fn set_profile(&self, profile: crate::storage::Profile) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        s.set_profile(profile)
+            .map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    // ── A2: Delete a single message from a conversation ───────────────────────
+    pub async fn delete_message(&mut self, conv_id_hex: &str, msg_id_hex: &str) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        s.delete_message(conv_id_hex, msg_id_hex)
+            .map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    // ── A3: Edit the text content of a sent message ───────────────────────────
+    pub async fn edit_message(&mut self, conv_id_hex: &str, msg_id_hex: &str, new_content: String) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        s.edit_message(conv_id_hex, msg_id_hex, new_content)
+            .map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    // ── Clear all messages in a conversation ──────────────────────────────────
+    pub async fn clear_conversation(&mut self, conv_id_hex: &str) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        s.clear_conversation(conv_id_hex)
+            .map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    // ── E1: Add a member to a group ───────────────────────────────────────────
+    pub async fn add_group_member(&mut self, group_id: crate::protocol::GroupId, member_hash: crate::identity::IdentityHash) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        let mut group = s.get_group_mut(&group_id)
+            .ok_or_else(|| NetworkError::TransportError("Group not found".to_string()))?;
+        let member = crate::protocol::GroupMember {
+            identity_hash: member_hash,
+            public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+            joined_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            role: crate::protocol::MemberRole::Member,
+        };
+        group.add_member(member)
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+        s.add_group(group).map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    // ── E1: Remove a member from a group ─────────────────────────────────────
+    pub async fn remove_group_member(&mut self, group_id: crate::protocol::GroupId, member_hash: crate::identity::IdentityHash) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        let mut group = s.get_group_mut(&group_id)
+            .ok_or_else(|| NetworkError::TransportError("Group not found".to_string()))?;
+        group.remove_member(&member_hash)
+            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+        s.add_group(group).map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    /// Block a contact
+    pub async fn block_contact(&self, hash: &crate::identity::IdentityHash) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        s.block_contact(hash).map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    /// Unblock a contact
+    pub async fn unblock_contact(&self, hash: &crate::identity::IdentityHash) -> NetworkResult<()> {
+        let mut s = self.storage.lock().await;
+        s.unblock_contact(hash).map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    /// Toggle verification status of a contact
+    pub async fn toggle_verify_contact(&self, hash: &crate::identity::IdentityHash) -> NetworkResult<bool> {
+        let mut s = self.storage.lock().await;
+        s.toggle_verify_contact(hash).map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
 }
+

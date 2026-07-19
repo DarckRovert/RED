@@ -106,6 +106,7 @@ const init = () => {
   initRadar();
   initNavigation();
   loadThreeAndGlobe();
+  initLiveNodeTerminal();
 };
 
 document.addEventListener('DOMContentLoaded', init);
@@ -409,16 +410,27 @@ const initRadar = () => {
 const initCustomCursor = () => {
   const cursor = $('#custom-cursor');
   const follower = $('#custom-cursor-follower');
+  const neonGlow = $('#neon-glow');
   if (!cursor || !follower) return;
 
-  let mx = 0, my = 0, px = 0, py = 0;
+  let mx = 0, my = 0, px = 0, py = 0, gx = 0, gy = 0;
   window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
 
   const tick = () => {
     cursor.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
+    
+    // Follower (rápido)
     px += (mx - px) * 0.15;
     py += (my - py) * 0.15;
     follower.style.transform = `translate3d(${px - 20}px, ${py - 20}px, 0)`;
+
+    // Ambient Neon Glow (suave y lento para inercia fluida)
+    if (neonGlow) {
+      gx += (mx - gx) * 0.04;
+      gy += (my - gy) * 0.04;
+      neonGlow.style.transform = `translate3d(${gx}px, ${gy}px, 0) translate(-50%, -50%)`;
+    }
+
     requestAnimationFrame(tick);
   };
   tick();
@@ -456,6 +468,44 @@ const initGeoParticles = () => {
     el.style.setProperty('--d', (Math.random() * 15 + 10) + 's');
     document.body.appendChild(el);
   }
+};
+
+const initLiveNodeTerminal = () => {
+  const output = $('#node-status-output');
+  if (!output) return;
+
+  const checkStatus = async () => {
+    try {
+      const res = await fetch('http://localhost:7333/api/status');
+      if (res.ok) {
+        const data = await res.json();
+        
+        let info = '';
+        if (data.is_running) {
+          info += `<span class="pulse-online">●</span> <span class="highlight">DAEMON STATUS: ONLINE</span>\n\n`;
+          info += `<span class="info">Identity Hash:</span>  ${data.identity_hash}\n`;
+          info += `<span class="info">Consensus:</span>      Proof-of-Stake (Omega Protocol)\n`;
+          info += `<span class="info">Block Height:</span>   <span class="highlight">${data.chain_height}</span>\n`;
+          info += `<span class="info">Mesh Peers:</span>     ${data.peer_count} activos\n`;
+          info += `<span class="info">Gossip Latency:</span> ${data.gossip_latency_ms ? data.gossip_latency_ms + ' ms' : 'N/A'}\n`;
+          info += `<span class="info">Version:</span>        v${data.version}\n`;
+        } else {
+          info += `<span class="pulse-offline">●</span> <span class="warning">DAEMON STATUS: INITIALIZING (PoW in progress)</span>\n\n`;
+          info += `<span class="info">Version:</span>        v${data.version}\n`;
+        }
+        output.innerHTML = info;
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      output.innerHTML = `<span class="pulse-offline">●</span> <span class="error">DAEMON STATUS: OFFLINE</span>\n\n` +
+        `<span class="info">No se detecta un nodo local activo en http://localhost:7333 (CORS Permisivo habilitado).</span>\n` +
+        `<span class="info">Inicia tu app móvil RED en la misma red o ejecuta 'cargo run' en tu terminal de escritorio para integrarlo con la consola de diagnóstico mesh en tiempo real.</span>`;
+    }
+  };
+
+  checkStatus();
+  setInterval(checkStatus, 5000);
 };
 
 // Fire everything

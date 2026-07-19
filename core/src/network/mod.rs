@@ -77,3 +77,13 @@ pub const MIN_PEERS: usize = 3;
 
 /// Onion routing path length
 pub const ONION_PATH_LENGTH: usize = 3;
+
+/// Utility for debugging logs in mobile environments
+pub fn append_log(data_dir: &std::path::Path, line: &str) {
+    use std::io::Write;
+    let path = data_dir.join("DEBUG_TRACE.txt");
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+        let _ = writeln!(f, "[{}] {}", ts, line);
+    }
+}

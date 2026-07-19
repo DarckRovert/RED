@@ -15,6 +15,8 @@ pub struct LoraBridge {
     port: String,
     baud_rate: u32,
     is_active: bool,
+    /// BUG 10 FIX: mpsc sender to the write-half of the serial stream
+    tx: Option<tokio::sync::mpsc::Sender<Vec<u8>>>,
 }
 
 impl LoraBridge {
@@ -25,6 +27,7 @@ impl LoraBridge {
             port,
             baud_rate,
             is_active: false,
+            tx: None,
         }
     }
 
@@ -37,17 +40,32 @@ impl LoraBridge {
         let port_path = self.port.clone();
         let baud = self.baud_rate;
 
-        // SEC-FIX A-1: REAL Serial I/O implementation using tokio-serial.
-        // Previously this was a dummy loop with a 600s sleep.
-        tokio::spawn(async move {
-            use tokio_serial::{SerialPortBuilderExt, SerialStream};
-            use tokio::io::{AsyncBufReadExt, BufReader};
+        // BUG 10 FIX: Create mpsc channel so transmit() can send bytes to the write-half
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(64);
+        self.tx = Some(tx);
 
-            let builder = tokio_serial::new(port_path, baud);
+        tokio::spawn(async move {
+            use tokio_serial::SerialPortBuilderExt;
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+            let builder = tokio_serial::new(&port_path, baud);
             match builder.open_native_async() {
-                Ok(mut serial) => {
+                Ok(serial) => {
                     info!("Successfully opened LoRa serial port");
-                    let mut reader = BufReader::new(serial).lines();
+                    // Split into read and write halves
+                    let (read_half, mut write_half) = tokio::io::split(serial);
+                    let mut reader = BufReader::new(read_half).lines();
+
+                    // Spawn writer task
+                    tokio::spawn(async move {
+                        while let Some(data) = rx.recv().await {
+                            if let Err(e) = write_half.write_all(&data).await {
+                                error!("LoRa serial write error: {}", e);
+                            }
+                        }
+                    });
+
+                    // Reader loop — inject received bytes into the Rust node
                     while let Ok(Some(line)) = reader.next_line().await {
                         if let Ok(bytes) = hex::decode(line.trim()) {
                             let mut n = node_ptr.lock().await;
@@ -68,10 +86,16 @@ impl LoraBridge {
         if !self.is_active {
             return Err("LoRa Radio module offline or disconnected".to_string());
         }
-        // SEC-FIX A-1: REAL transmission — previous implementation was a no-op.
-        let hex_payload = hex::encode(payload) + "\n";
-        // In a real impl, we'd need a write-half of the serial stream or a MPSC channel.
-        debug!("Dispatched {} bytes over LoRa interface: {}", payload.len(), hex_payload);
-        Ok(())
+        // BUG 10 FIX: Actually send bytes through the mpsc channel to the write-half
+        let hex_payload = format!("{}\n", hex::encode(payload));
+        if let Some(tx) = &self.tx {
+            tx.send(hex_payload.into_bytes())
+                .await
+                .map_err(|e| format!("LoRa send channel error: {}", e))?;
+            debug!("Dispatched {} bytes over LoRa interface", payload.len());
+            Ok(())
+        } else {
+            Err("LoRa bridge not started — call start() first".to_string())
+        }
     }
 }

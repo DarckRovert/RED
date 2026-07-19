@@ -45,6 +45,7 @@
   <!-- ───────────────── CUSTOM CURSOR ───────────────── -->
   <div id="custom-cursor" aria-hidden="true"></div>
   <div id="custom-cursor-follower" aria-hidden="true"></div>
+  <div id="neon-glow" aria-hidden="true"></div>
 
   <div id="scroll-progress"></div>
   <canvas id="bg-mesh-canvas" aria-hidden="true"></canvas>
@@ -265,6 +266,34 @@
             <li><span class="partial">!</span> Depende de AWS/Google</li>
             <li><span class="cross">✗</span> Bloqueable por ISP</li>
           </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── LIVE NODE TERMINAL ───────────────── -->
+  <section id="terminal" class="terminal-section section">
+    <div class="container">
+      <div class="terminal__header">
+        <span class="badge reveal-text">🟢 INTEGRACIÓN DE NODO MESH</span>
+        <h2 class="section-title reveal-text">RED Daemon Terminal.<br><span class="text-gradient">Consola en Tiempo Real.</span></h2>
+        <p class="section-desc reveal-text">Esta consola interactúa en tiempo real con tu nodo local si se encuentra activo en el puerto 7333, mostrando telemetría en vivo del blockchain y la red mesh.</p>
+      </div>
+
+      <div class="terminal-hud reveal">
+        <div class="terminal-hud__topbar">
+          <div class="terminal-hud__dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-hud__title font-mono">SOVEREIGN-NODE@RED-MESSENGER:~</div>
+        </div>
+        <div class="terminal-hud__body font-mono">
+          <div class="terminal-line"><span class="terminal-prompt">$</span> status-check --mesh</div>
+          <div id="node-status-output" class="terminal-output">
+            <span class="pulse-offline">●</span> Buscando nodo RED local activo en puerto 7333...
+          </div>
         </div>
       </div>
     </div>

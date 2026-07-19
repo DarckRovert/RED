@@ -44,6 +44,12 @@ pub async fn auth_middleware(
         "/app.css",
         "/app.js",
         "/api/status",
+        // SSE and WebSocket endpoints cannot send custom Authorization headers —
+        // the browser EventSource and WebSocket APIs do not support it.
+        // These are protected implicitly by being localhost-only (127.0.0.1:7333).
+        "/api/events",
+        "/api/network/outbound",
+        "/local-signal",
     ];
 
     if public_paths.iter().any(|p| path == *p) {

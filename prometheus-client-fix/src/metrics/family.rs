@@ -225,7 +225,7 @@ impl<S: Clone + std::hash::Hash + Eq, M, C: MetricConstructor<M>> Family<S, M, C
     /// // calls.
     /// family.get_or_create(&vec![("method".to_owned(), "GET".to_owned())]).inc();
     /// ```
-    pub fn get_or_create(&self, label_set: &S) -> MappedRwLockReadGuard<M> {
+    pub fn get_or_create(&self, label_set: &S) -> MappedRwLockReadGuard<'_, M> {
         if let Ok(metric) =
             RwLockReadGuard::try_map(self.metrics.read(), |metrics| metrics.get(label_set))
         {
@@ -288,7 +288,7 @@ impl<S: Clone + std::hash::Hash + Eq, M, C: MetricConstructor<M>> Family<S, M, C
         self.metrics.write().clear()
     }
 
-    pub(crate) fn read(&self) -> RwLockReadGuard<HashMap<S, M>> {
+    pub(crate) fn read(&self) -> RwLockReadGuard<'_, HashMap<S, M>> {
         self.metrics.read()
     }
 }

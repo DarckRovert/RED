@@ -282,6 +282,11 @@ impl Consensus {
         *self.epoch.read().unwrap()
     }
 
+    /// Get current slot
+    pub fn current_slot(&self) -> u64 {
+        *self.current_slot.read().unwrap()
+    }
+
     /// Advance to next slot
     pub fn advance_slot(&self) {
         let mut slot = self.current_slot.write().unwrap();

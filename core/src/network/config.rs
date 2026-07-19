@@ -13,7 +13,7 @@ pub struct NetworkConfig {
     pub listen_addr: SocketAddr,
     
     /// Bootstrap nodes
-    pub bootstrap_nodes: Vec<SocketAddr>,
+    pub bootstrap_nodes: Vec<libp2p::Multiaddr>,
     
     /// Maximum number of peers
     pub max_peers: usize,
@@ -41,6 +41,10 @@ pub struct NetworkConfig {
     
     /// Dummy traffic rate (messages per minute)
     pub dummy_traffic_rate: f64,
+
+    /// [NEW] Root directory for persistent logs (telemetry)
+    #[serde(skip)]
+    pub data_dir: Option<std::path::PathBuf>,
 }
 
 impl NetworkConfig {
@@ -58,17 +62,24 @@ impl NetworkConfig {
             enable_dht: true,
             enable_gossip: true,
             dummy_traffic_rate: 1.0, // 1 dummy message per minute
+            data_dir: None,
         }
     }
 
+    /// Set the data directory for logs
+    pub fn with_data_dir(mut self, path: std::path::PathBuf) -> Self {
+        self.data_dir = Some(path);
+        self
+    }
+
     /// Add a bootstrap node
-    pub fn with_bootstrap_node(mut self, addr: SocketAddr) -> Self {
+    pub fn with_bootstrap_node(mut self, addr: libp2p::Multiaddr) -> Self {
         self.bootstrap_nodes.push(addr);
         self
     }
 
     /// Add multiple bootstrap nodes
-    pub fn with_bootstrap_nodes(mut self, addrs: Vec<SocketAddr>) -> Self {
+    pub fn with_bootstrap_nodes(mut self, addrs: Vec<libp2p::Multiaddr>) -> Self {
         self.bootstrap_nodes.extend(addrs);
         self
     }
@@ -121,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_builder_pattern() {
-        let addr: SocketAddr = "192.168.1.1:7331".parse().unwrap();
+        let addr: libp2p::Multiaddr = "/ip4/192.168.1.1/tcp/7331".parse().unwrap();
         
         let config = NetworkConfig::new(8080)
             .with_bootstrap_node(addr)

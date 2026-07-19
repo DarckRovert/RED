@@ -19,7 +19,7 @@ red-blockchain = { path = "../blockchain" }
 tokio = { version = "1.35", features = ["full"] }
 
 # HTTP REST API
-axum = { version = "0.7", features = ["http1", "json"] }
+axum = { version = "0.7", features = ["http1", "json", "ws"] }
 tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -54,3 +54,4 @@ async-stream = "0.3"
 futures = "0.3"
 hex = "0.4"
 http = "1.4.0"
+base64 = "0.21"

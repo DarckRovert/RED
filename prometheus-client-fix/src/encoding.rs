@@ -232,7 +232,7 @@ impl<'a> From<protobuf::LabelSetEncoder<'a>> for LabelSetEncoder<'a> {
 
 impl<'a> LabelSetEncoder<'a> {
     /// Encode the given label.
-    pub fn encode_label(&mut self) -> LabelEncoder {
+    pub fn encode_label(&mut self) -> LabelEncoder<'_> {
         for_both_mut!(self, LabelSetEncoderInner, e, e.encode_label().into())
     }
 }
@@ -269,7 +269,7 @@ impl<'a> From<protobuf::LabelEncoder<'a>> for LabelEncoder<'a> {
 
 impl<'a> LabelEncoder<'a> {
     /// Encode a label.
-    pub fn encode_label_key(&mut self) -> Result<LabelKeyEncoder, std::fmt::Error> {
+    pub fn encode_label_key(&mut self) -> Result<LabelKeyEncoder<'_>, std::fmt::Error> {
         for_both_mut!(
             self,
             LabelEncoderInner,

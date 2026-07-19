@@ -47,6 +47,17 @@ impl MessageId {
     pub fn to_hex(&self) -> String {
         hex::encode(&self.0)
     }
+
+    /// Parse from 64-char hex string
+    pub fn from_hex(s: &str) -> Result<Self, String> {
+        let bytes = hex::decode(s).map_err(|e| e.to_string())?;
+        if bytes.len() != 32 {
+            return Err(format!("Expected 32 bytes, got {}", bytes.len()));
+        }
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&bytes);
+        Ok(Self(arr))
+    }
 }
 
 impl std::fmt::Display for MessageId {
@@ -183,6 +194,9 @@ pub struct Message {
     /// Message status
     #[serde(skip)]
     pub status: MessageStatus,
+    /// Whether this message has been edited
+    #[serde(default)]
+    pub edited: bool,
 }
 
 impl Message {

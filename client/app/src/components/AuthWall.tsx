@@ -60,6 +60,30 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             try {
                 const info = await BiometricAuth.checkBiometry();
                 setBiometryAvailable(info.isAvailable);
+                
+                // Auto-trigger biometrics if returning user
+                if (masterPin && info.isAvailable && !disguiseEnabled) {
+                    try {
+                        await BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
+                        // If success, just login right away!
+                        setMode("unlock");
+                        setIsLoaded(true);
+                        // Using internal function but since it's an effect, we rely on the state to update
+                        // Actually better to do the login directly here to avoid flashes
+                        const panicPin = await getSecurePin("panic_pin");
+                        const decoyPin = await getSecurePin("decoy_pin");
+                        if (masterPin === decoyPin) {
+                            // GAP-12 FIX: pass the real decoyPin so Rust derives the correct storage key
+                            login(decoyPin);
+                        } else {
+                            login(masterPin);
+                        }
+                        return; // do not even render the form
+                    } catch (e) {
+                        // User cancelled or failed biometric -> Show PIN fallback
+                        console.log("Biometric bypassed or failed, falling back to PIN");
+                    }
+                }
             } catch {
                 setBiometryAvailable(false);
             }
@@ -93,7 +117,8 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         // 2. DECOY VAULT
         if (decoyPin && pwd === decoyPin) {
-            await login("9999");
+            // GAP-12 FIX: pass decoyPin so Rust derives the correct storage key for the decoy vault
+            await login(decoyPin);
             setLoading(false);
             return;
         }
@@ -167,7 +192,19 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     // ── RENDER ────────────────────────────────────────────────────────────────
     if (!isLoaded || mode === "checking") {
-        return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
+        return (
+            <div style={{
+                background: 'var(--bg-deep)', height: '100dvh', width: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+                <div style={{
+                    width: 44, height: 44, borderRadius: '14px', background: 'var(--primary)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.3rem', fontWeight: 900, color: 'white',
+                    animation: 'pulse-glow 1.5s ease-in-out infinite',
+                }}>R</div>
+            </div>
+        );
     }
 
     if (isAuthenticated) return <>{children}</>;
@@ -198,24 +235,33 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', height: '100dvh', width: '100%',
-            background: 'var(--bg-deep)', padding: '32px', boxSizing: 'border-box'
+            background: 'var(--bg-deep)', padding: '32px', boxSizing: 'border-box',
+            backgroundImage: 'radial-gradient(ellipse 80% 50% at 50% -5%, rgba(232,33,58,0.12) 0%, transparent 65%)',
         }}>
 
-            {/* Logo */}
-            <div style={{ marginBottom: '40px', textAlign: 'center' }}>
+            {/* Logo Section */}
+            <div style={{ marginBottom: '40px', textAlign: 'center' }} className="animate-enter">
                 <div style={{
-                    width: '80px', height: '80px', background: 'var(--primary)',
-                    borderRadius: '24px', display: 'flex', alignItems: 'center',
-                    justifyContent: 'center', margin: '0 auto 20px auto',
-                    boxShadow: '0 0 48px rgba(255,60,60,0.5)'
+                    width: '84px', height: '84px',
+                    borderRadius: '26px',
+                    background: 'linear-gradient(145deg, var(--primary-bright), var(--primary))',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 22px auto',
+                    boxShadow: '0 0 0 1px rgba(232,33,58,0.3), 0 8px 40px var(--primary-glow)',
+                    position: 'relative',
+                    overflow: 'hidden'
                 }}>
-                    <span style={{ fontSize: '2.5rem' }}>🔴</span>
+                    <div style={{
+                        position: 'absolute', inset: 0, borderRadius: 'inherit',
+                        background: 'linear-gradient(145deg, rgba(255,255,255,0.2) 0%, transparent 60%)',
+                    }} />
+                    <span style={{ fontSize: '2.6rem', fontWeight: 900, color: 'white', letterSpacing: '-3px', lineHeight: 1, position: 'relative', zIndex: 2 }}>R</span>
                 </div>
-                <h1 style={{ color: 'var(--text-primary)', fontSize: '1.8rem', fontWeight: 800, margin: 0 }}>RED</h1>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '6px' }}>
+                <h1 style={{ color: 'var(--text-primary)', fontSize: '2.4rem', fontWeight: 900, margin: '0 0 6px 0', letterSpacing: '10px', textShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>RED</h1>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, letterSpacing: '4px', textTransform: 'uppercase' }}>
                     {isOnboarding
-                        ? (step === "enter" ? "Crea tu PIN de acceso" : "Confirma tu PIN")
-                        : "Ingresa tu PIN de acceso"
+                        ? (step === "enter" ? "Crear Identidad" : "Confirmar acceso")
+                        : "Sistema táctico P2P"
                     }
                 </p>
             </div>
@@ -223,12 +269,12 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             {/* Warning for onboarding */}
             {isOnboarding && step === "enter" && (
                 <div style={{
-                    background: 'rgba(255,180,0,0.1)', border: '1px solid rgba(255,180,0,0.4)',
-                    borderRadius: '12px', padding: '12px 16px', marginBottom: '24px',
-                    maxWidth: '320px', textAlign: 'center'
-                }}>
-                    <p style={{ color: '#ffb400', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
-                        ⚠️ Este PIN es la única llave de tu bóveda cifrada. <strong>No tiene recuperación.</strong> Si lo olvidas, perderás tu identidad.
+                    background: 'rgba(255,170,0,0.08)', border: '1px solid rgba(255,170,0,0.25)',
+                    borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: '24px',
+                    maxWidth: '320px', textAlign: 'center',
+                }} className="animate-fade">
+                    <p style={{ color: 'var(--warning)', fontSize: '0.8rem', margin: 0, lineHeight: 1.6 }}>
+                        ⚠️ Este PIN es la <strong>única llave</strong> de tu bóveda cifrada. No tiene recuperación.
                     </p>
                 </div>
             )}
@@ -236,7 +282,12 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             {/* PIN Form */}
             <form
                 onSubmit={isOnboarding ? handleOnboardingSubmit : handleUnlockSubmit}
-                style={{ width: '100%', maxWidth: '300px', display: 'flex', flexDirection: 'column', gap: '16px' }}
+                className="glass-panel-elevated animate-enter"
+                style={{
+                    width: '100%', maxWidth: '340px', display: 'flex', flexDirection: 'column',
+                    gap: '16px', padding: '28px', borderRadius: 'var(--radius-xl)',
+                    animationDelay: '120ms',
+                }}
             >
                 <input
                     type="password"
@@ -249,14 +300,16 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                         setError("");
                     }}
                     autoFocus
-                    placeholder={isOnboarding ? "Mínimo 6 dígitos" : "• • • • • •"}
+                    placeholder={isOnboarding ? "Crear PIN" : "PIN"}
                     disabled={loading}
                     style={{
-                        width: '100%', padding: '18px', background: 'var(--bg-lifted)',
-                        border: `2px solid ${error ? 'var(--danger)' : 'var(--solid-border)'}`,
-                        color: 'var(--text-primary)', borderRadius: '14px', fontSize: '1.8rem',
-                        letterSpacing: '12px', textAlign: 'center', outline: 'none',
-                        transition: 'border 0.2s ease', boxSizing: 'border-box'
+                        width: '100%', padding: '18px 20px',
+                        background: 'rgba(0,0,0,0.4)',
+                        border: `1px solid ${error ? 'var(--danger)' : 'var(--glass-border)'}`,
+                        color: 'var(--text-primary)', borderRadius: 'var(--radius-md)',
+                        fontSize: '1.6rem', letterSpacing: '10px', textAlign: 'center',
+                        outline: 'none', transition: 'all var(--dur-fast)', boxSizing: 'border-box',
+                        boxShadow: error ? '0 0 0 3px rgba(232,33,58,0.2)' : 'none',
                     }}
                 />
 
@@ -286,13 +339,9 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
                     <button
                         type="submit"
+                        className="btn-primary"
                         disabled={loading || (isOnboarding && step === "enter" && pin.length < 6) || (isOnboarding && step === "confirm" && confirmPin.length < 6) || (!isOnboarding && !pin)}
-                        style={{
-                            flex: 1, padding: '16px', background: 'var(--primary)',
-                            color: 'white', border: 'none', borderRadius: '14px',
-                            fontSize: '1.05rem', fontWeight: 700, cursor: 'pointer',
-                            opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s'
-                        }}
+                        style={{ flex: 1 }}
                     >
                         {loading ? "INICIANDO..." : isOnboarding ? (step === "enter" ? "CONTINUAR →" : "CREAR BÓVEDA") : "DESCIFRAR NODO"}
                     </button>
@@ -300,9 +349,9 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             </form>
 
             <p style={{
-                position: 'absolute', bottom: '24px',
-                color: 'var(--text-muted)', fontSize: '0.7rem',
-                fontFamily: 'monospace', letterSpacing: 1
+                position: 'absolute', bottom: '20px',
+                color: 'var(--text-disabled)', fontSize: '0.68rem',
+                fontFamily: 'JetBrains Mono, monospace', letterSpacing: 1.5,
             }}>
                 AES-256-GCM · Ed25519 · P2P
             </p>

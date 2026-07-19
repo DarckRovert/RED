@@ -235,6 +235,25 @@ body:hover #custom-cursor, body:hover #custom-cursor-follower {
   background: rgba(232, 0, 28, 0.05);
 }
 
+/* ─── NEON GLOW DECORATOR (Premium Ambient Light) ──── */
+#neon-glow {
+  position: fixed;
+  top: 0; left: 0;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(232, 0, 28, 0.16) 0%, rgba(232, 0, 28, 0.04) 40%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+  transform: translate3d(-50%, -50%, 0);
+  opacity: 0;
+  transition: opacity 1.5s var(--ease-out);
+  will-change: transform;
+}
+body:hover #neon-glow {
+  opacity: 1;
+}
+
 /* ─── SCROLL PROGRESS ────────────────────────────── */
 #scroll-progress {
   position: fixed;
@@ -825,7 +844,7 @@ body:hover #custom-cursor, body:hover #custom-cursor-follower {
   inset: 0;
   background: radial-gradient(circle at 80% 0%, rgba(232,0,28,0.1) 0%, transparent 70%);
   opacity: 0.5;
-  transition: opacity 0.4s;
+  transition: opacity 0.4s, background 0.4s;
 }
 
 .feature-card:hover {
@@ -836,6 +855,11 @@ body:hover #custom-cursor, body:hover #custom-cursor-follower {
     0 30px 60px -12px rgba(0,0,0,0.7),
     0 0 40px rgba(232,0,28,0.2),
     var(--neon-inner);
+}
+
+.feature-card:hover::before {
+  opacity: 0.9;
+  background: radial-gradient(circle at 80% 0%, rgba(232,0,28,0.18) 0%, rgba(232,0,28,0.02) 50%, transparent 70%);
 }
 
 .feature-card__icon {
@@ -918,10 +942,21 @@ body:hover #custom-cursor, body:hover #custom-cursor-follower {
   grid-column: span 1;
   transform: scale(1.05) translateZ(50px);
   border-color: rgba(232, 0, 28, 0.5);
-  box-shadow: var(--red-glow-md);
   background: linear-gradient(180deg, rgba(10,10,20,0.9) 0%, rgba(30,0,5,0.9) 100%);
   z-index: 10;
   padding: 40px 32px;
+  animation: neonPulse 4s infinite ease-in-out;
+}
+
+@keyframes neonPulse {
+  0%, 100% { 
+    box-shadow: 0 0 30px rgba(232, 0, 28, 0.35), 0 0 60px rgba(232, 0, 28, 0.12), var(--neon-inner);
+    border-color: rgba(232, 0, 28, 0.4);
+  }
+  50% { 
+    box-shadow: 0 0 45px rgba(232, 0, 28, 0.55), 0 0 90px rgba(232, 0, 28, 0.22), var(--neon-inner);
+    border-color: rgba(255, 45, 71, 0.6);
+  }
 }
 
 @media (min-width: 1024px) {
@@ -1742,4 +1777,110 @@ a.download-card {
 @media (max-width: 480px) {
   .origin__stats { grid-template-columns: 1fr 1fr; }
   .origin__flag { font-size: 3rem; }
+}
+
+/* ─────────────────────────────────────────────────
+   LIVE NODE TERMINAL
+   ───────────────────────────────────────────────── */
+.terminal-section {
+  background: var(--bg-void);
+  padding: var(--section-py) 0;
+}
+.terminal__header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+.terminal-hud {
+  background: rgba(4, 4, 8, 0.95);
+  border: 1px solid rgba(232, 0, 28, 0.25);
+  border-radius: var(--r-xl);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(232, 0, 28, 0.08);
+  overflow: hidden;
+  max-width: 800px;
+  margin: 0 auto;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.terminal-hud__topbar {
+  background: rgba(12, 12, 20, 0.98);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.terminal-hud__dots {
+  display: flex;
+  gap: 8px;
+}
+.terminal-hud__dots .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.terminal-hud__dots .dot.red { background: #ff5f56; }
+.terminal-hud__dots .dot.yellow { background: #ffbd2e; }
+.terminal-hud__dots .dot.green { background: #27c93f; }
+
+.terminal-hud__title {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+.terminal-hud__body {
+  padding: 30px;
+  min-height: 280px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #a8a8b3;
+}
+.terminal-line {
+  margin-bottom: 12px;
+  color: var(--text-primary);
+}
+.terminal-prompt {
+  color: var(--red-400);
+  margin-right: 10px;
+  font-weight: 700;
+}
+.terminal-output {
+  color: #27c93f;
+  margin-top: 15px;
+  white-space: pre-wrap;
+  animation: terminalFade 0.3s ease;
+}
+.terminal-output .error {
+  color: #ff5f56;
+}
+.terminal-output .warning {
+  color: #ffbd2e;
+}
+.terminal-output .info {
+  color: #a8a8b3;
+}
+.terminal-output .highlight {
+  color: var(--red-400);
+  font-weight: 700;
+}
+
+@keyframes terminalFade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pulse-offline {
+  color: #ff5f56;
+  display: inline-block;
+  animation: terminalPulse 1.5s infinite;
+}
+.pulse-online {
+  color: #27c93f;
+  display: inline-block;
+  animation: terminalPulse 1.5s infinite;
+}
+
+@keyframes terminalPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }

@@ -1,6 +1,6 @@
 {
   "name": "app",
-  "version": "5.1.0",
+  "version": "7.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -17,6 +17,7 @@
     "@capacitor/app": "^8.0.1",
     "@capacitor/camera": "^8.0.2",
     "@capacitor/cli": "^8.1.0",
+    "@capacitor/clipboard": "^8.0.1",
     "@capacitor/core": "^8.2.0",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/geolocation": "^8.1.0",
@@ -24,6 +25,7 @@
     "@capacitor/local-notifications": "^8.0.2",
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
+    "@capawesome/capacitor-background-task": "^8.0.2",
     "@types/leaflet": "^1.9.21",
     "capacitor-secure-storage-plugin": "^0.13.0",
     "capacitor-voice-recorder": "^7.0.6",

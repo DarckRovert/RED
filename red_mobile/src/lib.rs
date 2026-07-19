@@ -8,9 +8,13 @@ use ed25519_dalek::SigningKey;
 
 mod api;
 
-// Bootstrap nodes for the RED network.
+// Nodos Semilla Mundiales de la red pública IPFS (InterPlanetary File System).
+// No pertenecen a ningún servidor de RED corporativo. Proveen descubrimiento global descentralizado y actúan como "Trampolines Relay" para atravesar NAT 4G.
 const BOOTSTRAP_NODES: &[&str] = &[
-    "157.230.29.114:7331", // RED Bootstrap Seed #1 (Simulated)
+    "/ip4/147.75.109.213/tcp/4001/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkX1q42C",
+    "/ip4/147.75.83.83/tcp/4001/p2p/QmbBHw1Xx9pUpAbrVZUKTPL5Rsph5Q9GQhRvcWVBPFgNwF",
+    "/ip4/136.144.57.15/tcp/4001/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbX",
+    "/ip4/147.75.77.187/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6yHzpnVgG9fB"
 ];
 
 static ONCE: std::sync::Once = std::sync::Once::new();
@@ -24,10 +28,11 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
     password_jstr: JString,
 ) {
     ONCE.call_once(|| {
-        tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::DEBUG)
-            .without_time()
-            .init();
+        android_logger::init_once(
+            android_logger::Config::default()
+                .with_max_level(log::LevelFilter::Trace)
+                .with_tag("rust"),
+        );
     });
 
     if NODE_STARTED.load(std::sync::atomic::Ordering::SeqCst) {
@@ -120,17 +125,23 @@ fn append_log(data_dir: &std::path::Path, msg: &str) {
 }
 
 async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::Result<()> {
+    let build_ts = env!("CARGO_PKG_VERSION");
     append_log(&data_dir, "=== RED NODE BOOT START ===");
+    append_log(&data_dir, &format!("Build Version (SemVer): {}", build_ts));
+    append_log(&data_dir, &format!("Boot timestamp: {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()));
     let _ = std::fs::create_dir_all(&data_dir);
 
     // Derive storage key (fast, pure CPU, ok on async thread)
+    // SALT must match node/src/main.rs get_storage_key() exactly so that
+    // a node initialized on desktop and opened on mobile uses the same key.
     append_log(&data_dir, "Deriving storage key...");
     let key = red_core::crypto::hashing::derive_symmetric_key(
         password_str.as_bytes(),
-        b"red-salt",
+        b"red-storage-salt-v1",
         b"storage-key",
     ).map_err(|_| anyhow::anyhow!("Key derivation failure"))?;
     append_log(&data_dir, "Storage key derived OK");
+
 
     // ── ASYNC API BOOT ────────────────────────────────────────────────────────
     // Launch the API server FIRST with an empty state so the frontend can poll
@@ -181,8 +192,8 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
 
     append_log(&data_dir, "Loading or generating identity (spawn_blocking)...");
     let identity = {
-        let mut s = storage_arc.lock().await;
-        if let Some(id) = s.get_identity().cloned() {
+        let s = storage_arc.lock().await;
+        if let Some(id) = s.get_identity() {
             append_log(&data_dir, &format!("Existing identity loaded: {}", id.identity_hash().short()));
             id
         } else {
@@ -192,6 +203,7 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
                 red_core::identity::Identity::generate()
                     .map_err(|e| anyhow::anyhow!("Identity gen fail: {:?}", e))
             }).await.map_err(|e| anyhow::anyhow!("Identity thread panic: {:?}", e))??;
+            append_log(&data_dir, "IDENTITY PoW COMPLETE OK");
             {
                 let mut s2 = storage_arc.lock().await;
                 let _ = s2.set_identity(id.clone());
@@ -208,7 +220,8 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     append_log(&data_dir, "Blockchain OK");
 
     append_log(&data_dir, "Configuring P2P network...");
-    let mut network_config = red_core::network::NetworkConfig::new(4556);
+    let mut network_config = red_core::network::NetworkConfig::new(7331)
+        .with_data_dir(data_dir.clone());
     for addr_str in BOOTSTRAP_NODES {
         if let Ok(addr) = addr_str.parse() {
             network_config = network_config.with_bootstrap_node(addr);
@@ -236,6 +249,15 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     });
 
     // ── FINAL STATE READY — API now returns live data ─────────────────────────
+    let api_key = {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(identity.identity_hash().as_bytes());
+        hasher.update(b"red-api-v1-key-salt"); 
+        let hash = hasher.finalize();
+        *hash.as_bytes()
+    };
+    info!("API Key derived (persisted for this identity)");
+
     {
         let mut s = api_state.lock().await;
         *s = Some(api::ApiState {
@@ -243,16 +265,26 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
             msg_tx: msg_tx.clone(),
             chain: chain_arc.clone(),
             consensus: consensus.clone(),
+            api_key,
         });
     }
     append_log(&data_dir, "=== NODE FULLY INITIALIZED — API SERVING LIVE DATA ===");
 
     // Start P2P event loop
     let node_loop = node_arc.clone();
+    let log_dir_loop = data_dir.clone();
     tokio::spawn(async move {
+        append_log(&log_dir_loop, "Starting P2P Node Event Loop...");
         match red_core::network::Node::start(node_loop.clone()).await {
-            Ok(_) => red_core::network::Node::start_event_loop(node_loop).await,
-            Err(e) => error!("P2P node failed to start: {:?}", e),
+            Ok(_) => {
+                append_log(&log_dir_loop, "P2P Node STARTED OK. Entering Event Loop...");
+                red_core::network::Node::start_event_loop(node_loop).await;
+            }
+            Err(e) => {
+                let msg = format!("FATAL ERROR: P2P node failed to start: {:?}", e);
+                append_log(&log_dir_loop, &msg);
+                error!("{}", msg);
+            }
         }
     });
 

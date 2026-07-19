@@ -258,12 +258,13 @@ impl DoubleRatchet {
         // Derive receiving chain key
         if let Some(ref dh_self) = self.state.dh_self {
             let dh_output = dh_self.key_exchange(their_public);
-            // SEC-FIX C-2: Receive chain uses distinct label from send chain.
-            // Previously both used b"RED-chain-send" → identical keys → broken E2E.
+            // The receiving chain being derived here is mathematically the SENDER's send chain.
+            // Therefore, we MUST use the exact same KDF label ("RED-chain-send") that the
+            // sender used when they called `new_initiator` or `dh_ratchet`.
             let recv_chain = derive_symmetric_key(
                 &self.state.root_key,
                 &dh_output,
-                b"RED-chain-recv",
+                b"RED-chain-send",
             )?;
             self.state.chain_key_recv = Some(recv_chain);
 

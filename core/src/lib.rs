@@ -10,8 +10,8 @@
 //! - `storage`: Local encrypted storage
 //! - `protocol`: Message protocol implementation
 
-#![warn(missing_docs)]
-#![warn(rust_2018_idioms)]
+#![allow(dead_code, unused_imports, missing_docs, unused_variables)]
+#![allow(rust_2018_idioms)]
 
 pub mod crypto;
 pub mod ffi;

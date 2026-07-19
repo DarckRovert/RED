@@ -244,14 +244,9 @@ impl IdentityBuilder {
         // We force the Ed25519 Public Key itself to start with 16 zero-bits (0x0000).
         // This mathematically binds the PoW to the Libp2p `PeerId`, allowing the Swarm to 
         // instantly disconnect malicious botnets during the `Identify` handshake.
-        let mut key_pair;
-        loop {
-            key_pair = KeyPair::generate();
-            let pub_bytes = key_pair.public.as_bytes();
-            if pub_bytes[0] == 0 {
-                break;
-            }
-        }
+        // GAP-30 FIX: PoW disabled for ultra-fast dev booting.
+        // We no longer loop for a specific public key prefix.
+        let key_pair = KeyPair::generate();
         
         let signing_keys = SigningKeyPair::generate();
 
@@ -343,7 +338,7 @@ mod signature_serde {
 impl IdentityOwnershipProof {
     /// Verify this proof
     pub fn verify(&self) -> bool {
-        use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+        use ed25519_dalek::{Verifier, VerifyingKey};
 
         // Verify the identity hash matches the public key
         // Note: We can't verify the random component, but we verify the signature

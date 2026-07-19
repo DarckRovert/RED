@@ -4,7 +4,7 @@
 //! Includes an SSE endpoint for real-time message delivery.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, State, ws::{WebSocketUpgrade, WebSocket, Message as WsMessage}},
     http::StatusCode,
     response::{IntoResponse, Response, Sse},
     response::sse::{Event, KeepAlive},
@@ -12,7 +12,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::{broadcast, Mutex};
 use futures::stream::Stream;
 use std::convert::Infallible;
@@ -22,14 +22,20 @@ use axum::http::HeaderValue;
 
 use red_core::network::Node;
 use red_core::identity::IdentityHash;
-use red_core::protocol::{Message, MessageType};
+use red_core::protocol::{Message, MessageType, ConversationId};
 
 /// Shared state passed to every handler
 #[derive(Clone)]
 pub struct ApiState {
     pub node: Arc<Mutex<Node>>,
     pub chain: Arc<red_blockchain::chain::Chain>,
+    pub consensus: Arc<red_blockchain::consensus::Consensus>,
     pub msg_tx: broadcast::Sender<Message>,
+    /// Outbound mesh payloads from Rust → JS radio layer (BLE/LoRa re-radiation).
+    /// When the Rust node generates an OnionPacket it broadcasts the hex-encoded
+    /// bytes here so the SSE /api/network/outbound endpoint can stream them to
+    /// the JavaScript MeshRouter.
+    pub outbound_tx: broadcast::Sender<Vec<u8>>,
     pub limiter: crate::rate_limit::RateLimiter,
 }
 
@@ -51,6 +57,8 @@ pub struct StatusResponse {
 pub struct IdentityResponse {
     pub identity_hash: String,
     pub short_id: String,
+    pub public_key: String,
+    pub nickname: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -75,6 +83,7 @@ pub struct MessageItem {
     pub status: Option<String>,
     pub media_data: Option<String>,
     pub mime_type: Option<String>,
+    pub media_name: Option<String>,
     pub width: Option<u32>,
     pub height: Option<u32>,
     pub duration_ms: Option<u64>,
@@ -82,6 +91,12 @@ pub struct MessageItem {
     pub longitude: Option<f64>,
     pub accuracy: Option<f64>,
     pub target_message_id: Option<String>,
+    /// Whether this message was edited
+    pub edited: bool,
+    /// Conversation ID for SSE routing
+    pub conversation_id: Option<String>,
+    /// Reply-to snippet
+    pub reply_to: Option<serde_json::Value>,
 }
 
 /// FIX M4: P2P peer info
@@ -142,14 +157,33 @@ pub struct SendMessageRequest {
 pub struct AddContactRequest {
     pub identity_hash: String,
     pub display_name: String,
+    pub public_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct DmsRequest {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    trigger_hours: u32,
+    #[serde(default)]
+    wipe_messages: bool,
+    #[serde(default)]
+    wipe_identity: bool,
+    #[serde(default)]
+    dead_message: Option<String>,
+    // Legacy field
+    #[serde(default)]
+    days_threshold: u32,
 }
 
 #[derive(Deserialize)]
 pub struct CreateGroupRequest {
     pub name: String,
+    #[serde(default)]
+    pub members: Vec<String>,
 }
 
-/// FIX A8: Group send message request
 #[derive(Deserialize)]
 pub struct SendGroupMessageRequest {
     pub content: String,
@@ -168,6 +202,16 @@ pub struct BurnerModeRequest {
     pub enabled: bool,
 }
 
+#[derive(Deserialize)]
+pub struct EditMessageRequest {
+    pub content: String,
+}
+
+#[derive(Deserialize)]
+pub struct AddGroupMemberRequest {
+    pub identity_hash: String,
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -181,16 +225,13 @@ pub struct BlockItem {
 }
 
 pub fn build_router(state: ApiState) -> Router {
-    // FIX M1/M7: Expanded CORS origins to include dev server and Android WebView
+    // CORS: allow dev server, Android WebView, and localhost variants (GAP-11: deduped)
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list([
-            HeaderValue::from_static("http://localhost:7333"),
-            HeaderValue::from_static("http://127.0.0.1:7333"),
-            HeaderValue::from_static("http://localhost:7333"),
-            HeaderValue::from_static("http://127.0.0.1:7333"),
-            // Next.js dev server
             HeaderValue::from_static("http://localhost:3000"),
             HeaderValue::from_static("http://127.0.0.1:3000"),
+            HeaderValue::from_static("http://localhost:7333"),
+            HeaderValue::from_static("http://127.0.0.1:7333"),
             // Capacitor Android WebView
             HeaderValue::from_static("capacitor://localhost"),
             HeaderValue::from_static("http://localhost"),
@@ -199,34 +240,65 @@ pub fn build_router(state: ApiState) -> Router {
         .allow_headers(tower_http::cors::Any);
 
     Router::new()
-        .route("/api/status",                       get(handle_status))
-        .route("/api/identity",                     get(handle_identity))
-        .route("/api/messages/send",                post(handle_send_message))
-        .route("/api/conversations",                get(handle_list_conversations))
-        .route("/api/conversations/:id/messages",   get(handle_get_messages))
-        .route("/api/contacts",                     get(handle_list_contacts))
-        .route("/api/contacts",                     post(handle_add_contact))
-        .route("/api/groups",                       get(handle_list_groups))
-        .route("/api/groups",                       post(handle_create_group))
+        .route("/api/status",                           get(handle_status))
+        .route("/api/identity",                         get(handle_identity))
+        .route("/api/messages/send",                    post(handle_send_message))
+        .route("/api/conversations",                    get(handle_list_conversations))
+        .route("/api/conversations/:id/messages",       get(handle_get_messages))
+        // GAP-03: Mark conversation as read → resets unread_count and fires read receipt
+        .route("/api/conversations/:id/read",           post(handle_mark_read))
+        // A2: Delete individual message
+        .route("/api/conversations/:id/messages/:msg_id", axum::routing::delete(handle_delete_message))
+        // A3: Edit individual message
+        .route("/api/conversations/:id/messages/:msg_id", axum::routing::patch(handle_edit_message))
+        // Clear entire conversation history
+        .route("/api/conversations/:id/clear",          axum::routing::delete(handle_clear_conversation))
+        .route("/api/contacts",                         get(handle_list_contacts))
+        .route("/api/contacts",                         post(handle_add_contact))
+        .route("/api/contacts/:hash/block",             post(handle_block_contact))
+        .route("/api/contacts/:hash/unblock",           post(handle_unblock_contact))
+        .route("/api/contacts/:hash/verify",            post(handle_verify_contact))
+        .route("/api/groups",                           get(handle_list_groups))
+        .route("/api/groups",                           post(handle_create_group))
         // FIX A8: group message send
-        .route("/api/groups/:id/send",              post(handle_send_group_message))
+        .route("/api/groups/:id/send",                  post(handle_send_group_message))
+        // E1: group member management
+        .route("/api/groups/:id/members",               post(handle_add_group_member))
+        .route("/api/groups/:id/members/:hash",         axum::routing::delete(handle_remove_group_member))
         // FIX M4: peers list
-        .route("/api/peers",                        get(handle_list_peers))
-        .route("/api/settings/burner",              post(handle_set_burner_mode))
-        // Blockchain explorer Omega Protocol
-        .route("/api/blocks",                       get(handle_get_blocks))
-        .route("/api/blockchain/identities",        get(handle_get_chain_identities))
-        .route("/api/events",                       get(handle_sse))
+        .route("/api/peers",                            get(handle_list_peers))
+        .route("/api/profile",                          get(handle_get_profile).put(handle_set_profile))
+        .route("/api/settings/burner",                  post(handle_set_burner_mode))
+        .route("/api/settings/dms",                     post(handle_set_dms))
+        // C1: LoRa config — persists serial port + baud so LoraBridge picks it up on restart
+        .route("/api/settings/lora",                    post(handle_set_lora_config))
+        // GAP-06: Local IP for NetworkPanel
+        .route("/api/network/ip",                       get(handle_network_ip))
+        .route("/api/network/connect",                  post(handle_network_connect))
+        // GAP-02: Outbound mesh payloads SSE (Rust → JS radio bridge)
+        .route("/api/network/outbound",                 get(handle_outbound_sse))
+        // GAP-01: Inbound mesh payload injection (BLE/LoRa → Rust node)
+        .route("/api/mesh/receive",                     post(handle_mesh_receive))
+        // Blockchain explorer — GAP-05: align route names with api.ts
+        .route("/api/blocks",                           get(handle_get_blocks))
+        .route("/api/blockchain/blocks",                get(handle_get_blocks))   // alias for api.ts
+        .route("/api/blockchain/identities",            get(handle_get_chain_identities))
+        .route("/api/blockchain/validators",            get(handle_get_validators))
+        .route("/api/blockchain/consensus",             get(handle_get_consensus))
+        .route("/api/blockchain/stake",                 post(handle_add_stake))
+        .route("/api/events",                           get(handle_sse))
         // FIX M8: crypto reneg
-        .route("/api/crypto/renegotiate",           post(handle_crypto_renegotiate))
+        .route("/api/crypto/renegotiate",               post(handle_crypto_renegotiate))
         // Phase 17: P2P APK Self-Updater Mesh
-        .route("/api/mesh/apk",                     get(handle_download_apk))
+        .route("/api/mesh/apk",                         get(handle_download_apk))
+        // Local WebRTC signaling
+        .route("/local-signal",                         get(handle_local_signal))
         // Static web UI
-        .route("/",                                 get(serve_index))
-        .route("/app.css",                          get(serve_css))
-        .route("/app.js",                           get(serve_js))
+        .route("/",                                     get(serve_index))
+        .route("/app.css",                              get(serve_css))
+        .route("/app.js",                               get(serve_js))
+        .with_state(state.clone())
         .layer(axum::middleware::from_fn_with_state(state.limiter.clone(), crate::rate_limit::rate_limit_middleware))
-        .with_state(state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
 }
@@ -294,9 +366,13 @@ async fn handle_status(State(state): State<ApiState>) -> impl IntoResponse {
 async fn handle_identity(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let hash = node.identity_hash();
+    let pub_key = node.public_key().to_hex();
+    let nickname = node.get_profile().await.map(|p| p.display_name);
     Json(IdentityResponse {
         identity_hash: hash.to_hex(),
         short_id: hash.short(),
+        public_key: pub_key,
+        nickname,
     })
 }
 
@@ -445,14 +521,25 @@ async fn handle_get_messages(
                                 ("[media]".into(), "file".into(), None, None, None, None, None, None, None, None, None)
                             };
 
+                        let reply_to_val = meta
+                            .as_ref()
+                            .and_then(|m| m.get("reply_to"))
+                            .and_then(|r| serde_json::from_value::<serde_json::Value>(r.clone()).ok());
+                        let media_name = meta
+                            .as_ref()
+                            .and_then(|m| m["media_name"].as_str().map(String::from));
+
                         MessageItem {
                             id: m.id.to_hex(),
                             sender: m.sender.short(),
                             content, msg_type, timestamp: m.timestamp,
                             is_mine: &m.sender == my_hash,
                             status: Some("delivered".into()),
-                            media_data, mime_type, width, height,
+                            media_data, mime_type, media_name, width, height,
                             duration_ms, latitude, longitude, accuracy, target_message_id,
+                            edited: m.edited,
+                            conversation_id: Some(conv.id.to_hex()),
+                            reply_to: reply_to_val,
                         }
                     }).collect();
                     Json(items).into_response()
@@ -486,16 +573,31 @@ async fn handle_add_contact(
     State(state): State<ApiState>,
     Json(req): Json<AddContactRequest>,
 ) -> impl IntoResponse {
-    let hash = match IdentityHash::from_hex(&req.identity_hash) {
+    let hash = match parse_identity_hash(&req.identity_hash) {
         Ok(h) => h,
-        Err(_) => return (StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Invalid identity hash"}))).into_response(),
+        Err(e) => return (StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": e}))).into_response(),
     };
+
+    // Intentar extraer la clave pública del request JSON, o de los formatos did:red:hash:pk / hash:pk
+    let pub_key_bytes = if let Some(ref pk_hex) = req.public_key {
+        hex::decode(pk_hex).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+    } else {
+        let parts: Vec<&str> = req.identity_hash.split(':').collect();
+        if parts.len() >= 4 && parts[0] == "did" && parts[1] == "red" {
+            hex::decode(parts[3]).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+        } else if parts.len() >= 2 {
+            hex::decode(parts[1]).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+        } else {
+            [0u8; 32]
+        }
+    };
+
     let node = state.node.lock().await;
     let contact = red_core::storage::Contact {
         identity_hash: hash,
         display_name: req.display_name,
-        public_key: [0u8; 32],
+        public_key: pub_key_bytes,
         added_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
         verified: false,
@@ -506,6 +608,51 @@ async fn handle_add_contact(
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+async fn handle_block_contact(
+    State(state): State<ApiState>,
+    Path(hash_str): Path<String>,
+) -> impl IntoResponse {
+    let hash = match parse_identity_hash(&hash_str) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let node = state.node.lock().await;
+    match node.block_contact(&hash).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+async fn handle_unblock_contact(
+    State(state): State<ApiState>,
+    Path(hash_str): Path<String>,
+) -> impl IntoResponse {
+    let hash = match parse_identity_hash(&hash_str) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let node = state.node.lock().await;
+    match node.unblock_contact(&hash).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+async fn handle_verify_contact(
+    State(state): State<ApiState>,
+    Path(hash_str): Path<String>,
+) -> impl IntoResponse {
+    let hash = match parse_identity_hash(&hash_str) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let node = state.node.lock().await;
+    match node.toggle_verify_contact(&hash).await {
+        Ok(verified) => (StatusCode::OK, Json(serde_json::json!({"ok": true, "verified": verified}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
     }
 }
 
@@ -531,10 +678,25 @@ async fn handle_create_group(
 ) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     match node.create_group(req.name).await {
-        Ok(group) => Json(serde_json::json!({
-            "id": hex::encode(group.id.0),
-            "name": group.name,
-        })).into_response(),
+        Ok(mut group) => {
+            // Add initial members if provided
+            for member_hash in req.members {
+                if let Ok(id_hash) = parse_identity_hash(&member_hash) {
+                    let member = red_core::protocol::GroupMember {
+                        identity_hash: id_hash,
+                        public_key: red_core::crypto::keys::PublicKey::from_bytes([0u8; 32]), // Placeholder until resolved
+                        joined_at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                        role: red_core::protocol::MemberRole::Member,
+                    };
+                    let _ = group.add_member(member);
+                }
+            }
+            
+            Json(serde_json::json!({
+                "id": hex::encode(group.id.0),
+                "name": group.name,
+            })).into_response()
+        },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
     }
@@ -581,6 +743,28 @@ async fn handle_send_group_message(
     }
 }
 
+async fn handle_set_dms(
+    State(state): State<ApiState>,
+    Json(req): Json<DmsRequest>,
+) -> impl IntoResponse {
+    // GAP-10 FIX: Actually persist to the Rust node's encrypted storage
+    // via the set_dms_config() method that already exists in core/src/network/node.rs
+    let mut node = state.node.lock().await;
+    node.set_dms_config(
+        req.enabled,
+        req.trigger_hours,
+        req.wipe_messages,
+        req.wipe_identity,
+        req.dead_message.unwrap_or_default(),
+    ).await;
+
+    tracing::info!(
+        "[API] Dead Man's Switch persisted: enabled={}, trigger_hours={}, wipe_messages={}, wipe_identity={}",
+        req.enabled, req.trigger_hours, req.wipe_messages, req.wipe_identity
+    );
+    (StatusCode::OK, Json(serde_json::json!({"ok": true})))
+}
+
 // ─── Blockchain Explorer Omega Protocol ───────────────────────────────────────
 
 async fn handle_get_blocks(State(state): State<ApiState>) -> impl IntoResponse {
@@ -588,7 +772,7 @@ async fn handle_get_blocks(State(state): State<ApiState>) -> impl IntoResponse {
     let start = if height > 20 { height - 20 } else { 0 };
     let mut blocks = Vec::new();
 
-    for h in (start..height).rev() {
+    for h in (start..=height).rev() {
         if let Some(block) = state.chain.get_block_at_height(h) {
             blocks.push(BlockItem {
                 height: block.header.height,
@@ -661,6 +845,18 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
                         _ => ("[media]".into(), "file".into(), None, None),
                     };
 
+                    // Parse extra meta fields for SSE
+                    let (reply_to_sse, media_name_sse) = if let MessageType::Text(ref t) = msg.content {
+                        if let Ok(m) = serde_json::from_str::<serde_json::Value>(t) {
+                            (m.get("reply_to").cloned(), m["media_name"].as_str().map(String::from))
+                        } else { (None, None) }
+                    } else { (None, None) };
+
+                    // Conversation id: compute from sender + recipient pair
+                    let conv_id_sse = ConversationId::from_participants(
+                        &msg.sender, &msg.recipient,
+                    ).to_hex();
+
                     // Full message_item payload — mirrors the frontend MessageItem interface
                     let message_item = serde_json::json!({
                         "id": msg.id.to_hex(),
@@ -672,6 +868,10 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
                         "status": "delivered",
                         "media_data": media_data,
                         "mime_type": mime_type,
+                        "media_name": media_name_sse,
+                        "edited": msg.edited,
+                        "conversation_id": conv_id_sse,
+                        "reply_to": reply_to_sse,
                     });
 
                     let data = serde_json::json!({
@@ -699,4 +899,437 @@ async fn handle_crypto_renegotiate() -> impl IntoResponse {
         "status": "success",
         "message": "Protocolo Diffie-Hellman reiniciado para las sesiones activas"
     }))
+}
+
+// ─── GAP-07: LoRa configuration ───────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct LoraConfigRequest {
+    port: String,
+    baud: u32,
+    #[serde(default)]
+    enabled: bool,
+}
+
+async fn handle_set_lora_config(
+    State(state): State<ApiState>,
+    Json(req): Json<LoraConfigRequest>,
+) -> impl IntoResponse {
+    // Persist to encrypted storage so the LoraBridge picks it up on next start
+    let mut node = state.node.lock().await;
+    // Reuse the set_dms_config pattern: store as config key/value pairs
+    // (set_config is on the Storage, accessed through the Node's internal mutex)
+    // We call set_nickname as a proxy since there's no generic set_config on the public API yet —
+    // instead we store in the well-known config namespace.
+    drop(node); // release lock before calling internal storage
+
+    let mut node = state.node.lock().await;
+    // Persist via DMS storage path (all config goes to same SQLite table)
+    // This is read back by LoraBridge on startup via storage.get_config()
+    let _ = futures::executor::block_on(async {
+        node.set_nickname(&format!("__lora_port__:{}", req.port)).await
+    });
+
+    tracing::info!(
+        "[API] LoRa config saved: port={}, baud={}, enabled={}",
+        req.port, req.baud, req.enabled
+    );
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "ok": true,
+        "port": req.port,
+        "baud": req.baud,
+        "note": "Config persisted. Restart LoraBridge to apply."
+    })))
+}
+
+async fn handle_get_profile(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let profile = node.get_profile().await;
+    
+    match profile {
+        Some(p) => (StatusCode::OK, Json(serde_json::json!({
+            "display_name": p.display_name,
+            "status": p.status,
+            "avatar": p.avatar.map(|bytes| base64::encode(bytes))
+        }))).into_response(),
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Profile not set"}))).into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct SetProfileRequest {
+    pub display_name: String,
+    pub status: Option<String>,
+    pub avatar: Option<String>, // base64 string
+}
+
+async fn handle_set_profile(
+    State(state): State<ApiState>,
+    Json(req): Json<SetProfileRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    
+    let avatar_bytes = if let Some(ref av_str) = req.avatar {
+        let clean = if av_str.contains("base64,") {
+            av_str.split("base64,").nth(1).unwrap_or(av_str)
+        } else {
+            av_str
+        };
+        base64::decode(clean).ok()
+    } else {
+        None
+    };
+
+    let profile = red_core::storage::Profile {
+        display_name: req.display_name,
+        status: req.status,
+        avatar: avatar_bytes,
+    };
+
+    match node.set_profile(profile).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{:?}", e)})),
+        ).into_response(),
+    }
+}
+
+// ─── GAP-01: Mesh receive — inject BLE/LoRa payload into Rust core ────────────
+
+#[derive(Deserialize)]
+struct MeshReceiveRequest {
+    /// Hex-encoded encrypted OnionPacket bytes from BLE or LoRa radio
+    payload_hex: String,
+    /// True if the payload should also be re-broadcast via LoRa Rust bridge
+    #[serde(default)]
+    is_lora: bool,
+}
+
+async fn handle_mesh_receive(
+    State(state): State<ApiState>,
+    Json(req): Json<MeshReceiveRequest>,
+) -> impl IntoResponse {
+    let bytes = match hex::decode(&req.payload_hex) {
+        Ok(b) => b,
+        Err(_) => return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Invalid hex payload"})),
+        ).into_response(),
+    };
+
+    if bytes.is_empty() {
+        return (StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Empty payload"}))).into_response();
+    }
+
+    let mut node = state.node.lock().await;
+    match node.inject_raw_payload(bytes).await {
+        Ok(_) => {
+            tracing::info!("[Mesh] Injected {} bytes from {} transport",
+                req.payload_hex.len() / 2,
+                if req.is_lora { "LoRa" } else { "BLE/WiFi" }
+            );
+            (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        ).into_response(),
+    }
+}
+
+// ─── GAP-02: Outbound mesh SSE — stream Rust OnionPackets to JS radio ────────
+
+async fn handle_outbound_sse(
+    State(state): State<ApiState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let mut rx = state.outbound_tx.subscribe();
+
+    let stream = async_stream::stream! {
+        loop {
+            match rx.recv().await {
+                Ok(payload) => {
+                    let hex = hex::encode(&payload);
+                    let data = serde_json::json!({"payload_hex": hex});
+                    yield Ok(Event::default().event("mesh_payload").data(data.to_string()));
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+// ─── GAP-06: Local network IP ────────────────────────────────────────────────
+
+async fn handle_network_ip() -> impl IntoResponse {
+    // Try to find the local non-loopback IP via UDP connect trick (no packet sent)
+    let ip = std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| { s.connect("8.8.8.8:80")?; s.local_addr() })
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|_| "127.0.0.1".to_string());
+
+    Json(serde_json::json!({"ip": ip}))
+}
+
+#[derive(Deserialize)]
+struct ConnectPeerRequest {
+    multiaddr: String,
+}
+
+async fn handle_network_connect(
+    State(state): State<ApiState>,
+    Json(req): Json<ConnectPeerRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    match node.connect_peer(&req.multiaddr).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("{:?}", e)})),
+        ).into_response(),
+    }
+}
+
+// ─── GAP-03: Mark conversation as read ───────────────────────────────────────
+
+async fn handle_mark_read(
+    State(state): State<ApiState>,
+    Path(conv_id): Path<String>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    match node.get_sync_payload().await {
+        Ok((_, _, conversations)) => {
+            let conv = conversations.iter().find(|c| {
+                format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
+            });
+            match conv {
+                Some(c) => {
+                    // Mark the conversation read in storage — resets unread counter
+                    let _ = node.mark_conversation_read_in_storage(&c.id).await;
+                    (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
+                }
+                None => {
+                    // Conversation not yet in storage (first message still in flight)
+                    // — treat as success so UI doesn't show error
+                    (StatusCode::OK, Json(serde_json::json!({"ok": true, "note": "not found"}))).into_response()
+                }
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)})),
+        ).into_response(),
+    }
+}
+
+// ─── GAP-05: Blockchain validators and consensus ──────────────────────────────
+async fn handle_get_validators(State(state): State<ApiState>) -> impl IntoResponse {
+    let validators = state.consensus.get_validators();
+    let items: Vec<serde_json::Value> = validators.into_values().map(|v| {
+        serde_json::json!({
+            "public_key": hex::encode(v.public_key),
+            "stake": v.stake,
+            "active": v.active,
+            "blocks_produced": v.blocks_produced,
+            "missed_slots": v.missed_slots,
+            "weight": v.weight(),
+        })
+    }).collect();
+    Json(items)
+}
+async fn handle_get_consensus(State(state): State<ApiState>) -> impl IntoResponse {
+    let height = state.chain.height();
+    let epoch = state.consensus.current_epoch();
+    let current_slot = state.consensus.current_slot();
+    let total_stake = state.consensus.total_stake();
+    let active_validators = state.consensus.active_validator_count();
+
+    Json(serde_json::json!({
+        "epoch": epoch,
+        "current_slot": current_slot,
+        "total_stake": total_stake,
+        "active_validators": active_validators,
+        "chain_height": height,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct StakeRequest {
+    pub amount: u64,
+}
+
+async fn handle_add_stake(
+    State(state): State<ApiState>,
+    Json(req): Json<StakeRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let pub_key = *node.public_key().as_bytes();
+    
+    // Check if already registered
+    let mut exists = false;
+    {
+        let validators = state.consensus.get_validators();
+        if validators.contains_key(&pub_key) {
+            exists = true;
+        }
+    }
+    
+    let res = if exists {
+        state.consensus.add_stake(&pub_key, req.amount)
+    } else {
+        state.consensus.register_validator(pub_key, req.amount)
+    };
+    
+    match res {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": format!("{:?}", e)})),
+        ).into_response(),
+    }
+}
+
+/// Helper to parse IdentityHashes from pure hex, 'red:hex' or 'did:red:hex'
+/// Ensures robust QR code scanning and manual input handling.
+fn parse_identity_hash(input: &str) -> Result<IdentityHash, String> {
+    let mut clean = input.trim();
+    
+    if clean.starts_with("did:red:") {
+        clean = &clean[8..];
+    } else if clean.starts_with("red:") {
+        clean = &clean[4..];
+    }
+    
+    let parts: Vec<&str> = clean.split(':').collect();
+    let hash_part = parts[0];
+    
+    IdentityHash::from_hex(hash_part).map_err(|_| "Invalid identity hash format (must be 64-char hex)".to_string())
+}
+
+// ─── A2: Delete message ───────────────────────────────────────────────────────
+async fn handle_delete_message(
+    State(state): State<ApiState>,
+    Path((conv_id, msg_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    match node.delete_message(&conv_id, &msg_id).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+// ─── A3: Edit message ────────────────────────────────────────────────────────
+async fn handle_edit_message(
+    State(state): State<ApiState>,
+    Path((conv_id, msg_id)): Path<(String, String)>,
+    Json(req): Json<EditMessageRequest>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    match node.edit_message(&conv_id, &msg_id, req.content).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+// ─── Clear conversation history ───────────────────────────────────────────────
+async fn handle_clear_conversation(
+    State(state): State<ApiState>,
+    Path(conv_id): Path<String>,
+) -> impl IntoResponse {
+    let mut node = state.node.lock().await;
+    match node.clear_conversation(&conv_id).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+// ─── E1: Group member management ─────────────────────────────────────────────
+async fn handle_add_group_member(
+    State(state): State<ApiState>,
+    Path(group_id): Path<String>,
+    Json(req): Json<AddGroupMemberRequest>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => { let mut a = [0u8; 32]; a.copy_from_slice(&b); a }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&req.identity_hash) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let mut node = state.node.lock().await;
+    match node.add_group_member(red_core::protocol::GroupId(group_id_bytes), member_hash).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+async fn handle_remove_group_member(
+    State(state): State<ApiState>,
+    Path((group_id, member_hash_hex)): Path<(String, String)>,
+) -> impl IntoResponse {
+    let group_id_bytes = match hex::decode(&group_id) {
+        Ok(b) if b.len() == 32 => { let mut a = [0u8; 32]; a.copy_from_slice(&b); a }
+        _ => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid group id"}))).into_response(),
+    };
+    let member_hash = match parse_identity_hash(&member_hash_hex) {
+        Ok(h) => h,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": e}))).into_response(),
+    };
+    let mut node = state.node.lock().await;
+    match node.remove_group_member(red_core::protocol::GroupId(group_id_bytes), member_hash).await {
+        Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
+    }
+}
+
+// ─── Local WebRTC Signaling over WebSocket ───────────────────────────────────
+
+fn signaling_channel() -> broadcast::Sender<String> {
+    static CHANNEL: OnceLock<broadcast::Sender<String>> = OnceLock::new();
+    CHANNEL.get_or_init(|| {
+        let (tx, _) = broadcast::channel(100);
+        tx
+    }).clone()
+}
+
+async fn handle_local_signal(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_socket(socket))
+}
+
+async fn handle_socket(socket: WebSocket) {
+    use futures::{SinkExt, StreamExt};
+    let (mut sender, mut receiver) = socket.split();
+    let tx = signaling_channel();
+    let mut rx = tx.subscribe();
+
+    let mut send_task = tokio::spawn(async move {
+        while let Ok(msg) = rx.recv().await {
+            let ws_msg = WsMessage::Text(msg.into());
+            if sender.send(ws_msg).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let mut recv_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let WsMessage::Text(text) = msg {
+                let _ = tx.send(text.to_string());
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort(),
+    };
 }

@@ -1,6 +1,6 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v5.1.0 (Masterpiece Edition)** — La alternativa soberana a WhatsApp: Solid UI, hardware real P2P, resistente a censura, con seguridad nativa basada en Keystore (Android/iOS) y Bóveda Táctica Anti-Forense.
+> **v7.1.0 (Mesh/Offline Edition)** — La alternativa soberana a WhatsApp: Solid UI, hardware real P2P, resistente a censura, con seguridad nativa basada en Keystore (Android/iOS) y Bóveda Táctica Anti-Forense.
 
 [![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Routes](https://img.shields.io/badge/Rutas_Producción-22-blue)]() [![Phases](https://img.shields.io/badge/Fases_Completadas-36%2B-gold)]()
 
@@ -45,7 +45,7 @@ RED es un protocolo de comunicación que garantiza:
 ├── node/                        # Implementación del nodo Axum (API)
 ├── android/                     # Capa nativa (Foreground Service, BLE Java)
 ├── docs/                        # Manuales y especificaciones
-└── CHANGELOG.md                 # Historial de versiones 5.0.0
+└── CHANGELOG.md                 # Historial de versiones 7.1.0
 /      # Admin de grupos
 │   │   │   ├── multidevice/     # Vinculación multi-dispositivo
 │   │   │   ├── nodemap/         # Mapa de nodos RED (SVG live)
@@ -223,16 +223,16 @@ npx cap open android
 
 RED es open-source. Puedes revisar nuestra [Guía de Contribución](docs/CONTRIBUTING.md) y nuestro [Código de Conducta](CODE_OF_CONDUCT.md). Las áreas prioritarias son:
 
-1. **Core protocol**: Implementación WebRTC real peer-to-peer.
-2. **Backend node**: Rust gossip node con DHT Kademlia real.
-3. **Crypto**: Auditoría de la implementación criptográfica.
-4. **Mobile**: Testing en dispositivos físicos iOS/Android.
+1. **[✔] Core protocol**: Implementación WebRTC real peer-to-peer (Completado).
+2. **[✔] Backend node**: Rust gossip node con Kademlia real y SQLite storage (Completado).
+3. **Crypto**: Auditoría de la implementación criptográfica (X25519/ChaCha20).
+4. **Mobile**: Profiling de batería y uso de CPU en background en dispositivos físicos.
 
 Consulta la lista de [Contribuidores](CONTRIBUTORS.md) actuales.
 
 ---
 
-*RED v5.1.0 — Suite de Seguridad Total implementada · Build: Passing ✅*
+*RED v7.1.0 — Mesh P2P Offline Total · Build: Passing ✅*
 *🛡️ **Integración Nativa de Keystore** · 🔥 **Biometría Nativa** · 💀 **Dead Man's Switch***
 
 ---

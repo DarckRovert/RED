@@ -1,4 +1,4 @@
-# 🔴 RED - Manual del Usuario (v5.1.0 - Masterpiece Edition)
+# 🔴 RED - Manual del Usuario (v7.1.0 - Mesh/Offline Edition)
 
 Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería soberana, ahora con una interfaz más sólida y capacidades de hardware directo.
 
@@ -20,7 +20,8 @@ A diferencia de otras aplicaciones, en RED no necesitas un número de teléfono 
 ### Añadir Contactos
 - **Por Enlace:** Pega el enlace RED (`red://add-contact/...`) recibido de otra persona.
 - **Por Escaneo QR:** Pulsa en el icono de cámara en Ajustes > Perfil para escanear el código de un amigo.
-- **RADAR Nearby:** La función más potente de la v5.0. Si estás cerca de alguien, usa la pestaña de **RED Nearby** para descubrir y añadir contactos mediante señales Bluetooth BLE y WiFi Direct sin necesidad de internet.
+- **RADAR Nearby:** La función más potente de la v7.1. Si estás cerca de alguien, usa la pestaña de **RED Nearby** para descubrir y añadir contactos mediante señales Bluetooth BLE y WiFi Direct sin necesidad de internet.
+- **Bloqueo y Verificación Real:** En el modal de perfil de tu chat con un contacto, ahora puedes ver si su identidad está verificada o bloquearlo. Si bloqueas un contacto, el nodo Rust local descartará todo su tráfico en la capa de red nativa de forma transparente.
 
 ### Grupos Descentralizados
 En la pestaña **Grupos**, puedes crear salas de chat. Los grupos en RED no tienen un servidor central.
@@ -31,12 +32,13 @@ En la pestaña **Grupos**, puedes crear salas de chat. Los grupos en RED no tien
 ## 💬 3. Mensajería y Nueva Interfaz "Solid UI"
 
 ### Mensajería Sólida
-RED v5.0 presenta un diseño inspirado en la mensajería clásica pero con privacidad moderna:
+RED v7.1 presenta un diseño inspirado en la mensajería clásica pero con privacidad moderna y confirmación real en red Mesh:
 - **Burbujas con Cola:** Los mensajes tienen indicadores direccionales claros.
 - **Confirmación (Ticks):**
-    - **Un tick (✓):** Enviado a la red Mesh.
-    - **Doble tick (✓✓):** Recibido por el destinatario.
+    - **Un tick (✓):** Enviado a la red Mesh (y en cola de reintentos offline si el destinatario no está disponible al instante).
+    - **Doble tick (✓✓):** Recibido por el destinatario (tras conexión directa o descarga de la cola offline).
     - **Ticks Azules:** Mensaje leído.
+- **Huella de Seguridad (Safety Numbers):** Compara el código numérico de 20 dígitos en la info de perfil de tu contacto. Si coincide exactamente, garantiza la integridad criptográfica contra ataques Man-In-The-Middle (MITM).
 - **Input Capsular:** El campo de escritura ahora es una cápsula ovalada con iconos de adjuntos integrados para un acceso más rápido.
 
 ### Funciones Avanzadas
@@ -60,16 +62,16 @@ RED v5.0 presenta un diseño inspirado en la mensajería clásica pero con priva
 
 Si no tienes acceso a la red de internet global, RED sigue funcionando:
 - **Malla Mesh:** Los mensajes se almacenan y reenvían automáticamente entre nodos cercanos (vía Bluetooth/WiFi).
-- **Puente LoRaWAN Sub-GHz:** Si existe un Módulo LoRa conectado por Serial/USB-C, la app enviará la telemetría P2P codificada rebotando hasta a 15Km de distancia saltándose toda infraestructura de telecomunicación moderna.
+- **Puente LoRaWAN Sub-GHz:** Conecta tu módulo de radio LoRa por Serial/USB-C. Ve a **Ajustes > Red (Network Panel)** e ingresa el puerto (`COM3`, `/dev/ttyUSB0`) y el baud rate (ej: `115200`). RED auto-configurará el hardware puente para enviar telemetría a ~15Km sin operadoras.
 - **Mesh APK Updater (Inmune a App Stores):** Si RED es eliminado de internet, un solo teléfono puede propagar el archivo `.apk` a los teléfonos vecinos enviándolos a la ruta `http://<ip-radar>:7331/api/mesh/apk`.
-- **HUD de Conexión:** Revisa en la barra superior o en el Explorador de Nodos si tu tráfico está fluyendo vía LAN, BLE o Internet.
+- **Geometría de Nodos (Mapa 3D):** Puedes ver una representación en tiempo real de tu topología de red abriendo el visualizador global. El mapa extrae las conexiones vivas del transporte local y las posiciona geográficamente usando derivadas criptográficas de sus identidades.
 
 ---
 
 ## ❓ Preguntas Frecuentes
 
 **¿Necesito internet para chatear?**
-No necesariamente. Gracias a la v5.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi) formando una red mesh autónoma.
+No necesariamente. Gracias a la v7.1, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
 
 **¿Qué pasa si pierdo mi teléfono?**
 Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.

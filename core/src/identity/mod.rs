@@ -7,7 +7,7 @@
 //! - Blockchain registration
 
 mod identity;
-mod registry;
+pub mod registry;
 
 pub use identity::{Identity, IdentityHash, IdentityBuilder, DeviceId, DevicePublicKey, AuthorizedDevice};
 

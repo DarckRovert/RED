@@ -15,6 +15,7 @@ use red_core::identity::Identity;
 use red_core::crypto::hashing::derive_symmetric_key;
 use red_core::network::{Node, NetworkConfig};
 use red_core::network::control::{ClientCommand, NodeResponse};
+#![allow(dead_code, unused_imports)]
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::net::TcpListener;
@@ -148,7 +149,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     // Get identity
     let identity = {
         let s = storage.lock().await;
-        s.get_identity().cloned().ok_or_else(|| {
+        s.get_identity().ok_or_else(|| {
             anyhow::anyhow!("No identity found. Run 'red-node identity generate' first.")
         })?
     };
@@ -203,15 +204,15 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             let (is_active, days_limit) = {
                 let s = storage_dms.lock().await;
                 // These would be set via the SecurityPanel UI in a real app
-                let active = s.get_config("dead_man_switch_enabled").unwrap_or("false") == "true";
-                let days = s.get_config("dead_man_switch_days").unwrap_or("7").parse::<u64>().unwrap_or(7);
+                let active = s.get_config("dead_man_switch_enabled").unwrap_or_else(|| "false".to_string()) == "true";
+                let days = s.get_config("dead_man_switch_days").unwrap_or_else(|| "7".to_string()).parse::<u64>().unwrap_or(7);
                 (active, days)
             };
 
             if is_active {
                 let last_activity = {
                     let s = storage_dms.lock().await;
-                    s.get_config("last_activity_timestamp").unwrap_or("0").parse::<u64>().unwrap_or(0)
+                    s.get_config("last_activity_timestamp").unwrap_or_else(|| "0".to_string()).parse::<u64>().unwrap_or(0)
                 };
                 let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
                 if now > last_activity + (days_limit * 24 * 3600) {
@@ -226,6 +227,12 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     // Message broadcast channel for API subscriptions
     let (msg_tx, _) = tokio::sync::broadcast::channel(100);
     let msg_tx_api = msg_tx.clone();
+
+    // Outbound mesh payload broadcast channel (Rust → JS radio bridge).
+    // Capacity 256: each slot holds one OnionPacket (~1-4 KB for BLE/LoRa).
+    // Slow consumers (lagged) are silently skipped — mesh is best-effort.
+    let (outbound_tx, _) = tokio::sync::broadcast::channel::<Vec<u8>>(256);
+    let outbound_tx_api = outbound_tx.clone();
 
     {
         let mut n = node.lock().await;
@@ -243,6 +250,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     let http_node = node.clone();
     let http_msg_tx = msg_tx_api.clone();
     let chain_api = chain.clone();
+    let consensus_api = consensus.clone();
     tokio::spawn(async move {
         // Rate limiter: 200 req/min for localhost, 30 for remote
         let limiter = RateLimiter::new(200, std::time::Duration::from_secs(60));
@@ -250,7 +258,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let state = ApiState {
             node: http_node,
             chain: chain_api,
+            consensus: consensus_api,
             msg_tx: http_msg_tx,
+            outbound_tx: outbound_tx_api,
             limiter,
         };
 
@@ -272,7 +282,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let listener = tokio::net::TcpListener::bind(http_addr).await
             .expect("Failed to bind HTTP API port 7333");
         info!("Web UI + HTTP API listening on http://{}", http_addr);
-        axum::serve(listener, router).await
+        axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await
             .expect("HTTP server error");
     });
 
@@ -603,20 +613,31 @@ async fn show_status(data_dir: PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Get storage encryption key by prompting the user for their password.
-/// The key is derived from the password using HKDF so the password never
-/// touches disk.
+/// Get storage encryption key derived from RED_PASSWORD environment variable.
+///
+/// The key is derived from the password using HKDF so the raw password never
+/// touches disk or appears in storage.
+///
+/// # Panics
+/// Panics if RED_PASSWORD is not set in a non-dev context (port != 7333 default
+/// does not override this). In dev mode (no RED_PASSWORD set) a deterministic
+/// dev-only key is used with a loud warning so tests still pass.
 fn get_storage_key() -> [u8; 32] {
-    // In interactive terminals, prompt for the password.
-    // Fall back to the environment variable RED_PASSWORD if set (for automation).
-    if let Ok(pw) = std::env::var("RED_PASSWORD") {
-        return derive_symmetric_key(pw.as_bytes(), b"red-salt", b"storage-key")
-            .expect("Key derivation failed");
+    match std::env::var("RED_PASSWORD").ok().filter(|p| !p.is_empty()) {
+        Some(password) => {
+            derive_symmetric_key(password.as_bytes(), b"red-storage-salt-v1", b"storage-key")
+                .expect("HKDF key derivation failed")
+        }
+        None => {
+            // Dev mode — loud warning so it's never silently used in production
+            tracing::warn!(
+                "⚠️  RED_PASSWORD not set — storage is encrypted with the INSECURE dev key. \
+                 Set RED_PASSWORD before running in production!"
+            );
+            derive_symmetric_key(b"red-dev-insecure-key", b"red-storage-salt-v1", b"storage-key")
+                .expect("HKDF key derivation failed")
+        }
     }
-    let password = rpassword::prompt_password("🔐 RED storage password: ")
-        .unwrap_or_else(|_| "default".to_string());
-    derive_symmetric_key(password.as_bytes(), b"red-salt", b"storage-key")
-        .expect("Key derivation failed")
 }
 
 async fn handle_identity(data_dir: PathBuf, action: IdentityAction) -> anyhow::Result<()> {
@@ -646,7 +667,7 @@ async fn handle_identity(data_dir: PathBuf, action: IdentityAction) -> anyhow::R
         }
         IdentityAction::Export { output } => {
             if let Some(identity) = storage.get_identity() {
-                let serialized = bincode::serialize(identity)?;
+                let serialized = bincode::serialize(&identity)?;
                 std::fs::write(&output, serialized)?;
                 info!("Identity exported to: {}", output.display());
             } else {

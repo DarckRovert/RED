@@ -17,6 +17,7 @@ import AuthWall from "../components/AuthWall";
 import NodeMap from "../components/NodeMap";
 import NetworkPanel from "../components/NetworkPanel";
 import OnboardingProfile from "../components/OnboardingProfile";
+import DMSSettings from "../components/DMSSettings";
 import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
@@ -70,6 +71,8 @@ export default function AppRouter() {
         return <NetworkPanel />;
       case 'groupAdmin':
         return <GroupsPanel />;
+      case 'dms':
+        return <DMSSettings />;
       case 'explorer':
         return <BlockchainExplorer />;
       default:
@@ -85,10 +88,12 @@ export default function AppRouter() {
         ) : (
           <main style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
             {!nodeOnline && (
-              <div style={{ background: 'var(--danger)', color: 'white', textAlign: 'center', padding: '4px', fontSize: '12px', fontWeight: 'bold' }}>
-                 ⚠ Trabajando Sin Conexión al Nodo Local
+              <div style={{ background: 'var(--danger)', color: 'white', textAlign: 'center', padding: '6px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                 <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>
+                 Generando identidad PoW — espera unos segundos…
               </div>
             )}
+
             <StatusHeader />
             <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               {renderScreen()}

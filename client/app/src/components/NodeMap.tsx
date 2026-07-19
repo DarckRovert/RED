@@ -2,12 +2,63 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
-import * as THREE from "three";
+import { localTransport } from "../lib/mesh/localTransport";
+
+/** Derive a deterministic lat/lng from a peer ID string (no Math.random). */
+function peerToCoords(peerId: string): { lat: number; lng: number } {
+    // Use char codes of peer ID bytes to seed lat/lng deterministically
+    let hash1 = 0, hash2 = 0;
+    for (let i = 0; i < peerId.length; i++) {
+        const c = peerId.charCodeAt(i);
+        if (i % 2 === 0) hash1 = (hash1 * 31 + c) & 0xFFFFFF;
+        else             hash2 = (hash2 * 31 + c) & 0xFFFFFF;
+    }
+    const lat = ((hash1 % 180000) / 1000) - 90;   // -90 .. +90
+    const lng = ((hash2 % 360000) / 1000) - 180;  // -180 .. +180
+    return { lat, lng };
+}
+
+const TRANSPORT_COLOR: Record<string, string> = {
+    wifi:    '#00D97E',
+    ble:     '#3498db',
+    lorawan: '#9b59b6',
+};
 
 export default function NodeMap() {
     const { status, goBack } = useRedStore();
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const [globeLoaded, setGlobeLoaded] = useState(false);
+    const [peers, setPeers] = useState(localTransport.allPeers);
+    const [myPos, setMyPos] = useState<{lat: number, lng: number}>({ lat: 0, lng: 0 });
+    const [realGPS, setRealGPS] = useState(false);
+
+    // Conectar a GPS Nativo en Background/Foreground
+    useEffect(() => {
+        let mounted = true;
+        const fetchGeo = async () => {
+            try {
+                const { Geolocation } = await import('@capacitor/geolocation');
+                const permission = await Geolocation.checkPermissions();
+                if (permission.location !== 'granted') await Geolocation.requestPermissions();
+                
+                const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+                if (mounted) {
+                    setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                    setRealGPS(true);
+                }
+            } catch (e) {
+                console.warn("GPS no disponible, usando centro criptográfico.", e);
+            }
+        };
+        fetchGeo();
+        return () => { mounted = false; };
+    }, []);
+
+    // Refresh peer list every 4s
+    useEffect(() => {
+        const t = setInterval(() => setPeers([...localTransport.allPeers]), 4000);
+        return () => clearInterval(t);
+    }, []);
 
     useEffect(() => {
         let globeInstance: any = null;
@@ -15,18 +66,21 @@ export default function NodeMap() {
         if (typeof window !== "undefined" && mapContainerRef.current) {
             import("globe.gl").then((GlobeModule) => {
                 const Globe = GlobeModule.default;
-                
-                // Generate random mock nodes based on peer_count
-                const N = status?.peer_count ? Math.max(status.peer_count * 3, 15) : 15;
-                const arcsData = [...Array(N).keys()].map(() => ({
-                    startLat: (Math.random() - 0.5) * 180,
-                    startLng: (Math.random() - 0.5) * 360,
-                    endLat: (Math.random() - 0.5) * 180,
-                    endLng: (Math.random() - 0.5) * 360,
-                    color: ['var(--primary)', 'var(--danger)', '#3498db'][Math.round(Math.random() * 2)]
-                }));
 
-                const ringsData = arcsData.map(d => ({ lat: d.startLat, lng: d.startLng }));
+                // Build arc data from REAL peers to our REAL GPS
+                const arcsData = peers.map(peer => {
+                    const { lat, lng } = peerToCoords(peer.id);
+                    return {
+                        startLat: myPos.lat,
+                        startLng: myPos.lng,
+                        endLat: lat,
+                        endLng: lng,
+                        color: TRANSPORT_COLOR[peer.transport] || '#e8213a',
+                        peerId: peer.id,
+                    };
+                });
+
+                const ringsData = arcsData.map(d => ({ lat: d.endLat, lng: d.endLng }));
 
                 // @ts-ignore
                 globeInstance = Globe()(mapContainerRef.current!)
@@ -42,55 +96,66 @@ export default function NodeMap() {
                     .ringMaxRadius(5)
                     .ringPropagationSpeed(3)
                     .ringRepeatPeriod(700);
-                
-                // Spin animation
-                globeInstance.controls().autoRotate = true;
-                globeInstance.controls().autoRotateSpeed = 1.5;
 
-                // Add ambient light
-                const scene = globeInstance.scene();
-                scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-                
+                globeInstance.controls().autoRotate = true;
+                globeInstance.controls().autoRotateSpeed = 1.2;
+
                 setGlobeLoaded(true);
+            }).catch(() => {
+                // globe.gl not available (e.g. SSR or no WebGL) — show fallback
+                setGlobeLoaded(false);
             });
         }
 
         return () => {
-            if (globeInstance) {
-                // Destroy globe on unmount to prevent WebGL memory leaks
+            if (globeInstance && globeInstance._destructor) {
                 globeInstance._destructor();
             }
         };
-    }, [status]);
+    }, [peers]);
 
     return (
         <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#050914' }}>
-            
+
             {/* Context Header */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '24px', zIndex: 10, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pointerEvents: 'none' }}>
                 <div style={{ display: 'flex', gap: '16px', pointerEvents: 'auto' }}>
-                    <button onClick={goBack} style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', color: 'white', width: 48, height: 48, borderRadius: 24, fontSize: '1.5rem', border: '1px solid var(--solid-border)' }}>←</button>
+                    <button onClick={goBack} style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', color: 'white', width: 48, height: 48, borderRadius: 24, fontSize: '1.5rem', border: '1px solid var(--solid-border)', cursor: 'pointer' }}>←</button>
                     <div>
                         <h1 style={{ color: 'white', margin: 0, fontSize: '1.5rem', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>Geometría de Nodos</h1>
-                        <p style={{ color: 'var(--primary)', margin: 0, fontWeight: 'bold' }}>RED P2P Tor Network</p>
+                        <p style={{ color: 'var(--primary)', margin: 0, fontWeight: 'bold', fontSize: '0.85rem' }}>
+                            {peers.length} nodo{peers.length !== 1 ? 's' : ''} en malla — RED P2P
+                        </p>
                     </div>
                 </div>
-                
-                <div style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', padding: '16px', borderRadius: '16px', border: '1px solid var(--primary)', pointerEvents: 'auto' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div className="pulsing-dot" style={{ width: 8, height: 8, borderRadius: 4, background: 'var(--success)' }} />
-                        <span style={{ color: 'white', fontFamily: 'monospace' }}>Malla Global Activa</span>
+
+                <div style={{ background: 'linear-gradient(135deg, rgba(13,13,22,0.85), rgba(8,8,16,0.95))', backdropFilter: 'blur(16px)', padding: '16px 20px', borderRadius: '20px', border: '1px solid rgba(232,33,58,0.3)', pointerEvents: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: 12 }}>
+                        <div className="pulsing-dot" style={{ width: 10, height: 10, borderRadius: 5, background: peers.length > 0 ? 'var(--primary-bright)' : 'var(--text-muted)' }} />
+                        <span style={{ color: 'white', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem', fontWeight: 800, letterSpacing: 1 }}>
+                            {peers.length > 0 ? 'MALLA ACTIVA' : 'MALLA OFFLINE'}
+                        </span>
                     </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '4px 0 0 0' }}>Enrutando mediante ChaCha20</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'min-content 1fr', gap: '4px 12px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span style={{ fontWeight: 700 }}>Origen:</span>
+                        <span style={{ fontFamily: 'monospace', color: realGPS ? 'var(--success)' : 'var(--text-secondary)' }}>
+                            {realGPS ? `${myPos.lat.toFixed(4)}, ${myPos.lng.toFixed(4)}` : 'Ofuscado'}
+                        </span>
+                        <span style={{ fontWeight: 700 }}>Chain:</span>
+                        <span style={{ fontFamily: 'monospace' }}>#{status?.chain_height ?? '0'}</span>
+                    </div>
                 </div>
             </div>
 
             {/* WebGL Mount Point */}
             <div ref={mapContainerRef} style={{ width: '100%', height: '100%', opacity: globeLoaded ? 1 : 0, transition: 'opacity 1s' }} />
-            
+
             {!globeLoaded && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                    Construyendo Malla Satelital...
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: '50%', border: '3px solid var(--primary)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
+                    <span style={{ color: 'var(--primary)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }}>
+                        Construyendo Malla Satelital...
+                    </span>
                 </div>
             )}
         </div>

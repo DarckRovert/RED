@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { localTransport } from "../lib/mesh/localTransport";
 import { toast } from "./Toast";
 
 export default function RadarWindow() {
@@ -14,6 +15,7 @@ export default function RadarWindow() {
     const [manualHash, setManualHash] = useState('');
     const [manualName, setManualName] = useState('');
     const [isAdding, setIsAdding] = useState(false);
+    const [addingStatus, setAddingStatus] = useState(''); // e.g. 'Verificando nodo...'
     
     // QR Code State
     const [qrDataUrl, setQrDataUrl] = useState<string>('');
@@ -21,8 +23,11 @@ export default function RadarWindow() {
     // QR Generation Hook
     useEffect(() => {
         if (identity?.identity_hash) {
+            const qrText = identity.public_key 
+                ? `did:red:${identity.identity_hash}:${identity.public_key}` 
+                : identity.identity_hash;
             import('qrcode').then(QRCode => {
-                QRCode.toDataURL(identity.identity_hash, {
+                QRCode.toDataURL(qrText, {
                     width: 400,
                     margin: 1,
                     color: { dark: '#f01e1e', light: '#00000000' }
@@ -31,54 +36,25 @@ export default function RadarWindow() {
         }
     }, [identity]);
 
-    // BLE Scanning Hook
+    // The Radar now consumes peers from the centralized localTransport
+    // instead of running its own redundant BLE scan.
     useEffect(() => {
-        let isScanningBLE = false;
-
-        const initBLE = async () => {
-            try {
-                const { Capacitor } = await import('@capacitor/core');
-                if (!Capacitor.isNativePlatform()) return;
-
-                const { BleClient } = await import('@capacitor-community/bluetooth-le');
-                await BleClient.initialize();
-                
-                await BleClient.requestLEScan({
-                    // Scan all for now, filter by 'RED-' prefix
-                    allowDuplicates: false
-                }, (result) => {
-                    const devName = result.device.name || result.localName;
-                    if (devName && devName.startsWith('RED-')) {
-                        setNearbyPeers(prev => {
-                            if (!prev.find(p => p.id === result.device.deviceId)) {
-                                return [...prev, {
-                                    id: result.device.deviceId,
-                                    name: devName,
-                                    rssi: result.rssi
-                                }];
-                            }
-                            return prev;
-                        });
-                    }
-                });
-                isScanningBLE = true;
-            } catch (e) {
-                console.error("[RED BLE] Scan error:", e);
-            }
+        const updatePeers = () => {
+            // Filter only BLE peers for the specific "RED NEARBY" section
+            const blePeers = localTransport.allPeers
+                .filter((p: any) => p.transport === 'ble')
+                .map((p: any) => ({
+                    id: p.id,
+                    name: `RED-${p.id.substring(0, 8)}`,
+                    rssi: p.rssi || -100
+                }));
+            setNearbyPeers(blePeers);
         };
 
-        if (!scanning) {
-            initBLE();
-        }
-
-        return () => {
-            if (isScanningBLE) {
-                import('@capacitor-community/bluetooth-le').then(({ BleClient }) => {
-                    BleClient.stopLEScan().catch(() => {});
-                });
-            }
-        };
-    }, [scanning]);
+        const interval = setInterval(updatePeers, 2000);
+        updatePeers();
+        return () => clearInterval(interval);
+    }, []);
 
     // Stop camera scanning when unmounting
     useEffect(() => {
@@ -107,13 +83,15 @@ export default function RadarWindow() {
 
             // if the result has content
             if (result.hasContent) {
-                setScannedResult(result.content);
-                const success = await addContact(result.content, "Par Escaneado");
-                if (success) {
+                const cleanHash = result.content.trim();
+                setScannedResult(cleanHash);
+                try {
+                    await addContact(cleanHash, "Par Escaneado");
                     toast.success("¡Contacto añadido con éxito!");
                     navigate('sidebar');
-                } else {
-                    toast.error("No se pudo agregar el contacto. Verifica el QR.");
+                } catch (addErr) {
+                    const msg = addErr instanceof Error ? addErr.message : String(addErr);
+                    toast.error(`Error al añadir: ${msg}`);
                 }
             }
         } catch (e) {
@@ -157,134 +135,161 @@ export default function RadarWindow() {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-surface)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)' }}>
             
-            <header style={{ padding: '16px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <header className="glass-panel" style={{ padding: '20px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0 0 24px 24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <button onClick={goBack} style={{ background: 'transparent', color: 'var(--primary)', fontSize: '1.4rem' }}>←</button>
-                    <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.3rem' }}>Radar & Contactos</h2>
+                    <button onClick={goBack} style={{ background: 'transparent', color: 'var(--text-primary)', border: 'none', fontSize: '1.4rem', cursor: 'pointer', padding: '8px' }}>←</button>
+                    <div>
+                        <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.3rem', fontWeight: 800, letterSpacing: '1px' }}>RADAR P2P</h2>
+                        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.75rem', letterSpacing: '2px' }}>GESTIÓN DE IDENTIDADES</p>
+                    </div>
                 </div>
-                <button onClick={() => useRedStore.getState().navigate('nodemap')} style={{ background: 'var(--solid-highlight)', color: 'var(--primary)', padding: '6px 12px', borderRadius: '12px', fontWeight: 'bold', fontSize: '0.85rem' }}>
+                <button onClick={() => useRedStore.getState().navigate('nodemap')} style={{ background: 'var(--primary-subtle)', color: 'var(--primary)', padding: '8px 16px', borderRadius: '20px', fontWeight: 700, fontSize: '0.85rem', border: '1px solid var(--solid-border-active)', cursor: 'pointer' }}>
                     🌍 Mapa P2P
                 </button>
             </header>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="scroll-container" style={{ flex: 1, padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 
-                {/* Add Contact Action (Scanner) */}
-                <div style={{ 
-                    background: 'var(--bg-lifted)', padding: '24px', borderRadius: '16px', 
-                    border: '1px solid var(--solid-border)', textAlign: 'center',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
-                }}>
+                {/* Add Contact (Scanner) */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '28px', borderRadius: '24px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <button 
                         onClick={startScan}
                         style={{ 
-                            width: 80, height: 80, borderRadius: 40, background: 'var(--primary)', 
-                            color: 'white', fontSize: '2rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            margin: '0 auto 16px auto', boxShadow: '0 8px 24px var(--primary-glow)'
+                            width: 88, height: 88, borderRadius: 44, background: 'linear-gradient(135deg, #E8213A, #C0152A)', 
+                            color: 'white', fontSize: '2.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            margin: '0 auto 20px auto', boxShadow: '0 8px 32px rgba(232,33,58,0.4)',
+                            border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', transition: 'transform 0.3s var(--ease-spring)',
                         }}
+                        onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                        onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
                     >
                         📷
                     </button>
-                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem' }}>Escaneo Rápido</h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: 8 }}>Añade identidades apuntando con la cámara.</p>
+                    <h3 style={{ margin: '0 0 8px 0', color: 'white', fontSize: '1.2rem', fontWeight: 800 }}>Escaneo Rápido</h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0, lineHeight: 1.5 }}>Añade identidades apuntando con la cámara.</p>
                 </div>
 
                 {/* Manual Entry Fallback */}
-                <div style={{ 
-                    background: 'var(--bg-lifted)', padding: '24px', borderRadius: '16px', 
-                    border: '1px solid var(--solid-border)', display: 'flex', flexDirection: 'column', gap: '12px'
-                }}>
-                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem' }}>Entrada Manual</h3>
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <h3 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 700 }}>Entrada Manual de ID</h3>
                     <input 
                         type="text" 
-                        placeholder="Hash de Identidad (ej: 42af...)" 
+                        placeholder="Hash de Identidad (64 hex chars)" 
                         value={manualHash}
                         onChange={e => setManualHash(e.target.value)}
-                        style={{ background: 'var(--bg-deep)', border: '1px solid var(--solid-border)', padding: '12px', borderRadius: '8px', color: 'white' }}
+                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', padding: '14px 16px', borderRadius: '12px', color: 'white', fontFamily: 'monospace', fontSize: '0.9rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
                     />
                     <input 
                         type="text" 
-                        placeholder="Nombre para el contacto" 
+                        placeholder="Alias del contacto" 
                         value={manualName}
                         onChange={e => setManualName(e.target.value)}
-                        style={{ background: 'var(--bg-deep)', border: '1px solid var(--solid-border)', padding: '12px', borderRadius: '8px', color: 'white' }}
+                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', padding: '14px 16px', borderRadius: '12px', color: 'white', fontSize: '1rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
                     />
                     <button 
                         disabled={!manualHash || isAdding}
                         onClick={async () => {
                             setIsAdding(true);
-                            const ok = await addContact(manualHash, manualName || "Nuevo Par");
-                            setIsAdding(false);
-                            if (ok) {
-                                toast.success("Contacto añadido.");
+                            setAddingStatus('Añadiendo...');
+                            const hashToSent = manualHash.trim();
+                            const nameToSend = manualName ? manualName.trim() : "Nuevo Par";
+                            try {
+                                const powTimer = setTimeout(() => setAddingStatus('Verificando nodo PoW…'), 1000);
+                                await addContact(hashToSent, nameToSend);
+                                clearTimeout(powTimer);
+                                toast.success("✅ Contacto añadido correctamente.");
                                 navigate('sidebar');
-                            } else {
-                                toast.error("Error al añadir contacto.");
+                            } catch (err) {
+                                const msg = err instanceof Error ? err.message : String(err);
+                                toast.error(`❌ ${msg}`);
+                            } finally {
+                                setIsAdding(false);
+                                setAddingStatus('');
                             }
                         }}
                         className="btn-primary" 
-                        style={{ padding: '12px', borderRadius: '8px', opacity: manualHash ? 1 : 0.5 }}
+                        style={{ borderRadius: '14px', background: 'linear-gradient(135deg, #E8213A, #C0152A)', opacity: manualHash ? 1 : 0.5, border: 'none', color: 'white', padding: '14px' }}
                     >
-                        {isAdding ? "Añadiendo..." : "Añadir Contacto"}
+                        {isAdding ? addingStatus || 'Añadiendo...' : 'Añadir Contacto'}
                     </button>
                 </div>
 
                 {/* My Identity / Display QR */}
-                <div style={{ 
-                    background: 'var(--bg-lifted)', padding: '20px', borderRadius: '16px', 
-                    border: '1px solid var(--solid-border)', textAlign: 'center'
-                }}>
-                    <h3 style={{ margin: '0 0 16px 0', color: 'var(--text-primary)', fontSize: '1.1rem' }}>Mi Tarjeta de Identidad</h3>
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
+                    <h3 style={{ margin: '0 0 20px 0', color: 'white', fontSize: '1.1rem', fontWeight: 700 }}>Mi Tarjeta de Identidad</h3>
                     
                     <div style={{ 
-                        background: 'white', padding: '10px', borderRadius: '12px', display: 'inline-block',
-                        boxShadow: '0 0 20px rgba(240, 30, 30, 0.3)', marginBottom: '16px'
+                        background: 'white', padding: '12px', borderRadius: '16px', display: 'inline-block',
+                        boxShadow: '0 0 32px rgba(232,33,58,0.3)', marginBottom: '16px'
                     }}>
                         {qrDataUrl ? (
-                            <img src={qrDataUrl} alt="My QR Code" style={{ width: 180, height: 180, display: 'block' }} />
+                            <img src={qrDataUrl} alt="My QR Code" style={{ width: 200, height: 200, display: 'block' }} />
                         ) : (
-                            <div style={{ width: 180, height: 180, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>Generando QR...</div>
+                            <div style={{ width: 200, height: 200, background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', borderRadius: '8px' }}>Generando...</div>
                         )}
                     </div>
 
                     <div style={{ 
-                        background: 'var(--bg-deep)', padding: '12px', borderRadius: '8px', 
-                        fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--primary)',
-                        wordBreak: 'break-all', border: '1px solid var(--solid-highlight)'
+                        background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '12px', 
+                        fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--primary-bright)',
+                        wordBreak: 'break-all', border: '1px solid rgba(232,33,58,0.25)',
+                        letterSpacing: '1px', lineHeight: 1.6
                     }}>
                         {identity?.identity_hash}
                     </div>
                 </div>
 
                 {/* Radar BLE (Nearby Nodes) */}
-                <div style={{ 
-                    background: 'var(--bg-lifted)', padding: '20px', borderRadius: '16px', 
-                    border: '1px solid var(--solid-border)'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h3 style={{ margin: 0, color: '#3498db', fontSize: '1.1rem' }}>RED Nearby (BLE)</h3>
-                        <div className="pulsing-dot" style={{ width: 12, height: 12, borderRadius: 6, background: '#3498db' }} />
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,40,60,0.85), rgba(10,20,30,0.95))', backdropFilter: 'blur(16px)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(41,182,246,0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <h3 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 700 }}>RED NEARBY (BLE)</h3>
+                        <div className="pulsing-dot" style={{ width: 12, height: 12, borderRadius: 6, background: '#00D97E' }} />
                     </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '8px 0 16px 0' }}>Escaneando nodos en red local y Bluetooth Low Energy...</p>
+                    <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: '0 0 16px 0' }}>Escaneando nodos en Bluetooth Low Energy...</p>
                     
-                    <div style={{ textAlign: 'center', padding: '20px', border: '1px dashed var(--solid-highlight)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {nearbyPeers.length === 0 ? (
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>0 Pares Detectados Offline</p>
-                        ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {nearbyPeers.map(peer => (
-                                    <div key={peer.id} style={{ 
-                                        display: 'flex', justifyContent: 'space-between', 
-                                        background: 'var(--bg-card)', padding: '12px', borderRadius: '8px',
-                                        border: '1px solid var(--solid-border)'
-                                    }}>
-                                        <span style={{ color: 'white', fontWeight: 'bold' }}>{peer.name}</span>
-                                        <span style={{ color: peer.rssi > -70 ? '#2ecc71' : '#f1c40f' }}>{peer.rssi} dBm</span>
-                                    </div>
-                                ))}
+                            <div style={{ textAlign: 'center', padding: '20px', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 12, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                0 Pares Detectados
                             </div>
+                        ) : (
+                            nearbyPeers.map(peer => (
+                                <div key={peer.id} style={{
+                                    display: 'flex', alignItems: 'center', gap: '10px',
+                                    background: 'rgba(0,0,0,0.4)', padding: '12px 14px', borderRadius: '12px',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>{peer.name}</div>
+                                        <div style={{
+                                            color: peer.rssi > -70 ? '#00D97E' : 'var(--warning)',
+                                            fontFamily: 'JetBrains Mono, monospace', fontSize: '0.72rem', marginTop: 2,
+                                        }}>{peer.rssi} dBm · BLE</div>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const peerShort = peer.name.replace('RED-', '');
+                                                await addContact(peerShort, peer.name);
+                                                toast.success(`✅ ${peer.name} añadido`);
+                                            } catch (e) {
+                                                const msg = e instanceof Error ? e.message : String(e);
+                                                toast.error(`❌ ${msg}`);
+                                            }
+                                        }}
+                                        style={{
+                                            padding: '7px 12px', borderRadius: 10, flexShrink: 0,
+                                            background: 'rgba(41,182,246,0.15)', border: '1px solid rgba(41,182,246,0.3)',
+                                            color: '#29B6F6', fontSize: '0.78rem', fontWeight: 700,
+                                            cursor: 'pointer', whiteSpace: 'nowrap',
+                                        }}
+                                    >
+                                        + Agregar
+                                    </button>
+                                </div>
+                            ))
                         )}
                     </div>
                 </div>

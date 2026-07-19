@@ -25,13 +25,21 @@ class BluetoothTransport {
     async scan(onDeviceFound: (device: RedDevice) => void, timeoutMs: number = 10000) {
         await this.init();
         await BleClient.requestLEScan(
-            { services: [RED_BLE_SERVICE] },
+            // We scan all devices and check both the 'RED-' name prefix and the RED service UUID in advertisements.
+            { allowDuplicates: false },
             (result) => {
-                onDeviceFound({
-                    id: result.device.deviceId,
-                    name: result.device.name ?? "RED Node",
-                    rssi: result.rssi ?? -100
-                });
+                const devName = result.device.name ?? result.localName ?? '';
+                const hasRedService = result.uuids?.some(
+                    (uuid) => uuid.toLowerCase() === RED_BLE_SERVICE.toLowerCase()
+                );
+
+                if (devName.startsWith('RED-') || hasRedService) {
+                    onDeviceFound({
+                        id: result.device.deviceId,
+                        name: devName || 'Dispositivo RED',
+                        rssi: result.rssi ?? -100
+                    });
+                }
             }
         );
         

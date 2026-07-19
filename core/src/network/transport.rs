@@ -1,6 +1,7 @@
 //! Network transport layer.
 
 use async_trait::async_trait;
+use libp2p::Multiaddr;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -47,8 +48,14 @@ pub trait Transport: Send + Sync + 'static {
     /// Start listening for connections
     async fn listen(&self, addr: SocketAddr) -> NetworkResult<()>;
 
-    /// Connect to a peer
+    /// Connect to a peer via SocketAddr (legacy / internal use)
     async fn connect(&self, addr: SocketAddr) -> NetworkResult<PeerId>;
+
+    /// Connect to a bootstrap/relay peer via a libp2p Multiaddr.
+    /// Default impl is a no-op for transports that don't support it.
+    async fn connect_multiaddr(&self, _addr: Multiaddr) -> NetworkResult<()> {
+        Ok(())
+    }
 
     /// Disconnect from a peer
     async fn disconnect(&self, peer_id: &PeerId) -> NetworkResult<()>;

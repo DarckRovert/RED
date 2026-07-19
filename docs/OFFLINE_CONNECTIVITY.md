@@ -1,6 +1,6 @@
 # 🛜 Conectividad Offline — Especificación Técnica
 
-**Versión**: 1.0.0 | **Fecha**: Marzo 2026
+**Versión**: 7.1.0 | **Fecha**: Marzo 2026
 
 ## Resumen
 
@@ -223,5 +223,5 @@ Navegar a `/offline` en la app (o tocar el botón de antena en el sidebar cuando
 - [ ] Plugin nativo Capacitor para BLE (mayor alcance y control)
 - [ ] WiFi Direct nativo Android (Wi-Fi P2P API)
 - [ ] Nearby Connections API (Android) para discovery automático
-- [ ] LoRa radio como transporte de ultra largo alcance
+- [x] LoRa radio como transporte de ultra largo alcance (Vía serial bridge e I/O API)
 - [ ] Compresión de payloads para BLE (mensajes grandes)
