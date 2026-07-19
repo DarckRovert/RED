@@ -233,7 +233,7 @@ const initCyberMesh = () => {
   let w = canvas.width = window.innerWidth;
   let h = canvas.height = window.innerHeight;
   let particles = [];
-  const count = window.innerWidth > 768 ? 200 : 80;
+  const count = window.innerWidth > 768 ? 80 : 35; // OPTIMIZED: Reduced particles by 60%
   
   const mouse = { x: -1000, y: -1000, vx: 0, vy: 0 };
   let lastMouse = { x: -1000, y: -1000 };
@@ -260,7 +260,18 @@ const initCyberMesh = () => {
     });
   }
 
+  let animationId;
+  let isVisible = true;
+
+  const observer = new IntersectionObserver((entries) => {
+    isVisible = entries[0].isIntersecting;
+    if (isVisible) animate();
+    else cancelAnimationFrame(animationId);
+  }, { threshold: 0.01 });
+  observer.observe(canvas);
+
   const animate = () => {
+    if (!isVisible) return;
     ctx.fillStyle = '#020205'; // bg-deep void color
     ctx.fillRect(0, 0, w, h);
     
@@ -317,7 +328,7 @@ const initCyberMesh = () => {
       }
     }
     
-    requestAnimationFrame(animate);
+    animationId = requestAnimationFrame(animate);
   };
   animate();
 };
@@ -376,6 +387,13 @@ const initGlobe = () => {
   ctrl.autoRotateSpeed = 0.5;
   ctrl.enableZoom = false;
   globe.pointOfView({ lat: LIMA.lat, lng: LIMA.lng, altitude: 2.5 }, 0);
+
+  // OPTIMIZATION: Pause Globe render loop when off-screen
+  const observer = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) globe.resumeAnimation();
+    else globe.pauseAnimation();
+  }, { threshold: 0.01 });
+  observer.observe(container);
 };
 
 /* ─── RADAR ──────────────────────────────────────────────── */
@@ -388,7 +406,18 @@ const initRadar = () => {
   const cx = size / 2, cy = size / 2, R = size / 2 - 10;
   
   let scanA = 0;
+  let animationId;
+  let isVisible = true;
+
+  const observer = new IntersectionObserver((entries) => {
+    isVisible = entries[0].isIntersecting;
+    if (isVisible) draw();
+    else cancelAnimationFrame(animationId);
+  }, { threshold: 0.01 });
+  observer.observe(canvas);
+
   const draw = () => {
+    if (!isVisible) return;
     ctx.clearRect(0, 0, size, size);
     // Rings
     ctx.strokeStyle = 'rgba(232,0,28,0.1)';
@@ -401,7 +430,7 @@ const initRadar = () => {
     ctx.lineTo(cx,cy);
     ctx.fillStyle = 'rgba(232,0,28,0.15)';
     ctx.fill();
-    requestAnimationFrame(draw);
+    animationId = requestAnimationFrame(draw);
   };
   draw();
 };
