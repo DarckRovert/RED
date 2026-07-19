@@ -1,0 +1,62 @@
+name: Build iOS Capacitor App
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios, x86_64-apple-ios, aarch64-apple-ios-sim
+
+      - name: Install Frontend Dependencies
+        working-directory: ./client/app
+        run: npm ci
+
+      - name: Build Frontend (Next.js)
+        working-directory: ./client/app
+        run: npm run build
+
+      - name: Build Rust Native Library (libred_mobile.a)
+        run: |
+          chmod +x ./build_ios.sh
+          ./build_ios.sh
+
+      - name: Capacitor Sync iOS
+        working-directory: ./client/app
+        run: npx cap sync ios
+
+      - name: Build iOS App (Unsigned)
+        working-directory: ./client/app/ios/App
+        run: |
+          xcodebuild clean build \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            -sdk iphonesimulator
+
+      - name: Upload iOS App Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RED-iOS-Build
+          path: client/app/ios/App/build/Release-iphonesimulator/App.app
