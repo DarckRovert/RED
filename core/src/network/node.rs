@@ -33,8 +33,12 @@ pub struct Node {
     msg_notifier: Option<tokio::sync::broadcast::Sender<Message>>,
     /// Identity registry for verification
     pub identity_registry: crate::identity::registry::IdentityRegistry,
-    /// Send channel for outbound data (for mobile integration)
+    /// TX end: Node sends outbound mesh payloads here (encrypted OnionPackets).
+    /// The Axum API layer holds the RX end and streams them to the frontend via SSE.
     pub outbound_payload_tx: Option<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>,
+    /// RX end: held by the API so it can subscribe via /network/outbound SSE.
+    /// MUST be stored here to prevent the channel from being dropped.
+    pub outbound_payload_rx: Option<tokio::sync::mpsc::UnboundedReceiver<Vec<u8>>>,
     /// Hardware LoRa bridge (Phase 18)
     pub lora_bridge: Option<crate::network::lora_bridge::LoraBridge>,
     /// Is the node running
@@ -53,6 +57,10 @@ impl Node {
         let signing_key_bytes = identity.signing_key_bytes();
         let transport = Arc::new(Libp2pTransport::new(signing_key_bytes, config.data_dir.clone())?);
 
+        // BUG-FIX: Previously only .0 (sender) was stored, discarding the receiver
+        // silently. Now both ends are stored so the Axum API can consume outbound payloads.
+        let (outbound_tx, outbound_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+
         Ok(Self {
             identity,
             config,
@@ -61,7 +69,8 @@ impl Node {
             transport,
             msg_notifier: None,
             identity_registry: crate::identity::registry::IdentityRegistry::new(),
-            outbound_payload_tx: Some(tokio::sync::mpsc::unbounded_channel().0),
+            outbound_payload_tx: Some(outbound_tx),
+            outbound_payload_rx: Some(outbound_rx),
             lora_bridge: None,
             is_running: false,
         })

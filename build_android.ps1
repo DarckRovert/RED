@@ -16,6 +16,9 @@ $BACKEND_PATH = "$RED_ROOT\red_mobile"
 $ANDROID_PATH = "$FRONTEND_PATH\android"
 $JNI_LIBS_ROOT = "$ANDROID_PATH\app\src\main\jniLibs"
 
+# Fix PATH for Sandbox Environment
+$env:PATH += ";$env:USERPROFILE\.cargo\bin"
+
 # --- Functions ---
 
 function Write-Header {
@@ -82,16 +85,19 @@ Write-Host "Success: JNI motor injected into Android project." -ForegroundColor 
 
 # --- Step 5: Compile Production APK ---
 
-Write-Header "Step 5: Compiling Production APK (assembleRelease)"
+Write-Header "Step 5: Compiling Signed Debug APK (assembleDebug)"
 Set-Location $ANDROID_PATH
 if (Test-Path "gradlew.bat") {
     Write-Host "Running Gradle build..." -ForegroundColor Gray
-    cmd.exe /c "gradlew.bat assembleRelease"
+    cmd.exe /c "gradlew.bat assembleDebug"
     
-    $ApkPath = "$ANDROID_PATH\app\build\outputs\apk\release\app-release-unsigned.apk"
+    $ApkPath = "$ANDROID_PATH\app\build\outputs\apk\debug\app-debug.apk"
     if (Test-Path $ApkPath) {
-        Write-Host "`n[OK] Release APK successfully built!" -ForegroundColor Green
+        Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
+        
+        Write-Host "Copying APK to website/red.apk..." -ForegroundColor Gray
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\website\red.apk" -Force
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
     }

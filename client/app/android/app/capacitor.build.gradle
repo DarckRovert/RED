@@ -21,6 +21,7 @@ dependencies {
     implementation project(':capacitor-local-notifications')
     implementation project(':capacitor-share')
     implementation project(':capacitor-splash-screen')
+    implementation project(':capawesome-capacitor-background-task')
     implementation project(':capacitor-secure-storage-plugin')
     implementation project(':capacitor-voice-recorder')
 

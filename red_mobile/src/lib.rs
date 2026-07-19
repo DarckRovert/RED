@@ -8,13 +8,17 @@ use ed25519_dalek::SigningKey;
 
 mod api;
 
-// Nodos Semilla Mundiales de la red pública IPFS (InterPlanetary File System).
-// No pertenecen a ningún servidor de RED corporativo. Proveen descubrimiento global descentralizado y actúan como "Trampolines Relay" para atravesar NAT 4G.
+// Nodos Semilla Mundiales — Bootstrap peers oficiales de libp2p/IPFS.
+// Mantenidos por Protocol Labs. Proveen descubrimiento Kademlia global
+// y actúan como relay para atravesar NAT 4G sin servidor central propio.
+// Fuente: https://github.com/libp2p/go-libp2p/blob/master/config/config.go
 const BOOTSTRAP_NODES: &[&str] = &[
-    "/ip4/147.75.109.213/tcp/4001/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkX1q42C",
-    "/ip4/147.75.83.83/tcp/4001/p2p/QmbBHw1Xx9pUpAbrVZUKTPL5Rsph5Q9GQhRvcWVBPFgNwF",
-    "/ip4/136.144.57.15/tcp/4001/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbX",
-    "/ip4/147.75.77.187/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6yHzpnVgG9fB"
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkXNA5yRxklDDe",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXDDts6X9R2kS",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6yHzpnVgG9fB5UrD62gJLqDKtv",
+    "/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+    "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
+    "/ip4/104.131.131.82/udp/4001/quic-v1/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ",
 ];
 
 static ONCE: std::sync::Once = std::sync::Once::new();

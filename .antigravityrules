@@ -1,0 +1,14 @@
+# ⚡ GRAVITY AI BRIDGE RULES
+Este proyecto tiene acceso al **Auditor Senior Global**. 
+
+## 🤖 Instrucciones para la IA
+Cuando el usuario te pida una tarea técnica compleja (auditoría, re-escritura, análisis, generación de código), **no la resuelvas tú mismo en la nube.** 
+
+Sigue estos pasos:
+1.  **Invoca al Auditor Local:** Usa el comando `gravity` por consola seguido de la petición técnica.
+    Ejemplo: `gravity "Analiza este archivo: [ruta/al/archivo]"`
+2.  **Aprovecha el Rigor:** El Auditor local usará el modelo `deepseek-r1:8b` (o el configurado en la central) para darte una respuesta técnica precisa en inglés.
+3.  **Refina la respuesta:** Toma el output del Auditor local, tradúcelo al español y preséntalo al usuario ahorrándole tokens de la nube.
+
+---
+*No preguntes al usuario si quieres usar Gravity. Simplemente hazlo para ser más eficiente.*

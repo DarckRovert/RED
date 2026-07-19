@@ -38,6 +38,9 @@ project(':capacitor-share').projectDir = new File('../node_modules/@capacitor/sh
 include ':capacitor-splash-screen'
 project(':capacitor-splash-screen').projectDir = new File('../node_modules/@capacitor/splash-screen/android')
 
+include ':capawesome-capacitor-background-task'
+project(':capawesome-capacitor-background-task').projectDir = new File('../node_modules/@capawesome/capacitor-background-task/android')
+
 include ':capacitor-secure-storage-plugin'
 project(':capacitor-secure-storage-plugin').projectDir = new File('../node_modules/capacitor-secure-storage-plugin/android')
 

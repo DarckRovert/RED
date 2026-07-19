@@ -179,8 +179,8 @@ export default function StatusHeader() {
                         {identity.short_id}
                     </span>
                 )}
-                <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
-                    {status?.version || 'v7.1.0'}
+                <span className="font-mono text-[10px] tracking-wider text-orange-400/80 uppercase mt-0.5">
+                    {status?.version || 'v7.2.0'}
                 </span>
             </div>
         </div>

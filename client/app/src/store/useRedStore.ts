@@ -147,10 +147,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
     initNodeConnection: async () => {
         let retries = 60; // 60 retries × 1s = up to 1 minute for mobile PoW / slow boots
-        console.log("[RED] Initializing Node Connection...");
+        if (process.env.NODE_ENV === 'development') console.log("[RED] Initializing Node Connection...");
         while (retries > 0) {
             try {
-                if (retries % 5 === 0) console.log(`[RED] Polling Rust API... (${60 - retries}s elapsed)`);
+                if (process.env.NODE_ENV === 'development' && retries % 5 === 0) {
+                    console.log(`[RED] Polling Rust API... (${60 - retries}s elapsed)`);
+                }
                 const [identity, status] = await Promise.all([
                     RedAPI.getIdentity(),
                     RedAPI.getStatus(),
@@ -161,27 +163,42 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 // is_running: false (and identity_hash: "INITIALIZING") during PoW.
                 // We must wait until is_running is true before declaring nodeOnline.
                 if (!status.is_running || status.identity_hash === 'INITIALIZING') {
-                    console.log("[RED] Node online but still in PoW — retrying...");
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log("[RED] Node online but still in PoW — retrying...");
+                    }
                     retries--;
                     await new Promise(r => setTimeout(r, 1000));
                     continue;
                 }
 
                 set({ identity, status, nodeOnline: true });
-                console.log("[RED] Attached to Rust Node Natively (PoW complete):", identity.short_id);
+                if (process.env.NODE_ENV === 'development') {
+                    console.log("[RED] Attached to Rust Node Natively (PoW complete):", identity.short_id);
+                }
                 
                 await get().fetchData();
-                
-                // FASE 1.1: SSE con reconexión automática.
-                // Si el nodo Rust se reinicia, el EventSource se cierra con onerror.
-                // Reconectamos con backoff de 3 segundos indefinidamente.
+                              // FASE 1.1: SSE con reconexión automática.
+                // Escucha eventos tipo 'conv_update' para actualizar sidebar SOLO cuando
+                // hay cambios reales — elimina el polling agresivo de batería.
                 const connectSSE = () => {
                     const es = RedAPI.subscribeToEvents((data) => {
-                        get().addIncomingMessage(data);
+                        // Nuevo mensaje → agregar al chat activo
+                        if (data.message_item) {
+                            get().addIncomingMessage(data);
+                        }
+                        // Actualización de conversaciones (badges, nuevos chats, confirmaciones)
+                        if (data.event_type === 'conv_update' || data.event_type === 'contact_update') {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.log('[RED] SSE conv_update — refreshing sidebar');
+                            }
+                            get().fetchData();
+                        }
                     });
                     if (es) {
                         es.onerror = () => {
-                            console.warn('[RED] SSE connection lost — reconnecting in 3s...');
+                            if (process.env.NODE_ENV === 'development') {
+                                console.warn('[RED] SSE connection lost — reconnecting in 3s...');
+                            }
                             es.close();
                             setTimeout(connectSSE, 3000);
                         };
@@ -189,7 +206,14 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 };
                 connectSSE();
 
-                // ── MESH BRIDGING: Pipe Rust outbound payloads to the radio ──
+                // Heartbeat de seguridad: refresco cada 30s como red de seguridad
+                // en caso de que algún evento SSE se pierda. Mucho menos agresivo que 8s.
+                const fetchInterval = setInterval(() => {
+                    if (get().nodeOnline) get().fetchData();
+                    else clearInterval(fetchInterval);
+                }, 30000);
+
+    // ── MESH BRIDGING: Pipe Rust outbound payloads to the radio ──
                 // Whenever the Rust Node generates an encrypted OnionPacket (e.g. after resolving
                 // a POST /api/messages/send), it streams the bytes back to us natively. We then
                 // hand those bytes to the MeshRouter so they can actually leave the phone's antenna (BLE/WiFi).
