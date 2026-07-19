@@ -240,14 +240,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 };
                 connectOutboundSSE();
 
-                // FASE 1.2: Refresco periódico cada 8s para mantener sidebar vivo.
-                // Permite que lleguen actualizaciones de conversaciones, badges de
-                // no leídos, y contactos nuevos sin necesidad de reiniciar la app.
-                const fetchInterval = setInterval(() => {
-                    if (get().nodeOnline) get().fetchData();
-                    else clearInterval(fetchInterval);
-                }, 8000);
-                
+
                 // Initialize the multi-transport mesh layer with our FULL identity hash.
                 // Uses mDNS (same WiFi), WiFi Direct (WebRTC), and BLE to create
                 // a self-healing hop-by-hop network that works without internet.

@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem, RedAPI } from "../lib/api";
 import { mediaChunker } from "../lib/mesh/mediaChunker";
+import { MessageBubble } from "./chat/MessageBubble";
 
 /* ── Avatar helpers (same palette as Sidebar) ─────────────────────────────── */
 const AVATAR_COLORS = [
@@ -60,8 +61,8 @@ function TypingIndicator() {
     );
 }
 
-/* ── Voice waveform ────────────────────────────────────────────────────────── */
-function VoiceWave({ playing, color }: { playing: boolean; color: string }) {
+/* ── Voice waveform (For Input Recording Display) ─────────────────────────── */
+export function VoiceWave({ playing, color }: { playing: boolean; color: string }) {
     const heights = [4, 8, 14, 10, 18, 12, 20, 14, 10, 8, 16, 12, 6, 14, 10, 8, 16, 12, 18, 10, 8, 14, 6, 10, 14];
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px', height: 24 }}>
@@ -73,96 +74,6 @@ function VoiceWave({ playing, color }: { playing: boolean; color: string }) {
                     transition: 'opacity 0.3s ease',
                 }} />
             ))}
-        </div>
-    );
-}
-
-
-/* ── Voice message ──────────────────────────────────────────────────────────── */
-function VoiceMessage({ msg, isMine }: { msg: MessageItem; isMine: boolean }) {
-    const audioRef = useRef<HTMLAudioElement>(null);
-    const [playing, setPlaying] = useState(false);
-    const [progress, setProgress] = useState(0);
-
-    // media_data from Rust is raw base64 without the data: URI prefix.
-    // Normalize it so the <audio> element can actually decode and play it.
-    const audioSrc = msg.media_data
-        ? (msg.media_data.startsWith('data:') || msg.media_data.startsWith('http')
-            ? msg.media_data
-            : `data:audio/ogg;base64,${msg.media_data}`)
-        : undefined;
-
-    const toggle = () => {
-        const a = audioRef.current;
-        if (!a) return;
-        if (playing) { a.pause(); setPlaying(false); }
-        else         { a.play().catch(() => {}); setPlaying(true); }
-    };
-
-    const color = isMine ? 'rgba(255,255,255,0.8)' : 'var(--text-secondary)';
-
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 200 }}>
-            <button onClick={toggle} style={{
-                width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                background: isMine ? 'rgba(255,255,255,0.15)' : 'rgba(232,33,58,0.15)',
-                border: `1px solid ${isMine ? 'rgba(255,255,255,0.2)' : 'rgba(232,33,58,0.3)'}`,
-                color: isMine ? 'white' : 'var(--primary-bright)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all 0.15s ease',
-            }}>
-                {playing
-                    ? <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                    : <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-                }
-            </button>
-            <div style={{ flex: 1 }}>
-                <VoiceWave playing={playing} color={color} />
-                <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: 3 }}>
-                    {msg.duration_ms ? `${Math.round(msg.duration_ms / 1000)}s` : 'Nota de voz'}
-                </div>
-            </div>
-            {audioSrc && (
-                <audio ref={audioRef} src={audioSrc}
-                    onEnded={() => setPlaying(false)}
-                    onTimeUpdate={() => {
-                        const a = audioRef.current;
-                        if (a && a.duration) setProgress(a.currentTime / a.duration * 100);
-                    }}
-                    style={{ display: 'none' }}
-                />
-            )}
-        </div>
-    );
-}
-
-/* ── Poll message ───────────────────────────────────────────────────────────── */
-function PollMessage({ msg, onVote }: { msg: MessageItem; onVote: (optIdx: number) => void }) {
-    const pd = msg.poll_data;
-    if (!pd) return null;
-    const totalVotes = Object.keys(pd.votes || {}).length;
-    return (
-        <div style={{ minWidth: 210 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span>📊</span> {pd.question}
-            </div>
-            {pd.options.map((opt, i) => {
-                const votes = Object.values(pd.votes || {}).filter((v: any) => v === String(i)).length;
-                const pct = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
-                return (
-                    <div key={i} className="poll-option" onClick={() => onVote(i)}
-                        style={{ color: 'var(--text-primary)', cursor: 'pointer' }}>
-                        <div className="poll-bar" style={{ width: `${pct}%` }} />
-                        <span style={{ position: 'relative', zIndex: 1, fontSize: '0.86rem' }}>{opt}</span>
-                        <span style={{ position: 'relative', zIndex: 1, fontSize: '0.76rem', color: 'var(--text-muted)', marginLeft: 8, flexShrink: 0 }}>
-                            {pct}%
-                        </span>
-                    </div>
-                );
-            })}
-            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: 4 }}>
-                {totalVotes} voto{totalVotes !== 1 ? 's' : ''}
-            </div>
         </div>
     );
 }
@@ -913,261 +824,36 @@ export default function ChatWindow() {
                     const isLast  = !next || next.is_mine !== isMine;
                     const showDate = !prev || !sameDay(prev.timestamp, msg.timestamp);
                     const isSwiping = swipingId === msg.id;
-
-                    /* Bubble corner radius — groups messages */
-                    const tl = isMine ? (isFirst ? 18 : 4) : 18;
-                    const tr = isMine ? 18 : (isFirst ? 18 : 4);
-                    const br = isMine ? (isLast ? 4 : 18) : (isLast ? 18 : 4);
-                    const bl = isMine ? 4 : (isLast ? 4 : 18);
-
-                    const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0;
-                    const isSystem     = msg.msg_type === 'system';
-
-                    if (isSystem) {
-                        return (
-                            <div key={msg.id} className="system-msg">
-                                🔐 {msg.content}
-                            </div>
-                        );
-                    }
+                    const isSearchHighlight = searchQuery && searchResults[searchIdx]?.id === msg.id;
 
                     return (
-                        <React.Fragment key={msg.id}>
-                            {showDate && (
-                                <div className="chat-date-pill">
-                                    <span>{datePill(msg.timestamp)}</span>
-                                </div>
-                            )}
-
-                            <div style={{
-                                display: 'flex', flexDirection: isMine ? 'row-reverse' : 'row',
-                                alignItems: 'flex-end', gap: '6px',
-                                marginTop: isFirst ? '10px' : '2px',
-                                transform: isSwiping ? (isMine ? 'translateX(-12px)' : 'translateX(12px)') : 'none',
-                                transition: 'transform 0.2s ease',
-                            }}>
-                                {/* Swipe-to-reply icon */}
-                                <div className={`swipe-reply-icon ${isSwiping ? 'visible' : ''}`}
-                                    style={{ fontSize: '1rem', flexShrink: 0 }}>
-                                    ↩
-                                </div>
-
-                                {/* Bubble */}
-                                <div
-                                    data-msgid={msg.id}
-                                    className="msg-bubble"
-                                    style={{
-                                        maxWidth: '80%',
-                                        padding: msg.msg_type === 'image' ? '3px' : '10px 13px',
-                                        borderRadius: `${tl}px ${tr}px ${br}px ${bl}px`,
-                                        background: isMine
-                                            ? 'linear-gradient(135deg, rgba(232,33,58,0.22), rgba(200,20,45,0.14))'
-                                            : 'rgba(20,20,34,0.9)',
-                                        border: `1px solid ${isMine ? 'rgba(232,33,58,0.28)' : 'rgba(255,255,255,0.07)'}`,
-                                        boxShadow: isMine
-                                            ? '0 2px 14px rgba(232,33,58,0.14), inset 0 1px 0 rgba(255,255,255,0.07)'
-                                            : '0 2px 8px rgba(0,0,0,0.3)',
-                                        display: 'flex', flexDirection: 'column',
-                                        position: 'relative',
-                                        backdropFilter: 'blur(10px)',
-                                        WebkitBackdropFilter: 'blur(10px)',
-                                    }}
-                                    onMouseDown={e => startLongPress(e, msg)}
-                                    onMouseUp={cancelLongPress}
-                                    onMouseLeave={cancelLongPress}
-                                    onTouchStart={e => onTouchStart(e, msg)}
-                                    onTouchMove={e => onTouchMove(e, msg)}
-                                    onTouchEnd={onTouchEnd}
-                                >
-                                    {/* Reply quote */}
-                                    {msg.reply_to && (
-                                        <div className={`msg-reply-quote ${isMine ? 'mine' : ''}`}>
-                                            <div className="msg-reply-quote-name">
-                                                {msg.reply_to.sender === 'me' ? 'Tú' : peerName}
-                                            </div>
-                                            <div className="msg-reply-quote-text">
-                                                {msg.reply_to.msg_type === 'image' ? '📷 Foto' :
-                                                 msg.reply_to.msg_type === 'voice' ? '🎤 Voz' :
-                                                 msg.reply_to.content}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Content */}
-                                    {msg.msg_type === 'contact_card' ? (() => {
-                                        let cardData: any = {};
-                                        try { cardData = JSON.parse(msg.media_data || '{}'); } catch {}
-                                        const { identity_hash: ih, display_name: dn } = cardData;
-                                        return (
-                                            <div style={{ minWidth: 200, padding: 4 }}>
-                                                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-                                                    <div style={{ width:42, height:42, borderRadius:'50%', background:'linear-gradient(135deg,#7E57C2,#5E35B1)', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, color:'white', fontSize:'1.1rem' }}>
-                                                        {(dn||'?')[0].toUpperCase()}
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ fontWeight:700, fontSize:'0.95rem' }}>{dn || 'Contacto'}</div>
-                                                        <div style={{ fontSize:'0.7rem', color:'var(--text-muted)' }}>{(ih||'').substring(0,16)}…</div>
-                                                    </div>
-                                                </div>
-                                                {ih && (
-                                                    <button onClick={() => useRedStore.getState().addContact(ih, dn || ih.substring(0,8))}
-                                                        style={{ width:'100%', padding:'8px', borderRadius:10, background:'rgba(232,33,58,0.12)', border:'1px solid rgba(232,33,58,0.25)', color:'var(--primary-bright)', fontSize:'0.8rem', fontWeight:700, cursor:'pointer' }}>
-                                                        + Añadir contacto
-                                                    </button>
-                                                )}
-                                            </div>
-                                        );
-                                    })() : msg.msg_type === 'file' ? (() => {
-                                        const name = (msg as any).media_name || msg.content.replace('📎 ', '') || 'Archivo';
-                                        const handleOpen = () => {
-                                            if (!msg.media_data) return;
-                                            const mime = msg.mime_type || 'application/octet-stream';
-                                            const blob = new Blob([Uint8Array.from(atob(msg.media_data), c => c.charCodeAt(0))], { type: mime });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement('a'); a.href = url; a.download = name; a.click();
-                                            setTimeout(() => URL.revokeObjectURL(url), 5000);
-                                        };
-                                        return (
-                                            <div onClick={handleOpen} style={{ display:'flex', alignItems:'center', gap:12, cursor:'pointer', minWidth:180 }}>
-                                                <div style={{ width:42, height:42, borderRadius:10, background:'rgba(232,33,58,0.12)', border:'1px solid rgba(232,33,58,0.2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.3rem', flexShrink:0 }}>📄</div>
-                                                <div style={{ flex:1, minWidth:0 }}>
-                                                    <div style={{ fontWeight:700, fontSize:'0.88rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{name}</div>
-                                                    <div style={{ fontSize:'0.7rem', color:'var(--text-muted)' }}>Toca para abrir</div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })() : msg.msg_type === 'image' && msg.media_data ? (() => {
-                                        // El Rust retorna base64 puro; el cámera local ya incluye el prefijo data:
-                                        const imgSrc = msg.media_data.startsWith('data:')
-                                            ? msg.media_data
-                                            : `data:${msg.mime_type || 'image/jpeg'};base64,${msg.media_data}`;
-                                        return (
-                                            <div>
-                                                <img src={imgSrc} alt="Imagen cifrada"
-                                                    style={{ width: '100%', maxWidth: 280, borderRadius: 14, display: 'block', maxHeight: 300, objectFit: 'cover' }} />
-                                                {msg.content && msg.content !== '📷 Foto cifrada' && msg.content !== '[Image]' && msg.content !== '🖼️ Imagen cifrada' && (
-                                                    <span style={{ display: 'block', padding: '7px 8px 0', fontSize: '0.93rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-                                                        {msg.content}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        );
-                                    })() : msg.msg_type === 'media_chunk' ? (
-                                        <div style={{ color: 'var(--info)', fontSize: '0.8rem', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6 }}>
-                                            <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--info)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></span>
-                                            Recibiendo fragmento pesado vía P2P...
-                                        </div>
-                                    ) : msg.msg_type === 'voice' ? (
-                                        <VoiceMessage msg={msg} isMine={isMine} />
-                                    ) : msg.msg_type === 'location' && msg.latitude && msg.longitude ? (
-                                        <div style={{ minWidth: 220 }}>
-                                            {/* OSM Static Map Thumbnail */}
-                                            <div style={{
-                                                width: '100%', height: 140, borderRadius: 12, marginBottom: 8,
-                                                overflow: 'hidden', position: 'relative',
-                                                border: '1px solid rgba(255,255,255,0.08)',
-                                            }}>
-                                                <img
-                                                    src={`https://staticmap.openstreetmap.de/staticmap.php?center=${msg.latitude},${msg.longitude}&zoom=15&size=280x140&maptype=mapnik&markers=${msg.latitude},${msg.longitude},red`}
-                                                    alt="Mapa"
-                                                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                                    onError={(e) => {
-                                                        // Fallback si no hay internet
-                                                        (e.target as HTMLImageElement).style.display = 'none';
-                                                    }}
-                                                />
-                                                <div style={{
-                                                    position: 'absolute', inset: 0,
-                                                    background: 'radial-gradient(circle at 50% 50%, rgba(232,33,58,0.1), transparent 70%)',
-                                                    pointerEvents: 'none',
-                                                }} />
-                                                <div style={{
-                                                    position: 'absolute', top: '50%', left: '50%',
-                                                    transform: 'translate(-50%,-50%)',
-                                                    fontSize: '1.5rem', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.6))',
-                                                    pointerEvents: 'none',
-                                                }}>📍</div>
-                                            </div>
-                                            <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: 3 }}>Ubicación GPS</div>
-                                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-                                                {msg.latitude.toFixed(5)}, {msg.longitude.toFixed(5)}
-                                                {msg.accuracy ? ` · ±${Math.round(msg.accuracy)}m` : ''}
-                                            </div>
-                                            <button onClick={() => window.open(`https://maps.google.com/?q=${msg.latitude},${msg.longitude}`, '_blank')}
-                                                style={{
-                                                    width: '100%', padding: '7px', borderRadius: 8,
-                                                    background: 'rgba(232,33,58,0.12)', border: '1px solid rgba(232,33,58,0.25)',
-                                                    color: 'var(--primary-bright)', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                                                }}>
-                                                Abrir en mapa →
-                                            </button>
-                                        </div>
-                                    ) : msg.msg_type === 'poll' ? (
-                                        <PollMessage msg={msg} onVote={(i) => {
-                                            setChatMessages(prev => prev.map(m => m.id !== msg.id ? m : {
-                                                ...m, poll_data: m.poll_data ? {
-                                                    ...m.poll_data,
-                                                    votes: { ...m.poll_data.votes, me: String(i) },
-                                                } : m.poll_data,
-                                            }));
-                                        }} />
-                                    ) : (
-                                        <span style={{ wordBreak: 'break-word', fontSize: '0.96rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
-                                            {msg.content}
-                                        </span>
-                                    )}
-
-                                    {/* Timestamp + tick + star */}
-                                    <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:4, marginTop:5 }}>
-                                        {starredMessages.includes(msg.id) && (
-                                            <span style={{ fontSize:'0.7rem' }}>⭐</span>
-                                        )}
-                                        {(msg as any).edited && (
-                                            <span style={{ fontSize:'0.66rem', color:'var(--text-muted)', fontStyle:'italic' }}>editado</span>
-                                        )}
-                                        <span style={{ fontSize:'0.66rem', color: isMine ? 'rgba(255,255,255,0.35)' : 'var(--text-muted)' }}>
-                                            {timeStr(msg.timestamp)}
-                                        </span>
-                                        {isMine && (
-                                            <svg width="16" height="10" viewBox="0 0 16 10" fill="none">
-                                                {/* First tick */}
-                                                <path d="M1 5L3.5 7.5L8 2" stroke={
-                                                    msg.status === 'Delivered' ? '#4FC3F7' :
-                                                    msg.status === 'Sent' ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)'
-                                                } strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-                                                {/* Second tick (only for Sent+Delivered) */}
-                                                {msg.status !== 'Pending' && (
-                                                    <path d="M5 5L7.5 7.5L12 2" stroke={
-                                                        msg.status === 'Delivered' ? '#4FC3F7' : 'rgba(255,255,255,0.5)'
-                                                    } strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-                                                )}
-                                            </svg>
-                                        )}
-                                    </div>
-
-                                    {/* Search highlight indicator */}
-                                    {searchQuery && searchResults[searchIdx]?.id === msg.id && (
-                                        <div style={{ position:'absolute', inset:0, borderRadius:'inherit',
-                                            border:'2px solid rgba(255,210,0,0.8)', pointerEvents:'none',
-                                            boxShadow:'0 0 12px rgba(255,210,0,0.3)' }} />
-                                    )}
-
-                                    {/* Reactions */}
-                                    {hasReactions && (
-                                        <div className="msg-reactions">
-                                            {Object.entries(msg.reactions!).map(([em, ids]) => (
-                                                <button key={em}
-                                                    className={`msg-reaction-badge ${ids.includes('me') ? 'mine' : ''}`}
-                                                    onClick={() => handleReaction(msg.id, em)}>
-                                                    {em}
-                                                    {ids.length > 1 && <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{ids.length}</span>}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </React.Fragment>
+                        <MessageBubble
+                            key={msg.id}
+                            msg={msg}
+                            isMine={isMine}
+                            isFirst={isFirst}
+                            isLast={isLast}
+                            showDate={showDate}
+                            peerName={peerName}
+                            starredMessages={starredMessages}
+                            searchQuery={searchQuery}
+                            isSearchHighlight={!!isSearchHighlight}
+                            isSwiping={isSwiping}
+                            onTouchStart={onTouchStart}
+                            onTouchMove={onTouchMove}
+                            onTouchEnd={onTouchEnd}
+                            onLongPress={startLongPress}
+                            onCancelLongPress={cancelLongPress}
+                            onReaction={handleReaction}
+                            onVote={(msgId, optIdx) => {
+                                setChatMessages(prevMsgs => prevMsgs.map(m => m.id !== msgId ? m : {
+                                    ...m, poll_data: m.poll_data ? {
+                                        ...m.poll_data,
+                                        votes: { ...m.poll_data.votes, me: String(optIdx) },
+                                    } : m.poll_data,
+                                }));
+                            }}
+                        />
                     );
                 })}
 
