@@ -1,18 +1,665 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-  <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=website/index.html">
-  <title>RED Protocol — Red Encriptada Descentralizada</title>
-  <script>
-    window.location.href = "website/index.html";
-  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="RED — Protocolo de mensajería descentralizada de grado militar. Cifrado E2E, P2P puro y resistencia total a la censura. Hecho en Perú para el mundo." />
+  <meta name="keywords"
+    content="RED, RED Protocol, mensajería descentralizada, cifrado military grade, P2P, privacidad, anti-censura, Perú technology, DarckRovert" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://github.com/DarckRovert/RED" />
+  <meta property="og:title" content="RED — La Revolución de la Privacidad 🇵🇪" />
+  <meta property="og:description" content="Mensajería P2P sin servidores, sin internet y sin censura. El futuro de la comunicación nace en Lima." />
+  <meta property="og:image" content="assets/splash.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://github.com/DarckRovert/RED" />
+  <meta property="twitter:title" content="RED Protocol — Privacy is Key 🗝️" />
+  <meta property="twitter:description" content="Únete al protocolo de comunicación más seguro del planeta. 100% Peruano, 100% Libre." />
+  <meta property="twitter:image" content="assets/splash.png" />
+  <title>RED — Red Encriptada Descentralizada</title>
+  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="icon" href="assets/icon.png" />
+  <style>
+    .term-action-btn:hover {
+      background: rgba(232, 0, 28, 0.18) !important;
+      border-color: rgba(232, 0, 28, 0.5) !important;
+      color: #fff !important;
+      transform: translateY(-1px);
+    }
+    .term-action-btn:active {
+      transform: translateY(0);
+    }
+  </style>
 </head>
-<body style="background: #030307; color: #ffffff; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;">
-  <div style="text-align: center;">
-    <h1 style="color: #e8001c;">🔴 RED Protocol v16.0 Zenith</h1>
-    <p>Redirigiendo al sitio web oficial...</p>
-    <p><a href="website/index.html" style="color: #00d97e;">Haz clic aquí si no eres redirigido automáticamente</a></p>
+
+<body>
+  <!-- ───────────────── PRELOADER ───────────────── -->
+  <div id="preloader" role="alert" aria-busy="true">
+    <div class="preloader__content">
+      <div class="preloader__logo">
+        <img src="assets/icon.png" alt="RED Logo" class="preloader__img">
+        <div class="preloader__glitch-overlay"></div>
+      </div>
+      <div class="preloader__bar-wrapper">
+        <div class="preloader__bar"></div>
+      </div>
+      <span class="preloader__text font-mono">RED PROTOCOL · LIMA ORIGIN 🇵🇪</span>
+    </div>
   </div>
+
+  <!-- ───────────────── CUSTOM CURSOR ───────────────── -->
+  <div id="custom-cursor" aria-hidden="true"></div>
+  <div id="custom-cursor-follower" aria-hidden="true"></div>
+  <div id="neon-glow" aria-hidden="true"></div>
+
+  <div id="scroll-progress"></div>
+  <canvas id="bg-mesh-canvas" aria-hidden="true"></canvas>
+
+  <div class="neon-inca-pattern" aria-hidden="true">
+    <svg viewBox="0 0 1000 1000" preserveAspectRatio="none">
+      <path d="M0,100 L100,100 L100,0 L200,0 L200,100 L300,100 L300,200 L200,200 L200,300 L100,300 L100,200 L0,200 Z" />
+      <path d="M500,500 L600,500 L600,400 L700,400 L700,500 L800,500 L800,600 L700,600 L700,700 L600,700 L600,600 L500,600 Z" />
+      <path d="M900,900 L1000,900 L1000,800 L900,800 Z" />
+      <path d="M100,800 L300,800 L300,900 L100,900 Z" />
+    </svg>
+  </div>
+
+  <!-- ───────────────── NAV ───────────────── -->
+  <nav class="nav" role="navigation" aria-label="Navegación principal">
+    <div class="container">
+      <div class="nav__inner">
+        <a href="#" class="nav__logo" aria-label="RED inicio">
+          <img src="assets/icon.png" alt="RED Logo" class="nav__logo-img" style="width: 34px; height: 34px; border-radius: 10px; box-shadow: var(--red-glow-sm);">
+          <span>RED</span>
+        </a>
+        <ul class="nav__links" id="nav-links">
+          <li><a href="#features">Características</a></li>
+          <li><a href="#comparison">Comparativa</a></li>
+          <li><a href="#offline">Modo Offline</a></li>
+          <li><a href="#architecture">Arquitectura</a></li>
+          <li><a href="#download">Descargar</a></li>
+        </ul>
+        <a href="#download" class="nav__cta" id="nav-download-btn">Descargar</a>
+        <button class="nav__mobile-toggle" id="nav-toggle" aria-label="Menú móvil">☰</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ───────────────── HERO ───────────────── -->
+  <section class="hero" aria-label="Presentación principal">
+    <div id="globe-container" aria-hidden="true"></div>
+    <div class="hero__glow" aria-hidden="true"></div>
+    <div class="container">
+      <div class="hero__content">
+        <div class="hero__badge font-mono">
+          <span class="hero__badge-dot" aria-hidden="true"></span>
+          v16.0 Zenith Master Edition — 40+ Fases Completadas · Build: Passing ✅
+        </div>
+
+        <div class="peru-is-key reveal">
+          <span class="peru-flag">🇵🇪</span>
+          <span>Peru is Key</span>
+        </div>
+
+        <h1 class="hero__title glitch reveal-text" data-text="RED PROTOCOL">
+          <span class="text-gradient">RED PROTOCOL</span>
+        </h1>
+        <p class="hero__subtitle reveal-text">
+          RED es el protocolo de mensajería del futuro: nacido en Lima, blindado por criptografía y capaz de operar sin
+          internet. Tu privacidad no es negociable.
+        </p>
+
+        <div class="hero-peru-badge" aria-hidden="true">
+            <span class="text">Lima Origin</span>
+            <span class="flag">🇵🇪</span>
+        </div>
+
+        <div class="hero__actions">
+          <a href="#download" class="btn-primary" id="hero-download-btn">
+            <span>📲</span>
+            Descargar Gratis
+          </a>
+          <a href="https://github.com/DarckRovert/RED" class="btn-secondary" target="_blank" rel="noopener"
+            id="hero-github-btn">
+            <span>⭐</span>
+            Ver en GitHub
+          </a>
+        </div>
+
+        <div class="hero__stats">
+          <div class="hero__stat-item">
+            <div class="hero__stat-value" data-target="256" data-suffix="-bit">256-bit</div>
+            <div class="hero__stat-label">Cifrado AES</div>
+          </div>
+          <div class="hero__stat-item">
+            <div class="hero__stat-value" data-target="0" data-suffix=" servidores">0</div>
+            <div class="hero__stat-label">Servidores</div>
+          </div>
+          <div class="hero__stat-item">
+            <div class="hero__stat-value" data-target="100" data-suffix="% P2P">100%</div>
+            <div class="hero__stat-label">Nodo P2P</div>
+          </div>
+          <div class="hero__stat-item">
+            <div class="hero__stat-value" data-target="0" data-suffix=" rastreo">Sin</div>
+            <div class="hero__stat-label">Rastreo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── FEATURES ───────────────── -->
+  <section id="features" class="features section">
+    <div class="container">
+      <div class="features__header">
+        <span class="badge reveal-text">🚀 POR QUÉ RED</span>
+        <h2 class="section-title reveal-text">Todo lo que necesitas.<br><span class="text-gradient">Nada que no quieras.</span></h2>
+        <p class="section-desc reveal-text">Construido sobre principios de privacidad radical y descentralización real — sin compromisos.</p>
+      </div>
+
+      <div class="features__grid">
+        <div class="feature-card reveal">
+          <div class="feature-card__icon">🔐</div>
+          <h3 class="feature-card__title">Cifrado Total E2E</h3>
+          <p class="feature-card__desc">X25519 + AES-256-GCM con Double Ratchet y Perfect Forward Secrecy. Cada mensaje
+            usa claves únicas de sesión. Ni siquiera nosotros podemos leer tus mensajes.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-card__icon">🌐</div>
+          <h3 class="feature-card__title">Red P2P Pura</h3>
+          <p class="feature-card__desc">Sin servidores centrales. Protocolo Gossip + DHT Kademlia + Onion Routing de 3
+            saltos. Imposible de censurar o bloquear por un solo actor.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-card__icon">🕵️</div>
+          <h3 class="feature-card__title">Anonimato Real</h3>
+          <p class="feature-card__desc">Identidades <span class="font-mono-red">did:red:xxxxxxx</span> efímeras
+            generadas localmente. Sin número de teléfono, sin
+            email, sin metadatos expuestos. Tu identidad cambia cada 24h automáticamente.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-card__icon">📡</div>
+          <h3 class="feature-card__title">Funciona Sin Internet</h3>
+          <p class="feature-card__desc">Bluetooth Low Energy y WiFi Direct habilitan comunicación entre dispositivos cercanos. Si están offline, se encolan en disco y se auto-envían por la cola DTN al encontrarse.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-card__icon">📱</div>
+          <h3 class="feature-card__title">Multi-Plataforma</h3>
+          <p class="feature-card__desc">Android, iOS, Web y PWA desde un solo codebase (Next.js + Capacitor).
+            Notificaciones push, modo offline, soporte multi-dispositivo con vinculación QR.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-3">
+          <div class="feature-card__icon">🔓</div>
+          <h3 class="feature-card__title">100% Open Source</h3>
+          <p class="feature-card__desc">Código auditado públicamente. Sin backdoors posibles. Auditoría de seguridad
+            independiente. Fork libremente, contribuye o despliega tu propio nodo.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-1">
+          <div class="feature-card__icon">🛡️</div>
+          <h3 class="feature-card__title">Seguridad Táctica</h3>
+          <p class="feature-card__desc">Ingresa un <span class="font-mono-red">PIN de Pánico</span> falso para borrar todos tus datos permanentemente si estás bajo amenaza. Modo Camuflaje y Bóveda Señuelo activables.</p>
+        </div>
+        <div class="feature-card reveal reveal-delay-2">
+          <div class="feature-card__icon">🧬</div>
+          <h3 class="feature-card__title">Motor Sled (Zero-RAM)</h3>
+          <p class="feature-card__desc">La base de datos embebida transaccional <strong>Sled</strong> cifra registros en disco de forma individual, manteniendo el consumo de memoria RAM plano e inmune a historiales masivos.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── COMPARISON ───────────────── -->
+  <section id="comparison" class="comparison section glass-bg">
+    <div class="container">
+      <div class="comparativa__header">
+        <span class="badge reveal-text">📊 COMPARATIVA</span>
+        <h2 class="section-title reveal-text">RED vs el resto.<br><span class="text-gradient">Arquitectura Incomparable.</span></h2>
+        <p class="section-desc reveal-text">Compara lo que realmente importa para tu privacidad y libertad.</p>
+      </div>
+
+      <div class="comparison__cards-wrapper">
+        <!-- Competitors (Faded / Blurred) -->
+        <div class="comp-card comp-card--other reveal reveal-delay-2">
+          <div class="comp-card__header">
+            <span class="comp__icon">💬</span> WhatsApp
+          </div>
+          <ul class="comp-card__list">
+            <li><span class="cross">✗</span> Red Centralizada</li>
+            <li><span class="cross">✗</span> Requiere Teléfono</li>
+            <li><span class="cross">✗</span> Metadatos Expuestos</li>
+            <li><span class="cross">✗</span> Censurable</li>
+          </ul>
+        </div>
+
+        <div class="comp-card comp-card--other reveal reveal-delay-3">
+          <div class="comp-card__header">
+            <span class="comp__icon">✈️</span> Telegram
+          </div>
+          <ul class="comp-card__list">
+            <li><span class="cross">✗</span> E2E Opcional</li>
+            <li><span class="cross">✗</span> Servidor Central</li>
+            <li><span class="cross">✗</span> Metadatos Guardados</li>
+            <li><span class="partial">!</span> Parcialmente Censurable</li>
+          </ul>
+        </div>
+
+        <!-- RED (Highlighted / Glowing) -->
+        <div class="comp-card comp-card--main reveal reveal-delay-1" data-tilt>
+          <div class="comp-card__glow-bg"></div>
+          <div class="comp-card__header">
+            <span class="comp__icon red">💎</span> RED
+          </div>
+          <ul class="comp-card__list main-list">
+            <li><span class="check">✓</span> 100% P2P Puro</li>
+            <li><span class="check">✓</span> E2E Permanente</li>
+            <li><span class="check">✓</span> Sin Servidores (Mesh)</li>
+            <li><span class="check">✓</span> Onion Routing 3 Saltos</li>
+            <li><span class="check">✓</span> Identidad Anónima (DID)</li>
+            <li><span class="check">✓</span> Incensurable (Decentralized)</li>
+            <li><span class="check">✓</span> Red Local Bluetooth / WiFi</li>
+          </ul>
+        </div>
+
+        <div class="comp-card comp-card--other reveal reveal-delay-4">
+          <div class="comp-card__header">
+            <span class="comp__icon">🔒</span> Signal
+          </div>
+          <ul class="comp-card__list">
+            <li><span class="cross">✗</span> Servidor Central</li>
+            <li><span class="cross">✗</span> Requiere Teléfono</li>
+            <li><span class="partial">!</span> Depende de AWS/Google</li>
+            <li><span class="cross">✗</span> Bloqueable por ISP</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── LIVE NODE TERMINAL ───────────────── -->
+  <section id="terminal" class="terminal-section section">
+    <div class="container">
+      <div class="terminal__header">
+        <span class="badge reveal-text">🟢 INTEGRACIÓN DE NODO MESH</span>
+        <h2 class="section-title reveal-text">RED Daemon Terminal.<br><span class="text-gradient">Consola en Tiempo Real.</span></h2>
+        <p class="section-desc reveal-text">Esta consola interactúa en tiempo real con tu nodo local si se encuentra activo en el puerto 7333, mostrando telemetría en vivo del blockchain y la red mesh.</p>
+      </div>
+
+      <div class="terminal-hud reveal">
+        <div class="terminal-hud__topbar">
+          <div class="terminal-hud__dots">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+          </div>
+          <div class="terminal-hud__title font-mono">SOVEREIGN-NODE@RED-MESSENGER:~</div>
+        </div>
+        <div class="terminal-hud__body font-mono">
+          <div class="terminal-line"><span class="terminal-prompt">$</span> <span id="terminal-cmd">status-check --mesh</span></div>
+          <div id="node-status-output" class="terminal-output">
+            <span class="pulse-offline">●</span> Buscando nodo RED local activo en puerto 7333...
+          </div>
+        </div>
+
+        <div class="terminal-hud__actions font-mono" style="padding: 16px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; background: rgba(0,0,0,0.15);">
+          <span style="color: var(--text-muted); font-size: 0.75rem; align-self: center; margin-right: 8px;">SIMULADOR CLI:</span>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('peers')" style="background: rgba(232,0,28,0.08); border: 1px solid rgba(232,0,28,0.2); color: var(--primary-bright); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--list-peers</button>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('ratchet')" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--ratchet-status</button>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('dtn')" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--dtn-queue</button>
+          <button class="term-action-btn" onclick="simulateTerminalCommand('sybil')" style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary); padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.15s ease;">--mitigate-sybil</button>
+          <button class="term-action-btn" id="term-resume-btn" onclick="resumeLiveTerminal()" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); color: #fff; padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; display: none; transition: all 0.15s ease;">● Reanudar Live</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── OFFLINE ───────────────── -->
+  <section class="section offline-section" id="offline" aria-label="Modo offline">
+    <div class="container">
+      <p class="section-label reveal">📡 Modo Offline</p>
+      <h2 class="section-title reveal reveal-delay-1">
+        Sin internet.<br /><span class="text-gradient">Resiliencia Extrema.</span>
+      </h2>
+
+      <div class="offline__grid">
+        <div class="reveal">
+          <p class="section-subtitle">
+            Cuando se corta la red, cuando el gobierno bloquea Internet, o cuando estás en una zona sin cobertura —
+            <strong style="color: var(--text-primary);">RED sigue funcionando</strong>. Forma redes mesh locales en
+            tiempo real usando el hardware que ya tienes.
+          </p>
+          <div class="offline__transport-list">
+            <div class="transport-card">
+              <div class="transport-card__icon">📶</div>
+              <div>
+                <div class="transport-card__title">Bluetooth Low Energy (BLE)</div>
+                <div class="transport-card__desc">Descubrimiento y mensajería directa en un radio de ~100 metros.
+                  Servicio GATT personalizado con cifrado RED nativo. Ideal para comunicaciones cortas y seguras.</div>
+              </div>
+            </div>
+            <div class="transport-card">
+              <div class="transport-card__icon">📡</div>
+              <div>
+                <div class="transport-card__title">WiFi Direct / LAN Local</div>
+                <div class="transport-card__desc">WebRTC peer-to-peer en red local (WiFi, hotspot, cable). Sin servidor
+                  STUN externo. Hasta 1 km de alcance con antenas externas. Alta velocidad para archivos y video.</div>
+              </div>
+            </div>
+            <div class="transport-card">
+              <div class="transport-card__icon">🕸️</div>
+              <div>
+                <div class="transport-card__title">Protocolo Mesh Store-and-Forward</div>
+                <div class="transport-card__desc">Los mensajes se almacenan y retransmiten automáticamente entre nodos.
+                  Si el destinatario no está cerca, el mensaje viaja de dispositivo en dispositivo hasta llegar.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="offline__visual reveal reveal-delay-2">
+          <div class="offline__radar-wrap">
+            <canvas id="radar-canvas" aria-label="Visualización de red mesh"></canvas>
+          </div>
+          <div class="offline__stats">
+            <div class="off-stat">
+              <div class="off-stat__val">~100m</div>
+              <div class="off-stat__label">Alcance BLE</div>
+            </div>
+            <div class="off-stat">
+              <div class="off-stat__val">∞</div>
+              <div class="off-stat__label">Saltos Mesh</div>
+            </div>
+            <div class="off-stat">
+              <div class="off-stat__val">E2E</div>
+              <div class="off-stat__label">Cifrado</div>
+            </div>
+            <div class="off-stat">
+              <div class="off-stat__val">0€</div>
+              <div class="off-stat__label">Costo</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── ARCHITECTURE ───────────────── -->
+  <section class="section architecture" id="architecture" aria-label="Arquitectura técnica">
+    <div class="container">
+      <p class="section-label reveal">🏗️ Arquitectura</p>
+      <h2 class="section-title reveal reveal-delay-1">
+        Construido para<br /><span class="text-gradient">durar eternamente.</span>
+      </h2>
+      <p class="section-subtitle reveal reveal-delay-2">
+        Cinco capas independientes, cada una con su propia responsabilidad de seguridad.
+      </p>
+
+      <div class="arch__layers reveal reveal-delay-2">
+        <div class="arch__layer">
+          <div class="arch__layer-icon">📱</div>
+          <div class="arch__layer-info">
+            <div class="arch__layer-name">Capa de Aplicación</div>
+            <div class="arch__layer-desc">Interfaces nativas para Android, iOS, Web y PWA. Soporte completo de chat,
+              llamadas WebRTC, stories y todos los features de mensajería.</div>
+          </div>
+          <div class="arch__layer-tags">
+            <span class="arch__tag">Next.js</span>
+            <span class="arch__tag">Mobile / Web</span>
+            <span class="arch__tag">Secure Keystore</span>
+          </div>
+        </div>
+        <div class="arch__layer">
+          <div class="arch__layer-icon">🔒</div>
+          <div class="arch__layer-info">
+            <div class="arch__layer-name">Capa de Protocolo</div>
+            <div class="arch__layer-desc">Chat P2P, grupos descentralizados, llamadas WebRTC, stories y encuestas. Sin
+              coordinación de servidor central.</div>
+          </div>
+          <div class="arch__layer-tags">
+            <span class="arch__tag">WebRTC</span>
+            <span class="arch__tag">BLE</span>
+            <span class="arch__tag">WiFi Direct</span>
+          </div>
+        </div>
+        <div class="arch__layer">
+          <div class="arch__layer-icon">🕵️</div>
+          <div class="arch__layer-info">
+            <div class="arch__layer-name">Capa de Identidad</div>
+            <div class="arch__layer-desc">DIDs efímeros, X25519 Diffie-Hellman con renegociación, Ed25519 para firmas,
+              Perfect Forward Secrecy y deniabilidad plausible.</div>
+          </div>
+          <div class="arch__layer-tags">
+            <span class="arch__tag">X25519 / Ed25519</span>
+            <span class="arch__tag">Biometría Local</span>
+            <span class="arch__tag">DID</span>
+          </div>
+        </div>
+        <div class="arch__layer">
+          <div class="arch__layer-icon">🌐</div>
+          <div class="arch__layer-info">
+            <div class="arch__layer-name">Capa de Red</div>
+            <div class="arch__layer-desc">Gossip Protocol, DHT Kademlia para descubrimiento de peers, Onion Routing de 3
+              saltos para ocultación de metadatos. Red mesh local BLE/WiFi.</div>
+          </div>
+          <div class="arch__layer-tags">
+            <span class="arch__tag">Gossip</span>
+            <span class="arch__tag">Kademlia DHT</span>
+            <span class="arch__tag">Onion</span>
+          </div>
+        </div>
+        <div class="arch__layer">
+          <div class="arch__layer-icon">⛓️</div>
+          <div class="arch__layer-info">
+            <div class="arch__layer-name">Capa de Blockchain</div>
+            <div class="arch__layer-desc">Blockchain minimalista solo para registro de identidades DID. Consenso Proof
+              of Stake. No almacena mensajes. Bloques cada 6 segundos.</div>
+          </div>
+          <div class="arch__layer-tags">
+            <span class="arch__tag">PoS</span>
+            <span class="arch__tag">Rust</span>
+            <span class="arch__tag">ZK Proofs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── DOWNLOAD ───────────────── -->
+  <section class="section download" id="download" aria-label="Descargas">
+    <div class="container">
+      <div class="download__inner">
+        <p class="section-label reveal" style="display: inline-flex;">📲 Descarga Directa</p>
+        <h2 class="section-title reveal reveal-delay-1">Empieza<br /><span class="text-gradient">ahora mismo.</span>
+        </h2>
+        <p style="color: var(--text-secondary); max-width: 480px; margin: 0 auto 0; font-size: 1.05rem;"
+          class="reveal reveal-delay-2">
+          Disponible para todas las plataformas. Gratis. Sin registro. Sin número de teléfono.
+        </p>
+
+        <div class="download__cards download__cards--two">
+          <a class="download-card download-card--featured reveal reveal-delay-1"
+            href="https://github.com/DarckRovert/RED/releases" target="_blank" rel="noopener"
+            aria-label="Descargar RED para Android">
+            <div class="download-card__icon">🤖</div>
+            <div class="download-card__platform">Android</div>
+            <div class="download-card__detail">APK Directo • v16.0 Zenith • 98.9 MB</div>
+            <div class="download-card__btn">
+              ⬇️ Descargar APK
+            </div>
+          </a>
+
+          <a class="download-card reveal reveal-delay-2"
+            href="https://github.com/DarckRovert/RED" target="_blank" rel="noopener"
+            aria-label="Ver código fuente en GitHub">
+            <div class="download-card__icon">💻</div>
+            <div class="download-card__platform">Código Fuente</div>
+            <div class="download-card__detail">GitHub • Open Source • MIT</div>
+            <div class="download-card__btn" style="background: var(--bg-elevated); border: 1px solid var(--glass-border);">
+              ⭐ Ver en GitHub
+            </div>
+          </a>
+        </div>
+
+        <p class="reveal" style="margin-top: 40px; font-size: 0.8rem; color: var(--text-muted);">
+          🔒 100% open source · Sin tracking · Sin telemetría · Tu privacidad primero
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── CTA / OPEN SOURCE ───────────────── -->
+  <section class="cta-section" aria-label="Call to action">
+    <div class="container">
+      <div class="cta__box reveal">
+        <h2 class="cta__title">
+          La comunicación libre<br /><span class="text-gradient">es un derecho humano.</span>
+        </h2>
+        <p class="cta__desc">
+          RED es software libre. Contribuye al protocolo, audita el código criptográfico, despliega tu propio nodo, o
+          simplemente úsalo. La resistencia es colectiva.
+        </p>
+        <div class="cta__actions">
+          <a href="https://github.com/DarckRovert/RED" class="btn-primary" target="_blank" rel="noopener"
+            id="cta-github-btn">
+            <span>⭐</span>
+            Contribuir en GitHub
+          </a>
+          <a href="https://github.com/DarckRovert/RED/blob/main/docs/CONTRIBUTING.md" class="btn-secondary"
+            id="cta-docs-btn" target="_blank" rel="noopener">
+            <span>📖</span>
+            Leer la Documentación
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── ORIGIN ───────────────── -->
+  <section class="section origin-section" id="origin" aria-label="Origen del proyecto">
+    <div class="container">
+      <div class="origin__inner reveal">
+        <div class="origin__flag" aria-hidden="true">🛡️</div>
+        <p class="section-label" style="display:inline-flex; margin-bottom: 28px;">🌎 Origins</p>
+        <h2 class="section-title">
+          Nacido en Lima.<br /><span class="text-gradient">Diseñado para el mundo.</span>
+        </h2>
+        <p class="origin__desc">
+          En una era definida por la vigilancia masiva y la recolección indiscriminada de datos, <strong>RED</strong> surge desde Perú como una postura inquebrantable a favor de la privacidad absoluta y los derechos digitales.
+        </p>
+        <p class="origin__desc">
+          Construido íntegramente por <strong>DarckRovert</strong>, este protocolo demuestra que la criptografía de grado militar y la resistencia a la censura pueden operar sin fronteras. Hemos consolidado una herramienta de libertad, respaldada puramente por matemáticas y código abierto.
+        </p>
+        <div class="origin__stats">
+          <div class="origin__stat">
+            <span class="origin__stat-val">1</span>
+            <span class="origin__stat-label">Autor · DarckRovert</span>
+          </div>
+          <div class="origin__stat">
+            <span class="origin__stat-val">📍</span>
+            <span class="origin__stat-label">Lima, Perú — 2026</span>
+          </div>
+          <div class="origin__stat">
+            <span class="origin__stat-val">∞</span>
+            <span class="origin__stat-label">Nodos Descentralizados</span>
+          </div>
+          <div class="origin__stat">
+            <span class="origin__stat-val">0</span>
+            <span class="origin__stat-label">Servidores Centrales</span>
+          </div>
+        </div>
+        <a href="https://github.com/DarckRovert" target="_blank" rel="noopener" class="origin__link">
+          Ver perfil del desarrollador →
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────────────── FOOTER ───────────────── -->
+  <footer class="footer" role="contentinfo">
+    <div class="container">
+      <div class="footer__grid">
+        <div class="footer__brand">
+          <div class="footer__logo">
+            <img src="assets/icon.png" alt="RED Logo" class="footer__logo-img">
+            <span>RED</span>
+          </div>
+          <p class="footer__tagline">
+            El protocolo de mensajería del futuro. Basado en Lima, cifrado por defecto, libre por elección. La alternativa real al panóptico digital.
+          </p>
+          <div class="footer__peru">
+            <span class="flag">🇵🇪</span>
+            <span class="text">Hecho con orgullo en el Perú</span>
+          </div>
+        </div>
+
+        <div class="footer__nav-col">
+          <p class="footer__col-title">Explorar</p>
+          <ul class="footer__links">
+            <li><a href="#features">Tecnología</a></li>
+            <li><a href="#comparison">Comparativa</a></li>
+            <li><a href="#offline">Modo Mesh</a></li>
+            <li><a href="#architecture">Arquitectura</a></li>
+            <li><a href="#download">Descargas</a></li>
+          </ul>
+        </div>
+
+        <div class="footer__nav-col">
+          <p class="footer__col-title">Recursos</p>
+          <ul class="footer__links">
+            <li><a href="https://github.com/DarckRovert/RED" target="_blank">Código Fuente</a></li>
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/README.md" target="_blank">Wiki Técnica</a></li>
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/CHANGELOG.md" target="_blank">Versiones</a></li>
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank">Licencia MIT</a></li>
+          </ul>
+        </div>
+
+        <div class="footer__nav-col">
+          <p class="footer__col-title">Legal</p>
+          <ul class="footer__links">
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/docs/PRIVACY.md" target="_blank">Privacidad</a></li>
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/docs/TERMS.md" target="_blank">Términos</a></li>
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/docs/SECURITY_AUDIT.md" target="_blank">Seguridad</a></li>
+            <li><a href="https://github.com/DarckRovert/RED/blob/main/CODE_OF_CONDUCT.md" target="_blank">Código de Conducta</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer__bottom">
+        <div class="footer__copyright">
+          © 2026 RED Protocol. Creado por <a href="https://github.com/DarckRovert" target="_blank" class="text-gradient">@DarckRovert</a>. <span style="margin: 0 10px; opacity: 0.3;">|</span> <a href="https://www.netlify.com" target="_blank" rel="noopener" style="opacity: 0.8;">Powered by Netlify</a>
+        </div>
+        <div class="footer__social">
+          <a href="https://github.com/DarckRovert/RED" aria-label="GitHub">
+            <svg style="width:20px; height:20px; fill:currentColor;" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.570 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ───────────────── LIBS ───────────────── -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
+  
+  <script src="script.js?v=8"></script>
+
+  <!-- Auto Fallback Preloader Remove -->
+  <script>
+    setTimeout(function() {
+      var p = document.getElementById('preloader');
+      if (p) {
+        p.style.opacity = '0';
+        p.style.pointerEvents = 'none';
+        setTimeout(function() { p.remove(); }, 500);
+      }
+    }, 1200);
+  </script>
 </body>
+
 </html>
