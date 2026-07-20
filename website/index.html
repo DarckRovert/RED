@@ -643,12 +643,23 @@
   </footer>
 
   <!-- ───────────────── LIBS ───────────────── -->
-  <script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.29/bundled/lenis.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js" integrity="sha512-wC/a55305001y1A1sQZ5uupk/zX2jEwXU0yE2y+YQ/y2o7w7mQxG6H/y2P94f1OqW+5sQn/y27lB2/uE/y2zNw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
   
-  <script src="script.js?v=7"></script>
+  <script src="script.js?v=8"></script>
+
+  <!-- Auto Fallback Preloader Remove -->
+  <script>
+    setTimeout(function() {
+      var p = document.getElementById('preloader');
+      if (p) {
+        p.style.opacity = '0';
+        p.style.pointerEvents = 'none';
+        setTimeout(function() { p.remove(); }, 500);
+      }
+    }, 1200);
+  </script>
 </body>
 
 </html>
