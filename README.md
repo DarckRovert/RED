@@ -1,8 +1,8 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v7.1.0 (Mesh/Offline Edition)** — La alternativa soberana a WhatsApp: Solid UI, hardware real P2P, resistente a censura, con seguridad nativa basada en Keystore (Android/iOS) y Bóveda Táctica Anti-Forense.
+> **v16.0 Zenith Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P WebRTC STUN, Notificaciones Locales Nativas, Notas de Voz, Búsqueda Global, Bóveda `.redbak` y Simulador de Apagón Táctico.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Routes](https://img.shields.io/badge/Rutas_Producción-22-blue)]() [![Phases](https://img.shields.io/badge/Fases_Completadas-36%2B-gold)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v16.0_Zenith-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]()
 
 ## 🎯 Visión
 

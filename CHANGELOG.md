@@ -4,6 +4,29 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [16.0.0] - 2026-07-20
+
+### Añadido — RED v16.0 Zenith Master Architecture Release
+
+**Comunicaciones P2P & Multimedia**
+- **Insignias Dinámicas de Transporte Mesh:** Identificación visual clara (🌐 WAN, 📶 mDNS, 📡 BLE) en burbujas de mensaje según la ruta P2P de entrega.
+- **Videollamadas P2P WebRTC con STUN Fallback:** Traversal dinámico P2P en redes 4G/5G con fallback a servidor STUN.
+- **Notas de Voz Nativas:** Grabación con micro-animación de forma de onda y reproductor interactivo.
+- **Visor de Fotos Fullscreen:** Visor con Zoom 1.8x y botón de descarga directa.
+
+**Administración & Búsqueda Cifrada**
+- **Administrador de Grupos P2P (`GroupAdminModal`):** Adición y expulsión de integrantes en grupos cifrados.
+- **Búsqueda Global en Mensajes (`GlobalSearchModal`):** Buscador profundo por palabras clave en todo el historial cifrado.
+- **Bóveda de Respaldo `.redbak` (`BackupRestoreModal`):** Exportación e importación de copias de seguridad cifradas con clave.
+
+**Diagnósticos, Seguridad Táctica & Empaquetado Nativo**
+- **Auto-Diagnóstico SSE en Vivo (`SystemHealthModal`):** Prueba de canal `EventSource('/api/events')` midiendo latencia RTT real.
+- **Consola de Logs Rust (`NodeLogsModal`):** Stream estilo terminal verde-neón para auditar eventos P2P en directo.
+- **Simulador de Apagón Táctico (`BlackoutSimulatorModal`):** Evaluación de resiliencia mesh ante cortes totales de internet.
+- **Informe de Auditoría Exportable (`SecurityReportModal`):** Generador de fichas de postura de seguridad copiables al portapapeles.
+- **Empaquetado Nativo Android APK (`app-debug.apk`):** Compilación ejecutada mediante Gradle Wrapper (`BUILD SUCCESSFUL in 24s`, 98.9 MB).
+
+---
 
 ## [7.2.0] - 2026-07-19
 

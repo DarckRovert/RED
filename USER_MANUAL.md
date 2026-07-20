@@ -1,6 +1,6 @@
-# 🔴 RED - Manual del Usuario (v7.1.0 - Mesh/Offline Edition)
+# 🔴 RED - Manual del Usuario (v16.0 - Zenith Master Edition)
 
-Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería soberana, ahora con una interfaz más sólida y capacidades de hardware directo.
+Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería táctica y comunicación soberana en la versión v16.0 Zenith Release.
 
 ---
 
@@ -65,6 +65,16 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 - **Puente LoRaWAN Sub-GHz:** Conecta tu módulo de radio LoRa por Serial/USB-C. Ve a **Ajustes > Red (Network Panel)** e ingresa el puerto (`COM3`, `/dev/ttyUSB0`) y el baud rate (ej: `115200`). RED auto-configurará el hardware puente para enviar telemetría a ~15Km sin operadoras.
 - **Mesh APK Updater (Inmune a App Stores):** Si RED es eliminado de internet, un solo teléfono puede propagar el archivo `.apk` a los teléfonos vecinos enviándolos a la ruta `http://<ip-radar>:7331/api/mesh/apk`.
 - **Geometría de Nodos (Mapa 3D):** Puedes ver una representación en tiempo real de tu topología de red abriendo el visualizador global. El mapa extrae las conexiones vivas del transporte local y las posiciona geográficamente usando derivadas criptográficas de sus identidades.
+
+---
+
+## 🛠️ 6. Herramientas Tácticas y Diagnóstico de Red (v16.0)
+
+- **Consola de Logs Rust (`NodeLogsModal`):** Accede desde el panel de Criptografía para auditar el tráfico de paquetes de ruido blanco, handshakes Kyber y pings RTT en vivo.
+- **Simulador de Apagón Táctico (`BlackoutSimulatorModal`):** Prueba cómo la aplicación conmuta automáticamente del transporte WAN hacia mDNS, Bluetooth LE y LoRa al cortar la conectividad a internet.
+- **Bóveda Cifrada `.redbak` (`BackupRestoreModal`):** Exporta tus conversaciones e identidades protegidas por contraseña en un archivo compacto para migrar entre teléfonos.
+- **Informe de Auditoría Exportable (`SecurityReportModal`):** Genera una ficha técnica de la postura de seguridad de tu nodo para auditar el Kill-Switch, Camuflaje y paridad PQC.
+- **Buscador Global:** Toca el icono de lupa en la barra lateral para buscar cualquier palabra o frase cifrada en todo tu historial de chats de manera instantánea.
 
 ---
 
