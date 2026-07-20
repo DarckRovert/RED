@@ -138,18 +138,7 @@ ul { list-style: none; }
 
 /* ─── PRELOADER ───────────────────────────────────── */
 #preloader {
-  position: fixed;
-  inset: 0;
-  background: var(--bg-void);
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.8s var(--ease-out), visibility 0.8s;
-}
-#preloader.fade-out {
-  opacity: 0;
-  visibility: hidden;
+  display: none !important;
 }
 .preloader__content {
   display: flex;
@@ -634,10 +623,10 @@ body:hover #neon-glow {
   pointer-events: none;
 }
 
-  /* Kinetic Typography Reveal */
+  /* Kinetic Typography Reveal (Progressive Enhancement - Visible by Default) */
   .reveal-text {
-    opacity: 0;
-    transform: translateY(30px) skewY(2deg);
+    opacity: 1;
+    transform: translateY(0) skewY(0);
     transition: opacity 0.8s var(--ease-spring), transform 0.8s var(--ease-spring);
     clip-path: polygon(0 0, 100% 0, 100% 100%, 0% 100%);
   }
