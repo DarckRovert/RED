@@ -59,6 +59,13 @@ class LocalTransport {
     // Hook WiFi peer discovery events into MeshRouter
     this.hookWifiPeerEvents();
 
+    if (typeof window !== 'undefined') {
+        Object.defineProperty(window, 'meshPeerCounts', {
+            get: () => this.peerCounts,
+            configurable: true
+        });
+    }
+
     console.log('[LocalTransport] Mesh layer initialized for identity:', myIdentityHash.slice(0, 12));
   }
 

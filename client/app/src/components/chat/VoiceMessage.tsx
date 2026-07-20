@@ -6,7 +6,7 @@ interface VoiceWaveProps {
     color: string;
 }
 
-function VoiceWave({ playing, color }: VoiceWaveProps) {
+export function VoiceWave({ playing, color }: VoiceWaveProps) {
     const heights = [4, 8, 14, 10, 18, 12, 20, 14, 10, 8, 16, 12, 6, 14, 10, 8, 16, 12, 18, 10, 8, 14, 6, 10, 14];
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '2px', height: 24 }}>

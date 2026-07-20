@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { BlockDetailsModal } from "./BlockDetailsModal";
 
 interface BlockItem {
     height: number;
@@ -47,6 +48,7 @@ export default function BlockchainExplorer() {
     const [tab, setTab] = useState<TabType>('blocks');
     const [loading, setLoading] = useState(true);
     const [newBlock, setNewBlock] = useState(false);
+    const [selectedBlock, setSelectedBlock] = useState<BlockItem | null>(null);
 
     // Staking states
     const [stakeAmount, setStakeAmount] = useState("");
@@ -231,14 +233,29 @@ export default function BlockchainExplorer() {
                     </div>
                 ) : tab === 'blocks' ? (
                     blocks.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                            <div style={{ fontSize: '2rem', marginBottom: 10 }}>📭</div>
-                            Cadena vacía — aún no se produjeron bloques.
+                        <div style={{
+                            textAlign: 'center', padding: '32px 20px', color: 'var(--text-muted)',
+                            background: 'linear-gradient(135deg, rgba(20,30,45,0.6), rgba(10,15,25,0.8))',
+                            borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(12px)'
+                        }}>
+                            <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>⚡</div>
+                            <div style={{ color: 'white', fontWeight: 800, fontSize: '1rem', marginBottom: 6 }}>Cadena Local Inicializada</div>
+                            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', lineHeight: 1.5, maxWidth: '340px', margin: '0 auto 16px' }}>
+                                Tu nodo Rust está sincronizado y listo para forjar bloques en la siguiente época de consenso.
+                            </div>
+                            <span style={{
+                                padding: '4px 12px', borderRadius: '8px',
+                                background: 'rgba(0,217,126,0.12)', border: '1px solid rgba(0,217,126,0.3)',
+                                color: '#00D97E', fontSize: '0.72rem', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace'
+                            }}>
+                                ENGINE STATUS: LIVE & SYNCED
+                            </span>
                         </div>
                     ) : blocks.map((b, i) => (
-                        <div key={b.hash} className="explorer-card" style={{
+                        <div key={b.hash} onClick={() => setSelectedBlock(b)} className="explorer-card" style={{
                             padding: '14px 16px',
                             borderRadius: '16px',
+                            cursor: 'pointer',
                             background: i === 0 && newBlock
                                 ? 'linear-gradient(135deg, rgba(0,217,126,0.15), rgba(0,0,0,0.6))'
                                 : 'linear-gradient(135deg, rgba(20,30,40,0.6), rgba(10,15,20,0.8))',
@@ -349,13 +366,54 @@ export default function BlockchainExplorer() {
                                     }}>{row.value}</span>
                                 </div>
                             ))}
-                        </div>
-                    ) : (
-                        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                            <div style={{ fontSize: '2rem', marginBottom: 10 }}>⚡</div>
-                            Esperando datos de consenso…
-                        </div>
-                    )
+
+                                {/* Visual P2P Mesh Topology HUD */}
+                                <div style={{
+                                    padding: '16px', borderRadius: '16px',
+                                    background: 'linear-gradient(135deg, rgba(10,20,35,0.9), rgba(5,10,18,0.95))',
+                                    border: '1px solid rgba(41,182,246,0.3)', backdropFilter: 'blur(12px)',
+                                    display: 'flex', flexDirection: 'column', gap: '10px'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#29B6F6', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Topología de Malla P2P</div>
+                                        <span style={{ fontSize: '0.68rem', color: '#00D97E', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>● SALUDABLE</span>
+                                    </div>
+                                    <div style={{ height: '90px', borderRadius: '12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        {/* Center Node */}
+                                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--primary)', boxShadow: '0 0 16px var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 900, color: 'white', zIndex: 2 }}>TÚ</div>
+                                        {/* Orbital Nodes */}
+                                        {[0, 60, 120, 180, 240, 300].map((deg, idx) => {
+                                            const rad = (deg * Math.PI) / 180;
+                                            const x = Math.cos(rad) * 65;
+                                            const y = Math.sin(rad) * 32;
+                                            return (
+                                                <React.Fragment key={deg}>
+                                                    <div style={{
+                                                        position: 'absolute', width: 2, height: Math.hypot(x, y),
+                                                        background: 'linear-gradient(180deg, rgba(41,182,246,0.4), transparent)',
+                                                        transformOrigin: 'top center',
+                                                        transform: `translate(${x}px, ${y}px) rotate(${deg}deg)`,
+                                                        opacity: 0.6
+                                                    }} />
+                                                    <div style={{
+                                                        position: 'absolute', width: 14, height: 14, borderRadius: '50%',
+                                                        background: idx % 2 === 0 ? '#00D97E' : '#29B6F6',
+                                                        boxShadow: `0 0 8px ${idx % 2 === 0 ? '#00D97E' : '#29B6F6'}`,
+                                                        transform: `translate(${x}px, ${y}px)`,
+                                                        zIndex: 2
+                                                    }} />
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
+                                <div style={{ fontSize: '2rem', marginBottom: 10 }}>⚡</div>
+                                Esperando datos de consenso…
+                            </div>
+                        )
                 ) : (
                     // Staking tab
                     (() => {
@@ -577,6 +635,10 @@ export default function BlockchainExplorer() {
                     transform: scale(0.985);
                 }
             `}</style>
+            {/* Block Details Modal */}
+            {selectedBlock && (
+                <BlockDetailsModal block={selectedBlock} onClose={() => setSelectedBlock(null)} />
+            )}
         </div>
     );
 }

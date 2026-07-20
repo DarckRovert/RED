@@ -47,12 +47,13 @@ export default function CallScreen() {
                 
                 const sseSource = new EventSource(url, { withCredentials: false });
 
-                // Start PeerConnection — RED es offline-first.
-                // En LAN/mesh el signaling va por /local-signal (WebSocket local)
-                // y NO necesitamos STUN externo. Si hay internet el navegador
-                // usará host candidates directamente.
+                // Start PeerConnection — STUN Dynamic Fallback para traversal en 4G/5G + LAN Direct
                 const pc = new RTCPeerConnection({
-                    iceServers: [] // Sin STUN externo — P2P local puro
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' }
+                    ]
                 });
                 peerRef.current = pc;
 

@@ -3,6 +3,7 @@ import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
 import { VoiceMessage } from "./VoiceMessage";
 import { PollMessage } from "./PollMessage";
+import { ImageViewerModal } from "./ImageViewerModal";
 
 interface MessageBubbleProps {
     msg: MessageItem;
@@ -49,6 +50,8 @@ export const MessageBubble = memo(({
     searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
     onLongPress, onCancelLongPress, onReaction, onVote
 }: MessageBubbleProps) => {
+    const [viewingImageSrc, setViewingImageSrc] = React.useState<string | null>(null);
+
     const tl = isMine ? (isFirst ? 18 : 4) : 18;
     const tr = isMine ? 18 : (isFirst ? 18 : 4);
     const br = isMine ? (isLast ? 4 : 18) : (isLast ? 18 : 4);
@@ -176,8 +179,12 @@ export const MessageBubble = memo(({
                             : `data:${msg.mime_type || 'image/jpeg'};base64,${msg.media_data}`;
                         return (
                             <div>
-                                <img src={imgSrc} alt="Imagen cifrada"
-                                    style={{ width: '100%', maxWidth: 280, borderRadius: 14, display: 'block', maxHeight: 300, objectFit: 'cover' }} />
+                                <img 
+                                    src={imgSrc} 
+                                    alt="Imagen cifrada"
+                                    onClick={() => setViewingImageSrc(imgSrc)}
+                                    style={{ width: '100%', maxWidth: 280, borderRadius: 14, display: 'block', maxHeight: 300, objectFit: 'cover', cursor: 'pointer' }} 
+                                />
                                 {msg.content && msg.content !== '📷 Foto cifrada' && msg.content !== '[Image]' && msg.content !== '🖼️ Imagen cifrada' && (
                                     <span style={{ display: 'block', padding: '7px 8px 0', fontSize: '0.93rem', lineHeight: 1.5, color: 'var(--text-primary)' }}>
                                         {msg.content}
@@ -241,8 +248,39 @@ export const MessageBubble = memo(({
                         </span>
                     )}
 
-                    {/* Timestamp + tick + star */}
+                    {/* Timestamp + Transport Badge + tick + star */}
                     <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:4, marginTop:5 }}>
+                        {/* Atomic Transport Badge */}
+                        {((msg as any).transport || (isMine ? 'wan' : null)) && (
+                            <span 
+                                title={`Transporte de entrega: ${((msg as any).transport || 'wan').toUpperCase()}`}
+                                style={{ 
+                                    fontSize: '0.62rem', 
+                                    padding: '1px 4px', 
+                                    borderRadius: '4px',
+                                    background: ((msg as any).transport === 'ble' ? 'rgba(155,89,182,0.2)' :
+                                                 (msg as any).transport === 'wifi' ? 'rgba(52,152,219,0.2)' :
+                                                 (msg as any).transport === 'lora' ? 'rgba(230,126,34,0.2)' :
+                                                 'rgba(0,217,126,0.12)'),
+                                    color: ((msg as any).transport === 'ble' ? '#ba68c8' :
+                                            (msg as any).transport === 'wifi' ? '#3498db' :
+                                            (msg as any).transport === 'lora' ? '#e67e22' :
+                                            '#00D97E'),
+                                    border: `1px solid ${((msg as any).transport === 'ble' ? 'rgba(155,89,182,0.3)' :
+                                                        (msg as any).transport === 'wifi' ? 'rgba(52,152,219,0.3)' :
+                                                        (msg as any).transport === 'lora' ? 'rgba(230,126,34,0.3)' :
+                                                        'rgba(0,217,126,0.25)')}`,
+                                    fontWeight: 700,
+                                    fontFamily: 'JetBrains Mono, monospace',
+                                    letterSpacing: '0.2px'
+                                }}
+                            >
+                                {(msg as any).transport === 'ble' ? '📡 BLE' :
+                                 (msg as any).transport === 'wifi' ? '📶 WiFi' :
+                                 (msg as any).transport === 'lora' ? '📻 LoRa' :
+                                 '🌐 WAN'}
+                            </span>
+                        )}
                         {starredMessages.includes(msg.id) && (
                             <span style={{ fontSize:'0.7rem' }}>⭐</span>
                         )}
@@ -289,6 +327,14 @@ export const MessageBubble = memo(({
                     )}
                 </div>
             </div>
+
+            {/* Fullscreen Image Viewer Modal */}
+            {viewingImageSrc && (
+                <ImageViewerModal 
+                    src={viewingImageSrc} 
+                    onClose={() => setViewingImageSrc(null)} 
+                />
+            )}
         </React.Fragment>
     );
 });

@@ -51,6 +51,12 @@ interface RedStore {
     // Real-time typing state (set by incoming SSE typing messages)
     peerTyping: boolean;
     typingTimeout: ReturnType<typeof setTimeout> | null;
+
+    // Advanced Chat Management (v8.0)
+    pinnedChatIds: string[];
+    archivedChatIds: string[];
+    togglePinChat: (id: string) => void;
+    toggleArchiveChat: (id: string) => void;
 }
 
 export const useRedStore = create<RedStore>((set, get) => ({
@@ -66,6 +72,24 @@ export const useRedStore = create<RedStore>((set, get) => ({
     starredMessages: [],
     peerTyping: false,
     typingTimeout: null,
+
+    // Advanced Chat Management (v8.0)
+    pinnedChatIds: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('red_pinned_chats') || '[]') : [],
+    archivedChatIds: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('red_archived_chats') || '[]') : [],
+
+    togglePinChat: (id: string) => {
+        const { pinnedChatIds } = get();
+        const next = pinnedChatIds.includes(id) ? pinnedChatIds.filter(x => x !== id) : [...pinnedChatIds, id];
+        if (typeof window !== 'undefined') localStorage.setItem('red_pinned_chats', JSON.stringify(next));
+        set({ pinnedChatIds: next });
+    },
+
+    toggleArchiveChat: (id: string) => {
+        const { archivedChatIds } = get();
+        const next = archivedChatIds.includes(id) ? archivedChatIds.filter(x => x !== id) : [...archivedChatIds, id];
+        if (typeof window !== 'undefined') localStorage.setItem('red_archived_chats', JSON.stringify(next));
+        set({ archivedChatIds: next });
+    },
     
     // We start displaying the sidebar (contacts/chats list)
     currentScreen: 'sidebar',
@@ -411,13 +435,19 @@ export const useRedStore = create<RedStore>((set, get) => ({
             // FIRE LOCAL NOTIFICATION IF CHAT IS NOT FOCUSED OR APP IS BACKGROUNDED
             import('@capacitor/core').then(({ Capacitor }) => {
                 if (Capacitor.isNativePlatform()) {
+                    const contacts = get().contacts;
+                    const contact = contacts.find((c: any) => c.identity_hash === item.sender);
+                    const senderDisplayName = contact?.display_name || `${item.sender.substring(0, 8)}…`;
+
                     import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
                         LocalNotifications.schedule({
                             notifications: [
                                 {
-                                    title: "Red Encriptada",
-                                    body: `Nuevo mensaje P2P de ${item.sender.substring(0, 8)}...`,
-                                    id: new Date().getTime(),
+                                    title: `💬 ${senderDisplayName}`,
+                                    body: item.msg_type === 'image' ? '📷 Foto cifrada' :
+                                          item.msg_type === 'voice' ? '🎤 Nota de voz' :
+                                          item.content || 'Nuevo mensaje P2P',
+                                    id: Math.floor(Math.random() * 100000),
                                     schedule: { at: new Date(Date.now() + 100) },
                                     sound: undefined,
                                     attachments: undefined,
@@ -425,7 +455,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                                     extra: null
                                 }
                             ]
-                        });
+                        }).catch(() => {});
                     });
                 }
             });

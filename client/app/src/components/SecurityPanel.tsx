@@ -5,6 +5,8 @@ import { useRedStore } from "../store/useRedStore";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 import { toast } from "./Toast";
 import { registerPlugin } from '@capacitor/core';
+import { SystemHealthModal } from "./SystemHealthModal";
+import { SecurityReportModal } from "./SecurityReportModal";
 
 const RedDisguise = registerPlugin<any>('RedDisguise');
 
@@ -58,6 +60,8 @@ export default function SecurityPanel() {
     // Phase 19: New Tactical Settings
     const [decoyPin, setDecoyPin] = useState("");
     const [burnerChatsEnabled, setBurnerChatsEnabled] = useState(false);
+    const [healthModalOpen, setHealthModalOpen] = useState(false);
+    const [reportModalOpen, setReportModalOpen] = useState(false);
 
     const [disguiseEnabled, setDisguiseEnabled] = useState(false);
     const [calcPin, setCalcPin] = useState("");
@@ -108,6 +112,24 @@ export default function SecurityPanel() {
         setPrivacyScreenEnabled(nextState);
         localStorage.setItem("red_privacy_screen", nextState.toString());
         applyPrivacyScreen(nextState);
+    };
+
+    const purgeTempCache = async () => {
+        try {
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { Filesystem, Directory } = await import('@capacitor/filesystem');
+                await Filesystem.rmdir({
+                    path: 'caches',
+                    directory: Directory.Cache,
+                    recursive: true
+                }).catch(() => {});
+            }
+            localStorage.removeItem('red_recent_media_cache');
+            toast.success("🧹 Caché y temporales anti-forenses purgados.");
+        } catch {
+            toast.info("🧹 Caché temporal limpiada.");
+        }
     };
 
     const savePanicPin = async () => {
@@ -186,6 +208,40 @@ export default function SecurityPanel() {
 
             <div className="scroll-container" style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 
+                {/* System Health Diagnostics Card */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(0,217,126,0.08), rgba(0,180,100,0.03))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,217,126,0.25)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '1.4rem' }}>🩺</span>
+                            <div>
+                                <div style={{ color: 'white', fontWeight: 800, fontSize: '0.95rem' }}>Auto-Diagnóstico del Nodo</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Evaluación de resiliencia, SSE y cifrado</div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                                onClick={() => setReportModalOpen(true)}
+                                style={{
+                                    padding: '8px 14px', borderRadius: '12px',
+                                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                                    color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer'
+                                }}
+                            >
+                                Informe 📄
+                            </button>
+                            <button
+                                onClick={() => setHealthModalOpen(true)}
+                                style={{
+                                    padding: '8px 16px', borderRadius: '12px',
+                                    background: 'linear-gradient(135deg, #00D97E, #009955)',
+                                    color: 'white', fontWeight: 800, fontSize: '0.82rem', border: 'none', cursor: 'pointer'
+                                }}
+                            >
+                                Auditar
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 {/* Privacy Screen Toggle */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -339,6 +395,32 @@ export default function SecurityPanel() {
                     </div>
                 </div>
 
+                {/* Anti-Forensic Temp Purge Card */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                🧹 Purga Anti-Forense de Temporales
+                                <InfoTooltip text="Elimina de forma segura la caché de imágenes, notas de voz recibidas e historia temporal del disco local." />
+                            </h3>
+                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                Limpieza de huella digital y archivos del sistema
+                            </p>
+                        </div>
+                        <button
+                            onClick={purgeTempCache}
+                            style={{
+                                background: 'rgba(232,33,58,0.15)', color: '#ff4444',
+                                padding: '10px 18px', borderRadius: '10px', fontWeight: 700,
+                                border: '1px solid rgba(232,33,58,0.3)', cursor: 'pointer',
+                                fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0,
+                            }}
+                        >
+                            Purgar Caché
+                        </button>
+                    </div>
+                </div>
+
                 {/* Burner Chats */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(30,15,25,0.85), rgba(20,10,15,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(236,64,122,0.2)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -359,6 +441,16 @@ export default function SecurityPanel() {
                 </div>
 
             </div>
+
+            {/* System Health Modal */}
+            {healthModalOpen && (
+                <SystemHealthModal onClose={() => setHealthModalOpen(false)} />
+            )}
+
+            {/* Security Report Modal */}
+            {reportModalOpen && (
+                <SecurityReportModal onClose={() => setReportModalOpen(false)} />
+            )}
         </div>
     );
 }

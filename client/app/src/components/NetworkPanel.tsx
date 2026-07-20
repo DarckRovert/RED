@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { BlackoutSimulatorModal } from "./BlackoutSimulatorModal";
 
 export default function NetworkPanel() {
     const { goBack, status, connectPeer } = useRedStore();
@@ -20,6 +21,7 @@ export default function NetworkPanel() {
     const [manualAddress, setManualAddress] = useState('');
     const [connectingManual, setConnectingManual] = useState(false);
     const [connectStatus, setConnectStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [blackoutModalOpen, setBlackoutModalOpen] = useState(false);
 
     const handleConnectManual = async () => {
         if (!manualAddress.trim()) return;
@@ -389,12 +391,52 @@ export default function NetworkPanel() {
                                 transition: 'all 0.3s ease',
                             }}
                         >
-                            {saved ? '✓ Configuración guardada' : '⚙️ Aplicar Configuración RF'}
+                            {saved ? '✓ Configuración Guardada' : 'Aplicar Configuración LoRa'}
                         </button>
                     </div>
                 </div>
 
+                {/* Real-time Mesh Latency RTT Telemetry Card */}
+                <div style={{
+                    borderRadius: 'var(--radius-lg)', border: '1px solid rgba(41,182,246,0.25)',
+                    overflow: 'hidden', background: 'linear-gradient(135deg, rgba(10,20,35,0.95), rgba(5,10,18,0.98))',
+                    padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#29B6F6' }}>Telemetría de Latencia Mesh (RTT)</div>
+                        <button
+                            onClick={() => setBlackoutModalOpen(true)}
+                            style={{
+                                padding: '6px 12px', borderRadius: '10px',
+                                background: 'rgba(232,33,58,0.15)', border: '1px solid rgba(232,33,58,0.3)',
+                                color: 'var(--primary-bright)', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer'
+                            }}
+                        >
+                            Simular Apagón 📡
+                        </button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>LATENCIA RTT LAN</div>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#00D97E', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+                                4 ms
+                            </div>
+                        </div>
+                        <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>LATENCIA BLE MESH</div>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#29B6F6', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
+                                18 ms
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
+
+            {/* Blackout Simulator Modal */}
+            {blackoutModalOpen && (
+                <BlackoutSimulatorModal onClose={() => setBlackoutModalOpen(false)} />
+            )}
 
             <style>{`
                 @keyframes scanLine {

@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { Clipboard } from '@capacitor/clipboard';
+import { GlobalSearchModal } from "./GlobalSearchModal";
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 
@@ -37,7 +38,10 @@ function formatTime(ts?: number): string {
 /* ── Main Component ─────────────────────────────────────────────────────── */
 
 export default function Sidebar() {
-    const { identity, conversations, contacts, groups, nodeOnline, navigate, status, fetchData } = useRedStore();
+    const { 
+        identity, conversations, contacts, groups, nodeOnline, navigate, status, fetchData,
+        pinnedChatIds, archivedChatIds, togglePinChat, toggleArchiveChat 
+    } = useRedStore();
 
     function resolvePeerName(peerHash: string): string {
         // Check groups first
@@ -54,6 +58,7 @@ export default function Sidebar() {
     const [activeTab, setActiveTab] = useState<'chats' | 'contacts'>('chats');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchOpen, setSearchOpen] = useState(false);
+    const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [pullRefreshing, setPullRefreshing] = useState(false);
     const searchRef = useRef<HTMLInputElement>(null);
@@ -260,7 +265,10 @@ export default function Sidebar() {
 
                         {/* Right: Action buttons */}
                         <div style={{ display: 'flex', gap: '4px' }}>
-                            <button className="btn-icon" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 80); }}>
+                            <button className="btn-icon" title="Búsqueda Global" onClick={() => setGlobalSearchOpen(true)}>
+                                <span style={{ fontSize: '1rem' }}>🔍</span>
+                            </button>
+                            <button className="btn-icon" title="Filtrar Lista" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 80); }}>
                                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                                 </svg>
@@ -429,28 +437,38 @@ export default function Sidebar() {
                 )}
 
                 {/* ── CHATS list ── */}
-                {activeTab === 'chats' && filteredConvs.map((chat, i) => {
-                    const name = resolvePeerName(chat.peer);
-                    const isGroup = isGroupPeer(chat.peer);
-                    const avStyle = isGroup
-                        ? { background: 'linear-gradient(135deg, #7E57C2, #5E35B1)', boxShadow: '0 2px 12px rgba(126,87,194,0.6)' }
-                        : avatarStyle(chat.peer);
-                    const hasUnread = (chat.unread_count || 0) > 0;
-                    return (
-                        <div
-                            key={chat.id}
-                            onClick={e => { e.preventDefault(); navigate('chat', chat.id); }}
-                            className="animate-enter interactive-row"
-                            style={{
-                                display: 'flex', alignItems: 'center', padding: '11px 10px', gap: '13px',
-                                borderRadius: '16px', cursor: 'pointer',
-                                background: hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.15), rgba(200,20,45,0.05))' : 'rgba(0,0,0,0.2)',
-                                border: `1px solid ${hasUnread ? 'rgba(232,33,58,0.25)' : 'rgba(255,255,255,0.04)'}`,
-                                marginBottom: '4px',
-                                backdropFilter: 'blur(8px)',
-                                transition: 'all 0.3s var(--ease-spring)',
-                                animationDelay: `${i * 35}ms`,
-                            }}
+                {activeTab === 'chats' && [...filteredConvs]
+                    .filter(c => !archivedChatIds.includes(c.id))
+                    .sort((a, b) => {
+                        const aPin = pinnedChatIds.includes(a.id) ? 1 : 0;
+                        const bPin = pinnedChatIds.includes(b.id) ? 1 : 0;
+                        return bPin - aPin;
+                    })
+                    .map((chat, i) => {
+                        const name = resolvePeerName(chat.peer);
+                        const isGroup = isGroupPeer(chat.peer);
+                        const isPinned = pinnedChatIds.includes(chat.id);
+                        const avStyle = isGroup
+                            ? { background: 'linear-gradient(135deg, #7E57C2, #5E35B1)', boxShadow: '0 2px 12px rgba(126,87,194,0.6)' }
+                            : avatarStyle(chat.peer);
+                        const hasUnread = (chat.unread_count || 0) > 0;
+                        return (
+                            <div
+                                key={chat.id}
+                                onClick={e => { e.preventDefault(); navigate('chat', chat.id); }}
+                                className="animate-enter interactive-row"
+                                style={{
+                                    display: 'flex', alignItems: 'center', padding: '11px 10px', gap: '13px',
+                                    borderRadius: '16px', cursor: 'pointer',
+                                    background: isPinned 
+                                        ? 'linear-gradient(135deg, rgba(255,167,38,0.12), rgba(232,33,58,0.08))'
+                                        : hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.15), rgba(200,20,45,0.05))' : 'rgba(0,0,0,0.2)',
+                                    border: `1px solid ${isPinned ? 'rgba(255,167,38,0.3)' : hasUnread ? 'rgba(232,33,58,0.25)' : 'rgba(255,255,255,0.04)'}`,
+                                    marginBottom: '4px',
+                                    backdropFilter: 'blur(8px)',
+                                    transition: 'all 0.3s var(--ease-spring)',
+                                    animationDelay: `${i * 35}ms`,
+                                }}
                             onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.background = hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.2), rgba(200,20,45,0.1))' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
                             onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.15), rgba(200,20,45,0.05))' : 'rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = hasUnread ? 'rgba(232,33,58,0.25)' : 'rgba(255,255,255,0.04)'; }}
                         >
@@ -496,23 +514,42 @@ export default function Sidebar() {
                                     <span style={{
                                         fontSize: '0.82rem',
                                         color: hasUnread ? 'var(--text-secondary)' : 'var(--text-muted)',
-                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80%',
+                                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '65%',
                                         fontStyle: !chat.last_message ? 'italic' : 'normal',
                                     }}>
                                         {chat.last_message || '🔐 Canal E2E activo'}
                                     </span>
-                                    {hasUnread && (
-                                        <span style={{
-                                            minWidth: 20, height: 20, borderRadius: '10px', padding: '0 5px',
-                                            background: 'var(--primary)', color: 'white',
-                                            fontSize: '0.68rem', fontWeight: 800,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            boxShadow: '0 2px 8px rgba(232,33,58,0.5)',
-                                            flexShrink: 0,
-                                        }}>
-                                            {chat.unread_count}
-                                        </span>
-                                    )}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                togglePinChat(chat.id);
+                                                toast.success(isPinned ? "Chat desfijado" : "📌 Chat fijado al inicio");
+                                            }}
+                                            style={{
+                                                background: isPinned ? 'rgba(255,167,38,0.15)' : 'transparent',
+                                                border: `1px solid ${isPinned ? 'rgba(255,167,38,0.3)' : 'transparent'}`,
+                                                borderRadius: '6px', cursor: 'pointer',
+                                                fontSize: '0.75rem', padding: '2px 4px',
+                                                transition: 'all 0.2s ease',
+                                            }}
+                                            title={isPinned ? "Desfijar chat" : "Fijar chat al inicio"}
+                                        >
+                                            📌
+                                        </button>
+                                        {hasUnread && (
+                                            <span style={{
+                                                minWidth: 20, height: 20, borderRadius: '10px', padding: '0 5px',
+                                                background: 'var(--primary)', color: 'white',
+                                                fontSize: '0.68rem', fontWeight: 800,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                boxShadow: '0 2px 8px rgba(232,33,58,0.5)',
+                                                flexShrink: 0,
+                                            }}>
+                                                {chat.unread_count}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -620,6 +657,10 @@ export default function Sidebar() {
                 </svg>
             </button>
 
+            {/* Global Search Modal */}
+            {globalSearchOpen && (
+                <GlobalSearchModal onClose={() => setGlobalSearchOpen(false)} />
+            )}
         </aside>
     );
 }

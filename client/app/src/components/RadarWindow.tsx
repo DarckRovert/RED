@@ -262,31 +262,46 @@ export default function RadarWindow() {
                                     border: '1px solid rgba(255,255,255,0.08)',
                                 }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem' }}>{peer.name}</div>
+                                        <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            {peer.name}
+                                            <span style={{
+                                                fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px',
+                                                background: peer.rssi > -65 ? 'rgba(0,217,126,0.15)' : peer.rssi > -80 ? 'rgba(255,167,38,0.15)' : 'rgba(232,33,58,0.15)',
+                                                color: peer.rssi > -65 ? '#00D97E' : peer.rssi > -80 ? '#FFA726' : '#ff4444',
+                                                border: `1px solid ${peer.rssi > -65 ? 'rgba(0,217,126,0.3)' : peer.rssi > -80 ? 'rgba(255,167,38,0.3)' : 'rgba(232,33,58,0.3)'}`,
+                                                fontWeight: 800
+                                            }}>
+                                                {peer.rssi > -65 ? '⚡ EXCELENTE' : peer.rssi > -80 ? '📶 BUENA' : '📡 DÉBIL'}
+                                            </span>
+                                        </div>
                                         <div style={{
-                                            color: peer.rssi > -70 ? '#00D97E' : 'var(--warning)',
+                                            color: 'var(--text-muted)',
                                             fontFamily: 'JetBrains Mono, monospace', fontSize: '0.72rem', marginTop: 2,
-                                        }}>{peer.rssi} dBm · BLE</div>
+                                        }}>
+                                            {peer.rssi} dBm · Proximidad BLE Mesh
+                                        </div>
                                     </div>
                                     <button
                                         onClick={async () => {
                                             try {
                                                 const peerShort = peer.name.replace('RED-', '');
                                                 await addContact(peerShort, peer.name);
-                                                toast.success(`✅ ${peer.name} añadido`);
+                                                toast.success(`🤝 Vinculación directa enviada a ${peer.name}`);
                                             } catch (e) {
                                                 const msg = e instanceof Error ? e.message : String(e);
                                                 toast.error(`❌ ${msg}`);
                                             }
                                         }}
                                         style={{
-                                            padding: '7px 12px', borderRadius: 10, flexShrink: 0,
-                                            background: 'rgba(41,182,246,0.15)', border: '1px solid rgba(41,182,246,0.3)',
-                                            color: '#29B6F6', fontSize: '0.78rem', fontWeight: 700,
+                                            padding: '7px 14px', borderRadius: 10, flexShrink: 0,
+                                            background: 'linear-gradient(135deg, rgba(41,182,246,0.2), rgba(0,217,126,0.15))',
+                                            border: '1px solid rgba(41,182,246,0.35)',
+                                            color: '#29B6F6', fontSize: '0.78rem', fontWeight: 800,
                                             cursor: 'pointer', whiteSpace: 'nowrap',
+                                            boxShadow: '0 2px 8px rgba(41,182,246,0.2)'
                                         }}
                                     >
-                                        + Agregar
+                                        🤝 Invitar
                                     </button>
                                 </div>
                             ))

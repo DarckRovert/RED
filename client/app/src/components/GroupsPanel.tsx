@@ -3,12 +3,14 @@
 import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { GroupAdminModal } from "./GroupAdminModal";
 
 export default function GroupsPanel() {
     const { contacts, groups, goBack, navigate, fetchData } = useRedStore();
     const [groupName, setGroupName] = useState("");
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [creationStatus, setCreationStatus] = useState("");
+    const [adminGroup, setAdminGroup] = useState<any | null>(null);
 
     const toggleContact = (hash: string) => {
         if (selectedContacts.includes(hash)) setSelectedContacts(selectedContacts.filter(c => c !== hash));
@@ -103,30 +105,53 @@ export default function GroupsPanel() {
                                         <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</div>
                                         <div style={{ color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 600, marginTop: 2 }}>{g.member_count || (g.members?.length ?? 0)} miembros</div>
                                     </div>
-                                    <button
-                                        onClick={() => { navigate('chat', g.id); }}
-                                        style={{
-                                            flexShrink: 0, padding: '8px 16px', borderRadius: '10px',
-                                            background: 'linear-gradient(135deg, rgba(232,33,58,0.18), rgba(200,20,45,0.10))',
-                                            border: '1px solid rgba(232,33,58,0.3)', color: 'var(--primary-bright)',
-                                            fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
-                                            display: 'flex', alignItems: 'center', gap: '6px',
-                                            transition: 'all 0.2s ease',
-                                        }}
-                                        onMouseOver={e => { e.currentTarget.style.background = 'rgba(232,33,58,0.25)'; }}
-                                        onMouseOut={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(232,33,58,0.18), rgba(200,20,45,0.10))'; }}
-                                    >
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                                        </svg>
-                                        Chat
-                                    </button>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button
+                                            onClick={() => setAdminGroup(g)}
+                                            style={{
+                                                padding: '8px 12px', borderRadius: '10px',
+                                                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                                                color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.82rem',
+                                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px'
+                                            }}
+                                        >
+                                            ⚙️ Admin
+                                        </button>
+                                        <button
+                                            onClick={() => { navigate('chat', g.id); }}
+                                            style={{
+                                                flexShrink: 0, padding: '8px 16px', borderRadius: '10px',
+                                                background: 'linear-gradient(135deg, rgba(232,33,58,0.18), rgba(200,20,45,0.10))',
+                                                border: '1px solid rgba(232,33,58,0.3)', color: 'var(--primary-bright)',
+                                                fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', gap: '6px',
+                                                transition: 'all 0.2s ease',
+                                            }}
+                                            onMouseOver={e => { e.currentTarget.style.background = 'rgba(232,33,58,0.25)'; }}
+                                            onMouseOut={e => { e.currentTarget.style.background = 'linear-gradient(135deg, rgba(232,33,58,0.18), rgba(200,20,45,0.10))'; }}
+                                        >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                                            </svg>
+                                            Chat
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Admin Group Modal */}
+            {adminGroup && (
+                <GroupAdminModal
+                    groupId={adminGroup.id}
+                    groupName={adminGroup.name}
+                    members={adminGroup.members || []}
+                    onClose={() => setAdminGroup(null)}
+                />
+            )}
         </div>
     );
 }

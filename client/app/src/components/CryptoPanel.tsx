@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { BackupRestoreModal } from "./BackupRestoreModal";
+import { NodeLogsModal } from "./NodeLogsModal";
 
 // Animated counter hook
 function useAnimatedCount(target: number) {
@@ -50,6 +52,11 @@ export default function CryptoPanel() {
     const [exportCopied, setExportCopied] = useState(false);
     const [burnConfirm, setBurnConfirm] = useState(false);
     const [burnDone, setBurnDone] = useState(false);
+    const [backupModalOpen, setBackupModalOpen] = useState(false);
+    const [logsModalOpen, setLogsModalOpen] = useState(false);
+    const [powerMode, setPowerMode] = useState<'high' | 'stealth'>(
+        (localStorage.getItem('red_power_mode') as 'high' | 'stealth') || 'high'
+    );
 
     // Fetch vault telemetry from /network/vault every 5s
     useEffect(() => {
@@ -195,21 +202,24 @@ This is your sovereign cryptographic identity.`;
                     </div>
                 </div>
 
-                {/* Live Vault Telemetry */}
+                {/* Live Vault & Multi-Transport Telemetry */}
                 <div style={{
                     borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
                     overflow: 'hidden', background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
                 }}>
-                    <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--solid-border)' }}>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#3498db', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetría · Vault Omega</div>
+                    <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--solid-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#3498db', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetría Multired · Vault Omega</div>
+                        <div style={{ fontSize: '0.65rem', color: '#00D97E', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>v7.3.0 HYBRID</div>
                     </div>
                     <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <StatCard label="Sesiones DR" value={activeSessions} icon="🔒" color="#9b59b6" glow />
-                        <StatCard label="Peers" value={status?.peer_count ?? 0} icon="🕸️" color="#3498db" />
+                        <StatCard label="Peers WAN" value={status?.peer_count ?? 0} icon="🌐" color="#3498db" />
+                        <StatCard label="Peers BLE" value={(window as any)?.meshPeerCounts?.ble ?? 0} icon="📡" color="#ba68c8" />
+                        <StatCard label="Peers WiFi" value={(window as any)?.meshPeerCounts?.wifi ?? 0} icon="📶" color="#29b6f6" />
+                        <StatCard label="Radio LoRa" value={(window as any)?.meshPeerCounts?.lora ?? 0} icon="📻" color="#e67e22" />
                         <StatCard label="Ruido Blanco" value={noisePackets} icon="🌊" color="#FFA726" glow={noisePackets !== '--' && noisePackets > 0} />
                         <StatCard label="Sybil Bloq." value={sybilBlocked} icon="🛡️" color="var(--danger)" glow={sybilBlocked !== '--' && (sybilBlocked as number) > 0} />
                         <StatCard label="Cadena" value={vault?.chain_height ?? status?.chain_height ?? 0} icon="⛓️" color="#26A69A" />
-                        <StatCard label="Versión" value={vault?.version || status?.version || 'v6'} icon="⚙️" color="#3498db" />
                     </div>
                 </div>
 
@@ -253,6 +263,96 @@ This is your sovereign cryptographic identity.`;
                         </div>
                     )}
                 </div>
+
+                {/* Encrypted Backup & Migration Card */}
+                <div style={{
+                    borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
+                    overflow: 'hidden', background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
+                }}>
+                    <button
+                        onClick={() => setBackupModalOpen(true)}
+                        style={{
+                            width: '100%', padding: '16px 20px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            background: 'transparent', color: 'var(--text-primary)', border: 'none', cursor: 'pointer',
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '1.2rem' }}>📦</span>
+                            <div style={{ textAlign: 'left' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Respaldo & Migración Cifrada (.redbak)</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Copia de seguridad protegida con clave</div>
+                            </div>
+                        </div>
+                        <span style={{ color: 'var(--primary-bright)', fontWeight: 700, fontSize: '0.82rem' }}>Gestionar →</span>
+                    </button>
+                </div>
+
+                {/* Backup & Restore Modal */}
+                {backupModalOpen && (
+                    <BackupRestoreModal onClose={() => setBackupModalOpen(false)} />
+                )}
+
+                {/* Tactical Power Profile Card */}
+                <div style={{
+                    borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
+                    overflow: 'hidden', background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
+                    padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '1.2rem' }}>⚡</span>
+                        <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--text-primary)' }}>Perfil Energético Táctico</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                {powerMode === 'high' ? 'Modo Rendimiento Máximo (Polling 2s)' : 'Modo Sigilo Ahorro (Polling 10s)'}
+                            </div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const next = powerMode === 'high' ? 'stealth' : 'high';
+                            setPowerMode(next);
+                            localStorage.setItem('red_power_mode', next);
+                        }}
+                        style={{
+                            padding: '8px 14px', borderRadius: '10px',
+                            background: powerMode === 'high' ? 'rgba(0,217,126,0.15)' : 'rgba(41,182,246,0.15)',
+                            border: `1px solid ${powerMode === 'high' ? 'rgba(0,217,126,0.35)' : 'rgba(41,182,246,0.35)'}`,
+                            color: powerMode === 'high' ? '#00D97E' : '#29B6F6',
+                            fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer'
+                        }}
+                    >
+                        {powerMode === 'high' ? '⚡ Máximo' : '🔋 Sigilo'}
+                    </button>
+                </div>
+                <div style={{
+                    borderRadius: 'var(--radius-lg)', border: '1px solid rgba(0,217,126,0.25)',
+                    overflow: 'hidden', background: 'linear-gradient(135deg, rgba(5,15,10,0.95), rgba(2,8,5,0.98))',
+                    padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '1.2rem' }}>📟</span>
+                        <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#00D97E' }}>Consola de Logs Rust</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Trazabilidad en tiempo real de eventos P2P</div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setLogsModalOpen(true)}
+                        style={{
+                            padding: '8px 14px', borderRadius: '10px',
+                            background: 'rgba(0,217,126,0.15)', border: '1px solid rgba(0,217,126,0.35)',
+                            color: '#00D97E', fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer'
+                        }}
+                    >
+                        Abrir 📟
+                    </button>
+                </div>
+
+                {/* Node Logs Modal */}
+                {logsModalOpen && (
+                    <NodeLogsModal onClose={() => setLogsModalOpen(false)} />
+                )}
 
                 {/* ── PÁNICO / BURN BUTTON ─────────────────────────────── */}
                 <div style={{
