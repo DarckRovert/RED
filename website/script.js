@@ -568,7 +568,7 @@ window.simulateTerminalCommand = (cmdType) => {
         `did:red:charlie  BLE          -85dBm   Ruteo Hop-Onion\n` +
         `did:red:dave112  LoRa         -94dBm   Puente Serial (12.4 Km)\n` +
         `--------------------------------------------------------------\n` +
-        `<span class="info">Rutas activas totales: 4 | Protocolo: RED Mesh v7.2.0</span>`;
+        `<span class="info">Rutas activas totales: 4 | Protocolo: RED Mesh v16.0.0 Zenith</span>`;
       break;
     case 'ratchet':
       cmdText = 'red-cli --ratchet-status';
@@ -576,8 +576,8 @@ window.simulateTerminalCommand = (cmdType) => {
         `<span class="info">🔒 Sesión Criptográfica Activa con:</span> did:red:bob99ff\n` +
         `--------------------------------------------------------------\n` +
         `<span class="info">- Clave de Cadena KDF:</span> [32 bytes] e2a5f1d93ac8bb92...\n` +
-        `<span class="info">- Trinquete DH:</span>        X25519 (Llaves efímeras rotadas hoy)\n` +
-        `<span class="info">- Motor AEAD:</span>         ChaCha20-Poly1305 (Cifrado autenticado)\n` +
+        `<span class="info">- Trinquete DH:</span>        Kyber1024 (KEM Poscuántico) + Double Ratchet\n` +
+        `<span class="info">- Motor AEAD:</span>         AES-256-GCM + Firmas Dilithium5\n` +
         `<span class="info">- Huella de Seguridad:</span> <span class="highlight">84729 11928 33481 00293</span>\n` +
         `<span class="info">- Verificación:</span>        Múltiple Confianza (Fingerprint Match)\n` +
         `<span class="info">- PFS State:</span>           Perfect Forward Secrecy ACTIVO y saludable\n` +
