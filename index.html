@@ -134,8 +134,8 @@
 
         <div class="hero__stats">
           <div class="hero__stat-item">
-            <div class="hero__stat-value" data-target="256" data-suffix="-bit">256-bit</div>
-            <div class="hero__stat-label">Cifrado AES</div>
+            <div class="hero__stat-value" data-target="1024" data-suffix="-PQC">Kyber1024</div>
+            <div class="hero__stat-label">Cifrado Poscuántico</div>
           </div>
           <div class="hero__stat-item">
             <div class="hero__stat-value" data-target="0" data-suffix=" servidores">0</div>
@@ -143,7 +143,7 @@
           </div>
           <div class="hero__stat-item">
             <div class="hero__stat-value" data-target="100" data-suffix="% P2P">100%</div>
-            <div class="hero__stat-label">Nodo P2P</div>
+            <div class="hero__stat-label">Nodo P2P Mesh</div>
           </div>
           <div class="hero__stat-item">
             <div class="hero__stat-value" data-target="0" data-suffix=" rastreo">Sin</div>
@@ -158,57 +158,51 @@
   <section id="features" class="features section">
     <div class="container">
       <div class="features__header">
-        <span class="badge reveal-text">🚀 POR QUÉ RED</span>
+        <span class="badge reveal-text">🚀 POR QUÉ RED v16.0</span>
         <h2 class="section-title reveal-text">Todo lo que necesitas.<br><span class="text-gradient">Nada que no quieras.</span></h2>
-        <p class="section-desc reveal-text">Construido sobre principios de privacidad radical y descentralización real — sin compromisos.</p>
+        <p class="section-desc reveal-text">Construido sobre principios de privacidad radical, cifrado poscuántico y descentralización real — sin compromisos.</p>
       </div>
 
       <div class="features__grid">
         <div class="feature-card reveal">
           <div class="feature-card__icon">🔐</div>
-          <h3 class="feature-card__title">Cifrado Total E2E</h3>
-          <p class="feature-card__desc">X25519 + AES-256-GCM con Double Ratchet y Perfect Forward Secrecy. Cada mensaje
-            usa claves únicas de sesión. Ni siquiera nosotros podemos leer tus mensajes.</p>
+          <h3 class="feature-card__title">Cifrado Poscuántico PQC</h3>
+          <p class="feature-card__desc">Blindado con <strong>Kyber1024</strong> (encriptación) y <strong>Dilithium5</strong> (firmas digitales). Resistente a supercomputadoras cuánticas y ataques Harvest-Now-Decrypt-Later.</p>
         </div>
         <div class="feature-card reveal reveal-delay-1">
-          <div class="feature-card__icon">🌐</div>
-          <h3 class="feature-card__title">Red P2P Pura</h3>
-          <p class="feature-card__desc">Sin servidores centrales. Protocolo Gossip + DHT Kademlia + Onion Routing de 3
-            saltos. Imposible de censurar o bloquear por un solo actor.</p>
+          <div class="feature-card__icon">📹</div>
+          <h3 class="feature-card__title">Videollamadas P2P WebRTC STUN</h3>
+          <p class="feature-card__desc">Llamadas de voz y video P2P de alta fidelidad atravesando redes CGNAT de operadoras 4G/5G con fallback dinámico a servidores STUN.</p>
         </div>
         <div class="feature-card reveal reveal-delay-2">
-          <div class="feature-card__icon">🕵️</div>
-          <h3 class="feature-card__title">Anonimato Real</h3>
-          <p class="feature-card__desc">Identidades <span class="font-mono-red">did:red:xxxxxxx</span> efímeras
-            generadas localmente. Sin número de teléfono, sin
-            email, sin metadatos expuestos. Tu identidad cambia cada 24h automáticamente.</p>
+          <div class="feature-card__icon">🎤</div>
+          <h3 class="feature-card__title">Multimedia Avanzada</h3>
+          <p class="feature-card__desc">Notas de voz nativas con visor de forma de onda, reproductor interactivo y visor de fotos a pantalla completa con Zoom 1.8x y descarga limpia.</p>
         </div>
         <div class="feature-card reveal reveal-delay-1">
           <div class="feature-card__icon">📡</div>
-          <h3 class="feature-card__title">Funciona Sin Internet</h3>
-          <p class="feature-card__desc">Bluetooth Low Energy y WiFi Direct habilitan comunicación entre dispositivos cercanos. Si están offline, se encolan en disco y se auto-envían por la cola DTN al encontrarse.</p>
+          <h3 class="feature-card__title">Operación Mesh Offline</h3>
+          <p class="feature-card__desc">Enrutamiento epidémico multi-salto sobre mDNS/WiFi Direct, Bluetooth LE Mesh y LoRa Radio Sub-GHz. Si no hay internet, la malla entrega tus mensajes.</p>
         </div>
         <div class="feature-card reveal reveal-delay-2">
-          <div class="feature-card__icon">📱</div>
-          <h3 class="feature-card__title">Multi-Plataforma</h3>
-          <p class="feature-card__desc">Android, iOS, Web y PWA desde un solo codebase (Next.js + Capacitor).
-            Notificaciones push, modo offline, soporte multi-dispositivo con vinculación QR.</p>
+          <div class="feature-card__icon">📟</div>
+          <h3 class="feature-card__title">Consola & Simulador Táctico</h3>
+          <p class="feature-card__desc">Consola de logs Rust en vivo para auditar handshakes PQC y paquetes de cobertura, más el Simulador de Apagón para testear aislamiento de red.</p>
         </div>
         <div class="feature-card reveal reveal-delay-3">
-          <div class="feature-card__icon">🔓</div>
-          <h3 class="feature-card__title">100% Open Source</h3>
-          <p class="feature-card__desc">Código auditado públicamente. Sin backdoors posibles. Auditoría de seguridad
-            independiente. Fork libremente, contribuye o despliega tu propio nodo.</p>
+          <div class="feature-card__icon">🔍</div>
+          <h3 class="feature-card__title">Búsqueda & Bóveda .redbak</h3>
+          <p class="feature-card__desc">Buscador global por palabras clave en todos los chats cifrados y sistema de respaldo portable <strong>.redbak</strong> con protección por contraseña maestro.</p>
         </div>
         <div class="feature-card reveal reveal-delay-1">
           <div class="feature-card__icon">🛡️</div>
-          <h3 class="feature-card__title">Seguridad Táctica</h3>
-          <p class="feature-card__desc">Ingresa un <span class="font-mono-red">PIN de Pánico</span> falso para borrar todos tus datos permanentemente si estás bajo amenaza. Modo Camuflaje y Bóveda Señuelo activables.</p>
+          <h3 class="feature-card__title">Seguridad Anti-Forense</h3>
+          <p class="feature-card__desc">PIN de Pánico para purga irreversible de claves, Modo Camuflaje de Calculadora y Bloqueo de Capturas de Pantalla a nivel del sistema operativo.</p>
         </div>
         <div class="feature-card reveal reveal-delay-2">
           <div class="feature-card__icon">🧬</div>
-          <h3 class="feature-card__title">Motor Sled (Zero-RAM)</h3>
-          <p class="feature-card__desc">La base de datos embebida transaccional <strong>Sled</strong> cifra registros en disco de forma individual, manteniendo el consumo de memoria RAM plano e inmune a historiales masivos.</p>
+          <h3 class="feature-card__title">Motor Axum Rust (Zero-RAM)</h3>
+          <p class="feature-card__desc">El motor nativo Axum Rust (puerto 7333) y la base de datos embebida <strong>Sled</strong> mantienen el consumo de memoria RAM ultra-bajo e inmune a historiales masivos.</p>
         </div>
       </div>
     </div>
@@ -253,16 +247,16 @@
         <div class="comp-card comp-card--main reveal reveal-delay-1" data-tilt>
           <div class="comp-card__glow-bg"></div>
           <div class="comp-card__header">
-            <span class="comp__icon red">💎</span> RED
+            <span class="comp__icon red">💎</span> RED v16.0 Zenith
           </div>
           <ul class="comp-card__list main-list">
-            <li><span class="check">✓</span> 100% P2P Puro</li>
-            <li><span class="check">✓</span> E2E Permanente</li>
-            <li><span class="check">✓</span> Sin Servidores (Mesh)</li>
-            <li><span class="check">✓</span> Onion Routing 3 Saltos</li>
+            <li><span class="check">✓</span> 100% P2P Mesh Soberano</li>
+            <li><span class="check">✓</span> Cifrado Poscuántico Kyber1024</li>
+            <li><span class="check">✓</span> Videollamadas P2P WebRTC STUN</li>
+            <li><span class="check">✓</span> Sin Servidores (mDNS / BLE / LoRa)</li>
+            <li><span class="check">✓</span> Consola Logs Rust & Simulador Apagón</li>
             <li><span class="check">✓</span> Identidad Anónima (DID)</li>
-            <li><span class="check">✓</span> Incensurable (Decentralized)</li>
-            <li><span class="check">✓</span> Red Local Bluetooth / WiFi</li>
+            <li><span class="check">✓</span> Bóveda Anti-Forense & Respaldo .redbak</li>
           </ul>
         </div>
 
