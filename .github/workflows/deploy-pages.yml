@@ -25,14 +25,6 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Sync Website Assets
-        run: |
-          mkdir -p website/assets
-          cp -rf assets/* website/assets/ 2>/dev/null || true
-          cp -f index.html website/index.html 2>/dev/null || true
-          cp -f styles.css website/styles.css 2>/dev/null || true
-          cp -f script.js website/script.js 2>/dev/null || true
-
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v3
         with:
