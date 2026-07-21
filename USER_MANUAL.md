@@ -1,17 +1,26 @@
-# 🔴 RED - Manual del Usuario (v16.0 - Zenith Master Edition)
+# 🔴 RED - Manual del Usuario (v16.1 - Zenith Master Edition)
 
-Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería táctica y comunicación soberana en la versión v16.0 Zenith Release.
+Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería táctica y comunicación soberana en la versión v16.1 Zenith Release.
 
 ---
 
 ## 🏁 1. Empezando: Generando tu Identidad (DID)
 
-A diferencia de otras aplicaciones, en RED no necesitas un número de teléfono ni un correo electrónico. Tu identidad es un **DID (Decentralized Identifier)** generado localmente en tu dispositivo.
+A diferencia de otras aplicaciones como WhatsApp, en RED no necesitas un número de teléfono ni un correo electrónico, ni requieres vincular un celular para usar la Web.
 
+### Uso desde la Web (Web SPA en Navegador)
+- Accede libremente desde cualquier navegador web a `https://darckrovert.github.io/RED/chat.html`.
+- Tu navegador generará un **DID (Decentralized Identifier)** criptográfico único en menos de 10ms (ejemplo: `did:red:f3a298...`).
+- Tu identidad se almacena de forma segura en tu propio navegador. No requiere servidores de registro centralizados.
+
+### Uso desde la App Móvil (Android APK)
 1. **Pantalla de Onboarding**: Al abrir RED por primera vez, verás el asistente de configuración de la bóveda.
-2. **Creación de PIN Maestro**: Deberás crear un PIN numérico seguro de al menos 6 dígitos. Este PIN se cifrará a nivel hardware en el Keystore de tu teléfono. **No existe opción de recuperación.**
+2. **Creación de PIN Maestro**: Deberás crear un PIN numérico seguro de al menos 6 dígitos. Este PIN se cifrará a nivel hardware en el Keystore de tu teléfono.
 3. **Generación de Claves**: La aplicación generará tus claves criptográficas (DID). Este proceso es 100% privado.
-4. **Biometría (Opcional)**: En tu próximo inicio de sesión, podrás usar tu huella dactilar o FaceID para acceder rápidamente a tu bóveda.
+
+### Comunicación P2P Web ↔ Mobile
+- Puedes chatear entre la Web App y la App Móvil sin restricciones.
+- Solicitas el DID del contacto móvil (o web), lo añades en `+ Añadir Contacto` y el sistema inicia un **túnel P2P cifrado mediante WebRTC DataChannels (AES-256-GCM + Double Ratchet)**.
 
 ---
 

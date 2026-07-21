@@ -1,28 +1,23 @@
-# 🔴 RED - Manual del Administrador (Node Ops v16.0.0)
+# 🔴 RED - Manual del Administrador (Node Ops v16.1.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED, ahora con soporte nativo para Android 14 y comunicaciones P2P directas.
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED, ahora con soporte para interconexión P2P Web ↔ Mobile y clusters de señalización ampliados (hasta 50 pares P2P por sala).
 
 ---
 
-## 🛠️ 1. Despliegue del Nodo (red-node)
+## 🛠️ 1. Despliegue del Servidor de Señalización (`signaling/server.js`)
 
-### Requisitos Mínimos
-- OS: Linux (recomendado), macOS o Windows.
-- RAM: 2GB (mínimo).
-- Almacenamiento: SSD con al menos 10GB libres para la base de datos de la blockchain ligera y mensajes.
+El servidor de señalización actúa como coordinador ciego (zero-knowledge) para la negociación WebRTC (offers/answers e ICE Candidates) entre clientes Web SPA y la App Móvil:
 
-### Despliegue en Android (Nativo)
-Para el correcto funcionamiento en dispositivos móviles con Android 14+, es obligatorio configurar el servicio en primer plano:
-1. **Foreground Service:** El nodo Rust se ejecuta dentro de un `RedNodeService.java`.
-2. **Foreground Type:** Se debe declarar `android:foregroundServiceType="dataSync"` en el `AndroidManifest.xml`.
-3. **Optimización de Batería:** Se requiere inyectar `WAKE_LOCK` para evitar que el sistema operativo suspenda los hilos de red P2P.
-4. **Compilación Automatizada (APK):** Ejecuta `./build_android.ps1` desde la raíz para compilar Next.js, sincronizar Capacitor, compilar el motor de Rust y empaquetar el APK de producción (`app-release-unsigned.apk`) usando Gradle de forma desatendida.
+```bash
+cd signaling
+npm install
+PORT=3001 node server.js
+```
 
-### Administración del Frontend
-RED utiliza **Next.js Static Export** sincronizado vía Capacitor:
-1. `npm run build` en `client/app`.
-2. `npx cap sync android`.
-3. El build estático se inyecta en `assets/public` del contenedor Android (automatizado mediante el script `./build_android.ps1`).
+### Características del Servidor de Señalización v16.1:
+- **Capacidad de Sala Ampliada:** Soporta hasta **50 pares P2P simultáneos** por sala (`roomId = sort([DID1, DID2]).join("-")`).
+- **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociación de red.
+- **Health Check HTTP:** Monitoreo en vivo vía `GET /health` (`status`, `uptime`, `peers`, `rooms`).
 
 ---
 

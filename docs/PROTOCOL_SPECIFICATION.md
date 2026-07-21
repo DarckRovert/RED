@@ -1,8 +1,8 @@
-# 📜 Especificación del Protocolo RED (Protocolo Ω)
+# 📜 Especificación del Protocolo RED (Protocolo Ω - v16.1 Zenith Master)
 
-**Versión**: 1.0.0  
-**Estado**: Draft  
-**Fecha**: Febrero 2026
+**Versión**: 16.1.0  
+**Estado**: Especificación de Producción  
+**Fecha**: Julio 2026
 
 ---
 

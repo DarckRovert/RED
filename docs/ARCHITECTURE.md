@@ -1,12 +1,13 @@
-# 🏗️ Arquitectura de RED (v5.0)
+# 🏗️ Arquitectura de RED (v16.1 Zenith Master Edition)
 
 ## Visión General
 
-RED es un ecosistema de mensajería soberana que opera bajo un modelo de **Malla Híbrida**:
-- **Capa Local:** Comunicación directa vía Bluetooth BLE (Advertiser) y WiFi Direct.
+RED es un ecosistema de mensajería soberana y descentralizada que opera bajo un modelo de **Malla Híbrida Web-Mobile**:
+- **Capa Web SPA (Autónoma):** Generación de identidades DID en navegador vía WebCrypto API (sin servidor de registro ni número telefónico).
+- **Puente Web ↔ Mobile:** Negociación WebRTC DataChannel ciega (`signaling/server.js`) con túneles P2P cifrados E2E por Double Ratchet.
+- **Capa Local Móvil:** Comunicación directa sin internet vía Bluetooth BLE Advertiser y WiFi Direct con el motor Rust JNI (`libred_mobile.so`).
 - **Capa Global:** Ruteo P2P mediante libp2p y DHT Kademlia.
-- **Capa de Identidad:** DID (Decentralized Identifiers) inmutables en blockchain.
-- **Interfaz Sólida:** UI de alto rendimiento basada en Next.js y Zustand con estética premium.
+- **Capa de Identidad:** DID (Decentralized Identifiers) inmutables.
 
 ## Componentes del Ecosistema
 

@@ -1,18 +1,19 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v16.0 Zenith Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P WebRTC STUN, Notificaciones Locales Nativas, Notas de Voz, Búsqueda Global, Bóveda `.redbak` y Simulador de Apagón Táctico.
+> **v16.1 Zenith Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Puente P2P Web ↔ Mobile (WebRTC DataChannel), Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P, Identidad Criptográfica Autónoma (sin número ni registro), Bóveda `.redbak` y Simulador de Apagón Táctico.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v16.0_Zenith-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v16.1_Zenith-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]()
 
 ## 🎯 Visión
 
 RED es un protocolo de comunicación que garantiza:
-- **Privacidad total**: Cifrado X25519 + AES-256-GCM con deniabilidad perfecta
-- **Descentralización**: Sin servidores centrales, red P2P pura (100% P2P)
-- **Seguridad Táctica**: PIN de Pánico, Modo Camuflaje y Borrado de Seguridad (DMS)
-- **Anonimato**: Identidades DID efímeras, sin metadatos expuestos
-- **Resistencia a censura**: Operación vía BLE/WiFi-Direct y Mesh LoRa
-- **Paridad con WhatsApp**: Todas las características principales más capacidades exclusivas
+- **Puente P2P Web ↔ Mobile**: Conexión cifrada directa punto a punto entre navegadores web (`https://darckrovert.github.io/RED/`) y la App Móvil Android sin requerir celular ni servidores centrales.
+- **Identidad Autónomas (Zero-Registration)**: Generación criptográfica en el navegador en <10ms; sin correos, sin números de teléfono.
+- **Privacidad total**: Cifrado Double Ratchet X25519 + AES-256-GCM con deniabilidad perfecta.
+- **Descentralización**: Sin servidores centrales de datos, red P2P pura.
+- **Seguridad Táctica**: PIN de Pánico, Modo Camuflaje, FLAG_SECURE y Borrado de Seguridad (DMS).
+- **Anonimato**: Identidades DID efímeras (`did:red:...`), sin metadatos expuestos.
+- **Resistencia a censura**: Operación vía BLE/WiFi-Direct y Mesh LoRa.
 
 ## 🏗️ Arquitectura
 

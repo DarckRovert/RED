@@ -4,6 +4,19 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [16.1.0] - 2026-07-21
+
+### Añadido — Interconexión P2P Web ↔ Mobile & Renegociación WebCrypto ECDH
+
+**Interconexión Web-Mobile & Señalización P2P**
+- **Puente P2P Web ↔ Mobile (WebRTC DataChannel):** Comunicación cifrada punto a punto directa entre cualquier navegador web (`https://darckrovert.github.io/RED/`) y la App Móvil Android sin requerir teléfono celular ni servidores centrales.
+- **Cluster de Señalización Ampliado (`signaling/server.js`):** Expansión de capacidad a 50 pares P2P simultáneos por sala para mallas descentralizadas.
+- **Cifrado ECDH WebCrypto en Tiempo Real:** Renegociación dinámica de claves P-256 en tiempo real en la Web SPA mediante la API criptográfica nativa del navegador.
+- **Persistencia de Identidad Offline:** Carga automática de DIDs personalizados (`red_identity_hash`, `red_displayName`) desde el almacenamiento local sin sobrescribir en modo sin conexión.
+- **Navegación Unificada SPA:** Corrección de botones de retorno e itinerario directo a `/RED/chat.html` desde todas las vistas avanzadas (`nodemap`, `settings`, `crypto`, `contacts`).
+
+---
+
 ## [16.0.0] - 2026-07-20
 
 ### Añadido — RED v16.0 Zenith Master Architecture Release
