@@ -1,5 +1,29 @@
 <!DOCTYPE html><!--39bfRvdAUfMMAyfLRHUn9--><html lang="es"><head><script>
 (function() {
+  var path = window.location.pathname;
+  var search = window.location.search || '';
+  var hash = window.location.hash || '';
+  
+  // Clean path
+  var clean = path.replace(/^\/RED\/?/, '/').replace(/^\//, '');
+  if (!clean || clean === 'index.html') {
+    window.location.replace('/RED/' + search + hash);
+    return;
+  }
+  
+  var parts = clean.split('/');
+  var page = parts[0].replace(/\.html$/, '');
+  
+  var validRoutes = ['chat', 'offline', 'settings', 'nodemap', 'crypto', 'contacts', 'status', 'broadcast', 'calls', 'contactprofile', 'contactqr', 'contactsync', 'export', 'groupadmin', 'multidevice', 'profile', 'starred', 'stats'];
+  
+  if (validRoutes.indexOf(page) !== -1) {
+    window.location.replace('/RED/' + page + '.html' + search + hash);
+  } else if (!path.startsWith('/RED/')) {
+    window.location.replace('/RED/' + clean + search + hash);
+  }
+})();
+</script><script>
+(function() {
   var base = '/RED';
   if (window.location.pathname.startsWith(base)) {
     var pushState = history.pushState;
