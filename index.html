@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>RED — Red Encriptada Descentralizada | Protocolo P2P Soberano</title>
-  <meta name="description" content="RED es un protocolo de mensajería P2P soberano de grado militar. Cifrado Doble Trinquete X25519/AES-256-GCM, red mesh radio offline BLE/WiFi-Direct y resistencia total a la censura. Creado por DarckRovert en Perú." />
-  <meta name="keywords" content="RED Protocol, mensajería P2P, cifrado militar, mesh offline, X25519, Doble Trinquete, DarckRovert, Perú, anti-censura" />
+  <title>RED Protocol — Red Encriptada Descentralizada | Inversión & Infraestructura P2P</title>
+  <meta name="description" content="RED es un protocolo de mensajería P2P soberano de grado militar y arquitectura sin servidores. Cifrado Doble Trinquete X25519/AES-256-GCM, red mesh radio offline BLE/WiFi-Direct y resistencia total a la censura." />
+  <meta name="keywords" content="RED Protocol, mensajería P2P, cifrado militar, mesh offline, X25519, Doble Trinquete, DarckRovert, Perú, anti-censura, inversión Web3, P2P privacy" />
 
   <!-- Open Graph / Social -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://darckrovert.github.io/RED/" />
-  <meta property="og:title" content="RED Protocol — La Revolución de la Mensajería P2P 🇵🇪" />
+  <meta property="og:title" content="RED Protocol — La Revolución de la Mensajería P2P & Malla Radio 🇵🇪" />
   <meta property="og:description" content="Mensajería cifrada militar sin servidores ni internet. Comunicación pura por ondas de radio." />
   <meta property="og:image" content="assets/splash.png" />
 
@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700;800&family=Outfit:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16.1" />
+  <link rel="stylesheet" href="styles.css?v=16.2" />
   <link rel="icon" href="assets/icon.png" />
 
   <!-- Schema.org JSON-LD -->
@@ -44,7 +44,7 @@
       <div class="preloader-bar-wrap">
         <div class="preloader-bar"></div>
       </div>
-      <div class="preloader-text font-mono">RED PROTOCOL v16.0 · PERÚ 🇵🇪</div>
+      <div class="preloader-text font-mono">RED PROTOCOL v16.0 ZENITH · PERÚ 🇵🇪</div>
     </div>
   </div>
 
@@ -69,14 +69,18 @@
           <a href="#features">Características</a>
           <a href="#ratchet">Doble Trinquete</a>
           <a href="#mesh">Red Mesh</a>
+          <a href="#investors">Inversionistas & TAM</a>
+          <a href="#matrix">Matriz Comparativa</a>
           <a href="#terminal">Terminal CLI</a>
-          <a href="#architecture">Arquitectura</a>
           <a href="#download" class="nav-highlight">Descargar APK</a>
         </nav>
 
         <div class="nav-right">
           <button class="btn-webapp-launch" onclick="openWebAppModal()">
             <span>🌐</span> Abrir Web SPA
+          </button>
+          <button class="btn-investor-launch" onclick="openInvestorModal()">
+            <span>💼</span> Inversores
           </button>
           <a href="#download" class="btn-primary btn-nav">Descargar</a>
           <button class="menu-toggle" id="menu-toggle" aria-label="Menú">☰</button>
@@ -95,11 +99,11 @@
 
         <h1 class="hero-heading">
           Mensajería P2P Sin Servidores.<br />
-          <span class="gradient-text">Privacidad Absoluta e Inflexible.</span>
+          <span class="gradient-text">Infraestructura Soberana de Privacidad.</span>
         </h1>
 
         <p class="hero-subheading">
-          RED es un protocolo de comunicación inmutable y soberano. Cifrado de grado militar <strong class="highlight-text">Doble Trinquete X25519 / AES-256-GCM</strong>, enrutamiento por cebolla de 3 saltos y conectividad <strong class="highlight-text">Radio Mesh Offline por BLE / WiFi Direct</strong>. Sin servidores centrales, sin internet y sin registro telefónico.
+          RED es un protocolo de comunicación inmutable y descentralizado. Cifrado de grado militar <strong class="highlight-text">Doble Trinquete X25519 / AES-256-GCM</strong>, enrutamiento por cebolla de 3 saltos y conectividad <strong class="highlight-text">Radio Mesh Offline por BLE / WiFi Direct</strong>. Sin servidores centrales, sin internet y sin registro de teléfono.
         </p>
 
         <div class="hero-buttons">
@@ -109,10 +113,17 @@
           <button class="btn-secondary btn-hero" onclick="openWebAppModal()">
             <span>🌐</span> Probar Web SPA en Vivo
           </button>
+          <button class="btn-investor-hero" onclick="openInvestorModal()">
+            <span>💼</span> Contacto para Inversionistas
+          </button>
         </div>
 
         <!-- HERO STATS GRID -->
         <div class="stats-grid font-mono">
+          <div class="stat-box">
+            <div class="stat-num">$140B+</div>
+            <div class="stat-desc">Mercado Global TAM</div>
+          </div>
           <div class="stat-box">
             <div class="stat-num">100%</div>
             <div class="stat-desc">P2P Radio Offline</div>
@@ -124,10 +135,6 @@
           <div class="stat-box">
             <div class="stat-num">256-bit</div>
             <div class="stat-desc">AES-GCM Militar</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-num">3-Hop</div>
-            <div class="stat-desc">Onion Routing</div>
           </div>
         </div>
       </div>
@@ -250,6 +257,141 @@
     </div>
   </section>
 
+  <!-- INVESTORS & MARKET OPPORTUNITY SECTION -->
+  <section class="section-padding" id="investors">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-tag font-mono">💼 SECCIÓN INVERSORES & VENTURE CAPITAL</span>
+        <h2 class="section-heading">Oportunidad de Mercado &<br /><span class="gradient-text">Escalabilidad de Infraestructura.</span></h2>
+        <p class="section-sub">RED aborda la necesidad crítica de privacidad de datos soberanos en un mercado global en rápida expansión.</p>
+      </div>
+
+      <!-- TAM SAM SOM GRID -->
+      <div class="investor-metrics-grid font-mono">
+        <div class="inv-card glass-card">
+          <div class="inv-badge">TAM</div>
+          <div class="inv-num">$140B+</div>
+          <div class="inv-title">Mercado Total Direccionable</div>
+          <p class="inv-desc">Mercado mundial de ciberseguridad, mensajería empresarial e infraestructura de privacidad para 2028.</p>
+        </div>
+
+        <div class="inv-card glass-card">
+          <div class="inv-badge">SAM</div>
+          <div class="inv-num">$38B</div>
+          <div class="inv-title">Mercado Servible Atendible</div>
+          <p class="inv-desc">Usuarios activos en plataformas de comunicación cifrada que requieren privacidad de metadatos estricta.</p>
+        </div>
+
+        <div class="inv-card glass-card">
+          <div class="inv-badge">SOM</div>
+          <div class="inv-num">$4.2B</div>
+          <div class="inv-title">Mercado Objetivo Inicial</div>
+          <p class="inv-desc">Organizaciones corporativas, sectores gubernamentales, activistas y entusiastas de infraestructura soberana.</p>
+        </div>
+      </div>
+
+      <!-- MONETIZATION MODEL -->
+      <div class="monetization-box glass-card" style="margin-top: 36px; padding: 36px;">
+        <h3 style="font-family: var(--font-title); font-size: 1.6rem; font-weight: 800; margin-bottom: 16px; color: white;">
+          💎 Modelo Económico & Fuentes de Monetización
+        </h3>
+        <div class="cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px;">
+          <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 14px; border: 1px solid var(--glass-border);">
+            <div style="font-size: 1.8rem; margin-bottom: 8px;">🏢</div>
+            <h4 style="color: white; margin-bottom: 6px;">Enterprise Mesh Gateways</h4>
+            <p style="font-size: 0.88rem; color: var(--text-secondary);">Licencias B2B de nodos de señalización privados para redes corporativas, financieras y de misiones gubernamentales.</p>
+          </div>
+          <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 14px; border: 1px solid var(--glass-border);">
+            <div style="font-size: 1.8rem; margin-bottom: 8px;">🪙</div>
+            <h4 style="color: white; margin-bottom: 6px;">Staking de Nodos & Ancho de Banda</h4>
+            <p style="font-size: 0.88rem; color: var(--text-secondary);">Protocolo de recompensas para operadores de nodos relay que retransmiten tráfico cebolla cifrado de alta velocidad.</p>
+          </div>
+          <div style="background: rgba(0,0,0,0.3); padding: 20px; border-radius: 14px; border: 1px solid var(--glass-border);">
+            <div style="font-size: 1.8rem; margin-bottom: 8px;">🛡️</div>
+            <h4 style="color: white; margin-bottom: 6px;">Suscripción Anti-Forense Pro</h4>
+            <p style="font-size: 0.88rem; color: var(--text-secondary);">Herramientas avanzadas de auditoría, almacenamiento distribuido redundante y protección contra extracción física.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPETITIVE ANALYSIS MATRIX TABLE -->
+  <section class="section-padding" id="matrix">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-tag font-mono">📊 ANÁLISIS COMPETITIVO BENCHMARK</span>
+        <h2 class="section-heading">RED Protocol vs.<br /><span class="gradient-text">Plataformas de Mensajería Globales.</span></h2>
+        <p class="section-sub">Comparativa técnica directa frente a Signal, Telegram, WhatsApp y Session.</p>
+      </div>
+
+      <div class="matrix-table-wrap glass-card">
+        <table class="matrix-table font-mono">
+          <thead>
+            <tr>
+              <th>Característica Técnica</th>
+              <th class="col-red">🔴 RED Protocol</th>
+              <th>Signal</th>
+              <th>Telegram</th>
+              <th>WhatsApp</th>
+              <th>Session</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Servidores Centrales</strong></td>
+              <td class="col-red check-ok">❌ 0 (100% P2P)</td>
+              <td class="check-no">⚠️ Servidores AWS</td>
+              <td class="check-no">⚠️ Servidores Propios</td>
+              <td class="check-no">⚠️ Servidores Meta</td>
+              <td class="check-ok">✅ Nodos Swarm</td>
+            </tr>
+            <tr>
+              <td><strong>Radio Malla Offline (Sin Internet)</strong></td>
+              <td class="col-red check-ok">✅ BLE / WiFi-D / LoRa</td>
+              <td class="check-no">❌ Imposible</td>
+              <td class="check-no">❌ Imposible</td>
+              <td class="check-no">❌ Imposible</td>
+              <td class="check-no">❌ Imposible</td>
+            </tr>
+            <tr>
+              <td><strong>Privacidad de Metadatos (Onion)</strong></td>
+              <td class="col-red check-ok">✅ 3-Hop Onion</td>
+              <td class="check-no">⚠️ Limitado</td>
+              <td class="check-no">❌ Sin Cifrado Onion</td>
+              <td class="check-no">❌ Recolecta Metadatos</td>
+              <td class="check-ok">✅ Lokinet Onion</td>
+            </tr>
+            <tr>
+              <td><strong>Identidad sin Teléfono / SIM</strong></td>
+              <td class="col-red check-ok">✅ DID Cero-Conocimiento</td>
+              <td class="check-no">❌ Requiere Teléfono</td>
+              <td class="check-no">❌ Requiere Teléfono</td>
+              <td class="check-no">❌ Requiere Teléfono</td>
+              <td class="check-ok">✅ Session ID</td>
+            </tr>
+            <tr>
+              <td><strong>Resistencia a Apagones (Blackouts)</strong></td>
+              <td class="col-red check-ok">✅ Store & Forward Malla</td>
+              <td class="check-no">❌ Caída Total</td>
+              <td class="check-no">❌ Caída Total</td>
+              <td class="check-no">❌ Caída Total</td>
+              <td class="check-no">❌ Caída Total</td>
+            </tr>
+            <tr>
+              <td><strong>Defensa Anti-Forense (PIN Pánico)</strong></td>
+              <td class="col-red check-ok">✅ PIN Pánico + DMS</td>
+              <td class="check-no">❌ No Integrado</td>
+              <td class="check-no">❌ No Integrado</td>
+              <td class="check-no">❌ No Integrado</td>
+              <td class="check-no">❌ No Integrado</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- INTERACTIVE TERMINAL CLI HUD -->
   <section class="section-padding" id="terminal">
     <div class="container">
@@ -277,6 +419,7 @@
         <div class="terminal-btns">
           <button class="t-btn" onclick="runTerminalCmd('peers')">--list-peers</button>
           <button class="t-btn" onclick="runTerminalCmd('ratchet')">--ratchet-status</button>
+          <button class="t-btn" onclick="runTerminalCmd('market')">--market-cap</button>
           <button class="t-btn" onclick="runTerminalCmd('dtn')">--dtn-queue</button>
           <button class="t-btn" onclick="runTerminalCmd('sybil')">--sybil-mitigation</button>
           <button class="t-btn" onclick="runTerminalCmd('audit')">--audit-keys</button>
@@ -409,7 +552,7 @@
         <div class="footer-right font-mono">
           <a href="https://github.com/DarckRovert/RED" target="_blank">GitHub</a>
           <a href="https://github.com/DarckRovert/RED/blob/main/docs/SECURITY_AUDIT.md" target="_blank">Auditoría</a>
-          <a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank">Licencia MIT</a>
+          <a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank">Licencia AGPL-3.0</a>
         </div>
       </div>
     </div>
@@ -438,6 +581,46 @@
     </div>
   </div>
 
-  <script src="script.js?v=16.1"></script>
+  <!-- INVESTOR INQUIRY MODAL -->
+  <div id="investor-modal" class="modal-backdrop">
+    <div class="modal-box glass-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.4rem;">💼</span>
+          <h3 style="margin: 0; color: white; font-weight: 800;">Contacto para Inversionistas</h3>
+        </div>
+        <button onclick="closeInvestorModal()" class="modal-close-btn">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px; line-height: 1.5;">
+          Solicita el Executive Summary, Pitch Deck y la documentación de arquitectura técnica de RED Protocol.
+        </p>
+
+        <form onsubmit="handleInvestorSubmit(event)">
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 0.78rem; color: var(--primary-bright); font-weight: 700; margin-bottom: 4px;" class="font-mono">NOMBRE / FONDO DE INVERSIÓN</label>
+            <input type="text" id="inv-name" required placeholder="Ej. A16z / Sequoia / Inversionista Ángel" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); padding: 10px 14px; border-radius: 8px; color: white; font-size: 0.9rem;" />
+          </div>
+
+          <div style="margin-bottom: 12px;">
+            <label style="display: block; font-size: 0.78rem; color: var(--primary-bright); font-weight: 700; margin-bottom: 4px;" class="font-mono">CORREO INSTITUCIONAL</label>
+            <input type="email" id="inv-email" required placeholder="investor@fund.com" style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); padding: 10px 14px; border-radius: 8px; color: white; font-size: 0.9rem;" />
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 0.78rem; color: var(--primary-bright); font-weight: 700; margin-bottom: 4px;" class="font-mono">MENSAJE / CONSULTA TÉCNICA</label>
+            <textarea id="inv-msg" rows="3" placeholder="Interesado en ronda Seed / Asociación de Infraestructura Mesh..." style="width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--glass-border); padding: 10px 14px; border-radius: 8px; color: white; font-size: 0.9rem;"></textarea>
+          </div>
+
+          <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 14px;">
+            ✉️ Enviar Solicitud de Información
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js?v=16.2"></script>
 </body>
 </html>

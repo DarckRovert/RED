@@ -1,4 +1,4 @@
-/* ━━━ RED — Masterpiece Edition Script v16.0 — PERÚ EDITION ━━━ */
+/* ━━━ RED — Masterpiece Edition Script v16.2 — PERÚ EDITION ━━━ */
 'use strict';
 
 window.addEventListener('load', () => {
@@ -8,6 +8,22 @@ window.addEventListener('load', () => {
     setTimeout(() => preloader.style.display = 'none', 500);
   }
   initMeshCanvas();
+});
+
+// Mobile menu toggle
+document.getElementById('menu-toggle')?.addEventListener('click', () => {
+  const menu = document.getElementById('nav-menu');
+  if (menu) {
+    menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+    menu.style.flexDirection = 'column';
+    menu.style.position = 'absolute';
+    menu.style.top = '76px';
+    menu.style.left = '0';
+    menu.style.right = '0';
+    menu.style.background = '#040408';
+    menu.style.padding = '20px';
+    menu.style.borderBottom = '1px solid var(--glass-border)';
+  }
 });
 
 // Double Ratchet Sim
@@ -120,6 +136,8 @@ function runTerminalCmd(cmd) {
     line.innerHTML = `<span class="t-prompt">red@master:~$</span> [PEERS] Nodos activos: 3 (BLE: 1, WiFi: 1, LoRa: 1) · Latencia: 4ms`;
   } else if (cmd === 'ratchet') {
     line.innerHTML = `<span class="t-prompt">red@master:~$</span> [RATCHET] Sesión activa: X25519-AES256-GCM · PFS: VERIFICADO ✅`;
+  } else if (cmd === 'market') {
+    line.innerHTML = `<span class="t-prompt">red@master:~$</span> [MARKET-CAP] TAM: $140B · SAM: $38B · Modelo Económico: Enterprise Gateways & Staking.`;
   } else if (cmd === 'dtn') {
     line.innerHTML = `<span class="t-prompt">red@master:~$</span> [DTN-QUEUE] Cola Store-and-Forward: 0 paquetes pendientes. Malla sincronizada.`;
   } else if (cmd === 'sybil') {
@@ -132,12 +150,26 @@ function runTerminalCmd(cmd) {
   body.scrollTop = body.scrollHeight;
 }
 
-// Modal Launcher
+// WebApp Modal Launcher
 function openWebAppModal() {
   document.getElementById('webapp-modal')?.classList.add('active');
 }
 function closeWebAppModal() {
   document.getElementById('webapp-modal')?.classList.remove('active');
+}
+
+// Investor Modal Launcher
+function openInvestorModal() {
+  document.getElementById('investor-modal')?.classList.add('active');
+}
+function closeInvestorModal() {
+  document.getElementById('investor-modal')?.classList.remove('active');
+}
+function handleInvestorSubmit(e) {
+  e.preventDefault();
+  const name = document.getElementById('inv-name').value;
+  alert(`✅ Gracias ${name}. Tu solicitud de Pitch Deck e información de inversión ha sido registrada. Te contactaremos a la brevedad.`);
+  closeInvestorModal();
 }
 
 // Copy SHA Hash

@@ -1,6 +1,6 @@
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   RED — Red Encriptada Descentralizada (v16.0 Zenith Master Edition)
-   Ultra-Premium Design System: OLED Dark · Glassmorphism 2.0 · Signal Red
+   RED — Red Encriptada Descentralizada (v16.2 Masterpiece Edition)
+   Ultra-Premium Design System: OLED Dark · Glassmorphism 2.0 · Signal Red & Cyber Cyan
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
 
 :root {
@@ -8,6 +8,9 @@
   --primary-bright: #FF3355;
   --primary-glow: rgba(232, 33, 58, 0.45);
   --primary-glow-intense: rgba(232, 33, 58, 0.75);
+
+  --cyan-bright: #00F2FE;
+  --cyan-glow: rgba(0, 242, 254, 0.35);
 
   --bg-deep: #020205;
   --bg-surface: #070710;
@@ -116,7 +119,7 @@ body {
   right: 10%;
   width: 600px;
   height: 400px;
-  background: radial-gradient(ellipse, rgba(52,152,219,0.08) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(0,242,254,0.08) 0%, transparent 70%);
 }
 #bg-mesh-canvas {
   position: fixed;
@@ -177,12 +180,12 @@ body {
 }
 .nav-menu {
   display: flex;
-  gap: 24px;
+  gap: 20px;
 }
 .nav-menu a {
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 600;
   transition: color 0.2s ease;
 }
@@ -192,16 +195,16 @@ body {
 .nav-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
-.btn-webapp-launch {
+.btn-webapp-launch, .btn-investor-launch {
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--glass-border);
   color: white;
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-radius: 20px;
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -212,14 +215,18 @@ body {
   background: rgba(232,33,58,0.15);
   border-color: var(--primary-glow);
 }
+.btn-investor-launch:hover {
+  background: rgba(0,242,254,0.15);
+  border-color: var(--cyan-glow);
+}
 .btn-primary {
   background: var(--primary);
   color: white;
   border: none;
-  padding: 12px 26px;
+  padding: 12px 24px;
   border-radius: 30px;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -236,10 +243,10 @@ body {
   background: rgba(255,255,255,0.06);
   border: 1px solid var(--glass-border);
   color: white;
-  padding: 12px 26px;
+  padding: 12px 24px;
   border-radius: 30px;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -251,6 +258,27 @@ body {
   background: rgba(255,255,255,0.12);
   transform: translateY(-2px);
 }
+.btn-investor-hero {
+  background: rgba(0, 242, 254, 0.1);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  color: var(--cyan-bright);
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  transition: all 0.25s ease;
+}
+.btn-investor-hero:hover {
+  background: rgba(0, 242, 254, 0.2);
+  box-shadow: 0 4px 20px var(--cyan-glow);
+  transform: translateY(-2px);
+}
+
 .menu-toggle {
   display: none;
   background: transparent;
@@ -300,7 +328,7 @@ body {
   margin-bottom: 20px;
 }
 .gradient-text {
-  background: linear-gradient(135deg, #FF3355 0%, #E8213A 50%, #FF7043 100%);
+  background: linear-gradient(135deg, #FF3355 0%, #E8213A 50%, #00F2FE 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -323,7 +351,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 16px;
-  max-width: 840px;
+  max-width: 900px;
   margin: 0 auto;
 }
 .stat-box {
@@ -394,6 +422,85 @@ body {
 .card-icon { font-size: 2.5rem; margin-bottom: 16px; }
 .card h3 { font-size: 1.25rem; font-weight: 800; margin-bottom: 10px; }
 .card p { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.6; }
+
+/* INVESTOR METRICS GRID */
+.investor-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+.inv-card {
+  padding: 32px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(0, 242, 254, 0.2);
+}
+.inv-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 242, 254, 0.15);
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  color: var(--cyan-bright);
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+.inv-num {
+  font-size: 3rem;
+  font-weight: 900;
+  color: white;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, #ffffff, var(--cyan-bright));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.inv-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: white;
+  margin-bottom: 10px;
+}
+.inv-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* COMPETITIVE MATRIX TABLE */
+.matrix-table-wrap {
+  overflow-x: auto;
+  padding: 24px;
+}
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.88rem;
+}
+.matrix-table th, .matrix-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.matrix-table th {
+  background: rgba(0,0,0,0.5);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+.matrix-table th.col-red {
+  color: var(--primary-bright);
+  font-size: 0.95rem;
+}
+.matrix-table td.col-red {
+  background: rgba(232, 33, 58, 0.08);
+  font-weight: 700;
+}
+.check-ok { color: #00E676; }
+.check-no { color: var(--text-muted); }
 
 /* RATCHET SIMULATOR */
 .interactive-box { padding: 32px; }
@@ -501,4 +608,5 @@ body {
   .menu-toggle { display: block; }
   .hero-section { padding-top: 130px; }
   .arch-card { flex-direction: column; text-align: center; }
+  .matrix-table th, .matrix-table td { padding: 12px; font-size: 0.78rem; }
 }
