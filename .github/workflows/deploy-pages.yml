@@ -5,24 +5,37 @@ on:
     branches:
       - main
       - master
-    paths:
-      - 'website/**'
-      - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   deploy:
+    environment:
+      name: github-pages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Sync Website Assets
+        run: |
+          mkdir -p website/assets
+          cp -rf assets/* website/assets/ 2>/dev/null || true
+          cp -f index.html website/index.html 2>/dev/null || true
+          cp -f styles.css website/styles.css 2>/dev/null || true
+          cp -f script.js website/script.js 2>/dev/null || true
+
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./website
+          publish_dir: .
           force_orphan: true
