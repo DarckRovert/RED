@@ -119,8 +119,8 @@ wss.on("connection", (ws, req) => {
                 peerId = msg.peerId || crypto.randomUUID?.() || `peer_${Date.now()}_${Math.random().toString(36).slice(2)}`;
                 const room = getOrCreateRoom(msg.roomId);
 
-                if (room.size >= 2) {
-                    send(ws, { type: "error", message: "Room is full (max 2 peers)" });
+                if (room.size >= 50) {
+                    send(ws, { type: "error", message: "Room is full (max 50 peers)" });
                     return;
                 }
 
@@ -130,7 +130,7 @@ wss.on("connection", (ws, req) => {
                 send(ws, { type: "registered", peerId, roomId: msg.roomId, peerCount: room.size });
                 broadcastToRoom(msg.roomId, peerId, { type: "peer-joined", peerId });
 
-                console.log(`[RED Signaling] Peer registered: ${peerId} → room: ${msg.roomId} (${room.size}/2)`);
+                console.log(`[RED Signaling] Peer registered: ${peerId} → room: ${msg.roomId} (${room.size}/50)`);
                 break;
             }
 
