@@ -180,7 +180,7 @@ export default function StatusHeader() {
                     </span>
                 )}
                 <span className="font-mono text-[10px] tracking-wider text-orange-400/80 uppercase mt-0.5">
-                    {status?.version || 'v16.0.0'}
+                    {status?.version || 'v18.3.0'}
                 </span>
             </div>
         </div>

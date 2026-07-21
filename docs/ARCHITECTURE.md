@@ -1,4 +1,4 @@
-# 🏗️ Arquitectura de RED (v16.1 Zenith Master Edition)
+# 🏗️ Arquitectura de RED (v18.3 Zenith Master Edition)
 
 ## Visión General
 

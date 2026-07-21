@@ -92,7 +92,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
 
         try {
             const payload = {
-                version: "v16.0",
+                version: "v18.3",
                 timestamp: Date.now(),
                 identity,
                 contacts,
@@ -101,7 +101,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
 
             const jsonString = JSON.stringify(payload);
             const encryptedB64 = await encryptPayloadAesGcm(jsonString, password);
-            const backupText = `-----BEGIN RED AES-256-GCM ENCRYPTED BACKUP (v16.0)-----\nPBKDF2-SHA256: 100000-iterations\n${encryptedB64}\n-----END RED ENCRYPTED BACKUP-----`;
+            const backupText = `-----BEGIN RED AES-256-GCM ENCRYPTED BACKUP (v18.3)-----\nPBKDF2-SHA256: 100000-iterations\n${encryptedB64}\n-----END RED ENCRYPTED BACKUP-----`;
 
             const { Capacitor } = await import('@capacitor/core');
             if (Capacitor.isNativePlatform()) {

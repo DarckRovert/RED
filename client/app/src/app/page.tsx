@@ -22,7 +22,7 @@ import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
 /**
- * RED v16.0 Zenith Master SPA Router.
+ * RED v18.3 Zenith Master SPA Router.
  * Replaces Next.js <Link> and useRouter to guarantee 100% stable offline mobile transitions.
  */
 export default function AppRouter() {
