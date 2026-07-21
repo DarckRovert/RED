@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio (v16.0.0 "Mesh/Offline Edition")
+# 🔴 RED — Guía de Inicio (v18.3.0 "Mesh/Offline Edition")
 
 RED es un sistema de mensajería soberana, descentralizada y cifrada end-to-end que ahora cuenta con una interfaz sólida estilo WhatsApp/Telegram y capacidades de hardware directo (BLE/WiFi Mesh).
 
@@ -43,7 +43,7 @@ npm run dev
 2. Tu dispositivo generará una identidad **DID** única.
 3. **CRÍTICO:** Copia y guarda tu **Identity Hash**. RED no tiene "recuperación de contraseña" por correo; si pierdes este código, pierdes tu cuenta.
 
-## Características de la v16.0.0
+## Características de la v18.3.0
 - **Solid UI:** Interfaz premium, rápida y minimalista sin stuns externos para WebRTC.
 - **NodeMap + LoRa:** Mapa 3D de nodos con hardware radio bridge para largo alcance real P2P.
 - **RED Nearby:** Radar de contactos por Bluetooth BLE sin necesidad de internet.

@@ -233,7 +233,7 @@ Consulta la lista de [Contribuidores](CONTRIBUTORS.md) actuales.
 
 ---
 
-*RED v16.0.0 — Mesh P2P Offline Total · Build: Passing ✅*
+*RED v18.3.0 — Mesh P2P Offline Total · Build: Passing ✅*
 *🛡️ **Integración Nativa de Keystore** · 🔥 **Biometría Nativa** · 💀 **Dead Man's Switch***
 
 ---

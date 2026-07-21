@@ -1,4 +1,4 @@
-/* ━━━ RED — Masterpiece Edition Script v16.3 — PERÚ EDITION ━━━ */
+/* ━━━ RED — Masterpiece Edition Script v18.3 — PERÚ EDITION ━━━ */
 'use strict';
 
 window.addEventListener('load', () => {
@@ -65,7 +65,7 @@ function resetRatchetSim() {
   if (numElem) numElem.innerText = '1';
 
   document.getElementById('r-dh').innerText = 'DH_Key = X25519(Alice_Secret, Bob_Ephemeral_Public)';
-  document.getElementById('r-kdf').innerText = 'Message_Key_1 = HKDF_Expand(Chain_Key_1, "RED-Ratchet-v16")';
+  document.getElementById('r-kdf').innerText = 'Message_Key_1 = HKDF_Expand(Chain_Key_1, "RED-Ratchet-v18.3")';
   document.getElementById('r-cipher').innerText = 'Payload = AES256_GCM_Encrypt(Message_Key_1, Nonce, "Hola RED!")';
   document.getElementById('r-log').innerText = '> Llaves criptográficas reiniciadas a la época inicial.';
 }
