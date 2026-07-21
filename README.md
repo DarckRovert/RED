@@ -1,8 +1,8 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v16.1 Zenith Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Puente P2P Web ↔ Mobile (WebRTC DataChannel), Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P, Identidad Criptográfica Autónoma (sin número ni registro), Bóveda `.redbak` y Simulador de Apagón Táctico.
+> **v18.3 Zenith Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Puente P2P Web ↔ Mobile (WebRTC DataChannel), Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P, Identidad Criptográfica Autónoma (sin número ni registro), Bóveda `.redbak` y Simulador de Apagón Táctico.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v16.1_Zenith-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v18.3_Zenith-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]()
 
 ## 🎯 Visión
 
