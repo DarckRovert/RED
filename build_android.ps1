@@ -96,8 +96,9 @@ if (Test-Path "gradlew.bat") {
         Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
         
-        Write-Host "Copying APK to website/red.apk..." -ForegroundColor Gray
+        Write-Host "Copying APK to website/red.apk and assets/red-v16.0.0-zenith.apk..." -ForegroundColor Gray
         Copy-Item -Path $ApkPath -Destination "$RED_ROOT\website\red.apk" -Force
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v16.0.0-zenith.apk" -Force
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
     }
