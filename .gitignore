@@ -39,6 +39,7 @@ red-node-data/
 
 # Android / Mobile Builds
 *.apk
+!assets/red-v16.0.0-zenith.apk
 *.aab
 *.ap_
 client/app/android/app/build/
