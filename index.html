@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>RED Protocol — Red Encriptada Descentralizada | Inversión & Infraestructura P2P</title>
+  <title>RED Protocol — Red Encriptada Descentralizada | Flagship P2P Infrastructure</title>
   <meta name="description" content="RED es un protocolo de mensajería P2P soberano de grado militar y arquitectura sin servidores. Cifrado Doble Trinquete X25519/AES-256-GCM, red mesh radio offline BLE/WiFi-Direct y resistencia total a la censura." />
   <meta name="keywords" content="RED Protocol, mensajería P2P, cifrado militar, mesh offline, X25519, Doble Trinquete, DarckRovert, Perú, anti-censura, inversión Web3, P2P privacy" />
 
@@ -12,13 +12,13 @@
   <meta property="og:url" content="https://darckrovert.github.io/RED/" />
   <meta property="og:title" content="RED Protocol — La Revolución de la Mensajería P2P & Malla Radio 🇵🇪" />
   <meta property="og:description" content="Mensajería cifrada militar sin servidores ni internet. Comunicación pura por ondas de radio." />
-  <meta property="og:image" content="assets/splash.png" />
+  <meta property="og:image" content="assets/hero_device_mockup.png" />
 
   <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700;800&family=Outfit:wght@600;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16.2" />
+  <link rel="stylesheet" href="styles.css?v=16.3" />
   <link rel="icon" href="assets/icon.png" />
 
   <!-- Schema.org JSON-LD -->
@@ -48,9 +48,10 @@
     </div>
   </div>
 
-  <!-- ATMOSPHERIC BACKGROUND -->
+  <!-- ATMOSPHERIC BACKGROUND CANVAS -->
   <div class="ambient-glow top"></div>
   <div class="ambient-glow bottom"></div>
+  <div class="ambient-glow center"></div>
   <canvas id="bg-mesh-canvas"></canvas>
 
   <!-- NAVBAR -->
@@ -66,12 +67,12 @@
         </a>
 
         <nav class="nav-menu" id="nav-menu">
-          <a href="#features">Características</a>
+          <a href="#features">Capacidades</a>
           <a href="#ratchet">Doble Trinquete</a>
-          <a href="#mesh">Red Mesh</a>
-          <a href="#investors">Inversionistas & TAM</a>
-          <a href="#matrix">Matriz Comparativa</a>
-          <a href="#terminal">Terminal CLI</a>
+          <a href="#mesh">Radar Mesh</a>
+          <a href="#investors">Inversionistas</a>
+          <a href="#matrix">Matriz Benchmark</a>
+          <a href="#terminal">Console HUD</a>
           <a href="#download" class="nav-highlight">Descargar APK</a>
         </nav>
 
@@ -89,59 +90,80 @@
     </div>
   </header>
 
-  <!-- HERO SECTION -->
+  <!-- HERO SECTION WITH FLOATING 3D SHOWCASE -->
   <section class="hero-section">
     <div class="container">
-      <div class="hero-content">
-        <div class="peru-badge font-mono">
-          <span class="pulse-dot-red"></span> PROTOCOLO SOBERANO MILITAR · HECHO EN PERÚ 🇵🇪
+      <div class="hero-grid">
+        <div class="hero-left">
+          <div class="peru-badge font-mono">
+            <span class="pulse-dot-red"></span> PROTOCOLO SOBERANO MILITAR · HECHO EN PERÚ 🇵🇪
+          </div>
+
+          <h1 class="hero-heading">
+            Mensajería P2P Sin Servidores.<br />
+            <span class="gradient-text">Infraestructura Soberana de Privacidad.</span>
+          </h1>
+
+          <p class="hero-subheading">
+            RED es un protocolo de comunicación inmutable y descentralizado. Cifrado de grado militar <strong class="highlight-text">Doble Trinquete X25519 / AES-256-GCM</strong>, enrutamiento cebolla de 3 saltos y conectividad <strong class="highlight-text">Radio Mesh Offline por BLE / WiFi Direct</strong>. Sin servidores centrales, sin internet y sin registro telefónico.
+          </p>
+
+          <div class="hero-buttons">
+            <a href="assets/red-v16.0.0-zenith.apk" download="red-v16.0.0-zenith.apk" class="btn-primary btn-hero">
+              <span>⚡</span> Descargar APK Directo (v16.0)
+            </a>
+            <button class="btn-secondary btn-hero" onclick="openWebAppModal()">
+              <span>🌐</span> Probar Web SPA en Vivo
+            </button>
+            <button class="btn-investor-hero" onclick="openInvestorModal()">
+              <span>💼</span> Contacto para Inversionistas
+            </button>
+          </div>
+
+          <!-- HERO STATS GRID -->
+          <div class="stats-grid font-mono">
+            <div class="stat-box">
+              <div class="stat-num">$140B+</div>
+              <div class="stat-desc">Mercado Global TAM</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-num">100%</div>
+              <div class="stat-desc">P2P Radio Offline</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-num">0</div>
+              <div class="stat-desc">Servidores Centrales</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-num">256-bit</div>
+              <div class="stat-desc">AES-GCM Militar</div>
+            </div>
+          </div>
         </div>
 
-        <h1 class="hero-heading">
-          Mensajería P2P Sin Servidores.<br />
-          <span class="gradient-text">Infraestructura Soberana de Privacidad.</span>
-        </h1>
+        <!-- HERO RIGHT FLOATING SHOWCASE -->
+        <div class="hero-right">
+          <div class="device-mockup-wrapper">
+            <div class="glow-ring"></div>
+            <img src="assets/hero_device_mockup.png" alt="RED Smartphone UI Showcase" class="device-img floating-animation" />
 
-        <p class="hero-subheading">
-          RED es un protocolo de comunicación inmutable y descentralizado. Cifrado de grado militar <strong class="highlight-text">Doble Trinquete X25519 / AES-256-GCM</strong>, enrutamiento por cebolla de 3 saltos y conectividad <strong class="highlight-text">Radio Mesh Offline por BLE / WiFi Direct</strong>. Sin servidores centrales, sin internet y sin registro de teléfono.
-        </p>
-
-        <div class="hero-buttons">
-          <a href="assets/red-v16.0.0-zenith.apk" download="red-v16.0.0-zenith.apk" class="btn-primary btn-hero">
-            <span>⚡</span> Descargar APK Directo (v16.0)
-          </a>
-          <button class="btn-secondary btn-hero" onclick="openWebAppModal()">
-            <span>🌐</span> Probar Web SPA en Vivo
-          </button>
-          <button class="btn-investor-hero" onclick="openInvestorModal()">
-            <span>💼</span> Contacto para Inversionistas
-          </button>
-        </div>
-
-        <!-- HERO STATS GRID -->
-        <div class="stats-grid font-mono">
-          <div class="stat-box">
-            <div class="stat-num">$140B+</div>
-            <div class="stat-desc">Mercado Global TAM</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-num">100%</div>
-            <div class="stat-desc">P2P Radio Offline</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-num">0</div>
-            <div class="stat-desc">Servidores Centrales</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-num">256-bit</div>
-            <div class="stat-desc">AES-GCM Militar</div>
+            <!-- FLOATING BADGES -->
+            <div class="floating-badge badge-1 font-mono">
+              <span class="dot-green"></span> Double Ratchet Active
+            </div>
+            <div class="floating-badge badge-2 font-mono">
+              <span class="dot-blue"></span> BLE / WiFi-D Mesh Link
+            </div>
+            <div class="floating-badge badge-3 font-mono">
+              <span class="dot-red"></span> 0 Central Servers
+            </div>
           </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- FEATURES SECTION -->
+  <!-- FEATURES SECTION WITH CURSOR GLOW CARDS -->
   <section class="section-padding" id="features">
     <div class="container">
       <div class="section-title-wrap">
@@ -150,37 +172,37 @@
       </div>
 
       <div class="cards-grid">
-        <div class="card glass-card">
+        <div class="card glow-card glass-card">
           <div class="card-icon">🔐</div>
           <h3>Cifrado Doble Trinquete</h3>
           <p>Implementación matemática del algoritmo Signal (X25519 DH + HKDF-SHA256 + AES-256-GCM). Cada mensaje renueva las llaves simétricas efímeras con Secreto Hacia Adelante Perfecto (PFS).</p>
         </div>
 
-        <div class="card glass-card">
+        <div class="card glow-card glass-card">
           <div class="card-icon">📡</div>
           <h3>Red Malla Radio Offline</h3>
           <p>Comunicación pura por ondas de radio mediante Bluetooth BLE y WiFi Direct. Los mensajes saltan de teléfono a teléfono (Store & Forward) sin pasar por internet ni antenas celulares.</p>
         </div>
 
-        <div class="card glass-card">
+        <div class="card glow-card glass-card">
           <div class="card-icon">🧅</div>
           <h3>Enrutamiento por Cebolla</h3>
           <p>Protección total de metadatos. Cada paquete se envuelve en 3 capas de cifrado para que ningún nodo intermediario conozca simultáneamente el emisor y el destinatario final.</p>
         </div>
 
-        <div class="card glass-card">
+        <div class="card glow-card glass-card">
           <div class="card-icon">👤</div>
           <h3>Identidad DID Cero-Conocimiento</h3>
           <p>Identidades criptográficas basadas en llaves públicas Ed25519 y firmas Proof-of-Work (PoW). Sin nombres reales, sin correo electrónico y sin verificación de SMS.</p>
         </div>
 
-        <div class="card glass-card">
+        <div class="card glow-card glass-card">
           <div class="card-icon">☠️</div>
           <h3>Modo Muerto DMS & Pánico</h3>
           <p>Interruptor táctico con PIN de pánico y temporizador de inactividad DMS. Autodestrucción instantánea de llaves y almacenamiento local ante aprehensión o inspección física.</p>
         </div>
 
-        <div class="card glass-card">
+        <div class="card glow-card glass-card">
           <div class="card-icon">⛓️</div>
           <h3>Blockchain Omega PoS</h3>
           <p>Cadena de bloques minimalista en Rust PoS para el registro descentralizado de identidades DID y contratos de estado sin servidores centrales.</p>
@@ -189,7 +211,7 @@
     </div>
   </section>
 
-  <!-- INTERACTIVE DOUBLE RATCHET VISUALIZER -->
+  <!-- INTERACTIVE DOUBLE RATCHET VISUALIZER & PIPELINE -->
   <section class="section-padding" id="ratchet">
     <div class="container">
       <div class="section-title-wrap">
@@ -198,7 +220,7 @@
         <p class="section-sub">Haz clic para simular el intercambio de llaves y la mutación de cifrado con cada mensaje.</p>
       </div>
 
-      <div class="interactive-box glass-card">
+      <div class="interactive-box glass-card glow-card">
         <div class="interactive-controls">
           <button class="btn-primary" onclick="triggerRatchetSim()">
             <span>✉️</span> Simular Envío de Mensaje Cifrado
@@ -206,9 +228,36 @@
           <button class="btn-secondary" onclick="resetRatchetSim()">
             <span>🔄</span> Reiniciar Llaves
           </button>
+          <span class="ratchet-counter-badge font-mono" id="ratchet-counter font-mono">Mensajes Cifrados: <strong id="r-count-num">1</strong></span>
         </div>
 
-        <div class="ratchet-steps-grid font-mono">
+        <div class="ratchet-pipeline">
+          <div class="p-step active" id="p-step-1">
+            <div class="p-num">01</div>
+            <div class="p-title">Ephemeral Keypair</div>
+            <div class="p-desc font-mono">X25519 Gen</div>
+          </div>
+          <div class="p-arrow">➔</div>
+          <div class="p-step active" id="p-step-2">
+            <div class="p-num">02</div>
+            <div class="p-title">Diffie-Hellman</div>
+            <div class="p-desc font-mono">Shared Secret</div>
+          </div>
+          <div class="p-arrow">➔</div>
+          <div class="p-step active" id="p-step-3">
+            <div class="p-num">03</div>
+            <div class="p-title">HKDF Expand</div>
+            <div class="p-desc font-mono">Chain Ratchet</div>
+          </div>
+          <div class="p-arrow">➔</div>
+          <div class="p-step active" id="p-step-4">
+            <div class="p-num">04</div>
+            <div class="p-title">AES-256-GCM</div>
+            <div class="p-desc font-mono">Cipher Payload</div>
+          </div>
+        </div>
+
+        <div class="ratchet-steps-grid font-mono" style="margin-top: 24px;">
           <div class="r-step">
             <span class="r-tag">PASO 1: DH RATCHET (X25519)</span>
             <div class="r-val" id="r-dh">DH_Key = X25519(Alice_Secret, Bob_Ephemeral_Public)</div>
@@ -230,28 +279,50 @@
     </div>
   </section>
 
-  <!-- INTERACTIVE MESH RADAR SIMULATOR -->
+  <!-- NEXT-GEN INTERACTIVE MESH RADAR SIMULATOR -->
   <section class="section-padding" id="mesh">
     <div class="container">
       <div class="section-title-wrap">
         <span class="section-tag font-mono">📡 COBERTURA RADIO P2P</span>
         <h2 class="section-heading">Simulador de Malla Mesh<br /><span class="gradient-text">Conectividad Total Sin Internet.</span></h2>
+        <p class="section-sub">Haz clic sobre cualquier nodo en el radar para inspeccionar su telemetría P2P en tiempo real.</p>
       </div>
 
-      <div class="radar-box glass-card">
+      <div class="radar-box glass-card glow-card">
         <div class="radar-topbar">
           <button class="btn-secondary" id="btn-blackout" onclick="toggleBlackoutSim()">
             <span>⚡</span> Simular Apagón de Red (Blackout)
           </button>
-          <span class="radar-status font-mono" id="radar-status-text">ESTADO: 3 Nodos en Malla (BLE + WiFi Direct)</span>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="radar-status font-mono" id="radar-status-text">ESTADO: 3 Nodos en Malla (BLE + WiFi Direct)</span>
+            <span class="pulse-live-badge font-mono">RADAR EN VIVO</span>
+          </div>
         </div>
 
-        <canvas id="mesh-radar-canvas" style="width: 100%; height: 380px; background: #030308; border-radius: 16px; border: 1px solid var(--glass-border);"></canvas>
+        <div style="position: relative;">
+          <canvas id="mesh-radar-canvas" style="width: 100%; height: 420px; background: #030308; border-radius: 16px; border: 1px solid var(--glass-border); cursor: pointer;"></canvas>
+          
+          <!-- NODE HUD POPUP MODAL ON CANVAS -->
+          <div id="node-hud-card" class="node-hud-card glass-card font-mono" style="display: none;">
+            <div class="hud-header">
+              <span id="hud-node-title" style="color: var(--primary-bright); font-weight: 800;">Nodo Alice</span>
+              <button onclick="closeNodeHud()" style="background: transparent; border: none; color: white; cursor: pointer;">✕</button>
+            </div>
+            <div class="hud-body">
+              <div><span>ID:</span> <code id="hud-node-id">did:red:3f7a...</code></div>
+              <div><span>Transporte:</span> <span id="hud-node-type" style="color: #3498db;">BLE Radio</span></div>
+              <div><span>RSSI:</span> <span id="hud-node-rssi" style="color: #00E676;">-42 dBm (Excelente)</span></div>
+              <div><span>Paquetes Transmitidos:</span> <span id="hud-node-pkts">1,248 msgs</span></div>
+              <div><span>Cifrado:</span> <span style="color: var(--primary-bright);">Double Ratchet AES-256</span></div>
+            </div>
+          </div>
+        </div>
 
         <div class="radar-legend font-mono">
           <span><span class="dot-ble"></span> Bluetooth BLE (~100m)</span>
           <span><span class="dot-wifi"></span> WiFi-Direct (~1km)</span>
           <span><span class="dot-lora"></span> LoRa Mesh (~10km)</span>
+          <span style="margin-left: auto; color: var(--primary-bright);">💡 Toca un nodo para ver la telemetría</span>
         </div>
       </div>
     </div>
@@ -268,21 +339,21 @@
 
       <!-- TAM SAM SOM GRID -->
       <div class="investor-metrics-grid font-mono">
-        <div class="inv-card glass-card">
+        <div class="inv-card glow-card glass-card">
           <div class="inv-badge">TAM</div>
           <div class="inv-num">$140B+</div>
           <div class="inv-title">Mercado Total Direccionable</div>
           <p class="inv-desc">Mercado mundial de ciberseguridad, mensajería empresarial e infraestructura de privacidad para 2028.</p>
         </div>
 
-        <div class="inv-card glass-card">
+        <div class="inv-card glow-card glass-card">
           <div class="inv-badge">SAM</div>
           <div class="inv-num">$38B</div>
           <div class="inv-title">Mercado Servible Atendible</div>
           <p class="inv-desc">Usuarios activos en plataformas de comunicación cifrada que requieren privacidad de metadatos estricta.</p>
         </div>
 
-        <div class="inv-card glass-card">
+        <div class="inv-card glow-card glass-card">
           <div class="inv-badge">SOM</div>
           <div class="inv-num">$4.2B</div>
           <div class="inv-title">Mercado Objetivo Inicial</div>
@@ -291,7 +362,7 @@
       </div>
 
       <!-- MONETIZATION MODEL -->
-      <div class="monetization-box glass-card" style="margin-top: 36px; padding: 36px;">
+      <div class="monetization-box glass-card glow-card" style="margin-top: 36px; padding: 36px;">
         <h3 style="font-family: var(--font-title); font-size: 1.6rem; font-weight: 800; margin-bottom: 16px; color: white;">
           💎 Modelo Económico & Fuentes de Monetización
         </h3>
@@ -325,7 +396,7 @@
         <p class="section-sub">Comparativa técnica directa frente a Signal, Telegram, WhatsApp y Session.</p>
       </div>
 
-      <div class="matrix-table-wrap glass-card">
+      <div class="matrix-table-wrap glass-card glow-card">
         <table class="matrix-table font-mono">
           <thead>
             <tr>
@@ -392,7 +463,7 @@
     </div>
   </section>
 
-  <!-- INTERACTIVE TERMINAL CLI HUD -->
+  <!-- INTERACTIVE TERMINAL CLI HUD WITH MULTI-TAB LOGS -->
   <section class="section-padding" id="terminal">
     <div class="container">
       <div class="section-title-wrap">
@@ -400,7 +471,7 @@
         <h2 class="section-heading">Terminal HUD Interactiva<br /><span class="gradient-text">Simulación del Motor Rust Core.</span></h2>
       </div>
 
-      <div class="terminal-card glass-card font-mono">
+      <div class="terminal-card glass-card glow-card font-mono">
         <div class="terminal-head">
           <div class="t-dots">
             <span class="t-dot red"></span>
@@ -408,6 +479,11 @@
             <span class="t-dot green"></span>
           </div>
           <span class="t-title">red-core-engine-v16.0.0 --daemon</span>
+          <div class="t-tabs" style="margin-left: auto; display: flex; gap: 8px;">
+            <button class="t-tab-btn active" onclick="switchTermTab('libp2p')">libp2p.log</button>
+            <button class="t-tab-btn" onclick="switchTermTab('ratchet')">ratchet.log</button>
+            <button class="t-tab-btn" onclick="switchTermTab('dht')">dht.log</button>
+          </div>
         </div>
 
         <div class="terminal-body" id="term-body">
@@ -437,7 +513,7 @@
       </div>
 
       <div class="arch-list">
-        <div class="arch-card glass-card">
+        <div class="arch-card glow-card glass-card">
           <div class="arch-icon">📱</div>
           <div>
             <h3>Capa 5: Aplicación Nativa & Web SPA</h3>
@@ -445,7 +521,7 @@
           </div>
         </div>
 
-        <div class="arch-card glass-card">
+        <div class="arch-card glow-card glass-card">
           <div class="arch-icon">🔒</div>
           <div>
             <h3>Capa 4: Protocolo de Aplicación P2P</h3>
@@ -453,7 +529,7 @@
           </div>
         </div>
 
-        <div class="arch-card glass-card">
+        <div class="arch-card glow-card glass-card">
           <div class="arch-icon">🕵️</div>
           <div>
             <h3>Capa 3: Criptografía e Identidades DID</h3>
@@ -461,7 +537,7 @@
           </div>
         </div>
 
-        <div class="arch-card glass-card">
+        <div class="arch-card glow-card glass-card">
           <div class="arch-icon">🌐</div>
           <div>
             <h3>Capa 2: Red Malla & Onion Routing</h3>
@@ -469,7 +545,7 @@
           </div>
         </div>
 
-        <div class="arch-card glass-card">
+        <div class="arch-card glow-card glass-card">
           <div class="arch-icon">⛓️</div>
           <div>
             <h3>Capa 1: Blockchain de Identidades Omega</h3>
@@ -483,7 +559,7 @@
   <!-- DIRECT DOWNLOAD HUB -->
   <section class="section-padding" id="download">
     <div class="container">
-      <div class="download-container glass-card">
+      <div class="download-container glass-card glow-card">
         <div class="section-title-wrap">
           <span class="section-tag font-mono">📲 CENTRO DE DESCARGA DIRECTA</span>
           <h2 class="section-heading">Obtén RED v16.0 Zenith<br /><span class="gradient-text">Para Android y Navegador Web.</span></h2>
@@ -495,7 +571,7 @@
           <div class="dl-card main-dl">
             <div class="dl-icon">🤖</div>
             <h3>Android APK Directo</h3>
-            <span class="dl-version font-mono">v16.0.0 Zenith Master Edition · 98.9 MB</span>
+            <span class="dl-version font-mono">v16.0.0 Zenith Master Edition · 94.3 MB</span>
 
             <a href="assets/red-v16.0.0-zenith.apk" download="red-v16.0.0-zenith.apk" class="btn-primary btn-dl">
               <span>⬇️</span> Descargar APK Directo (v16.0)
@@ -526,7 +602,7 @@
   <!-- ORIGIN & SOVEREIGNTY SECTION -->
   <section class="section-padding">
     <div class="container">
-      <div class="origin-box glass-card">
+      <div class="origin-box glass-card glow-card">
         <div class="origin-flag-icon">🇵🇪</div>
         <span class="section-tag font-mono">🌎 INGENIERÍA PERUANA SOBERANA</span>
         <h2 class="section-heading" style="margin-top: 10px;">Nacido en Lima.<br /><span class="gradient-text">Diseñado para el Mundo.</span></h2>
@@ -621,6 +697,6 @@
     </div>
   </div>
 
-  <script src="script.js?v=16.2"></script>
+  <script src="script.js?v=16.3"></script>
 </body>
 </html>
