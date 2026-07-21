@@ -367,7 +367,7 @@ export default function Sidebar() {
             </div>
 
             {/* ── List ─────────────────────────────────────────────────────── */}
-            <div ref={listRef} className="scroll-container" style={{ flex: 1, padding: '4px 12px 80px', position: 'relative', zIndex: 1 }}
+            <div ref={listRef} className="scroll-container" style={{ flex: 1, padding: '4px 12px calc(80px + var(--safe-bottom, 0px))', position: 'relative', zIndex: 1 }}
                 onTouchStart={onListTouchStart}
                 onTouchEnd={onListTouchEnd}
             >

@@ -129,7 +129,7 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
                     <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>
                         Integrantes Activos ({members.length})
                     </label>
-                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }} className="no-scrollbar">
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }} className="scroll-container no-scrollbar">
                         {members.map(hash => {
                             const contact = contacts.find(c => c.identity_hash === hash);
                             const name = contact?.display_name || `${hash.substring(0, 10)}…`;

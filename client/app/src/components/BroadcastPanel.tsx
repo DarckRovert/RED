@@ -73,7 +73,7 @@ export default function BroadcastPanel() {
             </header>
 
             {/* Contact selector */}
-            <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+            <div className="scroll-container no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
 
                 {/* Step label */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>

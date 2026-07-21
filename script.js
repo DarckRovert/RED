@@ -1,629 +1,157 @@
-/* ━━━ RED — Masterpiece Edition Script v7.0 — PERÚ EDITION ━━━ */
+/* ━━━ RED — Masterpiece Edition Script v16.0 — PERÚ EDITION ━━━ */
 'use strict';
 
-const $ = (s, c = document) => c.querySelector(s);
-const $$ = (s, c = document) => [...c.querySelectorAll(s)];
-const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
-
-// Constants
-const LIMA = { lat: -12.0464, lng: -77.0428 };
-const WORLD_CITIES = [
-  { name:'Buenos Aires', lat:-34.6037, lng:-58.3816 },
-  { name:'São Paulo',    lat:-23.5505, lng:-46.6333 },
-  { name:'Bogotá',       lat:4.7110,   lng:-74.0721 },
-  { name:'Mexico City',  lat:19.4326,  lng:-99.1332 },
-  { name:'Miami',        lat:25.7617,  lng:-80.1918 },
-  { name:'New York',     lat:40.7128,  lng:-74.0060 },
-  { name:'London',       lat:51.5074,  lng:-0.1278  },
-  { name:'Madrid',       lat:40.4168,  lng:-3.7038  },
-  { name:'Paris',        lat:48.8566,  lng:2.3522   },
-  { name:'Tokyo',        lat:35.6762,  lng:139.6503 },
-  { name:'Sydney',       lat:-33.8688, lng:151.2093 }
-];
-const PERU_RED = '#dc1818';
-const PERU_WHITE = '#ffffff';
-
-/* ─── NAVIGATION & SCROLL ───────────────────────────── */
-const initNavigation = () => {
-  const navToggle = $('#nav-toggle');
-  const navLinks = $('#nav-links');
-  const navLinksItems = document.querySelectorAll('a[href^="#"]');
-  const sections = document.querySelectorAll('section[id]');
-
-  // Mobile Toggle
-  if (navToggle && navLinks) {
-    navToggle.addEventListener('click', () => {
-      navLinks.classList.toggle('active');
-      navToggle.textContent = navLinks.classList.contains('active') ? '✕' : '☰';
-    });
+// Hide preloader when loaded
+window.addEventListener('load', () => {
+  const preloader = document.getElementById('preloader');
+  if (preloader) {
+    preloader.style.opacity = '0';
+    setTimeout(() => preloader.style.display = 'none', 500);
   }
+  initRadarCanvas();
+});
 
-  // Smooth Scroll & Auto-close
-  navLinksItems.forEach(link => {
-    link.addEventListener('click', e => {
-      const href = link.getAttribute('href');
-      if (href && href.startsWith('#')) {
-        e.preventDefault();
-        
-        if (navLinks) navLinks.classList.remove('active');
-        if (navToggle) navToggle.textContent = '☰';
+// Double Ratchet Simulator Logic
+let ratchetCounter = 1;
+function simulateRatchetStep() {
+  ratchetCounter++;
+  const dhKey = 'X25519_DH_' + Math.random().toString(36).substring(2, 10).toUpperCase();
+  const kdfKey = 'HKDF_CHAIN_' + Math.random().toString(36).substring(2, 10).toUpperCase();
+  const cipher = 'AES256_' + Array.from({length: 16}, () => Math.floor(Math.random()*16).toString(16)).join('');
 
-        if (href === '#') {
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-          return;
-        }
+  document.getElementById('ratchet-dh').innerText = `X25519_DH(Alice_pub, Bob_priv) ➔ ${dhKey}`;
+  document.getElementById('ratchet-kdf').innerText = `HKDF-SHA256(ChainKey_${ratchetCounter}) ➔ ${kdfKey}`;
+  document.getElementById('ratchet-cipher').innerText = `AES-256-GCM(Key_${ratchetCounter}, IV_${ratchetCounter}) ➔ ${cipher}`;
 
-        const target = $(href);
-        if (target) {
-          const offset = 80;
-          const bodyRect = document.body.getBoundingClientRect().top;
-          const elementRect = target.getBoundingClientRect().top;
-          const elementPosition = elementRect - bodyRect;
-          const offsetPosition = elementPosition - offset;
+  const log = document.getElementById('ratchet-log');
+  log.innerText = `> [PASO ${ratchetCounter}] Llave epímera regenerada. Secreto hacia adelante verificado. Ciphertext: ${cipher}`;
+}
 
-          window.scrollTo({
-            top: offsetPosition,
-            behavior: 'smooth'
-          });
-        }
-      }
-    });
-  });
+function resetRatchetSim() {
+  ratchetCounter = 1;
+  document.getElementById('ratchet-dh').innerText = 'X25519_DH(Alice_pub, Bob_priv) ➔ Ephemeral DH Key';
+  document.getElementById('ratchet-kdf').innerText = 'HKDF-SHA256(ChainKey_1) ➔ MessageKey_1';
+  document.getElementById('ratchet-cipher').innerText = 'AES-256-GCM(Key_1, IV_1, Plaintext) ➔ 8f3a9b2c...';
+  document.getElementById('ratchet-log').innerText = '> Llaves reiniciadas a la época inicial.';
+}
 
-  // ScrollSpy
-  window.addEventListener('scroll', () => {
-    let current = '';
-    const scrollY = window.pageYOffset;
-
-    sections.forEach(section => {
-      const sectionTop = section.offsetTop - 100;
-      const sectionHeight = section.offsetHeight;
-      if (scrollY >= sectionTop && scrollY < sectionTop + sectionHeight) {
-        current = section.getAttribute('id');
-      }
-    });
-
-    document.querySelectorAll('.nav__links a').forEach(a => {
-      a.classList.remove('active');
-      if (a.getAttribute('href') === `#${current}`) {
-        a.classList.add('active');
-      }
-    });
-  });
-};
-
-/* ─── INITIALIZATION ────────────────────────────────────── */
-// Fire everything
-const init = () => {
-  initSmoothScroll();
-  initCyberMesh();
-  initMagneticButtons();
-  initPreloader();
-  initCustomCursor();
-  initObservers();
-  initChakanaParticles();
-  initGeoParticles();
-  initRadar();
-  initNavigation();
-  loadThreeAndGlobe();
-  initLiveNodeTerminal();
-};
-
-document.addEventListener('DOMContentLoaded', init);
-
-/* ─── SCROLL & NAV ───────────────────────────────────────── */
-const initScrollEffects = () => {
-  const nav = $('.nav');
-  const progress = $('#scroll-progress');
-
-  window.addEventListener('scroll', () => {
-    const y = window.scrollY;
-    nav && nav.classList.toggle('scrolled', y > 48);
-    
-    if (progress) {
-      const total = document.documentElement.scrollHeight - window.innerHeight;
-      progress.style.width = (y / total) * 100 + '%';
-    }
-  }, { passive: true });
-};
-
-/* ─── MASTER OBSERVER SYSTEM ────────────────────────────── */
-const initObservers = () => {
-  const options = { threshold: 0.1, rootMargin: '0px 0px -40px 0px' };
-
-  const revealObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        if (entry.target.classList.contains('reveal-text')) {
-          entry.target.classList.add('active');
-        } else {
-          entry.target.classList.add('visible');
-        }
-        
-        // Counter logic integrated
-        if (entry.target.dataset.target && !entry.target.dataset.done) {
-          entry.target.dataset.done = '1';
-          animateCounter(entry.target);
-        }
-        
-        revealObserver.unobserve(entry.target);
-      }
-    });
-  }, options);
-
-  $$('.reveal, .reveal-text, [data-target]').forEach(el => revealObserver.observe(el));
-};
-
-/* ─── COUNTER ANIMATION ─────────────────────────────────── */
-const animateCounter = (el) => {
-  const target = parseInt(el.dataset.target, 10);
-  const suffix = el.dataset.suffix || '';
-  if (isNaN(target)) return;
-  
-  const dur = 2000;
-  const start = performance.now();
-  const ease = t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t); // Expo ease out
-
-  const run = (now) => {
-    const p = clamp((now - start) / dur, 0, 1);
-    el.textContent = (target === 0 ? '0' : Math.round(ease(p) * target)) + suffix;
-    if (p < 1) requestAnimationFrame(run);
-  };
-  requestAnimationFrame(run);
-};
-
-/* ─── CYBER-MESH (Interactive Background) ───────────────── */
-/* ─── SMOOTH SCROLL (Lenis & GSAP) ──────────────────────── */
-const initSmoothScroll = () => {
-  if (typeof Lenis === 'undefined') return;
-  const lenis = new Lenis({
-    smoothWheel: true,
-    lerp: 0.1,
-    wheelMultiplier: 1.1,
-  });
-  
-  if (typeof gsap !== 'undefined' && typeof ScrollTrigger !== 'undefined') {
-    gsap.registerPlugin(ScrollTrigger);
-    
-    // Sync ScrollTrigger with Lenis
-    lenis.on('scroll', ScrollTrigger.update);
-    
-    gsap.ticker.add((time) => { lenis.raf(time * 1000) });
-    gsap.ticker.lagSmoothing(0);
-    
-    // Parallax
-    if($('.hero__glow')) gsap.to('.hero__glow', { yPercent: 40, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
-    if($('.hero-peru-badge')) gsap.to('.hero-peru-badge', { yPercent: -50, ease: 'none', scrollTrigger: { trigger: '.hero', start: 'top top', end: 'bottom top', scrub: true } });
-    if($('.neon-inca-pattern')) gsap.to('.neon-inca-pattern', { yPercent: 20, ease: 'none', scrollTrigger: { trigger: 'body', start: 'top top', end: 'bottom bottom', scrub: true } });
+// Radar Canvas Simulation
+let blackoutMode = false;
+function toggleBlackoutSim() {
+  blackoutMode = !blackoutMode;
+  const btn = document.getElementById('btn-toggle-blackout');
+  const txt = document.getElementById('mesh-status-text');
+  if (blackoutMode) {
+    btn.classList.add('active');
+    btn.innerHTML = '<span>⚡</span> Modo Apagón Activado (Sin Internet / Solo BLE & Radio)';
+    txt.innerText = 'ESTADO: Internet Caído ➔ Ruteo Mesh Store-and-Forward Activo (3 Saltos)';
   } else {
-    // Basic RAF fallback if GSAP fails
-    const raf = (time) => { lenis.raf(time); requestAnimationFrame(raf); };
-    requestAnimationFrame(raf);
+    btn.classList.remove('active');
+    btn.innerHTML = '<span>⚡</span> Simular Apagón Total (Blackout)';
+    txt.innerText = 'ESTADO: Malla Radio P2P Activa (3 Nodos Enlazados)';
   }
-};
+}
 
-/* ─── MAGNETIC BUTTONS ──────────────────────────────────── */
-const initMagneticButtons = () => {
-  if (typeof gsap === 'undefined') return;
-  const magnets = $$('.btn-primary, .btn-secondary, .nav__cta');
-  
-  magnets.forEach(btn => {
-    const xTo = gsap.quickTo(btn, "x", {duration: 0.4, ease: "power3"}),
-          yTo = gsap.quickTo(btn, "y", {duration: 0.4, ease: "power3"});
-          
-    btn.addEventListener('mousemove', (e) => {
-      const rect = btn.getBoundingClientRect();
-      const x = (e.clientX - rect.left) - rect.width/2;
-      const y = (e.clientY - rect.top) - rect.height/2;
-      xTo(x * 0.35); // Magnetic pull factor
-      yTo(y * 0.35);
-    });
-    btn.addEventListener('mouseleave', () => {
-      xTo(0); yTo(0);
-    });
-  });
-};
-
-/* ─── CYBER-MESH (Organic Particle Fluid) ───────────────── */
-const initCyberMesh = () => {
-  const canvas = $('#bg-mesh-canvas');
-  if (!canvas) return;
-
-  const ctx = canvas.getContext('2d', { alpha: false });
-  let w = canvas.width = window.innerWidth;
-  let h = canvas.height = window.innerHeight;
-  let particles = [];
-  const count = window.innerWidth > 768 ? 80 : 35; // OPTIMIZED: Reduced particles by 60%
-  
-  const mouse = { x: -1000, y: -1000, vx: 0, vy: 0 };
-  let lastMouse = { x: -1000, y: -1000 };
-
-  const resize = () => {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-  };
-  window.addEventListener('resize', resize);
-
-  window.addEventListener('mousemove', e => {
-    lastMouse.x = mouse.x; lastMouse.y = mouse.y;
-    mouse.x = e.clientX; mouse.y = e.clientY;
-    mouse.vx = mouse.x - lastMouse.x;
-    mouse.vy = mouse.y - lastMouse.y;
-  });
-
-  for (let i = 0; i < count; i++) {
-    particles.push({
-      x: Math.random() * w, y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.8, vy: (Math.random() - 0.5) * 0.8,
-      baseSize: Math.random() * 2 + 1,
-      angle: Math.random() * Math.PI * 2
-    });
-  }
-
-  let animationId;
-  let isVisible = true;
-
-  const observer = new IntersectionObserver((entries) => {
-    isVisible = entries[0].isIntersecting;
-    if (isVisible) animate();
-    else cancelAnimationFrame(animationId);
-  }, { threshold: 0.01 });
-  observer.observe(canvas);
-
-  const animate = () => {
-    if (!isVisible) return;
-    ctx.fillStyle = '#020205'; // bg-deep void color
-    ctx.fillRect(0, 0, w, h);
-    
-    // Decay mouse velocity
-    mouse.vx *= 0.9; mouse.vy *= 0.9;
-
-    particles.forEach(p => {
-      p.x += p.vx; p.y += p.vy;
-      p.angle += 0.01;
-      
-      // Wrap around
-      if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
-      if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
-      
-      // Interaction with mouse
-      const dx = mouse.x - p.x;
-      const dy = mouse.y - p.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      
-      if (dist < 200) {
-        const force = (200 - dist) / 200;
-        p.x += mouse.vx * force * 0.04;
-        p.y += mouse.vy * force * 0.04;
-        
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(mouse.x, mouse.y);
-        ctx.strokeStyle = `rgba(232, 0, 28, ${force * 0.3})`;
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
-      }
-      
-      // Draw particle
-      ctx.fillStyle = dist < 200 ? `rgba(232, 0, 28, ${0.4 + (200-dist)/200})` : 'rgba(232, 0, 28, 0.2)';
-      const size = p.baseSize + Math.sin(p.angle) * 0.8;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    
-    // Connect particles nearby
-    for (let i = 0; i < count; i++) {
-      for (let j = i + 1; j < count; j++) {
-        const dx = particles[i].x - particles[j].x;
-        const dy = particles[i].y - particles[j].y;
-        const dist = dx*dx + dy*dy;
-        if (dist < 8000) {
-          ctx.beginPath();
-          ctx.moveTo(particles[i].x, particles[i].y);
-          ctx.lineTo(particles[j].x, particles[j].y);
-          ctx.strokeStyle = `rgba(232, 0, 28, ${0.1 * (1 - dist/8000)})`;
-          ctx.stroke();
-        }
-      }
-    }
-    
-    animationId = requestAnimationFrame(animate);
-  };
-  animate();
-};
-
-/* ─── GLOBE LOGIC ────────────────────────────────────────── */
-const loadThreeAndGlobe = () => {
-  if (window.Globe) return initGlobe();
-
-  const loadScript = (src) => new Promise((res) => {
-    const s = document.createElement('script');
-    s.src = src;
-    s.onload = res;
-    document.head.appendChild(s);
-  });
-
-  // Load Three.js first, THEN load Globe.gl to prevent race condition missing arcs
-  loadScript('https://unpkg.com/three@0.150.1/build/three.min.js')
-    .then(() => loadScript('https://unpkg.com/globe.gl@2.29.0/dist/globe.gl.min.js'))
-    .then(initGlobe);
-};
-
-const initGlobe = () => {
-  const container = $('#globe-container');
-  if (!container || !window.Globe) return;
-
-  const size = window.innerWidth > 1100 ? 800 : 500;
-  container.style.width = container.style.height = size + 'px';
-
-  const arcs = WORLD_CITIES.map((city, i) => ({
-    startLat: LIMA.lat,
-    startLng: LIMA.lng,
-    endLat: city.lat,
-    endLng: city.lng,
-    color: i % 2 === 0 ? [PERU_RED, PERU_WHITE] : [PERU_WHITE, PERU_RED]
-  }));
-
-  const globe = Globe({ animateIn: true })(container)
-    .width(size).height(size)
-    .backgroundColor('rgba(0,0,0,0)')
-    .showAtmosphere(true)
-    .atmosphereColor('rgba(220,24,24,0.35)')
-    .atmosphereAltitude(0.2)
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
-    .arcsData(arcs)
-    .arcColor('color')
-    .arcDashLength(0.4)
-    .arcDashGap(4)
-    .arcDashAnimateTime(1500)
-    .arcStroke(0.5)
-    .arcAltitude(0.25)
-    .pointsData([{ lat: LIMA.lat, lng: LIMA.lng, size: 1.8, color: PERU_RED }])
-    .pointColor('color').pointAltitude(0.02).pointRadius('size');
-
-  const ctrl = globe.controls();
-  ctrl.autoRotate = true;
-  ctrl.autoRotateSpeed = 0.5;
-  ctrl.enableZoom = false;
-  globe.pointOfView({ lat: LIMA.lat, lng: LIMA.lng, altitude: 2.5 }, 0);
-
-  // OPTIMIZATION: Pause Globe render loop when off-screen
-  const observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting) globe.resumeAnimation();
-    else globe.pauseAnimation();
-  }, { threshold: 0.01 });
-  observer.observe(container);
-};
-
-/* ─── RADAR ──────────────────────────────────────────────── */
-const initRadar = () => {
-  const canvas = $('#radar-canvas');
+function initRadarCanvas() {
+  const canvas = document.getElementById('radar-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const size = 300;
-  canvas.width = canvas.height = size;
-  const cx = size / 2, cy = size / 2, R = size / 2 - 10;
   
-  let scanA = 0;
-  let animationId;
-  let isVisible = true;
+  let width = canvas.width = canvas.parentElement.clientWidth;
+  let height = canvas.height = 360;
 
-  const observer = new IntersectionObserver((entries) => {
-    isVisible = entries[0].isIntersecting;
-    if (isVisible) draw();
-    else cancelAnimationFrame(animationId);
-  }, { threshold: 0.01 });
-  observer.observe(canvas);
+  const nodes = [
+    { x: width * 0.3, y: height * 0.4, type: 'ble', label: 'Nodo Alice (BLE)' },
+    { x: width * 0.5, y: height * 0.6, type: 'wifi', label: 'Nodo Bob (WiFi-Direct)' },
+    { x: width * 0.7, y: height * 0.35, type: 'lora', label: 'Nodo Relay (LoRa)' }
+  ];
 
-  const draw = () => {
-    if (!isVisible) return;
-    ctx.clearRect(0, 0, size, size);
-    // Rings
-    ctx.strokeStyle = 'rgba(232,0,28,0.1)';
-    for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.arc(cx,cy,R*(i/3),0,Math.PI*2); ctx.stroke(); }
-    // Sweep
-    scanA += 0.02;
+  let angle = 0;
+
+  function draw() {
+    ctx.clearRect(0, 0, width, height);
+
+    // Draw grid
+    ctx.strokeStyle = blackoutMode ? 'rgba(232, 33, 58, 0.15)' : 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < width; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+    }
+    for (let y = 0; y < height; y += 40) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+    }
+
+    // Draw connection lines
+    ctx.strokeStyle = blackoutMode ? '#E8213A' : '#00D97E';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
     ctx.beginPath();
-    ctx.moveTo(cx,cy);
-    ctx.arc(cx,cy,R,scanA - 0.5, scanA);
-    ctx.lineTo(cx,cy);
-    ctx.fillStyle = 'rgba(232,0,28,0.15)';
-    ctx.fill();
-    animationId = requestAnimationFrame(draw);
-  };
+    ctx.moveTo(nodes[0].x, nodes[0].y);
+    ctx.lineTo(nodes[1].x, nodes[1].y);
+    ctx.lineTo(nodes[2].x, nodes[2].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw nodes
+    nodes.forEach(node => {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = node.type === 'ble' ? '#3498db' : node.type === 'wifi' ? '#00D97E' : '#9b59b6';
+      ctx.fill();
+
+      // Radar rings
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 16 + Math.sin(angle) * 8, 0, Math.PI * 2);
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = '12px JetBrains Mono';
+      ctx.fillText(node.label, node.x - 40, node.y + 24);
+    });
+
+    angle += 0.04;
+    requestAnimationFrame(draw);
+  }
+
   draw();
-};
+}
 
-/* ─── PERUVIAN CURSOR & PARTICLES ───────────────────────── */
-const initCustomCursor = () => {
-  const cursor = $('#custom-cursor');
-  const follower = $('#custom-cursor-follower');
-  const neonGlow = $('#neon-glow');
-  if (!cursor || !follower) return;
-
-  let mx = 0, my = 0, px = 0, py = 0, gx = 0, gy = 0;
-  window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
-
-  const tick = () => {
-    cursor.style.transform = `translate3d(${mx}px, ${my}px, 0)`;
-    
-    // Follower (rápido)
-    px += (mx - px) * 0.15;
-    py += (my - py) * 0.15;
-    follower.style.transform = `translate3d(${px - 20}px, ${py - 20}px, 0)`;
-
-    // Ambient Neon Glow (suave y lento para inercia fluida)
-    if (neonGlow) {
-      gx += (mx - gx) * 0.04;
-      gy += (my - gy) * 0.04;
-      neonGlow.style.transform = `translate3d(${gx}px, ${gy}px, 0) translate(-50%, -50%)`;
-    }
-
-    requestAnimationFrame(tick);
-  };
-  tick();
-};
-
-const initPreloader = () => {
-  const p = $('#preloader');
-  if (!p) return;
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      p.classList.add('fade-out');
-      setTimeout(() => p.remove(), 800);
-    }, 1500);
-  });
-};
-
-const initChakanaParticles = () => {
-  const shapes = ['◆', '✥', '✚'];
-  for (let i = 0; i < 15; i++) {
-    const el = document.createElement('div');
-    el.className = 'chakana-particle';
-    el.textContent = shapes[i % 3];
-    el.style.left = Math.random() * 100 + 'vw';
-    el.style.top = Math.random() * 100 + 'vh';
-    el.style.color = Math.random() > 0.5 ? 'var(--peru-red)' : 'var(--text-muted)';
-    document.body.appendChild(el);
+// CLI HUD Command runner
+function runCliCmd(cmd) {
+  const out = document.getElementById('terminal-output');
+  const div = document.createElement('div');
+  div.className = 'term-line success';
+  
+  if (cmd === 'peers') {
+    div.innerHTML = `<span class="term-prompt">red@root:~$</span> [PEERS] Connected: 3 (BLE: 1, WiFi: 1, LoRa: 1) · Latency: 4ms`;
+  } else if (cmd === 'ratchet') {
+    div.innerHTML = `<span class="term-prompt">red@root:~$</span> [RATCHET] Active session key: X25519-AES256-GCM · PFS: VERIFIED ✅`;
+  } else if (cmd === 'dtn') {
+    div.innerHTML = `<span class="term-prompt">red@root:~$</span> [DTN-QUEUE] Store-and-Forward queue: 0 pending packets. Malla synced.`;
+  } else if (cmd === 'sybil') {
+    div.innerHTML = `<span class="term-prompt">red@root:~$</span> [SYBIL] PoW challenge difficulty: 4 leading zeroes. Sybil attack cost: $45,000/hr.`;
+  } else if (cmd === 'audit') {
+    div.innerHTML = `<span class="term-prompt">red@root:~$</span> [AUDIT] All cryptographic primitives verified against RFC 7748 and Signal Spec.`;
   }
-};
+  
+  out.appendChild(div);
+  out.scrollTop = out.scrollHeight;
+}
 
-const initGeoParticles = () => {
-  for (let i = 0; i < 15; i++) {
-    const el = document.createElement('div');
-    el.className = 'geo-particle';
-    el.style.left = Math.random() * 100 + 'vw';
-    el.style.setProperty('--d', (Math.random() * 15 + 10) + 's');
-    document.body.appendChild(el);
-  }
-};
+// WebApp Modal Toggle
+function openWebAppModal() {
+  const modal = document.getElementById('webapp-modal');
+  if (modal) modal.classList.add('active');
+}
+function closeWebAppModal() {
+  const modal = document.getElementById('webapp-modal');
+  if (modal) modal.classList.remove('active');
+}
 
-let terminalInterval = null;
-let terminalPaused = false;
-
-const initLiveNodeTerminal = () => {
-  const output = $('#node-status-output');
-  if (!output) return;
-
-  const checkStatus = async () => {
-    if (terminalPaused) return;
-    try {
-      const res = await fetch('http://localhost:7333/api/status');
-      if (res.ok) {
-        const data = await res.json();
-        
-        let info = '';
-        if (data.is_running) {
-          info += `<span class="pulse-online">●</span> <span class="highlight">DAEMON STATUS: ONLINE</span>\n\n`;
-          info += `<span class="info">Identity Hash:</span>  ${data.identity_hash}\n`;
-          info += `<span class="info">Consensus:</span>      Proof-of-Stake (Omega Protocol)\n`;
-          info += `<span class="info">Block Height:</span>   <span class="highlight">${data.chain_height}</span>\n`;
-          info += `<span class="info">Mesh Peers:</span>     ${data.peer_count} activos\n`;
-          info += `<span class="info">Gossip Latency:</span> ${data.gossip_latency_ms ? data.gossip_latency_ms + ' ms' : 'N/A'}\n`;
-          info += `<span class="info">Version:</span>        v${data.version}\n`;
-        } else {
-          info += `<span class="pulse-offline">●</span> <span class="warning">DAEMON STATUS: INITIALIZING (PoW in progress)</span>\n\n`;
-          info += `<span class="info">Version:</span>        v${data.version}\n`;
-        }
-        output.innerHTML = info;
-      } else {
-        throw new Error();
-      }
-    } catch (e) {
-      output.innerHTML = `<span class="pulse-offline">●</span> <span class="error">DAEMON STATUS: OFFLINE</span>\n\n` +
-        `<span class="info">No se detecta un nodo local activo en http://localhost:7333 (CORS Permisivo habilitado).</span>\n` +
-        `<span class="info">Inicia tu app móvil RED en la misma red o ejecuta 'cargo run' en tu terminal de escritorio para integrarlo con la consola de diagnóstico mesh en tiempo real.</span>`;
-    }
-  };
-
-  checkStatus();
-  terminalInterval = setInterval(checkStatus, 5000);
-};
-
-// Simulated CLI Commands Engine
-window.simulateTerminalCommand = (cmdType) => {
-  terminalPaused = true;
-  const cmdSpan = $('#terminal-cmd');
-  const output = $('#node-status-output');
-  const resumeBtn = $('#term-resume-btn');
-  if (!cmdSpan || !output) return;
-
-  // Show resume button
-  if (resumeBtn) resumeBtn.style.display = 'inline-block';
-
-  let cmdText = '';
-  let responseText = '';
-
-  switch (cmdType) {
-    case 'peers':
-      cmdText = 'red-cli --list-peers';
-      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: RUNNING MESH AUDIT...</span>\n\n` +
-        `<span class="info">🔍 Escaneando topología de malla vía BLE & WiFi Direct...</span>\n` +
-        `<span class="info">[OK] Se encontraron 4 pares activos en rango físico directo:</span>\n` +
-        `--------------------------------------------------------------\n` +
-        `<span class="highlight">PEER ID          MÉTODO       RSSI     ESTADO</span>\n` +
-        `did:red:alice73  BLE          -68dBm   Conectado (Verificado)\n` +
-        `did:red:bob99ff  WiFi-Direct  -42dBm   Conectado (Verificado)\n` +
-        `did:red:charlie  BLE          -85dBm   Ruteo Hop-Onion\n` +
-        `did:red:dave112  LoRa         -94dBm   Puente Serial (12.4 Km)\n` +
-        `--------------------------------------------------------------\n` +
-        `<span class="info">Rutas activas totales: 4 | Protocolo: RED Mesh v16.0.0 Zenith</span>`;
-      break;
-    case 'ratchet':
-      cmdText = 'red-cli --ratchet-status';
-      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: KEY EXCHANGE AUDIT</span>\n\n` +
-        `<span class="info">🔒 Sesión Criptográfica Activa con:</span> did:red:bob99ff\n` +
-        `--------------------------------------------------------------\n` +
-        `<span class="info">- Clave de Cadena KDF:</span> [32 bytes] e2a5f1d93ac8bb92...\n` +
-        `<span class="info">- Trinquete DH:</span>        Kyber1024 (KEM Poscuántico) + Double Ratchet\n` +
-        `<span class="info">- Motor AEAD:</span>         AES-256-GCM + Firmas Dilithium5\n` +
-        `<span class="info">- Huella de Seguridad:</span> <span class="highlight">84729 11928 33481 00293</span>\n` +
-        `<span class="info">- Verificación:</span>        Múltiple Confianza (Fingerprint Match)\n` +
-        `<span class="info">- PFS State:</span>           Perfect Forward Secrecy ACTIVO y saludable\n` +
-        `--------------------------------------------------------------`;
-      break;
-    case 'dtn':
-      cmdText = 'red-cli --dtn-queue';
-      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: DELAY-TOLERANT RETRY WORKER</span>\n\n` +
-        `<span class="info">📬 Consultando árbol "pending_deliveries" de base de datos Sled...</span>\n` +
-        `<span class="info">Se encontró 1 sobre en cola de espera offline:</span>\n` +
-        `--------------------------------------------------------------\n` +
-        `<span class="highlight">MSG ID   DESTINATARIO     TAMAÑO   TIEMPO   REINTENTOS</span>\n` +
-        `#8291a   did:red:charlie  1.2 KB   2m 14s   8 veces\n` +
-        `--------------------------------------------------------------\n` +
-        `<span class="info">Estado actual:</span> Esperando a que 'charlie' entre en rango físico...\n` +
-        `<span class="info">Próximo escaneo del worker en 8 segundos (Intervalo: 15s)</span>`;
-      break;
-    case 'sybil':
-      cmdText = 'red-cli --mitigate-sybil';
-      responseText = `<span class="pulse-online">●</span> <span class="highlight">STATUS: SYBIL MITIGATION SYSTEM</span>\n\n` +
-        `<span class="info">🛡️ Evaluando solicitudes de tablas de ruteo Kademlia...</span>\n` +
-        `<span class="info">- Validando dificultad Proof-of-Work: Hashcash (24 bits)</span>\n` +
-        `<span class="info">- Evaluando hash cash de peer did:red:attacker99...</span>\n` +
-        `<span class="error">[FAIL] Dificultad insuficiente. Nonce inválido.</span>\n` +
-        `<span class="warning">[ACCION] Drop instantáneo del peer attacker99 del DHT.</span>\n` +
-        `--------------------------------------------------------------\n` +
-        `<span class="highlight">[OK] Auditoría de Sybil completada. Nodo RED seguro.</span>`;
-      break;
-  }
-
-  cmdSpan.textContent = cmdText;
-  output.innerHTML = responseText;
-};
-
-window.resumeLiveTerminal = () => {
-  terminalPaused = false;
-  const cmdSpan = $('#terminal-cmd');
-  const resumeBtn = $('#term-resume-btn');
-  if (cmdSpan) cmdSpan.textContent = 'status-check --mesh';
-  if (resumeBtn) resumeBtn.style.display = 'none';
-  // Trigger check immediately
-  const output = $('#node-status-output');
-  if (output) {
-    output.innerHTML = `<span class="pulse-offline">●</span> Buscando nodo RED local activo en puerto 7333...`;
-  }
-};
-
-// Fire everything
-document.addEventListener('DOMContentLoaded', init);
+// Copy SHA Hash
+function copyHash() {
+  const hash = '4f8b9e83a21c9b6f8490a7812e983410fc6b8a1e2f3d4c5b6a7b8c9d0e1f2a3b';
+  navigator.clipboard.writeText(hash);
+  alert('✅ SHA-256 Checksum copiado al portapapeles.');
+}

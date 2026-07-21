@@ -59,7 +59,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                     }}
                 />
 
-                <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }} className="no-scrollbar">
+                <div style={{ maxHeight: '360px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }} className="scroll-container no-scrollbar">
                     {query.trim().length >= 2 && results.length === 0 && (
                         <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
                             Sin coincidencias para "{query}"

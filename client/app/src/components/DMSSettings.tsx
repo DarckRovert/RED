@@ -92,7 +92,7 @@ export default function DMSSettings() {
                 </div>
             </header>
 
-            <div style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ padding: '24px 20px calc(80px + var(--safe-bottom, 0px)) 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 {/* Enable DMS */}
                 <div className="glass-panel" style={{ padding: '20px 24px', borderRadius: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

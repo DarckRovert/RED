@@ -110,7 +110,7 @@ body {
   width: 100%;
   background: var(--bg-deep);
   color: var(--text-primary);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -123,13 +123,13 @@ body {
   pointer-events: auto; /* body itself must allow clicks */
 }
 
-/* Force all purely decorative images and SVGs to be click-through ghosts */
-img, svg, .pulsing-dot, .pulsing-dot::after {
-  pointer-events: none !important;
+/* Force purely decorative SVGs and indicators to be click-through ghosts without blocking images */
+.decorative-icon, .pulsing-dot, .pulsing-dot::after {
+  pointer-events: none;
 }
 
 button img, button svg, .btn-primary svg {
-  pointer-events: none !important;
+  pointer-events: none;
 }
 
 /* ─── App Shell ──────────────────────────────────────────────────────────────── */
@@ -948,4 +948,51 @@ textarea:focus {
   transform: scale(0.97) !important;
   transition: transform 0.08s var(--ease-smooth) !important;
 }
+
+/* ─── Glassmorphism 2.0 & Neon Utilities (RED v18.0) ────────────────────────── */
+.glass-card-v2 {
+  background: linear-gradient(145deg, rgba(18, 18, 32, 0.85), rgba(10, 10, 20, 0.95)) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+.neon-border-green {
+  border: 1px solid rgba(0, 217, 126, 0.4) !important;
+  box-shadow: 0 0 20px rgba(0, 217, 126, 0.15) !important;
+}
+
+.neon-border-red {
+  border: 1px solid rgba(232, 33, 58, 0.4) !important;
+  box-shadow: 0 0 20px rgba(232, 33, 58, 0.15) !important;
+}
+
+.pulse-dot-green {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00D97E;
+  box-shadow: 0 0 10px #00D97E;
+  animation: pulse-ring-green 2s infinite;
+}
+
+@keyframes pulse-ring-green {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 217, 126, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(0, 217, 126, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 217, 126, 0); }
+}
+
+.sticky-modal-footer {
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(10, 10, 20, 0.8) 0%, rgba(5, 5, 12, 0.98) 100%);
+  backdrop-filter: blur(12px);
+  padding-top: 12px;
+  margin-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 10;
+}
+
 

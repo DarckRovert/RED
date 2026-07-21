@@ -784,7 +784,7 @@ export default function ChatWindow() {
 
             {/* ── Messages ────────────────────────────────────────────────────── */}
             <div className="scroll-container" style={{
-                flex: 1, padding: '12px 12px 8px',
+                flex: 1, padding: '12px 12px calc(16px + var(--safe-bottom, 0px))',
                 display: 'flex', flexDirection: 'column',
                 backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(232,33,58,0.025) 0%, transparent 55%), radial-gradient(circle at 80% 10%, rgba(41,182,246,0.02) 0%, transparent 55%)',
             }}>
@@ -982,7 +982,7 @@ export default function ChatWindow() {
                             </div>
                             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                                 <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700 }}>PROTOCOLO</div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--primary-bright)', fontWeight: 800 }}>Red V7.2.0</div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--primary-bright)', fontWeight: 800 }}>Red v16.0 Zenith</div>
                             </div>
                         </div>
 

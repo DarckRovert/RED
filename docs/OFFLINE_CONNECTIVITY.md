@@ -1,6 +1,6 @@
 # 🛜 Conectividad Offline — Especificación Técnica
 
-**Versión**: 7.1.0 | **Fecha**: Marzo 2026
+**Versión**: 16.0.0 | **Fecha**: Marzo 2026
 
 ## Resumen
 

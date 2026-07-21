@@ -47,7 +47,7 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
             <div 
                 className="animate-pop glass-panel"
                 style={{
-                    width: '100%', maxWidth: '620px', padding: '24px',
+                    width: '100%', maxWidth: '620px', padding: '24px', maxHeight: '85vh', overflowY: 'auto',
                     borderRadius: '24px', background: 'linear-gradient(145deg, #070c12, #03060a)',
                     border: '1px solid rgba(0,217,126,0.3)', boxShadow: '0 20px 60px rgba(0,0,0,0.85)'
                 }}
@@ -69,7 +69,7 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                 </div>
 
                 <div 
-                    className="no-scrollbar"
+                    className="scroll-container no-scrollbar"
                     style={{
                         height: '320px', overflowY: 'auto', padding: '14px', borderRadius: '14px',
                         background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(0,217,126,0.2)',

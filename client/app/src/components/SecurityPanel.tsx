@@ -206,7 +206,7 @@ export default function SecurityPanel() {
                 </div>
             </header>
 
-            <div className="scroll-container" style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="scroll-container no-scrollbar" style={{ flex: 1, padding: '16px 16px calc(80px + var(--safe-bottom, 0px)) 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 
                 {/* System Health Diagnostics Card */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(0,217,126,0.08), rgba(0,180,100,0.03))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,217,126,0.25)' }}>

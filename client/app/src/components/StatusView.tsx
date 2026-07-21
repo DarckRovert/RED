@@ -255,7 +255,7 @@ export default function StatusView() {
                 )}
             </header>
 
-            <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+            <div className="scroll-container no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
 
                 {/* Mi Estado */}
                 <div style={{

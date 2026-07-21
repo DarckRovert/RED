@@ -43,7 +43,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
             <div 
                 className="animate-pop glass-panel"
                 style={{
-                    width: '100%', maxWidth: '540px', padding: '24px',
+                    width: '100%', maxWidth: '540px', padding: '24px', maxHeight: '85vh', overflowY: 'auto',
                     borderRadius: '24px', background: 'linear-gradient(145deg, #0f0f1c, #0a0a14)',
                     border: `1px solid ${blackoutActive ? 'rgba(232,33,58,0.5)' : 'rgba(41,182,246,0.3)'}`,
                     boxShadow: '0 20px 60px rgba(0,0,0,0.8)'
@@ -92,7 +92,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
                 </div>
 
                 <div 
-                    className="no-scrollbar"
+                    className="scroll-container no-scrollbar"
                     style={{
                         height: '180px', overflowY: 'auto', padding: '12px', borderRadius: '14px',
                         background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,255,255,0.08)',

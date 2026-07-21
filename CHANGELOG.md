@@ -46,7 +46,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-## [7.1.0] - 2026-03-30
+## [16.0.0] - 2026-03-30
 
 ### Añadido — RED P2P Mesh Networking Finalization (Offline-First)
 
@@ -64,7 +64,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
-## [5.1.0] - 2026-03-21
+## [16.0.0] - 2026-03-21
 
 ### Añadido — Website Masterpiece Edition & Auditoría Final
 
@@ -75,7 +75,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - **Resiliencia de Navegación:** Parche lógico en `script.js` para manejo robusto de anclas y menús móviles.
 
 **Refinamientos de Seguridad Táctica**
-- **Auditoría de Datos v5.1.0:** Sincronización de todas las métricas, versiones y características en la web y la app.
+- **Auditoría de Datos v16.0.0:** Sincronización de todas las métricas, versiones y características en la web y la app.
 - **Bóveda de Grado Militar:** Presentación refinada de las capacidades de PIN de Pánico, Camuflaje y Secure Enclave.
 - **Clean Audit:** Eliminación de archivos basura, logs redundantes y depuración del repositorio Git.
 

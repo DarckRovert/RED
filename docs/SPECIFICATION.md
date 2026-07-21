@@ -204,7 +204,7 @@ struct Conversation {
 
 ## 7. PROPIEDADES DE SEGURIDAD
 
-### 7.1 Teorema de Forward Secrecy
+### 16.0 Teorema de Forward Secrecy
 
 ```
 Si SK_u(t) es comprometido, ∀ t' < t:
@@ -213,7 +213,7 @@ I({m_{t'}}; SK_u(t)) ≤ ε_fs(λ)
 
 **Prueba**: Por construcción del Double Ratchet, cada mensaje usa claves derivadas que son borradas después del uso.
 
-### 7.2 Teorema de Resistencia a Censura
+### 16.0 Teorema de Resistencia a Censura
 
 ```
 ∀ u,v ∈ 𝕌, ∀ t ∈ 𝕋:

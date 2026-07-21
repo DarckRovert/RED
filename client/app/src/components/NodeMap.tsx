@@ -118,7 +118,7 @@ export default function NodeMap() {
         <div style={{ position: 'relative', width: '100vw', height: '100vh', background: '#050914' }}>
 
             {/* Context Header */}
-            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '24px', zIndex: 10, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: 'calc(24px + var(--safe-top, 0px)) 24px 24px 24px', zIndex: 10, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pointerEvents: 'none' }}>
                 <div style={{ display: 'flex', gap: '16px', pointerEvents: 'auto' }}>
                     <button onClick={goBack} style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', color: 'white', width: 48, height: 48, borderRadius: 24, fontSize: '1.5rem', border: '1px solid var(--solid-border)', cursor: 'pointer' }}>←</button>
                     <div>

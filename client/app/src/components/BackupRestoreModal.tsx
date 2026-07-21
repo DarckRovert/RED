@@ -6,6 +6,78 @@ interface BackupRestoreModalProps {
     onClose: () => void;
 }
 
+// Helper para derivar clave AES-256-GCM usando PBKDF2 desde la contraseña
+async function deriveAesGcmKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+    const enc = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+        "raw",
+        enc.encode(password),
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+    );
+    return await window.crypto.subtle.deriveKey(
+        {
+            name: "PBKDF2",
+            salt: salt as BufferSource,
+            iterations: 100000,
+            hash: "SHA-256"
+        },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"]
+    );
+}
+
+// Cifrar datos con AES-256-GCM
+async function encryptPayloadAesGcm(jsonString: string, password: string): Promise<string> {
+    const enc = new TextEncoder();
+    const salt = window.crypto.getRandomValues(new Uint8Array(16));
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveAesGcmKey(password, salt);
+    
+    const ciphertext = await window.crypto.subtle.encrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        enc.encode(jsonString)
+    );
+
+    const combined = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
+    combined.set(salt, 0);
+    combined.set(iv, salt.length);
+    combined.set(new Uint8Array(ciphertext), salt.length + iv.length);
+
+    let binary = '';
+    for (let i = 0; i < combined.byteLength; i++) {
+        binary += String.fromCharCode(combined[i]);
+    }
+    return btoa(binary);
+}
+
+// Descifrar datos con AES-256-GCM
+async function decryptPayloadAesGcm(b64Combined: string, password: string): Promise<string> {
+    const binary = atob(b64Combined);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+
+    const salt = bytes.slice(0, 16);
+    const iv = bytes.slice(16, 28);
+    const ciphertext = bytes.slice(28);
+
+    const key = await deriveAesGcmKey(password, salt);
+    const decrypted = await window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: iv },
+        key,
+        ciphertext
+    );
+
+    const dec = new TextDecoder();
+    return dec.decode(decrypted);
+}
+
 export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose }) => {
     const { identity, contacts, groups, fetchData } = useRedStore();
     const [password, setPassword] = useState("");
@@ -18,31 +90,30 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
             return;
         }
 
-        const payload = {
-            version: "v9.0",
-            timestamp: Date.now(),
-            identity,
-            contacts,
-            groups
-        };
-
-        const jsonString = JSON.stringify(payload);
-        // Base64 encoding simulation of encrypted bundle
-        const encoded = btoa(encodeURIComponent(jsonString));
-        const backupText = `-----BEGIN RED ENCRYPTED BACKUP (v9.0)-----\nPassProtected: true\n${encoded}\n-----END RED ENCRYPTED BACKUP-----`;
-
         try {
+            const payload = {
+                version: "v16.0",
+                timestamp: Date.now(),
+                identity,
+                contacts,
+                groups
+            };
+
+            const jsonString = JSON.stringify(payload);
+            const encryptedB64 = await encryptPayloadAesGcm(jsonString, password);
+            const backupText = `-----BEGIN RED AES-256-GCM ENCRYPTED BACKUP (v16.0)-----\nPBKDF2-SHA256: 100000-iterations\n${encryptedB64}\n-----END RED ENCRYPTED BACKUP-----`;
+
             const { Capacitor } = await import('@capacitor/core');
             if (Capacitor.isNativePlatform()) {
                 const { Share } = await import('@capacitor/share');
-                await Share.share({ title: 'RED Backup Cifrado', text: backupText, dialogTitle: 'Exportar Respaldo RED' });
+                await Share.share({ title: 'RED Respaldo Cifrado AES-256-GCM', text: backupText, dialogTitle: 'Exportar Respaldo RED' });
             } else {
                 await navigator.clipboard.writeText(backupText);
-                toast.success("✅ Copia cifrada descargada/copiada al portapapeles.");
+                toast.success("🔒 Respaldo cifrado con AES-256-GCM copiado al portapapeles.");
             }
-        } catch {
-            await navigator.clipboard.writeText(backupText);
-            toast.success("✅ Copia cifrada copiada al portapapeles.");
+        } catch (err) {
+            console.error("Error cifrando respaldo", err);
+            toast.error("Error al generar el respaldo cifrado.");
         }
     };
 
@@ -53,22 +124,31 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
         }
 
         try {
-            const rawB64 = importData.replace(/-----BEGIN RED ENCRYPTED BACKUP \(v9.0\)-----/, '')
+            const rawB64 = importData.replace(/-----BEGIN RED [^\n]+-----/, '')
                                      .replace(/-----END RED ENCRYPTED BACKUP-----/, '')
+                                     .replace(/PBKDF2-SHA256: [^\n]+/, '')
                                      .replace(/PassProtected: true/, '')
                                      .trim();
 
-            const jsonString = decodeURIComponent(atob(rawB64));
+            let jsonString = '';
+            try {
+                // Intento 1: Cifrado AES-256-GCM Real
+                jsonString = await decryptPayloadAesGcm(rawB64, password);
+            } catch {
+                // Fallback para respaldos legados desprotegidos Base64
+                jsonString = decodeURIComponent(atob(rawB64));
+            }
+
             const parsed = JSON.parse(jsonString);
 
             if (parsed.contacts && Array.isArray(parsed.contacts)) {
                 localStorage.setItem('red_contacts_backup', JSON.stringify(parsed.contacts));
             }
-            toast.success("✅ Respaldo restaurado con éxito.");
+            toast.success("✅ Respaldo autenticado y restaurado con éxito.");
             await fetchData();
             onClose();
         } catch {
-            toast.error("❌ Contraseña o formato de respaldo inválido.");
+            toast.error("❌ Contraseña incorrecta o paquete cifrado corrupto.");
         }
     };
 

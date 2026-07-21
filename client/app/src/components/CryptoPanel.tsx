@@ -159,7 +159,7 @@ This is your sovereign cryptographic identity.`;
                 </div>
             </header>
 
-            <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="scroll-container no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px calc(80px + var(--safe-bottom, 0px)) 16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
                 {/* DID Identity Card */}
                 <div style={{
@@ -209,7 +209,7 @@ This is your sovereign cryptographic identity.`;
                 }}>
                     <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--solid-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#3498db', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Telemetría Multired · Vault Omega</div>
-                        <div style={{ fontSize: '0.65rem', color: '#00D97E', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>v7.3.0 HYBRID</div>
+                        <div style={{ fontSize: '0.65rem', color: '#00D97E', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700 }}>v16.0 Zenith PQC</div>
                     </div>
                     <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <StatCard label="Sesiones DR" value={activeSessions} icon="🔒" color="#9b59b6" glow />

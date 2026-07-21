@@ -223,7 +223,7 @@ export default function BlockchainExplorer() {
             </div>
 
             {/* Content */}
-            <div className="scroll-container" style={{ flex: 1, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="scroll-container" style={{ flex: 1, padding: '14px 16px calc(80px + var(--safe-bottom, 0px)) 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {loading ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14 }}>
                         <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid #3498db', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />

@@ -150,7 +150,7 @@ export default function NetworkPanel() {
                 </div>
             </header>
 
-            <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="scroll-container no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px calc(80px + var(--safe-bottom, 0px)) 16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 {/* Transport Status Row — real counts from /api/peers */}
                 <div style={{ display: 'flex', gap: '10px' }}>

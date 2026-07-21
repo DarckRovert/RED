@@ -120,7 +120,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
             <div 
                 className="animate-pop glass-panel"
                 style={{
-                    width: '100%', maxWidth: '500px', padding: '24px',
+                    width: '100%', maxWidth: '500px', padding: '24px', maxHeight: '85vh', overflowY: 'auto',
                     borderRadius: '24px', background: 'linear-gradient(145deg, #0f0f1c, #0a0a14)',
                     border: '1px solid rgba(0,217,126,0.3)', boxShadow: '0 20px 60px rgba(0,0,0,0.8)'
                 }}

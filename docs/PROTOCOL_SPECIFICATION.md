@@ -541,9 +541,9 @@ function RegenerateTopology():
 
 ## 7. Capa de Consenso
 
-### 7.1 Blockchain de Identidades
+### 16.0 Blockchain de Identidades
 
-#### 7.1.1 Estructura de Bloque
+#### 16.0.1 Estructura de Bloque
 
 ```
 Block {
@@ -563,7 +563,7 @@ BlockHeader {
 }
 ```
 
-#### 7.1.2 Tipos de Transacción
+#### 16.0.2 Tipos de Transacción
 
 ```
 Transaction {
@@ -583,7 +583,7 @@ Transaction {
 // 0x05 - Unstake
 ```
 
-### 7.2 Consenso Proof of Stake
+### 16.0 Consenso Proof of Stake
 
 ```
 function SelectValidator(stake_map, random_seed):

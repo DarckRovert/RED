@@ -695,9 +695,8 @@ impl Node {
 
         } else {
             // ── DIRECT GOSSIPSUB PATH (≤2 peers, e.g. 2-phone demo) ──
-            if !is_recipient_online {
-                return Err(NetworkError::RoutingFailed("Recipient offline in direct mode".to_string()));
-            }
+            // BUG FIX: Removed is_recipient_online block here to enable blind broadcasting
+            // over BLE Mesh/WiFi Direct. Offline nodes won't be seen as 'online' via Libp2p.
 
             // We MUST encrypt the payload. Since we drop Libp2p's TCP Noise layer
             // for offline BLE meshes, we wrap the message in a literal 1-hop OnionPacket.

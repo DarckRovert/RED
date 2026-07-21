@@ -269,14 +269,14 @@ lim_{t→∞} Pr[m entregado en ≤ Δt] = 1
 
 ## 7. Modelo de Amenazas
 
-### 7.1 Capacidades del Adversario
+### 16.0 Capacidades del Adversario
 
 El adversario A puede:
 - Controlar subconjunto A ⊂ ℕ𝕆𝔻 con |A|/|ℕ𝕆𝔻| ≤ f
 - Observar tiempos de mensajes globales
 - Comprometer usuarios individuales adaptativamente
 
-### 7.2 Limitaciones del Adversario
+### 16.0 Limitaciones del Adversario
 
 A NO puede:
 - Romper primitivas criptográficas (modelo ROM)

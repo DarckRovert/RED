@@ -35,7 +35,7 @@ export default function GroupsPanel() {
     };
 
     return (
-        <div style={{ padding: '0', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'white', overflowY: 'auto' }} className="no-scrollbar">
+        <div style={{ padding: '0', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'white', overflowY: 'auto' }} className="scroll-container no-scrollbar">
             <header className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '1px solid var(--solid-border)', borderRadius: '0 0 24px 24px', flexShrink: 0 }}>
                 <button onClick={goBack} style={{ background: 'transparent', color: 'var(--text-primary)', border: 'none', fontSize: '1.5rem', fontWeight: 'bold', cursor: 'pointer', padding: '8px' }}>←</button>
                 <div>
@@ -60,7 +60,7 @@ export default function GroupsPanel() {
                     />
                     
                     <h4 style={{ color: 'var(--text-secondary)', marginBottom: '12px', fontWeight: 600, letterSpacing: '1px', fontSize: '0.85rem' }}>AÑADIR MIEMBROS ({selectedContacts.length})</h4>
-                    <div className="no-scrollbar" style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div className="scroll-container no-scrollbar" style={{ maxHeight: '160px', overflowY: 'auto', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {contacts.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center', padding: '12px 0' }}>No hay contactos aún. Añade desde Radar P2P.</p>}
                         {contacts.map(c => (
                             <div 

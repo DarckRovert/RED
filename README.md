@@ -45,7 +45,7 @@ RED es un protocolo de comunicación que garantiza:
 ├── node/                        # Implementación del nodo Axum (API)
 ├── android/                     # Capa nativa (Foreground Service, BLE Java)
 ├── docs/                        # Manuales y especificaciones
-└── CHANGELOG.md                 # Historial de versiones 7.1.0
+└── CHANGELOG.md                 # Historial de versiones 16.0.0
 /      # Admin de grupos
 │   │   │   ├── multidevice/     # Vinculación multi-dispositivo
 │   │   │   ├── nodemap/         # Mapa de nodos RED (SVG live)
@@ -232,7 +232,7 @@ Consulta la lista de [Contribuidores](CONTRIBUTORS.md) actuales.
 
 ---
 
-*RED v7.1.0 — Mesh P2P Offline Total · Build: Passing ✅*
+*RED v16.0.0 — Mesh P2P Offline Total · Build: Passing ✅*
 *🛡️ **Integración Nativa de Keystore** · 🔥 **Biometría Nativa** · 💀 **Dead Man's Switch***
 
 ---

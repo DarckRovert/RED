@@ -20,7 +20,7 @@ A diferencia de otras aplicaciones, en RED no necesitas un número de teléfono 
 ### Añadir Contactos
 - **Por Enlace:** Pega el enlace RED (`red://add-contact/...`) recibido de otra persona.
 - **Por Escaneo QR:** Pulsa en el icono de cámara en Ajustes > Perfil para escanear el código de un amigo.
-- **RADAR Nearby:** La función más potente de la v7.1. Si estás cerca de alguien, usa la pestaña de **RED Nearby** para descubrir y añadir contactos mediante señales Bluetooth BLE y WiFi Direct sin necesidad de internet.
+- **RADAR Nearby:** La función más potente de la v16.0. Si estás cerca de alguien, usa la pestaña de **RED Nearby** para descubrir y añadir contactos mediante señales Bluetooth BLE y WiFi Direct sin necesidad de internet.
 - **Bloqueo y Verificación Real:** En el modal de perfil de tu chat con un contacto, ahora puedes ver si su identidad está verificada o bloquearlo. Si bloqueas un contacto, el nodo Rust local descartará todo su tráfico en la capa de red nativa de forma transparente.
 
 ### Grupos Descentralizados
@@ -32,7 +32,7 @@ En la pestaña **Grupos**, puedes crear salas de chat. Los grupos en RED no tien
 ## 💬 3. Mensajería y Nueva Interfaz "Solid UI"
 
 ### Mensajería Sólida
-RED v7.1 presenta un diseño inspirado en la mensajería clásica pero con privacidad moderna y confirmación real en red Mesh:
+RED v16.0 presenta un diseño inspirado en la mensajería clásica pero con privacidad moderna y confirmación real en red Mesh:
 - **Burbujas con Cola:** Los mensajes tienen indicadores direccionales claros.
 - **Confirmación (Ticks):**
     - **Un tick (✓):** Enviado a la red Mesh (y en cola de reintentos offline si el destinatario no está disponible al instante).
@@ -81,7 +81,7 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 ## ❓ Preguntas Frecuentes
 
 **¿Necesito internet para chatear?**
-No necesariamente. Gracias a la v7.1, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
+No necesariamente. Gracias a la v16.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
 
 **¿Qué pasa si pierdo mi teléfono?**
 Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.

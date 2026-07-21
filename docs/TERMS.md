@@ -1,6 +1,6 @@
 # Términos de Servicio — RED
 
-**Versión:** 5.1.0
+**Versión:** 16.0.0
 
 Al utilizar el protocolo **RED (Red Encriptada Descentralizada)**, aceptas los siguientes términos. Dado que RED es una herramienta descentralizada y open-source, tú eres el único responsable de su uso.
 

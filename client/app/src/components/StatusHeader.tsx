@@ -68,7 +68,7 @@ export default function StatusHeader() {
                 background: 'linear-gradient(90deg, rgba(232,33,58,0.95), rgba(200,20,45,0.9))',
                 color: 'white',
                 textAlign: 'center',
-                padding: '5px',
+                padding: 'calc(4px + var(--safe-top, 0px)) 8px 4px 8px',
                 fontSize: '11px',
                 fontWeight: 700,
                 zIndex: 5,
@@ -94,11 +94,11 @@ export default function StatusHeader() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '0 14px',
+            padding: 'calc(2px + var(--safe-top, 0px)) 14px 2px 14px',
             fontFamily: 'JetBrains Mono, monospace',
             color: 'var(--text-secondary)',
             zIndex: 5,
-            height: '28px',
+            minHeight: '28px',
             transition: 'all 0.4s ease',
             position: 'relative',
             overflow: 'hidden',
@@ -180,7 +180,7 @@ export default function StatusHeader() {
                     </span>
                 )}
                 <span className="font-mono text-[10px] tracking-wider text-orange-400/80 uppercase mt-0.5">
-                    {status?.version || 'v7.2.0'}
+                    {status?.version || 'v16.0.0'}
                 </span>
             </div>
         </div>
