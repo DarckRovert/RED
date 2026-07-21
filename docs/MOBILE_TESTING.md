@@ -6,9 +6,9 @@ He preparado todo el código de RED para que generar el instalador sea lo más s
 
 ## 📂 ¿Dónde están los archivos?
 
-- **Proyecto Android**: `f:\RED\client\app\android`
-- **Proyecto iOS (Xcode)**: `f:\RED\client\app\ios`
-- **Archivos Web (Optimizados)**: `f:\RED\client\app\out`
+- **Proyecto Android**: `d:\PROYECTO RED\client\app\android`
+- **Proyecto iOS (Xcode)**: `d:\PROYECTO RED\client\app\ios`
+- **Archivos Web (Optimizados)**: `d:\PROYECTO RED\client\app\out`
 
 ---
 
@@ -17,7 +17,7 @@ He preparado todo el código de RED para que generar el instalador sea lo más s
 Ya he realizado la compilación de producción de Next.js y la sincronización con Capacitor. Solo falta el paso final:
 
 1.  **Abrir Android Studio**.
-2.  Importa el proyecto que está en: `f:\RED\client\app\android`.
+2.  Importa el proyecto que está en: `d:\PROYECTO RED\client\app\android`.
 3.  Espera a que termine el "Gradle Sync" (verás una barra de progreso abajo).
 4.  En el menú superior, ve a: **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
 5.  Cuando termine, aparecerá un globo abajo a la derecha con el enlace **"locate"**. ¡Ese es tu `.apk` para compartir!
@@ -28,7 +28,7 @@ Ya he realizado la compilación de producción de Next.js y la sincronización c
 
 Para iOS, **necesitas un Mac con Xcode instalado**:
 
-1.  Copia la carpeta `f:\RED\client\app` a tu Mac.
+1.  Copia la carpeta `d:\PROYECTO RED\client\app` a tu Mac.
 2.  En la terminal del Mac, dentro de esa carpeta, ejecuta:
     ```bash
     npx cap open ios
