@@ -774,6 +774,59 @@ export async function updateBatteryOptimize(batteryLevel: number): Promise<{ ok:
     return data;
 }
 
+// ─── v23.0: Interfaces & API Proximity Anti-Spam & Stealth Guard ───────────────
+
+export interface SafeZone {
+    name: string;
+    lat: number;
+    lon: number;
+    radius_meters: number;
+}
+
+export interface ProximityFilterConfig {
+    cooldown_seconds: number;
+    rssi_threshold_dbm: number;
+    stealth_mode: 'silent' | 'vibrate' | 'discreet_sound';
+    digest_enabled: boolean;
+    safe_zones: SafeZone[];
+}
+
+export interface ProximityDigest {
+    total_nodes_detected: number;
+    nodes_summary: string[];
+    timestamp: number;
+    is_in_safe_zone: boolean;
+}
+
+/** Obtener configuración de filtro anti-spam de proximidad */
+export async function getDiscoveryConfig(): Promise<ProximityFilterConfig> {
+    const res = await fetch(`${NODE_URL}/api/discovery/config`);
+    if (!res.ok) throw new Error(`Discovery config error: ${res.status}`);
+    const data = await res.json();
+    return data.config as ProximityFilterConfig;
+}
+
+/** Actualizar configuración de filtro anti-spam y Modo Sigilo */
+export async function setDiscoveryConfig(config: ProximityFilterConfig): Promise<{ ok: boolean; config: ProximityFilterConfig }> {
+    const res = await fetch(`${NODE_URL}/api/discovery/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Obtener resumen por lote de proximidad */
+export async function getDiscoveryDigest(): Promise<ProximityDigest> {
+    const res = await fetch(`${NODE_URL}/api/discovery/digest`);
+    if (!res.ok) throw new Error(`Discovery digest error: ${res.status}`);
+    const data = await res.json();
+    return data.digest as ProximityDigest;
+}
+
+
 
 /** Obtener boletines climáticos locales */
 export async function getWeatherReports(): Promise<WeatherReport[]> {

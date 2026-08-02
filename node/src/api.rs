@@ -368,9 +368,12 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/sanitizer/clean", post(handle_clean_image_exif))
         .route("/api/weather/report", post(handle_post_weather_report))
         .route("/api/weather/reports", get(handle_get_weather_reports))
-        // ── v22.0: Discovery + Ephemeral + Battery ────────────────────────────
+        // ── v22.0 & v23.0: Discovery + Ephemeral + Battery + Stealth Guard ───
         .route("/api/discovery/proximity", get(handle_get_proximity_nodes))
         .route("/api/discovery/wave", post(handle_trigger_wave))
+        .route("/api/discovery/config", get(handle_get_discovery_config))
+        .route("/api/discovery/config", post(handle_set_discovery_config))
+        .route("/api/discovery/digest", get(handle_get_discovery_digest))
         .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer))
         .route("/api/battery/status", get(handle_get_battery_status))
         .route(
@@ -2195,13 +2198,41 @@ async fn handle_get_weather_reports(State(state): State<ApiState>) -> impl IntoR
     }))
 }
 
-// ── v22.0: Handlers Discovery, Ephemeral & Battery ────────────────────────────
+// ── v22.0 & v23.0: Handlers Discovery, Ephemeral, Battery & Stealth Guard ───
 
-/// GET /api/discovery/proximity — Lista nodos cercanos por proximidad zero-touch
+/// GET /api/discovery/proximity — Lista nodos cercanos filtrados anti-spam
 async fn handle_get_proximity_nodes(State(state): State<ApiState>) -> impl IntoResponse {
-    let nodes = state.discovery.get_proximity_nodes();
+    let nodes = state.discovery.get_filtered_proximity_nodes();
     Json(serde_json::json!({
         "proximity_nodes": nodes
+    }))
+}
+
+/// GET /api/discovery/config — Consulta configuración de filtro anti-spam y Modo Sigilo
+async fn handle_get_discovery_config(State(state): State<ApiState>) -> impl IntoResponse {
+    let cfg = state.discovery.get_config();
+    Json(serde_json::json!({
+        "config": cfg
+    }))
+}
+
+/// POST /api/discovery/config — Actualiza parámetros de Cooldown, Modo Sigilo y Zonas Seguras
+async fn handle_set_discovery_config(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::discovery::ProximityFilterConfig>,
+) -> impl IntoResponse {
+    state.discovery.set_config(req.clone());
+    Json(serde_json::json!({
+        "ok": true,
+        "config": req
+    }))
+}
+
+/// GET /api/discovery/digest — Obtiene resumen agrupado por lote de nodos detectados
+async fn handle_get_discovery_digest(State(state): State<ApiState>) -> impl IntoResponse {
+    let digest = state.discovery.get_digest();
+    Json(serde_json::json!({
+        "digest": digest
     }))
 }
 

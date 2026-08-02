@@ -128,7 +128,7 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 
 ## 🛠️ 9. Herramientas de Proximidad, Canvas Táctico y Resiliencia Eco-Mesh (v22.0)
 
-- **👋 Chat de Proximidad Zero-Touch (`ProximityWaveModal`):** Detección háptica al estar a menos de 5 metros de otro usuario RED por BLE/WiFi Direct. Inicia un chat cifrado E2E con el botón "Saludar P2P" sin escanear QR ni intercambiar contactos.
+- **👋 Chat de Proximidad Zero-Touch & Filtro Anti-Spam (`ProximityWaveModal` / `ProximitySettingsModal`):** Detección háptica al estar a menos de 5 metros de otro usuario RED por BLE/WiFi Direct. Incluye **Filtro Anti-Spam** con Cooldown de 1 hora por nodo, **Modo Sigilo** (Silencioso o Vibración Suave) y **Zonas Seguras Geofenced** para evitar molestias o sonido repetitivo en lugares muy concurridos.
 - **🎨 Canvas Táctico P2P en Vivo (`LiveCanvasModal`):** Pizarra de dibujo táctico compartida en tiempo real sobre el chat para trazar mapas, esquemas y rutas de evacuación sincronizados en la malla.
 - **⏳ Autodestrucción Efímera Granular (`ephemeral.rs`):** Temporizadores de purga de memoria RAM y disco local (destruir al leer, 10s, 1m, 1h, al desconectar) sin dejar huellas.
 - **🔋 Optimizador de Batería Eco-Mesh (`EcoMeshPanel`):** Monitor dinámico de ciclo de trabajo radio BLE/LoRa para extender la autonomía del nodo hasta 72 horas durante apagones.

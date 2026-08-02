@@ -74,9 +74,21 @@ export const ProximityWaveModal: React.FC = () => {
                 <div style={{ fontWeight: 800, fontSize: '1rem' }}>
                     👋 PROXIMIDAD ZERO-TOUCH P2P
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#4ade80', fontWeight: 800, fontFamily: 'monospace' }}>
-                    BLE & WIFI-DIRECT (&lt;5M)
-                </div>
+                <button
+                    onClick={() => navigate('proximitySettings')}
+                    style={{
+                        background: 'rgba(244,63,94,0.15)',
+                        border: '1px solid #f43f5e',
+                        color: '#f43f5e',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                    }}
+                >
+                    ⚙️ Filtro Anti-Spam
+                </button>
             </div>
 
             {/* MAIN NODES LIST */}
