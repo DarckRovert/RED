@@ -22,26 +22,29 @@ interface VaultData {
 async function loadVaultFromStorage(): Promise<VaultData | null> {
     try {
         if (SecureStoragePlugin) {
-            const { value } = await SecureStoragePlugin.get({ key: STORAGE_KEY });
-            if (value) return JSON.parse(value) as VaultData;
-        } else {
-            // Web fallback: localStorage (not encrypted, but functional for web preview)
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) return JSON.parse(raw) as VaultData;
+            const res = await SecureStoragePlugin.get({ key: STORAGE_KEY }).catch(() => null);
+            if (res && res.value) return JSON.parse(res.value) as VaultData;
         }
     } catch {
-        // Key doesn't exist yet — return null
+        // Keystore failed
     }
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw) as VaultData;
+    } catch {}
     return null;
 }
 
 async function saveVaultToStorage(data: VaultData): Promise<void> {
     const serialized = JSON.stringify(data);
-    if (SecureStoragePlugin) {
-        await SecureStoragePlugin.set({ key: STORAGE_KEY, value: serialized });
-    } else {
+    try {
+        if (SecureStoragePlugin) {
+            await SecureStoragePlugin.set({ key: STORAGE_KEY, value: serialized }).catch(() => null);
+        }
+    } catch {}
+    try {
         localStorage.setItem(STORAGE_KEY, serialized);
-    }
+    } catch {}
 }
 
 export const IdentityVaultModal: React.FC = () => {

@@ -8,8 +8,8 @@ android {
         applicationId "f.red.app"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode 1830
-        versionName "18.3.0"
+        versionCode 2400
+        versionName "24.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
 
@@ -32,6 +32,7 @@ android {
         release {
             minifyEnabled false // Desactivamos temporalmente para evitar que R8 rompa el JNI de Rust
             shrinkResources false
+            signingConfig signingConfigs.debug
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
 import { RedDevice } from "../lib/mesh/bluetoothTransport";
 import { MeshPeer } from "../lib/mesh/meshRouter";
@@ -32,11 +33,13 @@ function RssiBar({ rssi }: { rssi?: number }) {
 }
 
 export default function NearbyDevicesPanel() {
+    const { navigate } = useRedStore();
     const [bleDevices, setBleDevices] = useState<RedDevice[]>([]);
     const [meshPeers, setMeshPeers] = useState<MeshPeer[]>([]);
     const [scanAngle, setScanAngle] = useState(0);
     const [connecting, setConnecting] = useState<string | null>(null);
     const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+
 
     useEffect(() => {
         const refresh = () => {
@@ -80,6 +83,13 @@ export default function NearbyDevicesPanel() {
                 display: 'flex', alignItems: 'center', gap: '14px',
                 background: 'linear-gradient(90deg, rgba(232,33,58,0.05), transparent)',
             }}>
+                <button
+                    onClick={() => navigate('sidebar')}
+                    style={{ background: 'transparent', border: 'none', color: '#00D97E', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 700 }}
+                >
+                    ← Volver
+                </button>
+
                 {/* Mini radar */}
                 <div style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
                     <div style={{

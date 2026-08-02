@@ -370,3 +370,11 @@ function simulateSightingReport() {
   alert('📍 ¡Avistamiento reportado con éxito! Las autoridades RED han sido notificadas.');
 }
 
+function copyHashStr() {
+  const hash = 'D9D2F5D131C9755C0F2373082B75DC4E2578099463510E7DEFAAC0B378505CF4';
+  navigator.clipboard.writeText(hash).then(() => {
+    alert('📋 Hash SHA-256 copiado al portapapeles:\n' + hash);
+  });
+}
+
+

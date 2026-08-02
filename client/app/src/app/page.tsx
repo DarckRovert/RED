@@ -30,7 +30,9 @@ import { LiveCanvasModal } from "../components/LiveCanvasModal";
 import { EcoMeshPanel } from "../components/EcoMeshPanel";
 import { ProximitySettingsModal } from "../components/ProximitySettingsModal";
 import { AICopilotModal } from "../components/AICopilotModal";
+import NearbyDevicesPanel from "../components/NearbyDevicesPanel";
 import { ToastProvider } from "../components/Toast";
+
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
 /**
@@ -111,10 +113,16 @@ export default function AppRouter() {
         return <ProximitySettingsModal />;
       case 'aiCopilot':
         return <AICopilotModal />;
+      case 'nearby':
+        return <NearbyDevicesPanel />;
+      case 'sos':
+        return <Sidebar />;
+
       default:
         return <Sidebar />;
     }
   };
+
 
   return (
     <ToastProvider>

@@ -7,6 +7,21 @@ use tokio::sync::Mutex;
 use ed25519_dalek::SigningKey;
 
 mod api;
+pub mod ai_copilot;
+pub mod ai_summarizer;
+pub mod ai_translator;
+pub mod amber;
+pub mod amber_authority;
+pub mod battery;
+pub mod channels;
+pub mod discovery;
+pub mod ephemeral;
+pub mod guardian;
+pub mod sanitizer;
+pub mod sos;
+pub mod voice;
+pub mod weather;
+
 
 // Nodos Semilla Mundiales — Bootstrap peers oficiales de libp2p/IPFS.
 // Mantenidos por Protocol Labs. Proveen descubrimiento Kademlia global
@@ -270,8 +285,21 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
             chain: chain_arc.clone(),
             consensus: consensus.clone(),
             api_key,
+            sos_store: sos::SosStore::new(),
+            channel_store: channels::ChannelStore::new(),
+            voice_store: voice::VoiceStore::new(),
+            weather_store: weather::WeatherStore::new(),
+            discovery_engine: discovery::DiscoveryEngine::new(),
+            battery_optimizer: battery::BatteryOptimizer::new(),
+            ephemeral_purge: ephemeral::EphemeralPurgeEngine::new(),
+            ai_copilot: Arc::new(ai_copilot::AICopilotEngine::new()),
+            ai_summarizer: Arc::new(ai_summarizer::AISummarizerEngine::new()),
+            ai_translator: Arc::new(ai_translator::AITranslatorEngine::new()),
+            amber_store: amber::AmberStore::new(),
+            guardian_engine: Arc::new(guardian::GuardianEngine::from_env()),
         });
     }
+
     append_log(&data_dir, "=== NODE FULLY INITIALIZED — API SERVING LIVE DATA ===");
 
     // Start P2P event loop

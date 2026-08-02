@@ -115,9 +115,10 @@ export default function Sidebar() {
         { icon: '🛰️', label: 'Estado de Red',        action: 'network'   },
         { icon: '⚡',  label: 'Explorador de Bloques', action: 'explorer' },
         { icon: '🗺️', label: 'Mapa de Nodos',        action: 'nodemap'   },
-        { icon: '☠️', label: 'Modo Muerto DMS',      action: 'dms'       },
+        { icon: '📡', label: 'Radar Hardware BLE/WiFi', action: 'nearby'  },
         { icon: '⚙️', label: 'Seguridad',            action: 'settings'  },
     ];
+
 
     return (
         <aside style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)', position: 'relative', overflow: 'hidden' }}>
@@ -139,13 +140,15 @@ export default function Sidebar() {
                     <div
                         className="glass-panel-elevated animate-pop"
                         style={{
-                            position: 'absolute', top: 68, right: 12, width: 252,
-                            borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+                            position: 'absolute', top: 68, right: 12, width: 260,
+                            maxHeight: 'calc(100vh - 90px)', overflowY: 'auto',
+                            borderRadius: 'var(--radius-lg)',
                             zIndex: 101, padding: '8px',
                             background: 'linear-gradient(145deg, rgba(15,15,28,0.98), rgba(8,8,18,0.99))',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            boxShadow: '0 16px 48px rgba(0,0,0,0.7)',
+                            border: '1px solid rgba(255,255,255,0.12)',
+                            boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
                         }}
+
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Menu header */}

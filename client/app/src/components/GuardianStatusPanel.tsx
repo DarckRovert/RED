@@ -29,7 +29,9 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
     try {
       const data = await getGuardianStatus();
       setStatus(data);
-    } catch {
+      setError(null);
+    } catch (err) {
+      console.error('[GuardianStatusPanel] Error fetching status:', err);
       setError('No se pudo conectar con el Guardian. ¿El nodo está activo?');
     } finally {
       setLoading(false);
@@ -132,27 +134,27 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
               {/* Estadísticas */}
               <div className="guardian-stats-grid">
                 <div className="guardian-stat">
-                  <div className="guardian-stat-value">{status.stats.messages_analyzed.toLocaleString()}</div>
+                  <div className="guardian-stat-value">{(status.stats?.messages_analyzed ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Mensajes analizados</div>
                 </div>
                 <div className="guardian-stat guardian-stat--blocked">
-                  <div className="guardian-stat-value">{status.stats.messages_blocked.toLocaleString()}</div>
+                  <div className="guardian-stat-value">{(status.stats?.messages_blocked ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Mensajes bloqueados</div>
                 </div>
                 <div className="guardian-stat">
-                  <div className="guardian-stat-value">{status.stats.images_analyzed.toLocaleString()}</div>
+                  <div className="guardian-stat-value">{(status.stats?.images_analyzed ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Imágenes verificadas</div>
                 </div>
                 <div className="guardian-stat guardian-stat--blocked">
-                  <div className="guardian-stat-value">{status.stats.images_blocked.toLocaleString()}</div>
+                  <div className="guardian-stat-value">{(status.stats?.images_blocked ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Imágenes bloqueadas</div>
                 </div>
                 <div className="guardian-stat">
-                  <div className="guardian-stat-value">{status.stats.cache_hits.toLocaleString()}</div>
+                  <div className="guardian-stat-value">{(status.stats?.cache_hits ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Cache hits</div>
                 </div>
                 <div className="guardian-stat">
-                  <div className="guardian-stat-value">{status.stats.api_calls_made.toLocaleString()}</div>
+                  <div className="guardian-stat-value">{(status.stats?.api_calls_made ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Llamadas API</div>
                 </div>
               </div>

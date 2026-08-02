@@ -20,15 +20,23 @@ type AuthMode = "checking" | "onboarding" | "unlock";
 
 async function getSecurePin(key: string): Promise<string | null> {
     try {
-        const { value } = await SecureStoragePlugin.get({ key });
-        return value || null;
+        const res = await SecureStoragePlugin.get({ key }).catch(() => null);
+        if (res && res.value) return res.value;
+    } catch {}
+    try {
+        return localStorage.getItem(key) || null;
     } catch {
-        return null; // Key doesn't exist = null
+        return null;
     }
 }
 
 async function setSecurePin(key: string, value: string): Promise<void> {
-    await SecureStoragePlugin.set({ key, value });
+    try {
+        await SecureStoragePlugin.set({ key, value }).catch(() => null);
+    } catch {}
+    try {
+        localStorage.setItem(key, value);
+    } catch {}
 }
 
 export default function AuthWall({ children }: { children: React.ReactNode }) {

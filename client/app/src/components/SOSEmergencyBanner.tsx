@@ -13,12 +13,12 @@ if (typeof window !== 'undefined') {
 }
 
 export const SOSEmergencyBanner: React.FC = () => {
-    const { navigate, identity } = useRedStore();
+    const { navigate, identity, isAuthenticated, currentScreen } = useRedStore();
     const [beacons, setBeacons] = useState<SosBeacon[]>([]);
     const [isTriggering, setIsTriggering] = useState(false);
     const [noteText, setNoteText] = useState('Emergencia médica / Auxilio táctico');
     const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'ok' | 'error'>('idle');
-    const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
+    const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
 
     const loadBeacons = useCallback(async () => {
         try {
@@ -30,59 +30,90 @@ export const SOSEmergencyBanner: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        if (!isAuthenticated) return;
         loadBeacons();
         const interval = setInterval(loadBeacons, 3000);
         return () => clearInterval(interval);
-    }, [loadBeacons]);
+    }, [loadBeacons, isAuthenticated]);
+
+    // Open trigger modal automatically when user selects SOS from menu
+    useEffect(() => {
+        if (currentScreen === 'sos') {
+            setIsTriggering(true);
+        }
+    }, [currentScreen]);
 
     const getGpsCoords = async (): Promise<{ lat: number; lon: number }> => {
         setGpsStatus('locating');
 
-        // Try Capacitor Geolocation first (native Android)
-        if (Geolocation) {
-            try {
-                const perm = await Geolocation.requestPermissions();
-                if (perm.location === 'granted') {
-                    const pos = await Geolocation.getCurrentPosition({
-                        enableHighAccuracy: true,
-                        timeout: 8000
-                    });
-                    const coords = {
-                        lat: parseFloat(pos.coords.latitude.toFixed(6)),
-                        lon: parseFloat(pos.coords.longitude.toFixed(6))
-                    };
-                    setGpsCoords(coords);
-                    setGpsStatus('ok');
-                    return coords;
-                }
-            } catch (e) {
-                console.warn('Capacitor Geolocation failed, trying browser API', e);
-            }
-        }
+        // Fast non-blocking GPS attempt (2500ms max timeout)
+        return new Promise((resolve) => {
+            let done = false;
 
-        // Web fallback: navigator.geolocation
-        return new Promise((resolve, reject) => {
-            if (!navigator.geolocation) {
-                setGpsStatus('error');
-                reject(new Error('GPS no disponible en este dispositivo o navegador.'));
-                return;
+            const finish = (coords: { lat: number; lon: number }, status: 'ok' | 'error') => {
+                if (done) return;
+                done = true;
+                setGpsCoords(coords);
+                setGpsStatus(status);
+                resolve(coords);
+            };
+
+            // Fast fallback timer: 2.5s max wait for GPS
+            const timer = setTimeout(() => {
+                finish({ lat: 0, lon: 0 }, 'error');
+            }, 2500);
+
+            // Native Capacitor Geolocation
+            if (Geolocation) {
+                Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 2000 })
+                    .then((pos: any) => {
+                        clearTimeout(timer);
+                        finish({
+                            lat: parseFloat(pos.coords.latitude.toFixed(6)),
+                            lon: parseFloat(pos.coords.longitude.toFixed(6))
+                        }, 'ok');
+                    })
+                    .catch(() => {
+                        // Web fallback
+                        if (typeof navigator !== 'undefined' && navigator.geolocation) {
+                            navigator.geolocation.getCurrentPosition(
+                                (pos) => {
+                                    clearTimeout(timer);
+                                    finish({
+                                        lat: parseFloat(pos.coords.latitude.toFixed(6)),
+                                        lon: parseFloat(pos.coords.longitude.toFixed(6))
+                                    }, 'ok');
+                                },
+                                () => {
+                                    clearTimeout(timer);
+                                    finish({ lat: 0, lon: 0 }, 'error');
+                                },
+                                { enableHighAccuracy: false, timeout: 2000 }
+                            );
+                        } else {
+                            clearTimeout(timer);
+                            finish({ lat: 0, lon: 0 }, 'error');
+                        }
+                    });
+            } else if (typeof navigator !== 'undefined' && navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        clearTimeout(timer);
+                        finish({
+                            lat: parseFloat(pos.coords.latitude.toFixed(6)),
+                            lon: parseFloat(pos.coords.longitude.toFixed(6))
+                        }, 'ok');
+                    },
+                    () => {
+                        clearTimeout(timer);
+                        finish({ lat: 0, lon: 0 }, 'error');
+                    },
+                    { enableHighAccuracy: false, timeout: 2000 }
+                );
+            } else {
+                clearTimeout(timer);
+                finish({ lat: 0, lon: 0 }, 'error');
             }
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    const coords = {
-                        lat: parseFloat(pos.coords.latitude.toFixed(6)),
-                        lon: parseFloat(pos.coords.longitude.toFixed(6))
-                    };
-                    setGpsCoords(coords);
-                    setGpsStatus('ok');
-                    resolve(coords);
-                },
-                (err) => {
-                    setGpsStatus('error');
-                    reject(new Error(`GPS Error (${err.code}): ${err.message}`));
-                },
-                { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
-            );
         });
     };
 
@@ -90,30 +121,33 @@ export const SOSEmergencyBanner: React.FC = () => {
         try {
             const coords = await getGpsCoords();
 
-            // Get real battery level if available
-            let batteryLevel = 100;
+            let batteryLevel = 90;
             try {
-                if ('getBattery' in navigator) {
+                if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
                     const battery: any = await (navigator as any).getBattery();
                     batteryLevel = Math.round(battery.level * 100);
                 }
-            } catch {
-                // Battery API not supported — default to 100
-            }
+            } catch {}
 
-            await emitSos({
+            const res = await emitSos({
                 sender_name: identity?.nickname || 'Usuario RED',
                 lat: coords.lat,
                 lon: coords.lon,
                 battery_level: batteryLevel,
-                note: noteText
+                note: noteText || 'EMERGENCIA SOS AUXILIO'
             });
 
             setIsTriggering(false);
+            if (currentScreen === 'sos') {
+                navigate('sidebar');
+            }
             await loadBeacons();
-            alert(`🚨 ¡Baliza SOS emitida!\nUbicación: ${coords.lat}, ${coords.lon}\nBatería: ${batteryLevel}%`);
+            alert(`🚨 ¡BALIZA SOS EMITIDA Y TRANSMITIDA!\n\n• Operador: ${identity?.nickname || 'Usuario RED'}\n• Mensaje: ${noteText}\n• Ubicación GPS: ${coords.lat !== 0 ? `${coords.lat}, ${coords.lon}` : 'Modo Radio (Sin GPS)'}\n• Batería: ${batteryLevel}%`);
         } catch (e: any) {
-            setGpsStatus('error');
+            setIsTriggering(false);
+            if (currentScreen === 'sos') {
+                navigate('sidebar');
+            }
             alert(`Error al emitir SOS: ${e.message}`);
         }
     };
@@ -126,6 +160,7 @@ export const SOSEmergencyBanner: React.FC = () => {
             alert(`Error al resolver SOS: ${e.message}`);
         }
     };
+
 
     return (
         <>
@@ -239,10 +274,11 @@ export const SOSEmergencyBanner: React.FC = () => {
 
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <button
-                                onClick={() => { setIsTriggering(false); setGpsStatus('idle'); setGpsCoords(null); }}
+                                onClick={() => { setIsTriggering(false); setGpsStatus('idle'); setGpsCoords({ lat: 0, lon: 0 }); if (currentScreen === 'sos') navigate('sidebar'); }}
                                 disabled={gpsStatus === 'locating'}
                                 style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#94a3b8', fontWeight: 700, cursor: 'pointer' }}
                             >
+
                                 Cancelar
                             </button>
                             <button

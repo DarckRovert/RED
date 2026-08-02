@@ -5,7 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 
 export default function StatusHeader() {
-    const { nodeOnline, status, identity } = useRedStore();
+    const { nodeOnline, status, identity, navigate } = useRedStore();
     const [meshCounts, setMeshCounts] = useState({ wifi: 0, ble: 0, lora: 0, total: 0 });
     const [loraActive, setLoraActive] = useState(false);
 
@@ -164,8 +164,8 @@ export default function StatusHeader() {
                 )}
             </div>
 
-            {/* RIGHT: Crypto status + identity short + version */}
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', position: 'relative' }}>
+            {/* RIGHT: Crypto status + identity short + version + settings */}
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
                 <span style={{ color: 'var(--success)', fontSize: '10px', opacity: 0.9, letterSpacing: '0.2px' }}>
                     🔐 E2E
                 </span>
@@ -179,9 +179,31 @@ export default function StatusHeader() {
                         {identity.short_id}
                     </span>
                 )}
-                <span className="font-mono text-[10px] tracking-wider text-orange-400/80 uppercase mt-0.5">
-                    {status?.version || 'v18.3.0'}
-                </span>
+                {/* ── Settings Button — always visible ── */}
+                <button
+                    id="settings-btn-header"
+                    onClick={() => navigate('settings')}
+                    title="Configuración y Seguridad"
+                    style={{
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        borderRadius: '6px',
+                        color: 'var(--text-secondary)',
+                        width: 24,
+                        height: 24,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem',
+                        transition: 'all 0.15s ease',
+                        flexShrink: 0,
+                    }}
+                    onMouseOver={e => { e.currentTarget.style.background = 'rgba(232,33,58,0.2)'; e.currentTarget.style.borderColor = 'rgba(232,33,58,0.4)'; }}
+                    onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
+                >
+                    ⚙️
+                </button>
             </div>
         </div>
     );

@@ -61,7 +61,20 @@ pub struct ApiState {
     pub chain: Arc<red_blockchain::chain::Chain>,
     pub consensus: Arc<red_blockchain::consensus::Consensus>,
     pub api_key: [u8; 32],
+    pub sos_store: crate::sos::SosStore,
+    pub channel_store: crate::channels::ChannelStore,
+    pub voice_store: crate::voice::VoiceStore,
+    pub weather_store: crate::weather::WeatherStore,
+    pub discovery_engine: crate::discovery::DiscoveryEngine,
+    pub battery_optimizer: crate::battery::BatteryOptimizer,
+    pub ephemeral_purge: crate::ephemeral::EphemeralPurgeEngine,
+    pub ai_copilot: Arc<crate::ai_copilot::AICopilotEngine>,
+    pub ai_summarizer: Arc<crate::ai_summarizer::AISummarizerEngine>,
+    pub ai_translator: Arc<crate::ai_translator::AITranslatorEngine>,
+    pub amber_store: crate::amber::AmberStore,
+    pub guardian_engine: Arc<crate::guardian::GuardianEngine>,
 }
+
 
 // ─── Response types ───────────────────────────────────────────────────────────
 
@@ -513,8 +526,42 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/settings/lora",                      post(handle_set_lora_config))
         .route("/api/conversations/:id/read",             post(handle_mark_conversation_read))
         .route("/api/conversations/:id/clear",            axum::routing::delete(handle_clear_conversation))
+        // SOS
+        .route("/api/sos/broadcast",      post(handle_emit_sos))
+        .route("/api/sos/resolve/:id",    post(handle_resolve_sos))
+        .route("/api/sos/active",         get(handle_get_active_sos))
+        // Channels
+        .route("/api/channels/messages", get(handle_get_channel_messages))
+        .route("/api/channels/post",     post(handle_post_channel_message))
+        // Voice & Weather
+        .route("/api/voice/send",        post(handle_send_voice_burst))
+        .route("/api/voice/bursts",      get(handle_get_voice_bursts))
+        .route("/api/weather/report",    post(handle_post_weather_report))
+        .route("/api/weather/reports",   get(handle_get_weather_reports))
+        // Discovery & Battery & Ephemeral
+        .route("/api/discovery/proximity", get(handle_get_proximity_nodes))
+        .route("/api/discovery/wave",      post(handle_trigger_wave))
+        .route("/api/discovery/config",    get(handle_get_discovery_config).post(handle_set_discovery_config))
+        .route("/api/discovery/digest",    get(handle_get_discovery_digest))
+        .route("/api/battery/status",      get(handle_get_battery_status))
+        .route("/api/battery/optimize",    post(handle_update_battery_optimize))
+        .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer))
+        .route("/api/sanitizer/clean",     post(handle_clean_image_exif))
+        // AI Copilot / Summarizer / Translator
+        .route("/api/ai/copilot",   post(handle_ai_copilot_query))
+        .route("/api/ai/summarize", post(handle_ai_summarize_channel))
+        .route("/api/ai/translate", post(handle_ai_translate_text))
+        // AMBER & Guardian
+        .route("/api/amber/alert",           post(handle_create_amber_alert))
+        .route("/api/amber/alerts",          get(handle_list_amber_alerts))
+        .route("/api/amber/alerts/:id",      get(handle_get_amber_alert))
+        .route("/api/amber/alerts/:id/resolve", post(handle_resolve_amber_alert))
+        .route("/api/amber/alerts/:id/sighting", post(handle_report_sighting))
+        .route("/api/guardian/status",      get(handle_guardian_status))
+        .route("/api/guardian/report",      post(handle_report_content))
         .route("/api/events",          get(handle_sse))
         .route("/local-signal",        get(handle_local_signal))
+
         .layer(auth_layer) // Protegemos todas las rutas
         .layer(cors)
         .layer(TraceLayer::new_for_http())
@@ -1191,15 +1238,7 @@ async fn handle_renegotiate_crypto() -> impl IntoResponse {
 // other endpoints were permanently unreachable on mobile (BUG ROOT CAUSE).
 
 pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>) -> Router {
-    let origins = [
-        "http://localhost".parse::<HeaderValue>().unwrap(),
-        "http://127.0.0.1".parse::<HeaderValue>().unwrap(),
-    ];
-
-    let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::list(origins))
-        .allow_methods(tower_http::cors::Any)
-        .allow_headers(tower_http::cors::Any);
+    let cors = CorsLayer::permissive();
 
     // 3. Global Security Middleware (X-API-Key Zero-Trust)
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_auth_async);
@@ -1234,6 +1273,40 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/api/settings/lora",                      post(handle_set_lora_async))
         .route("/api/conversations/:id/read",             post(handle_mark_read_async))
         .route("/api/conversations/:id/clear",            axum::routing::delete(handle_clear_async))
+        // SOS
+        .route("/api/sos/broadcast",      post(handle_emit_sos_async))
+        .route("/api/sos/resolve/:id",    post(handle_resolve_sos_async))
+        .route("/api/sos/active",         get(handle_get_active_sos_async))
+        // Channels
+        .route("/api/channels/messages", get(handle_get_channel_messages_async))
+        .route("/api/channels/post",     post(handle_post_channel_message_async))
+        // Voice & Weather
+        .route("/api/voice/send",        post(handle_send_voice_burst_async))
+        .route("/api/voice/bursts",      get(handle_get_voice_bursts_async))
+        .route("/api/weather/report",    post(handle_post_weather_report_async))
+        .route("/api/weather/reports",   get(handle_get_weather_reports_async))
+        // Discovery & Battery & Ephemeral
+        .route("/api/discovery/proximity", get(handle_get_proximity_nodes_async))
+        .route("/api/discovery/wave",      post(handle_trigger_wave_async))
+        .route("/api/discovery/config",    get(handle_get_discovery_config_async).post(handle_set_discovery_config_async))
+        .route("/api/discovery/digest",    get(handle_get_discovery_digest_async))
+        .route("/api/battery/status",      get(handle_get_battery_status_async))
+        .route("/api/battery/optimize",    post(handle_update_battery_optimize_async))
+        .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer_async))
+        .route("/api/sanitizer/clean",     post(handle_clean_image_exif))
+        // AI Copilot / Summarizer / Translator
+        .route("/api/ai/copilot",   post(handle_ai_copilot_query_async))
+        .route("/api/ai/summarize", post(handle_ai_summarize_channel_async))
+        .route("/api/ai/translate", post(handle_ai_translate_text_async))
+        // AMBER & Guardian
+        .route("/api/amber/alert",           post(handle_create_amber_alert_async))
+        .route("/api/amber/alerts",          get(handle_list_amber_alerts_async))
+        .route("/api/amber/alerts/:id",      get(handle_get_amber_alert_async))
+        .route("/api/amber/alerts/:id/resolve", post(handle_resolve_amber_alert_async))
+        .route("/api/amber/alerts/:id/sighting", post(handle_report_sighting_async))
+        .route("/api/guardian/status",      get(handle_guardian_status_async))
+        .route("/api/guardian/report",      post(handle_report_content_async))
+
         .fallback(handle_node_not_ready)
         .layer(auth_layer)
         .layer(cors)
@@ -1486,6 +1559,479 @@ async fn handle_outbound_sse_async(State(state): State<AsyncState>) -> impl Into
     match &*s {
         Some(ready) => handle_outbound_sse(State(ready.clone())).await.into_response(),
         None => (StatusCode::SERVICE_UNAVAILABLE, "Outbound SSE Source not ready").into_response()
+    }
+}
+
+// ─── Business Logic Handlers ───────────────────────────────────────────────────
+
+// SOS Handlers
+async fn handle_emit_sos(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::sos::SosReportRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let beacon = state.sos_store.emit_sos(sender_did, req);
+    Json(serde_json::json!({ "ok": true, "sos": beacon })).into_response()
+}
+
+async fn handle_resolve_sos(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let ok = state.sos_store.resolve_sos(&id);
+    Json(serde_json::json!({ "ok": true, "resolved": ok })).into_response()
+}
+
+async fn handle_get_active_sos(State(state): State<ApiState>) -> impl IntoResponse {
+    let beacons = state.sos_store.get_active_beacons();
+    Json(serde_json::json!({ "ok": true, "active_beacons": beacons })).into_response()
+}
+
+// Channels Handlers
+async fn handle_get_channel_messages(
+    State(state): State<ApiState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let channel_id = params.get("channel").or_else(|| params.get("channel_id")).cloned().unwrap_or_else(|| "red-local-general".to_string());
+    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let msgs = state.channel_store.get_channel_messages(&channel_id, limit);
+    let channels = state.channel_store.list_active_channels();
+    Json(serde_json::json!({
+        "channel_id": channel_id,
+        "channels": channels,
+        "messages": msgs
+    })).into_response()
+}
+
+async fn handle_post_channel_message(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::channels::PostChannelMessageRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let msg = state.channel_store.post_message(sender_did, req);
+    Json(serde_json::json!({ "ok": true, "message": msg })).into_response()
+}
+
+// Voice Handlers
+async fn handle_send_voice_burst(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::voice::SendVoiceBurstRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let burst = state.voice_store.add_burst(sender_did, req);
+    Json(serde_json::json!({ "ok": true, "burst": burst })).into_response()
+}
+
+async fn handle_get_voice_bursts(
+    State(state): State<ApiState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(20);
+    let bursts = state.voice_store.get_recent_bursts(limit);
+    Json(serde_json::json!({ "ok": true, "bursts": bursts })).into_response()
+}
+
+// Weather Handlers
+async fn handle_post_weather_report(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::weather::PostWeatherReportRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let report = state.weather_store.add_report(sender_did, req);
+    Json(serde_json::json!({ "ok": true, "report": report })).into_response()
+}
+
+async fn handle_get_weather_reports(
+    State(state): State<ApiState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let limit = params.get("limit").and_then(|s| s.parse().ok()).unwrap_or(50);
+    let reports = state.weather_store.list_reports(limit);
+    Json(serde_json::json!({ "ok": true, "reports": reports })).into_response()
+}
+
+// Discovery Handlers
+async fn handle_get_proximity_nodes(State(state): State<ApiState>) -> impl IntoResponse {
+    let nodes = state.discovery_engine.get_filtered_proximity_nodes();
+    Json(serde_json::json!({ "ok": true, "proximity_nodes": nodes })).into_response()
+}
+
+async fn handle_trigger_wave(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::discovery::WaveHandshakeRequest>,
+) -> impl IntoResponse {
+    let node = state.discovery_engine.trigger_wave(req);
+    Json(serde_json::json!({ "ok": true, "wave_handshake": node })).into_response()
+}
+
+async fn handle_get_discovery_config(State(state): State<ApiState>) -> impl IntoResponse {
+    let cfg = state.discovery_engine.get_config();
+    Json(serde_json::json!({ "ok": true, "config": cfg })).into_response()
+}
+
+async fn handle_set_discovery_config(
+    State(state): State<ApiState>,
+    Json(cfg): Json<crate::discovery::ProximityFilterConfig>,
+) -> impl IntoResponse {
+    state.discovery_engine.set_config(cfg.clone());
+    Json(serde_json::json!({ "ok": true, "config": cfg })).into_response()
+}
+
+async fn handle_get_discovery_digest(State(state): State<ApiState>) -> impl IntoResponse {
+    let digest = state.discovery_engine.get_digest();
+    Json(serde_json::json!({ "ok": true, "digest": digest })).into_response()
+}
+
+// Battery Handlers
+async fn handle_get_battery_status(State(state): State<ApiState>) -> impl IntoResponse {
+    let status = state.battery_optimizer.get_status();
+    Json(serde_json::json!({ "ok": true, "battery_status": status })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct UpdateBatteryRequest {
+    pub battery_level: u8,
+}
+
+async fn handle_update_battery_optimize(
+    State(state): State<ApiState>,
+    Json(req): Json<UpdateBatteryRequest>,
+) -> impl IntoResponse {
+    let status = state.battery_optimizer.update_battery(req.battery_level);
+    Json(serde_json::json!({ "ok": true, "battery_status": status })).into_response()
+}
+
+// Ephemeral Handlers
+async fn handle_set_ephemeral_timer(
+    State(state): State<ApiState>,
+    Json(cfg): Json<crate::ephemeral::EphemeralConfig>,
+) -> impl IntoResponse {
+    state.ephemeral_purge.set_config(cfg.clone());
+    Json(serde_json::json!({ "ok": true, "config": cfg })).into_response()
+}
+
+// Sanitizer Handlers
+async fn handle_clean_image_exif(
+    Json(req): Json<crate::sanitizer::CleanImageRequest>,
+) -> impl IntoResponse {
+    match crate::sanitizer::ImageSanitizer::sanitize_image(req) {
+        Ok(res) => Json(res).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e }))).into_response(),
+    }
+}
+
+// AI Handlers
+async fn handle_ai_copilot_query(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
+) -> impl IntoResponse {
+    let res = state.ai_copilot.query(req);
+    Json(res).into_response()
+}
+
+async fn handle_ai_summarize_channel(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ai_summarizer::SummarizeChannelRequest>,
+) -> impl IntoResponse {
+    let res = state.ai_summarizer.summarize(req);
+    Json(res).into_response()
+}
+
+async fn handle_ai_translate_text(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ai_translator::TranslateRequest>,
+) -> impl IntoResponse {
+    let res = state.ai_translator.translate(req);
+    Json(res).into_response()
+}
+
+// AMBER Handlers
+async fn handle_create_amber_alert(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::amber::CreateAmberAlertRequest>,
+) -> impl IntoResponse {
+    match state.amber_store.create_alert(req) {
+        Ok(alert) => Json(serde_json::json!({ "ok": true, "alert": alert })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    }
+}
+
+async fn handle_list_amber_alerts(State(state): State<ApiState>) -> impl IntoResponse {
+    let alerts = state.amber_store.list_active_alerts();
+    Json(serde_json::json!({ "ok": true, "alerts": alerts })).into_response()
+}
+
+async fn handle_get_amber_alert(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.amber_store.get_alert(&id) {
+        Some(alert) => Json(alert).into_response(),
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "Alert not found" }))).into_response(),
+    }
+}
+
+async fn handle_resolve_amber_alert(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<crate::amber::ResolveAmberAlertRequest>,
+) -> impl IntoResponse {
+    match state.amber_store.resolve_alert(&id, &req.authority_node_id, req.resolution_notes) {
+        Ok(alert) => Json(serde_json::json!({ "ok": true, "alert": alert })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    }
+}
+
+async fn handle_report_sighting(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+    Json(req): Json<crate::amber::ReportSightingRequest>,
+) -> impl IntoResponse {
+    let reporter_node_id = state.node.lock().await.identity_hash().to_hex();
+    match state.amber_store.report_sighting(&id, &reporter_node_id, req.lat, req.lon, req.notes) {
+        Ok(sighting) => Json(serde_json::json!({ "ok": true, "sighting": sighting })).into_response(),
+        Err(e) => (StatusCode::BAD_REQUEST, Json(serde_json::json!({ "error": e.to_string() }))).into_response(),
+    }
+}
+
+// Guardian Handlers
+async fn handle_guardian_status(State(state): State<ApiState>) -> impl IntoResponse {
+    let stats = state.guardian_engine.get_stats();
+    let authorities = crate::amber_authority::list_authorities();
+    Json(serde_json::json!({
+        "active": state.guardian_engine.mode != crate::guardian::GuardianMode::Off,
+        "mode": format!("{:?}", state.guardian_engine.mode).to_lowercase(),
+        "has_api_key": false,
+        "model": "RED Local Heuristic Engine (<15MB RAM)",
+        "stats": stats,
+        "authorities": authorities
+    })).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct GuardianReportRequest {
+    pub content: Option<String>,
+    pub reason: Option<String>,
+}
+
+async fn handle_report_content(
+    State(state): State<ApiState>,
+    Json(req): Json<GuardianReportRequest>,
+) -> impl IntoResponse {
+    let content = req.content.as_deref().or(req.reason.as_deref()).unwrap_or("");
+    let verdict = state.guardian_engine.analyze_text(content);
+    let report_id = format!("rep_{}", chrono::Utc::now().timestamp_millis());
+    Json(serde_json::json!({
+        "ok": true,
+        "report_id": report_id,
+        "verdict": verdict
+    })).into_response()
+}
+
+
+
+// ─── Async Wrappers (build_router_async delegates) ────────────────────────────
+
+async fn handle_emit_sos_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::sos::SosReportRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_emit_sos(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_active_sos_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_active_sos(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_post_channel_message_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::channels::PostChannelMessageRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_post_channel_message(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_send_voice_burst_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::voice::SendVoiceBurstRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_send_voice_burst(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_post_weather_report_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::weather::PostWeatherReportRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_post_weather_report(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_proximity_nodes_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_proximity_nodes(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_trigger_wave_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::discovery::WaveHandshakeRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_trigger_wave(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_discovery_config_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_discovery_config(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_set_discovery_config_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::discovery::ProximityFilterConfig>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_set_discovery_config(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_discovery_digest_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_discovery_digest(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_battery_status_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_battery_status(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_update_battery_optimize_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<UpdateBatteryRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_update_battery_optimize(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_set_ephemeral_timer_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::ephemeral::EphemeralConfig>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_set_ephemeral_timer(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_ai_copilot_query_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_ai_copilot_query(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_ai_summarize_channel_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::ai_summarizer::SummarizeChannelRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_ai_summarize_channel(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_ai_translate_text_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::ai_translator::TranslateRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_ai_translate_text(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_create_amber_alert_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<crate::amber::CreateAmberAlertRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_create_amber_alert(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_list_amber_alerts_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_list_amber_alerts(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_guardian_status_async(State(state): State<AsyncState>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_guardian_status(State(r.clone())).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_report_content_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<GuardianReportRequest>,
+) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_report_content(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
     }
 }
 

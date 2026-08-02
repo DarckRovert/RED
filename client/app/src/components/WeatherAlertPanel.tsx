@@ -5,7 +5,7 @@ import { useRedStore } from '../store/useRedStore';
 import { getWeatherReports, postWeatherReport, WeatherReport } from '../lib/api';
 
 export const WeatherAlertPanel: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, isAuthenticated } = useRedStore();
     const [reports, setReports] = useState<WeatherReport[]>([]);
     const [pressure, setPressure] = useState<string>('');
     const [temperature, setTemperature] = useState<string>('');
@@ -24,10 +24,11 @@ export const WeatherAlertPanel: React.FC = () => {
     }, []);
 
     useEffect(() => {
+        if (!isAuthenticated) return;
         loadReports();
         const interval = setInterval(loadReports, 4000);
         return () => clearInterval(interval);
-    }, [loadReports]);
+    }, [loadReports, isAuthenticated]);
 
     const validateForm = (): boolean => {
         if (!pressure || isNaN(parseFloat(pressure))) {

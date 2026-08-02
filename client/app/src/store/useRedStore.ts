@@ -8,7 +8,8 @@ import { meshRouter } from '../lib/mesh/meshRouter';
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'guardian' | 'compass' | 'channels' | 'sos' | 'walkie' | 'weather' | 'idVault' | 'proximity' | 'canvas' | 'ecoMesh' | 'proximitySettings' | 'aiCopilot';
+export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'guardian' | 'compass' | 'channels' | 'sos' | 'walkie' | 'weather' | 'idVault' | 'proximity' | 'canvas' | 'ecoMesh' | 'proximitySettings' | 'aiCopilot' | 'nearby';
+
 
 interface RedStore {
     // 1. Data Mode
