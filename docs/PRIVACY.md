@@ -24,6 +24,12 @@ Tus datos residen exclusivamente en tu dispositivo. RED utiliza el **Android Key
 ## 4. Red Mesh y Descentralización
 RED no utiliza servidores centrales. Las comunicaciones viajan a través de una red peer-to-peer (P2P). Esto significa que no hay un punto central donde el tráfico pueda ser interceptado o analizado.
 
+### 4.1 Garantías de Privacidad en Guardian IA (v19.0)
+La moderación de contenido para prevención de delitos graves y protección infantil opera bajo estrictos principios de privacidad soberana:
+* **Evaluación Nivel 0 Off-Grid**: El análisis primario se realiza localmente en tu propio dispositivo en <1ms mediante heurísticas en Rust y hashes perceptuales. Ningún dato sale a la red.
+* **Evaluación Pre-Cifrado E2E**: Ocurre en el nodo emisor antes de empaquetar y cifrar el mensaje. Si un mensaje es bloqueado, se destruye localmente en el origen sin ser transmitido jamás por la red P2P ni exponer al receptor.
+* **Cero Telemetría**: Las estadísticas recopiladas en `get_stats()` son contadores anónimos en memoria local (mensajes procesados/bloqueados) y jamás se transmiten a servidores externos ni a otros peers.
+
 ## 5. Cambios en esta Política
 Esta política puede actualizarse para reflejar mejoras en la seguridad del protocolo. Dado que no tenemos tu contacto, te recomendamos revisar el repositorio oficial periódicamente.
 

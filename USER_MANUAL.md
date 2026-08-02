@@ -13,6 +13,26 @@ A diferencia de otras aplicaciones como WhatsApp, en RED no necesitas un número
 - Tu navegador generará un **DID (Decentralized Identifier)** criptográfico único en menos de 10ms (ejemplo: `did:red:f3a298...`).
 - Tu identidad se almacena de forma segura en tu propio navegador. No requiere servidores de registro centralizados.
 
+### 🛡️ 8. Sistema Guardian IA (Protección y Moderación Off-Grid)
+
+RED incorpora **Guardian IA**, un motor de moderación que protege la red contra contenido ilícito y grooming antes de que los mensajes salgan de tu dispositivo:
+
+* **Moderación Pre-Cifrado**: El análisis ocurre en tu dispositivo emisor **antes de cifrar el mensaje con Double Ratchet**. El receptor nunca sabe si hubo evaluación ni se expone contenido cifrado a terceros.
+* **Operación Off-Grid (<1ms)**: Funciona 100% sin internet usando un motor heurístico local en Rust. Si no hay red, la moderación no se detiene ni bloquea la aplicación.
+* **Ventana de Contexto (Anti-Grooming)**: Evalúa los mensajes recientes de la conversación para detectar patrones de acoso o grooming acumulativos.
+* **Transparencia y Estadísticas**: Haz clic en el botón 🛡️ **Guardian** en la barra superior o menú para ver cuántos mensajes/imágenes han sido analizados o bloqueados, verificar el modo (Estricto/Warn/Off) y reportar contenido manualmente.
+
+---
+
+## 🟠 9. Sistema Alerta AMBER-RED (Búsqueda de Personas Desaparecidas)
+
+El **Sistema AMBER-RED** es una red P2P descentralizada para la difusión inmediata de alertas de personas desaparecidas:
+
+* **Banner Alerta Flotante**: Cuando se emite una alerta en la red P2P, aparece automáticamente un banner de alta prioridad naranja animado sobre la pantalla de todos los usuarios conectados.
+* **Reporte de Avistamientos**: Si ves a la persona desaparecida, puedes presionar **📍 Reportar Avistamiento** directamente en el banner para notificar de forma inmediata a las autoridades con tu ubicación aproximada o notas.
+* **Compartir Alerta**: Puedes copiar la información esencial de la alerta con un solo toque para difundirla fuera de RED.
+* **Panel de Alertas (para Autoridades)**: Las autoridades registradas pueden acceder al botón 🟠 **AMBER** para emitir nuevas alertas con fotografía, coordenadas GPS y tiempo de expiración (24h a 30 días), o marcar alertas como **Persona Encontrada**.
+
 ### Uso desde la App Móvil (Android APK)
 1. **Pantalla de Onboarding**: Al abrir RED por primera vez, verás el asistente de configuración de la bóveda.
 2. **Creación de PIN Maestro**: Deberás crear un PIN numérico seguro de al menos 6 dígitos. Este PIN se cifrará a nivel hardware en el Keystore de tu teléfono.
@@ -34,7 +54,7 @@ A diferencia de otras aplicaciones como WhatsApp, en RED no necesitas un número
 
 ### Grupos Descentralizados
 En la pestaña **Grupos**, puedes crear salas de chat. Los grupos en RED no tienen un servidor central.
-- **Administración Real:** Si eres admin, puedes promover a otros miembros, silenciarlos o expulsarlos del grupo en tiempo real.
+- **Administración Real:** Si eres admin, puedes promover a otros miembros, silenciarlos o expulsarlos del grupo en real.
 
 ---
 

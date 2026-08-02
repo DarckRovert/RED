@@ -46,7 +46,39 @@ El nodo expone una API REST (puerto 7333) y eventos SSE.
 
 ---
 
-## 🔒 4. Hardening y Seguridad
+## 🛡️ 5. Configuración de Guardian IA y Autoridades AMBER (v19.0 Node Ops)
+
+### 5.1 Variables de Entorno del Nodo Rust (`red-node`)
+
+| Variable | Descripción | Valor por Defecto |
+|---|---|---|
+| `GROQ_API_KEY` | Clave API de Groq para análisis remoto LlamaGuard 4. Si falta, opera en modo degradado (solo pHash local). | (Vacío) |
+| `GUARDIAN_MODE` | Modo del motor de moderación: `strict` (bloqueo total), `warn` (solo alerta), `off` (desactivado). | `strict` |
+| `AMBER_AUTHORITY_NODE_IDS` | Lista separada por comas de identity hashes autorizados para emitir/resolver alertas AMBER. | (Vacío) |
+| `AMBER_DEV_MODE` | `1` o `true` habilita que el nodo local se auto-registre como autoridad para testing/demos. | `1` |
+
+### 5.2 Comandos de Administración de Alertas AMBER
+
+```bash
+# Probar emisión de alerta AMBER desde el nodo autoridad
+curl -X POST http://localhost:7333/api/amber/alert \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Persona Prueba",
+    "age": 10,
+    "description": "Prueba de emisión de alerta AMBER P2P",
+    "ttl_secs": 259200,
+    "authority_signature": "LOCAL_DEV_SIGNATURE",
+    "authority_node_id": "TU_IDENTITY_HASH"
+  }'
+
+# Consultar estado del Guardian IA
+curl http://localhost:7333/api/guardian/status
+```
+
+---
+
+## 🔒 6. Hardening y Seguridad
 
 ### Cifrado de Almacenamiento
 La base de datos **Sled** utiliza árboles transaccionales (`conversations`, `contacts`, `profile`, `pending_deliveries`, `config`, `identity`, `groups`, `devices`) cifrados individualmente en reposo ( ChaCha20-Poly1305) mediante derivación HKDF a partir del PIN/Contraseña maestro del usuario (`RED_PASSWORD`). No se almacenan claves privadas en texto claro.

@@ -353,3 +353,158 @@ class RedAPIClient {
 }
 
 export const RedAPI = new RedAPIClient();
+
+// ─── v19.0: Tipos AMBER-RED ───────────────────────────────────────────────────
+
+export type AlertStatus = 'Active' | 'Resolved' | 'Expired' | 'Cancelled';
+
+export interface AmberAlert {
+    id: string;
+    name: string;
+    age: number;
+    description: string;
+    photo_b64?: string;
+    last_seen_lat?: number;
+    last_seen_lon?: number;
+    last_seen_location?: string;
+    issued_at: number;
+    expires_at: number;
+    authority_node_id: string;
+    authority_signature: string;
+    status: AlertStatus;
+    resolution_notes?: string;
+    sighting_count: number;
+}
+
+export interface AmberAlertCreate {
+    name: string;
+    age: number;
+    description: string;
+    photo_b64?: string;
+    last_seen_lat?: number;
+    last_seen_lon?: number;
+    last_seen_location?: string;
+    ttl_secs?: number;
+    authority_signature: string;
+    authority_node_id: string;
+}
+
+export interface AmberSighting {
+    alert_id: string;
+    reporter_node_id: string;
+    reported_at: number;
+    lat?: number;
+    lon?: number;
+    notes?: string;
+}
+
+// ─── v19.0: Tipos Guardian IA ─────────────────────────────────────────────────
+
+export interface GuardianStats {
+    messages_analyzed: number;
+    messages_blocked: number;
+    messages_flagged: number;
+    images_analyzed: number;
+    images_blocked: number;
+    api_calls_made: number;
+    api_errors: number;
+    cache_hits: number;
+}
+
+export interface GuardianStatus {
+    active: boolean;
+    mode: 'strict' | 'warn' | 'off';
+    has_api_key: boolean;
+    model: string;
+    stats: GuardianStats;
+    authorities: string[];
+}
+
+// ─── v19.0: Funciones API AMBER ───────────────────────────────────────────────
+
+const NODE_URL = typeof window !== 'undefined'
+    ? (localStorage.getItem('red_node_url') || 'http://localhost:7333')
+    : 'http://localhost:7333';
+
+/** Obtener alertas AMBER activas */
+export async function getAmberAlerts(): Promise<AmberAlert[]> {
+    const res = await fetch(`${NODE_URL}/api/amber/alerts`);
+    if (!res.ok) throw new Error(`AMBER alerts error: ${res.status}`);
+    const data = await res.json();
+    return data.alerts as AmberAlert[];
+}
+
+/** Obtener alerta específica por ID (incluye foto) */
+export async function getAmberAlert(id: string): Promise<AmberAlert> {
+    const res = await fetch(`${NODE_URL}/api/amber/alerts/${id}`);
+    if (!res.ok) throw new Error(`AMBER alert ${id} error: ${res.status}`);
+    return res.json() as Promise<AmberAlert>;
+}
+
+/** Crear nueva alerta AMBER (requiere autoridad) */
+export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok: boolean; alert: AmberAlert }> {
+    const res = await fetch(`${NODE_URL}/api/amber/alert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Resolver alerta (persona encontrada) */
+export async function resolveAmberAlert(
+    id: string,
+    payload: { authority_node_id: string; authority_signature: string; resolution_notes?: string }
+): Promise<{ ok: boolean; alert: AmberAlert }> {
+    const res = await fetch(`${NODE_URL}/api/amber/alerts/${id}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Reportar avistamiento */
+export async function reportSighting(
+    alertId: string,
+    payload: { lat?: number; lon?: number; notes?: string }
+): Promise<{ ok: boolean }> {
+    const res = await fetch(`${NODE_URL}/api/amber/alerts/${alertId}/sighting`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+// ─── v19.0: Funciones API Guardian ───────────────────────────────────────────
+
+/** Obtener estado del Guardian IA */
+export async function getGuardianStatus(): Promise<GuardianStatus> {
+    const res = await fetch(`${NODE_URL}/api/guardian/status`);
+    if (!res.ok) throw new Error(`Guardian status error: ${res.status}`);
+    return res.json() as Promise<GuardianStatus>;
+}
+
+/** Reportar contenido manualmente */
+export async function reportContent(payload: {
+    conversation_id?: string;
+    message_id?: string;
+    reason: string;
+    description?: string;
+}): Promise<{ ok: boolean; report_id: string }> {
+    const res = await fetch(`${NODE_URL}/api/guardian/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}

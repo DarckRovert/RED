@@ -18,6 +18,8 @@ import NodeMap from "../components/NodeMap";
 import NetworkPanel from "../components/NetworkPanel";
 import OnboardingProfile from "../components/OnboardingProfile";
 import DMSSettings from "../components/DMSSettings";
+import AmberAdminPanel from "../components/AmberAdminPanel";
+import GuardianStatusPanel from "../components/GuardianStatusPanel";
 import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
@@ -26,7 +28,7 @@ import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
  * Replaces Next.js <Link> and useRouter to guarantee 100% stable offline mobile transitions.
  */
 export default function AppRouter() {
-  const { currentScreen, nodeOnline } = useRedStore();
+  const { currentScreen, nodeOnline, identity, navigate } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
 
@@ -75,6 +77,10 @@ export default function AppRouter() {
         return <DMSSettings />;
       case 'explorer':
         return <BlockchainExplorer />;
+      case 'amber':
+        return <AmberAdminPanel onClose={() => navigate('sidebar')} localNodeId={identity?.identity_hash || 'node-local'} />;
+      case 'guardian':
+        return <GuardianStatusPanel onClose={() => navigate('sidebar')} />;
       default:
         return <Sidebar />;
     }

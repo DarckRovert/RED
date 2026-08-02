@@ -4,6 +4,24 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [19.0.0] - 2026-08-01
+
+### Añadido — RED v19.0 Zenith Guardian Release
+
+**Sistema Alerta AMBER-RED P2P (Búsqueda Descentralizada de Personas)**
+- **Red Broadcast AMBER Descentralizada:** Difusión masiva de alertas de personas desaparecidas sobre la red P2P vía topic GossipSub `amber-red-v1` y notificación push SSE instantánea.
+- **Banner Flotante de Alta Prioridad (`AmberAlertBanner.tsx`):** Componente flotante de máxima prioridad naranja animado que notifica en tiempo real a todos los nodos conectados.
+- **Panel de Administración para Autoridades (`AmberAdminPanel.tsx`):** Emisión de alertas con fotografía base64, coordenadas GPS, tiempo de expiración (TTL) y firmas Ed25519.
+- **Reporte de Avistamientos Geolocalizados:** Permitir a cualquier usuario reportar avistamientos directamente a las autoridades.
+
+**Guardian IA (Moderación Off-Grid & Híbrida)**
+- **Motor Off-Grid Nivel 0 en Rust (`guardian.rs`):** Evaluación heurística local en `<1ms` sin internet ni dependencias externas en el nodo emisor antes del cifrado E2E.
+- **Ventana de Contexto Deslizante (Anti-Grooming):** Evaluación acumulativa de los últimos 5 mensajes de la conversación para detectar patrones de acoso o grooming progresivos.
+- **Auditoría Cloud Híbrida (Groq LlamaGuard 4 12B):** Clasificación semántica remota opcional con la API de Groq usando formato de conversación role-based estandarizado (`meta-llama/llama-guard-4-12b`).
+- **Panel de Transparencia (`GuardianStatusPanel.tsx`):** Monitoreo en vivo de métricas (analizados/bloqueados/cache hits) y formulario de reporte manual de contenido.
+
+---
+
 ## [16.1.0] - 2026-07-21
 
 ### Añadido — Interconexión P2P Web ↔ Mobile & Renegociación WebCrypto ECDH

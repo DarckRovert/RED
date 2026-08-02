@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { useRedStore } from "../store/useRedStore";
+import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { Clipboard } from '@capacitor/clipboard';
 import { GlobalSearchModal } from "./GlobalSearchModal";
@@ -90,14 +90,17 @@ export default function Sidebar() {
 
     const quickActions = [
         { icon: '📢', label: 'Difusión',  action: 'broadcast', color: '#E8213A' },
+        { icon: '🛡️', label: 'Guardian',  action: 'guardian',  color: '#63b3ed' },
+        { icon: '🟠', label: 'AMBER',     action: 'amber',     color: '#ff8c00' },
         { icon: '📡', label: 'Radar',     action: 'radar',     color: '#29B6F6' },
         { icon: '🔐', label: 'Bóveda',    action: 'crypto',    color: '#9b59b6' },
-        { icon: '🛰️', label: 'Red',       action: 'network',   color: '#26A69A' },
     ];
 
     const menuItems = [
         { icon: '👤', label: 'Nuevo contacto',      action: 'contacts'  },
         { icon: '📢', label: 'Difusión privada',     action: 'broadcast' },
+        { icon: '🛡️', label: 'Guardian IA (Moderación)', action: 'guardian' },
+        { icon: '🟠', label: 'Sistema Alerta AMBER', action: 'amber'     },
         { icon: '🔐', label: 'Bóveda Criptográfica', action: 'crypto'    },
         { icon: '🛰️', label: 'Estado de Red',        action: 'network'   },
         { icon: '⚡',  label: 'Explorador de Bloques', action: 'explorer' },
@@ -144,7 +147,7 @@ export default function Sidebar() {
                         {menuItems.map((item, i) => (
                             <button
                                 key={item.action}
-                                onClick={e => { e.preventDefault(); navigate(item.action as any); setMenuOpen(false); }}
+                                onClick={e => { e.preventDefault(); navigate(item.action as ScreenView); setMenuOpen(false); }}
                                 style={{
                                     width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
                                     padding: '11px 14px', background: 'transparent', color: 'var(--text-primary)',

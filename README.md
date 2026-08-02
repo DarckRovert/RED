@@ -1,12 +1,14 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v18.3 Zenith Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Puente P2P Web ↔ Mobile (WebRTC DataChannel), Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P, Identidad Criptográfica Autónoma (sin número ni registro), Bóveda `.redbak` y Simulador de Apagón Táctico.
+> **v19.0 Zenith Guardian Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Sistema Alerta AMBER-RED P2P, Moderación Off-Grid Guardian IA (LlamaGuard 4 / Engine Local Pre-Cifrado), Puente P2P Web ↔ Mobile (WebRTC DataChannel), Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P, Bóveda `.redbak` y Simulador de Apagón Táctico.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v18.3_Zenith-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v19.0_Guardian-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]() [![Guardian](https://img.shields.io/badge/Guardian_IA-Dual_Engine-blue)]()
 
 ## 🎯 Visión
 
 RED es un protocolo de comunicación que garantiza:
+- **Sistema Alerta AMBER-RED P2P**: Red descentralizada de búsqueda de personas desaparecidas con difusión broadcast instantánea, avistamiento geolocalizado y verificación de autoridad Ed25519.
+- **Guardian IA (Moderación Off-Grid & Híbrida)**: Protección activa contra contenido ilícito y grooming. Análisis de ventana de contexto en el dispositivo emisor antes del cifrado E2E en <1ms sin romper la privacidad ni la operación off-grid.
 - **Puente P2P Web ↔ Mobile**: Conexión cifrada directa punto a punto entre navegadores web (`https://darckrovert.github.io/RED/`) y la App Móvil Android sin requerir celular ni servidores centrales.
 - **Identidad Autónomas (Zero-Registration)**: Generación criptográfica en el navegador en <10ms; sin correos, sin números de teléfono.
 - **Privacidad total**: Cifrado Double Ratchet X25519 + AES-256-GCM con deniabilidad perfecta.

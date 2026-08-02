@@ -450,3 +450,92 @@ The local node exposes an HTTP REST API on `http://localhost:7333` for UI commun
 #### 3. Mark Conversation as Read
 * **Endpoint:** `POST /api/conversations/:id/read`
 
+---
+
+### v19.0 AMBER Alert System API
+
+#### 1. Emit AMBER Alert
+* **Endpoint:** `POST /api/amber/alert`
+* **Request Body:**
+  ```json
+  {
+    "name": "Nombre de la Persona",
+    "age": 12,
+    "description": "Descripción física y circunstancias",
+    "photo_b64": "base64_string_opcional",
+    "last_seen_lat": 19.4326,
+    "last_seen_lon": -99.1332,
+    "last_seen_location": "Ubicación textual",
+    "ttl_secs": 259200,
+    "authority_signature": "firma_ed25519",
+    "authority_node_id": "hex_identity_hash_autoridad"
+  }
+  ```
+
+#### 2. List Active AMBER Alerts
+* **Endpoint:** `GET /api/amber/alerts`
+
+#### 3. Get Specific AMBER Alert (with photo)
+* **Endpoint:** `GET /api/amber/alerts/:id`
+
+#### 4. Mark AMBER Alert as Resolved
+* **Endpoint:** `POST /api/amber/alerts/:id/resolve`
+* **Request Body:**
+  ```json
+  {
+    "authority_node_id": "hex_identity_hash_autoridad",
+    "authority_signature": "firma_ed25519",
+    "resolution_notes": "Persona encontrada de forma segura"
+  }
+  ```
+
+#### 5. Report Sighting
+* **Endpoint:** `POST /api/amber/alerts/:id/sighting`
+* **Request Body:**
+  ```json
+  {
+    "lat": 19.4326,
+    "lon": -99.1332,
+    "notes": "Descripción del lugar y circunstancia del avistamiento"
+  }
+  ```
+
+---
+
+### v19.0 Guardian IA Moderation API
+
+#### 1. Get Guardian Status & Statistics
+* **Endpoint:** `GET /api/guardian/status`
+* **Response:**
+  ```json
+  {
+    "active": true,
+    "mode": "strict",
+    "has_api_key": true,
+    "model": "meta-llama/llama-guard-4-12b",
+    "stats": {
+      "messages_analyzed": 142,
+      "messages_blocked": 3,
+      "messages_flagged": 0,
+      "images_analyzed": 12,
+      "images_blocked": 1,
+      "api_calls_made": 142,
+      "api_errors": 0,
+      "cache_hits": 45
+    },
+    "authorities": ["node_hash_1"]
+  }
+  ```
+
+#### 2. Manual Content Report
+* **Endpoint:** `POST /api/guardian/report`
+* **Request Body:**
+  ```json
+  {
+    "conversation_id": "opt_hex",
+    "message_id": "opt_hex",
+    "reason": "csam | violence | hate_speech | trafficking | drugs | spam | other",
+    "description": "Detalles adicionales del reporte"
+  }
+  ```
+

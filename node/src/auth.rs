@@ -11,9 +11,9 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use red_core::crypto::hashing::blake3_hash;
 use serde_json::json;
 use tracing::warn;
-use red_core::crypto::hashing::blake3_hash;
 
 /// Extract the Bearer token from Authorization header
 fn extract_bearer(headers: &HeaderMap) -> Option<&str> {
@@ -70,15 +70,14 @@ pub async fn auth_middleware(
 
     // Check the provided token
     match extract_bearer(&headers) {
-        Some(provided) if provided == expected_token => {
-            next.run(request).await
-        }
+        Some(provided) if provided == expected_token => next.run(request).await,
         Some(_) => {
             warn!("Auth failed: invalid token for {}", path);
             (
                 StatusCode::UNAUTHORIZED,
                 Json(json!({"error": "Invalid API token"})),
-            ).into_response()
+            )
+                .into_response()
         }
         None => {
             warn!("Auth failed: no token provided for {}", path);

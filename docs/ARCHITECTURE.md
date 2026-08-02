@@ -9,6 +9,51 @@ RED es un ecosistema de mensajería soberana y descentralizada que opera bajo un
 - **Capa Global:** Ruteo P2P mediante libp2p y DHT Kademlia.
 - **Capa de Identidad:** DID (Decentralized Identifiers) inmutables.
 
+## 🛡️ v19.0 Sub-Sistemas de Seguridad y Servicio Público
+
+### 1. Arquitectura Guardian IA (Moderación Off-Grid Híbrida)
+
+```
+NODO EMISOR (Dispositivo Usuario)
+    │
+    ├── Componer Mensaje
+    │
+    ▼
+[GuardianEngine] (Pre-Cifrado)
+    │
+    ├── Capa 1: Evaluador Local Off-Grid (Rust, <1ms)
+    │     ├── Heurísticas S4/CSAM/Tráfico
+    │     ├── Acumulador de Ventana de Contexto (Últimos N mensajes)
+    │     └── pHash Perceptual para Imágenes
+    │
+    ├── Capa 2: Cloud Audit (Opcional, si hay internet y GROQ_API_KEY)
+    │     └── LlamaGuard 4 12B (Meta) vía HTTPS determinista
+    │
+    ├── VERDICT: ALLOW  ──► Cifrado Double Ratchet ──► Red P2P/Mesh
+    ├── VERDICT: WARN   ──► Log + Flag ──► Cifrado Double Ratchet
+    └── VERDICT: BLOCK  ──► 403 Forbidden (Destrucción local pre-envío)
+```
+
+### 2. Topología Sistema Alerta AMBER-RED P2P
+
+```
+AUTORIDAD AMBER (Nodo Registrado con Firma Ed25519)
+    │
+    ├── Emisión POST /api/amber/alert
+    │
+    ├── Persistencia local en Sled DB
+    │
+    ├── Broadcast GossipSub Topic "amber-red-v1"
+    │
+    └── Push SSE ("amber_alert") ──► Todos los Nodos RED Conectados
+                                          │
+                                          ▼
+                                <AmberAlertBanner /> Flotante
+                                          │
+                                          ├── Ver Detalles / Foto
+                                          └── Reportar Avistamiento (POST /sighting)
+```
+
 ## Componentes del Ecosistema
 
 ```

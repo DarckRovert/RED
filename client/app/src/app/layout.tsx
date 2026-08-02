@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import "./globals.css";
+import AmberAlertBanner from "@/components/AmberAlertBanner";
 
 export default function RootLayout({
   children,
@@ -45,6 +46,8 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
       </head>
       <body>
+        {/* v19.0: Banner AMBER-RED — overlay de alta prioridad, visible sobre toda la app */}
+        <AmberAlertBanner />
         <div className="app-container">
           {children}
         </div>

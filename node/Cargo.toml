@@ -55,3 +55,12 @@ futures = "0.3"
 hex = "0.4"
 http = "1.4.0"
 base64 = "0.21"
+
+# HTTP client para Guardian IA (Groq API)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Errores tipados (amber.rs)
+thiserror = "1.0"
+
+# UUIDs para IDs de alertas AMBER
+uuid = { version = "1.6", features = ["v4", "serde"] }

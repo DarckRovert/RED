@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use axum::{
     extract::{ConnectInfo, Request, State as AxumState},
-    http::{StatusCode, HeaderMap},
+    http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -117,6 +117,7 @@ pub async fn rate_limit_middleware(
         (
             StatusCode::TOO_MANY_REQUESTS,
             Json(json!({"error": "Rate limit exceeded. Please slow down."})),
-        ).into_response()
+        )
+            .into_response()
     }
 }
