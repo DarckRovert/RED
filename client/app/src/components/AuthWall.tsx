@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { CalculatorScreen } from "./CalculatorScreen";
 import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
-import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
 /**
  * Authentication Wall — RED Unified Lockscreen
@@ -20,11 +19,17 @@ type AuthMode = "checking" | "onboarding" | "unlock";
 
 async function getSecurePin(key: string): Promise<string | null> {
     try {
-        const res = await SecureStoragePlugin.get({ key }).catch(() => null);
-        if (res && res.value) return res.value;
+        if (typeof window !== 'undefined') {
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                const res = await SecureStoragePlugin.get({ key }).catch(() => null);
+                if (res && res.value) return res.value;
+            }
+        }
     } catch {}
     try {
-        return localStorage.getItem(key) || null;
+        return typeof window !== 'undefined' ? localStorage.getItem(key) || null : null;
     } catch {
         return null;
     }
@@ -32,10 +37,16 @@ async function getSecurePin(key: string): Promise<string | null> {
 
 async function setSecurePin(key: string, value: string): Promise<void> {
     try {
-        await SecureStoragePlugin.set({ key, value }).catch(() => null);
+        if (typeof window !== 'undefined') {
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                await SecureStoragePlugin.set({ key, value }).catch(() => null);
+            }
+        }
     } catch {}
     try {
-        localStorage.setItem(key, value);
+        if (typeof window !== 'undefined') localStorage.setItem(key, value);
     } catch {}
 }
 
