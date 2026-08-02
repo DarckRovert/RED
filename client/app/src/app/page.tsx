@@ -131,14 +131,19 @@ export default function AppRouter() {
       }
     };
 
-    // Check if profile was already created in Keystore
+    // Check if profile was already created in Keystore or localStorage
     const checkProfile = async () => {
       try {
+        if (typeof window !== 'undefined' && localStorage.getItem("profile_created") === "true") {
+          setNeedsProfile(false);
+          return;
+        }
         const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
         const { value } = await SecureStoragePlugin.get({ key: "profile_created" });
         setNeedsProfile(!value);
       } catch {
-        setNeedsProfile(true);
+        // On Web browser fallback (GitHub Pages), default to false so app is immediately accessible!
+        setNeedsProfile(false);
       }
     };
 

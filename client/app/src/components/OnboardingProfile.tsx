@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
-import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
 /**
  * OnboardingProfile — shown ONCE after first successful login.
@@ -35,8 +34,10 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
             await fetchData();
         } catch {}
 
-        // Mark profile as created in Keystore
+        // Mark profile as created in Keystore & localStorage
         try {
+            if (typeof window !== 'undefined') localStorage.setItem("profile_created", "true");
+            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
             await SecureStoragePlugin.set({ key: "profile_created", value: "true" });
         } catch {}
 
@@ -46,6 +47,8 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
 
     const handleSkip = async () => {
         try {
+            if (typeof window !== 'undefined') localStorage.setItem("profile_created", "true");
+            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
             await SecureStoragePlugin.set({ key: "profile_created", value: "true" });
         } catch {}
         onDone();
