@@ -12,7 +12,7 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
 
     const reportData = {
         timestamp: new Date().toISOString(),
-        version: "RED v18.3 Zenith Master Edition",
+        version: "RED v24.0 AI Sovereign Master",
         identity_hash: identity?.identity_hash || "Desconocida",
         security_features: {
             pqc_kyber1024: "ACTIVO & OPERATIVO",
@@ -77,7 +77,7 @@ Identidad Criptográfica: ${reportData.identity_hash}
                                 Informe de Auditoría Táctica
                             </h2>
                             <div style={{ fontSize: '0.72rem', color: 'var(--danger)', letterSpacing: '1px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span className="pulse-dot-green"></span> PROTOCOLO DE SEGURIDAD GLOBAL v18.3
+                                <span className="pulse-dot-green"></span> PROTOCOLO DE SEGURIDAD GLOBAL v24.0
                             </div>
                         </div>
                     </div>

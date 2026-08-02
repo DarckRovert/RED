@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { RedAPI } from "../lib/api";
 
 interface NodeLogsModalProps {
     onClose: () => void;
@@ -6,36 +7,87 @@ interface NodeLogsModalProps {
 
 export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
     const [logs, setLogs] = useState<string[]>([]);
+    const eventSourceRef = useRef<EventSource | null>(null);
+    const logsEndRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
+        // Initial static boot log entries (deterministic — not random)
+        const ts = () => new Date().toLocaleTimeString();
         const initialLogs = [
-            `[${new Date().toLocaleTimeString()}] [INFO] Motor Nativo RED Rust inicializado en puerto 7333`,
-            `[${new Date().toLocaleTimeString()}] [INFO] Bóveda Kyber1024 / Dilithium5 cargada correctamente`,
-            `[${new Date().toLocaleTimeString()}] [P2P] Transportador mDNS/WiFi iniciado (discovery activo)`,
-            `[${new Date().toLocaleTimeString()}] [P2P] Transportador Bluetooth LE Mesh activado`,
-            `[${new Date().toLocaleTimeString()}] [NOISE] Emisión de paquetes de cobertura anti-análisis de tráfico`,
-            `[${new Date().toLocaleTimeString()}] [CONSENSUS] Sincronizado con altura de bloque local #0`,
+            `[${ts()}] [INFO] Motor Nativo RED Rust inicializado en puerto 7333`,
+            `[${ts()}] [INFO] Bóveda Kyber1024 / Dilithium5 cargada correctamente`,
+            `[${ts()}] [P2P] Transportador mDNS/WiFi iniciado (discovery activo)`,
+            `[${ts()}] [P2P] Transportador Bluetooth LE Mesh activado`,
+            `[${ts()}] [NOISE] Emisión de paquetes de cobertura anti-análisis de tráfico`,
+            `[${ts()}] [CONSENSUS] Sincronizado con cadena de bloques local`,
+            `[${ts()}] [SSE] Conectando al flujo de eventos real del nodo...`,
         ];
         setLogs(initialLogs);
 
-        const interval = setInterval(() => {
-            const types = ['INFO', 'P2P', 'NOISE', 'SECURITY'];
-            const randomType = types[Math.floor(Math.random() * types.length)];
-            let msg = '';
-            if (randomType === 'NOISE') msg = 'Paquete de cobertura dummy empaquetado y difundido';
-            else if (randomType === 'P2P') msg = 'Ping RTT transmitido a través de la malla local';
-            else if (randomType === 'SECURITY') msg = 'Verificación periódica de llaves Kyber en memoria (Zero-leak)';
-            else msg = 'Bucle de eventos SSE /api/events operacional';
+        // Subscribe to real SSE event stream from the Rust node
+        const es = RedAPI.subscribeToEvents((data: any) => {
+            try {
+                let label = 'EVENT';
+                let detail = '';
 
-            const newEntry = `[${new Date().toLocaleTimeString()}] [${randomType}] ${msg}`;
-            setLogs(prev => [...prev.slice(-40), newEntry]);
-        }, 3000);
+                if (data.type === 'new_message' || data.message_item) {
+                    label = 'MSG';
+                    const msg = data.message_item;
+                    detail = msg
+                        ? `Nuevo mensaje de ${msg.sender?.substring(0, 10) || 'peer'}… (tipo: ${msg.msg_type || 'text'})`
+                        : 'Nuevo mensaje recibido';
+                } else if (data.type === 'peer_connected' || data.peer_id) {
+                    label = 'P2P';
+                    detail = `Par conectado: ${(data.peer_id || data.peer || '').substring(0, 16)}`;
+                } else if (data.type === 'peer_disconnected') {
+                    label = 'P2P';
+                    detail = `Par desconectado: ${(data.peer_id || '').substring(0, 16)}`;
+                } else if (data.type === 'block_produced' || data.block_height != null) {
+                    label = 'CONSENSUS';
+                    detail = `Bloque producido: altura #${data.block_height ?? '?'} | validator: ${(data.validator || '').substring(0, 10)}`;
+                } else if (data.type === 'noise_packet') {
+                    label = 'NOISE';
+                    detail = 'Paquete de cobertura difundido en la malla';
+                } else if (data.type === 'guardian_alert') {
+                    label = 'GUARDIAN';
+                    detail = `IA bloqueó contenido: ${data.reason || 'política S1'}`;
+                } else if (data.type === 'sos_beacon') {
+                    label = 'SOS';
+                    detail = `Baliza SOS recibida de: ${(data.sender_did || '').substring(0, 16)}`;
+                } else {
+                    label = 'INFO';
+                    detail = JSON.stringify(data).substring(0, 80);
+                }
 
-        return () => clearInterval(interval);
+                const entry = `[${new Date().toLocaleTimeString()}] [${label}] ${detail}`;
+                setLogs(prev => [...prev.slice(-60), entry]); // Keep last 60 entries
+            } catch {
+                // Non-parseable SSE event — ignore
+            }
+        });
+
+        if (es) {
+            eventSourceRef.current = es;
+            setLogs(prev => [...prev, `[${ts()}] [SSE] ✅ Canal de eventos real conectado. Escuchando nodo Rust...`]);
+        } else {
+            setLogs(prev => [...prev, `[${ts()}] [WARN] Canal SSE no disponible. Inicia el nodo RED para ver logs reales.`]);
+        }
+
+        return () => {
+            if (eventSourceRef.current) {
+                eventSourceRef.current.close();
+                eventSourceRef.current = null;
+            }
+        };
     }, []);
 
+    // Auto-scroll to bottom on new log entries
+    useEffect(() => {
+        logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [logs]);
+
     return (
-        <div 
+        <div
             className="animate-fade"
             style={{
                 position: 'fixed', inset: 0, zIndex: 10000,
@@ -44,7 +96,7 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
             }}
             onClick={onClose}
         >
-            <div 
+            <div
                 className="animate-pop glass-panel"
                 style={{
                     width: '100%', maxWidth: '620px', padding: '24px', maxHeight: '85vh', overflowY: 'auto',
@@ -61,14 +113,14 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                                 Consola de Logs del Nodo Rust
                             </h2>
                             <div style={{ fontSize: '0.72rem', color: '#00D97E', fontFamily: 'JetBrains Mono, monospace' }}>
-                                LIVE TELEMETRY LOG STREAM
+                                LIVE TELEMETRY · SSE /api/events
                             </div>
                         </div>
                     </div>
                     <button onClick={onClose} className="btn-icon">✕</button>
                 </div>
 
-                <div 
+                <div
                     className="scroll-container no-scrollbar"
                     style={{
                         height: '320px', overflowY: 'auto', padding: '14px', borderRadius: '14px',
@@ -78,10 +130,17 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                     }}
                 >
                     {logs.map((log, i) => (
-                        <div key={i} style={{ wordBreak: 'break-all' }}>
+                        <div key={i} style={{
+                            wordBreak: 'break-all',
+                            color: log.includes('[WARN]') ? '#f59e0b'
+                                : log.includes('[SOS]') || log.includes('[GUARDIAN]') ? '#ef4444'
+                                : log.includes('[CONSENSUS]') ? '#c084fc'
+                                : '#00D97E'
+                        }}>
                             {log}
                         </div>
                     ))}
+                    <div ref={logsEndRef} />
                 </div>
             </div>
         </div>
