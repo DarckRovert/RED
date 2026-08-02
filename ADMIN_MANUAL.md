@@ -99,4 +99,41 @@ La base de datos **Sled** utiliza árboles transaccionales (`conversations`, `co
 
 ---
 
+## 🛠️ 7. Administración de Motores Avanzados (v20.0 - v23.0)
+
+### 1. Auditoría del Filtro Anti-Spam y Modo Sigilo de Proximidad
+```bash
+# Consultar parámetros activos de Cooldown y Modo Sigilo
+curl -s http://localhost:7333/api/discovery/config | jq .
+
+# Actualizar el Cooldown a 1 hora (3600s) y activar Modo Sigilo por Vibración
+curl -X POST http://localhost:7333/api/discovery/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cooldown_seconds": 3600,
+    "rssi_threshold_dbm": -75,
+    "stealth_mode": "vibrate",
+    "digest_enabled": true,
+    "safe_zones": []
+  }'
+```
+
+### 2. Administración de Balizas SOS Tácticas y Canales Locales
+```bash
+# Consultar balizas SOS de auxilio activas en la red local
+curl -s http://localhost:7333/api/sos/active | jq .
+
+# Publicar en el canal local descentralizado (con moderación pre-difusión Guardian IA)
+curl -X POST http://localhost:7333/api/channels/post \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel_id": "red-local-general",
+    "sender_name": "Administrador Nodo",
+    "content": "Aviso oficial de mantenimiento de nodo local."
+  }'
+```
+
+---
+
 **RED Admin Docs** — Soberanía tecnológica mediante hardware real y criptografía robusta.
+
