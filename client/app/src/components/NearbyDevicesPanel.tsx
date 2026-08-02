@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
 import { RedDevice } from "../lib/mesh/bluetoothTransport";
 import { MeshPeer } from "../lib/mesh/meshRouter";
+import { RedAPI } from "../lib/api";
 
 const TRANSPORT_COLOR: Record<string, string> = {
     wifi:      '#00D97E',
@@ -40,14 +41,32 @@ export default function NearbyDevicesPanel() {
     const [connecting, setConnecting] = useState<string | null>(null);
     const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
 
-
     useEffect(() => {
-        const refresh = () => {
+        const refresh = async () => {
             setBleDevices([...localTransport.discoveredBluetoothPeers]);
-            setMeshPeers([...localTransport.allPeers]);
+            try {
+                const apiPeers = await RedAPI.getPeers().catch(() => []);
+                const localPeers = localTransport.allPeers;
+                const map = new Map<string, MeshPeer>();
+                for (const p of localPeers) {
+                    map.set(p.id, p);
+                }
+                for (const ap of apiPeers) {
+                    if (!map.has(ap.id)) {
+                        map.set(ap.id, {
+                            id: ap.id,
+                            transport: (ap.transport as any) || 'wifi',
+                            lastSeen: Date.now(),
+                        });
+                    }
+                }
+                setMeshPeers(Array.from(map.values()));
+            } catch {
+                setMeshPeers([...localTransport.allPeers]);
+            }
         };
         refresh();
-        const interval = setInterval(refresh, 2000);
+        const interval = setInterval(refresh, 2500);
         return () => clearInterval(interval);
     }, []);
 

@@ -4,9 +4,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
 
+import { RedAPI } from "../lib/api";
+
 /** Derive a deterministic lat/lng from a peer ID string (no Math.random). */
 function peerToCoords(peerId: string): { lat: number; lng: number } {
-    // Use char codes of peer ID bytes to seed lat/lng deterministically
     let hash1 = 0, hash2 = 0;
     for (let i = 0; i < peerId.length; i++) {
         const c = peerId.charCodeAt(i);
@@ -28,7 +29,7 @@ export default function NodeMap() {
     const { status, goBack } = useRedStore();
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const [globeLoaded, setGlobeLoaded] = useState(false);
-    const [peers, setPeers] = useState(localTransport.allPeers);
+    const [peers, setPeers] = useState<Array<{ id: string; transport: string }>>([]);
     const [myPos, setMyPos] = useState<{lat: number, lng: number}>({ lat: 0, lng: 0 });
     const [realGPS, setRealGPS] = useState(false);
 
@@ -54,9 +55,31 @@ export default function NodeMap() {
         return () => { mounted = false; };
     }, []);
 
-    // Refresh peer list every 4s
+    // Refresh peer list every 3s combining RedAPI and localTransport
     useEffect(() => {
-        const t = setInterval(() => setPeers([...localTransport.allPeers]), 4000);
+        const updatePeers = async () => {
+            try {
+                const apiPeers = await RedAPI.getPeers().catch(() => []);
+                const localPeers = localTransport.allPeers;
+                
+                const map = new Map<string, { id: string; transport: string }>();
+                for (const p of localPeers) {
+                    map.set(p.id, { id: p.id, transport: p.transport });
+                }
+                for (const p of apiPeers) {
+                    if (!map.has(p.id)) {
+                        map.set(p.id, { id: p.id, transport: p.transport || 'wifi' });
+                    }
+                }
+                
+                setPeers(Array.from(map.values()));
+            } catch {
+                setPeers([...localTransport.allPeers]);
+            }
+        };
+
+        updatePeers();
+        const t = setInterval(updatePeers, 3000);
         return () => clearInterval(t);
     }, []);
 

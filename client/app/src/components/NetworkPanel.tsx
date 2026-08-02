@@ -251,7 +251,7 @@ export default function NetworkPanel() {
                     </div>
                 </div>
 
-                {/* Conexión Manual P2P */}
+                {/* Conexión Manual P2P (WAN / Internet / 4G / 5G / LAN) */}
                 <div style={{
                     background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
                     borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
@@ -260,20 +260,26 @@ export default function NetworkPanel() {
                     <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{
                             width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-                            background: 'linear-gradient(135deg, #3498db, #2980b9)',
+                            background: 'linear-gradient(135deg, #00D97E, #26A69A)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 4px 16px rgba(52,152,219,0.4)',
+                            boxShadow: '0 4px 16px rgba(0,217,126,0.3)',
                             fontSize: '1.1rem',
-                        }}>📡</div>
+                        }}>🌐</div>
                         <div>
-                            <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Conexión Manual P2P</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>Conéctate directamente ingresando la IP / Multiaddr del otro nodo</div>
+                            <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Conexión Larga Distancia (WAN / 4G / 5G / Internet)</div>
+                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>Conéctate a nodos remotos en otras redes mediante IP pública, Dominio o Relay</div>
                         </div>
                     </div>
                     <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span><strong>Formatos Soportados (WAN & LAN):</strong></span>
+                            <code style={{ color: 'var(--primary-bright)', fontSize: '0.72rem' }}>/dns4/nodo.midominio.com/tcp/7331 (Dominio WAN)</code>
+                            <code style={{ color: '#00D97E', fontSize: '0.72rem' }}>/ip4/200.x.x.x/tcp/7331 (IP Pública 4G/5G/Fibra)</code>
+                            <code style={{ color: '#3498db', fontSize: '0.72rem' }}>/ip4/192.168.1.50/tcp/7331 (WiFi Local)</code>
+                        </div>
                         <input
                             type="text"
-                            placeholder="Ej. /ip4/192.168.1.50/tcp/7331"
+                            placeholder="Ej. /dns4/nodo.redapp.org/tcp/7331 o /ip4/201.55.12.8/tcp/7331"
                             value={manualAddress}
                             onChange={e => setManualAddress(e.target.value)}
                             style={{
@@ -299,11 +305,11 @@ export default function NetworkPanel() {
                             {connectingManual ? (
                                 <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
                             ) : connectStatus === 'success' ? (
-                                '✓ Conexión Iniciada'
+                                '✓ Conexión WAN Iniciada'
                             ) : connectStatus === 'error' ? (
-                                '✗ Error de Conexión'
+                                '✗ Error al Conectar (Verifica IP/Dominio)'
                             ) : (
-                                'Conectar a Nodo'
+                                'Conectar por Internet / WAN'
                             )}
                         </button>
                     </div>

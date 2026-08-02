@@ -145,6 +145,11 @@ impl Libp2pTransport {
         swarm.behaviour_mut().gossipsub.subscribe(&routing_topic)
             .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
 
+        // Handshake topic for exchanging node keys and identities
+        let handshake_topic = gossipsub::IdentTopic::new("red-handshake");
+        swarm.behaviour_mut().gossipsub.subscribe(&handshake_topic)
+            .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
+
         // Escuchar automáticamente en el canal de relé para NAT traversal en datos móviles
         if let Ok(relay_addr) = "/p2p-circuit".parse::<libp2p::Multiaddr>() {
             match swarm.listen_on(relay_addr) {
@@ -198,6 +203,11 @@ impl Libp2pTransport {
                     event = swarm.select_next_some() => {
                         match event {
                             SwarmEvent::Behaviour(RedBehaviourEvent::Identify(identify::Event::Received { peer_id, info, .. })) => {
+                                let real_pub_bytes: [u8; 32] = info.public_key
+                                    .try_into_ed25519()
+                                    .map(|k| k.to_bytes())
+                                    .unwrap_or([0u8; 32]);
+
                                 for addr in info.listen_addrs {
                                     debug!("[libp2p] Identify: peer {} at {}", peer_id, addr);
                                     swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
@@ -206,18 +216,23 @@ impl Libp2pTransport {
                                     connected_clone.lock().unwrap().insert(peer_id.to_bytes());
                                     
                                     let mut kp = known_peers_clone.lock().unwrap();
-                                    if !kp.iter().any(|p| p.id.as_bytes() == peer_id.to_bytes().as_slice()) {
+                                    let target_id_bytes = {
+                                        let b = peer_id.to_bytes();
+                                        let mut arr = [0u8; 32];
+                                        let len = b.len().min(32);
+                                        arr[..len].copy_from_slice(&b[..len]);
+                                        arr
+                                    };
+                                    if let Some(existing) = kp.iter_mut().find(|p| p.id.as_bytes() == target_id_bytes.as_slice()) {
+                                        if existing.public_key.as_bytes() == &[0u8; 32] && real_pub_bytes != [0u8; 32] {
+                                            existing.public_key = crate::crypto::keys::PublicKey::from_bytes(real_pub_bytes);
+                                        }
+                                    } else {
                                         if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
                                             kp.push(crate::network::PeerInfo {
-                                                id: PeerId::from_bytes({
-                                                    let b = peer_id.to_bytes();
-                                                    let mut arr = [0u8; 32];
-                                                    let len = b.len().min(32);
-                                                    arr[..len].copy_from_slice(&b[..len]);
-                                                    arr
-                                                }),
+                                                id: PeerId::from_bytes(target_id_bytes),
                                                 addresses: vec![socket_addr],
-                                                public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+                                                public_key: crate::crypto::keys::PublicKey::from_bytes(real_pub_bytes),
                                                 identity_hash: None,
                                                 protocol_version: 1,
                                                 user_agent: info.agent_version.clone(),
@@ -245,7 +260,49 @@ impl Libp2pTransport {
                                 };
 
                                 // Topic-based routing
-                                if message.topic.as_str() == "red-routing" {
+                                if message.topic.as_str() == "red-handshake" {
+                                    if let Ok(handshake) = serde_json::from_slice::<serde_json::Value>(&message.data) {
+                                        if let (Some(hash_str), Some(pk_str)) = (
+                                            handshake.get("identity_hash").and_then(|v| v.as_str()),
+                                            handshake.get("public_key").and_then(|v| v.as_str())
+                                        ) {
+                                            if let Ok(identity_hash) = crate::identity::IdentityHash::from_hex(hash_str) {
+                                                if let Ok(pk_bytes) = hex::decode(pk_str) {
+                                                    if pk_bytes.len() == 32 {
+                                                        let mut kp = known_peers_clone.lock().unwrap();
+                                                        let target_id_bytes = {
+                                                            let b = peer_id.to_bytes();
+                                                            let mut arr = [0u8; 32];
+                                                            let len = b.len().min(32);
+                                                            arr[..len].copy_from_slice(&b[..len]);
+                                                            arr
+                                                        };
+                                                        let mut pk_array = [0u8; 32];
+                                                        pk_array.copy_from_slice(&pk_bytes);
+                                                        let public_key = crate::crypto::keys::PublicKey::from_bytes(pk_array);
+
+                                                        if let Some(existing) = kp.iter_mut().find(|p| p.id.as_bytes() == target_id_bytes.as_slice()) {
+                                                            existing.identity_hash = Some(identity_hash);
+                                                            existing.public_key = public_key;
+                                                            debug!("Handshake received: updated peer {} with identity hash {}", peer_id, hash_str);
+                                                        } else {
+                                                            let custom_peer_id = PeerId::from_bytes(target_id_bytes);
+                                                            kp.push(crate::network::PeerInfo {
+                                                                id: custom_peer_id,
+                                                                public_key,
+                                                                identity_hash: Some(identity_hash),
+                                                                protocol_version: 1,
+                                                                user_agent: "red-node".to_string(),
+                                                                addresses: vec![],
+                                                            });
+                                                            debug!("Handshake received: added new peer {} with identity hash {}", peer_id, hash_str);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else if message.topic.as_str() == "red-routing" {
                                     if let Ok(packet) = bincode::deserialize::<crate::network::routing::OnionPacket>(&message.data) {
                                         let _ = msg_tx.send((peer, TransportMessage::Onion(packet))).await;
                                     }
@@ -348,6 +405,14 @@ impl Libp2pTransport {
                                                 let routing_topic = gossipsub::IdentTopic::new("red-routing");
                                                 let _ = swarm.behaviour_mut().gossipsub.publish(routing_topic, data);
                                             }
+                                        }
+                                        TransportMessage::IdentityBroadcast { hash, pk } => {
+                                            let payload = serde_json::json!({
+                                                "identity_hash": hash,
+                                                "public_key": pk
+                                            }).to_string().into_bytes();
+                                            let topic = gossipsub::IdentTopic::new("red-handshake");
+                                            let _ = swarm.behaviour_mut().gossipsub.publish(topic, payload);
                                         }
                                         _ => {}
                                     }

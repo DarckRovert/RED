@@ -223,6 +223,7 @@ impl Message {
                 .as_millis() as u64,
             reply_to: None,
             status: MessageStatus::Pending,
+            edited: false,
         })
     }
 

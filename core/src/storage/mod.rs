@@ -212,10 +212,10 @@ impl Storage {
 
     // Groups
     pub fn add_group(&mut self, group: Group) -> StorageResult<()> {
-        self.store("groups", group.id.as_bytes(), &group)
+        self.store("groups", &group.id.0, &group)
     }
     pub fn get_group(&self, id: &GroupId) -> Option<Group> {
-        self.fetch("groups", id.as_bytes()).unwrap_or(None)
+        self.fetch("groups", &id.0).unwrap_or(None)
     }
     pub fn get_groups(&self) -> Vec<Group> {
         self.fetch_all("groups").unwrap_or_default()
@@ -226,7 +226,7 @@ impl Storage {
 
     // Devices
     pub fn add_authorized_device(&mut self, device: AuthorizedDevice) -> StorageResult<()> {
-        self.store("devices", device.id.as_bytes(), &device)
+        self.store("devices", &device.id.0, &device)
     }
     pub fn get_authorized_devices(&self) -> Vec<AuthorizedDevice> {
         self.fetch_all("devices").unwrap_or_default()
@@ -260,14 +260,14 @@ impl Storage {
     pub fn save_conversation(&mut self, conv: &Conversation) -> StorageResult<()> {
         if self.burner_mode { return Ok(()); }
         let id = ConversationId::from_participants(&conv.our_identity, &conv.their_identity);
-        self.store("conversations", id.to_bytes().as_ref(), conv)
+        self.store("conversations", id.as_bytes(), conv)
     }
 
     pub fn get_conversations(&self) -> Vec<Conversation> {
         self.fetch_all("conversations").unwrap_or_default()
     }
     pub fn get_conversation(&self, id: &ConversationId) -> Option<Conversation> {
-        self.fetch("conversations", id.to_bytes().as_ref()).unwrap_or(None)
+        self.fetch("conversations", id.as_bytes()).unwrap_or(None)
     }
     pub fn get_conversation_mut(&mut self, id: &ConversationId) -> Option<Conversation> {
         self.get_conversation(id) // compatibility, caller must re-save

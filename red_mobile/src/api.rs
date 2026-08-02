@@ -514,6 +514,8 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/groups",          post(handle_create_group))
         .route("/api/groups/:id/send", post(handle_send_group_message))
         .route("/api/peers",              get(handle_get_peers))
+        .route("/api/network/connect",     post(handle_connect_peer))
+        .route("/api/network/ip",          get(handle_get_network_ip))
         .route("/api/network/vault",       get(handle_get_vault))
         .route("/api/crypto/renegotiate",  post(handle_renegotiate_crypto))
         .route("/api/blockchain/blocks",      get(handle_get_blocks))
@@ -562,8 +564,12 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/events",          get(handle_sse))
         .route("/local-signal",        get(handle_local_signal))
 
-        .layer(auth_layer) // Protegemos todas las rutas
-        .layer(cors)
+        // P5 FIX: El orden de capas en Axum es outer-last (la última capa aplicada
+        // se ejecuta PRIMERO en cada request). Por tanto CORS debe estar DESPUÉS de
+        // auth en el código para que se aplique ANTES en la pipeline — así los preflight
+        // OPTIONS nunca son rechazados por el middleware de autenticación.
+        .layer(auth_layer)
+        .layer(cors)                   // ← CORS ejecuta antes que auth (outer layer)
         .layer(TraceLayer::new_for_http())
         .layer(SetResponseHeaderLayer::if_not_present(
             header::X_CONTENT_TYPE_OPTIONS,
@@ -582,17 +588,16 @@ pub fn build_router(state: ApiState) -> Router {
 async fn handle_status(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let chain_height = state.chain.height();
+    // P3 FIX: leer el contador atómico real de paquetes cifrados enviados
+    let noise_packets_sent = node.packets_sent_count();
     Json(StatusResponse {
         is_running: node.is_running(),
         peer_count: node.transport_peer_count(),
         identity_hash: node.identity_hash().to_hex(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         chain_height,
-        // gossip_latency_ms, noise_packets_sent, sybil_blocked —
-        // estos campos se expanden en fases futuras desde el transport layer.
-        // Por ahora retornamos valores de base: 0 indica "no hay datos aún".
         gossip_latency_ms: None,
-        noise_packets_sent: 0,
+        noise_packets_sent,
         sybil_blocked: 0,
     })
 }
@@ -749,18 +754,36 @@ async fn handle_clear_conversation(
     State(state): State<ApiState>,
     axum::extract::Path(conv_id): axum::extract::Path<String>,
 ) -> impl IntoResponse {
-    let node = state.node.lock().await;
-    if let Ok((_, _, conversations)) = node.get_sync_payload().await {
-        if let Some(_conv) = conversations.iter().find(|c| {
-            format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
-        }) {
-            drop(node);
-            // NOTE: clear_conversation_messages will be added to Storage in a follow-up if not present
-            return (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response();
+    // P6 FIX: borrado real de mensajes usando el método clear_conversation del Node.
+    // Primero buscamos la conversación para obtener su conv_id_hex de storage,
+    // luego liberamos el lock de lectura y adquirimos uno mutable para la escritura.
+    let conv_storage_id: Option<String> = {
+        let node = state.node.lock().await;
+        match node.get_sync_payload().await {
+            Ok((_, _, conversations)) => {
+                conversations.iter().find(|c| {
+                    format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
+                }).map(|c| c.id.to_hex())
+            }
+            Err(_) => None,
         }
+    }; // lock liberado aquí
+
+    match conv_storage_id {
+        Some(hex_id) => {
+            let mut node = state.node.lock().await;
+            match node.clear_conversation(&hex_id).await {
+                Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
+                Err(e) => {
+                    tracing::warn!("[clear] Failed to clear conversation {}: {}", conv_id, e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"ok": false, "error": format!("{}", e)}))).into_response()
+                }
+            }
+        }
+        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Conversation not found"}))).into_response(),
     }
-    (StatusCode::NOT_FOUND, Json(serde_json::json!({"ok": false, "error": "Not found"}))).into_response()
 }
+
 
 async fn handle_send_message(
     State(state): State<ApiState>,
@@ -803,6 +826,7 @@ async fn handle_send_message(
             .as_millis() as u64,
         reply_to,
         status: red_core::protocol::MessageStatus::Pending,
+        edited: false,
     };
 
     if message.is_too_large() {
@@ -1173,14 +1197,29 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
-async fn handle_outbound_sse(State(_state): State<ApiState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn handle_outbound_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    // P2 FIX: El SSE outbound ahora retransmite los mensajes ENVIADOS al WebView para
+    // que el MeshRouter pueda broadcast físico por BLE/WiFi.
+    // Compartimos el mismo canal msg_tx: los mensajes donde sender == my_hash son salientes.
+    let mut rx = state.msg_tx.subscribe();
+    let my_hash = state.node.lock().await.identity_hash().clone();
     let stream = async_stream::stream! {
-        // SSE outbound interceptor requires a broadcast channel.
-        // As outbound_payload_tx is now mpsc for React Native interop,
-        // we lock this stream in standby.
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-            yield Ok(Event::default().event("standby").data(""));
+            match rx.recv().await {
+                Ok(msg) if msg.sender == my_hash => {
+                    // Serializar el ID y destinatario del mensaje enviado para que el
+                    // MeshRouter pueda rastrear la entrega y confirmar estado en la UI.
+                    let payload_json = serde_json::json!({
+                        "payload_hex": msg.id.to_hex(),
+                        "recipient": msg.recipient.to_hex(),
+                        "timestamp": msg.timestamp,
+                    });
+                    yield Ok(Event::default().event("mesh_payload").data(payload_json.to_string()));
+                }
+                Ok(_) => continue, // mensaje entrante, ignorar en este canal
+                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(broadcast::error::RecvError::Closed) => break,
+            }
         }
     };
     Sse::new(stream).keep_alive(KeepAlive::default())
@@ -1188,23 +1227,66 @@ async fn handle_outbound_sse(State(_state): State<ApiState>) -> Sse<impl Stream<
 
 async fn handle_get_peers(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
-    let count = node.transport_peer_count();
-    // Transport labels rotate through the known transport types so the UI can
-    // display varied transport badges even before each peer's metadata is rich.
-    let transports = ["quic", "tcp", "websocket", "ble", "wifi_direct"];
-    let items: Vec<PeerItem> = (0..count).map(|i| {
-        let transport = transports[i % transports.len()].to_string();
+    let known = node.known_peers();
+    let items: Vec<PeerItem> = known.into_iter().map(|p| {
+        let hex_id = p.identity_hash.as_ref().map(|h| h.to_hex()).unwrap_or_else(|| p.id.to_string());
+        let addr = p.addresses.first().map(|a| a.to_string());
+        let transport = if addr.as_ref().map(|a| a.contains("ble") || a.contains("gatt")).unwrap_or(false) {
+            "ble".to_string()
+        } else {
+            "wifi".to_string()
+        };
         PeerItem {
-            id: format!("peer_{i:04x}"),
+            id: hex_id,
             is_connected: true,
-            transport: transport.clone(),
-            // Latency placeholder — will be filled once transport exposes RTT metrics
-            latency_ms: Some(12 + (i as u64 * 7) % 80),
+            transport,
+            latency_ms: None,
             noise_session: true,
-            addr: Some(format!("10.0.0.{}:{}", i + 2, 7333)),
+            addr,
         }
     }).collect();
     Json(items).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct ConnectPeerRequest {
+    pub multiaddr: String,
+}
+
+async fn handle_connect_peer(
+    State(state): State<ApiState>,
+    Json(req): Json<ConnectPeerRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    match node.connect_peer(&req.multiaddr).await {
+        Ok(_) => Json(serde_json::json!({
+            "ok": true,
+            "connected": req.multiaddr,
+            "status": "Dialing multiaddr over P2P network"
+        })).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("{}", e)
+            })),
+        ).into_response(),
+    }
+}
+
+async fn handle_get_network_ip(State(_state): State<ApiState>) -> impl IntoResponse {
+    // Detect active local interface IP
+    let ip = local_ip_address::local_ip()
+        .map(|i| i.to_string())
+        .unwrap_or_else(|_| "127.0.0.1".to_string());
+    Json(serde_json::json!({
+        "local_ip": ip,
+        "port": 7331,
+        "relays": [
+            "/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTKI8XwOSPNKZbPEmLkXNA5yRxklDDe",
+            "/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ"
+        ]
+    })).into_response()
 }
 
 async fn handle_get_vault(State(state): State<ApiState>) -> impl IntoResponse {
@@ -1216,10 +1298,8 @@ async fn handle_get_vault(State(state): State<ApiState>) -> impl IntoResponse {
         identity_hash: hash.to_hex(),
         short_id: hash.short(),
         key_algorithm: "Curve25519 + ChaCha20-Poly1305".to_string(),
-        // Each peer occupies one Double Ratchet session
         active_sessions: peer_count,
-        // Placeholder telemetry — upgraded when transport exposes counters
-        noise_packets_sent: (chain_height * 3).saturating_add(peer_count as u64 * 17),
+        noise_packets_sent: node.packets_sent_count(),
         sybil_blocked: 0,
         chain_height,
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -2031,6 +2111,62 @@ async fn handle_report_content_async(
     let s = state.lock().await;
     match &*s {
         Some(r) => handle_report_content(State(r.clone()), Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_resolve_sos_async(State(state): State<AsyncState>, path: Path<String>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_resolve_sos(State(r.clone()), path).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_channel_messages_async(State(state): State<AsyncState>, axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_channel_messages(State(r.clone()), axum::extract::Query(params)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_voice_bursts_async(State(state): State<AsyncState>, axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_voice_bursts(State(r.clone()), axum::extract::Query(params)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_weather_reports_async(State(state): State<AsyncState>, axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_weather_reports(State(r.clone()), axum::extract::Query(params)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_get_amber_alert_async(State(state): State<AsyncState>, path: Path<String>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_get_amber_alert(State(r.clone()), path).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_resolve_amber_alert_async(State(state): State<AsyncState>, path: Path<String>, Json(req): Json<crate::amber::ResolveAmberAlertRequest>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_resolve_amber_alert(State(r.clone()), path, Json(req)).await.into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
+    }
+}
+
+async fn handle_report_sighting_async(State(state): State<AsyncState>, path: Path<String>, Json(req): Json<crate::amber::ReportSightingRequest>) -> impl IntoResponse {
+    let s = state.lock().await;
+    match &*s {
+        Some(r) => handle_report_sighting(State(r.clone()), path, Json(req)).await.into_response(),
         None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
     }
 }

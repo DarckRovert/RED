@@ -1,12 +1,14 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v24.0 AI Sovereign Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Copiloto / Asistente IA Táctico Offline (<15 MB RAM), Resumidor Inteligente de Canales Mesh, Traductor P2P Off-Grid, Filtro Anti-Spam de Proximidad Zero-Touch (Cooldown 1h + Modo Sigilo + Zonas Seguras Geofenced), Walkie-Talkie Mesh Push-to-Talk (Opus 8 kbps), Sanitizador EXIF de Fotos, Alertas Barométricas, Bóveda de Identidad Táctica, Brújula y Radar P2P, Balizas SOS y Sistema Alerta AMBER-RED P2P.
+> **v24.1 Real-Data & WAN P2P Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Auto-Detección Atmosférica por GPS & Sensores Real-Time (Open-Meteo REST API + Presión hPa), Comunicaciones de Larga Distancia WAN / 4G / 5G / Internet (Kademlia DHT + Circuit Relay v2 + Multiaddrs P2P), Copiloto / Asistente IA Táctico Offline (<15 MB RAM), Resumidor Inteligente de Canales Mesh, Traductor P2P Off-Grid, Filtro Anti-Spam de Proximidad Zero-Touch, Walkie-Talkie Mesh Push-to-Talk (Opus 8 kbps), Sanitizador EXIF de Fotos, Bóveda de Identidad Táctica, Brújula y Radar P2P, Balizas SOS y Sistema Alerta AMBER-RED P2P.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v24.0_AI_Master-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]() [![AI Engine](https://img.shields.io/badge/AI_Copilot-Dual_Engine-blue)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v24.1_WAN_Master-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]() [![AI Engine](https://img.shields.io/badge/AI_Copilot-Dual_Engine-blue)]()
 
 ## 🎯 Visión
 
 RED es un protocolo de comunicación que garantiza:
+- **Conectividad Larga Distancia (WAN / 4G / 5G / Internet)**: Interconexión P2P entre dispositivos en redes celulares 4G/5G, conexiones domésticas diferentes o LANs separadas mediante Kademlia DHT, perforación de NAT (DCUtR) y libp2p Circuit Relay v2.
+- **Auto-Detección Atmosférica & Clima Real**: Lectura en tiempo real de sensores barométricos, presión en hPa, temperatura, humedad y códigos de tormentas severos por geolocalización GPS real.
 - **Sistema Alerta AMBER-RED P2P**: Red descentralizada de búsqueda de personas desaparecidas con difusión broadcast instantánea, avistamiento geolocalizado y verificación de autoridad Ed25519.
 - **Guardian IA (Moderación Off-Grid & Híbrida)**: Protección activa contra contenido ilícito y grooming. Análisis de ventana de contexto en el dispositivo emisor antes del cifrado E2E en <1ms sin romper la privacidad ni la operación off-grid.
 - **Puente P2P Web ↔ Mobile**: Conexión cifrada directa punto a punto entre navegadores web (`https://darckrovert.github.io/RED/`) y la App Móvil Android sin requerir celular ni servidores centrales.
@@ -15,7 +17,7 @@ RED es un protocolo de comunicación que garantiza:
 - **Descentralización**: Sin servidores centrales de datos, red P2P pura.
 - **Seguridad Táctica**: PIN de Pánico, Modo Camuflaje, FLAG_SECURE y Borrado de Seguridad (DMS).
 - **Anonimato**: Identidades DID efímeras (`did:red:...`), sin metadatos expuestos.
-- **Resistencia a censura**: Operación vía BLE/WiFi-Direct y Mesh LoRa.
+- **Resistencia a censura**: Operación vía BLE/WiFi-Direct, Mesh LoRa y Multiaddrs WAN.
 
 ## 🏗️ Arquitectura
 

@@ -4,6 +4,25 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [24.1.0] - 2026-08-02
+
+### Añadido y Corregido — RED v24.1 Real-Data & WAN P2P Release
+
+**Auto-Detección Atmosférica Real y Geolocalización GPS**
+- **Lectura Automática de Sensores (`WeatherAlertPanel.tsx`):** Obtención de latitud/longitud vía `@capacitor/geolocation` + `navigator.geolocation` y consulta en tiempo real a Open-Meteo REST API (presión barométrica hPa, temperatura °C, humedad % y código WMO). Auto-llenado al abrir la vista y botón manual de re-escaneo.
+- **Protección contra Excepciones JS:** Desempaquetado seguro de objetos JSON devueltos por `/api/weather/reports` en `api.ts` y guardas `Array.isArray()` estrictas en React.
+
+**Comunicaciones P2P de Larga Distancia (WAN / 4G / 5G / Internet)**
+- **Endpoints de Conexión de Red (`POST /api/network/connect` & `GET /api/network/ip`):** Registro de handlers en `api.rs` para marcación P2P directa mediante libp2p `Multiaddr` (`/dns4/`, `/ip4/`, `/p2p-circuit/`).
+- **Integración Kademlia DHT & Circuit Relay v2:** Conexión con nodos semilla mundiales (`BOOTSTRAP_NODES`) para descubrimiento P2P e interconexión transparente a través de CGNAT (redes móviles 4G/5G) y routers domésticos.
+- **Tarjeta UI Larga Distancia (`NetworkPanel.tsx`):** Formato y asistencia visual para conexiones por dominio, IP pública o relay.
+
+**Estabilidad Nativa y SSE Mesh Bridge**
+- **Hidratación SSR (`page.tsx`):** Sustitución de imports síncronos por `dynamic(() => import(...), { ssr: false })` + `<ErrorBoundary>` táctico de 2 niveles.
+- **SSE Outbound Activo (`/api/network/outbound`):** Difusión en tiempo real de paquetes salientes cifrados a través del canal `msg_tx` hacia el `MeshRouter` nativo.
+
+---
+
 ## [19.0.0] - 2026-08-01
 
 ### Añadido — RED v19.0 Zenith Guardian Release

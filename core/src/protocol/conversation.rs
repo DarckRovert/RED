@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use crate::crypto::ratchet::{DoubleRatchet, RatchetMessage};
 use crate::identity::IdentityHash;
 
-use super::{Message, MessageId, MessageStatus, ProtocolError, ProtocolResult};
+use super::{Message, MessageId, MessageStatus, MessageType, ProtocolError, ProtocolResult};
 
 /// Unique conversation identifier
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

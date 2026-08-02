@@ -286,6 +286,7 @@ pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate
             content: crate::protocol::MessageType::Text(first_msg.to_string()),
             reply_to: None,
             status: crate::protocol::MessageStatus::Delivered,
+            edited: false,
         };
         let _ = storage.add_message(msg);
         
@@ -297,11 +298,11 @@ pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate
             content: crate::protocol::MessageType::Text("Claro, todo bien.".to_string()),
             reply_to: None,
             status: crate::protocol::MessageStatus::Sent,
+            edited: false,
         };
         let _ = storage.add_message(reply);
     }
     
-    let _ = storage.save_conversations();
     tracing::info!("Decoy Vault autonomously populated with mundane conversation history.");
 }
 

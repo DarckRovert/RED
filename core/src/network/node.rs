@@ -43,6 +43,8 @@ pub struct Node {
     pub lora_bridge: Option<crate::network::lora_bridge::LoraBridge>,
     /// Is the node running
     is_running: bool,
+    /// Total packets sent by this node
+    pub packets_sent: std::sync::atomic::AtomicU64,
 }
 
 impl Node {
@@ -73,6 +75,7 @@ impl Node {
             outbound_payload_rx: Some(outbound_rx),
             lora_bridge: None,
             is_running: false,
+            packets_sent: std::sync::atomic::AtomicU64::new(0),
         })
     }
 
@@ -170,6 +173,16 @@ impl Node {
         self.transport.connect_multiaddr(multiaddr).await
     }
 
+
+    /// Get list of known connected peers
+    pub fn known_peers(&self) -> Vec<crate::network::PeerInfo> {
+        self.transport.known_peers()
+    }
+
+    /// Get total packets sent
+    pub fn packets_sent_count(&self) -> u64 {
+        self.packets_sent.load(std::sync::atomic::Ordering::Relaxed)
+    }
 
     /// Start the node
     pub async fn start(node_ref: Arc<Mutex<Self>>) -> NetworkResult<()> {
@@ -274,6 +287,22 @@ impl Node {
             }
         });
 
+        let node_ref_handshake = node_ref.clone();
+        tokio::spawn(async move {
+            debug!("Starting RED identity handshake loop (10s interval)");
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                let mut n = node_ref_handshake.lock().await;
+                let hash_hex = n.identity.identity_hash().to_hex();
+                let pk_hex = hex::encode(n.identity.public_key().as_bytes());
+                let dummy_peer = crate::network::PeerId::from_bytes([0; 32]);
+                let _ = n.transport.send(&dummy_peer, crate::network::transport::TransportMessage::IdentityBroadcast {
+                    hash: hash_hex,
+                    pk: pk_hex,
+                }).await;
+            }
+        });
+
         let node_ref_retry = node_ref.clone();
         tokio::spawn(async move {
             info!("Starting background pending delivery retry loop (15s interval)");
@@ -334,6 +363,7 @@ impl Node {
                     timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
                     reply_to: None,
                     status: crate::protocol::MessageStatus::Pending,
+                    edited: false,
                 };
 
                 let _ = node_for_padding.lock().await.send_message(dummy_recipient, dummy_msg).await;
@@ -479,10 +509,10 @@ impl Node {
         // Intercept GroupPayload for decryption and re-routing
         if let MessageType::GroupPayload(ref group_msg) = message.content {
             let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-            if let Some(mut group) = s.get_group(&group_msg.group_id).cloned() {
-                let decryption_result: Result<Vec<u8>, crate::protocol::GroupError> = group.decrypt_message(group_msg, &message.sender);
-                if let Ok(decrypted) = decryption_result {
-                    if let Ok(inner_type) = bincode::deserialize::<MessageType>(&decrypted) {
+            if let Some(mut group) = s.get_group(&group_msg.group_id) {
+                let decryption_result = group.decrypt_message(group_msg, &message.sender);
+                if let Ok(ref decrypted) = decryption_result {
+                    if let Ok(inner_type) = bincode::deserialize::<MessageType>(decrypted) {
                         message.content = inner_type;
                         // Map the recipient to the Group's IdentityHash so it's threaded as a group conversation
                         message.recipient = IdentityHash::from_bytes(group.id.0);
@@ -510,9 +540,8 @@ impl Node {
             // Special handling for TimerUpdate to persist the setting
             if let MessageType::TimerUpdate { seconds } = message.content {
                 let conv_id = ConversationId::from_participants(&message.sender, &message.recipient);
-                if let Some(conv) = s.get_conversation_mut(&conv_id) {
+                if let Some(mut conv) = s.get_conversation_mut(&conv_id) {
                     conv.disappearing_timer = if seconds > 0 { Some(seconds) } else { None };
-                    let _ = s.save_conversations();
                     info!("Updated disappearing timer to {}s for conversation {}", seconds, conv_id);
                 }
             }
@@ -546,7 +575,6 @@ impl Node {
         let mut group = {
             let s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
             s.get_group(&group_id)
-                .cloned()
                 .ok_or_else(|| NetworkError::TransportError("Group not found".to_string()))?
         };
 
@@ -577,6 +605,7 @@ impl Node {
                     .as_millis() as u64,
                 reply_to: None,
                 status: crate::protocol::MessageStatus::Sent,
+                edited: false,
             };
             if let Err(e) = s.add_message(outbound_msg) {
                 error!("Failed to save outgoing group message to local storage: {:?}", e);
@@ -602,6 +631,7 @@ impl Node {
                     .as_millis() as u64,
                 reply_to: None,
                 status: crate::protocol::MessageStatus::Pending,
+                edited: false,
             };
 
             if let Err(e) = self.send_message(member.identity_hash.clone(), outer_msg).await {
@@ -632,7 +662,7 @@ impl Node {
         match self.deliver_message(&recipient, &message).await {
             Ok(_) => Ok(()),
             Err(e) => {
-                warn!("Message delivery to {} failed ({:?}). Queuing in pending deliveries.", recipient.short(), e);
+                tracing::warn!("Message delivery to {} failed ({:?}). Queuing in pending deliveries.", recipient.short(), e);
                 let s = self.storage.lock().await;
                 let key = format!("{}:{}", recipient.to_hex(), message.id.to_hex());
                 let _ = s.add_pending_delivery(key.as_bytes(), &message);
@@ -643,11 +673,19 @@ impl Node {
 
     /// Internal message delivery logic
     async fn deliver_message(&mut self, recipient: &IdentityHash, message: &Message) -> NetworkResult<()> {
+        self.packets_sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let available_peers = self.transport.known_peers();
         let is_recipient_online = available_peers.iter().any(|p| p.identity_hash.as_ref() == Some(recipient));
         
         let payload = message.serialize()
             .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+
+        let my_pub_bytes = *self.identity.public_key().as_bytes();
+
+        let contact_pub_key = {
+            let s = self.storage.lock().await;
+            s.get_contact(recipient).map(|c| c.public_key)
+        };
 
         if available_peers.len() >= 3 {
             // ── FULL ONION ROUTING PATH ──
@@ -656,13 +694,19 @@ impl Node {
             
             let destination = available_peers.into_iter()
                 .find(|p| p.identity_hash.as_ref() == Some(recipient))
-                .unwrap_or_else(|| crate::network::PeerInfo {
-                    id: peer_id.clone(),
-                    public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
-                    identity_hash: Some(recipient.clone()),
-                    protocol_version: 1,
-                    user_agent: "red-node".to_string(),
-                    addresses: vec!["127.0.0.1:7331".parse().unwrap()],
+                .unwrap_or_else(|| {
+                    let pub_key = contact_pub_key
+                        .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                        .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
+
+                    crate::network::PeerInfo {
+                        id: peer_id.clone(),
+                        public_key: pub_key,
+                        identity_hash: Some(recipient.clone()),
+                        protocol_version: 1,
+                        user_agent: "red-node".to_string(),
+                        addresses: vec!["127.0.0.1:7331".parse().unwrap()],
+                    }
                 });
 
             if destination.addresses.is_empty() {
@@ -678,7 +722,7 @@ impl Node {
                 shared_secrets.push(secret);
             }
 
-            let packet = self.onion_router.create_packet(&route, &payload, &shared_secrets)
+            let packet = self.onion_router.create_packet(&route, &payload, &shared_secrets, my_pub_bytes)
                 .map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
             let first_hop = &route.hops[0].peer_id;
@@ -731,19 +775,19 @@ impl Node {
                 }],
             };
 
-            if let Ok(packet) = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret]) {
-                // Publish for internal Libp2p mesh (if any)
-                use crate::network::transport::TransportMessage;
-                let dummy_peer = PeerId::from_bytes([0u8; 32]);
-                let _ = self.transport.send(&dummy_peer, TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }).await;
-                info!("Direct encrypted 1-hop Onion message dispatched (direct mode)");
-
-                // BUG FIX: Emit the encrypted packet to the frontend for Bluetooth LE / WiFi-Direct transmission
+            if let Ok(packet) = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret], my_pub_bytes) {
+                // BUG FIX: Emit encrypted packet to frontend for Bluetooth LE / WiFi-Direct transmission FIRST
                 if let Some(tx) = &self.outbound_payload_tx {
                     if let Ok(serialized_packet) = bincode::serialize(&packet) {
                         let _ = tx.send(serialized_packet);
                     }
                 }
+
+                // Publish for internal Libp2p mesh (if any)
+                use crate::network::transport::TransportMessage;
+                let dummy_peer = PeerId::from_bytes([0u8; 32]);
+                let _ = self.transport.send(&dummy_peer, TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }).await;
+                info!("Direct encrypted 1-hop Onion message dispatched (direct mode)");
             } else {
                 return Err(NetworkError::TransportError("Failed to encrypt 1-hop OnionPacket for offline mesh mode".to_string()));
             }
@@ -810,7 +854,7 @@ impl Node {
         info!("Adding member {} to group {:?}", member.identity_hash.short(), group_id);
         
         let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-        if let Some(mut group) = s.get_group(&group_id).cloned() {
+        if let Some(mut group) = s.get_group(&group_id) {
             group.add_member(member)
                 .map_err(|e| NetworkError::TransportError(e.to_string()))?;
             s.add_group(group)
@@ -966,10 +1010,7 @@ impl Node {
     }
 
     // ── E1: Add a member to a group ───────────────────────────────────────────
-    pub async fn add_group_member(&mut self, group_id: crate::protocol::GroupId, member_hash: crate::identity::IdentityHash) -> NetworkResult<()> {
-        let mut s = self.storage.lock().await;
-        let mut group = s.get_group_mut(&group_id)
-            .ok_or_else(|| NetworkError::TransportError("Group not found".to_string()))?;
+    pub async fn add_group_member_by_hash(&mut self, group_id: crate::protocol::GroupId, member_hash: crate::identity::IdentityHash) -> NetworkResult<()> {
         let member = crate::protocol::GroupMember {
             identity_hash: member_hash,
             public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
@@ -977,9 +1018,7 @@ impl Node {
                 .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
             role: crate::protocol::MemberRole::Member,
         };
-        group.add_member(member)
-            .map_err(|e| NetworkError::TransportError(e.to_string()))?;
-        s.add_group(group).map_err(|e| NetworkError::TransportError(e.to_string()))
+        self.add_group_member(group_id, member).await
     }
 
     // ── E1: Remove a member from a group ─────────────────────────────────────

@@ -108,6 +108,7 @@ export const IdentityVaultModal: React.FC = () => {
         await handleSave();
         const payload = JSON.stringify({
             did: identity?.identity_hash || 'did:red:unknown',
+            pk: identity?.public_key || '',
             blood: bloodType,
             allergies,
             contact: emergencyContact,

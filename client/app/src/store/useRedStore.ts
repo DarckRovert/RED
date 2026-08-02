@@ -42,7 +42,7 @@ interface RedStore {
     sendMessage:  (content: string, options?: Record<string, any>) => Promise<void>;
     sendTyping:   () => void;
     addIncomingMessage: (rawEvent: any) => void;
-    addContact:   (identity_hash: string, display_name: string) => Promise<boolean>;
+    addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<boolean>;
     deleteMessage: (messageId: string) => Promise<void>;
     editMessage: (messageId: string, newContent: string) => Promise<void>;
     clearConversation: () => Promise<void>;
@@ -466,25 +466,27 @@ export const useRedStore = create<RedStore>((set, get) => ({
         get().fetchData();
     },
 
-    addContact: async (identity_hash: string, display_name: string) => {
+    addContact: async (identity_hash: string, display_name: string, public_key?: string | null) => {
         const inputStr = identity_hash.trim();
         const cleanName = display_name.trim();
 
         let cleanHash = inputStr;
-        let pubKey: string | null = null;
+        let pubKey: string | null = public_key ?? null;
 
-        // Parsear did:red:<hash>:<pk> o <hash>:<pk>
-        if (inputStr.startsWith("did:red:")) {
-            const parts = inputStr.split(":");
-            if (parts.length >= 4) {
-                cleanHash = parts[2];
-                pubKey = parts[3];
-            }
-        } else if (inputStr.includes(":")) {
-            const parts = inputStr.split(":");
-            if (parts.length >= 2) {
-                cleanHash = parts[0];
-                pubKey = parts[1];
+        // If no explicit pk was provided, try to parse did:red:<hash>:<pk> or <hash>:<pk> format
+        if (!pubKey) {
+            if (inputStr.startsWith("did:red:")) {
+                const parts = inputStr.split(":");
+                if (parts.length >= 4) {
+                    cleanHash = parts[2];
+                    pubKey = parts[3];
+                }
+            } else if (inputStr.includes(":")) {
+                const parts = inputStr.split(":");
+                if (parts.length >= 2) {
+                    cleanHash = parts[0];
+                    pubKey = parts[1];
+                }
             }
         }
 

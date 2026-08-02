@@ -83,15 +83,31 @@ export default function RadarWindow() {
 
             // if the result has content
             if (result.hasContent) {
-                const cleanHash = result.content.trim();
-                setScannedResult(cleanHash);
-                try {
-                    await addContact(cleanHash, "Par Escaneado");
-                    toast.success("¡Contacto añadido con éxito!");
-                    navigate('sidebar');
-                } catch (addErr) {
-                    const msg = addErr instanceof Error ? addErr.message : String(addErr);
-                    toast.error(`Error al añadir: ${msg}`);
+                const raw = result.content.trim();
+                if (raw.startsWith('RED_ID_VAULT:')) {
+                    try {
+                        const encoded = raw.split(':')[1];
+                        const decoded = JSON.parse(atob(encoded));
+                        const did = decoded.did;
+                        const pk = decoded.pk;
+                        setScannedResult(did);
+                        await addContact(did, "Contacto Escaneado", pk);
+                        toast.success("¡Identidad y clave guardada con éxito!");
+                        navigate('sidebar');
+                    } catch (e) {
+                        toast.error("QR Invalido");
+                    }
+                } else {
+                    const cleanHash = raw;
+                    setScannedResult(cleanHash);
+                    try {
+                        await addContact(cleanHash, "Par Escaneado");
+                        toast.success("¡Contacto añadido con éxito!");
+                        navigate('sidebar');
+                    } catch (addErr) {
+                        const msg = addErr instanceof Error ? addErr.message : String(addErr);
+                        toast.error(`Error al añadir: ${msg}`);
+                    }
                 }
             }
         } catch (e) {

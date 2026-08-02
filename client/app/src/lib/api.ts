@@ -988,9 +988,13 @@ export async function postWeatherReport(payload: {
 
 /** Obtener boletines climáticos locales */
 export async function getWeatherReports(): Promise<WeatherReport[]> {
-    return fetchWithFallback('/api/weather/reports', undefined, () => {
+    const res = await fetchWithFallback<any>('/api/weather/reports', undefined, () => {
         return getStored<WeatherReport[]>(STORAGE_KEYS.WEATHER_REPORTS, []);
     });
+    if (Array.isArray(res)) return res;
+    if (res && typeof res === 'object' && Array.isArray(res.reports)) return res.reports;
+    if (res && typeof res === 'object' && Array.isArray(res.value)) return res.value;
+    return [];
 }
 
 // ─── v22.0: Interfaces & API Discovery + Ephemeral + Battery ──────────────────

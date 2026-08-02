@@ -40,6 +40,11 @@ pub enum TransportMessage {
     },
     /// Onion routed packet
     Onion(crate::network::routing::OnionPacket),
+    /// Broadcast RED identity (hash + pk hex)
+    IdentityBroadcast {
+        hash: String,
+        pk: String,
+    },
 }
 
 /// Transport trait for network communication

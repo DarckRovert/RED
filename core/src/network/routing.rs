@@ -146,6 +146,7 @@ impl OnionRouter {
         route: &Route,
         message: &[u8],
         shared_secrets: &[[u8; 32]],
+        sender_pk: [u8; 32],
     ) -> CryptoResult<OnionPacket> {
         if route.hops.len() != shared_secrets.len() {
             return Err(crate::crypto::CryptoError::EncryptionError(
@@ -173,7 +174,7 @@ impl OnionRouter {
         }
 
         // Build layers from inside out (last hop first)
-        for (i, (hop, secret)) in route.hops.iter().zip(shared_secrets.iter()).rev().enumerate() {
+        for (i, (_hop, secret)) in route.hops.iter().zip(shared_secrets.iter()).rev().enumerate() {
             let is_final = i == 0;
             
             // Create routing info
@@ -198,7 +199,7 @@ impl OnionRouter {
             let encrypted = encrypt(secret, &routing_bytes)?;
 
             layers.push(OnionLayer {
-                ephemeral_pk: *hop.public_key.as_bytes(),
+                ephemeral_pk: sender_pk,
                 encrypted,
             });
 
