@@ -1,8 +1,8 @@
 # 🔴 RED - Red Encriptada Descentralizada
 
-> **v19.0 Zenith Guardian Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Sistema Alerta AMBER-RED P2P, Moderación Off-Grid Guardian IA (LlamaGuard 4 / Engine Local Pre-Cifrado), Puente P2P Web ↔ Mobile (WebRTC DataChannel), Cifrado Poscuántico (Kyber1024/Dilithium5), Videollamadas P2P, Bóveda `.redbak` y Simulador de Apagón Táctico.
+> **v24.0 AI Sovereign Master Edition** — Plataforma de Comunicaciones Tácticas Soberanas y Descentralizadas: Copiloto / Asistente IA Táctico Offline (<15 MB RAM), Resumidor Inteligente de Canales Mesh, Traductor P2P Off-Grid, Filtro Anti-Spam de Proximidad Zero-Touch (Cooldown 1h + Modo Sigilo + Zonas Seguras Geofenced), Walkie-Talkie Mesh Push-to-Talk (Opus 8 kbps), Sanitizador EXIF de Fotos, Alertas Barométricas, Bóveda de Identidad Táctica, Brújula y Radar P2P, Balizas SOS y Sistema Alerta AMBER-RED P2P.
 
-[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v19.0_Guardian-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]() [![Guardian](https://img.shields.io/badge/Guardian_IA-Dual_Engine-blue)]()
+[![Build](https://img.shields.io/badge/Build-Passing-brightgreen)]() [![Version](https://img.shields.io/badge/Version-v24.0_AI_Master-red)]() [![APK](https://img.shields.io/badge/APK-98.9_MB_Ready-blue)]() [![Live Demo](https://img.shields.io/badge/Web_SPA-GitHub_Pages-purple)](https://darckrovert.github.io/RED/) [![Security](https://img.shields.io/badge/PQC-Kyber1024_Active-green)]() [![AI Engine](https://img.shields.io/badge/AI_Copilot-Dual_Engine-blue)]()
 
 ## 🎯 Visión
 
@@ -235,8 +235,8 @@ Consulta la lista de [Contribuidores](CONTRIBUTORS.md) actuales.
 
 ---
 
-*RED v18.3.0 — Mesh P2P Offline Total · Build: Passing ✅*
-*🛡️ **Integración Nativa de Keystore** · 🔥 **Biometría Nativa** · 💀 **Dead Man's Switch***
+*RED v24.0.0 — AI Sovereign Master Edition · Mesh P2P Offline Total · Build: Passing ✅*
+*🤖 **Copiloto IA Offline (<15MB RAM)** · 🔕 **Proximidad Anti-Spam (Cooldown 1h)** · 🎙️ **Walkie-Talkie Opus** · 🛡️ **Guardian IA***
 
 ---
 <p align="center">
