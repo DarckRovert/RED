@@ -1,46 +1,103 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { getWeatherReports, postWeatherReport, WeatherReport } from '../lib/api';
 
 export const WeatherAlertPanel: React.FC = () => {
     const { navigate } = useRedStore();
     const [reports, setReports] = useState<WeatherReport[]>([]);
-    const [pressure, setPressure] = useState<number>(1013.25);
-    const [summary, setSummary] = useState('Despejado — Presión Estable');
+    const [pressure, setPressure] = useState<string>('');
+    const [temperature, setTemperature] = useState<string>('');
+    const [humidity, setHumidity] = useState<string>('');
+    const [summary, setSummary] = useState('');
     const [isAlert, setIsAlert] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
-    const loadReports = async () => {
+    const loadReports = useCallback(async () => {
         try {
             const list = await getWeatherReports();
             setReports(list);
         } catch (e) {
             console.error('Weather fetch error:', e);
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadReports();
         const interval = setInterval(loadReports, 4000);
         return () => clearInterval(interval);
-    }, []);
+    }, [loadReports]);
+
+    const validateForm = (): boolean => {
+        if (!pressure || isNaN(parseFloat(pressure))) {
+            setFormError('La presión barométrica es requerida (ej: 1013.25 hPa).');
+            return false;
+        }
+        if (!summary.trim()) {
+            setFormError('El resumen de condición climática es requerido.');
+            return false;
+        }
+        const pressureVal = parseFloat(pressure);
+        if (pressureVal < 870 || pressureVal > 1085) {
+            setFormError('Presión fuera de rango válido (870 – 1085 hPa).');
+            return false;
+        }
+        setFormError(null);
+        return true;
+    };
 
     const handleBroadcastReport = async () => {
+        if (!validateForm()) return;
+
+        const pressureVal = parseFloat(pressure);
+        const tempVal = temperature !== '' ? parseFloat(temperature) : undefined;
+        const humidityVal = humidity !== '' ? parseFloat(humidity) : undefined;
+
+        // Validate optional fields if provided
+        if (temperature !== '' && isNaN(tempVal!)) {
+            setFormError('Temperatura inválida (ej: 21.5).');
+            return;
+        }
+        if (humidity !== '' && (isNaN(humidityVal!) || humidityVal! < 0 || humidityVal! > 100)) {
+            setFormError('Humedad inválida: debe ser un número entre 0 y 100.');
+            return;
+        }
+
         try {
             await postWeatherReport({
-                sender_name: 'Estación Vecinal',
-                pressure_hpa: pressure,
-                temperature_c: 21.5,
-                humidity_percent: 68,
-                condition_summary: summary,
+                sender_name: 'Estación Vecinal RED',
+                pressure_hpa: pressureVal,
+                temperature_c: tempVal,
+                humidity_percent: humidityVal,
+                condition_summary: summary.trim(),
                 is_disaster_alert: isAlert
             });
             await loadReports();
-            alert('🌤️ Boletín barométrico/clima emitido a la red P2P.');
+
+            // Clear form after successful submission
+            setPressure('');
+            setTemperature('');
+            setHumidity('');
+            setSummary('');
+            setIsAlert(false);
+            setFormError(null);
+
+            alert('🌤️ Boletín barométrico emitido a la red P2P.');
         } catch (e: any) {
             alert(`Error al emitir boletín: ${e.message}`);
         }
+    };
+
+    const inputStyle: React.CSSProperties = {
+        width: '100%',
+        background: 'rgba(0,0,0,0.5)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        borderRadius: '8px',
+        padding: '8px 12px',
+        color: '#fff',
+        fontSize: '0.85rem',
+        boxSizing: 'border-box'
     };
 
     return (
@@ -66,14 +123,7 @@ export const WeatherAlertPanel: React.FC = () => {
             }}>
                 <button
                     onClick={() => navigate('sidebar')}
-                    style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#f59e0b',
-                        fontSize: '1.1rem',
-                        cursor: 'pointer',
-                        fontWeight: 700
-                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#f59e0b', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 700 }}
                 >
                     ← Volver
                 </button>
@@ -81,14 +131,14 @@ export const WeatherAlertPanel: React.FC = () => {
                     🌤️ ALERTAS BAROMÉTRICAS & CLIMA MESH
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#f59e0b', fontWeight: 800, fontFamily: 'monospace' }}>
-                    BAROMETER SENSOR ACTIVE
+                    RED SENSOR MESH
                 </div>
             </div>
 
             {/* MAIN CONTENT */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                
-                {/* BAROMETER CARDS */}
+
+                {/* BROADCAST FORM */}
                 <div style={{
                     width: '100%',
                     maxWidth: '600px',
@@ -99,13 +149,81 @@ export const WeatherAlertPanel: React.FC = () => {
                     marginBottom: '20px',
                     boxShadow: '0 0 24px rgba(245,158,11,0.1)'
                 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <div>
-                            <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700 }}>PRESIÓN BAROMÉTRICA LOCAL</div>
-                            <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#f59e0b', fontFamily: 'monospace' }}>
-                                {pressure} hPa
-                            </div>
-                        </div>
+                    <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '14px' }}>
+                        REGISTRAR CONDICIONES CLIMÁTICAS LOCALES
+                    </div>
+
+                    {/* PRESSURE — required */}
+                    <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                            PRESIÓN BAROMÉTRICA (hPa) — <span style={{ color: '#ef4444' }}>requerido</span>
+                        </label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="870"
+                            max="1085"
+                            value={pressure}
+                            onChange={(e) => setPressure(e.target.value)}
+                            placeholder="Ej: 1013.25"
+                            style={inputStyle}
+                        />
+                    </div>
+
+                    {/* TEMPERATURE — optional */}
+                    <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                            TEMPERATURA (°C) — opcional
+                        </label>
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="-60"
+                            max="60"
+                            value={temperature}
+                            onChange={(e) => setTemperature(e.target.value)}
+                            placeholder="Ej: 21.5 (lee el termómetro real)"
+                            style={inputStyle}
+                        />
+                    </div>
+
+                    {/* HUMIDITY — optional */}
+                    <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                            HUMEDAD RELATIVA (%) — opcional
+                        </label>
+                        <input
+                            type="number"
+                            step="1"
+                            min="0"
+                            max="100"
+                            value={humidity}
+                            onChange={(e) => setHumidity(e.target.value)}
+                            placeholder="Ej: 65"
+                            style={inputStyle}
+                        />
+                    </div>
+
+                    {/* CONDITION SUMMARY — required */}
+                    <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>
+                            RESUMEN DE CONDICIÓN — <span style={{ color: '#ef4444' }}>requerido</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={summary}
+                            onChange={(e) => setSummary(e.target.value)}
+                            placeholder="Ej: Lluvia moderada — Tormenta eléctrica al NE"
+                            style={inputStyle}
+                        />
+                    </div>
+
+                    {/* DISASTER ALERT TOGGLE + SUBMIT */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={isAlert} onChange={(e) => setIsAlert(e.target.checked)} />
+                            🚨 Marcar como Alerta de Desastre
+                        </label>
                         <button
                             onClick={handleBroadcastReport}
                             style={{
@@ -123,32 +241,18 @@ export const WeatherAlertPanel: React.FC = () => {
                         </button>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                        <input
-                            type="text"
-                            value={summary}
-                            onChange={(e) => setSummary(e.target.value)}
-                            style={{
-                                flex: 1,
-                                background: 'rgba(0,0,0,0.5)',
-                                border: '1px solid rgba(255,255,255,0.15)',
-                                borderRadius: '8px',
-                                padding: '8px 12px',
-                                color: '#fff',
-                                fontSize: '0.85rem'
-                            }}
-                        />
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#ef4444', fontWeight: 700, cursor: 'pointer' }}>
-                            <input type="checkbox" checked={isAlert} onChange={(e) => setIsAlert(e.target.checked)} />
-                            Alerta de Desastre
-                        </label>
-                    </div>
+                    {/* VALIDATION ERROR */}
+                    {formError && (
+                        <div style={{ marginTop: '10px', padding: '8px 12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: '0.8rem', color: '#fca5a5' }}>
+                            ⚠️ {formError}
+                        </div>
+                    )}
                 </div>
 
                 {/* REPORTS FEED */}
                 <div style={{ width: '100%', maxWidth: '600px', background: 'rgba(15,23,42,0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', padding: '16px' }}>
                     <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#94a3b8', marginBottom: '12px', letterSpacing: '0.5px' }}>
-                        BOLETINES CLIMÁTICOS TRANSMITIDOS EN LA MALLA
+                        BOLETINES CLIMÁTICOS EN LA MALLA ({reports.length})
                     </div>
 
                     {reports.length === 0 ? (
@@ -172,9 +276,11 @@ export const WeatherAlertPanel: React.FC = () => {
                                         {new Date(r.timestamp * 1000).toLocaleTimeString()}
                                     </span>
                                 </div>
-                                <div style={{ fontSize: '0.88rem', color: '#e2e8f0' }}>{r.condition_summary}</div>
-                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px', fontFamily: 'monospace' }}>
-                                    Presión: {r.pressure_hpa} hPa | Temp: {r.temperature_c || 21.5}°C
+                                <div style={{ fontSize: '0.88rem', color: '#e2e8f0', marginBottom: '4px' }}>{r.condition_summary}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace' }}>
+                                    Presión: {r.pressure_hpa} hPa
+                                    {r.temperature_c != null && ` | Temp: ${r.temperature_c}°C`}
+                                    {r.humidity_percent != null && ` | Humedad: ${r.humidity_percent}%`}
                                 </div>
                             </div>
                         ))

@@ -1,43 +1,119 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
 
+// Capacitor Geolocation — dynamically imported to avoid SSR issues in Next.js
+let Geolocation: any = null;
+if (typeof window !== 'undefined') {
+    import('@capacitor/geolocation').then((m) => {
+        Geolocation = m.Geolocation;
+    });
+}
+
 export const SOSEmergencyBanner: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
     const [beacons, setBeacons] = useState<SosBeacon[]>([]);
     const [isTriggering, setIsTriggering] = useState(false);
     const [noteText, setNoteText] = useState('Emergencia médica / Auxilio táctico');
+    const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'ok' | 'error'>('idle');
+    const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number } | null>(null);
 
-    const loadBeacons = async () => {
+    const loadBeacons = useCallback(async () => {
         try {
             const list = await getActiveSos();
             setBeacons(list);
         } catch (e) {
             console.error('SOS fetch error:', e);
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadBeacons();
         const interval = setInterval(loadBeacons, 3000);
         return () => clearInterval(interval);
-    }, []);
+    }, [loadBeacons]);
+
+    const getGpsCoords = async (): Promise<{ lat: number; lon: number }> => {
+        setGpsStatus('locating');
+
+        // Try Capacitor Geolocation first (native Android)
+        if (Geolocation) {
+            try {
+                const perm = await Geolocation.requestPermissions();
+                if (perm.location === 'granted') {
+                    const pos = await Geolocation.getCurrentPosition({
+                        enableHighAccuracy: true,
+                        timeout: 8000
+                    });
+                    const coords = {
+                        lat: parseFloat(pos.coords.latitude.toFixed(6)),
+                        lon: parseFloat(pos.coords.longitude.toFixed(6))
+                    };
+                    setGpsCoords(coords);
+                    setGpsStatus('ok');
+                    return coords;
+                }
+            } catch (e) {
+                console.warn('Capacitor Geolocation failed, trying browser API', e);
+            }
+        }
+
+        // Web fallback: navigator.geolocation
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                setGpsStatus('error');
+                reject(new Error('GPS no disponible en este dispositivo o navegador.'));
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const coords = {
+                        lat: parseFloat(pos.coords.latitude.toFixed(6)),
+                        lon: parseFloat(pos.coords.longitude.toFixed(6))
+                    };
+                    setGpsCoords(coords);
+                    setGpsStatus('ok');
+                    resolve(coords);
+                },
+                (err) => {
+                    setGpsStatus('error');
+                    reject(new Error(`GPS Error (${err.code}): ${err.message}`));
+                },
+                { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }
+            );
+        });
+    };
 
     const handleBroadcastSos = async () => {
         try {
+            const coords = await getGpsCoords();
+
+            // Get real battery level if available
+            let batteryLevel = 100;
+            try {
+                if ('getBattery' in navigator) {
+                    const battery: any = await (navigator as any).getBattery();
+                    batteryLevel = Math.round(battery.level * 100);
+                }
+            } catch {
+                // Battery API not supported — default to 100
+            }
+
             await emitSos({
-                sender_name: 'Usuario RED',
-                lat: -12.04637,
-                lon: -77.04279,
-                battery_level: 85,
+                sender_name: identity?.nickname || 'Usuario RED',
+                lat: coords.lat,
+                lon: coords.lon,
+                battery_level: batteryLevel,
                 note: noteText
             });
+
             setIsTriggering(false);
             await loadBeacons();
-            alert('🚨 ¡Baliza SOS emitida a la red P2P!');
+            alert(`🚨 ¡Baliza SOS emitida!\nUbicación: ${coords.lat}, ${coords.lon}\nBatería: ${batteryLevel}%`);
         } catch (e: any) {
+            setGpsStatus('error');
             alert(`Error al emitir SOS: ${e.message}`);
         }
     };
@@ -53,7 +129,7 @@ export const SOSEmergencyBanner: React.FC = () => {
 
     return (
         <>
-            {/* ACTIVE SOS BANNER AT THE TOP IF BEACONS EXIST */}
+            {/* ACTIVE SOS BANNER */}
             {beacons.length > 0 && (
                 <div style={{
                     position: 'fixed',
@@ -78,32 +154,21 @@ export const SOSEmergencyBanner: React.FC = () => {
                                 ¡ALERTA SOS DE AUXILIO ACTIVA! ({beacons.length})
                             </div>
                             <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>
-                                {beacons[0].sender_name}: {beacons[0].note} (Lat: {beacons[0].lat}, Lon: {beacons[0].lon})
+                                {beacons[0].sender_name}: {beacons[0].note}
+                                {beacons[0].lat !== 0 && ` · GPS: ${beacons[0].lat}, ${beacons[0].lon}`}
                             </div>
                         </div>
                     </div>
-
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <button
-                            onClick={() => handleResolve(beacons[0].id)}
-                            style={{
-                                background: 'rgba(0,0,0,0.4)',
-                                border: '1px solid rgba(255,255,255,0.3)',
-                                color: '#fff',
-                                padding: '6px 12px',
-                                borderRadius: '8px',
-                                fontSize: '0.78rem',
-                                fontWeight: 800,
-                                cursor: 'pointer'
-                            }}
-                        >
-                            ✓ Marcar a Salvo
-                        </button>
-                    </div>
+                    <button
+                        onClick={() => handleResolve(beacons[0].id)}
+                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
+                    >
+                        ✓ Marcar a Salvo
+                    </button>
                 </div>
             )}
 
-            {/* FULLSCREEN SOS TRIGGER MODAL IF TRIGGERED */}
+            {/* FULLSCREEN SOS TRIGGER MODAL */}
             {isTriggering && (
                 <div style={{
                     position: 'fixed',
@@ -127,10 +192,33 @@ export const SOSEmergencyBanner: React.FC = () => {
                         boxShadow: '0 0 40px rgba(239,68,68,0.3)'
                     }}>
                         <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🚨</div>
-                        <h2 style={{ color: '#ef4444', fontWeight: 900, marginBottom: '8px' }}>EMITIR SOS TÁCTICO</h2>
-                        <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.4' }}>
-                            Se transmitirá una baliza de socorro con tu ubicación GPS aproximada a todos los nodos P2P en rango radio.
+                        <h2 style={{ color: '#ef4444', fontWeight: 900, marginBottom: '8px', fontSize: '1.1rem' }}>EMITIR SOS TÁCTICO</h2>
+                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '12px', lineHeight: '1.4' }}>
+                            Se transmitirá una baliza de socorro con tu <strong>ubicación GPS real</strong> a todos los nodos P2P en rango radio.
                         </p>
+
+                        {/* GPS STATUS INDICATOR */}
+                        <div style={{
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            marginBottom: '14px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            background: gpsStatus === 'ok'
+                                ? 'rgba(34,197,94,0.1)'
+                                : gpsStatus === 'error'
+                                ? 'rgba(239,68,68,0.1)'
+                                : gpsStatus === 'locating'
+                                ? 'rgba(56,189,248,0.1)'
+                                : 'rgba(255,255,255,0.05)',
+                            border: `1px solid ${gpsStatus === 'ok' ? '#22c55e' : gpsStatus === 'error' ? '#ef4444' : gpsStatus === 'locating' ? '#38bdf8' : 'rgba(255,255,255,0.1)'}`,
+                            color: gpsStatus === 'ok' ? '#4ade80' : gpsStatus === 'error' ? '#fca5a5' : gpsStatus === 'locating' ? '#7dd3fc' : '#94a3b8'
+                        }}>
+                            {gpsStatus === 'idle' && '📍 GPS se obtendrá al transmitir'}
+                            {gpsStatus === 'locating' && '📡 Obteniendo ubicación GPS...'}
+                            {gpsStatus === 'ok' && gpsCoords && `✅ GPS: ${gpsCoords.lat}, ${gpsCoords.lon}`}
+                            {gpsStatus === 'error' && '❌ GPS no disponible — se emitirá sin coordenadas'}
+                        </div>
 
                         <textarea
                             value={noteText}
@@ -144,40 +232,25 @@ export const SOSEmergencyBanner: React.FC = () => {
                                 padding: '10px',
                                 color: '#fff',
                                 fontSize: '0.85rem',
-                                marginBottom: '20px'
+                                marginBottom: '20px',
+                                boxSizing: 'border-box'
                             }}
                         />
 
                         <div style={{ display: 'flex', gap: '12px' }}>
                             <button
-                                onClick={() => setIsTriggering(false)}
-                                style={{
-                                    flex: 1,
-                                    padding: '12px',
-                                    borderRadius: '10px',
-                                    background: 'transparent',
-                                    border: '1px solid rgba(255,255,255,0.2)',
-                                    color: '#94a3b8',
-                                    fontWeight: 700,
-                                    cursor: 'pointer'
-                                }}
+                                onClick={() => { setIsTriggering(false); setGpsStatus('idle'); setGpsCoords(null); }}
+                                disabled={gpsStatus === 'locating'}
+                                style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#94a3b8', fontWeight: 700, cursor: 'pointer' }}
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={handleBroadcastSos}
-                                style={{
-                                    flex: 1,
-                                    padding: '12px',
-                                    borderRadius: '10px',
-                                    background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
-                                    border: 'none',
-                                    color: '#fff',
-                                    fontWeight: 900,
-                                    cursor: 'pointer'
-                                }}
+                                disabled={gpsStatus === 'locating'}
+                                style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'linear-gradient(135deg, #ef4444, #b91c1c)', border: 'none', color: '#fff', fontWeight: 900, cursor: 'pointer', opacity: gpsStatus === 'locating' ? 0.6 : 1 }}
                             >
-                                Transmitir SOS
+                                {gpsStatus === 'locating' ? '📡 Localizando...' : 'Transmitir SOS'}
                             </button>
                         </div>
                     </div>

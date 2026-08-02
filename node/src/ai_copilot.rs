@@ -56,7 +56,7 @@ impl AICopilotEngine {
             (
                 format!("🤖 Copiloto IA RED (Modo Nano Local Off-Grid):\n\nRecibido: \"{}\"\n\nInstrucción guardada. Estoy optimizado para asistencia táctica, primeros auxilios, protocolos de sismo/apagón y guiado de supervivencia en redes malla sin internet.", req.prompt),
                 "Asistencia General".to_string(),
-            );
+            )
         };
 
         let execution_time_ms = start.elapsed().as_millis() as u64;
