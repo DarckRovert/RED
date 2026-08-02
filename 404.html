@@ -10,6 +10,11 @@
     window.location.replace('/RED/' + search + hash);
     return;
   }
+  if (clean.indexOf('assets/') === 0 || clean.indexOf('.apk') !== -1) {
+    window.location.replace('/RED/#download');
+    return;
+  }
+
   
   var parts = clean.split('/');
   var page = parts[0].replace(/\.html$/, '');
