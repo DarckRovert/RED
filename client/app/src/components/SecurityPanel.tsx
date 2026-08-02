@@ -209,22 +209,22 @@ export default function SecurityPanel() {
             <div className="scroll-container no-scrollbar" style={{ flex: 1, padding: '16px 16px calc(80px + var(--safe-bottom, 0px)) 16px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 
                 {/* System Health Diagnostics Card */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(0,217,126,0.08), rgba(0,180,100,0.03))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(0,217,126,0.25)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <span style={{ fontSize: '1.4rem' }}>🩺</span>
-                            <div>
-                                <div style={{ color: 'white', fontWeight: 800, fontSize: '0.95rem' }}>Auto-Diagnóstico del Nodo</div>
-                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Evaluación de resiliencia, SSE y cifrado</div>
+                <div style={{ background: 'linear-gradient(135deg, rgba(0,217,126,0.08), rgba(0,180,100,0.03))', backdropFilter: 'blur(16px)', padding: '16px 18px', borderRadius: '20px', border: '1px solid rgba(0,217,126,0.25)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                            <span style={{ fontSize: '1.4rem', flexShrink: 0 }}>🩺</span>
+                            <div style={{ minWidth: 0 }}>
+                                <div style={{ color: 'white', fontWeight: 800, fontSize: '0.92rem' }}>Auto-Diagnóstico del Nodo</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Resiliencia, latencia y criptografía</div>
                             </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                             <button
                                 onClick={() => setReportModalOpen(true)}
                                 style={{
-                                    padding: '8px 14px', borderRadius: '12px',
+                                    padding: '8px 12px', borderRadius: '12px',
                                     background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-                                    color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer'
+                                    color: 'var(--text-secondary)', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer'
                                 }}
                             >
                                 Informe 📄
@@ -232,9 +232,9 @@ export default function SecurityPanel() {
                             <button
                                 onClick={() => setHealthModalOpen(true)}
                                 style={{
-                                    padding: '8px 16px', borderRadius: '12px',
+                                    padding: '8px 14px', borderRadius: '12px',
                                     background: 'linear-gradient(135deg, #00D97E, #009955)',
-                                    color: 'white', fontWeight: 800, fontSize: '0.82rem', border: 'none', cursor: 'pointer'
+                                    color: 'white', fontWeight: 800, fontSize: '0.8rem', border: 'none', cursor: 'pointer'
                                 }}
                             >
                                 Auditar
@@ -242,6 +242,7 @@ export default function SecurityPanel() {
                         </div>
                     </div>
                 </div>
+
                 {/* Privacy Screen Toggle */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -119,45 +119,51 @@ export const IdentityVaultModal: React.FC = () => {
         }}>
             {/* TOP BAR */}
             <div style={{
-                height: '60px',
-                padding: '0 20px',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
+                minHeight: '60px',
+                padding: '12px 16px',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: 'rgba(15,23,42,0.9)'
+                background: 'linear-gradient(180deg, rgba(15,23,42,0.98), rgba(8,12,22,0.98))',
+                flexShrink: 0,
+                gap: '12px'
             }}>
                 <button
                     onClick={() => navigate('sidebar')}
-                    style={{ background: 'transparent', border: 'none', color: '#00D97E', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 700 }}
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#00D97E', padding: '8px 12px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
                     ← Volver
                 </button>
-                <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-                    🪪 BÓVEDA DE IDENTIDAD TÁCTICA
+                <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        🪪 Bóveda de Identidad
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#00D97E', fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.5px' }}>
+                        HARDWARE KEYSTORE ENCRYPTED
+                    </div>
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#00D97E', fontWeight: 800, fontFamily: 'monospace' }}>
-                    HARDWARE KEYSTORE ENCRYPTED
-                </div>
+                <div style={{ width: 60 }} />
             </div>
 
             {/* MAIN FORM */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{
                     width: '100%',
-                    maxWidth: '500px',
-                    background: 'rgba(15,23,42,0.7)',
-                    borderRadius: '16px',
+                    maxWidth: '440px',
+                    background: 'linear-gradient(145deg, rgba(15,23,42,0.85), rgba(8,12,22,0.95))',
+                    borderRadius: '20px',
                     border: '1px solid rgba(0,217,126,0.3)',
-                    padding: '24px',
-                    boxShadow: '0 0 30px rgba(0,217,126,0.1)'
+                    padding: '20px',
+                    boxShadow: '0 0 40px rgba(0,217,126,0.08)'
                 }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#00D97E', marginBottom: '4px', letterSpacing: '0.5px' }}>
-                        DATOS DE AUXILIO Y PASES DE EMERGENCIA
+                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#00D97E', marginBottom: '6px', letterSpacing: '0.5px' }}>
+                        📋 Datos de Auxilio y Emergencia
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748b', marginBottom: '16px' }}>
-                        Almacenado de forma cifrada en el Keystore seguro del dispositivo.
+                    <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '20px', lineHeight: '1.4' }}>
+                        Información guardada con cifrado por hardware en el Keystore seguro del dispositivo.
                     </div>
+
 
                     <div style={{ marginBottom: '14px' }}>
                         <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>TIPO DE SANGRE</label>

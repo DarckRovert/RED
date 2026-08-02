@@ -26,23 +26,25 @@ interface StatCardProps {
 function StatCard({ label, value, icon, color, glow }: StatCardProps) {
     return (
         <div style={{
-            padding: '16px', borderRadius: 'var(--radius-md)',
+            padding: '12px 10px', borderRadius: 'var(--radius-md)',
             background: `${color}0a`,
             border: `1px solid ${color}25`,
-            display: 'flex', flexDirection: 'column', gap: '6px',
-            boxShadow: glow ? `0 4px 20px ${color}15` : 'none',
+            display: 'flex', flexDirection: 'column', gap: '4px',
+            boxShadow: glow ? `0 4px 16px ${color}15` : 'none',
             transition: 'all 0.3s ease',
+            minWidth: 0,
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</span>
-                <span style={{ fontSize: '1.1rem' }}>{icon}</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                <span style={{ fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                <span style={{ fontSize: '1rem', flexShrink: 0 }}>{icon}</span>
             </div>
-            <div style={{ fontSize: '1.6rem', fontWeight: 900, color, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1 }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 900, color, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.1 }}>
                 {value}
             </div>
         </div>
     );
 }
+
 
 export default function CryptoPanel() {
     const { identity, status, goBack } = useRedStore();
