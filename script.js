@@ -295,3 +295,78 @@ function copyHashStr() {
   navigator.clipboard.writeText('4f8b9e83a21c9b6f8490a7812e983410fc6b8a1e2f3d4c5b6a7b8c9d0e1f2a3b');
   alert('✅ Checksum SHA-256 copiado al portapapeles.');
 }
+
+// ── v19.0 Guardian IA Interactive Live Tester ───────────────────────────
+function testGuardianLocal() {
+  const input = document.getElementById('guardian-test-input');
+  const box = document.getElementById('g-verdict-box');
+  const title = document.getElementById('g-verdict-title');
+  const desc = document.getElementById('g-verdict-desc');
+  const text = (input ? input.value : '').toLowerCase().trim();
+
+  if (!text) {
+    alert('Por favor escribe un mensaje de prueba.');
+    return;
+  }
+
+  // Heurísticas locales off-grid simuladas
+  const csamTriggers = ['child', 'niño', 'pedof', 'grooming', 'abuso infantil', 'cp_link'];
+  let isBlocked = false;
+
+  for (const pat of csamTriggers) {
+    if (text.includes(pat) && (text.includes('link') || text.includes('foto') || text.includes('vender') || text.includes('send'))) {
+      isBlocked = true;
+      break;
+    }
+  }
+
+  box.className = 'g-verdict-card ' + (isBlocked ? 'block' : 'allow');
+  if (isBlocked) {
+    title.style.color = '#E8213A';
+    title.innerText = '⛔ BLOQUEADO — GUARDIAN LOCAL (S4)';
+    desc.innerText = 'El motor local interceptó este mensaje antes de cifrar. El contenido viola la política de protección infantil. Destruido en el dispositivo emisor en <1ms.';
+    
+    const blockedVal = document.getElementById('g-m-blocked');
+    if (blockedVal) blockedVal.innerText = (parseInt(blockedVal.innerText || '2') + 1).toString();
+  } else {
+    title.style.color = '#00D97E';
+    title.innerText = '✅ PERMITIDO — GUARDIAN LOCAL (OFF-GRID)';
+    desc.innerText = 'Contenido verificado en <1ms. Procede al cifrado Double Ratchet E2E para transmisión P2P segura.';
+  }
+
+  const countVal = document.getElementById('g-m-analyzed');
+  if (countVal) countVal.innerText = (parseInt(countVal.innerText || '142') + 1).toString();
+}
+
+function testGuardianPreset(preset) {
+  const input = document.getElementById('guardian-test-input');
+  if (!input) return;
+
+  if (preset === 'safe') {
+    input.value = 'Hola equipo RED, la reunión de coordinación de la red malla será hoy a las 5 PM.';
+  } else if (preset === 'flagged') {
+    input.value = 'Tengo fotos y cp_link para vender por privado mandar mensaje pronto';
+  }
+  testGuardianLocal();
+}
+
+// ── v19.0 AMBER Alert Live Demo ──────────────────────────────────────────
+function simulateAmberBroadcast() {
+  const log = document.getElementById('amber-demo-log');
+  if (!log) return;
+
+  log.innerText = '> [AMBER-RED P2P] Re-difundiendo paquete GossipSub en topic "amber-red-v1"... Transmitido a 24 nodos vecinos.';
+  alert('📢 Alerta AMBER re-difundida sobre la red P2P a 24 nodos cercanos.');
+}
+
+function simulateSightingReport() {
+  const notes = prompt('Ingrese notas del avistamiento de la persona desaparecida (ej: Vistas cerca de la estación de tren):', 'Vista cerca del parque central con chaqueta roja');
+  if (!notes) return;
+
+  const log = document.getElementById('amber-demo-log');
+  if (log) {
+    log.innerText = `> [AVISTAMIENTO REPORTADO] Coordenadas y notas enviadas a Autoridades RED: "${notes}"`;
+  }
+  alert('📍 ¡Avistamiento reportado con éxito! Las autoridades RED han sido notificadas.');
+}
+

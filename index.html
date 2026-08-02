@@ -291,6 +291,107 @@
     </div>
   </section>
 
+  <!-- GUARDIAN IA LIVE ENGINE TESTER -->
+  <section class="section-padding" id="guardian">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-tag font-mono">🛡️ SEGURIDAD P2P PRE-CIFRADO</span>
+        <h2 class="section-heading">Probador en Vivo del Motor<br /><span class="gradient-text">Guardian IA Off-Grid & Híbrido.</span></h2>
+        <p class="section-sub">Escribe cualquier mensaje de prueba para verificar la respuesta determinista del motor en &lt;1ms sin salir a internet.</p>
+      </div>
+
+      <div class="guardian-tester-box glass-card glow-card">
+        <div class="guardian-tester-grid">
+          <div class="g-left">
+            <label class="font-mono g-label">ENTRADA DE TEXTO DE PRUEBA (PRE-CIFRADO E2E):</label>
+            <textarea id="guardian-test-input" class="g-textarea font-mono" rows="4" placeholder="Escribe un mensaje aquí para probar el analizador local de contenido (ej: Hola amigo, ¿cómo estás hoy?)..."></textarea>
+            
+            <div class="g-actions">
+              <button class="btn-primary" onclick="testGuardianLocal()">
+                <span>⚡</span> Probar Motor Off-Grid (&lt;1ms)
+              </button>
+              <button class="btn-secondary" onclick="testGuardianPreset('safe')">
+                Ej: Mensaje Seguro
+              </button>
+              <button class="btn-secondary" onclick="testGuardianPreset('flagged')">
+                Ej: Patrón Sospechoso
+              </button>
+            </div>
+          </div>
+
+          <div class="g-right font-mono">
+            <div class="g-status-header">
+              <span class="g-badge-active">● GUARDIAN OFF-GRID ACTIVO</span>
+              <span class="g-latency">LATENCIA: &lt;1ms</span>
+            </div>
+
+            <div class="g-verdict-card" id="g-verdict-box">
+              <div class="g-verdict-title" id="g-verdict-title">ESPERANDO ENTRADA</div>
+              <div class="g-verdict-desc" id="g-verdict-desc">El mensaje aún no ha sido analizado. Haz clic en "Probar Motor Off-Grid".</div>
+            </div>
+
+            <div class="g-metrics-grid">
+              <div class="g-metric">
+                <span class="g-m-val" id="g-m-analyzed">142</span>
+                <span class="g-m-lbl">ANALIZADOS</span>
+              </div>
+              <div class="g-metric">
+                <span class="g-m-val" id="g-m-blocked" style="color: var(--primary);">2</span>
+                <span class="g-m-lbl">BLOQUEADOS</span>
+              </div>
+              <div class="g-metric">
+                <span class="g-m-val" id="g-m-phash" style="color: #00D97E;">100%</span>
+                <span class="g-m-lbl">LOCAL OFF-GRID</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AMBER ALERT P2P BROADCAST LIVE DEMO -->
+  <section class="section-padding" id="amber">
+    <div class="container">
+      <div class="section-title-wrap">
+        <span class="section-tag font-mono">🟠 SERVICIO PÚBLICO DESCENTRALIZADO</span>
+        <h2 class="section-heading">Sistema Alerta AMBER-RED<br /><span class="gradient-text">Difusión Broadcast P2P en Tiempo Real.</span></h2>
+        <p class="section-sub">Demostración en vivo de emisión y recepción instantánea de alertas de personas desaparecidas sobre GossipSub.</p>
+      </div>
+
+      <div class="amber-demo-box glass-card glow-card">
+        <div class="amber-alert-card-demo">
+          <div class="a-header">
+            <div class="a-badge">🟠 ALERTA AMBER-RED ACTIVA</div>
+            <div class="a-pulse font-mono">BROADCAST P2P TOPIC: amber-red-v1</div>
+          </div>
+          
+          <div class="a-body">
+            <div class="a-info font-mono">
+              <div class="a-row"><span class="a-lbl">PERSONA:</span> <strong style="color: white;">Sofía Martínez (10 años)</strong></div>
+              <div class="a-row"><span class="a-lbl">UBICACIÓN:</span> 📍 San Isidro, Lima · Lat 12.09, Lon -77.03</div>
+              <div class="a-row"><span class="a-lbl">EXPIRACIÓN:</span> ⏳ 71 Horas restantes (Firma Ed25519 Válida)</div>
+              <div class="a-row"><span class="a-lbl">DETALLES:</span> Vestía casaca roja y mochila azul. Vista por última vez en parque central.</div>
+            </div>
+
+            <div class="a-actions">
+              <button class="btn-primary" style="background: linear-gradient(135deg, #ff8c00, #e65100);" onclick="simulateSightingReport()">
+                📍 Simular Reporte de Avistamiento
+              </button>
+              <button class="btn-secondary" onclick="simulateAmberBroadcast()">
+                📢 Simular Difusión GossipSub
+              </button>
+            </div>
+          </div>
+
+          <div class="a-log font-mono" id="amber-demo-log">
+            > [AMBER-RED P2P] Alerta emitida por Autoridad RED #a4f89b. Transmitida a 18 nodos activos vía GossipSub.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- NEXT-GEN INTERACTIVE MESH RADAR SIMULATOR -->
   <section class="section-padding" id="mesh">
     <div class="container">
