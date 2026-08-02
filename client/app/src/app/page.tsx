@@ -29,6 +29,7 @@ import { ProximityWaveModal } from "../components/ProximityWaveModal";
 import { LiveCanvasModal } from "../components/LiveCanvasModal";
 import { EcoMeshPanel } from "../components/EcoMeshPanel";
 import { ProximitySettingsModal } from "../components/ProximitySettingsModal";
+import { AICopilotModal } from "../components/AICopilotModal";
 import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
@@ -108,6 +109,8 @@ export default function AppRouter() {
         return <EcoMeshPanel />;
       case 'proximitySettings':
         return <ProximitySettingsModal />;
+      case 'aiCopilot':
+        return <AICopilotModal />;
       default:
         return <Sidebar />;
     }

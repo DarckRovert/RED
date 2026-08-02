@@ -67,6 +67,12 @@ pub struct ApiState {
     pub ephemeral: Arc<crate::ephemeral::EphemeralPurgeEngine>,
     /// v22.0: Optimizador de batería Eco-Mesh
     pub battery: Arc<crate::battery::BatteryOptimizer>,
+    /// v24.0: Copiloto IA de Emergencia
+    pub ai_copilot: Arc<crate::ai_copilot::AICopilotEngine>,
+    /// v24.0: Resumidor Inteligente de Canales Mesh
+    pub ai_summarizer: Arc<crate::ai_summarizer::AISummarizerEngine>,
+    /// v24.0: Traductor P2P Multilingüe
+    pub ai_translator: Arc<crate::ai_translator::AITranslatorEngine>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -380,6 +386,10 @@ pub fn build_router(state: ApiState) -> Router {
             "/api/battery/optimize",
             post(handle_update_battery_optimize),
         )
+        // ── v24.0: AI Copilot + Summarizer + Translator ───────────────────────
+        .route("/api/ai/copilot", post(handle_ai_copilot_query))
+        .route("/api/ai/summarize", post(handle_ai_summarize_channel))
+        .route("/api/ai/translate", post(handle_ai_translate_text))
         // Static web UI
         .route("/", get(serve_index))
         .route("/app.css", get(serve_css))
@@ -2283,4 +2293,33 @@ async fn handle_update_battery_optimize(
         "ok": true,
         "battery_status": status
     }))
+}
+
+// ── v24.0: Handlers AI Copilot, Summarizer & Translator ───────────────────────
+
+/// POST /api/ai/copilot — Consulta al Copiloto / Asistente Táctico de Emergencia Offline
+async fn handle_ai_copilot_query(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
+) -> impl IntoResponse {
+    let res = state.ai_copilot.query(req);
+    Json(res)
+}
+
+/// POST /api/ai/summarize — Sintetiza y resume el feed de un canal local P2P
+async fn handle_ai_summarize_channel(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ai_summarizer::SummarizeChannelRequest>,
+) -> impl IntoResponse {
+    let res = state.ai_summarizer.summarize(req);
+    Json(res)
+}
+
+/// POST /api/ai/translate — Traduce texto en tiempo real off-grid
+async fn handle_ai_translate_text(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ai_translator::TranslateRequest>,
+) -> impl IntoResponse {
+    let res = state.ai_translator.translate(req);
+    Json(res)
 }

@@ -135,10 +135,18 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 
 ---
 
+## 🛠️ 10. Inteligencia Artificial Soberana Off-Grid & Copiloto IA (`v24.0`)
+
+- **🤖 Copiloto / Asistente IA Táctico Offline (`AICopilotModal`):** Asistente de inteligencia artificial local (<15 MB RAM) para orientación en emergencias médicas, protocolos de primeros auxilios, sismos, apagones y guías de supervivencia sin internet.
+- **📝 Resumidor Inteligente de Canales Mesh (`summarizeChannelAI`):** Toca el botón *"🪄 Resumen IA"* en cualquier canal para sintetizar decenas de mensajes acumulados en un resumen ejecutivo de 3 viñetas en <1 segundo.
+- **⚡ Arquitectura Híbrida Dual-Engine AI:** Modo Nano optimizado en Rust que corre en el 100% de dispositivos móviles (gama baja con <15 MB RAM) y Modo Turbo con aceleración NPU.
+
+---
+
 ## ❓ Preguntas Frecuentes
 
-**¿Necesito internet para chatear?**
-No necesariamente. Gracias a la arquitectura v22.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
+**¿Necesito internet para chatear o usar la IA?**
+No. Gracias a la arquitectura v24.0, tanto la red mesh de radio como el motor de Inteligencia Artificial corren 100% en local dentro de tu dispositivo.
 
 **¿Qué pasa si pierdo mi teléfono?**
 Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.
@@ -146,6 +154,7 @@ Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y 
 ---
 
 **RED** — Tu comunicación, tu hardware, tu soberanía.
+
 
 
 

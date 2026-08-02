@@ -4,6 +4,9 @@
 //! A full node for the RED decentralized messaging network.
 //! v19.0: Guardian IA + Sistema Alerta AMBER-RED
 
+mod ai_copilot;
+mod ai_summarizer;
+mod ai_translator;
 mod amber;
 mod amber_authority;
 mod api;
@@ -340,6 +343,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new());
         let ephemeral = std::sync::Arc::new(ephemeral::EphemeralPurgeEngine::new());
         let battery = std::sync::Arc::new(battery::BatteryOptimizer::new());
+        let ai_copilot = std::sync::Arc::new(ai_copilot::AICopilotEngine::new());
+        let ai_summarizer = std::sync::Arc::new(ai_summarizer::AISummarizerEngine::new());
+        let ai_translator = std::sync::Arc::new(ai_translator::AITranslatorEngine::new());
 
         let state = ApiState {
             node: http_node,
@@ -358,6 +364,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             discovery,
             ephemeral,
             battery,
+            ai_copilot,
+            ai_summarizer,
+            ai_translator,
         };
 
         // Print API token to logs for the user to use

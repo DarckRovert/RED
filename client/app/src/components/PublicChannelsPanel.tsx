@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRedStore } from '../store/useRedStore';
-import { getChannelMessages, postChannelMessage, ChannelMessage } from '../lib/api';
+import { getChannelMessages, postChannelMessage, summarizeChannelAI, ChannelMessage } from '../lib/api';
 
 export const PublicChannelsPanel: React.FC = () => {
     const { navigate } = useRedStore();
@@ -89,11 +89,30 @@ export const PublicChannelsPanel: React.FC = () => {
                     ← Volver
                 </button>
                 <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-                    📻 CANALES MESH LOCALES P2P
+                    📻 CANALES DE DIFUSIÓN MESH
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#00D97E', fontWeight: 800, fontFamily: 'monospace' }}>
-                    GUARDIAN IA MODERATED
-                </div>
+                <button
+                    onClick={async () => {
+                        try {
+                            const res = await summarizeChannelAI(channelId, messages.map(m => m.content));
+                            alert(`🪄 RESUMEN IA DEL CANAL #${channelId}:\n\n${res.summary_bullets.join('\n')}`);
+                        } catch (e: any) {
+                            alert(`Error al generar resumen: ${e.message}`);
+                        }
+                    }}
+                    style={{
+                        background: 'rgba(192,132,252,0.15)',
+                        border: '1px solid #c084fc',
+                        color: '#c084fc',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                    }}
+                >
+                    🪄 Resumen IA
+                </button>
             </div>
 
             {/* CHANNEL SELECTOR */}

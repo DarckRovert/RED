@@ -818,6 +818,67 @@ export async function setDiscoveryConfig(config: ProximityFilterConfig): Promise
     return data;
 }
 
+// ─── v24.0: Interfaces & API AI Copilot + Summarizer + Translator ──────────────
+
+export interface CopilotResponse {
+    answer: string;
+    topic_category: string;
+    source: string;
+    execution_time_ms: number;
+}
+
+export interface ChannelSummaryResponse {
+    channel_id: string;
+    summary_bullets: string[];
+    total_messages_analyzed: number;
+    sentiment: string;
+    execution_time_ms: number;
+}
+
+export interface TranslateResponse {
+    original_text: string;
+    translated_text: string;
+    target_language: string;
+    execution_time_ms: number;
+}
+
+/** Consultar al Copiloto / Asistente Táctico de Emergencia Offline */
+export async function queryAICopilot(prompt: string, context?: string): Promise<CopilotResponse> {
+    const res = await fetch(`${NODE_URL}/api/ai/copilot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, context }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data as CopilotResponse;
+}
+
+/** Generar resumen sintético con IA de un canal local */
+export async function summarizeChannelAI(channelId: string, messages: string[]): Promise<ChannelSummaryResponse> {
+    const res = await fetch(`${NODE_URL}/api/ai/summarize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel_id: channelId, messages }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data as ChannelSummaryResponse;
+}
+
+/** Traducir texto en tiempo real off-grid */
+export async function translateTextAI(text: string, targetLanguage: string): Promise<TranslateResponse> {
+    const res = await fetch(`${NODE_URL}/api/ai/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, target_language: targetLanguage }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data as TranslateResponse;
+}
+
+
 /** Obtener resumen por lote de proximidad */
 export async function getDiscoveryDigest(): Promise<ProximityDigest> {
     const res = await fetch(`${NODE_URL}/api/discovery/digest`);
