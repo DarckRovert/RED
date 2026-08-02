@@ -164,6 +164,50 @@ class LocalTransport {
       total: meshRouter.peerCount,
     };
   }
+
+  /**
+
+   * AI Smart Routing: Calculates link quality score (0-100%) and optimal transport route.
+   */
+  calculateOptimalRoute(peerHash?: string): { optimalTransport: string; scorePct: number; recommendation: string } {
+    const peers = this.allPeers;
+    if (peers.length === 0) {
+      return {
+        optimalTransport: 'Loopback / Store & Forward',
+        scorePct: 100,
+        recommendation: 'Sin nodos en rango. Los mensajes se guardarán en cola DTN hasta reconexión P2P.'
+      };
+    }
+
+    const target = peerHash ? peers.find(p => p.id === peerHash) || peers[0] : peers[0];
+    let score = 50;
+
+    // Transport weight
+    if (target.transport === 'wifi') score += 35;
+    else if (target.transport === 'ble') score += 25;
+    else score += 15;
+
+    // RSSI signal weight (-50 dBm = excellent, -95 = weak)
+    if (target.rssi != null) {
+      const rssiScore = Math.max(0, Math.min(25, ((target.rssi + 100) / 50) * 25));
+      score += rssiScore;
+    } else {
+      score += 15;
+    }
+
+    const finalScore = Math.min(100, Math.round(score));
+    let rec = '';
+    if (finalScore >= 80) rec = `Enrutamiento Directo Óptimo vía ${target.transport.toUpperCase()} (Calidad ${finalScore}%)`;
+    else if (finalScore >= 50) rec = `Vía Estable. Transmitiendo por ${target.transport.toUpperCase()} (Calidad ${finalScore}%)`;
+    else rec = `Señal débil (${target.rssi || -85} dBm). Se recomienda activar modo Eco-Mesh.`;
+
+    return {
+      optimalTransport: target.transport.toUpperCase(),
+      scorePct: finalScore,
+      recommendation: rec
+    };
+  }
 }
+
 
 export const localTransport = new LocalTransport();

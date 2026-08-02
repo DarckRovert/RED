@@ -255,7 +255,36 @@ export const SOSEmergencyBanner: React.FC = () => {
                             {gpsStatus === 'error' && '❌ GPS no disponible — se emitirá sin coordenadas'}
                         </div>
 
+                        {/* SMART SOS NOTE SUGGESTION CHIPS */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => setNoteText('🚑 HEMORRAGIA ACTIVA — Requiero torniquete y atención médica urgente')}
+                                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                                🚑 Médica
+                            </button>
+                            <button
+                                onClick={() => setNoteText('🏚️ ATRAPADO EN ESTRUCTURA — Inmueble con riesgo de colapso')}
+                                style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fcd34d', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                                🏚️ Rescate
+                            </button>
+                            <button
+                                onClick={() => setNoteText('🔥 EVACUACIÓN POR INCENDIO — Visibilidad nula y humo denso')}
+                                style={{ background: 'rgba(234,88,12,0.15)', border: '1px solid #ea580c', color: '#fdba74', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                                🔥 Incendio
+                            </button>
+                            <button
+                                onClick={() => setNoteText('⚡ SIN ENERGÍA NI COMUNICACIÓN — Transmitiendo por malla radio RED')}
+                                style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid #38bdf8', color: '#7dd3fc', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                                ⚡ Apagón
+                            </button>
+                        </div>
+
                         <textarea
+
                             value={noteText}
                             onChange={(e) => setNoteText(e.target.value)}
                             rows={3}

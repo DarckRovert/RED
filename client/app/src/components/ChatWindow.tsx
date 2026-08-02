@@ -130,6 +130,9 @@ export default function ChatWindow() {
     const [ctxMenu, setCtxMenu]             = useState<{ msg: MessageItem; x: number; y: number } | null>(null);
     // A6: File
     const fileInputRef                      = useRef<HTMLInputElement>(null);
+    const [showSummaryModal, setShowSummaryModal] = useState(false);
+    const [summaryData, setSummaryData] = useState<{ total: number; senders: string[]; topWords: string[]; timespan: string } | null>(null);
+
 
     /* ── Refs ── */
     const endRef           = useRef<HTMLDivElement>(null);
@@ -430,9 +433,87 @@ export default function ChatWindow() {
 
     // ── Long-press → context menu ───────────────────────────────────────────────
 
+    const handleSynthesizeChat = () => {
+        if (chatMessages.length === 0) {
+            alert('Sin mensajes en este chat para sintetizar.');
+            return;
+        }
+        const sendersSet = new Set<string>();
+        const wordFreq: Record<string, number> = {};
+        const stopWords = new Set(['para', 'como', 'esta', 'este', 'estos', 'esto', 'pero', 'mas', 'menos', 'aqui', 'alla', 'todo', 'nada', 'hola', 'bien', 'bueno', 'gracias']);
+
+        chatMessages.forEach(m => {
+            if (m.sender) sendersSet.add(m.sender === identity?.identity_hash ? 'Tú' : peerName);
+            if (typeof m.content === 'string') {
+                const words = m.content.toLowerCase().split(/\s+/);
+                words.forEach(w => {
+                    const clean = w.replace(/[^a-záéíóúñ0-9]/gi, '');
+                    if (clean.length >= 4 && !stopWords.has(clean)) {
+                        wordFreq[clean] = (wordFreq[clean] || 0) + 1;
+                    }
+                });
+            }
+        });
+
+        const topWords = Object.entries(wordFreq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([w, c]) => `"#${w}" (${c})`);
+
+        const firstTs = chatMessages[0]?.timestamp ? new Date(chatMessages[0].timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Inicio';
+        const lastTs = chatMessages[chatMessages.length - 1]?.timestamp ? new Date(chatMessages[chatMessages.length - 1].timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ahora';
+
+        setSummaryData({
+            total: chatMessages.length,
+            senders: Array.from(sendersSet),
+            topWords,
+            timespan: `${firstTs} ➔ ${lastTs}`
+        });
+        setShowSummaryModal(true);
+    };
+
     /* Render ─────────────────────────────────────────────────────────────── */
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)', overflow: 'hidden', position: 'relative' }}>
+
+            {/* ── Chat Summary Modal ────────────────────────────────────────── */}
+            {showSummaryModal && summaryData && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(3,7,18,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setShowSummaryModal(false)}>
+                    <div style={{ background: 'linear-gradient(145deg, #0f172a, #0b0f19)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 420, boxShadow: '0 0 40px rgba(56,189,248,0.2)' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                🪄 Síntesis de Chat (IA Local)
+                            </div>
+                            <button onClick={() => setShowSummaryModal(false)} className="btn-icon">✕</button>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: '#94a3b8', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
+                                <span style={{ color: '#fff', fontWeight: 700 }}>📊 Mensajes analizados:</span> {summaryData.total} mensajes
+                            </div>
+                            <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
+                                <span style={{ color: '#fff', fontWeight: 700 }}>👥 Participantes:</span> {summaryData.senders.join(', ')}
+                            </div>
+                            <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
+                                <span style={{ color: '#fff', fontWeight: 700 }}>⏰ Lapso de tiempo:</span> {summaryData.timespan}
+                            </div>
+                            {summaryData.topWords.length > 0 && (
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
+                                    <span style={{ color: '#38bdf8', fontWeight: 700 }}>🏷️ Temas clave detectados:</span>
+                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                                        {summaryData.topWords.map((tw, idx) => (
+                                            <span key={idx} style={{ background: 'rgba(56,189,248,0.15)', color: '#7dd3fc', border: '1px solid rgba(56,189,248,0.3)', padding: '2px 8px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>{tw}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <button onClick={() => setShowSummaryModal(false)} className="btn-primary" style={{ width: '100%', marginTop: 20, padding: 12 }}>
+                            Cerrar Síntesis
+                        </button>
+                    </div>
+                </div>
+            )}
+
 
             {/* ── Context menu (long-press) ──────────────────────────────────── */}
             {ctxMenu && (
@@ -673,8 +754,12 @@ export default function ChatWindow() {
 
                 {/* Header actions */}
                 <div style={{ display: 'flex', gap: '4px', flexShrink: 0, position: 'relative' }}>
+                    <button className="btn-icon" onClick={handleSynthesizeChat} title="Sintetizar Chat con IA Local" style={{ fontSize: '1rem' }}>
+                        🪄
+                    </button>
                     {/* B2: Search toggle */}
                     <button className="btn-icon" onClick={() => setSearchOpen(s => !s)} title="Buscar">
+
                         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                         </svg>
