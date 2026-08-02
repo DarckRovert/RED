@@ -939,9 +939,13 @@ textarea:focus {
   scrollbar-width: none !important; /* Firefox */
   min-height: 0 !important; /* Soluciona colapsos flexbox en WebView */
 }
+.scroll-container > * {
+  flex-shrink: 0 !important; /* Evita que los elementos se aplasten o se solapen en WebView */
+}
 .scroll-container::-webkit-scrollbar {
   display: none !important; /* Chrome, Safari, WebView */
 }
+
 
 /* Premium micro-interactions on hover/active taps */
 .btn-primary:active, .btn-ghost:active, .btn-icon:active, .interactive-row:active {

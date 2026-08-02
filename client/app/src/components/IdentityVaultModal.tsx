@@ -26,11 +26,15 @@ async function loadVaultFromStorage(): Promise<VaultData | null> {
     try {
         const plugin = await getSecureStoragePlugin();
         if (plugin) {
-            const res = await plugin.get({ key: STORAGE_KEY }).catch(() => null);
+            const res: any = await Promise.race([
+                plugin.get({ key: STORAGE_KEY }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Keystore timeout')), 1000))
+            ]).catch(() => null);
             if (res && res.value) return JSON.parse(res.value) as VaultData;
+
         }
     } catch {
-        // Keystore failed
+        // Keystore failed or timed out
     }
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
@@ -44,7 +48,10 @@ async function saveVaultToStorage(data: VaultData): Promise<void> {
     try {
         const plugin = await getSecureStoragePlugin();
         if (plugin) {
-            await plugin.set({ key: STORAGE_KEY, value: serialized }).catch(() => null);
+            await Promise.race([
+                plugin.set({ key: STORAGE_KEY, value: serialized }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Keystore timeout')), 1000))
+            ]).catch(() => null);
         }
     } catch {}
     try {
@@ -61,24 +68,28 @@ export const IdentityVaultModal: React.FC = () => {
     const [isSaved, setIsSaved] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Load persisted vault data on mount deterministically
+    // Load persisted vault data on mount deterministically with guaranteed fallback
     useEffect(() => {
         let isMounted = true;
         const load = async () => {
             setIsLoading(true);
-            const saved = await loadVaultFromStorage();
-            if (isMounted) {
-                if (saved) {
+            try {
+                const saved = await loadVaultFromStorage();
+                if (isMounted && saved) {
                     setBloodType(saved.bloodType || '');
                     setAllergies(saved.allergies || '');
                     setEmergencyContact(saved.emergencyContact || '');
                 }
-                setIsLoading(false);
+            } catch (e) {
+                console.warn('Vault load warning:', e);
+            } finally {
+                if (isMounted) setIsLoading(false);
             }
         };
         load();
         return () => { isMounted = false; };
     }, []);
+
 
 
     const handleSave = async () => {
