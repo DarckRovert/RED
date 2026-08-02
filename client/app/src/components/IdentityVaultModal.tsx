@@ -3,12 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import { useRedStore } from '../store/useRedStore';
 
-// capacitor-secure-storage-plugin — dynamically imported to avoid SSR issues
-let SecureStoragePlugin: any = null;
-if (typeof window !== 'undefined') {
-    import('capacitor-secure-storage-plugin').then((m) => {
-        SecureStoragePlugin = m.SecureStoragePlugin;
-    });
+// capacitor-secure-storage-plugin — robust async getter without race conditions
+async function getSecureStoragePlugin() {
+    if (typeof window === 'undefined') return null;
+    try {
+        const m = await import('capacitor-secure-storage-plugin');
+        return m.SecureStoragePlugin;
+    } catch {
+        return null;
+    }
 }
 
 const STORAGE_KEY = 'red_identity_vault_v1';
@@ -21,8 +24,9 @@ interface VaultData {
 
 async function loadVaultFromStorage(): Promise<VaultData | null> {
     try {
-        if (SecureStoragePlugin) {
-            const res = await SecureStoragePlugin.get({ key: STORAGE_KEY }).catch(() => null);
+        const plugin = await getSecureStoragePlugin();
+        if (plugin) {
+            const res = await plugin.get({ key: STORAGE_KEY }).catch(() => null);
             if (res && res.value) return JSON.parse(res.value) as VaultData;
         }
     } catch {
@@ -38,8 +42,9 @@ async function loadVaultFromStorage(): Promise<VaultData | null> {
 async function saveVaultToStorage(data: VaultData): Promise<void> {
     const serialized = JSON.stringify(data);
     try {
-        if (SecureStoragePlugin) {
-            await SecureStoragePlugin.set({ key: STORAGE_KEY, value: serialized }).catch(() => null);
+        const plugin = await getSecureStoragePlugin();
+        if (plugin) {
+            await plugin.set({ key: STORAGE_KEY, value: serialized }).catch(() => null);
         }
     } catch {}
     try {
@@ -56,22 +61,25 @@ export const IdentityVaultModal: React.FC = () => {
     const [isSaved, setIsSaved] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Load persisted vault data on mount
+    // Load persisted vault data on mount deterministically
     useEffect(() => {
+        let isMounted = true;
         const load = async () => {
             setIsLoading(true);
-            // Small delay to ensure SecureStoragePlugin is dynamically loaded
-            await new Promise((r) => setTimeout(r, 300));
             const saved = await loadVaultFromStorage();
-            if (saved) {
-                setBloodType(saved.bloodType);
-                setAllergies(saved.allergies);
-                setEmergencyContact(saved.emergencyContact);
+            if (isMounted) {
+                if (saved) {
+                    setBloodType(saved.bloodType || '');
+                    setAllergies(saved.allergies || '');
+                    setEmergencyContact(saved.emergencyContact || '');
+                }
+                setIsLoading(false);
             }
-            setIsLoading(false);
         };
         load();
+        return () => { isMounted = false; };
     }, []);
+
 
     const handleSave = async () => {
         try {
