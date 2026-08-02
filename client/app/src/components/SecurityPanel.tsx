@@ -268,13 +268,13 @@ export default function SecurityPanel() {
                 </div>
 
                 {/* Anti-Forensic Disguise Mode */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                        <div>
-                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem' }}>Modo Camuflaje (Disguise)</h3>
-                            <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Transforma el Login en una Calculadora.</p>
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.05rem', fontWeight: 800 }}>Modo Camuflaje (Disguise)</h3>
+                            <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>Transforma el Login en una Calculadora.</p>
                         </div>
-                        <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '28px' }}>
+                        <label className="switch" style={{ position: 'relative', display: 'inline-block', width: '50px', height: '28px', flexShrink: 0 }}>
                             <input type="checkbox" checked={disguiseEnabled} onChange={toggleDisguise} style={{ opacity: 0, width: 0, height: 0 }} />
                             <span className="slider round" style={{ position: 'absolute', cursor: 'pointer', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: disguiseEnabled ? 'var(--primary)' : 'var(--solid-highlight)', borderRadius: '34px', transition: '.4s' }}>
                                 <span style={{ position: 'absolute', height: '20px', width: '20px', left: disguiseEnabled ? '26px' : '4px', top: '4px', background: 'white', transition: '.4s', borderRadius: '50%' }} />
@@ -283,18 +283,18 @@ export default function SecurityPanel() {
                     </div>
 
                     {disguiseEnabled && (
-                        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                        <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
                             <input 
                                 type="number" 
-                                placeholder="PIN de Desbloqueo Cálculadora" 
+                                placeholder="PIN Calculadora (4-6)" 
                                 value={calcPin}
                                 onChange={(e) => setCalcPin(e.target.value.substring(0, 6))}
-                                style={{ flex: 1, padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', color: 'var(--text-primary)', borderRadius: '8px', fontSize: '1.1rem' }} 
+                                style={{ flex: 1, minWidth: 0, padding: '10px 12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', color: 'var(--text-primary)', borderRadius: '10px', fontSize: '0.95rem' }} 
                             />
                             <button 
                                 onClick={saveCalcPin}
                                 disabled={calcPin.length < 4}
-                                style={{ background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 16px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid var(--primary)', opacity: calcPin.length < 4 ? 0.3 : 1 }}
+                                style={{ background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 14px', borderRadius: '10px', fontWeight: 'bold', border: '1px solid var(--primary)', opacity: calcPin.length < 4 ? 0.3 : 1, fontSize: '0.85rem' }}
                             >
                                 Set PIN
                             </button>
@@ -303,31 +303,31 @@ export default function SecurityPanel() {
                 </div>
 
                 {/* Panic PIN */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(35,15,15,0.85), rgba(20,10,10,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(232,33,58,0.25)' }}>
-                    <h3 style={{ margin: 0, color: 'var(--danger)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(35,15,15,0.85), rgba(20,10,10,0.95))', backdropFilter: 'blur(16px)', padding: '18px', borderRadius: '20px', border: '1px solid rgba(232,33,58,0.25)' }}>
+                    <h3 style={{ margin: 0, color: 'var(--danger)', fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                         ⚠ PIN de Pánico (Wipe)
                         <InfoTooltip text="Si te obligan a desbloquear la app, introduce este PIN. La aplicación destruirá silenciosamente tu bóveda entera y simulará un perfil vacío." />
                     </h3>
-                    <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                    <p style={{ margin: '6px 0 14px', color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: '1.4' }}>
                         Si ingresas este PIN en la pantalla de bloqueo local, la base de datos de Rust y todas tus claves de sesión se destruirán **irreversiblemente**.
                     </p>
                     
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
                         <input 
                             type="number" 
                             placeholder="Ej. 9911" 
                             value={panicPin}
                             onChange={(e) => setPanicPin(e.target.value.substring(0, 6))}
                             style={{ 
-                                flex: 1, padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', 
-                                color: 'var(--text-primary)', borderRadius: '8px', fontSize: '1.2rem', letterSpacing: '4px', textAlign: 'center'
+                                flex: 1, minWidth: 0, padding: '10px 12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', 
+                                color: 'var(--text-primary)', borderRadius: '10px', fontSize: '1.1rem', letterSpacing: '4px', textAlign: 'center'
                             }} 
                         />
                         <button 
                             onClick={savePanicPin}
                             disabled={panicPin.length < 4 || panicPin === savedPined}
                             style={{ 
-                                background: 'var(--danger)', color: 'white', padding: '0 24px', borderRadius: '8px', fontWeight: 'bold',
+                                background: 'var(--danger)', color: 'white', padding: '0 18px', borderRadius: '10px', fontWeight: 'bold', fontSize: '0.85rem',
                                 opacity: (panicPin.length < 4 || panicPin === savedPined) ? 0.3 : 1
                             }}
                         >
@@ -337,31 +337,31 @@ export default function SecurityPanel() {
                 </div>
 
                 {/* Decoy Vault (Bóveda Señuelo) */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(15,25,35,0.85), rgba(10,15,20,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(41,182,246,0.2)' }}>
-                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ background: 'linear-gradient(135deg, rgba(15,25,35,0.85), rgba(10,15,20,0.95))', backdropFilter: 'blur(16px)', padding: '18px', borderRadius: '20px', border: '1px solid rgba(41,182,246,0.2)' }}>
+                    <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                         🛡️ Bóveda Señuelo (Decoy)
                         <InfoTooltip text="Un perfil falso con chats de mentira. Úsalo si te obligan a abrir RED y el PIN de Pánico es demasiado sospechoso." />
                     </h3>
-                    <p style={{ margin: '8px 0 16px', color: 'var(--text-secondary)', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                    <p style={{ margin: '6px 0 14px', color: 'var(--text-secondary)', fontSize: '0.82rem', lineHeight: '1.4' }}>
                         Ingresar este PIN en la pantalla de bloqueo forzará al nodo a conectarse a una base de datos vacía auto-poblada con mensajes mundanos.
                     </p>
                     
-                    <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
                         <input 
                             type="number" 
                             placeholder="Ej. 9999" 
                             value={decoyPin}
                             onChange={(e) => setDecoyPin(e.target.value.substring(0, 6))}
                             style={{ 
-                                flex: 1, padding: '12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', 
-                                color: 'var(--text-primary)', borderRadius: '8px', fontSize: '1.2rem', letterSpacing: '4px', textAlign: 'center'
+                                flex: 1, minWidth: 0, padding: '10px 12px', background: 'var(--bg-deep)', border: '1px solid var(--solid-highlight)', 
+                                color: 'var(--text-primary)', borderRadius: '10px', fontSize: '1.1rem', letterSpacing: '4px', textAlign: 'center'
                             }} 
                         />
                         <button 
                             onClick={saveDecoyPin}
                             disabled={decoyPin.length < 4}
                             style={{ 
-                                background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 24px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid var(--primary)',
+                                background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 18px', borderRadius: '10px', fontWeight: 'bold', border: '1px solid var(--primary)', fontSize: '0.85rem',
                                 opacity: decoyPin.length < 4 ? 0.3 : 1
                             }}
                         >
@@ -370,15 +370,15 @@ export default function SecurityPanel() {
                     </div>
                 </div>
 
-                {/* Dead Man's Switch — navigate to dedicated screen */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Dead Man's Switch */}
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 💀 Dead Man's Switch
                                 <InfoTooltip text="Si no abres la app en el período configurado, el nodo purgará toda tu identidad y chats automáticamente." />
                             </h3>
-                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
                                 Autodestrucción por inactividad — configuración avanzada
                             </p>
                         </div>
@@ -386,7 +386,7 @@ export default function SecurityPanel() {
                             onClick={() => import('../store/useRedStore').then(({ useRedStore }) => useRedStore.getState().navigate('dms'))}
                             style={{
                                 background: 'var(--solid-bg)', color: 'var(--primary)',
-                                padding: '10px 18px', borderRadius: '10px', fontWeight: 700,
+                                padding: '10px 16px', borderRadius: '10px', fontWeight: 700,
                                 border: '1px solid var(--primary)', cursor: 'pointer',
                                 fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0,
                             }}
@@ -397,14 +397,14 @@ export default function SecurityPanel() {
                 </div>
 
                 {/* Anti-Forensic Temp Purge Card */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                🧹 Purga Anti-Forense de Temporales
+                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '18px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.05rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                🧹 Purga Anti-Forense
                                 <InfoTooltip text="Elimina de forma segura la caché de imágenes, notas de voz recibidas e historia temporal del disco local." />
                             </h3>
-                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
                                 Limpieza de huella digital y archivos del sistema
                             </p>
                         </div>
@@ -412,7 +412,7 @@ export default function SecurityPanel() {
                             onClick={purgeTempCache}
                             style={{
                                 background: 'rgba(232,33,58,0.15)', color: '#ff4444',
-                                padding: '10px 18px', borderRadius: '10px', fontWeight: 700,
+                                padding: '10px 16px', borderRadius: '10px', fontWeight: 700,
                                 border: '1px solid rgba(232,33,58,0.3)', cursor: 'pointer',
                                 fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0,
                             }}
@@ -421,6 +421,7 @@ export default function SecurityPanel() {
                         </button>
                     </div>
                 </div>
+
 
                 {/* Burner Chats */}
                 <div style={{ background: 'linear-gradient(135deg, rgba(30,15,25,0.85), rgba(20,10,15,0.95))', backdropFilter: 'blur(16px)', padding: '20px', borderRadius: '20px', border: '1px solid rgba(236,64,122,0.2)' }}>

@@ -132,27 +132,26 @@ export const IdentityVaultModal: React.FC = () => {
                 borderBottom: '1px solid rgba(255,255,255,0.08)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
                 background: 'linear-gradient(180deg, rgba(15,23,42,0.98), rgba(8,12,22,0.98))',
                 flexShrink: 0,
                 gap: '12px'
             }}>
                 <button
                     onClick={() => navigate('sidebar')}
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#00D97E', padding: '8px 12px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px' }}
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#00D97E', padding: '8px 12px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
                 >
                     ← Volver
                 </button>
-                <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         🪪 Bóveda de Identidad
                     </div>
                     <div style={{ fontSize: '0.65rem', color: '#00D97E', fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.5px' }}>
                         HARDWARE KEYSTORE ENCRYPTED
                     </div>
                 </div>
-                <div style={{ width: 60 }} />
             </div>
+
 
             {/* MAIN FORM */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
