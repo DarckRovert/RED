@@ -33,6 +33,7 @@ import { AICopilotModal } from "../components/AICopilotModal";
 import NearbyDevicesPanel from "../components/NearbyDevicesPanel";
 import { ToastProvider } from "../components/Toast";
 
+import { App as CapApp } from '@capacitor/app';
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
 /**
@@ -40,13 +41,24 @@ import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
  * Replaces Next.js <Link> and useRouter to guarantee 100% stable offline mobile transitions.
  */
 export default function AppRouter() {
-  const { currentScreen, nodeOnline, identity, navigate } = useRedStore();
+  const { currentScreen, nodeOnline, identity, navigate, goBack } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
 
   useEffect(() => {
     setMounted(true);
-    
+
+    // Hardware Back Button Integration (Android physical back button & swipe back gesture)
+    let backHandler: any = null;
+    CapApp.addListener('backButton', () => {
+      const state = useRedStore.getState();
+      if (state.currentScreen !== 'sidebar') {
+        state.goBack();
+      } else {
+        CapApp.minimizeApp();
+      }
+    }).then(h => { backHandler = h; });
+
     // Check if profile was already created in Keystore
     const checkProfile = async () => {
       try {
@@ -58,7 +70,12 @@ export default function AppRouter() {
       }
     };
     checkProfile();
+
+    return () => {
+      if (backHandler) backHandler.remove();
+    };
   }, []);
+
 
   // SSR Hydration Fix: Never render anything server-side except a blank matching canvas
   // until both the client has mounted AND the async Keystore check is done.
