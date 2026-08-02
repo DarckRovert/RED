@@ -8,8 +8,11 @@ mod amber;
 mod amber_authority;
 mod api;
 mod auth;
+mod channels;
+mod chunker;
 mod guardian;
 mod rate_limit;
+mod sos;
 
 use clap::{Parser, Subcommand};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -319,6 +322,14 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             }
         };
 
+        let sos_store = std::sync::Arc::new(sos::SosStore::new(Some(
+            data_dir_amber.join("sled_db").into(),
+        )));
+        let channel_store = std::sync::Arc::new(channels::ChannelStore::new(Some(
+            data_dir_amber.join("sled_db").into(),
+        )));
+        let chunker = std::sync::Arc::new(chunker::ChunkerEngine::new());
+
         let state = ApiState {
             node: http_node,
             chain: chain_api,
@@ -328,6 +339,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             limiter,
             guardian: std::sync::Arc::new(guardian_engine),
             amber_store,
+            sos_store,
+            channel_store,
+            chunker,
         };
 
         // Print API token to logs for the user to use

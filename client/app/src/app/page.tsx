@@ -20,6 +20,8 @@ import OnboardingProfile from "../components/OnboardingProfile";
 import DMSSettings from "../components/DMSSettings";
 import AmberAdminPanel from "../components/AmberAdminPanel";
 import GuardianStatusPanel from "../components/GuardianStatusPanel";
+import { P2PCompassModal } from "../components/P2PCompassModal";
+import { PublicChannelsPanel } from "../components/PublicChannelsPanel";
 import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
@@ -81,6 +83,10 @@ export default function AppRouter() {
         return <AmberAdminPanel onClose={() => navigate('sidebar')} localNodeId={identity?.identity_hash || 'node-local'} />;
       case 'guardian':
         return <GuardianStatusPanel onClose={() => navigate('sidebar')} />;
+      case 'compass':
+        return <P2PCompassModal />;
+      case 'channels':
+        return <PublicChannelsPanel />;
       default:
         return <Sidebar />;
     }

@@ -107,10 +107,20 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 
 ---
 
+---
+
+## 🛠️ 7. Nuevas Herramientas Tácticas de Auxilio y Difusión (v20.0)
+
+- **🧭 Brújula Táctica y Radar P2P (`P2PCompassModal`):** Abre la brújula desde los accesos rápidos. Permite ubicar físicamente la dirección cardinal (N, S, E, W) y distancia relativa en metros de nodos o contactos RED cercanos usando la intensidad de señal de radio (BLE/WiFi Direct) en apagones totales o desastres.
+- **🚨 Baliza SOS Táctica de Auxilio (`SOSEmergencyBanner`):** En situaciones de peligro inminente, activa la baliza SOS para transmitir inmediatamente un faro de socorro cifrado E2E a tus contactos de auxilio con tus coordenadas GPS y nota de emergencia.
+- **📻 Canales de Difusión Mesh Locales (`PublicChannelsPanel`):** Accede a canales de radio digital comunitarios descentralizados (ej. `#red-local-general`, `#red-emergency-lima`) para publicar noticias, boletines de tráfico o alertas vecinales sin depender de servidores centrales ni riesgo de censura.
+
+---
+
 ## ❓ Preguntas Frecuentes
 
 **¿Necesito internet para chatear?**
-No necesariamente. Gracias a la v18.3, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
+No necesariamente. Gracias a la arquitectura v20.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
 
 **¿Qué pasa si pierdo mi teléfono?**
 Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.
@@ -118,3 +128,4 @@ Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y 
 ---
 
 **RED** — Tu comunicación, tu hardware, tu soberanía.
+

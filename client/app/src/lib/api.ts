@@ -508,3 +508,106 @@ export async function reportContent(payload: {
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
     return data;
 }
+
+// ─── v20.0: Interfaces & API SOS + Canales + Chunker ──────────────────────────
+
+export interface SosBeacon {
+    id: string;
+    sender_did: string;
+    sender_name: string;
+    lat: number;
+    lon: number;
+    altitude?: number;
+    timestamp: number;
+    battery_level: number;
+    note: string;
+    is_active: boolean;
+    signature: string;
+}
+
+export interface ChannelMessage {
+    id: string;
+    channel_id: string;
+    sender_did: string;
+    sender_name: string;
+    content: string;
+    timestamp: number;
+    hash: string;
+    is_moderated: boolean;
+}
+
+export interface ChunkManifest {
+    file_id: string;
+    filename: string;
+    total_size: number;
+    total_chunks: number;
+    root_hash: string;
+    chunk_hashes: string[];
+}
+
+/** Emitir baliza SOS */
+export async function emitSos(payload: {
+    sender_name: string;
+    lat: number;
+    lon: number;
+    altitude?: number;
+    battery_level: number;
+    note: string;
+}): Promise<{ ok: boolean; sos: SosBeacon }> {
+    const res = await fetch(`${NODE_URL}/api/sos/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Desactivar baliza SOS */
+export async function resolveSos(sosId: string): Promise<{ ok: boolean; resolved: boolean }> {
+    const res = await fetch(`${NODE_URL}/api/sos/resolve/${sosId}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Obtener balizas SOS activas */
+export async function getActiveSos(): Promise<SosBeacon[]> {
+    const res = await fetch(`${NODE_URL}/api/sos/active`);
+    if (!res.ok) throw new Error(`SOS active fetch error: ${res.status}`);
+    const data = await res.json();
+    return data.active_beacons as SosBeacon[];
+}
+
+/** Obtener mensajes de canal público local */
+export async function getChannelMessages(channelId = 'red-local-general'): Promise<{ channel_id: string; channels: string[]; messages: ChannelMessage[] }> {
+    const res = await fetch(`${NODE_URL}/api/channels/messages?channel=${encodeURIComponent(channelId)}`);
+    if (!res.ok) throw new Error(`Channel fetch error: ${res.status}`);
+    return res.json();
+}
+
+/** Publicar en canal público local con moderación Guardian IA */
+export async function postChannelMessage(payload: { channel_id: string; sender_name: string; content: string }): Promise<{ ok: boolean; message: ChannelMessage }> {
+    const res = await fetch(`${NODE_URL}/api/channels/post`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Fragmentar archivo base64 en chunks Torrent-mesh */
+export async function splitFileChunker(filename: string, dataBase64: string): Promise<{ ok: boolean; manifest: ChunkManifest }> {
+    const res = await fetch(`${NODE_URL}/api/chunker/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, data_base64: dataBase64 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+

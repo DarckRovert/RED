@@ -90,14 +90,17 @@ export default function Sidebar() {
 
     const quickActions = [
         { icon: '📢', label: 'Difusión',  action: 'broadcast', color: '#E8213A' },
+        { icon: '🧭', label: 'Brújula',   action: 'compass',   color: '#38bdf8' },
+        { icon: '📻', label: 'Canales',   action: 'channels',  color: '#c084fc' },
         { icon: '🛡️', label: 'Guardian',  action: 'guardian',  color: '#63b3ed' },
         { icon: '🟠', label: 'AMBER',     action: 'amber',     color: '#ff8c00' },
-        { icon: '📡', label: 'Radar',     action: 'radar',     color: '#29B6F6' },
-        { icon: '🔐', label: 'Bóveda',    action: 'crypto',    color: '#9b59b6' },
     ];
 
     const menuItems = [
         { icon: '👤', label: 'Nuevo contacto',      action: 'contacts'  },
+        { icon: '🧭', label: 'Brújula Táctica P2P', action: 'compass'   },
+        { icon: '📻', label: 'Canales Mesh Locales', action: 'channels' },
+        { icon: '🚨', label: 'Baliza SOS Auxilio',   action: 'sos'      },
         { icon: '📢', label: 'Difusión privada',     action: 'broadcast' },
         { icon: '🛡️', label: 'Guardian IA (Moderación)', action: 'guardian' },
         { icon: '🟠', label: 'Sistema Alerta AMBER', action: 'amber'     },

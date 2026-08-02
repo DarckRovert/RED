@@ -539,3 +539,86 @@ The local node exposes an HTTP REST API on `http://localhost:7333` for UI commun
   }
   ```
 
+---
+
+### v20.0 SOS Beacons, Public Channels & Chunker API
+
+#### 1. Broadcast SOS Emergency Beacon
+* **Endpoint:** `POST /api/sos/broadcast`
+* **Request Body:**
+  ```json
+  {
+    "sender_name": "Nombre Operador",
+    "lat": -12.04637,
+    "lon": -77.04279,
+    "altitude": 154.2,
+    "battery_level": 85,
+    "note": "Emergencia médica / Auxilio táctico"
+  }
+  ```
+
+#### 2. Get Active SOS Beacons
+* **Endpoint:** `GET /api/sos/active`
+* **Response:**
+  ```json
+  {
+    "active_beacons": [
+      {
+        "id": "sos_1775084920_a4f89b12",
+        "sender_did": "a4f89b12c3e4...",
+        "sender_name": "Usuario RED",
+        "lat": -12.04637,
+        "lon": -77.04279,
+        "is_active": true,
+        "signature": "sig_sos_ed25519_..."
+      }
+    ]
+  }
+  ```
+
+#### 3. Get Public Local Channel Messages
+* **Endpoint:** `GET /api/channels/messages?channel=red-local-general&limit=50`
+* **Response:**
+  ```json
+  {
+    "channel_id": "red-local-general",
+    "channels": ["red-local-general", "red-emergency-lima"],
+    "messages": [
+      {
+        "id": "msg_f49b12c3e4a5",
+        "channel_id": "red-local-general",
+        "sender_name": "Radio Vecinal",
+        "content": "Boletín de tráfico: Vía de acceso despejada en zona central.",
+        "timestamp": 1775085000,
+        "hash": "b8a9c1e2f3d4...",
+        "is_moderated": true
+      }
+    ]
+  }
+  ```
+
+#### 4. Split File into Torrent-Mesh Chunks
+* **Endpoint:** `POST /api/chunker/split`
+* **Request Body:**
+  ```json
+  {
+    "filename": "evidencia_tactica.mp4",
+    "data_base64": "AAAA...base64..."
+  }
+  ```
+* **Response:**
+  ```json
+  {
+    "ok": true,
+    "manifest": {
+      "file_id": "file_8f9e12c34a_12",
+      "filename": "evidencia_tactica.mp4",
+      "total_size": 786432,
+      "total_chunks": 12,
+      "root_hash": "4f8b9e83a21c...",
+      "chunk_hashes": ["chunk_hash_1", "chunk_hash_2"]
+    }
+  }
+  ```
+
+

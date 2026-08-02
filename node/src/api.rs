@@ -28,11 +28,14 @@ use red_core::identity::IdentityHash;
 use red_core::network::Node;
 use red_core::protocol::{ConversationId, Message, MessageType};
 
-// v19.0: Guardian IA + AMBER
+// v19.0 & v20.0: Guardian IA + AMBER + SOS + Channels + Chunker
 use crate::amber::{
     AmberStore, CreateAmberAlertRequest, ReportSightingRequest, ResolveAmberAlertRequest,
 };
+use crate::channels::{ChannelStore, PostChannelMessageRequest};
+use crate::chunker::{ChunkerEngine, SplitFileRequest};
 use crate::guardian::{GuardianEngine, GuardianVerdict};
+use crate::sos::{SosReportRequest, SosStore};
 
 /// Shared state passed to every handler
 #[derive(Clone)]
@@ -42,15 +45,18 @@ pub struct ApiState {
     pub consensus: Arc<red_blockchain::consensus::Consensus>,
     pub msg_tx: broadcast::Sender<Message>,
     /// Outbound mesh payloads from Rust → JS radio layer (BLE/LoRa re-radiation).
-    /// When the Rust node generates an OnionPacket it broadcasts the hex-encoded
-    /// bytes here so the SSE /api/network/outbound endpoint can stream them to
-    /// the JavaScript MeshRouter.
     pub outbound_tx: broadcast::Sender<Vec<u8>>,
     pub limiter: crate::rate_limit::RateLimiter,
     /// v19.0: Motor de moderación IA (Guardian)
     pub guardian: Arc<GuardianEngine>,
     /// v19.0: Almacén persistente de alertas AMBER
     pub amber_store: Arc<AmberStore>,
+    /// v20.0: Balizas de socorro SOS
+    pub sos_store: Arc<SosStore>,
+    /// v20.0: Canales públicos de difusión local
+    pub channel_store: Arc<ChannelStore>,
+    /// v20.0: Fragmentación de archivos Torrent-mesh
+    pub chunker: Arc<ChunkerEngine>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -339,6 +345,14 @@ pub fn build_router(state: ApiState) -> Router {
         // ── v19.0: Guardian IA ───────────────────────────────────────────────
         .route("/api/guardian/status", get(handle_guardian_status))
         .route("/api/guardian/report", post(handle_report_content))
+        // ── v20.0: SOS + Channels + Chunker ──────────────────────────────────
+        .route("/api/sos/broadcast", post(handle_emit_sos))
+        .route("/api/sos/resolve/:id", post(handle_resolve_sos))
+        .route("/api/sos/active", get(handle_get_active_sos))
+        .route("/api/channels/messages", get(handle_get_channel_messages))
+        .route("/api/channels/post", post(handle_post_channel_message))
+        .route("/api/chunker/split", post(handle_chunker_split))
+        .route("/api/chunker/manifest/:id", get(handle_chunker_manifest))
         // Static web UI
         .route("/", get(serve_index))
         .route("/app.css", get(serve_css))
@@ -1961,4 +1975,136 @@ async fn handle_report_content(
         "message": "Reporte recibido. El equipo de RED lo revisará.",
         "report_id": uuid::Uuid::new_v4().to_string()
     }))
+}
+
+// ── v20.0: Handlers SOS, Canales y Chunker ────────────────────────────────────
+
+/// POST /api/sos/broadcast — Emite una baliza de socorro SOS
+async fn handle_emit_sos(
+    State(state): State<ApiState>,
+    Json(req): Json<SosReportRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let beacon = state.sos_store.emit_sos(sender_did, req);
+
+    Json(serde_json::json!({
+        "ok": true,
+        "sos": beacon
+    }))
+}
+
+/// POST /api/sos/resolve/:id — Desactiva baliza SOS
+async fn handle_resolve_sos(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let success = state.sos_store.resolve_sos(&id);
+    if success {
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "resolved": true})),
+        )
+            .into_response()
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Baliza SOS no encontrada"})),
+        )
+            .into_response()
+    }
+}
+
+/// GET /api/sos/active — Lista balizas SOS activas
+async fn handle_get_active_sos(State(state): State<ApiState>) -> impl IntoResponse {
+    let active = state.sos_store.get_active_beacons();
+    Json(serde_json::json!({
+        "active_beacons": active
+    }))
+}
+
+/// GET /api/channels/messages?channel=... — Obtiene mensajes de canal público
+#[derive(Deserialize)]
+struct GetChannelMessagesQuery {
+    channel: Option<String>,
+    limit: Option<usize>,
+}
+
+async fn handle_get_channel_messages(
+    State(state): State<ApiState>,
+    axum::extract::Query(query): axum::extract::Query<GetChannelMessagesQuery>,
+) -> impl IntoResponse {
+    let channel_id = query
+        .channel
+        .unwrap_or_else(|| "red-local-general".to_string());
+    let limit = query.limit.unwrap_or(50);
+    let msgs = state.channel_store.get_channel_messages(&channel_id, limit);
+    let channels = state.channel_store.list_active_channels();
+
+    Json(serde_json::json!({
+        "channel_id": channel_id,
+        "channels": channels,
+        "messages": msgs
+    }))
+}
+
+/// POST /api/channels/post — Publica en canal público local con moderación Guardian IA
+async fn handle_post_channel_message(
+    State(state): State<ApiState>,
+    Json(req): Json<PostChannelMessageRequest>,
+) -> impl IntoResponse {
+    // Moderación pre-difusión con Guardian IA
+    let verdict = state.guardian.analyze_text(&req.content, &[]).await;
+    if !verdict.allowed {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "Mensaje rechazado por Guardian IA",
+                "reason": verdict.reason,
+                "category": verdict.category
+            })),
+        )
+            .into_response();
+    }
+
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let msg = state.channel_store.post_message(sender_did, req);
+
+    (
+        StatusCode::CREATED,
+        Json(serde_json::json!({"ok": true, "message": msg})),
+    )
+        .into_response()
+}
+
+/// POST /api/chunker/split — Fragmenta un archivo base64 en chunks BLAKE3
+async fn handle_chunker_split(
+    State(state): State<ApiState>,
+    Json(req): Json<SplitFileRequest>,
+) -> impl IntoResponse {
+    match state.chunker.split_file(req) {
+        Ok(manifest) => Json(serde_json::json!({"ok": true, "manifest": manifest})).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": err})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/chunker/manifest/:id — Consulta manifiesto Torrent-mesh
+async fn handle_chunker_manifest(
+    State(state): State<ApiState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if let Some(manifest) = state.chunker.get_manifest(&id) {
+        Json(serde_json::json!({"manifest": manifest})).into_response()
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Manifiesto no encontrado"})),
+        )
+            .into_response()
+    }
 }
