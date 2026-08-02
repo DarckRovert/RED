@@ -8,8 +8,11 @@ mod amber;
 mod amber_authority;
 mod api;
 mod auth;
+mod battery;
 mod channels;
 mod chunker;
+mod discovery;
+mod ephemeral;
 mod guardian;
 mod rate_limit;
 mod sanitizer;
@@ -334,6 +337,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let chunker = std::sync::Arc::new(chunker::ChunkerEngine::new());
         let voice_store = std::sync::Arc::new(voice::VoiceStore::new());
         let weather_store = std::sync::Arc::new(weather::WeatherStore::new());
+        let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new());
+        let ephemeral = std::sync::Arc::new(ephemeral::EphemeralPurgeEngine::new());
+        let battery = std::sync::Arc::new(battery::BatteryOptimizer::new());
 
         let state = ApiState {
             node: http_node,
@@ -349,6 +355,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             chunker,
             voice_store,
             weather_store,
+            discovery,
+            ephemeral,
+            battery,
         };
 
         // Print API token to logs for the user to use

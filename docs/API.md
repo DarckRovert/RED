@@ -668,5 +668,64 @@ The local node exposes an HTTP REST API on `http://localhost:7333` for UI commun
   }
   ```
 
+---
+
+### v22.0 Proximity Discovery, Ephemeral Timers & Battery API
+
+#### 1. Get Nearby Proximity Nodes (<5m)
+* **Endpoint:** `GET /api/discovery/proximity`
+* **Response:**
+  ```json
+  {
+    "proximity_nodes": [
+      {
+        "identity_hash": "3f7a8291c4e2",
+        "display_name": "Alice (BLE Proximity)",
+        "rssi_dbm": -58,
+        "distance_meters": 2.4,
+        "transport": "BLE",
+        "last_seen": 1775085000
+      }
+    ]
+  }
+  ```
+
+#### 2. Trigger Proximity Wave Handshake
+* **Endpoint:** `POST /api/discovery/wave`
+* **Request Body:**
+  ```json
+  {
+    "target_identity_hash": "3f7a8291c4e2",
+    "greeting_message": "¡Hola en proximidad zero-touch!"
+  }
+  ```
+
+#### 3. Set Ephemeral Self-Destruct Timer
+* **Endpoint:** `POST /api/ephemeral/set_timer`
+* **Request Body:**
+  ```json
+  {
+    "conversation_id": "conv_9b12c3e4",
+    "self_destruct_seconds": 60,
+    "burn_on_read": true
+  }
+  ```
+
+#### 4. Get Eco-Mesh Battery Resilience Status
+* **Endpoint:** `GET /api/battery/status`
+* **Response:**
+  ```json
+  {
+    "battery_status": {
+      "battery_level": 85,
+      "ble_scan_interval_ms": 2500,
+      "lora_tx_power_dbm": 14,
+      "estimated_mesh_hours": 48.5,
+      "eco_mode_enabled": true
+    }
+  }
+  ```
+
+
 
 

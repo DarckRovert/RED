@@ -126,10 +126,19 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 
 ---
 
+## 🛠️ 9. Herramientas de Proximidad, Canvas Táctico y Resiliencia Eco-Mesh (v22.0)
+
+- **👋 Chat de Proximidad Zero-Touch (`ProximityWaveModal`):** Detección háptica al estar a menos de 5 metros de otro usuario RED por BLE/WiFi Direct. Inicia un chat cifrado E2E con el botón "Saludar P2P" sin escanear QR ni intercambiar contactos.
+- **🎨 Canvas Táctico P2P en Vivo (`LiveCanvasModal`):** Pizarra de dibujo táctico compartida en tiempo real sobre el chat para trazar mapas, esquemas y rutas de evacuación sincronizados en la malla.
+- **⏳ Autodestrucción Efímera Granular (`ephemeral.rs`):** Temporizadores de purga de memoria RAM y disco local (destruir al leer, 10s, 1m, 1h, al desconectar) sin dejar huellas.
+- **🔋 Optimizador de Batería Eco-Mesh (`EcoMeshPanel`):** Monitor dinámico de ciclo de trabajo radio BLE/LoRa para extender la autonomía del nodo hasta 72 horas durante apagones.
+
+---
+
 ## ❓ Preguntas Frecuentes
 
 **¿Necesito internet para chatear?**
-No necesariamente. Gracias a la arquitectura v21.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
+No necesariamente. Gracias a la arquitectura v22.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
 
 **¿Qué pasa si pierdo mi teléfono?**
 Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.
@@ -137,5 +146,6 @@ Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y 
 ---
 
 **RED** — Tu comunicación, tu hardware, tu soberanía.
+
 
 

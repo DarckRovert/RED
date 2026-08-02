@@ -61,6 +61,12 @@ pub struct ApiState {
     pub voice_store: Arc<crate::voice::VoiceStore>,
     /// v21.0: Alertas climáticas & barómetro
     pub weather_store: Arc<crate::weather::WeatherStore>,
+    /// v22.0: Descubrimiento de proximidad zero-touch
+    pub discovery: Arc<crate::discovery::DiscoveryEngine>,
+    /// v22.0: Temporizadores de autodestrucción efímeros
+    pub ephemeral: Arc<crate::ephemeral::EphemeralPurgeEngine>,
+    /// v22.0: Optimizador de batería Eco-Mesh
+    pub battery: Arc<crate::battery::BatteryOptimizer>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -362,6 +368,15 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/sanitizer/clean", post(handle_clean_image_exif))
         .route("/api/weather/report", post(handle_post_weather_report))
         .route("/api/weather/reports", get(handle_get_weather_reports))
+        // ── v22.0: Discovery + Ephemeral + Battery ────────────────────────────
+        .route("/api/discovery/proximity", get(handle_get_proximity_nodes))
+        .route("/api/discovery/wave", post(handle_trigger_wave))
+        .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer))
+        .route("/api/battery/status", get(handle_get_battery_status))
+        .route(
+            "/api/battery/optimize",
+            post(handle_update_battery_optimize),
+        )
         // Static web UI
         .route("/", get(serve_index))
         .route("/app.css", get(serve_css))
@@ -2177,5 +2192,64 @@ async fn handle_get_weather_reports(State(state): State<ApiState>) -> impl IntoR
     let reports = state.weather_store.list_reports(30);
     Json(serde_json::json!({
         "reports": reports
+    }))
+}
+
+// ── v22.0: Handlers Discovery, Ephemeral & Battery ────────────────────────────
+
+/// GET /api/discovery/proximity — Lista nodos cercanos por proximidad zero-touch
+async fn handle_get_proximity_nodes(State(state): State<ApiState>) -> impl IntoResponse {
+    let nodes = state.discovery.get_proximity_nodes();
+    Json(serde_json::json!({
+        "proximity_nodes": nodes
+    }))
+}
+
+/// POST /api/discovery/wave — Inicia saludo P2P instantáneo de proximidad
+async fn handle_trigger_wave(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::discovery::WaveHandshakeRequest>,
+) -> impl IntoResponse {
+    let node = state.discovery.trigger_wave(req);
+    Json(serde_json::json!({
+        "ok": true,
+        "wave_handshake": node
+    }))
+}
+
+/// POST /api/ephemeral/set_timer — Configura temporizador de autodestrucción
+async fn handle_set_ephemeral_timer(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::ephemeral::EphemeralConfig>,
+) -> impl IntoResponse {
+    state.ephemeral.set_config(req.clone());
+    Json(serde_json::json!({
+        "ok": true,
+        "config": req
+    }))
+}
+
+/// GET /api/battery/status — Consulta estado Eco-Mesh y resiliencia de batería
+async fn handle_get_battery_status(State(state): State<ApiState>) -> impl IntoResponse {
+    let status = state.battery.get_status();
+    Json(serde_json::json!({
+        "battery_status": status
+    }))
+}
+
+/// POST /api/battery/optimize — Actualiza nivel de batería y recalcula ciclo de trabajo
+#[derive(Deserialize)]
+struct UpdateBatteryRequest {
+    battery_level: u8,
+}
+
+async fn handle_update_battery_optimize(
+    State(state): State<ApiState>,
+    Json(req): Json<UpdateBatteryRequest>,
+) -> impl IntoResponse {
+    let status = state.battery.update_battery(req.battery_level);
+    Json(serde_json::json!({
+        "ok": true,
+        "battery_status": status
     }))
 }

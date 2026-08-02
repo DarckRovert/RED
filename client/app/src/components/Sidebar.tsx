@@ -98,6 +98,9 @@ export default function Sidebar() {
 
     const menuItems = [
         { icon: '👤', label: 'Nuevo contacto',      action: 'contacts'  },
+        { icon: '👋', label: 'Proximidad Zero-Touch', action: 'proximity' },
+        { icon: '🎨', label: 'Canvas Táctico P2P',   action: 'canvas'   },
+        { icon: '🔋', label: 'Batería Eco-Mesh',     action: 'ecoMesh'  },
         { icon: '🎙️', label: 'Walkie-Talkie Mesh',  action: 'walkie'    },
         { icon: '🌤️', label: 'Clima & Barómetro',   action: 'weather'   },
         { icon: '🪪', label: 'Bóveda de Identidad', action: 'idVault'   },

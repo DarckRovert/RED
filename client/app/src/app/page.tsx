@@ -25,6 +25,9 @@ import { PublicChannelsPanel } from "../components/PublicChannelsPanel";
 import { P2PWalkieTalkieModal } from "../components/P2PWalkieTalkieModal";
 import { WeatherAlertPanel } from "../components/WeatherAlertPanel";
 import { IdentityVaultModal } from "../components/IdentityVaultModal";
+import { ProximityWaveModal } from "../components/ProximityWaveModal";
+import { LiveCanvasModal } from "../components/LiveCanvasModal";
+import { EcoMeshPanel } from "../components/EcoMeshPanel";
 import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
@@ -96,6 +99,12 @@ export default function AppRouter() {
         return <WeatherAlertPanel />;
       case 'idVault':
         return <IdentityVaultModal />;
+      case 'proximity':
+        return <ProximityWaveModal />;
+      case 'canvas':
+        return <LiveCanvasModal />;
+      case 'ecoMesh':
+        return <EcoMeshPanel />;
       default:
         return <Sidebar />;
     }

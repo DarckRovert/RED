@@ -697,6 +697,84 @@ export async function postWeatherReport(payload: {
     return data;
 }
 
+// ─── v22.0: Interfaces & API Discovery + Ephemeral + Battery ──────────────────
+
+export interface ProximityNode {
+    identity_hash: string;
+    display_name: string;
+    rssi_dbm: number;
+    distance_meters: number;
+    transport: string;
+    last_seen: number;
+}
+
+export interface EphemeralConfig {
+    conversation_id: string;
+    self_destruct_seconds: number;
+    burn_on_read: boolean;
+}
+
+export interface EcoMeshStatus {
+    battery_level: number;
+    ble_scan_interval_ms: number;
+    lora_tx_power_dbm: number;
+    estimated_mesh_hours: number;
+    eco_mode_enabled: boolean;
+}
+
+/** Obtener nodos por proximidad zero-touch (<5m) */
+export async function getProximityNodes(): Promise<ProximityNode[]> {
+    const res = await fetch(`${NODE_URL}/api/discovery/proximity`);
+    if (!res.ok) throw new Error(`Proximity nodes error: ${res.status}`);
+    const data = await res.json();
+    return data.proximity_nodes as ProximityNode[];
+}
+
+/** Iniciar saludo P2P instantáneo de proximidad */
+export async function triggerWaveHandshake(targetIdentityHash: string): Promise<{ ok: boolean; wave_handshake: ProximityNode }> {
+    const res = await fetch(`${NODE_URL}/api/discovery/wave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_identity_hash: targetIdentityHash }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Configurar temporizador efímero de autodestrucción */
+export async function setEphemeralTimer(config: EphemeralConfig): Promise<{ ok: boolean; config: EphemeralConfig }> {
+    const res = await fetch(`${NODE_URL}/api/ephemeral/set_timer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Consultar estado Eco-Mesh y resiliencia de batería */
+export async function getBatteryStatus(): Promise<EcoMeshStatus> {
+    const res = await fetch(`${NODE_URL}/api/battery/status`);
+    if (!res.ok) throw new Error(`Battery status error: ${res.status}`);
+    const data = await res.json();
+    return data.battery_status as EcoMeshStatus;
+}
+
+/** Actualizar nivel de batería y recalcular ciclo Eco-Mesh */
+export async function updateBatteryOptimize(batteryLevel: number): Promise<{ ok: boolean; battery_status: EcoMeshStatus }> {
+    const res = await fetch(`${NODE_URL}/api/battery/optimize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ battery_level: batteryLevel }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+
 /** Obtener boletines climáticos locales */
 export async function getWeatherReports(): Promise<WeatherReport[]> {
     const res = await fetch(`${NODE_URL}/api/weather/reports`);
