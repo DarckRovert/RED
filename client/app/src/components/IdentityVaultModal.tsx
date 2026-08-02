@@ -3,17 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRedStore } from '../store/useRedStore';
 
-// capacitor-secure-storage-plugin — robust async getter without race conditions
-async function getSecureStoragePlugin() {
-    if (typeof window === 'undefined') return null;
-    try {
-        const m = await import('capacitor-secure-storage-plugin');
-        return m.SecureStoragePlugin;
-    } catch {
-        return null;
-    }
-}
-
 const STORAGE_KEY = 'red_identity_vault_v1';
 
 interface VaultData {
@@ -22,20 +11,9 @@ interface VaultData {
     emergencyContact: string;
 }
 
-async function loadVaultFromStorage(): Promise<VaultData | null> {
-    try {
-        const plugin = await getSecureStoragePlugin();
-        if (plugin) {
-            const res: any = await Promise.race([
-                plugin.get({ key: STORAGE_KEY }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Keystore timeout')), 1000))
-            ]).catch(() => null);
-            if (res && res.value) return JSON.parse(res.value) as VaultData;
-
-        }
-    } catch {
-        // Keystore failed or timed out
-    }
+// Instant synchronous localStorage read to guarantee 0ms screen block
+function loadLocalVault(): VaultData | null {
+    if (typeof window === 'undefined') return null;
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (raw) return JSON.parse(raw) as VaultData;
@@ -43,19 +21,34 @@ async function loadVaultFromStorage(): Promise<VaultData | null> {
     return null;
 }
 
+// Background Keystore plugin loader with strict safety timeout
+async function loadKeystoreVault(): Promise<VaultData | null> {
+    if (typeof window === 'undefined') return null;
+    try {
+        const m = await import('capacitor-secure-storage-plugin');
+        const plugin = m?.SecureStoragePlugin;
+        if (plugin) {
+            const res: any = await Promise.race([
+                plugin.get({ key: STORAGE_KEY }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
+            ]).catch(() => null);
+            if (res && res.value) return JSON.parse(res.value) as VaultData;
+        }
+    } catch {}
+    return null;
+}
+
 async function saveVaultToStorage(data: VaultData): Promise<void> {
     const serialized = JSON.stringify(data);
     try {
-        const plugin = await getSecureStoragePlugin();
-        if (plugin) {
-            await Promise.race([
-                plugin.set({ key: STORAGE_KEY, value: serialized }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Keystore timeout')), 1000))
-            ]).catch(() => null);
-        }
+        localStorage.setItem(STORAGE_KEY, serialized);
     } catch {}
     try {
-        localStorage.setItem(STORAGE_KEY, serialized);
+        const m = await import('capacitor-secure-storage-plugin');
+        const plugin = m?.SecureStoragePlugin;
+        if (plugin) {
+            await plugin.set({ key: STORAGE_KEY, value: serialized }).catch(() => null);
+        }
     } catch {}
 }
 
@@ -66,31 +59,40 @@ export const IdentityVaultModal: React.FC = () => {
     const [emergencyContact, setEmergencyContact] = useState('');
     const [qrCodeData, setQrCodeData] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    const [syncing, setSyncing] = useState(false);
 
-    // Load persisted vault data on mount deterministically with guaranteed fallback
+    // Instant initial load on mount without blocking render
     useEffect(() => {
         let isMounted = true;
-        const load = async () => {
-            setIsLoading(true);
+
+        // Step 1: Instant load from localStorage
+        const initial = loadLocalVault();
+        if (initial) {
+            setBloodType(initial.bloodType || '');
+            setAllergies(initial.allergies || '');
+            setEmergencyContact(initial.emergencyContact || '');
+        }
+
+        // Step 2: Background sync from Hardware Keystore
+        const syncKeystore = async () => {
+            setSyncing(true);
             try {
-                const saved = await loadVaultFromStorage();
-                if (isMounted && saved) {
-                    setBloodType(saved.bloodType || '');
-                    setAllergies(saved.allergies || '');
-                    setEmergencyContact(saved.emergencyContact || '');
+                const ks = await loadKeystoreVault();
+                if (isMounted && ks) {
+                    if (ks.bloodType) setBloodType(ks.bloodType);
+                    if (ks.allergies) setAllergies(ks.allergies);
+                    if (ks.emergencyContact) setEmergencyContact(ks.emergencyContact);
                 }
             } catch (e) {
-                console.warn('Vault load warning:', e);
+                console.warn('Keystore background sync:', e);
             } finally {
-                if (isMounted) setIsLoading(false);
+                if (isMounted) setSyncing(false);
             }
         };
-        load();
+        syncKeystore();
+
         return () => { isMounted = false; };
     }, []);
-
-
 
     const handleSave = async () => {
         try {
@@ -98,32 +100,23 @@ export const IdentityVaultModal: React.FC = () => {
             setIsSaved(true);
             setTimeout(() => setIsSaved(false), 2500);
         } catch (e: any) {
-            alert(`Error al guardar en Keystore: ${e.message}`);
+            alert(`Error al guardar: ${e.message}`);
         }
     };
 
     const generateOneTimeQr = async () => {
-        // Auto-save before generating QR
         await handleSave();
-
         const payload = JSON.stringify({
             did: identity?.identity_hash || 'did:red:unknown',
             blood: bloodType,
             allergies,
             contact: emergencyContact,
-            expires: Date.now() + 300000 // 5 minutes
+            expires: Date.now() + 300000 // 5 min
         });
         const encoded = btoa(payload);
         setQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=RED_ID_VAULT:${encoded}&color=00d97e&bgcolor=080810`);
     };
 
-    if (isLoading) {
-        return (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 900, background: '#04060A', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#00D97E', fontFamily: 'monospace' }}>
-                🔐 Cargando Bóveda Cifrada...
-            </div>
-        );
-    }
 
     return (
         <div style={{
