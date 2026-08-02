@@ -179,6 +179,30 @@ export default function StatusHeader() {
                         {identity.short_id}
                     </span>
                 )}
+                {/* ── Chat Button — direct access to main chat ── */}
+                <button
+                    id="chat-btn-header"
+                    onClick={() => navigate('sidebar')}
+                    title="Ir al Chat Principal"
+                    style={{
+                        background: 'rgba(232,33,58,0.2)',
+                        border: '1px solid rgba(232,33,58,0.4)',
+                        borderRadius: '6px',
+                        color: 'white',
+                        padding: '3px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        transition: 'all 0.15s ease',
+                        flexShrink: 0,
+                        gap: '4px',
+                    }}
+                >
+                    💬 Chat
+                </button>
                 {/* ── Settings Button — always visible ── */}
                 <button
                     id="settings-btn-header"

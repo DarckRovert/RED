@@ -188,10 +188,20 @@ export default function SecurityPanel() {
                 borderTop: 'none', flexShrink: 0,
                 background: 'linear-gradient(180deg, rgba(15,15,24,0.98) 0%, rgba(8,8,16,0.98) 100%)',
             }}>
-                <button onClick={goBack} className="btn-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="15 18 9 12 15 6"/>
-                    </svg>
+                <button onClick={goBack} style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--text-primary)',
+                    padding: '6px 12px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                }}>
+                    ← Volver al Chat
                 </button>
                 <div style={{
                     width: 40, height: 40, borderRadius: 'var(--radius-sm)', flexShrink: 0,
