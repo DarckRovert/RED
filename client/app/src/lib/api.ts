@@ -611,3 +611,98 @@ export async function splitFileChunker(filename: string, dataBase64: string): Pr
     return data;
 }
 
+// ─── v21.0: Interfaces & API Voice + Sanitizer + Weather ──────────────────────
+
+export interface VoiceBurst {
+    id: string;
+    sender_did: string;
+    sender_name: string;
+    duration_seconds: number;
+    audio_opus_b64: string;
+    timestamp: number;
+    sample_rate: number;
+}
+
+export interface CleanImageResponse {
+    ok: boolean;
+    cleaned_b64: string;
+    bytes_stripped: number;
+    metadata_removed: string[];
+}
+
+export interface WeatherReport {
+    id: string;
+    sender_did: string;
+    sender_name: string;
+    pressure_hpa: number;
+    temperature_c?: number;
+    humidity_percent?: number;
+    condition_summary: string;
+    is_disaster_alert: boolean;
+    timestamp: number;
+}
+
+/** Enviar ráfaga de voz Walkie-Talkie Push-To-Talk */
+export async function sendVoiceBurst(payload: {
+    sender_name: string;
+    duration_seconds: number;
+    audio_opus_b64: string;
+}): Promise<{ ok: boolean; burst: VoiceBurst }> {
+    const res = await fetch(`${NODE_URL}/api/voice/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Obtener ráfagas de voz recientes */
+export async function getVoiceBursts(): Promise<VoiceBurst[]> {
+    const res = await fetch(`${NODE_URL}/api/voice/bursts`);
+    if (!res.ok) throw new Error(`Voice bursts error: ${res.status}`);
+    const data = await res.json();
+    return data.bursts as VoiceBurst[];
+}
+
+/** Limpiar metadatos EXIF / GPS de fotografía */
+export async function cleanImageExif(imageB64: string): Promise<CleanImageResponse> {
+    const res = await fetch(`${NODE_URL}/api/sanitizer/clean`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_b64: imageB64 }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Publicar boletín climático off-grid */
+export async function postWeatherReport(payload: {
+    sender_name: string;
+    pressure_hpa: number;
+    temperature_c?: number;
+    humidity_percent?: number;
+    condition_summary: string;
+    is_disaster_alert: boolean;
+}): Promise<{ ok: boolean; report: WeatherReport }> {
+    const res = await fetch(`${NODE_URL}/api/weather/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+}
+
+/** Obtener boletines climáticos locales */
+export async function getWeatherReports(): Promise<WeatherReport[]> {
+    const res = await fetch(`${NODE_URL}/api/weather/reports`);
+    if (!res.ok) throw new Error(`Weather reports error: ${res.status}`);
+    const data = await res.json();
+    return data.reports as WeatherReport[];
+}
+
+

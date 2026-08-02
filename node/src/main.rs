@@ -12,7 +12,10 @@ mod channels;
 mod chunker;
 mod guardian;
 mod rate_limit;
+mod sanitizer;
 mod sos;
+mod voice;
+mod weather;
 
 use clap::{Parser, Subcommand};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -329,6 +332,8 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             data_dir_amber.join("sled_db").into(),
         )));
         let chunker = std::sync::Arc::new(chunker::ChunkerEngine::new());
+        let voice_store = std::sync::Arc::new(voice::VoiceStore::new());
+        let weather_store = std::sync::Arc::new(weather::WeatherStore::new());
 
         let state = ApiState {
             node: http_node,
@@ -342,6 +347,8 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             sos_store,
             channel_store,
             chunker,
+            voice_store,
+            weather_store,
         };
 
         // Print API token to logs for the user to use

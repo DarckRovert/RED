@@ -621,4 +621,52 @@ The local node exposes an HTTP REST API on `http://localhost:7333` for UI commun
   }
   ```
 
+---
+
+### v21.0 Walkie-Talkie PTT, EXIF Sanitizer & Weather API
+
+#### 1. Send Walkie-Talkie Voice Burst (Opus P2P)
+* **Endpoint:** `POST /api/voice/send`
+* **Request Body:**
+  ```json
+  {
+    "sender_name": "Operador Walkie",
+    "duration_seconds": 3.5,
+    "audio_opus_b64": "GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQRHzY4A..."
+  }
+  ```
+
+#### 2. Sanitize EXIF & GPS Metadata from Image
+* **Endpoint:** `POST /api/sanitizer/clean`
+* **Request Body:**
+  ```json
+  {
+    "image_b64": "/9j/4AAQSkZJRgABAQAAAQABAAD..."
+  }
+  ```
+* **Response:**
+  ```json
+  {
+    "ok": true,
+    "cleaned_b64": "/9j/4AAQSkZJRg...",
+    "bytes_stripped": 4120,
+    "metadata_removed": ["GPS Coordinates", "Camera Model", "DateTime Original"]
+  }
+  ```
+
+#### 3. Post Off-Grid Weather Bulletin
+* **Endpoint:** `POST /api/weather/report`
+* **Request Body:**
+  ```json
+  {
+    "sender_name": "Estación Barométrica",
+    "pressure_hpa": 1013.25,
+    "temperature_c": 21.5,
+    "humidity_percent": 68.0,
+    "condition_summary": "Despejado — Presión Estable",
+    "is_disaster_alert": false
+  }
+  ```
+
+
 

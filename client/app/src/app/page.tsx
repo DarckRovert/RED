@@ -22,6 +22,9 @@ import AmberAdminPanel from "../components/AmberAdminPanel";
 import GuardianStatusPanel from "../components/GuardianStatusPanel";
 import { P2PCompassModal } from "../components/P2PCompassModal";
 import { PublicChannelsPanel } from "../components/PublicChannelsPanel";
+import { P2PWalkieTalkieModal } from "../components/P2PWalkieTalkieModal";
+import { WeatherAlertPanel } from "../components/WeatherAlertPanel";
+import { IdentityVaultModal } from "../components/IdentityVaultModal";
 import { ToastProvider } from "../components/Toast";
 import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 
@@ -87,6 +90,12 @@ export default function AppRouter() {
         return <P2PCompassModal />;
       case 'channels':
         return <PublicChannelsPanel />;
+      case 'walkie':
+        return <P2PWalkieTalkieModal />;
+      case 'weather':
+        return <WeatherAlertPanel />;
+      case 'idVault':
+        return <IdentityVaultModal />;
       default:
         return <Sidebar />;
     }

@@ -117,10 +117,19 @@ Si no tienes acceso a la red de internet global, RED sigue funcionando:
 
 ---
 
+## 🛠️ 8. Nuevas Herramientas Tácticas y Privacidad de Fotos (v21.0)
+
+- **🎙️ Walkie-Talkie Mesh Push-to-Talk (`P2PWalkieTalkieModal`):** Mantén presionado el botón central para hablar y enviar ráfagas de audio de voz ultra-comprimidas (Codec Opus a 8 kbps) que se propagan inmediatamente por ondas de radio Bluetooth BLE y WiFi Direct.
+- **🧹 Sanitizador de Metadatos EXIF en Fotos (`sanitizer.rs`):** El motor borra automáticamente las coordenadas GPS, fecha/hora y modelo de teléfono de cualquier foto antes de cifrarla y enviarla para impedir tu geolocalización.
+- **🌤️ Alertas Barométricas y Clima Mesh (`WeatherAlertPanel`):** Lectura del sensor barométrico del celular para publicar boletines meteorológicos locales y alertas de desastres naturales en tiempo real.
+- **🪪 Bóveda Cifrada de Identidad Táctica (`IdentityVaultModal`):** Almacena tus datos médicos, tipo de sangre y pase de auxilio cifrado con hardware Keystore, permitiendo generar un código QR de verificación de un solo uso (*One-Time QR*).
+
+---
+
 ## ❓ Preguntas Frecuentes
 
 **¿Necesito internet para chatear?**
-No necesariamente. Gracias a la arquitectura v20.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
+No necesariamente. Gracias a la arquitectura v21.0, si tus contactos están cerca de ti físicamente, RED chateará a través de ondas de radio (Bluetooth/WiFi/LoRa) usando señalización WebRTC P2P totalmente Offline.
 
 **¿Qué pasa si pierdo mi teléfono?**
 Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.
@@ -128,4 +137,5 @@ Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y 
 ---
 
 **RED** — Tu comunicación, tu hardware, tu soberanía.
+
 

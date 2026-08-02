@@ -57,6 +57,10 @@ pub struct ApiState {
     pub channel_store: Arc<ChannelStore>,
     /// v20.0: Fragmentación de archivos Torrent-mesh
     pub chunker: Arc<ChunkerEngine>,
+    /// v21.0: Walkie-Talkie Push-To-Talk
+    pub voice_store: Arc<crate::voice::VoiceStore>,
+    /// v21.0: Alertas climáticas & barómetro
+    pub weather_store: Arc<crate::weather::WeatherStore>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -345,7 +349,7 @@ pub fn build_router(state: ApiState) -> Router {
         // ── v19.0: Guardian IA ───────────────────────────────────────────────
         .route("/api/guardian/status", get(handle_guardian_status))
         .route("/api/guardian/report", post(handle_report_content))
-        // ── v20.0: SOS + Channels + Chunker ──────────────────────────────────
+        // ── v20.0 & v21.0: SOS + Channels + Chunker + Voice + Sanitizer + Weather ─────
         .route("/api/sos/broadcast", post(handle_emit_sos))
         .route("/api/sos/resolve/:id", post(handle_resolve_sos))
         .route("/api/sos/active", get(handle_get_active_sos))
@@ -353,6 +357,11 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/channels/post", post(handle_post_channel_message))
         .route("/api/chunker/split", post(handle_chunker_split))
         .route("/api/chunker/manifest/:id", get(handle_chunker_manifest))
+        .route("/api/voice/send", post(handle_send_voice_burst))
+        .route("/api/voice/bursts", get(handle_get_voice_bursts))
+        .route("/api/sanitizer/clean", post(handle_clean_image_exif))
+        .route("/api/weather/report", post(handle_post_weather_report))
+        .route("/api/weather/reports", get(handle_get_weather_reports))
         // Static web UI
         .route("/", get(serve_index))
         .route("/app.css", get(serve_css))
@@ -2107,4 +2116,66 @@ async fn handle_chunker_manifest(
         )
             .into_response()
     }
+}
+
+// ── v21.0: Handlers Voice, Sanitizer & Weather ────────────────────────────────
+
+/// POST /api/voice/send — Transmite ráfaga de voz Walkie-Talkie Push-To-Talk
+async fn handle_send_voice_burst(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::voice::SendVoiceBurstRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let burst = state.voice_store.add_burst(sender_did, req);
+
+    Json(serde_json::json!({
+        "ok": true,
+        "burst": burst
+    }))
+}
+
+/// GET /api/voice/bursts — Lista ráfagas de voz recientes
+async fn handle_get_voice_bursts(State(state): State<ApiState>) -> impl IntoResponse {
+    let bursts = state.voice_store.get_recent_bursts(20);
+    Json(serde_json::json!({
+        "bursts": bursts
+    }))
+}
+
+/// POST /api/sanitizer/clean — Sanitiza cabeceras EXIF / GPS de imágenes
+async fn handle_clean_image_exif(
+    Json(req): Json<crate::sanitizer::CleanImageRequest>,
+) -> impl IntoResponse {
+    match crate::sanitizer::ImageSanitizer::sanitize_image(req) {
+        Ok(res) => Json(res).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": err})),
+        )
+            .into_response(),
+    }
+}
+
+/// POST /api/weather/report — Publica boletín barométrico/clima off-grid
+async fn handle_post_weather_report(
+    State(state): State<ApiState>,
+    Json(req): Json<crate::weather::PostWeatherReportRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let sender_did = node.identity_hash().to_hex();
+    let report = state.weather_store.add_report(sender_did, req);
+
+    Json(serde_json::json!({
+        "ok": true,
+        "report": report
+    }))
+}
+
+/// GET /api/weather/reports — Lista boletines climáticos locales
+async fn handle_get_weather_reports(State(state): State<ApiState>) -> impl IntoResponse {
+    let reports = state.weather_store.list_reports(30);
+    Json(serde_json::json!({
+        "reports": reports
+    }))
 }

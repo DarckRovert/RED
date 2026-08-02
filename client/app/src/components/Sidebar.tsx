@@ -98,6 +98,9 @@ export default function Sidebar() {
 
     const menuItems = [
         { icon: '👤', label: 'Nuevo contacto',      action: 'contacts'  },
+        { icon: '🎙️', label: 'Walkie-Talkie Mesh',  action: 'walkie'    },
+        { icon: '🌤️', label: 'Clima & Barómetro',   action: 'weather'   },
+        { icon: '🪪', label: 'Bóveda de Identidad', action: 'idVault'   },
         { icon: '🧭', label: 'Brújula Táctica P2P', action: 'compass'   },
         { icon: '📻', label: 'Canales Mesh Locales', action: 'channels' },
         { icon: '🚨', label: 'Baliza SOS Auxilio',   action: 'sos'      },
