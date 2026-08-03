@@ -165,43 +165,48 @@ export const SOSEmergencyBanner: React.FC = () => {
     return (
         <>
             {/* ACTIVE SOS BANNER */}
-            {beacons.length > 0 && (
-                <div style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 9999,
-                    background: 'linear-gradient(135deg, #dc2626, #991b1b)',
-                    color: '#fff',
-                    padding: '12px 20px',
-                    boxShadow: '0 4px 20px rgba(220,38,38,0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '10px'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.4rem', animation: 'pulse 1s infinite' }}>🚨</span>
-                        <div>
-                            <div style={{ fontWeight: 900, fontSize: '0.9rem', letterSpacing: '0.5px' }}>
-                                ¡ALERTA SOS DE AUXILIO ACTIVA! ({beacons.length})
-                            </div>
-                            <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>
-                                {beacons[0].sender_name}: {beacons[0].note}
-                                {beacons[0].lat !== 0 && ` · GPS: ${beacons[0].lat}, ${beacons[0].lon}`}
+            {(() => {
+                const safeBeacons = Array.isArray(beacons) ? beacons : [];
+                if (safeBeacons.length === 0) return null;
+                const active = safeBeacons[0];
+                return (
+                    <div style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        zIndex: 9999,
+                        background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                        color: '#fff',
+                        padding: '12px 20px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '10px',
+                        boxShadow: '0 4px 20px rgba(239,68,68,0.5)'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '1.4rem', animation: 'pulse 1s infinite' }}>🚨</span>
+                            <div>
+                                <div style={{ fontWeight: 900, fontSize: '0.9rem', letterSpacing: '0.5px' }}>
+                                    ¡ALERTA SOS DE AUXILIO ACTIVA! ({safeBeacons.length})
+                                </div>
+                                <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>
+                                    {active.sender_name || 'Operador'}: {active.note || 'Auxilio'}
+                                    {active.lat !== 0 && ` · GPS: ${active.lat}, ${active.lon}`}
+                                </div>
                             </div>
                         </div>
+                        <button
+                            onClick={() => handleResolve(active.id)}
+                            style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
+                        >
+                            ✓ Marcar a Salvo
+                        </button>
                     </div>
-                    <button
-                        onClick={() => handleResolve(beacons[0].id)}
-                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
-                    >
-                        ✓ Marcar a Salvo
-                    </button>
-                </div>
-            )}
+                );
+            })()}
 
             {/* FULLSCREEN SOS TRIGGER MODAL */}
             {isTriggering && (
