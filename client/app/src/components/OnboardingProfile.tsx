@@ -15,16 +15,12 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!displayName.trim()) return;
+        const cleanName = displayName.trim();
+        if (!cleanName) return;
 
         setSaving(true);
         try {
-            // Send profile to Rust node
-            await fetch("http://127.0.0.1:7333/api/profile", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ display_name: displayName.trim() })
-            });
+            await useRedStore.getState().setProfile(cleanName);
         } catch (e) {
             console.warn("Profile save failed:", e);
         }

@@ -58,6 +58,7 @@ interface RedStore {
     archivedChatIds: string[];
     togglePinChat: (id: string) => void;
     toggleArchiveChat: (id: string) => void;
+    setProfile: (nickname: string) => Promise<void>;
 }
 
 export const useRedStore = create<RedStore>((set, get) => ({
@@ -177,6 +178,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 // Web Browser Platform (GitHub Pages SPA)
                 let localHash = typeof window !== 'undefined' ? localStorage.getItem("red_identity_hash") : null;
                 let shortId = typeof window !== 'undefined' ? localStorage.getItem("red_short_id") : null;
+                const savedNick = typeof window !== 'undefined' ? (localStorage.getItem("red_displayName") || localStorage.getItem("user_nickname")) : null;
                 if (!localHash || !shortId) {
                     const randomBytes = new Uint8Array(32);
                     if (typeof window !== 'undefined' && window.crypto) {
@@ -190,7 +192,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     }
                 }
                 set({
-                    identity: { identity_hash: localHash, short_id: shortId, public_key: localHash },
+                    identity: { identity_hash: localHash, short_id: shortId, public_key: localHash, nickname: savedNick || 'Operador RED' },
                     status: { is_running: true, peer_count: 0, identity_hash: localHash, version: "24.1.0-web", chain_height: 1 },
                     nodeOnline: true,
                     isAuthenticated: true
@@ -202,6 +204,27 @@ export const useRedStore = create<RedStore>((set, get) => ({
             set({ isAuthenticated: true, nodeOnline: true });
             return true;
         }
+    },
+
+    setProfile: async (nickname: string) => {
+        const cleanName = nickname.trim();
+        if (!cleanName) return;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_displayName', cleanName);
+        }
+        const currentIdentity = get().identity;
+        if (currentIdentity) {
+            set({ identity: { ...currentIdentity, nickname: cleanName } });
+        } else {
+            set({
+                identity: {
+                    identity_hash: 'local_' + Math.random().toString(36).substring(2, 10),
+                    short_id: cleanName.substring(0, 8).toLowerCase(),
+                    nickname: cleanName
+                }
+            });
+        }
+        RedAPI.setProfile(cleanName).catch(() => {});
     },
 
     initNodeConnection: async () => {
@@ -216,6 +239,13 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     RedAPI.getIdentity(),
                     RedAPI.getStatus(),
                 ]);
+
+                const savedNick = typeof window !== 'undefined' ? localStorage.getItem("red_displayName") : null;
+                const finalIdentity = {
+                    ...identity,
+                    nickname: savedNick || identity.nickname || 'Operador RED'
+                };
+                set({ identity: finalIdentity, status, nodeOnline: true });
 
                 // ROOT-CAUSE FIX: The Axum server responds to /identity and /status
                 // BEFORE the node finishes PoW. The /status endpoint returns

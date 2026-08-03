@@ -69,6 +69,8 @@ export default function Sidebar() {
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [pullRefreshing, setPullRefreshing] = useState(false);
+    const [showEditNickModal, setShowEditNickModal] = useState(false);
+    const [nickInput, setNickInput] = useState('');
     const searchRef = useRef<HTMLInputElement>(null);
     const pullStartY = useRef<number>(0);
     const listRef = useRef<HTMLDivElement>(null);
@@ -223,69 +225,85 @@ export default function Sidebar() {
                 ) : (
                     <>
                         {/* Left: Logo + identity */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ position: 'relative', flexShrink: 0 }}>
-                                <div style={{
-                                    width: 44, height: 44, borderRadius: '14px',
-                                    background: 'linear-gradient(145deg, #E8213A, #C0152A)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontWeight: 900, fontSize: '1.2rem', color: 'white', letterSpacing: '-1px',
-                                    boxShadow: '0 4px 18px rgba(232,33,58,0.5)',
-                                    position: 'relative', overflow: 'hidden',
-                                }}>
-                                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(145deg, rgba(255,255,255,0.2) 0%, transparent 60%)' }} />
-                                    <span style={{ position: 'relative' }}>R</span>
+                        {(() => {
+                            const userNick = identity?.nickname || (typeof window !== 'undefined' ? localStorage.getItem('red_displayName') : '') || 'Operador RED';
+                            const initialChar = (userNick.trim().charAt(0) || 'R').toUpperCase();
+                            return (
+                                <div 
+                                    onClick={() => {
+                                        setNickInput(userNick);
+                                        setShowEditNickModal(true);
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                                    title="Haz clic para cambiar tu alias táctico P2P"
+                                >
+                                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                                        <div style={{
+                                            width: 44, height: 44, borderRadius: '14px',
+                                            background: 'linear-gradient(145deg, #E8213A, #C0152A)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontWeight: 900, fontSize: '1.2rem', color: 'white', letterSpacing: '-1px',
+                                            boxShadow: '0 4px 18px rgba(232,33,58,0.5)',
+                                            position: 'relative', overflow: 'hidden',
+                                        }}>
+                                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(145deg, rgba(255,255,255,0.2) 0%, transparent 60%)' }} />
+                                            <span style={{ position: 'relative' }}>{initialChar}</span>
+                                        </div>
+                                        <div style={{
+                                            position: 'absolute', bottom: -2, right: -2,
+                                            width: 13, height: 13, borderRadius: '50%',
+                                            background: nodeOnline ? '#00D97E' : '#555',
+                                            border: '2.5px solid var(--bg-deep)',
+                                            boxShadow: nodeOnline ? '0 0 7px #00D97E' : 'none',
+                                            transition: 'all 0.4s ease',
+                                        }} />
+                                    </div>
+                                    <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                                                {userNick}
+                                            </span>
+                                            <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>✏️</span>
+                                        </div>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', gap: '6px',
+                                            fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.5px',
+                                            color: nodeOnline ? '#00D97E' : 'var(--text-muted)',
+                                            fontFamily: 'JetBrains Mono, monospace',
+                                            marginTop: '1px',
+                                        }}>
+                                            {nodeOnline ? (identity?.short_id || 'ONLINE') : 'OFFLINE'}
+                                            {nodeOnline && identity?.identity_hash && (
+                                                <button 
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        try {
+                                                            await Clipboard.write({ string: identity.identity_hash });
+                                                            toast.success("✅ Hash de identidad copiado.");
+                                                        } catch (err) {
+                                                            try {
+                                                                await navigator.clipboard.writeText(identity.identity_hash);
+                                                                toast.success("✅ Hash copiado al portapapeles.");
+                                                            } catch {
+                                                                toast.error("❌ No se pudo copiar.");
+                                                            }
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        background: 'rgba(255,255,255,0.06)', border: 'none',
+                                                        borderRadius: '4px', padding: '1px 4px', cursor: 'pointer',
+                                                        color: 'inherit', fontSize: '0.6rem'
+                                                    }}
+                                                    title="Copiar Hash"
+                                                >
+                                                    📋
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div style={{
-                                    position: 'absolute', bottom: -2, right: -2,
-                                    width: 13, height: 13, borderRadius: '50%',
-                                    background: nodeOnline ? '#00D97E' : '#555',
-                                    border: '2.5px solid var(--bg-deep)',
-                                    boxShadow: nodeOnline ? '0 0 7px #00D97E' : 'none',
-                                    transition: 'all 0.4s ease',
-                                }} />
-                            </div>
-                            <div>
-                                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
-                                    {identity?.nickname || 'RED'}
-                                </div>
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                    fontSize: '0.68rem', fontWeight: 600, letterSpacing: '0.5px',
-                                    color: nodeOnline ? '#00D97E' : 'var(--text-muted)',
-                                    fontFamily: 'JetBrains Mono, monospace',
-                                    marginTop: '1px',
-                                }}>
-                                    {nodeOnline ? (identity?.short_id || 'ONLINE') : 'OFFLINE'}
-                                    {nodeOnline && identity?.identity_hash && (
-                                        <button 
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                try {
-                                                    await Clipboard.write({ string: identity.identity_hash });
-                                                    toast.success("✅ Hash de identidad copiado.");
-                                                } catch (err) {
-                                                    try {
-                                                        await navigator.clipboard.writeText(identity.identity_hash);
-                                                        toast.success("✅ Hash copiado al portapapeles.");
-                                                    } catch {
-                                                        toast.error("❌ No se pudo copiar.");
-                                                    }
-                                                }
-                                            }}
-                                            style={{
-                                                background: 'rgba(255,255,255,0.06)', border: 'none',
-                                                borderRadius: '4px', padding: '1px 4px', cursor: 'pointer',
-                                                color: 'inherit', fontSize: '0.6rem'
-                                            }}
-                                            title="Copiar Hash"
-                                        >
-                                            📋
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                            );
+                        })()}
 
                         {/* Right: Action buttons */}
                         <div style={{ display: 'flex', gap: '4px' }}>
@@ -684,6 +702,60 @@ export default function Sidebar() {
             {/* Global Search Modal */}
             {globalSearchOpen && (
                 <GlobalSearchModal onClose={() => setGlobalSearchOpen(false)} />
+            )}
+
+            {/* Editable Nickname Modal */}
+            {showEditNickModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div style={{ width: '100%', maxWidth: '380px', background: 'linear-gradient(180deg, #181826, #0e0e18)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '24px', padding: '24px', color: 'white', boxShadow: '0 12px 48px rgba(0,0,0,0.7)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '1.4rem' }}>✏️</span>
+                            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>Alias Táctico P2P</h3>
+                        </div>
+                        <p style={{ margin: '0 0 18px', fontSize: '0.84rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            Configura tu nombre o apodo visible en la red P2P RED. Este alias se comparte de forma cifrada con tus contactos.
+                        </p>
+                        <input
+                            type="text"
+                            value={nickInput}
+                            onChange={e => setNickInput(e.target.value)}
+                            placeholder="Escribe tu alias (ej. Darck, Alfa-1)"
+                            style={{
+                                width: '100%', padding: '14px 16px', borderRadius: '14px',
+                                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.2)',
+                                color: 'white', fontSize: '1.05rem', outline: 'none', marginBottom: '22px'
+                            }}
+                            autoFocus
+                            onKeyDown={async (e) => {
+                                if (e.key === 'Enter' && nickInput.trim()) {
+                                    await useRedStore.getState().setProfile(nickInput.trim());
+                                    toast.success("✅ Alias táctico actualizado");
+                                    setShowEditNickModal(false);
+                                }
+                            }}
+                        />
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button
+                                onClick={() => setShowEditNickModal(false)}
+                                style={{ padding: '11px 20px', borderRadius: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'white', cursor: 'pointer', fontWeight: 600 }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (nickInput.trim()) {
+                                        await useRedStore.getState().setProfile(nickInput.trim());
+                                        toast.success("✅ Alias táctico actualizado");
+                                    }
+                                    setShowEditNickModal(false);
+                                }}
+                                style={{ padding: '11px 22px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), #C0152A)', border: 'none', color: 'white', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 16px rgba(232,33,58,0.4)' }}
+                            >
+                                Guardar Alias
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </aside>
     );
