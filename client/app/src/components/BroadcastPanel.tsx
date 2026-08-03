@@ -4,7 +4,8 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 
 export default function BroadcastPanel() {
-    const { contacts, sendMessage: _sendMessage, goBack } = useRedStore();
+    const { contacts: rawContacts, sendMessage: _sendMessage, goBack } = useRedStore();
+    const contacts = Array.isArray(rawContacts) ? rawContacts : [];
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [message, setMessage] = useState("");
     const [status, setStatus] = useState<'idle' | 'sending' | 'done'>('idle');

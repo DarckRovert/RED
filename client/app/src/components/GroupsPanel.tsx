@@ -6,7 +6,9 @@ import { RedAPI } from "../lib/api";
 import { GroupAdminModal } from "./GroupAdminModal";
 
 export default function GroupsPanel() {
-    const { contacts, groups, goBack, navigate, fetchData } = useRedStore();
+    const { contacts: rawContacts, groups: rawGroups, goBack, navigate, fetchData } = useRedStore();
+    const contacts = Array.isArray(rawContacts) ? rawContacts : [];
+    const groups = Array.isArray(rawGroups) ? rawGroups : [];
     const [groupName, setGroupName] = useState("");
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [creationStatus, setCreationStatus] = useState("");
