@@ -75,19 +75,32 @@ export const useRedStore = create<RedStore>((set, get) => ({
     typingTimeout: null,
 
     // Advanced Chat Management (v8.0)
-    pinnedChatIds: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('red_pinned_chats') || '[]') : [],
-    archivedChatIds: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('red_archived_chats') || '[]') : [],
+    pinnedChatIds: typeof window !== 'undefined' ? (() => {
+        try {
+            const raw = localStorage.getItem('red_pinned_chats');
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
+    })() : [],
+
+    archivedChatIds: typeof window !== 'undefined' ? (() => {
+        try {
+            const raw = localStorage.getItem('red_archived_chats');
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch { return []; }
+    })() : [],
 
     togglePinChat: (id: string) => {
-        const { pinnedChatIds } = get();
-        const next = pinnedChatIds.includes(id) ? pinnedChatIds.filter(x => x !== id) : [...pinnedChatIds, id];
+        const current = Array.isArray(get().pinnedChatIds) ? get().pinnedChatIds : [];
+        const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
         if (typeof window !== 'undefined') localStorage.setItem('red_pinned_chats', JSON.stringify(next));
         set({ pinnedChatIds: next });
     },
 
     toggleArchiveChat: (id: string) => {
-        const { archivedChatIds } = get();
-        const next = archivedChatIds.includes(id) ? archivedChatIds.filter(x => x !== id) : [...archivedChatIds, id];
+        const current = Array.isArray(get().archivedChatIds) ? get().archivedChatIds : [];
+        const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
         if (typeof window !== 'undefined') localStorage.setItem('red_archived_chats', JSON.stringify(next));
         set({ archivedChatIds: next });
     },
@@ -100,8 +113,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
     navigate: (screen: ScreenView, contextId?: string) => {
         if (screen === 'chat' && contextId) {
             // FIX A2: Convert full 64-char peer hash to short-short conversation ID
-            const { conversations, identity } = get();
-            const existingConv = conversations.find(c => c.peer === contextId);
+            const conversations = Array.isArray(get().conversations) ? get().conversations : [];
+            const identity = get().identity;
+            const existingConv = conversations.find(c => c && c.peer === contextId);
             
             let finalId = contextId;
             if (existingConv) {
@@ -111,13 +125,13 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }
 
             set({ currentScreen: screen, activeConversationId: finalId, messages: [] });
-            RedAPI.getMessages(finalId).then(msgs => set({ messages: msgs })).catch(() => {});
+            RedAPI.getMessages(finalId).then(msgs => set({ messages: Array.isArray(msgs) ? msgs : [] })).catch(() => set({ messages: [] }));
 
             // Load starred messages for this conversation from localStorage
             try {
                 const raw = localStorage.getItem(`red_starred_${finalId}`);
-                if (raw) set({ starredMessages: JSON.parse(raw) });
-                else set({ starredMessages: [] });
+                const parsed = raw ? JSON.parse(raw) : [];
+                set({ starredMessages: Array.isArray(parsed) ? parsed : [] });
             } catch { set({ starredMessages: [] }); }
 
             // FASE 1.4: Clear unread badge locally AND notify Rust so the
@@ -307,12 +321,20 @@ export const useRedStore = create<RedStore>((set, get) => ({
     },
 
     fetchData: async () => {
-        const [convs, conts, grps] = await Promise.all([
-            RedAPI.getConversations(),
-            RedAPI.getContacts(),
-            RedAPI.getGroups()
-        ]);
-        set({ conversations: convs, contacts: conts, groups: grps });
+        try {
+            const [convs, conts, grps] = await Promise.all([
+                RedAPI.getConversations(),
+                RedAPI.getContacts(),
+                RedAPI.getGroups()
+            ]);
+            set({
+                conversations: Array.isArray(convs) ? convs : [],
+                contacts: Array.isArray(conts) ? conts : [],
+                groups: Array.isArray(grps) ? grps : []
+            });
+        } catch {
+            set({ conversations: [], contacts: [], groups: [] });
+        }
     },
 
     sendMessage: async (content: string, options?: Record<string, any>) => {

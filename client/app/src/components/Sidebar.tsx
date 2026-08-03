@@ -39,20 +39,28 @@ function formatTime(ts?: number): string {
 
 export default function Sidebar() {
     const { 
-        identity, conversations, contacts, groups, nodeOnline, navigate, status, fetchData,
-        pinnedChatIds, archivedChatIds, togglePinChat, toggleArchiveChat 
+        identity, conversations: rawConvs, contacts: rawConts, groups: rawGrps, nodeOnline, navigate, status, fetchData,
+        pinnedChatIds: rawPinned, archivedChatIds: rawArchived, togglePinChat, toggleArchiveChat 
     } = useRedStore();
 
+    const conversations = Array.isArray(rawConvs) ? rawConvs : [];
+    const contacts = Array.isArray(rawConts) ? rawConts : [];
+    const groups = Array.isArray(rawGrps) ? rawGrps : [];
+    const pinnedChatIds = Array.isArray(rawPinned) ? rawPinned : [];
+    const archivedChatIds = Array.isArray(rawArchived) ? rawArchived : [];
+
     function resolvePeerName(peerHash: string): string {
+        if (!peerHash) return 'Contacto P2P';
         // Check groups first
-        const g = (groups as any[]).find((g: any) => g.id === peerHash);
+        const g = groups.find((g: any) => g && g.id === peerHash);
         if (g) return g.name || `Grupo ${peerHash.substring(0, 6)}…`;
-        const c = contacts.find((c: any) => c.identity_hash === peerHash);
+        const c = contacts.find((c: any) => c && c.identity_hash === peerHash);
         return c?.display_name || `${peerHash.substring(0, 8)}…`;
     }
 
     function isGroupPeer(peerHash: string): boolean {
-        return (groups as any[]).some((g: any) => g.id === peerHash);
+        if (!peerHash) return false;
+        return groups.some((g: any) => g && g.id === peerHash);
     }
 
     const [activeTab, setActiveTab] = useState<'chats' | 'contacts'>('chats');
@@ -78,15 +86,15 @@ export default function Sidebar() {
         }
     };
 
-    const filteredConvs = (conversations || []).filter(c =>
-        resolvePeerName(c?.peer || '').toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredConvs = conversations.filter(c =>
+        c && resolvePeerName(c.peer || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
-    const filteredContacts = (contacts || []).filter((c: any) =>
-        (c?.display_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (c?.identity_hash || '').toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredContacts = contacts.filter((c: any) =>
+        c && ((c.display_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.identity_hash || '').toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
-    const totalUnread = conversations.reduce((sum, c) => sum + (c.unread_count || 0), 0);
+    const totalUnread = conversations.reduce((sum, c) => sum + (c?.unread_count || 0), 0);
 
     const quickActions = [
         { icon: '📢', label: 'Difusión',  action: 'broadcast', color: '#E8213A' },

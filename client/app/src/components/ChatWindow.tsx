@@ -668,8 +668,8 @@ export default function ChatWindow() {
                         borderRadius:'24px 24px 0 0', border:'1px solid rgba(255,255,255,0.08)', borderBottom:'none', overflowY:'auto' }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ fontWeight:800, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>➡️ Reenviar a…</div>
-                        {[...contacts.map((c:any) => ({ name: c.display_name, hash: c.identity_hash, isGroup: false })),
-                          ...(groups as any[]).map((g:any) => ({ name: g.name, hash: g.id, isGroup: true }))]
+                        {[...(Array.isArray(contacts) ? contacts : []).map((c:any) => ({ name: c.display_name, hash: c.identity_hash, isGroup: false })),
+                          ...(Array.isArray(groups) ? groups : []).map((g:any) => ({ name: g.name, hash: g.id, isGroup: true }))]
                           .map(item => (
                             <button key={item.hash} onClick={() => handleForward(item.hash)}
                                 style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(255,255,255,0.04)',
