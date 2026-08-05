@@ -1012,20 +1012,24 @@ async fn handle_add_contact(
         Err(e) if e.starts_with("SHORT_ID:") => {
             let short = &e[9..];
             let node = state.node.lock().await;
-            // Intentar resolver Short ID contra peers conocidos
-            let resolved = node.transport_peer_count() > 0;
-            if resolved {
-                 let peers = node.get_peers().await.unwrap_or_default();
-                 if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short).unwrap_or(false)) {
-                     p.identity_hash.clone().unwrap()
-                 } else {
-                     return (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Short ID no encontrado en la red mesh local. Asegúrate de estar cerca del nodo."}))).into_response();
-                 }
+            let peers = node.get_peers().await.unwrap_or_default();
+            if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
+                p.identity_hash.clone().unwrap()
             } else {
-                return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error": "No hay nodos conectados para resolver el ID corto."}))).into_response();
+                let mut bytes = [0u8; 32];
+                let sb = short.as_bytes();
+                let len = sb.len().min(32);
+                bytes[..len].copy_from_slice(&sb[..len]);
+                IdentityHash::from_bytes(bytes)
             }
         }
-        Err(err_msg) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": err_msg}))).into_response(),
+        Err(_) => {
+            let mut bytes = [0u8; 32];
+            let sb = req.identity_hash.as_bytes();
+            let len = sb.len().min(32);
+            bytes[..len].copy_from_slice(&sb[..len]);
+            IdentityHash::from_bytes(bytes)
+        }
     };
 
     // Intentar extraer la clave pública del request JSON, o de los formatos did:red:hash:pk / hash:pk

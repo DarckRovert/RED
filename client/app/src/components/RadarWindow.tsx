@@ -313,8 +313,8 @@ export default function RadarWindow() {
                                     <button
                                         onClick={async () => {
                                             try {
-                                                const peerShort = peer.name.replace('RED-', '');
-                                                await addContact(peerShort, peer.name);
+                                                const peerTarget = peer.id || peer.name.replace('RED-', '');
+                                                await addContact(peerTarget, peer.name);
                                                 toast.success(`🤝 Vinculación directa enviada a ${peer.name}`);
                                             } catch (e) {
                                                 const msg = e instanceof Error ? e.message : String(e);
