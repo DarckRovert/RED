@@ -184,19 +184,24 @@ export default function AppRouter() {
     return () => { cleanupFn?.(); };
   }, []);
 
-  // SSR Hydration Fix: No renderizar nada del lado del servidor
-  if (!mounted || needsProfile === null) return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
+  // SSR Hydration Fix: No renderizar nada del lado del servidor si no está montado
+  if (!mounted) return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
 
+  // RENDERIZADO INMEDIATO DE LA LANDING PAGE EN WEB — Sin depender del backend en Rust ni de needsProfile
   if (showLanding) {
     return (
       <RedShowcaseLanding
         onEnterApp={() => {
-          localStorage.setItem("enter_app_direct", "true");
+          if (typeof window !== 'undefined') {
+            localStorage.setItem("enter_app_direct", "true");
+          }
           setShowLanding(false);
         }}
       />
     );
   }
+
+  if (needsProfile === null) return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
 
   const renderScreen = () => {
     switch (currentScreen) {
