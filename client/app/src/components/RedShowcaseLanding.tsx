@@ -83,7 +83,11 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
   const testGuardian = (text: string) => {
     if (!text.trim()) return;
     const lower = text.toLowerCase();
-    const isBad = lower.includes('vender') || lower.includes('abuso') || lower.includes('cp_link');
+    const csamTriggers = [
+      'porno', 'infantil', 'pedof', 'grooming', 'abuso', 'cp_link', 'explotacion',
+      'explotación', 'child abuse', 'csam', 'vender', 'droga', 'armas'
+    ];
+    const isBad = csamTriggers.some(pat => lower.includes(pat));
 
     if (isBad) {
       setGuardianVerdict({
@@ -654,6 +658,29 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
                   outline: 'none',
                 }}
               />
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <button
+                  onClick={() => {
+                    const txt = 'Hola equipo RED, la reunión de coordinación de la red malla será hoy a las 5 PM.';
+                    setGuardianInput(txt);
+                    testGuardian(txt);
+                  }}
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(0,217,126,0.15)', color: '#00D97E', border: '1px solid rgba(0,217,126,0.3)', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  🟢 Probar Mensaje Seguro
+                </button>
+                <button
+                  onClick={() => {
+                    const txt = 'tengo porno infantil para vender por privado';
+                    setGuardianInput(txt);
+                    testGuardian(txt);
+                  }}
+                  style={{ flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  🔴 Probar Mensaje Sospechoso / CSAM
+                </button>
+              </div>
+
               <button
                 onClick={() => testGuardian(guardianInput)}
                 style={{

@@ -214,21 +214,22 @@ impl GuardianEngine {
         let msg_lower = current_msg.to_lowercase();
 
         // 1. Detección de patrones de explotación o abuso severo (S4 / CSAM / Tráfico)
-        let csam_patterns = [
-            "child",
-            "niño",
+        let csam_direct_patterns = [
+            "porno infantil",
+            "pornografia infantil",
+            "pornografía infantil",
+            "cp_link",
             "pedof",
             "grooming",
             "abuso infantil",
-            "cp_link",
+            "explotacion infantil",
+            "explotación infantil",
+            "child abuse",
+            "csam",
+            "child porn",
         ];
-        for pat in csam_patterns {
-            if msg_lower.contains(pat)
-                && (msg_lower.contains("link")
-                    || msg_lower.contains("send")
-                    || msg_lower.contains("vender")
-                    || msg_lower.contains("foto"))
-            {
+        for pat in csam_direct_patterns {
+            if msg_lower.contains(pat) {
                 return Some(GuardianVerdict::Block {
                     category: "child_exploitation_local".to_string(),
                     reason: "Contenido bloqueado por el filtro local de protección infantil"

@@ -81,14 +81,23 @@ impl GuardianEngine {
 
         let msg_lower = content.to_lowercase();
 
-        // Detección CSAM / explotación infantil
-        let csam_patterns = ["pedof", "grooming", "abuso infantil", "cp_link"];
-        for pat in csam_patterns {
-            if msg_lower.contains(pat)
-                && (msg_lower.contains("link")
-                    || msg_lower.contains("send")
-                    || msg_lower.contains("foto"))
-            {
+        // Detección CSAM / explotación infantil / pornografía infantil
+        let csam_direct_patterns = [
+            "porno infantil",
+            "pornografia infantil",
+            "pornografía infantil",
+            "cp_link",
+            "pedof",
+            "grooming",
+            "abuso infantil",
+            "explotacion infantil",
+            "explotación infantil",
+            "child abuse",
+            "csam",
+            "child porn",
+        ];
+        for pat in csam_direct_patterns {
+            if msg_lower.contains(pat) {
                 if let Some(mut st) = self.stats.lock().ok() {
                     st.messages_blocked += 1;
                 }
