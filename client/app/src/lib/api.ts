@@ -1366,3 +1366,6 @@ export async function translateTextAI(text: string, targetLanguage: string): Pro
         };
     });
 }
+
+
+
