@@ -92,7 +92,7 @@ export default function Sidebar() {
     };
 
     const filteredConvs = conversations.filter(c =>
-        c && resolvePeerName(c.peer || '').toLowerCase().includes(searchQuery.toLowerCase())
+        c && c.peer && !c.peer.startsWith('00000000') && resolvePeerName(c.peer || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
     const filteredContacts = contacts.filter((c: any) =>
         c && ((c.display_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -347,12 +347,28 @@ export default function Sidebar() {
                                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                                 </svg>
                             </button>
-                            <button className="btn-icon" onClick={() => setMenuOpen(true)} style={{ position: 'relative' }}>
-                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="5" r="1.3" fill="currentColor"/>
-                                    <circle cx="12" cy="12" r="1.3" fill="currentColor"/>
-                                    <circle cx="12" cy="19" r="1.3" fill="currentColor"/>
-                                </svg>
+                            <button
+                                onClick={() => setMenuOpen(true)}
+                                title="Abrir Menú de Módulos RED"
+                                style={{
+                                    background: 'linear-gradient(135deg, rgba(232,33,58,0.25), rgba(99,179,237,0.2))',
+                                    border: '1px solid rgba(232,33,58,0.45)',
+                                    borderRadius: '12px',
+                                    color: 'white',
+                                    padding: '6px 10px',
+                                    fontSize: '0.78rem',
+                                    fontWeight: 800,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '5px',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 2px 12px rgba(232,33,58,0.3)',
+                                    transition: 'all 0.2s ease',
+                                }}
+                                onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                            >
+                                ⚡ Módulos
                             </button>
                         </div>
                     </>
