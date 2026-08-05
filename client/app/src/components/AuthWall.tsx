@@ -64,53 +64,72 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
+        let isMounted = true;
+
+        const safetyTimer = setTimeout(() => {
+            if (isMounted) {
+                console.warn("[AuthWall] Keystore/Biometrics init timed out, forcing PIN screen load");
+                setMode(prev => prev === "checking" ? "onboarding" : prev);
+                setIsLoaded(true);
+            }
+        }, 500);
+
         const init = async () => {
-            // Check calculator disguise mode (ok in localStorage — cosmetic only)
-            setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
-
-            // Check if user has already set a master PIN
-            const masterPin = await getSecurePin("master_pin");
-            if (masterPin) {
-                setMode("unlock");
-            } else {
-                setMode("onboarding");
-            }
-
             try {
-                const info = await BiometricAuth.checkBiometry();
-                setBiometryAvailable(info.isAvailable);
-                
-                // Auto-trigger biometrics if returning user
-                if (masterPin && info.isAvailable && !disguiseEnabled) {
-                    try {
-                        await BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
-                        // If success, just login right away!
-                        setMode("unlock");
-                        setIsLoaded(true);
-                        // Using internal function but since it's an effect, we rely on the state to update
-                        // Actually better to do the login directly here to avoid flashes
-                        const panicPin = await getSecurePin("panic_pin");
-                        const decoyPin = await getSecurePin("decoy_pin");
-                        if (masterPin === decoyPin) {
-                            // GAP-12 FIX: pass the real decoyPin so Rust derives the correct storage key
-                            login(decoyPin);
-                        } else {
-                            login(masterPin);
-                        }
-                        return; // do not even render the form
-                    } catch (e) {
-                        // User cancelled or failed biometric -> Show PIN fallback
-                        console.log("Biometric bypassed or failed, falling back to PIN");
-                    }
-                }
-            } catch {
-                setBiometryAvailable(false);
-            }
+                setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
 
-            // Important for Next.js SSR / hydration
-            setIsLoaded(true);
+                const pinPromise = getSecurePin("master_pin");
+                const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 300));
+                const masterPin = await Promise.race([pinPromise, timeoutPromise]);
+
+                if (!isMounted) return;
+
+                if (masterPin) {
+                    setMode("unlock");
+                } else {
+                    setMode("onboarding");
+                }
+
+                try {
+                    const bioPromise = BiometricAuth.checkBiometry();
+                    const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 300));
+                    const info = await Promise.race([bioPromise, bioTimeout]);
+                    if (isMounted) setBiometryAvailable(info.isAvailable);
+
+                    if (masterPin && info.isAvailable && localStorage.getItem("red_disguise_mode") !== "true") {
+                        try {
+                            await BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
+                            if (!isMounted) return;
+                            setMode("unlock");
+                            setIsLoaded(true);
+                            const panicPin = await getSecurePin("panic_pin");
+                            const decoyPin = await getSecurePin("decoy_pin");
+                            if (masterPin === decoyPin) {
+                                login(decoyPin);
+                            } else {
+                                login(masterPin);
+                            }
+                            return;
+                        } catch {
+                            console.log("Biometric bypassed or failed, falling back to PIN");
+                        }
+                    }
+                } catch {
+                    if (isMounted) setBiometryAvailable(false);
+                }
+            } catch (e) {
+                console.error("[AuthWall] Init error:", e);
+            } finally {
+                clearTimeout(safetyTimer);
+                if (isMounted) setIsLoaded(true);
+            }
         };
+
         init();
+        return () => {
+            isMounted = false;
+            clearTimeout(safetyTimer);
+        };
     }, []);
 
     const doLogin = useCallback(async (pwd: string) => {
