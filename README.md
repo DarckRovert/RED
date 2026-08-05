@@ -219,9 +219,9 @@ D:\PROYECTO RED
 
 ## 📄 Índice de Documentación Técnica
 
-- 📖 [Manual del Usuario](file:///d:/PROYECTO%20RED/USER_MANUAL.md) — Guía práctica paso a paso.
-- 🏗️ [Arquitectura del Sistema](file:///d:/PROYECTO%20RED/docs/ARCHITECTURE.md) — Diagrama de componentes y flujos nativos.
-- 📜 [Especificación de Protocolos](file:///d:/PROYECTO%20RED/docs/PROTOCOL_SPECIFICATION.md) — Detalles del protocolo criptográfico Ω.
-- 🛜 [Conectividad Offline](file:///d:/PROYECTO%20RED/docs/OFFLINE_CONNECTIVITY.md) — Especificación de BLE, WiFi Direct y LoRa.
-- 📐 [Especificación Matemática](file:///d:/PROYECTO%20RED/docs/MATHEMATICAL_SPECIFICATION.md) — Modelo matemático de la red.
-- 📱 [Pruebas Móviles en Hardware Real](file:///d:/PROYECTO%20RED/docs/MOBILE_TESTING.md) — Banco de pruebas ADB.
+- 📖 [Manual del Usuario](./USER_MANUAL.md) — Guía práctica paso a paso.
+- 🏗️ [Arquitectura del Sistema](./docs/ARCHITECTURE.md) — Diagrama de componentes y flujos nativos.
+- 📜 [Especificación de Protocolos](./docs/PROTOCOL_SPECIFICATION.md) — Detalles del protocolo criptográfico Ω.
+- 🛜 [Conectividad Offline](./docs/OFFLINE_CONNECTIVITY.md) — Especificación de BLE, WiFi Direct y LoRa.
+- 📐 [Especificación Matemática](./docs/MATHEMATICAL_SPECIFICATION.md) — Modelo matemático de la red.
+- 📱 [Pruebas Móviles en Hardware Real](./docs/MOBILE_TESTING.md) — Banco de pruebas ADB.
