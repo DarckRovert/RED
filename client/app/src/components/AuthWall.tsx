@@ -196,6 +196,8 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         e.preventDefault();
 
         const masterPin = await getSecurePin("master_pin");
+        const panicPin = await getSecurePin("panic_pin");
+        const decoyPin = await getSecurePin("decoy_pin");
 
         // No PIN in Keystore — reset to onboarding (e.g. user cleared app data)
         if (!masterPin) {
@@ -205,7 +207,18 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // Pass the raw PIN to doLogin to handle panic/decoy/master checks
+        // Validate typed PIN against valid PINs (Master, Decoy, or Panic)
+        const isMaster = pin === masterPin;
+        const isDecoy = decoyPin ? pin === decoyPin : false;
+        const isPanic = panicPin ? pin === panicPin : false;
+
+        if (!isMaster && !isDecoy && !isPanic) {
+            setError("PIN incorrecto. Inténtalo de nuevo.");
+            setPin("");
+            return;
+        }
+
+        // Pass the verified PIN to doLogin
         await doLogin(pin);
     };
 
