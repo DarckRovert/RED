@@ -12,9 +12,10 @@ export const ProximityWaveModal: React.FC = () => {
     const loadProximity = async () => {
         try {
             const list = await getProximityNodes();
-            setNodes(list);
+            setNodes(Array.isArray(list) ? list : []);
         } catch (e) {
             console.error('Proximity error:', e);
+            setNodes([]);
         }
     };
 

@@ -29,9 +29,9 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
   const fetchAlerts = useCallback(async () => {
     try {
       const data = await getAmberAlerts();
-      setAlerts(data);
+      setAlerts(Array.isArray(data) ? data : []);
     } catch {
-      // Fail silently — no interrumpir la UX si el nodo no responde
+      setAlerts([]);
     }
   }, []);
 

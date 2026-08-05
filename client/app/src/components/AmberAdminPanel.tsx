@@ -44,9 +44,10 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
     setLoading(true);
     try {
       const data = await getAmberAlerts();
-      setAlerts(data);
+      setAlerts(Array.isArray(data) ? data : []);
     } catch (e: any) {
       setError('No se pudo cargar las alertas.');
+      setAlerts([]);
     } finally {
       setLoading(false);
     }
@@ -217,19 +218,34 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                         )}
                       </div>
                     </div>
-                    <div className="amber-alert-card-footer">
-                      <div className="amber-alert-card-stats">
-                        <span>👁 {alert.sighting_count} avistamientos</span>
-                        <span>⏳ Expira: {new Date(alert.expires_at * 1000).toLocaleDateString('es-MX')}</span>
+                      <div className="amber-alert-card-footer">
+                        <div className="amber-alert-card-stats">
+                          <span>👁 {alert.sighting_count ?? 0} avistamientos</span>
+                          <span>
+                            ⏳ Expira: {(() => {
+                              if (!alert.expires_at) return 'Indefinido';
+                              const num = typeof alert.expires_at === 'string' ? Number(alert.expires_at) : alert.expires_at;
+                              if (!isNaN(num) && num > 0) {
+                                const ms = num < 100000000000 ? num * 1000 : num;
+                                const d = new Date(ms);
+                                if (!isNaN(d.getTime())) return d.toLocaleDateString('es-MX');
+                              }
+                              if (typeof alert.expires_at === 'string') {
+                                const d = new Date(alert.expires_at);
+                                if (!isNaN(d.getTime())) return d.toLocaleDateString('es-MX');
+                              }
+                              return 'Indefinido';
+                            })()}
+                          </span>
+                        </div>
+                        <button
+                          className="amber-admin-btn amber-admin-btn--resolve"
+                          onClick={() => handleResolve(alert.id)}
+                          id={`amber-resolve-btn-${alert.id}`}
+                        >
+                          ✅ Persona Encontrada
+                        </button>
                       </div>
-                      <button
-                        className="amber-admin-btn amber-admin-btn--resolve"
-                        onClick={() => handleResolve(alert.id)}
-                        id={`amber-resolve-btn-${alert.id}`}
-                      >
-                        ✅ Persona Encontrada
-                      </button>
-                    </div>
                   </div>
                 ))}
               </div>

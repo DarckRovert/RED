@@ -305,7 +305,8 @@ public class RedNodeService extends Service {
         public void onCharacteristicWriteRequest(BluetoothDevice device, int requestId, BluetoothGattCharacteristic characteristic, boolean preparedWrite, boolean responseNeeded, int offset, byte[] value) {
             super.onCharacteristicWriteRequest(device, requestId, characteristic, preparedWrite, responseNeeded, offset, value);
             
-            if (RED_BLE_TX_CHAR_UUID.equals(characteristic.getUuid().toString())) {
+            String charUuid = characteristic.getUuid().toString();
+            if (RED_BLE_TX_CHAR_UUID.equalsIgnoreCase(charUuid) || RED_BLE_RX_CHAR_UUID.equalsIgnoreCase(charUuid)) {
                 if (responseNeeded) {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return;
                     gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value);
@@ -314,6 +315,8 @@ public class RedNodeService extends Service {
                 if (value != null && value.length > 0) {
                     // Forward bytes to Capacitor App via RedNodePlugin static event emitter
                     RedNodePlugin.emitBleMessage(value, device.getAddress());
+                    // Direct native HTTP POST injection to local Rust Axum node
+                    injectNativeMeshPayload(value);
                 }
             } else {
                 if (responseNeeded) {
@@ -352,5 +355,29 @@ public class RedNodeService extends Service {
                 manager.createNotificationChannel(serviceChannel);
             }
         }
+    }
+
+    private void injectNativeMeshPayload(byte[] payload) {
+        new Thread(() -> {
+            try {
+                StringBuilder hex = new StringBuilder();
+                for (byte b : payload) {
+                    hex.append(String.format("%02x", b));
+                }
+                java.net.URL url = new java.net.URL("http://127.0.0.1:7333/api/mesh/receive");
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setDoOutput(true);
+                String jsonBody = "{\"payload_hex\":\"" + hex.toString() + "\",\"is_lora\":false}";
+                java.io.OutputStream os = conn.getOutputStream();
+                os.write(jsonBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                os.close();
+                conn.getResponseCode();
+                conn.disconnect();
+            } catch (Exception e) {
+                Log.w(TAG, "Direct native mesh inject failed (non-critical): " + e.getMessage());
+            }
+        }).start();
     }
 }

@@ -21,6 +21,9 @@ export default function GroupsPanel() {
 
     const handleCreateGroup = async () => {
         if (!groupName.trim()) return;
+        // FIX 1.8a: Guard against empty member list (defensive, in case button disabled state is bypassed)
+        if (selectedContacts.length === 0) return;
+        // FIX 1.8b: Reset status at start so previous error message doesn't persist during retry
         setCreationStatus("Sincronizando llaves compartidas (SenderKey)...");
         try {
             await RedAPI.req('/groups', {

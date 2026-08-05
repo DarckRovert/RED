@@ -1,160 +1,123 @@
-# 🔴 RED - Manual del Usuario (v18.3 Zenith Master Edition)
+# 📘 Manual Operativo del Usuario — RED v24.0.0
 
-Bienvenido a **RED (Red Encriptada Descentralizada)**. Este manual te guiará para que saques el máximo provecho de la plataforma de mensajería táctica y comunicación soberana en la versión v18.3 Zenith Release.
-
----
-
-## 🏁 1. Empezando: Generando tu Identidad (DID)
-
-A diferencia de otras aplicaciones como WhatsApp, en RED no necesitas un número de teléfono ni un correo electrónico, ni requieres vincular un celular para usar la Web.
-
-### Uso desde la Web (Web SPA en Navegador)
-- Accede libremente desde cualquier navegador web a `https://darckrovert.github.io/RED/chat.html`.
-- Tu navegador generará un **DID (Decentralized Identifier)** criptográfico único en menos de 10ms (ejemplo: `did:red:f3a298...`).
-- Tu identidad se almacena de forma segura en tu propio navegador. No requiere servidores de registro centralizados.
-
-### 🛡️ 8. Sistema Guardian IA (Protección y Moderación Off-Grid)
-
-RED incorpora **Guardian IA**, un motor de moderación que protege la red contra contenido ilícito y grooming antes de que los mensajes salgan de tu dispositivo:
-
-* **Moderación Pre-Cifrado**: El análisis ocurre en tu dispositivo emisor **antes de cifrar el mensaje con Double Ratchet**. El receptor nunca sabe si hubo evaluación ni se expone contenido cifrado a terceros.
-* **Operación Off-Grid (<1ms)**: Funciona 100% sin internet usando un motor heurístico local en Rust. Si no hay red, la moderación no se detiene ni bloquea la aplicación.
-* **Ventana de Contexto (Anti-Grooming)**: Evalúa los mensajes recientes de la conversación para detectar patrones de acoso o grooming acumulativos.
-* **Transparencia y Estadísticas**: Haz clic en el botón 🛡️ **Guardian** en la barra superior o menú para ver cuántos mensajes/imágenes han sido analizados o bloqueados, verificar el modo (Estricto/Warn/Off) y reportar contenido manualmente.
+Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura o censura.
 
 ---
 
-## 🟠 9. Sistema Alerta AMBER-RED (Búsqueda de Personas Desaparecidas)
+## 📋 Tabla de Contenidos
 
-El **Sistema AMBER-RED** es una red P2P descentralizada para la difusión inmediata de alertas de personas desaparecidas:
-
-* **Banner Alerta Flotante**: Cuando se emite una alerta en la red P2P, aparece automáticamente un banner de alta prioridad naranja animado sobre la pantalla de todos los usuarios conectados.
-* **Reporte de Avistamientos**: Si ves a la persona desaparecida, puedes presionar **📍 Reportar Avistamiento** directamente en el banner para notificar de forma inmediata a las autoridades con tu ubicación aproximada o notas.
-* **Compartir Alerta**: Puedes copiar la información esencial de la alerta con un solo toque para difundirla fuera de RED.
-* **Panel de Alertas (para Autoridades)**: Las autoridades registradas pueden acceder al botón 🟠 **AMBER** para emitir nuevas alertas con fotografía, coordenadas GPS y tiempo de expiración (24h a 30 días), o marcar alertas como **Persona Encontrada**.
-
-### Uso desde la App Móvil (Android APK)
-1. **Pantalla de Onboarding**: Al abrir RED por primera vez, verás el asistente de configuración de la bóveda.
-2. **Creación de PIN Maestro**: Deberás crear un PIN numérico seguro de al menos 6 dígitos. Este PIN se cifrará a nivel hardware en el Keystore de tu teléfono.
-3. **Generación de Claves**: La aplicación generará tus claves criptográficas (DID). Este proceso es 100% privado.
-
-### Comunicación P2P Web ↔ Mobile
-- Puedes chatear entre la Web App y la App Móvil sin restricciones.
-- Solicitas el DID del contacto móvil (o web), lo añades en `+ Añadir Contacto` y el sistema inicia un **túnel P2P cifrado mediante WebRTC DataChannels (AES-256-GCM + Double Ratchet)**.
+1. [Primer Inicio & Configuración de Seguridad](#1-primer-inicio--configuración-de-seguridad)
+2. [Modo Señuelo (Decoy Mode - Clave `9999`)](#2-modo-señuelo-decoy-mode---clave-9999)
+3. [Gestión de Identidad & Bóveda Criptográfica](#3-gestión-de-identidad--bóveda-criptográfica)
+4. [Agregar Contactos & Escaneo QR](#4-agregar-contactos--escaneo-qr)
+5. [Mensajería Directa & Notas de Voz Tácticas](#5-mensajería-directa--notas-de-voz-tácticas)
+6. [Navegación & Interfaz de Usuario](#6-navegación--interfaz-de-usuario)
+7. [Radar P2P & Descubrimiento de Nodos](#7-radar-p2p--descubrimiento-de-nodos)
+8. [Balizas de Emergencia SOS](#8-balizas-de-emergencia-sos)
+9. [Herramientas Tácticas Avanzadas](#9-herramientas-tácticas-avanzadas)
+10. [Interruptor del Hombre Muerto (DMS)](#10-interruptor-del-hombre-muerto-dms)
+11. [Preguntas Frecuentes & Solución de Problemas](#11-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
-## 👥 2. Contactos y Grupos
+## 1. Primer Inicio & Configuración de Seguridad
 
-### Añadir Contactos
-- **Por Enlace:** Pega el enlace RED (`red://add-contact/...`) recibido de otra persona.
-- **Por Escaneo QR:** Pulsa en el icono de cámara en Ajustes > Perfil para escanear el código de un amigo.
-- **RADAR Nearby:** La función más potente de la v18.3. Si estás cerca de alguien, usa la pestaña de **RED Nearby** para descubrir y añadir contactos mediante señales Bluetooth BLE y WiFi Direct sin necesidad de internet.
-- **Bloqueo y Verificación Real:** En el modal de perfil de tu chat con un contacto, ahora puedes ver si su identidad está verificada o bloquearlo. Si bloqueas un contacto, el nodo Rust local descartará todo su tráfico en la capa de red nativa de forma transparente.
-
-### Grupos Descentralizados
-En la pestaña **Grupos**, puedes crear salas de chat. Los grupos en RED no tienen un servidor central.
-- **Administración Real:** Si eres admin, puedes promover a otros miembros, silenciarlos o expulsarlos del grupo en real.
+1. Al abrir la aplicación RED por primera vez, el sistema te solicitará ingresar una **Contraseña Maestra**.
+2. Esta contraseña protege tu **Bóveda de Claves Criptográficas** en la memoria segura del dispositivo (Android KeyStore / Secure Storage).
+3. Tras la verificación de contraseña, el motor nativo en Rust ejecutará un proceso de **Prueba de Trabajo (Proof of Work - PoW)** local para generar tu Identidad Soberana única (`did:red:<identity_hash>:<public_key>`).
 
 ---
 
-## 💬 3. Mensajería y Nueva Interfaz "Solid UI"
+## 2. Modo Señuelo (Decoy Mode - Clave `9999`)
 
-### Mensajería Sólida
-RED v18.3 presenta un diseño inspirado en la mensajería clásica pero con privacidad moderna y confirmación real en red Mesh:
-- **Burbujas con Cola:** Los mensajes tienen indicadores direccionales claros.
-- **Confirmación (Ticks):**
-    - **Un tick (✓):** Enviado a la red Mesh (y en cola de reintentos offline si el destinatario no está disponible al instante).
-    - **Doble tick (✓✓):** Recibido por el destinatario (tras conexión directa o descarga de la cola offline).
-    - **Ticks Azules:** Mensaje leído.
-- **Huella de Seguridad (Safety Numbers):** Compara el código numérico de 20 dígitos en la info de perfil de tu contacto. Si coincide exactamente, garantiza la integridad criptográfica contra ataques Man-In-The-Middle (MITM).
-- **Input Capsular:** El campo de escritura ahora es una cápsula ovalada con iconos de adjuntos integrados para un acceso más rápido.
-
-### Funciones Avanzadas
-- **Mensajes Guardados (⭐):** Guarda mensajes importantes pulsando prolongadamente sobre ellos; aparecerán en tu sección de "Mensajes Guardados".
-- **Historias/Status:** Comparte estados de texto o imagen que desaparecen a las 24 horas.
+Si te encuentras en una situación de riesgo donde seas forzado a desbloquear tu dispositivo:
+- Ingresa la contraseña de emboscada **`9999`**.
+- La aplicación abrirá un **Perfil Señuelo completamente limpio** sin rastro de tus chats, contactos reales, claves privadas ni archivos personales.
+- No existe ninguna indicación visual en la pantalla que revele que el sistema está operando en modo señuelo.
 
 ---
 
-## 🔐 4. Seguridad y Herramientas Tácticas
+## 3. Gestión de Identidad & Bóveda Criptográfica
 
-### Defensa Anti-Forense (Nivel Dios)
-- **Bloqueo de Capturas:** La aplicación impide capturas de pantalla y grabaciones para proteger tus chats de software espía.
-- **Dead Man's Switch:** Configura una purga automática si no accedes a la app en X días.
-- **Bóveda Señuelo Autopoblada (Coacción):** Si te obligan a abrir tu teléfono, ingresa el **PIN Señuelo** (Configurable en Ajustes > Seguridad). RED abrirá una "Bóveda Falsa" (Decoy Vault) e instantáneamente generará docenas de chats mundanos con contactos creíbles, con fechas de la última semana. A los ojos de cualquier interrogador, serás un ciudadano común chateando con su familia.
-- **PIN de Pánico:** Ingresa tu **PIN destructivo** (Configurable en Ajustes) en el bloqueo de pantalla para destruir electromagnéticamente la base de datos local y borrar tus rastros de inmediato.
-- **App Disguise (Calculadora):** Activa el modo camuflaje para que el icono de RED se transforme en una calculadora funcional. Solo al ingresar tu PIN maestro en el teclado numérico de la calculadora se revelará la interfaz real de RED.
+En la pestaña de **Bóveda de Identidad (ID Vault)** podrás:
+- Consultar tu **Hash de Identidad Soberana** y tu **Short ID** táctico.
+- Configurar datos médicos de emergencia opcionales (Tipo de sangre, alergias y contacto de emergencia) cifrados localmente.
+- Generar un **Código QR de Verificación Temporal (validez de 5 minutos)** para validar tu identidad de forma presencial.
 
 ---
 
-## 🛠️ 5. Conectividad y Radar RED
+## 4. Agregar Contactos & Escaneo QR
 
-Si no tienes acceso a la red de internet global, RED sigue funcionando:
-- **Malla Mesh:** Los mensajes se almacenan y reenvían automáticamente entre nodos cercanos (vía Bluetooth/WiFi).
-- **Puente LoRaWAN Sub-GHz:** Conecta tu módulo de radio LoRa por Serial/USB-C. Ve a **Ajustes > Red (Network Panel)** e ingresa el puerto (`COM3`, `/dev/ttyUSB0`) y el baud rate (ej: `115200`). RED auto-configurará el hardware puente para enviar telemetría a ~15Km sin operadoras.
-- **Mesh APK Updater (Inmune a App Stores):** Si RED es eliminado de internet, un solo teléfono puede propagar el archivo `.apk` a los teléfonos vecinos enviándolos a la ruta `http://<ip-radar>:7331/api/mesh/apk`.
-- **Geometría de Nodos (Mapa 3D):** Puedes ver una representación en tiempo real de tu topología de red abriendo el visualizador global. El mapa extrae las conexiones vivas del transporte local y las posiciona geográficamente usando derivadas criptográficas de sus identidades.
+Para establecer comunicación cifrada E2E con otro usuario existen tres métodos:
 
----
+### Método A: Escaneo de Código QR (Recomendado)
+1. En el teléfono A, abre la pestaña **Radar P2P** o presiona **📷 Mi QR** en el menú.
+2. En el teléfono B, presiona el botón de **Escanear QR**.
+3. Apunta la cámara al código QR del teléfono A.
+4. El sistema extraerá el `identity_hash` y la `public_key` del contacto, guardando ambos datos y abriendo la conversación de forma instantánea.
 
-## 🛠️ 6. Herramientas Tácticas y Diagnóstico de Red (v18.3)
+### Método B: Auto-Intercambio Recíproco
+- Si agregas manualmente a un usuario por su Hash o Short ID, tu teléfono enviará automáticamente una solicitud de contacto (`contact_request`) incluyendo tu clave pública (`sender_pk`).
+- El destinatario recibirá un aviso `🤝 Operador te ha agregado como contacto` y su teléfono responderá guardando tu clave pública automáticamente.
 
-- **Consola de Logs Rust (`NodeLogsModal`):** Accede desde el panel de Criptografía para auditar el tráfico de paquetes de ruido blanco, handshakes Kyber y pings RTT en vivo.
-- **Simulador de Apagón Táctico (`BlackoutSimulatorModal`):** Prueba cómo la aplicación conmuta automáticamente del transporte WAN hacia mDNS, Bluetooth LE y LoRa al cortar la conectividad a internet.
-- **Bóveda Cifrada `.redbak` (`BackupRestoreModal`):** Exporta tus conversaciones e identidades protegidas por contraseña en un archivo compacto para migrar entre teléfonos.
-- **Informe de Auditoría Exportable (`SecurityReportModal`):** Genera una ficha técnica de la postura de seguridad de tu nodo para auditar el Kill-Switch, Camuflaje y paridad PQC.
-- **Buscador Global:** Toca el icono de lupa en la barra lateral para buscar cualquier palabra o frase cifrada en todo tu historial de chats de manera instantánea.
-
----
+### Método C: Ingreso Manual de Hash / Short ID
+- Presiona el botón **+** en la lista de chats e ingresa el hash de 64 caracteres hex o el Short ID de 8 caracteres.
 
 ---
 
-## 🛠️ 7. Nuevas Herramientas Tácticas de Auxilio y Difusión (v20.0)
+## 5. Mensajería Directa & Notas de Voz Tácticas
 
-- **🧭 Brújula Táctica y Radar P2P (`P2PCompassModal`):** Abre la brújula desde los accesos rápidos. Permite ubicar físicamente la dirección cardinal (N, S, E, W) y distancia relativa en metros de nodos o contactos RED cercanos usando la intensidad de señal de radio (BLE/WiFi Direct) en apagones totales o desastres.
-- **🚨 Baliza SOS Táctica de Auxilio (`SOSEmergencyBanner`):** En situaciones de peligro inminente, activa la baliza SOS para transmitir inmediatamente un faro de socorro cifrado E2E a tus contactos de auxilio con tus coordenadas GPS y nota de emergencia.
-- **📻 Canales de Difusión Mesh Locales (`PublicChannelsPanel`):** Accede a canales de radio digital comunitarios descentralizados (ej. `#red-local-general`, `#red-emergency-lima`) para publicar noticias, boletines de tráfico o alertas vecinales sin depender de servidores centrales ni riesgo de censura.
-
----
-
-## 🛠️ 8. Nuevas Herramientas Tácticas y Privacidad de Fotos (v21.0)
-
-- **🎙️ Walkie-Talkie Mesh Push-to-Talk (`P2PWalkieTalkieModal`):** Mantén presionado el botón central para hablar y enviar ráfagas de audio de voz ultra-comprimidas (Codec Opus a 8 kbps) que se propagan inmediatamente por ondas de radio Bluetooth BLE y WiFi Direct.
-- **🧹 Sanitizador de Metadatos EXIF en Fotos (`sanitizer.rs`):** El motor borra automáticamente las coordenadas GPS, fecha/hora y modelo de teléfono de cualquier foto antes de cifrarla y enviarla para impedir tu geolocalización.
-- **🌤️ Alertas Barométricas y Clima Mesh (`WeatherAlertPanel`):** Lectura del sensor barométrico del celular para publicar boletines meteorológicos locales y alertas de desastres naturales en tiempo real.
-- **🪪 Bóveda Cifrada de Identidad Táctica (`IdentityVaultModal`):** Almacena tus datos médicos, tipo de sangre y pase de auxilio cifrado con hardware Keystore, permitiendo generar un código QR de verificación de un solo uso (*One-Time QR*).
+- **Burbujas de Chat & Reacciones**: Envía mensajes de texto, imágenes y reacciona con emojis manteniendo presionado un mensaje.
+- **Notas de Voz Tácticas (12 Kbps)**: Mantén presionado el icono de micrófono. El audio se grabará y comprimirá a **12 Kbps (OGG/Opus)** para permitir su transmisión ágil por radios de baja velocidad como LoRa o Bluetooth BLE.
+- **Respuestas & Reenvíos**: Mantén presionado cualquier mensaje para responder directamente o reenviarlo a otros contactos o grupos.
 
 ---
 
-## 🛠️ 9. Herramientas de Proximidad, Canvas Táctico y Resiliencia Eco-Mesh (v22.0)
+## 6. Navegación & Interfaz de Usuario
 
-- **👋 Chat de Proximidad Zero-Touch & Filtro Anti-Spam (`ProximityWaveModal` / `ProximitySettingsModal`):** Detección háptica al estar a menos de 5 metros de otro usuario RED por BLE/WiFi Direct. Incluye **Filtro Anti-Spam** con Cooldown de 1 hora por nodo, **Modo Sigilo** (Silencioso o Vibración Suave) y **Zonas Seguras Geofenced** para evitar molestias o sonido repetitivo en lugares muy concurridos.
-- **🎨 Canvas Táctico P2P en Vivo (`LiveCanvasModal`):** Pizarra de dibujo táctico compartida en tiempo real sobre el chat para trazar mapas, esquemas y rutas de evacuación sincronizados en la malla.
-- **⏳ Autodestrucción Efímera Granular (`ephemeral.rs`):** Temporizadores de purga de memoria RAM y disco local (destruir al leer, 10s, 1m, 1h, al desconectar) sin dejar huellas.
-- **🔋 Optimizador de Batería Eco-Mesh (`EcoMeshPanel`):** Monitor dinámico de ciclo de trabajo radio BLE/LoRa para extender la autonomía del nodo hasta 72 horas durante apagones.
-
----
-
-## 🛠️ 10. Inteligencia Artificial Soberana Off-Grid & Copiloto IA (`v24.0`)
-
-- **🤖 Copiloto / Asistente IA Táctico Offline (`AICopilotModal`):** Asistente de inteligencia artificial local (<15 MB RAM) para orientación en emergencias médicas, protocolos de primeros auxilios, sismos, apagones y guías de supervivencia sin internet.
-- **📝 Resumidor Inteligente de Canales Mesh (`summarizeChannelAI`):** Toca el botón *"🪄 Resumen IA"* en cualquier canal para sintetizar decenas de mensajes acumulados en un resumen ejecutivo de 3 viñetas en <1 segundo.
-- **⚡ Arquitectura Híbrida Dual-Engine AI:** Modo Nano optimizado en Rust que corre en el 100% de dispositivos móviles (gama baja con <15 MB RAM) y Modo Turbo con aceleración NPU.
+- **Salir de un Chat**: Para volver a la lista principal de conversaciones desde cualquier chat, presiona la flecha **`←`** ubicada en la barra superior o presiona el botón físico/gesto de retroceso de Android.
+- **Indicadores de Estado de Red**:
+  - **`⚡ P2P MESH`**: Conectado a la malla mediante subred local IP o relés.
+  - **`🔵 BLE`**: Conectado directamente por la antena física de Bluetooth LE (Inmune a VPNs).
+  - **`📶 WIFI`**: Conectado por canal ad-hoc WiFi Direct.
+  - **`📻 LORA`**: Conectado por módem de radio LoRa.
+  - **`🛡️ STANDALONE`**: Operación local aislada.
 
 ---
 
-## ❓ Preguntas Frecuentes
+## 7. Radar P2P & Descubrimiento de Nodos
 
-**¿Necesito internet para chatear o usar la IA?**
-No. Gracias a la arquitectura v24.0, tanto la red mesh de radio como el motor de Inteligencia Artificial corren 100% en local dentro de tu dispositivo.
-
-**¿Qué pasa si pierdo mi teléfono?**
-Tus mensajes y contactos están cifrados localmente. Sin tu **Identity Hash** y tu respaldo físico, nadie podrá recuperar esos datos.
+- Accede al **Radar P2P** para visualizar un mapa de calor y listado en tiempo real de todos los dispositivos RED detectados en tu radio de alcance por Bluetooth LE o red WiFi local.
+- Podrás consultar la distancia aproximada en metros, la fuerza de señal (RSSI) y agregar nodos directamente con un toque.
 
 ---
 
-**RED** — Tu comunicación, tu hardware, tu soberanía.
+## 8. Balizas de Emergencia SOS
 
+- En caso de desastre o emergencia física, presiona el botón flotante **SOS** o ingresa a la pestaña SOS.
+- El sistema transmitirá una **Baliza de Socorro de Máxima Prioridad** que contiene tu ubicación GPS real y una señal auditiva a todos los nodos P2P en tu área de cobertura.
 
+---
 
+## 9. Herramientas Tácticas Avanzadas
 
+- **P2P Walkie-Talkie**: Transmisión de voz en vivo por radio digital sin servidores.
+- **Pizarra Táctica Colaborativa (Live Canvas)**: Dibujo y mapa esquemático sincronizado entre nodos.
+- **Transmisión de Video en Vivo Off-Grid**: Emisión y recepción de video local entre pares.
+- **Brújula P2P (P2P Compass)**: Orientación mediante magnetómetro para localizar la dirección de nodos cercanos.
+
+---
+
+## 10. Interruptor del Hombre Muerto (DMS)
+
+- Configura el **Dead Man's Switch (DMS)** en la pestaña de Configuración.
+- Si dejas de usar la aplicación durante el tiempo especificado (por ejemplo, 24 horas), el sistema destruirá automáticamente la base de datos cifrada y las claves de identidad.
+
+---
+
+## 11. Preguntas Frecuentes & Solución de Problemas
+
+- **¿Qué pasa si tengo una VPN activa?**  
+  No hay ningún problema. El transporte Bluetooth LE (BLE) opera a nivel de hardware y no es afectado por VPNs ni Kill-Switches.
+- **¿Qué ocurre si no hay Internet ni señal celular?**  
+  RED opera en modo **DTN Store-and-Forward**. Los mensajes saltarán de teléfono en teléfono hasta llegar a su destinatario.

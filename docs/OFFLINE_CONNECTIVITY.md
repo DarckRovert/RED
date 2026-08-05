@@ -1,6 +1,6 @@
 # 🛜 Conectividad Offline — Especificación Técnica
 
-**Versión**: 18.3.0 | **Fecha**: Julio 2026
+**Versión**: 24.0.0 | **Fecha**: Agosto 2026
 
 ## Resumen
 

@@ -1,49 +1,56 @@
-# 📲 Guía Rápida: Generar Instalador para Colegas
+# Guía de Pruebas Móviles en Hardware Real (Android)
 
-He preparado todo el código de RED para que generar el instalador sea lo más sencillo posible. Los **archivos de instalación** (carpetas de proyecto) están listos en tu disco duro.
-
----
-
-## 📂 ¿Dónde están los archivos?
-
-- **Proyecto Android**: `d:\PROYECTO RED\client\app\android`
-- **Proyecto iOS (Xcode)**: `d:\PROYECTO RED\client\app\ios`
-- **Archivos Web (Optimizados)**: `d:\PROYECTO RED\client\app\out`
+Este documento detalla el procedimiento verificado de pruebas e instalación mediante **Android Debug Bridge (ADB)** en dispositivos físicos conectados por USB.
 
 ---
 
-## 🤖 Android (Generar el archivo .apk)
+## 📲 Dispositivos Calibrados en Banco de Pruebas
 
-Ya he realizado la compilación de producción de Next.js y la sincronización con Capacitor. Solo falta el paso final:
-
-1.  **Abrir Android Studio**.
-2.  Importa el proyecto que está en: `d:\PROYECTO RED\client\app\android`.
-3.  Espera a que termine el "Gradle Sync" (verás una barra de progreso abajo).
-4.  En el menú superior, ve a: **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
-5.  Cuando termine, aparecerá un globo abajo a la derecha con el enlace **"locate"**. ¡Ese es tu `.apk` para compartir!
+- **Dispositivo 1**: Motorola Moto G22 (Serial: `ZT322B386P`)
+- **Dispositivo 2**: Lenovo Tablet (Serial: `HA2CHKZ2`)
 
 ---
 
-## 🍎 iOS (Generar IPA / TestFlight)
+## 🛠️ Procedimiento de Compilación e Instalación
 
-Para iOS, **necesitas un Mac con Xcode instalado**:
+### 1. Requisitos de Entorno
+- **JDK Java**: OpenJDK JBR de Android Studio (`C:\Program Files\Android\Android Studio\jbr`).
+- **Android SDK Platform Tools**: ADB instalado (`C:\Users\darck\AppData\Local\Android\Sdk\platform-tools\adb.exe`).
 
-1.  Copia la carpeta `d:\PROYECTO RED\client\app` a tu Mac.
-2.  En la terminal del Mac, dentro de esa carpeta, ejecuta:
-    ```bash
-    npx cap open ios
-    ```
-3.  Se abrirá Xcode. Selecciona tu "Team" en la pestaña **Signing & Capabilities**.
-4.  Crea el archivo instalador: **Product > Archive**.
-5.  Sigue los pasos de "Distribute App" para enviarlo a **TestFlight** o generar un `.ipa`.
+### 2. Comprobación de Dispositivos Conectados
+```bash
+adb devices -l
+```
+
+### 3. Compilación e Instalación Automatizada (PowerShell)
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+$env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
+
+# Sincronización de activos web exportados por Next.js Turbopack
+Set-Location "d:\PROYECTO RED\client\app"
+npm run build
+npx cap sync android
+
+# Compilación de APK Debug en Gradle
+Set-Location "d:\PROYECTO RED\client\app\android"
+cmd.exe /c "gradlew.bat assembleDebug"
+
+# Despliegue mediante Streamed Install en ambos equipos
+$Apk = "app\build\outputs\apk\debug\app-debug.apk"
+$Adb = "C:\Users\darck\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+
+& $Adb -s ZT322B386P install -r $Apk
+& $Adb -s HA2CHKZ2 install -r $Apk
+```
 
 ---
 
-## 🚀 Lo que yo ya he hecho por ti:
-*   **Migración de Estilos**: He movido todos los estilos de `styled-jsx` a un archivo CSS global (`components.css`). Esto era crítico porque las versiones modernas de Next.js fallaban al compilar para móvil con estilos inline.
-*   **Static Export**: He configurado `next.config.ts` para que la app sea 100% estática, requisito de Capacitor.
-*   **Sincronización**: He ejecutado `cap sync`, por lo que el proyecto Android ya tiene la última versión del código visual "WOW".
-*   **Autenticación Nivel Dios**: He configurado el Keystore Nativo (`SecureStoragePlugin`) y la Biometría (`BiometricAuth`). El bypass "1234" ya no existe; al abrir el APK por primera vez, el usuario enfrentará un verdadero Onboarding para crear su PIN maestro irrecuperable.
+## 📋 Lista de Verificación de Pruebas
 
----
-**RED** — Listo para testear. Compartir privacidad nunca fue tan fácil.
+- [x] **Booteo Nativo JNI**: Rust Node inicializa correctamente tras la autenticación de contraseña.
+- [x] **Prueba de Navegación**: El botón `←` y la tecla de retroceso nativa Android retornan limpiamente del chat al sidebar.
+- [x] **Escaneo QR de Claves Públicas**: Lectura de `did:red:<hash>:<public_key>` asigna la clave pública en el nodo Rust.
+- [x] **Auto-Intercambio Recíproco**: La recepción de `contact_request` almacena la clave del remitente y envía `contact_response`.
+- [x] **Recepción en Segundo Plano**: Los mensajes entrantes cuando el chat no está abierto disparan la notificación local y refrescan la lista de conversaciones (`fetchData`).
+- [x] **Inmunidad a VPN**: El transporte BLE y el servidor GATT nativo continúan operando con VPN activa.

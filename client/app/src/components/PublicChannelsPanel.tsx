@@ -17,13 +17,14 @@ export const PublicChannelsPanel: React.FC = () => {
     const loadMessages = async () => {
         try {
             const data = await getChannelMessages(channelId);
-            setMessages(data.messages);
-            if (data.channels && data.channels.length > 0) {
+            setMessages(Array.isArray(data?.messages) ? data.messages : []);
+            if (Array.isArray(data?.channels) && data.channels.length > 0) {
                 setChannels(data.channels);
             }
             setErrorMsg(null);
         } catch (e: any) {
             console.error('Channel fetch error:', e);
+            setMessages([]);
         }
     };
 

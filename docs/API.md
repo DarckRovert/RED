@@ -1,15 +1,15 @@
-# RED API Reference
+# RED API Reference (v24.0.0 Zenith Master)
 
 ## Overview
 
-RED provides a secure, decentralized messaging API with the following core modules:
+RED provides a secure, decentralized messaging API with core modules across Rust native (`core`, `red_mobile`) and JavaScript client (`useRedStore`, `RedAPI`):
 
-- **Identity**: User identity management with rotation
-- **Crypto**: Cryptographic primitives (encryption, signing, hashing)
-- **Protocol**: Message protocol with Double Ratchet
-- **Network**: P2P networking with onion routing
-- **Storage**: Encrypted local storage
-- **Blockchain**: Identity registration and verification
+- **Identity**: Sovereign identity management with DID (`did:red:<hash>:<pk>`)
+- **Crypto**: Cryptographic primitives (Noise XK, ChaCha20-Poly1305, Ed25519, X25519)
+- **Protocol**: Protocol Ω envelope with Controlled Flood routing
+- **Network**: P2P networking with BLE GATT Server, WiFi Direct, and LoRa Radio
+- **Axum Local Server (`127.0.0.1:7333`)**: HTTP REST API and SSE Event streams
+- **Storage**: Encrypted local SQLite storage
 
 ---
 

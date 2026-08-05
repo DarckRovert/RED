@@ -2,6 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
+// FIX 1.7: RedAPI is a singleton — import at module level, not inside the loop.
+// Dynamic import inside a for-loop causes repeated microtask scheduling.
+import { RedAPI } from "../lib/api";
 
 export default function BroadcastPanel() {
     const { contacts: rawContacts, sendMessage: _sendMessage, goBack } = useRedStore();
@@ -24,7 +27,6 @@ export default function BroadcastPanel() {
         let count = 0;
         for (const hash of selectedContacts) {
             try {
-                const { RedAPI } = await import("../lib/api");
                 await RedAPI.sendMessage(hash, message);
                 count++;
             } catch (e) {

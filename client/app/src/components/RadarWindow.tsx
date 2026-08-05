@@ -65,7 +65,7 @@ export default function RadarWindow() {
         try {
             const { Capacitor, registerPlugin } = await import('@capacitor/core');
             if (!Capacitor.isNativePlatform()) {
-                alert("La cámara QR solo funciona en dispositivos físicos.");
+                toast.info("La cámara QR requiere un dispositivo físico.");
                 return;
             }
 
@@ -88,14 +88,27 @@ export default function RadarWindow() {
                     try {
                         const encoded = raw.split(':')[1];
                         const decoded = JSON.parse(atob(encoded));
-                        const did = decoded.did;
-                        const pk = decoded.pk;
-                        setScannedResult(did);
-                        await addContact(did, "Contacto Escaneado", pk);
-                        toast.success("¡Identidad y clave guardada con éxito!");
-                        navigate('sidebar');
+                        const cleanHash = decoded.did || '';
+                        const pubKey = decoded.pk || null;
+                        if (cleanHash) {
+                            await addContact(cleanHash, "Bóveda Escaneada", pubKey);
+                            toast.success("¡Identidad y clave guardadas con éxito!");
+                            navigate('chat', cleanHash);
+                        }
                     } catch (e) {
-                        toast.error("QR Invalido");
+                        toast.error("Bóveda QR Inválida");
+                    }
+                } else if (raw.startsWith('did:red:')) {
+                    try {
+                        const parts = raw.split(':');
+                        const cleanHash = parts[2];
+                        const pubKey = parts[3] || null;
+                        await addContact(cleanHash, "Par Escaneado", pubKey);
+                        toast.success("¡Contacto y clave pública guardados con éxito!");
+                        navigate('chat', cleanHash);
+                    } catch (addErr) {
+                        const msg = addErr instanceof Error ? addErr.message : String(addErr);
+                        toast.error(`Error al añadir: ${msg}`);
                     }
                 } else {
                     const cleanHash = raw;
@@ -103,7 +116,7 @@ export default function RadarWindow() {
                     try {
                         await addContact(cleanHash, "Par Escaneado");
                         toast.success("¡Contacto añadido con éxito!");
-                        navigate('sidebar');
+                        navigate('chat', cleanHash);
                     } catch (addErr) {
                         const msg = addErr instanceof Error ? addErr.message : String(addErr);
                         toast.error(`Error al añadir: ${msg}`);
@@ -216,7 +229,7 @@ export default function RadarWindow() {
                                 await addContact(hashToSent, nameToSend);
                                 clearTimeout(powTimer);
                                 toast.success("✅ Contacto añadido correctamente.");
-                                navigate('sidebar');
+                                navigate('chat', hashToSent);
                             } catch (err) {
                                 const msg = err instanceof Error ? err.message : String(err);
                                 toast.error(`❌ ${msg}`);

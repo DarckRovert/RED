@@ -83,21 +83,38 @@ export const LiveCanvasModal: React.FC = () => {
         e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>,
         rect: DOMRect
     ) => {
-        if ('touches' in e) {
+        const canvas = canvasRef.current;
+        const scaleX = canvas ? canvas.width / rect.width : 1;
+        const scaleY = canvas ? canvas.height / rect.height : 1;
+        if ('touches' in e && e.touches.length > 0) {
             return {
-                x: e.touches[0].clientX - rect.left,
-                y: e.touches[0].clientY - rect.top
+                x: (e.touches[0].clientX - rect.left) * scaleX,
+                y: (e.touches[0].clientY - rect.top) * scaleY
             };
         }
+        const mouseEv = e as React.MouseEvent<HTMLCanvasElement>;
         return {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
+            x: (mouseEv.clientX - rect.left) * scaleX,
+            y: (mouseEv.clientY - rect.top) * scaleY
         };
     };
 
     const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
         setIsDrawing(true);
-        draw(e);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        const rect = canvas.getBoundingClientRect();
+        const { x, y } = getEventCoords(e, rect);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = color;
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        hasDrawnSinceLastSync.current = true;
     };
 
     const stopDrawing = () => {
@@ -129,6 +146,7 @@ export const LiveCanvasModal: React.FC = () => {
 
         hasDrawnSinceLastSync.current = true;
     };
+
 
     const clearCanvas = () => {
         const canvas = canvasRef.current;

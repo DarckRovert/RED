@@ -1,123 +1,108 @@
-# 🏗️ Arquitectura de RED (v18.3 Zenith Master Edition)
+# 🏗️ Especificación Arquitectónica de RED v24.0.0
 
-## Visión General
-
-RED es un ecosistema de mensajería soberana y descentralizada que opera bajo un modelo de **Malla Híbrida Web-Mobile**:
-- **Capa Web SPA (Autónoma):** Generación de identidades DID en navegador vía WebCrypto API (sin servidor de registro ni número telefónico).
-- **Puente Web ↔ Mobile:** Negociación WebRTC DataChannel ciega (`signaling/server.js`) con túneles P2P cifrados E2E por Double Ratchet.
-- **Capa Local Móvil:** Comunicación directa sin internet vía Bluetooth BLE Advertiser y WiFi Direct con el motor Rust JNI (`libred_mobile.so`).
-- **Capa Global:** Ruteo P2P mediante libp2p y DHT Kademlia.
-- **Capa de Identidad:** DID (Decentralized Identifiers) inmutables.
-
-## 🛡️ v19.0 Sub-Sistemas de Seguridad y Servicio Público
-
-### 1. Arquitectura Guardian IA (Moderación Off-Grid Híbrida)
-
-```
-NODO EMISOR (Dispositivo Usuario)
-    │
-    ├── Componer Mensaje
-    │
-    ▼
-[GuardianEngine] (Pre-Cifrado)
-    │
-    ├── Capa 1: Evaluador Local Off-Grid (Rust, <1ms)
-    │     ├── Heurísticas S4/CSAM/Tráfico
-    │     ├── Acumulador de Ventana de Contexto (Últimos N mensajes)
-    │     └── pHash Perceptual para Imágenes
-    │
-    ├── Capa 2: Cloud Audit (Opcional, si hay internet y GROQ_API_KEY)
-    │     └── LlamaGuard 4 12B (Meta) vía HTTPS determinista
-    │
-    ├── VERDICT: ALLOW  ──► Cifrado Double Ratchet ──► Red P2P/Mesh
-    ├── VERDICT: WARN   ──► Log + Flag ──► Cifrado Double Ratchet
-    └── VERDICT: BLOCK  ──► 403 Forbidden (Destrucción local pre-envío)
-```
-
-### 2. Topología Sistema Alerta AMBER-RED P2P
-
-```
-AUTORIDAD AMBER (Nodo Registrado con Firma Ed25519)
-    │
-    ├── Emisión POST /api/amber/alert
-    │
-    ├── Persistencia local en Sled DB
-    │
-    ├── Broadcast GossipSub Topic "amber-red-v1"
-    │
-    └── Push SSE ("amber_alert") ──► Todos los Nodos RED Conectados
-                                          │
-                                          ▼
-                                <AmberAlertBanner /> Flotante
-                                          │
-                                          ├── Ver Detalles / Foto
-                                          └── Reportar Avistamiento (POST /sighting)
-```
-
-## Componentes del Ecosistema
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      CAPA DE APLICACIÓN                      │
-│  "Solid UI" (Next.js) · Modo OLED · Animaciones Framer       │
-└────────┬──────────────────────┬──────────────────────┬───────┘
-         │                      │                      │
-┌────────┴──────────────┐┌──────┴───────────────┐┌─────┴───────┐
-│     CAPA NATIVA      ││     CAPA RUST        ││CAPA DE RED  │
-│Capacitor 8 (Android) ││Core P2P (Axum Node)  ││P2P Mesh     │
-│BLE Advertiser (Java) ││Double Ratchet        ││Local Radar  │
-│Storage / Foreground  ││Onion / Mixnets       ││LoRaWAN Radio│
-└────────┬──────────────┘└──────┬───────────────┘└─────┬───────┘
-         │                      │                      │
-┌────────┴──────────────────────┴──────────────────────┴───────┐
-│                      CAPA DE SEGURIDAD                       │
-│      DID Efímero · X25519 DH · Ed25519 · Anti-Forense       │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Flujo de Mensajes y Sincronización
-
-### 1. Mensajería Mesh (Propagación)
-1. **Composición:** El cliente Next.js compone el mensaje y lo envía al nodo Rust local via `/api/messages/send`.
-2. **Cifrado:** El nodo Rust aplica el Double Ratchet y envuelve la carga en capas de Onion Routing.
-3. **Transporte y Cola de Retransmisión Offline:** 
-   - Si el destinatario está disponible en los peers locales, se entrega de inmediato.
-   - Si está offline, se guarda de forma persistente en el árbol transaccional `pending_deliveries` de la base de datos local **Sled**.
-   - Un worker secundario en segundo plano (`node_ref_retry`) monitorea la topología cada 15 segundos y auto-entrega los mensajes en espera cuando el peer entra en rango.
-4. **Almacenamiento:** Los nodos vecinos y locales guardan el mensaje de forma cifrada en disco, liberando RAM.
-
-### 2. Sincronización de Estado (Zustand <-> Rust)
-El frontend utiliza un Store centralizado en **Zustand** (`useRedStore.ts`) que orquestra:
-- **SSE (Server-Sent Events):** Escucha continua del flujo de eventos de Rust (`/api/v1/events`).
-- **Handshake:** Verificación de salud del nodo nativo al arranque.
-- **Re-hidratación:** Estado persistente sincronizado mediante llamadas a la API Axum local.
-
-## Módulos del Core (Rust + Java)
-
-### android/ (Capa Nativa)
-- `RedNodeService.java`: El pilar de la persistencia. Mantiene el nodo Rust vivo como servicio Foreground (clase `dataSync`).
-- `BleAdvertiser`: Implementación del rol GATT Peripheral para descubrimiento pasivo.
-
-### core/ (Protocolo Rust)
-- `crypto/`: Double Ratchet, X25519 y ChaCha20.
-- `network/`: Implementación de libp2p, GossipSub, DHT, **Mesh Mixnets** y **LoRaWAN bridge**.
-- `storage/`: Base de datos **Sled** de alto rendimiento en disco. Cifra y persiste la configuración, mensajes, perfiles, grupos e identidades en árboles de clave-valor.
-- `node/`: Servidor Axum que expone la API REST, incluyendo endpoints de bloqueo de contactos y códigos de seguridad.
-
-### client/ (Frontend)
-- `Solid UI`: Sistema de diseño con variables CSS dinámicas.
-- `Radar Logic`: Cálculo de distancias y RSSI para el panel Nearby.
-
-## Seguridad de Capas
-
-| Capa | Implementación |
-|------|----------------|
-| **Carga Útil** | ChaCha20-Poly1305 (AEAD) |
-| **Identidad** | Ed25519 Signatures con **Hashcash PoW (Protección Kademlia Sybil)** |
-| **PFS** | Diffie-Hellman Ratchet (X25519) |
-| **Anonimato** | 3-hop Onion Routing + **Buffer Constante de 4096 bytes** |
-| **Ofuscación** | Mixnets Temporales + **Ruido Blanco Constante** (Continuous Pending) |
-| **Persistence** | Foreground Service Android + Bóvedas Señuelo Inyectadas Mágicamente |
+Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware y el sistema de gestión de estado en el cliente JavaScript.
 
 ---
-**RED Architecture Docs** — Diseñando la resistencia mediante descentralización total.
+
+## 📋 Tabla de Contenidos
+
+1. [Visión General de Capas](#1-visión-general-de-capas)
+2. [Capa Nativa Android & Servicio de Fondo Java](#2-capa-nativa-android--servicio-de-fondo-java)
+3. [Motor Criptográfico Nativo en Rust (`red_core` y `red_mobile`)](#3-motor-criptográfico-nativo-en-rust-red_core-y-red_mobile)
+4. [Capa de Red Mesh Multi-Radio (GATT, WiFi Direct, LoRa)](#4-capa-de-red-mesh-multi-radio-gatt-wifi-direct-lora)
+5. [Capa de Almacenamiento & Cifrado en Disco](#5-capa-de-almacenamiento--cifrado-en-disco)
+6. [Manejo de Estado SPA & Navegación (Next.js / Zustand)](#6-manejo-de-estado-spa--navegación-nextjs--zustand)
+7. [Endpoints de la API Axum REST & SSE](#7-endpoints-de-la-api-axum-rest--sse)
+
+---
+
+## 1. Visión General de Capas
+
+```
++-----------------------------------------------------------------------+
+|                    CAPA DE PRESENTACIÓN (FRONTEND)                    |
+|      Next.js 16 SPA (Turbopack) + React 19 + Zustand Store + CSS      |
++-----------------------------------------------------------------------+
+                                   │
+              HTTP REST / SSE (http://127.0.0.1:7333)
+                                   ▼
++-----------------------------------------------------------------------+
+|                    CAPA NATIVA ANDROID (MIDDLEWARE)                   |
+|       RedNodeService.java (Foreground) + RedNodePlugin.java (JNI)      |
+|    GATT Server / BleTransport + Direct Native HTTP POST Mesh Inject   |
++-----------------------------------------------------------------------+
+                                   │
+                          JNI Bindings (Rust C-ABI)
+                                   ▼
++-----------------------------------------------------------------------+
+|                      MOTOR NATIVO RUST (CORE)                         |
+|     red_mobile (Axum REST API + SSE) + red_core (Protocol Engine)    |
+|   Noise XK Handshake + Ed25519 Signatures + ChaCha20-Poly1305 E2E     |
++-----------------------------------------------------------------------+
+                                   │
+              TRANSPORTE MULTI-RADIO AD-HOC OFF-GRID
+     ┌─────────────────────┬───────────────┬────────────────────┐
+     │ BLE GATT (Physical) │ WiFi Direct   │ LoRa Radio Serial  │
+     └─────────────────────┴───────────────┴────────────────────┘
+```
+
+---
+
+## 2. Capa Nativa Android & Servicio de Fondo Java
+
+- **`RedNodeService.java`**: Proceso de servicio en primer plano (*Foreground Service*) que registra un canal de notificaciones persistente para evitar que el ahorrador de memoria de Android mate el nodo.
+  - Administra el **GATT Server BLE** escuchando solicitudes de lectura/escritura en las características `RED_BLE_RX_CHAR` (`00002a6e...`) y `RED_BLE_TX_CHAR` (`00002a4d...`).
+  - Ejecuta la función `injectNativeMeshPayload` que envía de forma directa e instantánea cualquier paquete de bytes capturado por la antena al servidor Rust Axum local en `http://127.0.0.1:7333/api/mesh/receive`.
+- **`RedNodePlugin.java`**: Plugin de Capacitor que expone las funciones JNI de Rust a JavaScript y emite el evento `bleMessageReceived` cuando se reciben tramas físicamente por Bluetooth.
+
+---
+
+## 3. Motor Criptográfico Nativo en Rust (`red_core` y `red_mobile`)
+
+El motor Rust está dividido en dos cajas (*crates*):
+
+1. **`red_core`**:
+   - **`identity`**: Generación y firma de llaves **Ed25519** para derivar el `IdentityHash` soberano (`did:red:`).
+   - **`protocol`**: Implementación del Handshake **Noise XK**, intercambio de claves efímeras **X25519** y cifrado simétrico autenticado **ChaCha20-Poly1305**.
+   - **`storage`**: Base de datos SQLite cifrada mediante llaves derivadas de la contraseña maestra del usuario.
+   - **`network`**: Algoritmo de enrutamiento por Inundación Controlada (*Controlled Flood Routing*) con deduplicación de nonces por 72 horas y TTL de 20 saltos.
+
+2. **`red_mobile`**:
+   - Expone las funciones de inicialización NDK JNI (`Java_f_red_app_RedNodePlugin_startNode`).
+   - Inicia el servidor HTTP REST y Eventos SSE en **Axum** (`127.0.0.1:7333`).
+
+---
+
+## 4. Capa de Red Mesh Multi-Radio (GATT, WiFi Direct, LoRa)
+
+- **Bluetooth Low Energy (BLE)**: Operación en modo Periférico y Central simultáneo. Advertising con UUID `00001818-0000-1000-8000-00805f9b34fb`. Inmune al estado de redes IP o VPNs.
+- **WiFi Direct**: Descubrimiento P2P mediante DataChannels WebRTC locales sin infraestructura de router.
+- **Módems LoRa**: Transmisión de paquetes por radio puente de serie a 915 MHz / 868 MHz para alcance de varios kilómetros.
+
+---
+
+## 5. Capa de Almacenamiento & Cifrado en Disco
+
+- Los mensajes, contactos, grupos y llaves se persisten en una base de datos SQLite cifrada.
+- Cada registro contiene metadatos de timestamp, estado de verificación, nonces de deduplicación e historial de retransmisión.
+
+---
+
+## 6. Manejo de Estado SPA & Navegación (Next.js / Zustand)
+
+- **`useRedStore.ts`**: Store central Zustand que coordina la comunicación entre los componentes React, el servidor Rust Axum y los listeners de Capacitor.
+- **Navegación Limpia `goBack`**:
+  - `goBack()` restablece la pantalla a `sidebar` y limpia `activeConversationId: null`.
+  - Escuchador del evento de hardware de Android (`Capacitor App backButton`) en `page.tsx` para garantizar que la tecla de retroceso vuelva limpiamente del chat a la lista principal.
+
+---
+
+## 7. Endpoints de la API Axum REST & SSE
+
+- `POST /api/node/start`: Inicialización del nodo Rust con la contraseña.
+- `GET /api/node/identity`: Retorna el `identity_hash`, `short_id` y `public_key` del nodo local.
+- `GET /api/contacts` / `POST /api/contacts`: Consulta y registro de contactos.
+- `POST /api/messages/send`: Envío de mensajes cifrados.
+- `POST /api/mesh/receive`: Inyección de tramas binarias de radio en Rust.
+- `GET /network/outbound` (SSE): Emisión de paquetes `OnionPacket` salientes para transmisión por radio.
+- `GET /events` (SSE): Emisión de eventos entrantes (`new_message`, `contact_request`, `status_update`).

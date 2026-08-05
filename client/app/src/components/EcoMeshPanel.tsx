@@ -12,8 +12,10 @@ export const EcoMeshPanel: React.FC = () => {
     const loadStatus = async () => {
         try {
             const st = await getBatteryStatus();
-            setStatus(st);
-            setBatteryInput(st.battery_level);
+            if (st) {
+                setStatus(st);
+                setBatteryInput(st.battery_level ?? 85);
+            }
         } catch (e) {
             console.error('Battery status error:', e);
         }

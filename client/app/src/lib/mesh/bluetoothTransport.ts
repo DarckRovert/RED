@@ -18,6 +18,19 @@ class BluetoothTransport {
 
     async init() {
         if (this.isInitialized) return;
+        try {
+            const { registerPlugin } = await import('@capacitor/core');
+            const RedNode = registerPlugin<any>('RedNode');
+            RedNode.addListener('bleMessageReceived', (data: any) => {
+                if (data && data.data) {
+                    const bytes = new Uint8Array(data.data);
+                    const fromDevice = data.device || 'ble_peer';
+                    this.messageListeners.forEach(cb => cb({ from: fromDevice, payload: bytes }));
+                }
+            });
+        } catch (e) {
+            console.warn('[BLE] Native listener attach failed:', e);
+        }
         await BleClient.initialize();
         this.isInitialized = true;
     }

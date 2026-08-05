@@ -37,24 +37,24 @@ export default function StatusHeader() {
         if (loraActive && meshCounts.lora > 0) return "LORA";
         if (meshCounts.wifi > 0) return "WIFI";
         if (meshCounts.ble > 0) return "BLE";
-        if ((status?.peer_count ?? 0) > 0) return "P2P";
-        return "INTERNET";
+        if ((status?.peer_count ?? 0) > 0) return "P2P MESH";
+        return "STANDALONE";
     })();
 
     const networkColor: Record<string, string> = {
-        LORA:    '#9b59b6',
-        WIFI:    '#00D97E',
-        BLE:     '#3498db',
-        P2P:     '#FF7043',
-        INTERNET:'var(--primary)',
+        LORA:       '#9b59b6',
+        WIFI:       '#00D97E',
+        BLE:        '#3498db',
+        'P2P MESH': '#FF7043',
+        STANDALONE: 'var(--primary)',
     };
 
     const networkIcon: Record<string, string> = {
-        LORA:    '📻',
-        WIFI:    '📶',
-        BLE:     '🔵',
-        P2P:     '⚡',
-        INTERNET:'🌐',
+        LORA:       '📻',
+        WIFI:       '📶',
+        BLE:        '🔵',
+        'P2P MESH': '⚡',
+        STANDALONE: '🛡️',
     };
 
     const isOffline = !nodeOnline;

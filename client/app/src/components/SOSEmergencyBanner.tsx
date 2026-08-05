@@ -4,13 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
 
-// Capacitor Geolocation — dynamically imported to avoid SSR issues in Next.js
-let Geolocation: any = null;
-if (typeof window !== 'undefined') {
-    import('@capacitor/geolocation').then((m) => {
-        Geolocation = m.Geolocation;
-    });
-}
+// NOTE: @capacitor/geolocation is imported dynamically inside getGpsCoords()
+// to guarantee it is always resolved before use, avoiding the race condition
+// where a module-level async import may not complete before the function fires.
 
 export const SOSEmergencyBanner: React.FC = () => {
     const { navigate, identity, isAuthenticated, currentScreen } = useRedStore();
@@ -32,7 +28,9 @@ export const SOSEmergencyBanner: React.FC = () => {
     useEffect(() => {
         if (!isAuthenticated) return;
         loadBeacons();
-        const interval = setInterval(loadBeacons, 3000);
+        // FIX 1.6: 3s is too aggressive for a polling model (battery drain).
+        // Increased to 15s. For sub-second latency, the SSE channel handles real-time events.
+        const interval = setInterval(loadBeacons, 15000);
         return () => clearInterval(interval);
     }, [loadBeacons, isAuthenticated]);
 
@@ -63,9 +61,10 @@ export const SOSEmergencyBanner: React.FC = () => {
                 finish({ lat: 0, lon: 0 }, 'error');
             }, 2500);
 
-            // Native Capacitor Geolocation
-            if (Geolocation) {
-                Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 2000 })
+            // FIX 1.5: Import Geolocation dynamically HERE, not at module level.
+            // Module-level async import may not complete before this function fires.
+            import('@capacitor/geolocation').then(({ Geolocation: GeoPlugin }) => {
+                GeoPlugin.getCurrentPosition({ enableHighAccuracy: false, timeout: 2000 })
                     .then((pos: any) => {
                         clearTimeout(timer);
                         finish({
@@ -95,25 +94,28 @@ export const SOSEmergencyBanner: React.FC = () => {
                             finish({ lat: 0, lon: 0 }, 'error');
                         }
                     });
-            } else if (typeof navigator !== 'undefined' && navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (pos) => {
-                        clearTimeout(timer);
-                        finish({
-                            lat: parseFloat(pos.coords.latitude.toFixed(6)),
-                            lon: parseFloat(pos.coords.longitude.toFixed(6))
-                        }, 'ok');
-                    },
-                    () => {
-                        clearTimeout(timer);
-                        finish({ lat: 0, lon: 0 }, 'error');
-                    },
-                    { enableHighAccuracy: false, timeout: 2000 }
-                );
-            } else {
-                clearTimeout(timer);
-                finish({ lat: 0, lon: 0 }, 'error');
-            }
+            }).catch(() => {
+                // Capacitor not available (web) — fall back to browser geolocation
+                if (typeof navigator !== 'undefined' && navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            clearTimeout(timer);
+                            finish({
+                                lat: parseFloat(pos.coords.latitude.toFixed(6)),
+                                lon: parseFloat(pos.coords.longitude.toFixed(6))
+                            }, 'ok');
+                        },
+                        () => {
+                            clearTimeout(timer);
+                            finish({ lat: 0, lon: 0 }, 'error');
+                        },
+                        { enableHighAccuracy: false, timeout: 2000 }
+                    );
+                } else {
+                    clearTimeout(timer);
+                    finish({ lat: 0, lon: 0 }, 'error');
+                }
+            });
         });
     };
 

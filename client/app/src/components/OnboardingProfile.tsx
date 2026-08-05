@@ -33,8 +33,11 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
         // Mark profile as created in Keystore & localStorage
         try {
             if (typeof window !== 'undefined') localStorage.setItem("profile_created", "true");
-            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
-            await SecureStoragePlugin.set({ key: "profile_created", value: "true" });
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                await SecureStoragePlugin.set({ key: "profile_created", value: "true" }).catch(() => null);
+            }
         } catch {}
 
         setSaving(false);
@@ -44,8 +47,11 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
     const handleSkip = async () => {
         try {
             if (typeof window !== 'undefined') localStorage.setItem("profile_created", "true");
-            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
-            await SecureStoragePlugin.set({ key: "profile_created", value: "true" });
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                await SecureStoragePlugin.set({ key: "profile_created", value: "true" }).catch(() => null);
+            }
         } catch {}
         onDone();
     };

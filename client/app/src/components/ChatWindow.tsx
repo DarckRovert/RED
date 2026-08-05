@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem, RedAPI } from "../lib/api";
 import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
+import { toast } from "./Toast";
 
 /* ── Avatar helpers (same palette as Sidebar) ─────────────────────────────── */
 const AVATAR_COLORS = [
@@ -29,8 +30,8 @@ function datePill(ts: number): string {
     const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
     if (diff === 0) return 'Hoy';
     if (diff === 1) return 'Ayer';
-    if (diff < 7)  return d.toLocaleDateString('es', { weekday: 'long' });
-    return d.toLocaleDateString('es', { day: '2-digit', month: 'long', year: 'numeric' });
+    if (diff < 7)  return d.toLocaleDateString([], { weekday: 'long' });
+    return d.toLocaleDateString([], { day: '2-digit', month: 'long', year: 'numeric' });
 }
 function timeStr(ts: number) {
     return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -83,7 +84,7 @@ export function VoiceWave({ playing, color }: { playing: boolean; color: string 
 export default function ChatWindow() {
     const {
         activeConversationId, conversations, contacts, groups, messages,
-        sendMessage, sendTyping, goBack, peerTyping,
+        sendMessage, sendTyping, goBack, peerTyping, addContact,
         deleteMessage, editMessage, clearConversation, starMessage, starredMessages,
         identity,
     } = useRedStore();
@@ -105,7 +106,6 @@ export default function ChatWindow() {
     const [replyTo, setReplyTo]             = useState<MessageItem | null>(null);
     const [pickerFor, setPickerFor]         = useState<string | null>(null);
     const [pickerPos, setPickerPos]         = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-    const [typingPeer, setTypingPeer]       = useState(false);
     const [chatMessages, setChatMessages]   = useState<MessageItem[]>([]);
     const [swipingId, setSwipingId]         = useState<string | null>(null);
     const [chatMenuOpen, setChatMenuOpen]   = useState(false);
@@ -142,6 +142,7 @@ export default function ChatWindow() {
     const searchInputRef   = useRef<HTMLInputElement>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef   = useRef<BlobPart[]>([]);
+    const recordSecRef     = useRef<number>(0);
 
     /* Sync messages from store — filter out reaction and typing entries */
     useEffect(() => {
@@ -151,7 +152,7 @@ export default function ChatWindow() {
     /* Auto-scroll */
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatMessages, typingPeer]);
+    }, [chatMessages, peerTyping]);
 
     /* Close pickers on outside tap */
     useEffect(() => {
@@ -164,13 +165,27 @@ export default function ChatWindow() {
     /* Focus search on open */
     useEffect(() => { if (searchOpen) searchInputRef.current?.focus(); }, [searchOpen]);
 
-    /* Derived search results */
-    const searchResults = searchQuery.trim()
-        ? chatMessages.filter(m =>
-            typeof m.content === 'string' &&
-            m.content.toLowerCase().includes(searchQuery.toLowerCase())
-          )
-        : [];
+
+    /* Derived search results — useMemo keeps hook order stable */
+    const searchResults = useMemo(() =>
+        searchQuery.trim()
+            ? chatMessages.filter(m =>
+                typeof m.content === 'string' &&
+                m.content.toLowerCase().includes(searchQuery.toLowerCase())
+              )
+            : [],
+        [searchQuery, chatMessages]
+    );
+
+    /* FIX 4.2: Auto-scroll to the currently highlighted search result */
+    useEffect(() => {
+        if (!searchResults.length) return;
+        const targetMsg = searchResults[searchIdx];
+        if (!targetMsg) return;
+        const el = document.querySelector<HTMLElement>(`[data-msgid="${targetMsg.id}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchIdx, searchResults]);
 
     /* ── Handlers ─────────────────────────────────────────────────────────── */
 
@@ -202,7 +217,11 @@ export default function ChatWindow() {
             mediaRecorder.start();
             setIsRecording(true);
             setRecordSec(0);
-            timerRef.current = setInterval(() => setRecordSec(p => p + 1), 1000);
+            recordSecRef.current = 0;
+            timerRef.current = setInterval(() => {
+                recordSecRef.current += 1;
+                setRecordSec(recordSecRef.current);
+            }, 1000);
         } catch (e) { console.error('Record start failed:', e); }
     };
 
@@ -212,6 +231,7 @@ export default function ChatWindow() {
         try {
             if (mediaRecorderRef.current) {
                 mediaRecorderRef.current.onstop = () => {
+                    const finalSec = recordSecRef.current;
                     const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                     const reader = new FileReader();
                     reader.readAsDataURL(blob);
@@ -226,7 +246,7 @@ export default function ChatWindow() {
                                 sendMessage(`[Fragment] Nota de voz [${c.chunkIndex}/${c.totalChunks}]`, {
                                     msg_type: 'media_chunk',
                                     media_data: JSON.stringify(c),
-                                    duration_ms: recordSec * 1000
+                                    duration_ms: finalSec * 1000
                                 });
                             });
                         } else {
@@ -234,7 +254,7 @@ export default function ChatWindow() {
                                 msg_type: 'voice',
                                 media_data: rawB64,
                                 mime_type: 'audio/webm',
-                                duration_ms: recordSec * 1000,
+                                duration_ms: finalSec * 1000,
                             });
                         }
                     };
@@ -734,7 +754,9 @@ export default function ChatWindow() {
                             {peerName}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-                            {typingPeer ? (
+                            {/* FIX 1.10: Use peerTyping from store (driven by real SSE events),
+                                NOT typingPeer local state which was never updated. */}
+                            {peerTyping ? (
                                 <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, fontStyle: 'italic' }}>
                                     escribiendo…
                                 </span>
@@ -751,6 +773,37 @@ export default function ChatWindow() {
                         </div>
                     </div>
                 </div>
+
+                {/* ── Reciprocal Contact Request Banner ──────────────────────────── */}
+                {peerHash && !contacts.some((c: any) => c.identity_hash === peerHash) && (
+                    <div style={{
+                        padding: '8px 16px', background: 'linear-gradient(135deg, rgba(232,33,58,0.18), rgba(255,51,85,0.1))',
+                        borderBottom: '1px solid rgba(232,33,58,0.3)', display: 'flex', alignItems: 'center',
+                        justifyContent: 'space-between', gap: '12px', zIndex: 9, flexShrink: 0
+                    }}>
+                        <div style={{ fontSize: '0.82rem', color: 'white', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>🤝</span>
+                            <span>Este usuario no está en tus contactos.</span>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    await addContact(peerHash, peerName || `Operador ${peerHash.substring(0, 6)}`);
+                                    toast.success("✅ Contacto guardado.");
+                                } catch {
+                                    toast.error("Error al guardar.");
+                                }
+                            }}
+                            style={{
+                                padding: '6px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), #C0152A)',
+                                border: 'none', color: 'white', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer',
+                                boxShadow: '0 2px 10px rgba(232,33,58,0.4)', flexShrink: 0
+                            }}
+                        >
+                            + Guardar Contacto
+                        </button>
+                    </div>
+                )}
 
                 {/* Header actions */}
                 <div style={{ display: 'flex', gap: '4px', flexShrink: 0, position: 'relative' }}>

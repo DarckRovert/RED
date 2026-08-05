@@ -3,8 +3,9 @@
 import React, { useState, useRef } from "react";
 import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "./Toast";
-import { Clipboard } from '@capacitor/clipboard';
+// NOTE: @capacitor/clipboard is not used in this file — removed dead import (FIX 3.3)
 import { GlobalSearchModal } from "./GlobalSearchModal";
+import StoriesBar from "./stories/StoriesBar";
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 
@@ -71,6 +72,8 @@ export default function Sidebar() {
     const [pullRefreshing, setPullRefreshing] = useState(false);
     const [showEditNickModal, setShowEditNickModal] = useState(false);
     const [nickInput, setNickInput] = useState('');
+    // Stories modal state (broadcaster/viewer opened from StoriesBar)
+    const [storyModal, setStoryModal] = useState<'creator' | { type: 'contact'; hash: string } | { type: 'live'; id: string } | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const pullStartY = useRef<number>(0);
     const listRef = useRef<HTMLDivElement>(null);
@@ -99,11 +102,12 @@ export default function Sidebar() {
     const totalUnread = conversations.reduce((sum, c) => sum + (c?.unread_count || 0), 0);
 
     const quickActions = [
-        { icon: '📢', label: 'Difusión',  action: 'broadcast', color: '#E8213A' },
-        { icon: '🧭', label: 'Brújula',   action: 'compass',   color: '#38bdf8' },
-        { icon: '📻', label: 'Canales',   action: 'channels',  color: '#c084fc' },
-        { icon: '🛡️', label: 'Guardian',  action: 'guardian',  color: '#63b3ed' },
-        { icon: '🟠', label: 'AMBER',     action: 'amber',     color: '#ff8c00' },
+        { icon: '📺', label: 'LIVE TikTok', action: 'status',    color: '#FF0050' },
+        { icon: '📢', label: 'Difusión',    action: 'broadcast', color: '#E8213A' },
+        { icon: '🧭', label: 'Brújula',     action: 'compass',   color: '#38bdf8' },
+        { icon: '📻', label: 'Canales',     action: 'channels',  color: '#c084fc' },
+        { icon: '🛡️', label: 'Guardian',    action: 'guardian',  color: '#63b3ed' },
+        { icon: '🟠', label: 'AMBER',       action: 'amber',     color: '#ff8c00' },
     ];
 
     const menuItems = [
@@ -226,7 +230,8 @@ export default function Sidebar() {
                     <>
                         {/* Left: Logo + identity */}
                         {(() => {
-                            const userNick = identity?.nickname || (typeof window !== 'undefined' ? localStorage.getItem('red_displayName') : '') || 'Operador RED';
+                            const savedLocalNick = typeof window !== 'undefined' ? (localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname')) : '';
+                            const userNick = savedLocalNick || identity?.nickname || 'Operador RED';
                             const initialChar = (userNick.trim().charAt(0) || 'R').toUpperCase();
                             return (
                                 <div 
@@ -259,11 +264,15 @@ export default function Sidebar() {
                                         }} />
                                     </div>
                                     <div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <span style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1 }}>
+                                        <div 
+                                            onClick={() => { setNickInput(userNick); setShowEditNickModal(true); }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: 150, cursor: 'pointer' }}
+                                            title="Toca para cambiar alias táctico"
+                                        >
+                                            <span style={{ fontSize: '1.05rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                 {userNick}
                                             </span>
-                                            <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>✏️</span>
+                                            <span style={{ fontSize: '0.75rem', opacity: 0.8, flexShrink: 0 }}>✏️</span>
                                         </div>
                                         <div style={{
                                             display: 'flex', alignItems: 'center', gap: '6px',
@@ -277,8 +286,11 @@ export default function Sidebar() {
                                                 <button 
                                                     onClick={async (e) => {
                                                         e.stopPropagation();
+                                                        // FIX 3.3: Use dynamic import for Capacitor Clipboard
+                                                        // to avoid referencing the browser's global Clipboard type.
                                                         try {
-                                                            await Clipboard.write({ string: identity.identity_hash });
+                                                            const { Clipboard: CapClipboard } = await import('@capacitor/clipboard');
+                                                            await CapClipboard.write({ string: identity.identity_hash });
                                                             toast.success("✅ Hash de identidad copiado.");
                                                         } catch (err) {
                                                             try {
@@ -306,7 +318,22 @@ export default function Sidebar() {
                         })()}
 
                         {/* Right: Action buttons */}
-                        <div style={{ display: 'flex', gap: '4px' }}>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            <button
+                                className="btn-primary"
+                                onClick={() => navigate('radar')}
+                                title="Mi Código QR e Identidad"
+                                style={{
+                                    padding: '6px 12px', borderRadius: '14px',
+                                    fontSize: '0.78rem', fontWeight: 800,
+                                    background: 'linear-gradient(135deg, #E8213A, #C0152A)',
+                                    color: 'white', border: 'none', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', gap: '4px',
+                                    boxShadow: '0 2px 10px rgba(232,33,58,0.4)'
+                                }}
+                            >
+                                📷 Mi QR
+                            </button>
                             <button className="btn-icon" title="Búsqueda Global" onClick={() => setGlobalSearchOpen(true)}>
                                 <span style={{ fontSize: '1rem' }}>🔍</span>
                             </button>
@@ -347,59 +374,69 @@ export default function Sidebar() {
             )}
 
             {/* ── Quick action strip ────────────────────────────────────────── */}
-            <div style={{ padding: '14px 16px 4px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ padding: '14px 16px 6px', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
                     {quickActions.map(a => (
                         <button
                             key={a.action}
                             onClick={e => { e.preventDefault(); navigate(a.action as any); }}
+                            className="zenith-card"
                             style={{
-                                flex: 1, padding: '11px 4px', display: 'flex', flexDirection: 'column',
-                                alignItems: 'center', gap: '5px', borderRadius: 'var(--radius-md)',
-                                background: `${a.color}0d`, border: `1px solid ${a.color}22`,
-                                cursor: 'pointer', color: a.color, transition: 'all 0.2s ease',
+                                flex: '1 0 62px', minWidth: 62, padding: '10px 4px', display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', gap: '6px', borderRadius: '16px',
+                                background: `linear-gradient(145deg, ${a.color}1a, rgba(14,14,26,0.8))`,
+                                border: `1px solid ${a.color}40`,
+                                cursor: 'pointer', color: 'white',
                             }}
-                            onMouseOver={e => { e.currentTarget.style.background = `${a.color}20`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                            onMouseOut={e => { e.currentTarget.style.background = `${a.color}0d`; e.currentTarget.style.transform = 'none'; }}
                         >
-                            <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{a.icon}</span>
-                            <span style={{ fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.3px', opacity: 0.9 }}>{a.label}</span>
+                            <span style={{ fontSize: '1.2rem', lineHeight: 1, filter: `drop-shadow(0 2px 8px ${a.color}80)` }}>{a.icon}</span>
+                            <span style={{ fontSize: '0.64rem', fontWeight: 800, letterSpacing: '0.3px', color: a.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{a.label}</span>
                         </button>
                     ))}
                 </div>
             </div>
 
+            {/* ── Stories Bar ────────────────────────────────────────────────── */}
+            <StoriesBar
+                onMyStory={() => navigate('status')}
+                onContactStory={(hash) => navigate('status')}
+                onLiveStream={(id) => navigate('status')}
+            />
+
             {/* ── Tab Bar ──────────────────────────────────────────────────── */}
             <div style={{ display: 'flex', padding: '10px 16px 6px', gap: '6px', flexShrink: 0 }}>
                 {[
                     { id: 'chats',    label: 'Mensajes', count: totalUnread },
+                    { id: 'status',   label: '📺 LIVE',   count: 0 },
                     { id: 'contacts', label: 'Contactos', count: contacts.length },
                 ].map(tab => (
                     <button
                         key={tab.id}
-                        onClick={e => { e.preventDefault(); setActiveTab(tab.id as any); }}
+                        onClick={e => {
+                            e.preventDefault();
+                            if (tab.id === 'status') {
+                                navigate('status');
+                            } else {
+                                setActiveTab(tab.id as any);
+                            }
+                        }}
+                        className={activeTab === tab.id ? 'glow-pill-active' : 'zenith-card'}
                         style={{
-                            flex: 1, padding: '9px 0', borderRadius: 'var(--radius-md)',
-                            fontSize: '0.83rem', fontWeight: 700,
-                            background: activeTab === tab.id
-                                ? 'linear-gradient(135deg, rgba(232,33,58,0.25), rgba(200,20,45,0.15))'
-                                : 'rgba(0,0,0,0.2)',
+                            flex: 1, padding: '10px 0', borderRadius: '16px',
+                            fontSize: '0.82rem', fontWeight: 800, letterSpacing: '0.2px',
                             color: activeTab === tab.id ? 'white' : 'var(--text-muted)',
-                            border: `1px solid ${activeTab === tab.id ? 'rgba(232,33,58,0.4)' : 'rgba(255,255,255,0.05)'}`,
-                            boxShadow: activeTab === tab.id ? '0 4px 12px rgba(232,33,58,0.2)' : 'none',
-                            transition: 'all 0.3s var(--ease-spring)',
-                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
                         }}
                     >
                         {tab.label}
                         {tab.count > 0 && (
                             <span style={{
-                                fontSize: '0.65rem', minWidth: 18, height: 18, borderRadius: '9px',
-                                background: activeTab === tab.id ? 'var(--primary)' : 'var(--bg-lifted)',
-                                color: activeTab === tab.id ? 'white' : 'var(--text-muted)',
+                                fontSize: '0.68rem', minWidth: 20, height: 20, borderRadius: '10px',
+                                background: activeTab === tab.id ? 'white' : '#FF3355',
+                                color: activeTab === tab.id ? '#E8213A' : 'white',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontWeight: 800, padding: '0 5px',
-                                boxShadow: activeTab === tab.id ? '0 2px 6px rgba(232,33,58,0.4)' : 'none',
+                                fontWeight: 900, padding: '0 6px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                             }}>
                                 {tab.count}
                             </span>
@@ -498,22 +535,20 @@ export default function Sidebar() {
                             <div
                                 key={chat.id}
                                 onClick={e => { e.preventDefault(); navigate('chat', chat.id); }}
-                                className="animate-enter interactive-row"
+                                className="animate-enter zenith-card"
                                 style={{
-                                    display: 'flex', alignItems: 'center', padding: '11px 10px', gap: '13px',
-                                    borderRadius: '16px', cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', padding: '12px 12px', gap: '14px',
+                                    borderRadius: '20px', cursor: 'pointer',
                                     background: isPinned 
-                                        ? 'linear-gradient(135deg, rgba(255,167,38,0.12), rgba(232,33,58,0.08))'
-                                        : hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.15), rgba(200,20,45,0.05))' : 'rgba(0,0,0,0.2)',
-                                    border: `1px solid ${isPinned ? 'rgba(255,167,38,0.3)' : hasUnread ? 'rgba(232,33,58,0.25)' : 'rgba(255,255,255,0.04)'}`,
-                                    marginBottom: '4px',
-                                    backdropFilter: 'blur(8px)',
-                                    transition: 'all 0.3s var(--ease-spring)',
-                                    animationDelay: `${i * 35}ms`,
+                                        ? 'linear-gradient(135deg, rgba(255,167,38,0.18), rgba(232,33,58,0.1))'
+                                        : hasUnread ? 'linear-gradient(135deg, rgba(255,51,85,0.22), rgba(200,20,45,0.1))' : undefined,
+                                    border: isPinned
+                                        ? '1px solid rgba(255,167,38,0.4)'
+                                        : hasUnread ? '1px solid rgba(255,51,85,0.45)' : undefined,
+                                    marginBottom: '6px',
+                                    animationDelay: `${i * 30}ms`,
                                 }}
-                            onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.background = hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.2), rgba(200,20,45,0.1))' : 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
-                            onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = hasUnread ? 'linear-gradient(135deg, rgba(232,33,58,0.15), rgba(200,20,45,0.05))' : 'rgba(0,0,0,0.2)'; e.currentTarget.style.borderColor = hasUnread ? 'rgba(232,33,58,0.25)' : 'rgba(255,255,255,0.04)'; }}
-                        >
+                            >
                             {/* Avatar */}
                             <div style={{
                                 width: 48, height: 48, borderRadius: isGroup ? '14px' : '50%', flexShrink: 0,
@@ -622,17 +657,14 @@ export default function Sidebar() {
                     return (
                         <div
                             key={c.identity_hash}
-                            className="animate-enter interactive-row"
+                            className="animate-enter zenith-card"
                             onClick={e => { e.preventDefault(); navigate('chat', c.identity_hash); }}
                             style={{
-                                display: 'flex', alignItems: 'center', padding: '11px 10px', gap: '13px',
-                                borderRadius: 'var(--radius-md)', cursor: 'pointer',
-                                border: '1px solid transparent',
-                                marginBottom: '2px', transition: 'all 0.15s ease',
-                                animationDelay: `${i * 35}ms`,
+                                display: 'flex', alignItems: 'center', padding: '12px 12px', gap: '14px',
+                                borderRadius: '20px', cursor: 'pointer',
+                                marginBottom: '6px',
+                                animationDelay: `${i * 30}ms`,
                             }}
-                            onMouseOver={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; }}
-                            onMouseOut={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; }}
                         >
                             <div style={{
                                 width: 48, height: 48, borderRadius: '50%', flexShrink: 0,

@@ -4,6 +4,25 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [24.0.0-p2p-master] - 2026-08-05
+
+### Añadido y Corregido — RED v24.0.0 Native P2P & Navigation Master Release
+
+**Puente Nativo GATT Server & Inyección Directa (`RedNodeService.java` & `bluetoothTransport.ts`)**
+- **Fix GATT Write UUID Swap:** Corrección de la validación UUID en `onCharacteristicWriteRequest` para aceptar escrituras en características `RED_BLE_RX_CHAR` y `RED_BLE_TX_CHAR`.
+- **Inyección Nativa Directa a Rust:** Implementación de `injectNativeMeshPayload` en Java para realizar un POST directo de tramas mesh a `http://127.0.0.1:7333/api/mesh/receive`.
+- **Listener JS Nativo:** Suscripción al evento `bleMessageReceived` de Capacitor en `bluetoothTransport.ts` para transmitir tramas físicas de radio al `MeshRouter`.
+
+**Auto-Intercambio Recíproco de Claves Públicas (`RadarWindow.tsx` & `useRedStore.ts`)**
+- **Extracción Criptográfica QR:** Corrección del escáner QR en `RadarWindow.tsx` para extraer `identity_hash` y `public_key` del formato `did:red:<hash>:<public_key>`.
+- **Payload `sender_pk` Recíproco:** Inclusión automática de `sender_pk` en `contact_request` y `contact_response`, habilitando el cifrado E2E Noise XK inmediato entre pares.
+- **Refresco de Fondo en Sidebar:** Actualización automática de la lista de conversaciones y el contador de no leídos (`fetchData()`) al recibir mensajes cuando la ventana del chat no está enfocada.
+
+**Navegación SPA & Botón Retroceso Android (`useRedStore.ts` & `page.tsx`)**
+- **Fix Bucle de Navegación `goBack()`:** Restablecimiento a `currentScreen: 'sidebar'` y `activeConversationId: null` para permitir salir limpiamente del chat mediante la flecha superior o la tecla física de retroceso de Android.
+
+---
+
 ## [24.1.0] - 2026-08-02
 
 ### Añadido y Corregido — RED v24.1 Real-Data & WAN P2P Release

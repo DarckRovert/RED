@@ -4,14 +4,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { sendVoiceBurst, getVoiceBursts, VoiceBurst } from '../lib/api';
 
-// Capacitor VoiceRecorder - dynamically imported to avoid SSR issues in Next.js
-let VoiceRecorder: any = null;
-if (typeof window !== 'undefined') {
-    import('capacitor-voice-recorder').then((m) => {
-        VoiceRecorder = m.VoiceRecorder;
-    });
-}
-
 export const P2PWalkieTalkieModal: React.FC = () => {
     const { navigate } = useRedStore();
     const [isRecording, setIsRecording] = useState(false);
@@ -21,12 +13,25 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
 
+    // Helper to dynamically obtain VoiceRecorder plugin when running natively
+    const getVoiceRecorder = async () => {
+        try {
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { VoiceRecorder } = await import('capacitor-voice-recorder');
+                return VoiceRecorder;
+            }
+        } catch {}
+        return null;
+    };
+
     // Request microphone permission on mount
     useEffect(() => {
         const requestPerm = async () => {
             try {
-                if (VoiceRecorder) {
-                    const perm = await VoiceRecorder.requestAudioRecordingPermission();
+                const VR = await getVoiceRecorder();
+                if (VR) {
+                    const perm = await VR.requestAudioRecordingPermission();
                     setPermissionGranted(perm.value);
                 } else {
                     // Web fallback: check getUserMedia
@@ -45,9 +50,10 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     const loadBursts = useCallback(async () => {
         try {
             const list = await getVoiceBursts();
-            setBursts(list);
+            setBursts(Array.isArray(list) ? list : []);
         } catch (e) {
             console.error('Voice bursts fetch error:', e);
+            setBursts([]);
         }
     }, []);
 
@@ -74,8 +80,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             return;
         }
         try {
-            if (VoiceRecorder) {
-                await VoiceRecorder.startRecording();
+            const VR = await getVoiceRecorder();
+            if (VR) {
+                await VR.startRecording();
             }
             setIsRecording(true);
             setStatusMsg(null);
@@ -91,10 +98,11 @@ export const P2PWalkieTalkieModal: React.FC = () => {
 
         try {
             let audioB64 = '';
+            const VR = await getVoiceRecorder();
 
-            if (VoiceRecorder) {
+            if (VR) {
                 // Real Capacitor recording
-                const result = await VoiceRecorder.stopRecording();
+                const result = await VR.stopRecording();
                 audioB64 = result.value?.recordDataBase64 || '';
             } else {
                 // Web fallback: not supported — show clear message

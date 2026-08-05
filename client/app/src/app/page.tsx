@@ -34,7 +34,12 @@ const EcoMeshPanel          = dynamic(() => import("../components/EcoMeshPanel")
 const ProximitySettingsModal = dynamic(() => import("../components/ProximitySettingsModal").then(m => ({ default: m.ProximitySettingsModal })), { ssr: false, loading: () => <AppLoader /> });
 const AICopilotModal        = dynamic(() => import("../components/AICopilotModal").then(m => ({ default: m.AICopilotModal })),        { ssr: false, loading: () => <AppLoader /> });
 const NearbyDevicesPanel    = dynamic(() => import("../components/NearbyDevicesPanel"),    { ssr: false, loading: () => <AppLoader /> });
+const LiveStreamBroadcaster = dynamic(() => import("../components/LiveStreamBroadcaster").then(m => ({ default: m.LiveStreamBroadcaster })), { ssr: false, loading: () => <AppLoader /> });
+const LiveStreamViewer      = dynamic(() => import("../components/LiveStreamViewer").then(m => ({ default: m.LiveStreamViewer })),      { ssr: false, loading: () => <AppLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
+// FIX 1.4: SOSEmergencyBanner must be a persistent overlay — mounted ONCE while authenticated,
+// regardless of which screen is active. It auto-activates via its own currentScreen subscription.
+const SOSEmergencyBanner    = dynamic(() => import("../components/SOSEmergencyBanner").then(m => ({ default: m.SOSEmergencyBanner })), { ssr: false, loading: () => null });
 
 /* ── Spinners de carga ── */
 function AppLoader() {
@@ -106,7 +111,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
  * Lazy-loads all components with ssr:false to prevent hydration crashes.
  */
 export default function AppRouter() {
-  const { currentScreen, nodeOnline, identity, navigate, goBack } = useRedStore();
+  const { currentScreen, nodeOnline, identity, navigate, goBack, activeLiveStreamId } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
 
@@ -138,12 +143,19 @@ export default function AppRouter() {
           setNeedsProfile(false);
           return;
         }
-        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
-        const { value } = await SecureStoragePlugin.get({ key: "profile_created" });
-        setNeedsProfile(!value);
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+          const res = await SecureStoragePlugin.get({ key: "profile_created" }).catch(() => null);
+          if (res && res.value === "true") {
+            setNeedsProfile(false);
+            return;
+          }
+        }
+        // ROOT-CAUSE FIX: For new users, profile_created is not set yet, so needsProfile MUST be true!
+        setNeedsProfile(true);
       } catch {
-        // On Web browser fallback (GitHub Pages), default to false so app is immediately accessible!
-        setNeedsProfile(false);
+        setNeedsProfile(true);
       }
     };
 
@@ -186,6 +198,9 @@ export default function AppRouter() {
       case 'proximitySettings': return <ProximitySettingsModal />;
       case 'aiCopilot':       return <AICopilotModal />;
       case 'nearby':          return <NearbyDevicesPanel />;
+      case 'liveStream':      return activeLiveStreamId
+                                ? <LiveStreamViewer streamId={activeLiveStreamId} onClose={() => navigate('sidebar')} />
+                                : <LiveStreamBroadcaster onClose={() => navigate('sidebar')} />;
       case 'sos':             return <Sidebar />;
       default:                return <Sidebar />;
     }
@@ -199,6 +214,8 @@ export default function AppRouter() {
             <OnboardingProfile onDone={() => setNeedsProfile(false)} />
           ) : (
             <main style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+              {/* FIX 1.4: SOS overlay — always mounted while authenticated so banners are always visible */}
+              <SOSEmergencyBanner />
               {!nodeOnline && (
                 <div style={{ background: 'var(--danger)', color: 'white', textAlign: 'center', padding: '6px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                    <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>

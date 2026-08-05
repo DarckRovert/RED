@@ -45,7 +45,7 @@ export interface MessageItem {
     duration_ms?: number;
     conversation_id?: string;
     /** Delivery status */
-    status?: 'Pending' | 'Sent' | 'Delivered';
+    status?: 'Pending' | 'Sent' | 'Delivered' | 'Failed';
     /** Reply/quote metadata — set when this message is a reply to another */
     reply_to?: {
         id: string;
@@ -61,6 +61,8 @@ export interface MessageItem {
         options: string[];
         votes: Record<string, string>; // option_index → peer_id
     };
+    /** Story theme index (0-7) — serialized as string in Rust payload */
+    theme?: string;
 }
 
 /** Peer item returned by /api/peers */
@@ -113,12 +115,19 @@ class RedAPIClient {
     }
 
     private getURL() {
-        try {
-             const cap = (window as any).Capacitor;
-             if (cap?.isNativePlatform?.() || window.location.protocol === 'capacitor:') {
-                 return this.baseURL;
-             }
-        } catch {}
+        if (typeof window !== 'undefined') {
+            const custom = localStorage.getItem('red_node_url');
+            if (custom) {
+                const trimmed = custom.replace(/\/+$/, '');
+                return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+            }
+            try {
+                const cap = (window as any).Capacitor;
+                if (cap?.isNativePlatform?.() || window.location.protocol === 'capacitor:') {
+                    return this.baseURL;
+                }
+            } catch {}
+        }
         return this.getFallbackURL();
     }
 
@@ -188,13 +197,62 @@ class RedAPIClient {
         await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
     }
 
+    // ── Live Streaming API ──────────────────────────────────────────────────────
+
+    /**
+     * Announce a new live stream to a list of contacts.
+     * Uses content field to carry the stream_id.
+     */
+    async sendLiveAnnounce(contacts: any[], streamId: string): Promise<void> {
+        for (const c of contacts) {
+            try {
+                await this.sendMessage(c.identity_hash, streamId, { msg_type: 'live_announce' });
+            } catch (e) {
+                console.warn('[RED Live] announce failed to', c.display_name, e);
+            }
+        }
+    }
+
+    /**
+     * Send a single MJPEG frame to all contacts.
+     * media_data: base64 JPEG string.
+     * duration_ms is reused to carry the frame sequence number (no backend change needed).
+     */
+    async sendLiveFrame(contacts: any[], streamId: string, frameB64: string, seq: number): Promise<void> {
+        for (const c of contacts) {
+            try {
+                await this.sendMessage(c.identity_hash, '', {
+                    msg_type: 'live_frame',
+                    media_data: frameB64,
+                    conversation_id: streamId,
+                    duration_ms: seq,
+                });
+            } catch { /* best-effort frame delivery */ }
+        }
+    }
+
+    /**
+     * Signal the end of a live stream to all contacts.
+     */
+    async sendLiveEnd(contacts: any[], streamId: string): Promise<void> {
+        for (const c of contacts) {
+            try {
+                await this.sendMessage(c.identity_hash, streamId, { msg_type: 'live_end' });
+            } catch (e) {
+                console.warn('[RED Live] end signal failed to', c.display_name, e);
+            }
+        }
+    }
+
     /**
      * Send a message to a P2P group.
      * The Rust node fans it out to all group members and stores it under the
      * unified group conversation (my_hash, group_id).
      */
     async sendGroupMessage(groupId: string, content: string, options?: Record<string, any>): Promise<void> {
-        const body = { content, ...options };
+        // NOTE: Rust struct SendMessageRequest requires `recipient: String`.
+        // Omitting recipient caused Serde deserialization failure (422 Unprocessable Entity).
+        const body = { recipient: groupId, content, ...options };
         await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
     }
 
@@ -252,7 +310,9 @@ class RedAPIClient {
     }
 
     async setProfile(nickname: string, bio?: string): Promise<void> {
-        await this.req('/profile', { method: 'PUT', body: JSON.stringify({ nickname, bio }) });
+        // NOTE: Rust struct UpdateProfileRequest uses `display_name` field, not `nickname`.
+        // Sending `nickname` was silently ignored by Axum — alias never persisted.
+        await this.req('/profile', { method: 'PUT', body: JSON.stringify({ display_name: nickname }) });
     }
 
     // ── Network / Peers ───────────────────────────────────────────────────────
@@ -340,11 +400,26 @@ class RedAPIClient {
         if (typeof window === 'undefined') return null;
         try {
             const es = new EventSource(`${this.getURL()}/events`);
-            es.addEventListener('message', (event) => {
-                try { onMessage(JSON.parse(event.data)); } catch (e) {
+            const handleEvent = (event: MessageEvent) => {
+                try {
+                    const parsed = JSON.parse(event.data);
+                    onMessage(parsed);
+                } catch (e) {
                     console.warn('[RED SSE] Parse failed', event.data);
                 }
-            });
+            };
+
+            // Register standard unnamed message listener
+            es.addEventListener('message', handleEvent);
+
+            // Register explicit named event listeners sent by Axum Rust SSE
+            const eventTypes = [
+                'new_message', 'message', 'conv_update', 'contact_update', 'typing',
+                'contact_request', 'live_frame', 'live_announce', 'live_end',
+                'live_comment', 'status', 'peer_connected', 'peer_disconnected', 'sos_alert'
+            ];
+            eventTypes.forEach(evt => es.addEventListener(evt, handleEvent));
+
             return es;
         } catch {
             return null;
@@ -423,17 +498,7 @@ export interface GuardianStatus {
 // ─── v19.0: Funciones API AMBER ───────────────────────────────────────────────
 
 function getNodeUrl(): string {
-    if (typeof window !== 'undefined') {
-        const custom = localStorage.getItem('red_node_url');
-        if (custom) return custom;
-        try {
-            const cap = (window as any).Capacitor;
-            if (cap?.isNativePlatform?.() || window.location.protocol === 'capacitor:') {
-                return 'http://127.0.0.1:7333';
-            }
-        } catch {}
-    }
-    return 'http://127.0.0.1:7333';
+    return RedAPI.getBaseURL().replace(/\/api\/?$/, '');
 }
 
 // ─── Client-Side Real-Functionality Fallback Engine ───────────────────────────
@@ -501,10 +566,16 @@ function setStored<T>(key: string, val: T): void {
 
 /** Obtener alertas AMBER activas */
 export async function getAmberAlerts(): Promise<AmberAlert[]> {
-    return fetchWithFallback('/api/amber/alerts', undefined, () => {
+    const res = await fetchWithFallback<any>('/api/amber/alerts', undefined, () => {
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
         return alerts.filter(a => a.status === 'Active');
     });
+    if (Array.isArray(res)) return res;
+    if (res && typeof res === 'object') {
+        if (Array.isArray(res.alerts)) return res.alerts;
+        if (Array.isArray(res.value)) return res.value;
+    }
+    return [];
 }
 
 /** Obtener alerta específica por ID (incluye foto) */
@@ -782,12 +853,18 @@ export async function resolveSos(sosId: string): Promise<{ ok: boolean; resolved
     });
 }
 
-/** Obtener balizas SOS activas */
 export async function getActiveSos(): Promise<SosBeacon[]> {
-    return fetchWithFallback('/api/sos/active', undefined, () => {
+    const res = await fetchWithFallback<any>('/api/sos/active', undefined, () => {
         const beacons = getStored<SosBeacon[]>(STORAGE_KEYS.SOS_BEACONS, []);
         return beacons.filter(b => b.is_active);
     });
+    if (Array.isArray(res)) return res;
+    if (res && typeof res === 'object') {
+        if (Array.isArray(res.active_beacons)) return res.active_beacons;
+        if (Array.isArray(res.beacons)) return res.beacons;
+        if (Array.isArray(res.value)) return res.value;
+    }
+    return [];
 }
 
 /** Obtener mensajes de canal público local */
@@ -928,9 +1005,15 @@ export async function sendVoiceBurst(payload: {
 
 /** Obtener ráfagas de voz recientes */
 export async function getVoiceBursts(): Promise<VoiceBurst[]> {
-    return fetchWithFallback('/api/voice/bursts', undefined, () => {
+    const res = await fetchWithFallback<any>('/api/voice/bursts', undefined, () => {
         return getStored<VoiceBurst[]>(STORAGE_KEYS.VOICE_BURSTS, []);
     });
+    if (Array.isArray(res)) return res;
+    if (res && typeof res === 'object') {
+        if (Array.isArray(res.bursts)) return res.bursts;
+        if (Array.isArray(res.value)) return res.value;
+    }
+    return [];
 }
 
 /** Limpiar metadatos EXIF / GPS de fotografía usando Canvas re-rendering */
@@ -1024,7 +1107,7 @@ export interface EcoMeshStatus {
 
 /** Obtener nodos por proximidad zero-touch (<5m) desde peers P2P conectados reales */
 export async function getProximityNodes(): Promise<ProximityNode[]> {
-    return fetchWithFallback('/api/discovery/proximity', undefined, async () => {
+    const res = await fetchWithFallback<any>('/api/discovery/proximity', undefined, async () => {
         const peers = await RedAPI.getPeers().catch(() => []);
         if (peers.length > 0) {
             return peers.map(p => ({
@@ -1038,6 +1121,13 @@ export async function getProximityNodes(): Promise<ProximityNode[]> {
         }
         return [];
     });
+    if (Array.isArray(res)) return res;
+    if (res && typeof res === 'object') {
+        if (Array.isArray(res.proximity_nodes)) return res.proximity_nodes;
+        if (Array.isArray(res.nodes)) return res.nodes;
+        if (Array.isArray(res.value)) return res.value;
+    }
+    return [];
 }
 
 /** Iniciar saludo P2P instantáneo de proximidad */

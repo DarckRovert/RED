@@ -37,8 +37,8 @@ function datePill(ts: number): string {
     const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
     if (diff === 0) return 'Hoy';
     if (diff === 1) return 'Ayer';
-    if (diff < 7)  return d.toLocaleDateString('es', { weekday: 'long' });
-    return d.toLocaleDateString('es', { day: '2-digit', month: 'long', year: 'numeric' });
+    if (diff < 7)  return d.toLocaleDateString([], { weekday: 'long' });
+    return d.toLocaleDateString([], { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
 function timeStr(ts: number) {

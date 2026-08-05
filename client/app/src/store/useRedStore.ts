@@ -2,13 +2,42 @@ import { create } from 'zustand';
 import { RedAPI, IdentityResponse, ConversationItem, MessageItem, StatusResponse } from '../lib/api';
 import { localTransport } from '../lib/mesh/localTransport';
 import { meshRouter } from '../lib/mesh/meshRouter';
+import { toast } from '../components/Toast';
+
+// ── Live Streaming Types ──────────────────────────────────────────────────────
+export interface LiveStreamItem {
+    stream_id: string;
+    broadcaster_hash: string;
+    broadcaster_name: string;
+    started_at: number;
+    is_active: boolean;
+    frames: string[];          // last 3 base64 JPEG frames (ring buffer)
+    frame_seq: number;         // last received sequence number
+    comments: { sender: string; text: string; ts: number }[];
+}
+
+export interface StoryEntry {
+    id: string;
+    content: string;           // text or empty if photo
+    media_data?: string;       // base64 JPEG if photo story
+    theme?: number;            // 0-7 gradient index for text stories
+    timestamp: number;         // ms since epoch
+    sender: string;            // own identity_hash
+    is_mine: true;
+}
+
+// ── Module-level cleanup handles (prevent duplicate connections on hot-reload) ──
+let _fetchInterval: ReturnType<typeof setInterval> | null = null;
+let _mainSSE: EventSource | null = null;
+let _outboundSSE: EventSource | null = null;
+let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * RED 2.0 SPA Store.
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'guardian' | 'compass' | 'channels' | 'sos' | 'walkie' | 'weather' | 'idVault' | 'proximity' | 'canvas' | 'ecoMesh' | 'proximitySettings' | 'aiCopilot' | 'nearby';
+export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'guardian' | 'compass' | 'channels' | 'sos' | 'walkie' | 'weather' | 'idVault' | 'proximity' | 'canvas' | 'ecoMesh' | 'proximitySettings' | 'aiCopilot' | 'nearby' | 'liveStream';
 
 
 interface RedStore {
@@ -31,7 +60,7 @@ interface RedStore {
     
     // 4. Actions
     login: (password: string) => Promise<boolean>;
-    initNodeConnection: () => Promise<void>;
+    initNodeConnection: () => Promise<boolean>;
     fetchData: () => Promise<void>;
     
     // Navigation Action
@@ -59,7 +88,30 @@ interface RedStore {
     togglePinChat: (id: string) => void;
     toggleArchiveChat: (id: string) => void;
     setProfile: (nickname: string) => Promise<void>;
+
+    // ── Stories & Live Streaming ───────────────────────────────────────────────
+    liveStreams: Record<string, LiveStreamItem>;
+    myStories: StoryEntry[];
+    peerStories: Record<string, MessageItem[]>;
+    activeLiveStreamId: string | null;   // stream being viewed
+    isStreaming: boolean;                 // true when broadcasting
+    streamId: string | null;             // own active stream id
+
+    publishStatus: (content: string, media?: string | null, theme?: number) => Promise<void>;
+    openLiveStream: (streamId: string) => void;
+    closeLiveStream: () => void;
+    addLiveFrame: (streamId: string, frame: string, seq: number) => void;
+    removeLiveStream: (streamId: string) => void;
+    addLiveComment: (streamId: string, sender: string, text: string) => void;
 }
+
+/** Screens that act as overlays and must NOT clear activeConversationId */
+const OVERLAY_SCREENS = new Set<ScreenView>([
+    'sos', 'aiCopilot', 'proximity', 'canvas', 'walkie', 'weather',
+    'proximitySettings', 'radar', 'contacts', 'settings', 'nodemap',
+    'compass', 'idVault', 'amber', 'guardian', 'channels', 'crypto',
+    'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast'
+]);
 
 export const useRedStore = create<RedStore>((set, get) => ({
     isAuthenticated: false,
@@ -74,6 +126,39 @@ export const useRedStore = create<RedStore>((set, get) => ({
     starredMessages: [],
     peerTyping: false,
     typingTimeout: null,
+
+    // Stories & Live Streaming
+    liveStreams: {},
+    myStories: typeof window !== 'undefined' ? (() => {
+        try {
+            const raw = localStorage.getItem('red_my_stories');
+            const arr = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(arr)) return [];
+            const cutoff = Date.now() - 24 * 3600 * 1000;
+            return arr.filter((s: StoryEntry) => s.timestamp > cutoff);
+        } catch { return []; }
+    })() : [],
+    peerStories: typeof window !== 'undefined' ? (() => {
+        try {
+            const raw = localStorage.getItem('red_peer_stories');
+            const map = raw ? JSON.parse(raw) : {};
+            if (typeof map !== 'object' || !map) return {};
+            const cutoff = Date.now() - 24 * 3600 * 1000;
+            const cleaned: Record<string, MessageItem[]> = {};
+            for (const sender of Object.keys(map)) {
+                const arr = Array.isArray(map[sender]) ? map[sender] : [];
+                const valid = arr.filter((m: MessageItem) => {
+                    const ts = m.timestamp > 1e10 ? m.timestamp : m.timestamp * 1000;
+                    return ts > cutoff;
+                });
+                if (valid.length > 0) cleaned[sender] = valid;
+            }
+            return cleaned;
+        } catch { return {}; }
+    })() : {},
+    activeLiveStreamId: null,
+    isStreaming: false,
+    streamId: null,
 
     // Advanced Chat Management (v8.0)
     pinnedChatIds: typeof window !== 'undefined' ? (() => {
@@ -112,21 +197,50 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
     // Navigation mechanism for SPA
     navigate: (screen: ScreenView, contextId?: string) => {
+        // Overlay screens: navigate without touching activeConversationId
+        // so the user returns to the same chat after dismissing the overlay.
+        if (OVERLAY_SCREENS.has(screen) && !contextId) {
+            set({ currentScreen: screen });
+            return;
+        }
+
         if (screen === 'chat' && contextId) {
-            // FIX A2: Convert full 64-char peer hash to short-short conversation ID
             const conversations = Array.isArray(get().conversations) ? get().conversations : [];
             const identity = get().identity;
-            const existingConv = conversations.find(c => c && c.peer === contextId);
+            const existingConv = conversations.find(c => c && (c.id === contextId || c.peer === contextId));
             
             let finalId = contextId;
             if (existingConv) {
                 finalId = existingConv.id;
+            } else if (contextId.length >= 32 || !contextId.includes('-')) {
+                finalId = contextId;
             } else if (identity) {
                 finalId = `${identity.short_id}-${contextId.substring(0, 8)}`;
             }
 
             set({ currentScreen: screen, activeConversationId: finalId, messages: [] });
-            RedAPI.getMessages(finalId).then(msgs => set({ messages: Array.isArray(msgs) ? msgs : [] })).catch(() => set({ messages: [] }));
+
+            const fetchMessages = async () => {
+                try {
+                    let msgs = await RedAPI.getMessages(finalId);
+                    const altPeer = existingConv?.peer || (contextId !== finalId ? contextId : null);
+                    if ((!msgs || !msgs.length) && altPeer && altPeer !== finalId) {
+                        const fallbackMsgs = await RedAPI.getMessages(altPeer).catch(() => []);
+                        if (fallbackMsgs && fallbackMsgs.length > 0) msgs = fallbackMsgs;
+                    }
+                    set({ messages: Array.isArray(msgs) ? msgs : [] });
+                } catch {
+                    const altPeer = existingConv?.peer || (contextId !== finalId ? contextId : null);
+                    if (altPeer && altPeer !== finalId) {
+                        RedAPI.getMessages(altPeer)
+                            .then(msgs => set({ messages: Array.isArray(msgs) ? msgs : [] }))
+                            .catch(() => set({ messages: [] }));
+                    } else {
+                        set({ messages: [] });
+                    }
+                }
+            };
+            fetchMessages();
 
             // Load starred messages for this conversation from localStorage
             try {
@@ -167,9 +281,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 const RedNode = registerPlugin<any>('RedNode');
                 await RedNode.start({ password, decoyMode: isDecoy });
                 console.log("[RED] Requested Rust Node boot via JNI (Decoy:", isDecoy, ")");
-                await new Promise(r => setTimeout(r, 4000));
-                await get().initNodeConnection();
-                if (get().nodeOnline) {
+                await new Promise(r => setTimeout(r, 1000));
+                const connected = await get().initNodeConnection();
+                if (connected) {
                     set({ isAuthenticated: true });
                     return true;
                 }
@@ -200,9 +314,10 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 return true;
             }
         } catch (e) {
-            console.error("Login Error:", e);
-            set({ isAuthenticated: true, nodeOnline: true });
-            return true;
+            console.error("[RED] Login Error:", e);
+            // Do NOT authenticate on error — fail clearly so the user can retry.
+            set({ isAuthenticated: false, nodeOnline: false });
+            return false;
         }
     },
 
@@ -211,6 +326,17 @@ export const useRedStore = create<RedStore>((set, get) => ({
         if (!cleanName) return;
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_displayName', cleanName);
+            localStorage.setItem('user_nickname', cleanName);
+            try {
+                import('@capacitor/core').then(({ Capacitor }) => {
+                    if (Capacitor.isNativePlatform()) {
+                        import('capacitor-secure-storage-plugin').then(({ SecureStoragePlugin }) => {
+                            SecureStoragePlugin.set({ key: "red_displayName", value: cleanName }).catch(() => null);
+                            SecureStoragePlugin.set({ key: "user_nickname", value: cleanName }).catch(() => null);
+                        });
+                    }
+                });
+            } catch {}
         }
         const currentIdentity = get().identity;
         if (currentIdentity) {
@@ -227,7 +353,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
         RedAPI.setProfile(cleanName).catch(() => {});
     },
 
-    initNodeConnection: async () => {
+    initNodeConnection: async (): Promise<boolean> => {
         let retries = 60; // 60 retries × 1s = up to 1 minute for mobile PoW / slow boots
         if (process.env.NODE_ENV === 'development') console.log("[RED] Initializing Node Connection...");
         while (retries > 0) {
@@ -240,17 +366,26 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     RedAPI.getStatus(),
                 ]);
 
-                const savedNick = typeof window !== 'undefined' ? localStorage.getItem("red_displayName") : null;
+                let savedNick = typeof window !== 'undefined' ? localStorage.getItem("red_displayName") : null;
+                if (!savedNick) {
+                    try {
+                        const { Capacitor } = await import('@capacitor/core');
+                        if (Capacitor.isNativePlatform()) {
+                            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                            const res = await SecureStoragePlugin.get({ key: "red_displayName" }).catch(() => null);
+                            if (res?.value) {
+                                savedNick = res.value;
+                                if (typeof window !== 'undefined') localStorage.setItem("red_displayName", savedNick);
+                            }
+                        }
+                    } catch {}
+                }
+
                 const finalIdentity = {
                     ...identity,
                     nickname: savedNick || identity.nickname || 'Operador RED'
                 };
-                set({ identity: finalIdentity, status, nodeOnline: true });
-
-                // ROOT-CAUSE FIX: The Axum server responds to /identity and /status
-                // BEFORE the node finishes PoW. The /status endpoint returns
-                // is_running: false (and identity_hash: "INITIALIZING") during PoW.
-                // We must wait until is_running is true before declaring nodeOnline.
+                
                 if (!status.is_running || status.identity_hash === 'INITIALIZING') {
                     if (process.env.NODE_ENV === 'development') {
                         console.log("[RED] Node online but still in PoW — retrying...");
@@ -260,61 +395,57 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     continue;
                 }
 
-                set({ identity, status, nodeOnline: true });
+                set({ identity: finalIdentity, status, nodeOnline: true });
                 if (process.env.NODE_ENV === 'development') {
                     console.log("[RED] Attached to Rust Node Natively (PoW complete):", identity.short_id);
                 }
                 
                 await get().fetchData();
-                              // FASE 1.1: SSE con reconexión automática.
-                // Escucha eventos tipo 'conv_update' para actualizar sidebar SOLO cuando
-                // hay cambios reales — elimina el polling agresivo de batería.
+                
                 const connectSSE = () => {
+                    if (_mainSSE) { _mainSSE.close(); _mainSSE = null; }
                     const es = RedAPI.subscribeToEvents((data) => {
-                        // Nuevo mensaje → agregar al chat activo
-                        if (data.message_item) {
+                        if (data.message_item || data.payload || (data.id && data.sender) || data.msg_type || data.content) {
                             get().addIncomingMessage(data);
                         }
-                        // Actualización de conversaciones (badges, nuevos chats, confirmaciones)
                         if (data.event_type === 'conv_update' || data.event_type === 'contact_update') {
                             if (process.env.NODE_ENV === 'development') {
-                                console.log('[RED] SSE conv_update — refreshing sidebar');
+                                console.log('[RED] SSE conv_update — refreshing sidebar (debounced)');
                             }
-                            get().fetchData();
+                            if (_sseDebounceTimer) clearTimeout(_sseDebounceTimer);
+                            _sseDebounceTimer = setTimeout(() => get().fetchData(), 500);
                         }
                     });
+                    _mainSSE = es;
                     if (es) {
                         es.onerror = () => {
                             if (process.env.NODE_ENV === 'development') {
                                 console.warn('[RED] SSE connection lost — reconnecting in 3s...');
                             }
                             es.close();
+                            _mainSSE = null;
                             setTimeout(connectSSE, 3000);
                         };
                     }
                 };
                 connectSSE();
 
-                // Heartbeat de seguridad: refresco cada 30s como red de seguridad
-                // en caso de que algún evento SSE se pierda. Mucho menos agresivo que 8s.
-                const fetchInterval = setInterval(() => {
+                if (_fetchInterval) clearInterval(_fetchInterval);
+                _fetchInterval = setInterval(() => {
                     if (get().nodeOnline) get().fetchData();
-                    else clearInterval(fetchInterval);
+                    else { if (_fetchInterval) { clearInterval(_fetchInterval); _fetchInterval = null; } }
                 }, 30000);
 
-    // ── MESH BRIDGING: Pipe Rust outbound payloads to the radio ──
-                // Whenever the Rust Node generates an encrypted OnionPacket (e.g. after resolving
-                // a POST /api/messages/send), it streams the bytes back to us natively. We then
-                // hand those bytes to the MeshRouter so they can actually leave the phone's antenna (BLE/WiFi).
                 const connectOutboundSSE = () => {
+                    if (_outboundSSE) { _outboundSSE.close(); _outboundSSE = null; }
                     const es = new EventSource(`${RedAPI.getBaseURL()}/network/outbound`);
+                    _outboundSSE = es;
                     es.addEventListener('mesh_payload', (e: any) => {
                         try {
                             const data = JSON.parse(e.data);
                             if (data && data.payload_hex) {
                                 const hex = data.payload_hex;
                                 const buf = new Uint8Array(hex.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []);
-                                // Broadcast physical bytes over BLE/WiFi
                                 meshRouter.broadcast(buf).catch(() => {});
                             }
                         } catch (err) {
@@ -324,20 +455,17 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     es.onerror = () => {
                         console.warn('[RED] Outbound Radio SSE lost — reconnecting in 3s...');
                         es.close();
+                        _outboundSSE = null;
                         setTimeout(connectOutboundSSE, 3000);
                     };
                 };
                 connectOutboundSSE();
 
-
-                // Initialize the multi-transport mesh layer with our FULL identity hash.
-                // Uses mDNS (same WiFi), WiFi Direct (WebRTC), and BLE to create
-                // a self-healing hop-by-hop network that works without internet.
                 localTransport.init(identity.identity_hash).catch(e =>
                     console.warn('[RED] Mesh init failed (non-critical):', e)
                 );
 
-                return; // Connected successfully
+                return true;
             } catch (err) {
                 retries--;
                 if (retries > 0) {
@@ -345,9 +473,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 } else {
                     console.warn("[RED] Rust Node unreachable after retries.");
                     set({ nodeOnline: false });
+                    return false;
                 }
             }
         }
+        return false;
     },
 
     fetchData: async () => {
@@ -357,10 +487,31 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 RedAPI.getContacts(),
                 RedAPI.getGroups()
             ]);
+            const safeConvs = Array.isArray(convs) ? convs : [];
+            const safeConts = Array.isArray(conts) ? conts : [];
+            const safeGrps  = Array.isArray(grps)  ? grps  : [];
+
+            const { currentScreen, activeConversationId } = get();
+            let newActiveId = activeConversationId;
+            if (currentScreen === 'chat' && activeConversationId) {
+                const matched = safeConvs.find((c: any) =>
+                    c && (
+                        c.id === activeConversationId ||
+                        c.peer === activeConversationId ||
+                        (c.peer && activeConversationId.includes(c.peer.substring(0, 8))) ||
+                        (c.id && activeConversationId.includes(c.id.split('-')[1] || '____'))
+                    )
+                );
+                if (matched && matched.id && matched.id !== activeConversationId) {
+                    newActiveId = matched.id;
+                }
+            }
+
             set({
-                conversations: Array.isArray(convs) ? convs : [],
-                contacts: Array.isArray(conts) ? conts : [],
-                groups: Array.isArray(grps) ? grps : []
+                conversations: safeConvs,
+                contacts: safeConts,
+                groups: safeGrps,
+                activeConversationId: newActiveId
             });
         } catch {
             set({ conversations: [], contacts: [], groups: [] });
@@ -375,13 +526,31 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const conv = conversations.find(c => c.id === activeConversationId);
 
         let peerHash = conv ? conv.peer : '';
-        if (!conv && activeConversationId.includes('-')) {
-            const extractedShort = activeConversationId.split('-')[1];
-            const potentialPeer = contacts.find((c: any) => c.identity_hash.substring(0, 8) === extractedShort);
-            if (potentialPeer) peerHash = potentialPeer.identity_hash;
+        if (!peerHash) {
+            if (activeConversationId.includes('-')) {
+                const parts = activeConversationId.split('-');
+                const secondPart = parts[1] || '';
+                const potentialPeer = (contacts as any[]).find((c: any) =>
+                    c && c.identity_hash && (c.identity_hash.substring(0, 8) === secondPart || c.identity_hash === secondPart)
+                );
+                if (potentialPeer) {
+                    peerHash = potentialPeer.identity_hash;
+                } else if (secondPart.length >= 8) {
+                    const matchByPrefix = (contacts as any[]).find((c: any) => c && c.identity_hash && c.identity_hash.startsWith(secondPart));
+                    if (matchByPrefix) {
+                        peerHash = matchByPrefix.identity_hash;
+                    }
+                }
+            } else if (activeConversationId.length >= 16) {
+                peerHash = activeConversationId;
+            }
         }
 
-        if (!peerHash) return;
+        if (!peerHash) {
+            console.warn('[RED] sendMessage: peerHash not resolved for conv', activeConversationId, '— refreshing contacts');
+            get().fetchData().catch(() => {});
+            return;
+        }
 
         // ── GROUP ROUTING FIX ──────────────────────────────────────────────────
         // Check if peerHash matches a known group id (hex-encoded GroupId)
@@ -435,6 +604,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }
         } catch (e) {
             console.error('Message send failed', e);
+            if (tempId) {
+                set({ messages: get().messages.map(m =>
+                    m.id === tempId ? { ...m, status: 'Failed' as const } : m
+                )});
+            }
         }
     },
 
@@ -448,20 +622,199 @@ export const useRedStore = create<RedStore>((set, get) => ({
             const now = Date.now();
             if (now - lastSent < 3000) return; // ← rate limit
             lastSent = now;
-            const { activeConversationId, conversations, identity } = get();
+            const { activeConversationId, conversations, contacts } = get();
             if (!activeConversationId) return;
-            const conv    = conversations.find(c => c.id === activeConversationId);
-            const peerHash = conv?.peer || '';
+            const conv = conversations.find(c => c.id === activeConversationId);
+            let peerHash = conv ? conv.peer : '';
+            if (!peerHash) {
+                if (activeConversationId.includes('-')) {
+                    const parts = activeConversationId.split('-');
+                    const secondPart = parts[1] || '';
+                    const potentialPeer = (contacts as any[]).find((c: any) =>
+                        c && c.identity_hash && (c.identity_hash.substring(0, 8) === secondPart || c.identity_hash === secondPart)
+                    );
+                    if (potentialPeer) {
+                        peerHash = potentialPeer.identity_hash;
+                    } else if (secondPart.length >= 8) {
+                        const matchByPrefix = (contacts as any[]).find((c: any) => c && c.identity_hash && c.identity_hash.startsWith(secondPart));
+                        if (matchByPrefix) {
+                            peerHash = matchByPrefix.identity_hash;
+                        }
+                    }
+                } else if (activeConversationId.length >= 16) {
+                    peerHash = activeConversationId;
+                }
+            }
             if (!peerHash) return;
             RedAPI.sendMessage(peerHash, 'typing', { msg_type: 'typing' }).catch(() => {});
         };
     })(),
 
+    // ── Stories & Live Streaming actions ─────────────────────────────────────
+    publishStatus: async (content: string, media?: string | null, theme?: number) => {
+        const { contacts, conversations, identity } = get();
+        if (!identity) return;
+        const payload: Record<string, any> = { msg_type: 'status' };
+        if (media) payload.media_data = media;
+        if (theme !== undefined) payload.theme = String(theme);
+
+        // Persist own story locally (24h TTL)
+        const entry: StoryEntry = {
+            id: `story-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            content,
+            media_data: media || undefined,
+            theme,
+            timestamp: Date.now(),
+            sender: identity.identity_hash,
+            is_mine: true,
+        };
+        const current = Array.isArray(get().myStories) ? get().myStories : [];
+        const updated = [...current, entry].slice(-10); // keep last 10
+        set({ myStories: updated });
+        if (typeof window !== 'undefined') {
+            try { localStorage.setItem('red_my_stories', JSON.stringify(updated)); } catch {}
+        }
+
+        // Aggregate unique peer hashes from both contacts and active conversations
+        const recipients = new Set<string>();
+        for (const contact of contacts || []) {
+            if (contact?.identity_hash) recipients.add(contact.identity_hash);
+        }
+        for (const conv of conversations || []) {
+            if (conv?.peer) recipients.add(conv.peer);
+        }
+
+        // Broadcast to all unique peers
+        for (const peerHash of recipients) {
+            try {
+                await RedAPI.sendMessage(peerHash, content, payload);
+            } catch (e) {
+                console.warn(`[RED] Status no enviado a ${peerHash.substring(0, 8)}:`, e);
+            }
+        }
+    },
+
+    openLiveStream: (streamId: string) => {
+        set({ activeLiveStreamId: streamId });
+    },
+
+    closeLiveStream: () => {
+        set({ activeLiveStreamId: null });
+    },
+
+    addLiveFrame: (streamId: string, frame: string, seq: number) => {
+        const liveStreams = { ...get().liveStreams };
+        const existing = liveStreams[streamId];
+        // Ring buffer: keep last 5 frames
+        const existingFrames = existing?.frames || [];
+        const frames = [...existingFrames, frame].slice(-5);
+        liveStreams[streamId] = {
+            ...(existing || {
+                stream_id: streamId,
+                broadcaster_hash: streamId,
+                broadcaster_name: `Streamer ${streamId.substring(0, 6)}…`,
+                started_at: Date.now(),
+                is_active: true,
+                comments: [],
+            }),
+            frames,
+            frame_seq: seq,
+            is_active: true,
+        };
+        set({ liveStreams });
+    },
+
+    removeLiveStream: (streamId: string) => {
+        const liveStreams = { ...get().liveStreams };
+        if (liveStreams[streamId]) {
+            liveStreams[streamId] = { ...liveStreams[streamId], is_active: false };
+        }
+        const activeLiveStreamId = get().activeLiveStreamId === streamId ? null : get().activeLiveStreamId;
+        set({ liveStreams, activeLiveStreamId });
+    },
+
+    addLiveComment: (streamId: string, sender: string, text: string) => {
+        const liveStreams = { ...get().liveStreams };
+        const existing = liveStreams[streamId];
+        if (!existing) return;
+        const comments = [...(existing.comments || []), { sender, text, ts: Date.now() }].slice(-50);
+        liveStreams[streamId] = { ...existing, comments };
+        set({ liveStreams });
+    },
+
     addIncomingMessage: (data: any) => {
-        const item = data.message_item;
+        if (!data) return;
+        const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
         if (!item) return;
 
         const { activeConversationId, messages, typingTimeout } = get();
+
+        // ── Live stream events ────────────────────────────────────────────────
+        if (item.msg_type === 'live_announce') {
+            const streamId = item.content || '';
+            if (!streamId) return;
+            const contacts = get().contacts;
+            const contact = contacts.find((c: any) => c.identity_hash === item.sender);
+            const broadcasterName = contact?.display_name || `${item.sender.substring(0, 8)}…`;
+            const liveStreams = { ...get().liveStreams };
+            liveStreams[streamId] = {
+                stream_id: streamId,
+                broadcaster_hash: item.sender,
+                broadcaster_name: broadcasterName,
+                started_at: Date.now(),
+                is_active: true,
+                frames: [],
+                frame_seq: -1,
+                comments: [],
+            };
+            set({ liveStreams });
+            return;
+        }
+
+        if (item.msg_type === 'live_frame') {
+            const streamId = item.conversation_id || '';
+            const frame = item.media_data || '';
+            const seq = typeof item.duration_ms === 'number' ? item.duration_ms : 0; // reuse field for seq
+            if (streamId && frame) {
+                get().addLiveFrame(streamId, frame, seq);
+            }
+            return;
+        }
+
+        if (item.msg_type === 'live_end') {
+            const streamId = item.content || '';
+            if (streamId) get().removeLiveStream(streamId);
+            return;
+        }
+
+        // ── Incoming status/story entry from peer ─────────────────────────────
+        if (item.msg_type === 'status') {
+            if (!item.is_mine && item.sender) {
+                const currentMap = { ...(get().peerStories || {}) };
+                const senderArr = currentMap[item.sender] || [];
+                if (!senderArr.some(m => m.id === item.id)) {
+                    const updatedArr = [...senderArr, item];
+                    currentMap[item.sender] = updatedArr;
+                    set({ peerStories: currentMap });
+                    if (typeof window !== 'undefined') {
+                        try { localStorage.setItem('red_peer_stories', JSON.stringify(currentMap)); } catch {}
+                    }
+                }
+            }
+            return;
+        }
+
+        const rawItem = item as any;
+        if (item.msg_type === 'live_comment' || (typeof rawItem.reaction === 'string' && rawItem.reaction.startsWith('live:'))) {
+            const streamId = item.conversation_id || (typeof rawItem.reaction === 'string' ? rawItem.reaction.replace('live:', '') : '') || get().streamId || '';
+            if (streamId && item.content) {
+                const contacts = get().contacts;
+                const contact = contacts.find((c: any) => c.identity_hash === item.sender);
+                const senderName = contact?.display_name || `${item.sender.substring(0, 6)}…`;
+                get().addLiveComment(streamId, senderName, item.content);
+            }
+            return;
+        }
 
         // ── Typing pulse: show indicator for 5s, then auto-clear ──────────────
         if (item.msg_type === 'typing') {
@@ -470,6 +823,74 @@ export const useRedStore = create<RedStore>((set, get) => ({
             set({ peerTyping: true, typingTimeout: t });
             return; // do NOT add to message list
         }
+
+        // ── Contact Request & Response: Reciprocal P2P auto-add & nickname exchange ──
+        if (item.msg_type === 'contact_request' || item.msg_type === 'contact_response') {
+            try {
+                const data = JSON.parse(item.content);
+                const senderHash = data.sender_hash || item.sender;
+                const senderName = data.sender_name || `Operador ${senderHash.substring(0, 6)}`;
+                const senderPk   = data.sender_pk || null;
+
+                RedAPI.addContact(senderHash, senderName, senderPk).then(() => {
+                    if (item.msg_type === 'contact_request') {
+                        toast.success(`🤝 ${senderName} te ha agregado como contacto.`);
+                        const myIdentity = get().identity;
+                        const myName = myIdentity?.nickname || 'Operador RED';
+                        if (myIdentity?.identity_hash) {
+                            RedAPI.sendMessage(senderHash, JSON.stringify({
+                                sender_hash: myIdentity.identity_hash,
+                                sender_name: myName,
+                                sender_pk: myIdentity.public_key || null
+                            }), { msg_type: 'contact_response' }).catch(() => {});
+                        }
+                    }
+                    get().fetchData();
+                }).catch(() => {});
+            } catch {
+                RedAPI.addContact(item.sender, `Operador ${item.sender.substring(0, 6)}`, null).then(() => {
+                    get().fetchData();
+                }).catch(() => {});
+            }
+            return;
+        }
+
+        // ── Auto-register un-added sender as contact on incoming message ─────────
+        if (!item.is_mine && item.sender && !item.sender.startsWith('local_')) {
+            const contactsList = get().contacts;
+            const exists = Array.isArray(contactsList) && contactsList.some((c: any) => c.identity_hash === item.sender);
+            if (!exists) {
+                const autoName = `Operador ${item.sender.substring(0, 6)}`;
+                RedAPI.addContact(item.sender, autoName, null).then(() => {
+                    const myIdentity = get().identity;
+                    const myName = myIdentity?.nickname || 'Operador RED';
+                    if (myIdentity?.identity_hash) {
+                        RedAPI.sendMessage(item.sender, JSON.stringify({
+                            sender_hash: myIdentity.identity_hash,
+                            sender_name: myName,
+                            sender_pk: myIdentity.public_key || null
+                        }), { msg_type: 'contact_request' }).catch(() => {});
+                    }
+                    get().fetchData();
+                }).catch(() => {});
+            }
+        }
+
+        // If we are looking at this exact chat right now — add if not already present
+        const currentConv = get().conversations.find((c: any) => c && (c.id === activeConversationId || c.peer === activeConversationId));
+        const myHash = get().identity?.identity_hash;
+        const itemRecipient = (item as any).recipient as string | undefined;
+        const itemSender = item.sender || '';
+
+        const isCurrentChat =
+            activeConversationId === item.conversation_id ||
+            (currentConv && (
+                currentConv.peer === itemSender ||
+                (itemRecipient && currentConv.peer === itemRecipient) ||
+                currentConv.id === item.conversation_id
+            )) ||
+            (itemSender.length >= 8 && itemSender !== myHash && activeConversationId?.includes(itemSender.substring(0, 8))) ||
+            (itemRecipient && itemRecipient.length >= 8 && itemRecipient !== myHash && activeConversationId?.includes(itemRecipient.substring(0, 8)));
 
         // ── Reactions: apply to target bubble, never append as new message ──
         if (item.msg_type === 'reaction' && typeof item.content === 'string') {
@@ -490,18 +911,23 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     }
                     return { ...m, reactions };
                 });
-                if (activeConversationId === item.conversation_id) set({ messages: updated });
+                if (isCurrentChat) set({ messages: updated });
             }
             get().fetchData();
             return;
         }
 
-        // If we are looking at this exact chat right now — add if not already present
-        if (activeConversationId === item.conversation_id) {
-            // DEDUP: skip if a message with this ID is already in the list
-            // (can happen if SSE reconnects and replays the last event)
-            const alreadyExists = messages.some((m: MessageItem) => m.id === item.id);
-            if (!alreadyExists) {
+        if (isCurrentChat) {
+            // DEDUP / IN-PLACE REPLACE: replace optimistic temp_ message or update existing
+            const existingIndex = messages.findIndex((m: MessageItem) =>
+                m.id === item.id ||
+                (m.id.startsWith('temp_') && m.content === item.content)
+            );
+            if (existingIndex !== -1) {
+                const updated = [...messages];
+                updated[existingIndex] = item as MessageItem;
+                set({ messages: updated });
+            } else {
                 set({ messages: [...messages, item as MessageItem] });
             }
         } else {
@@ -532,10 +958,15 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     });
                 }
             });
+            // ALWAYS REFRESH CONVERSATIONS & UNREAD BADGES IN SIDEBAR
+            get().fetchData();
         }
         
-        // And regardless, refresh conversations list to bump it to top
-        get().fetchData();
+        // FIX 2.3: Only refresh sidebar when the message belongs to a DIFFERENT conversation.
+        // If it's the active chat, the bubble was already appended locally — no HTTP round-trip needed.
+        if (activeConversationId !== item.conversation_id) {
+            get().fetchData();
+        }
     },
 
     addContact: async (identity_hash: string, display_name: string, public_key?: string | null) => {
@@ -568,6 +999,15 @@ export const useRedStore = create<RedStore>((set, get) => ({
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 await RedAPI.addContact(cleanHash, cleanName, pubKey);
+                // Send background contact request to peer so they automatically add us back!
+                const myIdentity = get().identity;
+                const myName = myIdentity?.nickname || 'Operador RED';
+                if (myIdentity?.identity_hash) {
+                    RedAPI.sendMessage(cleanHash, JSON.stringify({
+                        sender_hash: myIdentity.identity_hash,
+                        sender_name: myName
+                    }), { msg_type: 'contact_request' }).catch(() => {});
+                }
                 await get().fetchData();
                 return true;
             } catch (err) {
