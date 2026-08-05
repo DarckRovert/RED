@@ -746,34 +746,123 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         )}
 
         {activeTab === 'architecture' && (
-          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '24px' }}>Arquitectura del Sistema RED</h2>
-            <div style={{ padding: '24px', borderRadius: '16px', background: '#090D16', border: '1px solid rgba(255,255,255,0.1)', fontFamily: 'monospace', fontSize: '13px', color: '#38BDF8', lineHeight: 1.5, overflowX: 'auto', marginBottom: '30px' }}>
-              <pre>{`+-----------------------------------------------------------------------+
-|                    CAPA DE PRESENTACIÓN (FRONTEND)                    |
-|      Next.js 16 SPA (Turbopack) + React 19 + Zustand Store + CSS      |
-+-----------------------------------------------------------------------+
-                                   │
-              HTTP REST / SSE (http://127.0.0.1:7333)
-                                   ▼
-+-----------------------------------------------------------------------+
-|                    CAPA NATIVA ANDROID (MIDDLEWARE)                   |
-|       RedNodeService.java (Foreground) + RedNodePlugin.java (JNI)      |
-|    GATT Server / BleTransport + Direct Native HTTP POST Mesh Inject   |
-+-----------------------------------------------------------------------+
-                                   │
-                          JNI Bindings (Rust C-ABI)
-                                   ▼
-+-----------------------------------------------------------------------+
-|                      MOTOR NATIVO RUST (CORE)                         |
-|     red_mobile (Axum REST API + SSE) + red_core (Protocol Engine)    |
-|   Noise XK Handshake + Ed25519 Signatures + ChaCha20-Poly1305 E2E     |
-+-----------------------------------------------------------------------+
-                                   │
-              TRANSPORTE MULTI-RADIO AD-HOC OFF-GRID
-     ┌─────────────────────┬───────────────┬────────────────────┐
-     │ BLE GATT (Physical) │ WiFi Direct   │ LoRa Radio Serial  │
-     └─────────────────────┴───────────────┴────────────────────┘`}</pre>
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v24.0.0</h2>
+            <p style={{ fontSize: '14px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>
+              Flujo de procesamiento en tiempo real entre el Frontend SPA, Middleware Android Java JNI, Motor Rust NDK y Radios de Hardware Off-Grid.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+              {/* CAPA 1: FRONTEND SPA */}
+              <div style={{
+                width: '100%',
+                padding: '24px 28px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, rgba(14,165,233,0.15) 0%, rgba(15,23,42,0.85) 100%)',
+                border: '1px solid rgba(56,189,248,0.4)',
+                boxShadow: '0 8px 30px rgba(56,189,248,0.15)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '24px' }}>💻</span>
+                    <span style={{ fontWeight: 800, fontSize: '18px', color: '#38BDF8' }}>CAPA 1: PRESENTACIÓN FRONTEND (SPA)</span>
+                  </div>
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(56,189,248,0.2)', color: '#38BDF8', fontFamily: 'monospace', fontWeight: 700 }}>Next.js 16 • React 19 • Zustand</span>
+                </div>
+                <div style={{ fontSize: '13px', color: '#CBD5E1', lineHeight: 1.5 }}>
+                  Interfaz táctica responsiva compilada con Turbopack. Gestión de estado global de la malla en memoria (`useRedStore.ts`), renderizado dinámico de vistas y captura de eventos nativos.
+                </div>
+              </div>
+
+              {/* CONECTOR 1 */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#38BDF8', fontFamily: 'monospace', fontSize: '12px' }}>
+                <div style={{ width: '2px', height: '20px', background: 'linear-gradient(180deg, #38BDF8 0%, #00E676 100%)' }} />
+                <div style={{ padding: '4px 14px', borderRadius: '12px', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(56,189,248,0.3)', margin: '4px 0' }}>
+                  ⚡ HTTP REST / SSE Event Stream (127.0.0.1:7333)
+                </div>
+                <div style={{ width: '2px', height: '20px', background: 'linear-gradient(180deg, #38BDF8 0%, #00E676 100%)' }} />
+              </div>
+
+              {/* CAPA 2: NATIVA ANDROID MIDDLEWARE */}
+              <div style={{
+                width: '100%',
+                padding: '24px 28px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, rgba(0,230,118,0.15) 0%, rgba(15,23,42,0.85) 100%)',
+                border: '1px solid rgba(0,230,118,0.4)',
+                boxShadow: '0 8px 30px rgba(0,230,118,0.15)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '24px' }}>⚙️</span>
+                    <span style={{ fontWeight: 800, fontSize: '18px', color: '#00E676' }}>CAPA 2: MIDDLEWARE NATIVO ANDROID (JAVA / JNI)</span>
+                  </div>
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(0,230,118,0.2)', color: '#00E676', fontFamily: 'monospace', fontWeight: 700 }}>Foreground Service • GATT BLE Server</span>
+                </div>
+                <div style={{ fontSize: '13px', color: '#CBD5E1', lineHeight: 1.5 }}>
+                  `RedNodeService.java` ejecuta el proceso inmune al ahorrador de batería del SO. Administra el servidor GATT Bluetooth LE e inyecta tramas de radio físicamente capturadas directamente a Rust.
+                </div>
+              </div>
+
+              {/* CONECTOR 2 */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#00E676', fontFamily: 'monospace', fontSize: '12px' }}>
+                <div style={{ width: '2px', height: '20px', background: 'linear-gradient(180deg, #00E676 0%, #E8213A 100%)' }} />
+                <div style={{ padding: '4px 14px', borderRadius: '12px', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(0,230,118,0.3)', margin: '4px 0' }}>
+                  🔗 JNI Bindings (Rust C-ABI Interface)
+                </div>
+                <div style={{ width: '2px', height: '20px', background: 'linear-gradient(180deg, #00E676 0%, #E8213A 100%)' }} />
+              </div>
+
+              {/* CAPA 3: MOTOR NATIVO RUST */}
+              <div style={{
+                width: '100%',
+                padding: '24px 28px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, rgba(232,33,58,0.2) 0%, rgba(15,23,42,0.85) 100%)',
+                border: '1px solid rgba(232,33,58,0.5)',
+                boxShadow: '0 8px 30px rgba(232,33,58,0.25)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '24px' }}>🦀</span>
+                    <span style={{ fontWeight: 800, fontSize: '18px', color: '#FF4D66' }}>CAPA 3: MOTOR NATIVO RUST CORE & AXUM</span>
+                  </div>
+                  <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '20px', background: 'rgba(232,33,58,0.2)', color: '#FF4D66', fontFamily: 'monospace', fontWeight: 700 }}>red_core • red_mobile • SQLite Encrypted</span>
+                </div>
+                <div style={{ fontSize: '13px', color: '#CBD5E1', lineHeight: 1.5 }}>
+                  Binario nativo compilado NDK en Rust. Ejecuta el motor criptográfico Noise XK, firmas Ed25519, cifrado ChaCha20-Poly1305, deduplicación por 72h y servidor REST/SSE en Axum.
+                </div>
+              </div>
+
+              {/* CONECTOR 3 */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: '#FF4D66', fontFamily: 'monospace', fontSize: '12px' }}>
+                <div style={{ width: '2px', height: '20px', background: 'linear-gradient(180deg, #E8213A 0%, #A855F7 100%)' }} />
+                <div style={{ padding: '4px 14px', borderRadius: '12px', background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(232,33,58,0.3)', margin: '4px 0' }}>
+                  📡 Capa de Red Malla Multi-Radio (Ad-Hoc Hardware Radios)
+                </div>
+                <div style={{ width: '2px', height: '20px', background: 'linear-gradient(180deg, #E8213A 0%, #A855F7 100%)' }} />
+              </div>
+
+              {/* CAPA 4: RADIOS MULTI-RADIO EN PARALELO */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', width: '100%' }}>
+                <div style={{ padding: '18px', borderRadius: '16px', background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '22px', marginBottom: '4px' }}>🔵</div>
+                  <div style={{ fontWeight: 800, color: '#38BDF8', fontSize: '14px' }}>Bluetooth LE (GATT)</div>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Inmune a VPNs • Radio Físico directo ~100m</div>
+                </div>
+
+                <div style={{ padding: '18px', borderRadius: '16px', background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '22px', marginBottom: '4px' }}>📶</div>
+                  <div style={{ fontWeight: 800, color: '#00E676', fontSize: '14px' }}>WiFi Direct Ad-Hoc</div>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>WebRTC DataChannels • Alta velocidad local</div>
+                </div>
+
+                <div style={{ padding: '18px', borderRadius: '16px', background: 'rgba(168,85,247,0.1)', border: '1px solid rgba(168,85,247,0.3)', textAlign: 'center' }}>
+                  <div style={{ fontSize: '22px', marginBottom: '4px' }}>📻</div>
+                  <div style={{ fontWeight: 800, color: '#A855F7', fontSize: '14px' }}>LoRa Radio (915MHz)</div>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Módem de serie • Largo alcance kilometrado</div>
+                </div>
+              </div>
             </div>
           </div>
         )}
