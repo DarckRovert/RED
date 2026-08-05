@@ -36,6 +36,7 @@ const AICopilotModal        = dynamic(() => import("../components/AICopilotModal
 const NearbyDevicesPanel    = dynamic(() => import("../components/NearbyDevicesPanel"),    { ssr: false, loading: () => <AppLoader /> });
 const LiveStreamBroadcaster = dynamic(() => import("../components/LiveStreamBroadcaster").then(m => ({ default: m.LiveStreamBroadcaster })), { ssr: false, loading: () => <AppLoader /> });
 const LiveStreamViewer      = dynamic(() => import("../components/LiveStreamViewer").then(m => ({ default: m.LiveStreamViewer })),      { ssr: false, loading: () => <AppLoader /> });
+const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 // FIX 1.4: SOSEmergencyBanner must be a persistent overlay — mounted ONCE while authenticated,
 // regardless of which screen is active. It auto-activates via its own currentScreen subscription.
@@ -114,9 +115,25 @@ export default function AppRouter() {
   const { currentScreen, nodeOnline, identity, navigate, goBack, activeLiveStreamId } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
+  const [showLanding, setShowLanding] = useState<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
+
+    // Detección de plataforma: En navegadores web (no nativos) si no hay flag de app, mostrar Landing Page promocional por defecto
+    const checkLanding = async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (!Capacitor.isNativePlatform()) {
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('app') !== 'true' && !localStorage.getItem("enter_app_direct")) {
+            setShowLanding(true);
+          }
+        }
+      } catch {
+        // Fallback a web
+      }
+    };
 
     // Hardware Back Button — importado dinámicamente para evitar crash SSR
     const setupBackButton = async () => {
@@ -161,6 +178,7 @@ export default function AppRouter() {
 
     let cleanupFn: (() => void) | null = null;
     setupBackButton().then(cleanup => { cleanupFn = cleanup; });
+    checkLanding();
     checkProfile();
 
     return () => { cleanupFn?.(); };
@@ -168,6 +186,17 @@ export default function AppRouter() {
 
   // SSR Hydration Fix: No renderizar nada del lado del servidor
   if (!mounted || needsProfile === null) return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
+
+  if (showLanding) {
+    return (
+      <RedShowcaseLanding
+        onEnterApp={() => {
+          localStorage.setItem("enter_app_direct", "true");
+          setShowLanding(false);
+        }}
+      />
+    );
+  }
 
   const renderScreen = () => {
     switch (currentScreen) {
