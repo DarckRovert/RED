@@ -74,6 +74,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
         return () => clearInterval(timer);
     }, [isRecording]);
 
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+
     const handlePressDown = async () => {
         if (!permissionGranted) {
             setStatusMsg('⚠️ Permiso de micrófono requerido.');
@@ -83,6 +86,16 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             const VR = await getVoiceRecorder();
             if (VR) {
                 await VR.startRecording();
+            } else {
+                // Web HTML5 MediaRecorder fallback
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioChunksRef.current = [];
+                const mr = new MediaRecorder(stream);
+                mr.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunksRef.current.push(e.data);
+                };
+                mr.start();
+                mediaRecorderRef.current = mr;
             }
             setIsRecording(true);
             setStatusMsg(null);
@@ -104,10 +117,23 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 // Real Capacitor recording
                 const result = await VR.stopRecording();
                 audioB64 = result.value?.recordDataBase64 || '';
-            } else {
-                // Web fallback: not supported — show clear message
-                setStatusMsg('ℹ️ La grabación de audio real requiere la app nativa instalada en Android.');
-                return;
+            } else if (mediaRecorderRef.current) {
+                // Web HTML5 MediaRecorder stop & blob conversion
+                await new Promise<void>((resolve) => {
+                    if (!mediaRecorderRef.current) return resolve();
+                    mediaRecorderRef.current.onstop = () => resolve();
+                    mediaRecorderRef.current.stop();
+                    mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+                });
+
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const arrayBuf = await audioBlob.arrayBuffer();
+                const bytes = new Uint8Array(arrayBuf);
+                let binary = '';
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                audioB64 = btoa(binary);
             }
 
             if (!audioB64) {
@@ -116,7 +142,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             }
 
             await sendVoiceBurst({
-                sender_name: 'Operador RED',
+                sender_name: 'Operador RED Web',
                 duration_seconds: duration,
                 audio_opus_b64: audioB64
             });
@@ -133,8 +159,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 setStatusMsg('❌ Esta ráfaga no contiene datos de audio.');
                 return;
             }
-            // Determine MIME type: capacitor-voice-recorder returns AAC/MP4 on Android
-            const mimeType = 'audio/aac';
+            // Auto-detect MIME type based on base64 header or web fallback
+            const isWebm = burst.audio_opus_b64.startsWith('GkXf');
+            const mimeType = isWebm ? 'audio/webm' : 'audio/aac';
             const audioSrc = `data:${mimeType};base64,${burst.audio_opus_b64}`;
 
             // Reuse or create HTMLAudioElement per burst
@@ -145,7 +172,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             }
             audio.currentTime = 0;
             audio.play().catch(() => {
-                setStatusMsg('⚠️ No se pudo reproducir: formato no compatible con este navegador.');
+                // Retry with fallback audio/mp3 or audio/ogg
+                const fallbackAudio = new Audio(`data:audio/mp4;base64,${burst.audio_opus_b64}`);
+                fallbackAudio.play().catch(() => setStatusMsg('⚠️ Formato no compatible con este navegador.'));
             });
             setStatusMsg(`▶ Reproduciendo ráfaga de ${burst.sender_name} (${burst.duration_seconds}s)...`);
         } catch (e: any) {
