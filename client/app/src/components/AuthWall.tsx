@@ -246,16 +246,23 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         return (
             <CalculatorScreen
                 onUnlock={async (typedPin: string) => {
-                    // Try the dedicated calculator PIN from Keystore first
                     const calcPin = await getSecurePin("calc_pin");
+                    const masterPin = await getSecurePin("master_pin");
+                    const panicPin = await getSecurePin("panic_pin");
+                    const decoyPin = await getSecurePin("decoy_pin");
+
                     if (calcPin && typedPin === calcPin) {
-                        // Calc PIN matched — use master_pin to actually unlock the vault
-                        const masterPin = await getSecurePin("master_pin");
                         if (masterPin) await doLogin(masterPin);
                         return;
                     }
-                    // Fallback: allow master_pin, panic_pin, or decoy_pin directly for power users
-                    await doLogin(typedPin);
+
+                    const isMaster = masterPin ? typedPin === masterPin : false;
+                    const isDecoy = decoyPin ? typedPin === decoyPin : false;
+                    const isPanic = panicPin ? typedPin === panicPin : false;
+
+                    if (isMaster || isDecoy || isPanic) {
+                        await doLogin(typedPin);
+                    }
                 }}
             />
         );
