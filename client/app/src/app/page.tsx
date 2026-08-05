@@ -56,13 +56,29 @@ function AppLoader() {
   );
 }
 
-function FullScreenLoader() {
+function FullScreenTacticalLoader() {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      width: '100%', height: '100dvh', background: 'var(--bg-deep)',
-    }} />
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      width: '100%', height: '100dvh', background: '#04060a', color: '#fff', gap: '16px',
+    }}>
+      <div style={{
+        width: 60, height: 60, borderRadius: '20px',
+        background: 'linear-gradient(145deg, #E8213A, #C0152A)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '1.7rem', fontWeight: 900, color: 'white',
+        boxShadow: '0 0 32px rgba(232,33,58,0.5)',
+        animation: 'pulse 1.2s ease-in-out infinite',
+      }}>R</div>
+      <div style={{ fontSize: '12px', fontWeight: 700, color: '#888', letterSpacing: '2px' }}>
+        INICIALIZANDO BÓVEDA RED…
+      </div>
+    </div>
   );
+}
+
+function FullScreenLoader() {
+  return <FullScreenTacticalLoader />;
 }
 
 /* ── Error Boundary: atrapa cualquier crash de componente ── */
@@ -185,7 +201,7 @@ export default function AppRouter() {
   }, []);
 
   // SSR Hydration Fix: No renderizar nada del lado del servidor si no está montado
-  if (!mounted) return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
+  if (!mounted) return <FullScreenTacticalLoader />;
 
   // RENDERIZADO INMEDIATO DE LA LANDING PAGE EN WEB — Sin depender del backend en Rust ni de needsProfile
   if (showLanding) {
@@ -201,7 +217,7 @@ export default function AppRouter() {
     );
   }
 
-  if (needsProfile === null) return <div style={{ background: 'var(--bg-deep)', height: '100dvh' }} />;
+  if (needsProfile === null) return <FullScreenTacticalLoader />;
 
   const renderScreen = () => {
     switch (currentScreen) {
