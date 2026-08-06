@@ -28,6 +28,11 @@ const STATS_KEY = 'red_guardian_real_stats_v2';
 const MEMORY_CACHE = new Map<string, GuardianEvaluation>();
 
 // Categorías de reglas heurísticas locales
+const EXPLOITATION_PATTERNS = [
+    /\b(porno\s*infantil|pedofilia|abuso\s*infantil|abuso\s*de\s*menores|child\s*porn|csam|pedophile|child\s*abuse|explotaci[oó]n\s*infantil|pornograf[ií]a\s*infantil|cp)\b/i,
+    /\b(sextorci[oó]n|violaci[oó]n|grooming|abuso\s*sexual)\b/i,
+];
+
 const THREAT_PATTERNS = [
     /\b(amenaza|bomba|atentado|explosivo|matar|terrorismo|secuestro|arma de fuego)\b/i,
     /\b(kill|bomb|explosive|attack|gun|weapon|murder)\b/i,
@@ -119,7 +124,25 @@ class GuardianEngineClass {
         this.stats.messages_analyzed++;
         this.stats.api_calls_made++;
 
-        // 1. Verificar Amenazas Violentas
+        // 1. Verificar Explotación Infantil / CSAM / Material Ilegal Grave
+        for (const pattern of EXPLOITATION_PATTERNS) {
+            if (pattern.test(trimmed)) {
+                this.stats.messages_blocked++;
+                this.stats.messages_flagged++;
+                const result: GuardianEvaluation = {
+                    allowed: false,
+                    reason: '⛔ BLOQUEO CRÍTICO: Contenido clasificado como abuso, explotación de menores o material ilegal grave.',
+                    category: 'nsfw',
+                    confidence: 1.0,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+                MEMORY_CACHE.set(trimmed, result);
+                this.saveStats();
+                return result;
+            }
+        }
+
+        // 2. Verificar Amenazas Violentas
         for (const pattern of THREAT_PATTERNS) {
             if (pattern.test(trimmed)) {
                 this.stats.messages_blocked++;
@@ -137,7 +160,7 @@ class GuardianEngineClass {
             }
         }
 
-        // 2. Verificar Spam o Malicious Links
+        // 3. Verificar Spam o Malicious Links
         for (const pattern of SPAM_PATTERNS) {
             if (pattern.test(trimmed)) {
                 this.stats.messages_blocked++;
@@ -155,7 +178,7 @@ class GuardianEngineClass {
             }
         }
 
-        // 3. Verificar PII (Información Personal Sensible)
+        // 4. Verificar PII (Información Personal Sensible)
         for (const pattern of PII_PATTERNS) {
             if (pattern.test(trimmed)) {
                 this.stats.messages_flagged++;
