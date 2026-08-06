@@ -46,27 +46,48 @@ export default function NodeMap() {
     const [globeLoaded, setGlobeLoaded] = useState(false);
     const globeInstanceRef = useRef<any>(null);
 
-    // 1. Fetch Real Native GPS Position
+    // 1. Fetch Real Native GPS Position with Continuous Watcher
     useEffect(() => {
         let mounted = true;
-        const fetchGeo = async () => {
+        let watchId: string | null = null;
+
+        const initGeoWatch = async () => {
             try {
                 const { Geolocation } = await import('@capacitor/geolocation');
                 const permission = await Geolocation.checkPermissions().catch(() => null);
                 if (permission?.location !== 'granted') {
                     await Geolocation.requestPermissions().catch(() => null);
                 }
-                const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
+                
+                // Get immediate position first
+                const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true }).catch(() => null);
                 if (mounted && pos?.coords) {
                     setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
                     setRealGPS(true);
                 }
+
+                // Continuous real-time movement watcher
+                watchId = await Geolocation.watchPosition({ enableHighAccuracy: true }, (position) => {
+                    if (mounted && position?.coords) {
+                        setMyPos({ lat: position.coords.latitude, lng: position.coords.longitude });
+                        setRealGPS(true);
+                    }
+                });
             } catch (e) {
                 console.warn("[NodeMap] GPS fallback:", e);
             }
         };
-        fetchGeo();
-        return () => { mounted = false; };
+
+        initGeoWatch();
+
+        return () => {
+            mounted = false;
+            if (watchId) {
+                import('@capacitor/geolocation').then(({ Geolocation }) => {
+                    Geolocation.clearWatch({ id: watchId! }).catch(() => {});
+                });
+            }
+        };
     }, []);
 
     // 2. Poll Active Peers (RedAPI + localTransport)
@@ -144,10 +165,17 @@ export default function NodeMap() {
                 ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
                 : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 
-            L.tileLayer(tileUrl, {
+            const tileLayer = L.tileLayer(tileUrl, {
                 maxZoom: 19,
                 subdomains: 'abcd',
-            }).addTo(map);
+            });
+
+            // Graceful offline tile error handling (no broken tile icons when offline)
+            tileLayer.on('tileerror', (e: any) => {
+                if (e.tile) e.tile.style.display = 'none';
+            });
+
+            tileLayer.addTo(map);
 
             // Clear old markers & polylines
             markersGroupRef.current.clearLayers();
