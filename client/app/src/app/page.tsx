@@ -131,23 +131,27 @@ export default function AppRouter() {
   const { currentScreen, nodeOnline, identity, navigate, goBack, activeLiveStreamId } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
-  const [showLanding, setShowLanding] = useState<boolean>(false);
+  const [showLanding, setShowLanding] = useState<boolean>(true);
 
   useEffect(() => {
     setMounted(true);
 
-    // Detección de plataforma: En navegadores web (no nativos) si no hay flag de app, mostrar Landing Page promocional por defecto
+    // Detección de plataforma: En navegadores web mostrar Landing Page por defecto; en nativo Android ir directo a la bóveda
     const checkLanding = async () => {
       try {
         const { Capacitor } = await import('@capacitor/core');
-        if (!Capacitor.isNativePlatform()) {
+        if (Capacitor.isNativePlatform()) {
+          setShowLanding(false);
+        } else {
           const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('app') !== 'true' && !localStorage.getItem("enter_app_direct")) {
+          if (urlParams.get('app') === 'true' || localStorage.getItem("enter_app_direct") === "true") {
+            setShowLanding(false);
+          } else {
             setShowLanding(true);
           }
         }
       } catch {
-        // Fallback a web
+        setShowLanding(true);
       }
     };
 

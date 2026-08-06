@@ -91,28 +91,33 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                 }
 
                 try {
-                    const bioPromise = BiometricAuth.checkBiometry();
-                    const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 300));
-                    const info = await Promise.race([bioPromise, bioTimeout]);
-                    if (isMounted) setBiometryAvailable(info.isAvailable);
+                    const { Capacitor } = await import('@capacitor/core');
+                    if (Capacitor.isNativePlatform()) {
+                        const bioPromise = BiometricAuth.checkBiometry();
+                        const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 300));
+                        const info = await Promise.race([bioPromise, bioTimeout]);
+                        if (isMounted) setBiometryAvailable(info.isAvailable);
 
-                    if (masterPin && info.isAvailable && localStorage.getItem("red_disguise_mode") !== "true") {
-                        try {
-                            await BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
-                            if (!isMounted) return;
-                            setMode("unlock");
-                            setIsLoaded(true);
-                            const panicPin = await getSecurePin("panic_pin");
-                            const decoyPin = await getSecurePin("decoy_pin");
-                            if (masterPin === decoyPin) {
-                                login(decoyPin);
-                            } else {
-                                login(masterPin);
+                        if (masterPin && info.isAvailable && localStorage.getItem("red_disguise_mode") !== "true") {
+                            try {
+                                await BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
+                                if (!isMounted) return;
+                                setMode("unlock");
+                                setIsLoaded(true);
+                                const panicPin = await getSecurePin("panic_pin");
+                                const decoyPin = await getSecurePin("decoy_pin");
+                                if (masterPin === decoyPin) {
+                                    login(decoyPin);
+                                } else {
+                                    login(masterPin);
+                                }
+                                return;
+                            } catch {
+                                console.log("Biometric bypassed or failed, falling back to PIN");
                             }
-                            return;
-                        } catch {
-                            console.log("Biometric bypassed or failed, falling back to PIN");
                         }
+                    } else {
+                        if (isMounted) setBiometryAvailable(false);
                     }
                 } catch {
                     if (isMounted) setBiometryAvailable(false);
