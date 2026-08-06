@@ -24,7 +24,8 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [3/4] Rebuilding Web Export for GitHub Pages (with /RED basePath)...
+echo [3/4] Copying fresh APK to public assets and Rebuilding Web Export for GitHub Pages...
+powershell -Command "Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\client\app\public\assets\red-v24.0.0-latest.apk' -Force"
 cd /d "d:\PROYECTO RED\client\app"
 set CAPACITOR_BUILD=false
 set NEXT_PUBLIC_BASE_PATH=/RED
@@ -36,6 +37,6 @@ powershell -Command "Copy-Item -Path 'd:\PROYECTO RED\client\app\out\*' -Destina
 
 echo.
 echo ====================================
-echo FULL BUILD & SYNC SUCCESSFUL!
+echo FULL BUILD AND SYNC COMPLETED SUCCESSFULLY!
 echo ====================================
 dir /s /b "d:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\*.apk" 2>&1
