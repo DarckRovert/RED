@@ -116,7 +116,7 @@ const OVERLAY_SCREENS = new Set<ScreenView>([
     'sos', 'aiCopilot', 'proximity', 'canvas', 'walkie', 'weather',
     'proximitySettings', 'radar', 'contacts', 'settings', 'nodemap',
     'compass', 'idVault', 'amber', 'guardian', 'channels', 'crypto',
-    'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast'
+    'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast', 'call'
 ]);
 
 export const useRedStore = create<RedStore>((set, get) => ({
