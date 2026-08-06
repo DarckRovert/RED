@@ -141,7 +141,7 @@ class BluetoothTransport {
         // In a production environment, you'd use a more robust framing protocol instead of this naïve concat
         if (!buffer || buffer.length === 0) {
             if (chunk.length < 4) return;
-            const totalLength = (chunk[0] << 24) | (chunk[1] << 16) | (chunk[2] << 8) | chunk[3];
+            const totalLength = ((chunk[0] << 24) >>> 0) + (chunk[1] << 16) + (chunk[2] << 8) + chunk[3];
             buffer = new Uint8Array(totalLength);
             buffer.set(chunk.slice(4), 0);
             (buffer as any)._bytesWritten = chunk.length - 4;
