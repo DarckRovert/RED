@@ -4,10 +4,10 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 
-const FRAME_INTERVAL_MS = 200;  // 5 fps
-const FRAME_QUALITY   = 0.55;   // JPEG quality (55% = ~15-25KB per frame)
-const FRAME_WIDTH     = 480;
-const FRAME_HEIGHT    = 640;
+const FRAME_INTERVAL_MS = 500;  // 2 fps (optimized for BLE mesh radio bandwidth)
+const FRAME_QUALITY   = 0.35;   // JPEG quality (35% = ~3-5KB per frame)
+const FRAME_WIDTH     = 240;
+const FRAME_HEIGHT    = 320;
 
 export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
     const { contacts, identity, isStreaming, streamId: activeStreamId } = useRedStore();

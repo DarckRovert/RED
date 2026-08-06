@@ -11,9 +11,9 @@ export interface LiveStreamItem {
     broadcaster_name: string;
     started_at: number;
     is_active: boolean;
-    frames: string[];          // last 3 base64 JPEG frames (ring buffer)
+    frames: any[];          // base64 JPEG frames or frame objects
     frame_seq: number;         // last received sequence number
-    comments: { sender: string; text: string; ts: number }[];
+    comments: any[];
 }
 
 export interface StoryEntry {
@@ -836,6 +836,121 @@ export const useRedStore = create<RedStore>((set, get) => ({
             const t = setTimeout(() => set({ peerTyping: false, typingTimeout: null }), 5000);
             set({ peerTyping: true, typingTimeout: t });
             return; // do NOT add to message list
+        }
+
+        // ── LIVE Stream P2P Video Handlers ─────────────────────────────────────
+        if (item.msg_type === 'live_announce') {
+            const rawItem = item as any;
+            const streamId = rawItem.content || rawItem.conversation_id;
+            if (streamId) {
+                const contactsList = get().contacts || [];
+                const matchedContact = contactsList.find((c: any) => c.identity_hash === item.sender);
+                const broadcasterName = matchedContact?.display_name || rawItem.sender_name || `Operador ${item.sender.substring(0, 6)}`;
+                set(s => ({
+                    liveStreams: {
+                        ...s.liveStreams,
+                        [streamId]: {
+                            stream_id: streamId,
+                            broadcaster_hash: item.sender,
+                            broadcaster_name: broadcasterName,
+                            started_at: Date.now(),
+                            is_active: true,
+                            frames: [],
+                            frame_seq: -1,
+                            comments: [],
+                        }
+                    }
+                }));
+                toast.success(`🔴 ${broadcasterName} inició un LIVE en vivo`);
+            }
+            return;
+        }
+
+        if (item.msg_type === 'live_frame') {
+            const rawItem = item as any;
+            const streamId = rawItem.conversation_id || rawItem.content;
+            const b64 = rawItem.media_data;
+            const seq = typeof rawItem.duration_ms === 'number' ? rawItem.duration_ms : (rawItem.seq || 0);
+            if (streamId && b64) {
+                set(s => {
+                    const currentStream = s.liveStreams[streamId];
+                    if (!currentStream) {
+                        const contactsList = get().contacts || [];
+                        const matchedContact = contactsList.find((c: any) => c.identity_hash === item.sender);
+                        const broadcasterName = matchedContact?.display_name || rawItem.sender_name || `Operador ${item.sender.substring(0, 6)}`;
+                        return {
+                            liveStreams: {
+                                ...s.liveStreams,
+                                [streamId]: {
+                                    stream_id: streamId,
+                                    broadcaster_hash: item.sender,
+                                    broadcaster_name: broadcasterName,
+                                    started_at: Date.now(),
+                                    is_active: true,
+                                    frames: [{ seq, media_data: b64 }],
+                                    frame_seq: seq,
+                                    comments: [],
+                                }
+                            }
+                        };
+                    }
+                    const prevFrames = currentStream.frames || [];
+                    const newFrames = [...prevFrames, { seq, media_data: b64 }].slice(-10);
+                    return {
+                        liveStreams: {
+                            ...s.liveStreams,
+                            [streamId]: {
+                                ...currentStream,
+                                frames: newFrames,
+                                frame_seq: seq,
+                                is_active: true
+                            }
+                        }
+                    };
+                });
+            }
+            return;
+        }
+
+        if (item.msg_type === 'live_end') {
+            const rawItem = item as any;
+            const streamId = rawItem.content || rawItem.conversation_id;
+            if (streamId) {
+                set(s => {
+                    const currentStream = s.liveStreams[streamId];
+                    if (!currentStream) return s;
+                    return {
+                        liveStreams: {
+                            ...s.liveStreams,
+                            [streamId]: { ...currentStream, is_active: false }
+                        }
+                    };
+                });
+                toast.info(`🔴 Transmisión en vivo finalizada`);
+            }
+            return;
+        }
+
+        if (item.msg_type === 'live_comment') {
+            const rawItem = item as any;
+            const streamId = rawItem.conversation_id;
+            if (streamId && rawItem.content) {
+                set(s => {
+                    const currentStream = s.liveStreams[streamId];
+                    if (!currentStream) return s;
+                    const newComments = [...(currentStream.comments || []), {
+                        sender: rawItem.sender_name || `Operador ${item.sender.substring(0, 4)}`,
+                        text: rawItem.content
+                    }].slice(-30);
+                    return {
+                        liveStreams: {
+                            ...s.liveStreams,
+                            [streamId]: { ...currentStream, comments: newComments }
+                        }
+                    };
+                });
+            }
+            return;
         }
 
         // ── Contact Request & Response: Reciprocal P2P auto-add & nickname exchange ──

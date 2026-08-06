@@ -39,19 +39,20 @@ export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
     useEffect(() => {
         const s = liveStreams[streamId];
         if (!s) return;
-        if (s.frames.length > 0) {
+        if (s.frames && s.frames.length > 0) {
             const newestFrame = s.frames[s.frames.length - 1];
-            if (s.frame_seq > lastSeq) {
-                setLastFrame(newestFrame);
+            const frameB64 = typeof newestFrame === 'string' ? newestFrame : (newestFrame?.media_data || null);
+            if (frameB64) {
+                setLastFrame(frameB64);
                 setLastSeq(s.frame_seq);
             }
         }
-        if (!s.is_active) {
+        if (s.is_active === false) {
             // Stream ended — wait 2s then close
             const t = setTimeout(onClose, 2000);
             return () => clearTimeout(t);
         }
-    }, [liveStreams, streamId, lastSeq, onClose]);
+    }, [liveStreams, streamId, onClose]);
 
     // Elapsed time since stream started
     useEffect(() => {

@@ -221,24 +221,28 @@ class RedAPIClient {
      * Uses content field to carry the stream_id.
      */
     async sendLiveAnnounce(contacts: any[], streamId: string): Promise<void> {
-        for (const c of contacts) {
+        const recipients = new Set<string>(contacts.map(c => c.identity_hash));
+        recipients.add('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        for (const recipientHash of recipients) {
             try {
-                await this.sendMessage(c.identity_hash, streamId, { msg_type: 'live_announce' });
+                await this.sendMessage(recipientHash, streamId, { msg_type: 'live_announce' });
             } catch (e) {
-                console.warn('[RED Live] announce failed to', c.display_name, e);
+                console.warn('[RED Live] announce failed to', recipientHash, e);
             }
         }
     }
 
     /**
-     * Send a single MJPEG frame to all contacts.
+     * Send a single MJPEG frame to all contacts & P2P broadcast wildcard.
      * media_data: base64 JPEG string.
      * duration_ms is reused to carry the frame sequence number (no backend change needed).
      */
     async sendLiveFrame(contacts: any[], streamId: string, frameB64: string, seq: number): Promise<void> {
-        for (const c of contacts) {
+        const recipients = new Set<string>(contacts.map(c => c.identity_hash));
+        recipients.add('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        for (const recipientHash of recipients) {
             try {
-                await this.sendMessage(c.identity_hash, '', {
+                await this.sendMessage(recipientHash, '', {
                     msg_type: 'live_frame',
                     media_data: frameB64,
                     conversation_id: streamId,
@@ -249,14 +253,16 @@ class RedAPIClient {
     }
 
     /**
-     * Signal the end of a live stream to all contacts.
+     * Signal the end of a live stream to all contacts & P2P broadcast wildcard.
      */
     async sendLiveEnd(contacts: any[], streamId: string): Promise<void> {
-        for (const c of contacts) {
+        const recipients = new Set<string>(contacts.map(c => c.identity_hash));
+        recipients.add('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+        for (const recipientHash of recipients) {
             try {
-                await this.sendMessage(c.identity_hash, streamId, { msg_type: 'live_end' });
+                await this.sendMessage(recipientHash, streamId, { msg_type: 'live_end' });
             } catch (e) {
-                console.warn('[RED Live] end signal failed to', c.display_name, e);
+                console.warn('[RED Live] end signal failed to', recipientHash, e);
             }
         }
     }
