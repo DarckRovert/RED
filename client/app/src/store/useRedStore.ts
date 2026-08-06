@@ -632,6 +632,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 return;
             }
         }
+        if (options?.media_data || options?.msg_type === 'image') {
+            const imgData = options.media_data || content;
+            if (imgData) {
+                const verdict = GuardianEngine.evaluateImage(imgData);
+                if (!verdict.allowed) {
+                    toast.error(`⛔ RED Guardian: ${verdict.reason}`);
+                    return;
+                }
+            }
+        }
 
         // Reactions and typing pulses are not appended as new bubbles
         const isReaction = options?.msg_type === 'reaction';
