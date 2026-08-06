@@ -552,13 +552,10 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 );
                 if (potentialPeer) {
                     peerHash = potentialPeer.identity_hash;
-                } else if (secondPart.length >= 8) {
-                    const matchByPrefix = (contacts as any[]).find((c: any) => c && c.identity_hash && c.identity_hash.startsWith(secondPart));
-                    if (matchByPrefix) {
-                        peerHash = matchByPrefix.identity_hash;
-                    }
+                } else if (secondPart.length >= 4) {
+                    peerHash = secondPart;
                 }
-            } else if (activeConversationId.length >= 16) {
+            } else if (activeConversationId.length >= 3) {
                 peerHash = activeConversationId;
             }
         }
@@ -849,7 +846,13 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 const senderName = data.sender_name || `Operador ${senderHash.substring(0, 6)}`;
                 const senderPk   = data.sender_pk || null;
 
-                RedAPI.addContact(senderHash, senderName, senderPk).then(() => {
+                RedAPI.addContact(senderHash, senderName, senderPk).catch(() => {
+                    // Fallback to local store
+                    const existing = get().contacts || [];
+                    if (!existing.some((c: any) => c.identity_hash === senderHash)) {
+                        set({ contacts: [...existing, { identity_hash: senderHash, display_name: senderName, public_key: senderPk }] });
+                    }
+                }).finally(() => {
                     if (item.msg_type === 'contact_request') {
                         toast.success(`🤝 ${senderName} te ha agregado como contacto.`);
                         const myIdentity = get().identity;
@@ -863,11 +866,15 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         }
                     }
                     get().fetchData();
-                }).catch(() => {});
+                });
             } catch {
-                RedAPI.addContact(item.sender, `Operador ${item.sender.substring(0, 6)}`, null).then(() => {
-                    get().fetchData();
-                }).catch(() => {});
+                const senderHash = item.sender;
+                const senderName = `Operador ${senderHash.substring(0, 6)}`;
+                const existing = get().contacts || [];
+                if (!existing.some((c: any) => c.identity_hash === senderHash)) {
+                    set({ contacts: [...existing, { identity_hash: senderHash, display_name: senderName }] });
+                }
+                get().fetchData();
             }
             return;
         }

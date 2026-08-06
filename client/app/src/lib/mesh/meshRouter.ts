@@ -142,7 +142,15 @@ class MeshRouter {
     }
     this.markSeen(packet.nonce);
 
-    if (packet.recipient === this.myIdentityHash) {
+    // Check if packet is intended for THIS node (exact hash, short prefix, or broadcast)
+    const isForMe =
+      packet.recipient === this.myIdentityHash ||
+      packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+      packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000' ||
+      (packet.recipient.length >= 6 && this.myIdentityHash.startsWith(packet.recipient)) ||
+      (this.myIdentityHash.length >= 6 && packet.recipient.startsWith(this.myIdentityHash.substring(0, 8)));
+
+    if (isForMe) {
       // ── FINAL DELIVERY: packet is for us ──
       console.log(`[MeshRouter] Packet delivered locally from ${packet.sender.slice(0, 8)}`);
       this.deliverToRustNode(packet);

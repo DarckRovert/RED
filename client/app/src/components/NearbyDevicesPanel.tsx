@@ -83,13 +83,26 @@ export default function NearbyDevicesPanel() {
             setConnectedIds(s => new Set(s).add(deviceId));
             const store = useRedStore.getState();
             await store.addContact(deviceId, deviceName || `Nodo RED (${deviceId.substring(0, 6)})`);
+            
+            // Send P2P Identity Handshake to both device ID and broadcast wildcard
+            const myIdentity = store.identity;
+            if (myIdentity?.identity_hash) {
+                const payloadStr = JSON.stringify({
+                    sender_hash: myIdentity.identity_hash,
+                    sender_name: myIdentity.nickname || 'Operador RED',
+                    sender_pk: myIdentity.public_key || null
+                });
+                RedAPI.sendMessage(deviceId, payloadStr, { msg_type: 'contact_request' }).catch(() => {});
+                RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadStr, { msg_type: 'contact_request' }).catch(() => {});
+            }
+
             // Add peer directly to meshPeers list so it moves to active relay section
             setMeshPeers(prev => {
                 if (prev.some(p => p.id === deviceId)) return prev;
                 return [...prev, { id: deviceId, transport: 'ble', lastSeen: Date.now(), rssi: -50 }];
             });
             const { toast } = await import("./Toast");
-            toast.success(`✅ Conectado y enlazado con ${deviceName || 'Nodo RED'}`);
+            toast.success(`✅ Solicitud enviada a ${deviceName || 'Nodo RED'}`);
         } catch (e) {
             console.error("BLE connect failed:", e);
             const { toast } = await import("./Toast");
