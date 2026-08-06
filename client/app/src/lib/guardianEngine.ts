@@ -150,6 +150,23 @@ class GuardianEngineClass {
         this.stats.messages_analyzed++;
         this.stats.api_calls_made++;
 
+        // 0. Clasificación Semántica Neuronal de Vectores en Espacio Latente Local
+        const neuralEval = LocalAIEngine.classifySafety(trimmed);
+        if (neuralEval.isToxic) {
+            this.stats.messages_blocked++;
+            this.stats.messages_flagged++;
+            const result: GuardianEvaluation = {
+                allowed: false,
+                reason: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA: Detectada intención tóxica en espacio latente.',
+                category: neuralEval.category,
+                confidence: neuralEval.confidence,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+            MEMORY_CACHE.set(normalized, result);
+            this.saveStats();
+            return result;
+        }
+
         // 1. Verificar Explotación Infantil / CSAM / Material Ilegal Grave (en texto original y desofuscado)
         for (const pattern of EXPLOITATION_PATTERNS) {
             if (pattern.test(trimmed) || pattern.test(normalized)) {

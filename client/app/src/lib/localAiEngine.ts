@@ -143,7 +143,7 @@ class LocalAIEngineClass {
     /**
      * Clasificador Semántico Neuronal para RED Guardian IA
      */
-    public async classifySafety(text: string): Promise<NeuralSafetyEvaluation> {
+    public classifySafety(text: string): NeuralSafetyEvaluation {
         const start = performance.now();
         const lower = text.toLowerCase();
         const inputVector = this.computeEmbedding(text);
@@ -180,7 +180,7 @@ class LocalAIEngineClass {
     /**
      * Generador Neuronal Táctico RAG para el Copiloto IA Off-Grid
      */
-    public async generateCopilotResponse(prompt: string, context?: string): Promise<CopilotAIResponse> {
+    public generateCopilotResponse(prompt: string, context?: string): CopilotAIResponse {
         const start = performance.now();
         const lower = prompt.toLowerCase();
 
