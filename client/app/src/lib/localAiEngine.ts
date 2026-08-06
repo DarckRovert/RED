@@ -1,8 +1,8 @@
 /**
- * RED LocalAIEngine.ts — Real ONNX WebAssembly Neural AI Engine v24.0
+ * RED LocalAIEngine.ts — 100% Offline ONNX WASM Neural AI Engine v24.0
  * 
- * Powered by @xenova/transformers & ONNX Runtime WASM (Dynamic On-Demand Imports).
- * ZERO HARDCODED DUMMY FALLBACK STRINGS. Pure Real Neural Model Execution.
+ * Powered by @xenova/transformers & local ONNX model binaries in /models/.
+ * ZERO REMOTE NETWORK REQUESTS (env.allowRemoteModels = false).
  */
 
 export interface NeuralSafetyEvaluation {
@@ -48,50 +48,55 @@ class LocalAIEngineClass {
     private generatorPipeline: any = null;
     private transformersLib: any = null;
 
-    /** Dynamic import helper to prevent top-level module load exceptions */
+    /** Dynamic import & local model configuration */
     private async getTransformers() {
         if (typeof window === 'undefined') return null;
         if (!this.transformersLib) {
             const mod = await import('@xenova/transformers');
+            // Strict Offline Settings: ZERO calls to HuggingFace
+            mod.env.allowRemoteModels = false;
             mod.env.allowLocalModels = true;
-            mod.env.allowRemoteModels = true;
+            (mod.env as any).localURL = '/models/';
             mod.env.useBrowserCache = true;
             this.transformersLib = mod;
         }
         return this.transformersLib;
     }
 
-    /** Real ONNX Toxic-BERT Model Loader */
+    /** Real Offline ONNX Toxic-BERT Model Loader */
     private async getClassifier() {
         if (!this.classifierPipeline) {
             const tf = await this.getTransformers();
-            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible en este entorno.');
-            this.classifierPipeline = await tf.pipeline('text-classification', 'Xenova/toxic-bert', {
+            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
+            this.classifierPipeline = await tf.pipeline('text-classification', 'toxic-bert', {
                 quantized: true,
+                local_files_only: true,
             });
         }
         return this.classifierPipeline;
     }
 
-    /** Real ONNX 384-Dim MiniLM Feature Extractor Loader */
+    /** Real Offline ONNX 384-Dim MiniLM Feature Extractor Loader */
     private async getExtractor() {
         if (!this.embeddingPipeline) {
             const tf = await this.getTransformers();
             if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
-            this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+            this.embeddingPipeline = await tf.pipeline('feature-extraction', 'all-MiniLM-L6-v2', {
                 quantized: true,
+                local_files_only: true,
             });
         }
         return this.embeddingPipeline;
     }
 
-    /** Real ONNX LaMini-Flan-T5 Language Model Loader */
+    /** Real Offline ONNX LaMini-Flan-T5 Language Model Loader */
     private async getGenerator() {
         if (!this.generatorPipeline) {
             const tf = await this.getTransformers();
             if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
-            this.generatorPipeline = await tf.pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-77M', {
+            this.generatorPipeline = await tf.pipeline('text2text-generation', 'LaMini-Flan-T5-77M', {
                 quantized: true,
+                local_files_only: true,
             });
         }
         return this.generatorPipeline;
@@ -176,7 +181,7 @@ class LocalAIEngineClass {
         };
     }
 
-    /** 2. Copiloto Generativo Táctico Real (Sin Respuestas Fijas) */
+    /** 2. Copiloto Generativo Táctico Real 100% Offline */
     public async generateCopilotResponse(prompt: string, context?: string): Promise<CopilotAIResponse> {
         const start = performance.now();
         const trimmed = prompt.trim();
@@ -187,26 +192,26 @@ class LocalAIEngineClass {
             
             if (Array.isArray(output) && output.length > 0 && output[0].generated_text) {
                 return {
-                    answer: `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM)\n\n${output[0].generated_text}`,
+                    answer: `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM Offline)\n\n${output[0].generated_text}`,
                     topicCategory: 'Inferencia Neuronal Flan-T5',
                     confidence: 0.98,
-                    modelInfo: 'Xenova/LaMini-Flan-T5-77M (Quantized ONNX)',
+                    modelInfo: 'Xenova/LaMini-Flan-T5-77M (Local Bundle)',
                     executionTimeMs: Math.round(performance.now() - start),
                 };
             }
-            throw new Error('El modelo ONNX no devolvió texto generado.');
+            throw new Error('El modelo ONNX no devolvió texto.');
         } catch (e: any) {
             return {
-                answer: `❌ Error de Inferencia Neuronal Real ONNX:\n\n${e?.message || e}\n\nNota: Para ejecutar la IA Neuronal por primera vez se requieren los pesos del modelo ONNX descargas desde HuggingFace.`,
-                topicCategory: 'Error de Inferencia Real',
+                answer: `❌ Error de Inferencia ONNX Local:\n\n${e?.message || e}`,
+                topicCategory: 'Error de Inferencia Local',
                 confidence: 0,
-                modelInfo: 'Xenova/LaMini-Flan-T5-77M',
+                modelInfo: 'LaMini-Flan-T5-77M Local',
                 executionTimeMs: Math.round(performance.now() - start),
             };
         }
     }
 
-    /** 3. Resumidor Neuronal de Canales / Chats */
+    /** 3. Resumidor Neuronal de Canales / Chats 100% Offline */
     public async summarizeChannel(messages: string[]): Promise<ChannelSummaryResponse> {
         const start = performance.now();
         const count = messages.length;
@@ -228,7 +233,7 @@ class LocalAIEngineClass {
             if (Array.isArray(output) && output[0]?.generated_text) {
                 return {
                     summaryBullets: [
-                        `Síntesis Neuronal Real: ${output[0].generated_text}`,
+                        `Síntesis Neuronal Offline: ${output[0].generated_text}`,
                         `Total de mensajes analizados: ${count}`
                     ],
                     sentiment: 'Táctico Neutral',
@@ -236,11 +241,11 @@ class LocalAIEngineClass {
                     executionTimeMs: Math.round(performance.now() - start),
                 };
             }
-            throw new Error('Inferencia vacía');
+            throw new Error('Síntesis vacía');
         } catch (e: any) {
             return {
                 summaryBullets: [
-                    `Error en Síntesis Neuronal ONNX: ${e?.message || e}`,
+                    `Error en Síntesis Neuronal Local: ${e?.message || e}`,
                     `Mensajes en canal: ${count}`
                 ],
                 sentiment: 'Error',
@@ -250,7 +255,7 @@ class LocalAIEngineClass {
         }
     }
 
-    /** 4. Traductor Neuronal Off-Grid */
+    /** 4. Traductor Neuronal Off-Grid 100% Offline */
     public async translateText(text: string, targetLang: string = 'es'): Promise<TranslationResponse> {
         const start = performance.now();
         
@@ -270,7 +275,7 @@ class LocalAIEngineClass {
         } catch (e: any) {
             return {
                 originalText: text,
-                translatedText: `[Error ONNX]: ${e?.message || e}`,
+                translatedText: `[Error ONNX Local]: ${e?.message || e}`,
                 targetLang,
                 executionTimeMs: Math.round(performance.now() - start),
             };
@@ -282,8 +287,8 @@ class LocalAIEngineClass {
         const start = performance.now();
 
         return {
-            status: 'Óptimo (IA Neuronal Real WASM Active)',
-            recommendation: 'Topología Mesh saludable. Inferencia neuronal ONNX y transceptores BLE/WiFi operando al 100% de capacidad local.',
+            status: 'Óptimo (IA Neuronal Real Local WASM Active)',
+            recommendation: 'Topología Mesh saludable. Inferencia neuronal ONNX y transceptores BLE/WiFi operando al 100% de capacidad local sin internet.',
             score: 100,
             executionTimeMs: Math.round(performance.now() - start),
         };

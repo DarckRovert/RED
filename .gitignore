@@ -39,7 +39,8 @@ red-node-data/
 
 # Android / Mobile Builds
 *.apk
-!assets/*.apk
+*.onnx
+*.bin
 
 *.aab
 *.ap_
