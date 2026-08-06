@@ -514,7 +514,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 activeConversationId: newActiveId
             });
         } catch {
-            set({ conversations: [], contacts: [], groups: [] });
+            // BUG-FIX: Never wipe existing data on transient network errors.
+            // Previously this destroyed all conversations/contacts on every blip.
+            // Only log silently — the UI retains last good state.
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('[RED] fetchData: transient error — retaining cached data.');
+            }
         }
     },
 
@@ -930,6 +935,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
             } else {
                 set({ messages: [...messages, item as MessageItem] });
             }
+            // Refresh sidebar badge (debounced, only if not already active chat)
+            return;
         } else {
             // FIRE LOCAL NOTIFICATION IF CHAT IS NOT FOCUSED OR APP IS BACKGROUNDED
             import('@capacitor/core').then(({ Capacitor }) => {
@@ -962,11 +969,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
             get().fetchData();
         }
         
-        // FIX 2.3: Only refresh sidebar when the message belongs to a DIFFERENT conversation.
-        // If it's the active chat, the bubble was already appended locally — no HTTP round-trip needed.
-        if (activeConversationId !== item.conversation_id) {
-            get().fetchData();
-        }
+        // Only refresh sidebar for messages in OTHER conversations (badge count update).
+        // The early `return` above handles the active chat case without a round-trip.
     },
 
     addContact: async (identity_hash: string, display_name: string, public_key?: string | null) => {

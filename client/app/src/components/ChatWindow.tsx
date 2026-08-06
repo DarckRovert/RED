@@ -274,11 +274,13 @@ export default function ChatWindow() {
             const img = await Camera.getPhoto({ quality: 80, allowEditing: false, resultType: CameraResultType.Base64, source: CameraSource.Camera, width: 1280 });
             if (img.base64String) {
                 const mime = `image/${img.format || 'jpeg'}`;
-                if (img.base64String.length > 48000) {
-                     const chunks = mediaChunker.fragment(img.base64String, mime);
+                // Strip the 'data:mime;base64,' prefix if present — Rust expects raw base64
+                const rawB64 = img.base64String.replace(/^data:[^;]+;base64,/, '');
+                if (rawB64.length > 48000) {
+                     const chunks = mediaChunker.fragment(rawB64, mime);
                      chunks.forEach(c => sendMessage(`[Fragment] Foto [${c.chunkIndex}/${c.totalChunks}]`, { msg_type: 'media_chunk', media_data: JSON.stringify(c) }));
                 } else {
-                     sendMessage('📷 Foto cifrada', { msg_type: 'image', media_data: `data:${mime};base64,${img.base64String}`, mime_type: mime });
+                     sendMessage('📷 Foto cifrada', { msg_type: 'image', media_data: rawB64, mime_type: mime });
                 }
             }
         } catch {}
@@ -291,11 +293,13 @@ export default function ChatWindow() {
             const img = await Camera.getPhoto({ quality: 80, allowEditing: false, resultType: CameraResultType.Base64, source: CameraSource.Photos, width: 1280 });
             if (img.base64String) {
                 const mime = `image/${img.format || 'jpeg'}`;
-                if (img.base64String.length > 48000) {
-                     const chunks = mediaChunker.fragment(img.base64String, mime);
+                // Strip the 'data:mime;base64,' prefix if present — Rust expects raw base64
+                const rawB64 = img.base64String.replace(/^data:[^;]+;base64,/, '');
+                if (rawB64.length > 48000) {
+                     const chunks = mediaChunker.fragment(rawB64, mime);
                      chunks.forEach(c => sendMessage(`[Fragment] Imagen [${c.chunkIndex}/${c.totalChunks}]`, { msg_type: 'media_chunk', media_data: JSON.stringify(c) }));
                 } else {
-                     sendMessage('🖼️ Imagen cifrada', { msg_type: 'image', media_data: `data:${mime};base64,${img.base64String}`, mime_type: mime });
+                     sendMessage('🖼️ Imagen cifrada', { msg_type: 'image', media_data: rawB64, mime_type: mime });
                 }
             }
         } catch {}
@@ -397,15 +401,18 @@ export default function ChatWindow() {
         setEditText('');
     };
 
-    // ── A1: Forward message ──────────────────────────────────────────────────────
+    // A1: Forward message
     const handleForward = (targetHash: string) => {
         if (!forwardMsg) return;
-        const { sendMessage: send, groups: grps } = useRedStore.getState();
-        const isGrp = (grps as any[]).some((g: any) => g.id === targetHash);
-        // Use generic sendMessage — it already routes to group or DM
+        const originalConvId = activeConversationId;
+        // Temporarily set the target conversation, send, then restore
         useRedStore.setState({ activeConversationId: targetHash });
+        const { sendMessage: send } = useRedStore.getState();
         send(`↪ ${forwardMsg.content}`, { msg_type: forwardMsg.msg_type === 'text' ? 'text' : forwardMsg.msg_type });
+        // Restore original conversation so the user stays in the same chat
+        useRedStore.setState({ activeConversationId: originalConvId });
         setForwardMsg(null);
+        toast.success('✅ Mensaje reenviado.');
     };
 
     // ── A4: Star ───────────────────────────────────────────────────────────────
