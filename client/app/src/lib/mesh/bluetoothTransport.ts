@@ -1,8 +1,8 @@
 import { BleClient, numberToUUID } from '@capacitor-community/bluetooth-le';
 
 const RED_BLE_SERVICE = "00001818-0000-1000-8000-00805f9b34fb";
-const RED_BLE_RX_CHAR = "00002a6e-0000-1000-8000-00805f9b34fb"; // Escribimos aquí para que el servidor Remoto reciba
-const RED_BLE_TX_CHAR = "00002a4d-0000-1000-8000-00805f9b34fb"; // El servidor Remoto escribe aquí para notificarnos
+const RED_BLE_WRITE_CHAR = "00002a4d-0000-1000-8000-00805f9b34fb"; // Client writes here (matches native server txChar)
+const RED_BLE_NOTIFY_CHAR = "00002a6e-0000-1000-8000-00805f9b34fb"; // Client subscribes here (matches native server rxChar)
 
 export interface RedDevice {
     id: string;
@@ -67,7 +67,7 @@ class BluetoothTransport {
 
         try {
             await BleClient.connect(deviceId).catch(() => {});
-            await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_TX_CHAR, (value) => {
+            await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_NOTIFY_CHAR, (value) => {
                 this.handleIncomingChunk(deviceId, new Uint8Array(value.buffer));
             }).catch(() => {});
         } catch (e) {
@@ -115,7 +115,9 @@ class BluetoothTransport {
                     chunk.set(payload.slice(offset, offset + sliceLength), 0);
                 }
 
-                await BleClient.write(deviceId, RED_BLE_SERVICE, RED_BLE_RX_CHAR, new DataView(chunk.buffer));
+                const dataView = new DataView(chunk.buffer);
+                await BleClient.write(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView)
+                    .catch(() => BleClient.writeWithoutResponse(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView));
                 offset += sliceLength;
                 
                 // Small delay to prevent GATT buffer overflow
