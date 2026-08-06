@@ -3,6 +3,7 @@
  * Full-typed bridge to the local Rust Node (Axum HTTP + SSE).
  */
 import { GuardianEngine } from './guardianEngine';
+import { LocalAIEngine } from './localAiEngine';
 
 export interface IdentityResponse {
     identity_hash: string;
@@ -1300,33 +1301,12 @@ export async function queryAICopilot(prompt: string, context?: string): Promise<
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, context }),
     }, async () => {
-        const start = Date.now();
-        const lower = prompt.toLowerCase();
-        let answer = '';
-        let category = 'Asistencia Táctica General';
-
-        const sosList = await getActiveSos().catch(() => []);
-        const weatherList = await getWeatherReports().catch(() => []);
-
-        if (lower.includes('primeros auxilios') || lower.includes('herida') || lower.includes('sangre') || lower.includes('hemorragia') || lower.includes('torniquete')) {
-            category = 'Primeros Auxilios Tácticos';
-            answer = `🚑 PROTOCOLO DE PRIMEROS AUXILIOS TÁCTICOS (RED Off-Grid)\n\n1. EVALUACIÓN INICIAL (ABC):\n   • A (Vías Aéreas): Despeja vía aérea inclinando la cabeza ligeramente hacia atrás.\n   • B (Respiración): Verifica expansión torácica por 10 segundos.\n   • C (Circulación): Busca pulso y hemorragias masivas activas.\n\n2. CONTROL DE HEMORRAGIAS MASIVAS:\n   • Aplica presión directa firme sobre la herida con gasa o tela limpia.\n   • Si la hemorragia en extremidad no cede, aplica un TORNIQUETE 5-7cm arriba de la herida.\n   • Ajusta la varilla hasta detener el sangrado y anota la hora exacta de aplicación.\n\n3. NOTIFICACIÓN SOS:\n   • Activa la baliza SOS en la pestaña SOS para que nodos en un radio de 5km reciban tu ubicación GPS.`;
-        } else if (lower.includes('sismo') || lower.includes('terremoto') || lower.includes('incendio') || lower.includes('desastre') || lower.includes('evacuacion')) {
-            category = 'Protocolo de Emergencia en Desastres';
-            answer = `🚨 PROTOCOLO DE EMBARGO Y EMERGENCIA EN SISMOS (RED Off-Grid)\n\n1. DURANTE EL EVENTO:\n   • Agáchate, Cúbrete debajo de una estructura resistente (mesa sólida) o ubícate en la Zona de Seguridad Interna (columnas estructurales).\n   • Aléjate de ventanas, cristales, estantes pesados y cables eléctricos.\n\n2. EVACUACIÓN Y ZONAS SEGURAS:\n   • Mantén la calma y evacúa por las rutas señalizadas usando escaleras.\n   • NUNCA utilices ascensores.\n   • Dirígete a los puntos de reunión en áreas abiertas sin cables suspendidos.\n\n3. COMUNICACIÓN P2P MESH:\n   • Transmite alertas comunitarias por Canales Públicos RED. No satures llamadas de voz celular.`;
-        } else if (lower.includes('red') || lower.includes('mesh') || lower.includes('cifrado') || lower.includes('nodo') || lower.includes('diagnostico')) {
-            category = 'Diagnóstico RED Mesh & Cifrado';
-            answer = `🛰️ DIAGNÓSTICO TÁCTICO DE RED Y MESH (RED Off-Grid)\n\n• Estado del Nodo Local: Operativo en Loopback (Port 7333)\n• Identidad Criptográfica: Ed25519 Keypair activa\n• Protocolo Cifrado: Noise XK + ChaCha20-Poly1305 E2E\n• Red Mesh Multi-Hop: BLE Zero-Touch + WiFi-Direct activos\n• Balizas SOS Activas: ${sosList.length}\n• Reportes Climáticos Registrados: ${weatherList.length}`;
-        } else {
-            category = 'Asistencia Táctica Local';
-            answer = `🤖 ASISTENTE TÁCTICO RED (RED Local AI Engine)\n\nAnalizado: "${prompt}"\n\n• Operación 100% Off-Grid: Tu dispositivo está procesando consultas sin conexión a internet ni servidores externos.\n• Telemetría de Sistema: ${sosList.length} baliza(s) SOS en el área local.\n• Recomendación Táctica: Si enfrentas un evento crítico, utiliza la baliza SOS o los Canales Públicos para sincronizar información con nodos cercanos por mesh.`;
-        }
-
+        const aiRes = await LocalAIEngine.generateCopilotResponse(prompt, context);
         return {
-            answer,
-            topic_category: category,
-            source: 'RED Local Tactical AI Engine (Offline Rules)',
-            execution_time_ms: Math.max(5, Date.now() - start),
+            answer: aiRes.answer,
+            topic_category: aiRes.topicCategory,
+            source: aiRes.modelInfo,
+            execution_time_ms: aiRes.executionTimeMs,
         };
     });
 }

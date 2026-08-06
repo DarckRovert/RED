@@ -4,6 +4,7 @@
  * Evaluación híbrida (Heurística + Clasificador Semántico IA Local + De-obfuscator Leetspeak).
  * Opera 100% en el dispositivo emisor (<15MB RAM) sin enviar datos a internet.
  */
+import { LocalAIEngine } from './localAiEngine';
 
 export interface GuardianEvaluation {
     allowed: boolean;
