@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { CalculatorScreen } from "./CalculatorScreen";
-import { BiometricAuth } from '@aparajita/capacitor-biometric-auth';
+
 
 /**
  * Authentication Wall — RED Unified Lockscreen
@@ -93,6 +93,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                 try {
                     const { Capacitor } = await import('@capacitor/core');
                     if (Capacitor.isNativePlatform()) {
+                        const { BiometricAuth } = await import('@aparajita/capacitor-biometric-auth');
                         const bioPromise = BiometricAuth.checkBiometry();
                         const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 300));
                         const info = await Promise.race([bioPromise, bioTimeout]);
@@ -176,10 +177,14 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     const handleBiometricUnlock = async () => {
         try {
-            await BiometricAuth.authenticate({ reason: "Desbloquear bóveda RED" });
-            const masterPin = await getSecurePin("master_pin");
-            if (masterPin) {
-                await doLogin(masterPin);
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                const { BiometricAuth } = await import('@aparajita/capacitor-biometric-auth');
+                await BiometricAuth.authenticate({ reason: "Desbloquear bóveda RED" });
+                const masterPin = await getSecurePin("master_pin");
+                if (masterPin) {
+                    await doLogin(masterPin);
+                }
             }
         } catch (e) {
             setError("Biometría fallida. Usa tu PIN.");
