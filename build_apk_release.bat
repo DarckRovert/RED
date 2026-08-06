@@ -7,6 +7,13 @@ echo Java version:
 "%JAVA_HOME%\bin\java.exe" -version
 
 echo.
+echo Syncing Capacitor Web Assets for Android (empty basePath)...
+cd /d "d:\PROYECTO RED\client\app"
+set CAPACITOR_BUILD=true
+call npx next build 2>&1
+call npx cap sync android 2>&1
+
+echo.
 echo Building Android APK Release...
 cd /d "d:\PROYECTO RED\client\app\android"
 call gradlew.bat assembleRelease --no-daemon 2>&1
