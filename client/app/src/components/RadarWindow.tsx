@@ -314,8 +314,25 @@ export default function RadarWindow() {
                                         onClick={async () => {
                                             try {
                                                 const peerTarget = peer.id || peer.name.replace('RED-', '');
-                                                await addContact(peerTarget, peer.name);
-                                                toast.success(`🤝 ${peer.name} añadido a contactos.`);
+                                                const { localTransport } = await import('../lib/mesh/localTransport');
+                                                await localTransport.connectBluetooth(peerTarget).catch(() => {});
+
+                                                const store = useRedStore.getState();
+                                                await store.addContact(peerTarget, peer.name);
+
+                                                const myIdentity = store.identity;
+                                                if (myIdentity?.identity_hash) {
+                                                    const payloadStr = JSON.stringify({
+                                                        sender_hash: myIdentity.identity_hash,
+                                                        sender_name: myIdentity.nickname || 'Operador RED',
+                                                        sender_pk: myIdentity.public_key || null
+                                                    });
+                                                    const { RedAPI } = await import('../lib/api');
+                                                    RedAPI.sendMessage(peerTarget, payloadStr, { msg_type: 'contact_request' }).catch(() => {});
+                                                    RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadStr, { msg_type: 'contact_request' }).catch(() => {});
+                                                }
+
+                                                toast.success(`🤝 Invitación enviada a ${peer.name}`);
                                                 navigate('chat', peerTarget);
                                             } catch (e) {
                                                 const msg = e instanceof Error ? e.message : String(e);

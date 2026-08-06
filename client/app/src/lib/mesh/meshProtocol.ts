@@ -155,9 +155,11 @@ export function bytesToHex(bytes: Uint8Array): string {
 }
 
 export function hexToBytes(hex: string): Uint8Array {
-  const result = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    result[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  const clean = (hex || '').replace(/[^0-9a-fA-F]/g, '');
+  const len = Math.floor(clean.length / 2);
+  const result = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    result[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
   }
   return result;
 }

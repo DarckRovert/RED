@@ -142,13 +142,20 @@ class MeshRouter {
     }
     this.markSeen(packet.nonce);
 
-    // Check if packet is intended for THIS node (exact hash, short prefix, or broadcast)
+    // Check if packet is intended for THIS node (exact hash, short prefix, broadcast, or handshake)
+    let isHandshakeMsg = false;
+    try {
+      const payloadStr = new TextDecoder().decode(packet.payload);
+      isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('sender_hash');
+    } catch {}
+
     const isForMe =
+      isHandshakeMsg ||
       packet.recipient === this.myIdentityHash ||
       packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
       packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000' ||
-      (packet.recipient.length >= 6 && this.myIdentityHash.startsWith(packet.recipient)) ||
-      (this.myIdentityHash.length >= 6 && packet.recipient.startsWith(this.myIdentityHash.substring(0, 8)));
+      (packet.recipient.length >= 4 && this.myIdentityHash.toLowerCase().includes(packet.recipient.toLowerCase())) ||
+      (packet.recipient.length >= 4 && packet.recipient.toLowerCase().includes(this.myIdentityHash.substring(0, 8).toLowerCase()));
 
     if (isForMe) {
       // ── FINAL DELIVERY: packet is for us ──

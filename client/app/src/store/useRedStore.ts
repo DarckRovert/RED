@@ -864,6 +864,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
                                 sender_pk: myIdentity.public_key || null
                             }), { msg_type: 'contact_response' }).catch(() => {});
                         }
+                    } else if (item.msg_type === 'contact_response') {
+                        toast.success(`🤝 ${senderName} ha aceptado tu invitación.`);
                     }
                     get().fetchData();
                 });
