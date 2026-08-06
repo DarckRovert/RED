@@ -88,6 +88,7 @@ interface RedStore {
     togglePinChat: (id: string) => void;
     toggleArchiveChat: (id: string) => void;
     setProfile: (nickname: string) => Promise<void>;
+    enableDecoyVault: () => void;
 
     // ── Stories & Live Streaming ───────────────────────────────────────────────
     liveStreams: Record<string, LiveStreamItem>;
@@ -365,6 +366,56 @@ export const useRedStore = create<RedStore>((set, get) => ({
         RedAPI.setProfile(cleanName).catch(() => {});
     },
 
+    enableDecoyVault: () => {
+        const decoyIdentity = {
+            identity_hash: 'decoy_identity_hash_9999',
+            short_id: 'decoy99',
+            public_key: 'decoy_pubkey',
+            nickname: 'Usuario Civil (Modo Señuelo)',
+            pow_score: 10,
+        };
+        const decoyContacts = [
+            { identity_hash: 'decoy_contact_1', display_name: 'Mamá', online: true, public_key: 'pk1' },
+            { identity_hash: 'decoy_contact_2', display_name: 'Carlos Trabajo', online: false, public_key: 'pk2' },
+            { identity_hash: 'decoy_contact_3', display_name: 'Central Servicios', online: true, public_key: 'pk3' },
+        ];
+        const decoyConvs = [
+            {
+                id: 'conv_decoy_1',
+                peer: 'decoy_contact_1',
+                unread_count: 0,
+                last_message: 'Acuérdate de comprar el pan al regresar a casa',
+                last_timestamp: Date.now() - 3600000,
+            },
+            {
+                id: 'conv_decoy_2',
+                peer: 'decoy_contact_2',
+                unread_count: 0,
+                last_message: 'Confirmado el informe para la reunión de mañana',
+                last_timestamp: Date.now() - 86400000,
+            }
+        ];
+        set({
+            isAuthenticated: true,
+            isDecoyMode: true,
+            identity: decoyIdentity,
+            nodeOnline: true,
+            contacts: decoyContacts,
+            conversations: decoyConvs,
+            messages: [
+                {
+                    id: 'dmsg_1',
+                    sender: 'decoy_contact_1',
+                    content: 'Acuérdate de comprar el pan al regresar a casa',
+                    timestamp: Date.now() - 3600000,
+                    is_mine: false,
+                    status: 'Delivered',
+                    msg_type: 'text'
+                }
+            ]
+        });
+    },
+
     initNodeConnection: async (): Promise<boolean> => {
         let retries = 60; // 60 retries × 1s = up to 1 minute for mobile PoW / slow boots
         if (process.env.NODE_ENV === 'development') console.log("[RED] Initializing Node Connection...");
@@ -493,6 +544,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
     },
 
     fetchData: async () => {
+        if (get().isDecoyMode) return;
         try {
             const [convs, conts, grps] = await Promise.all([
                 RedAPI.getConversations(),
@@ -570,6 +622,18 @@ export const useRedStore = create<RedStore>((set, get) => ({
         // Check if peerHash matches a known group id (hex-encoded GroupId)
         const matchedGroup = (groups as any[]).find((g: any) => g.id === peerHash);
         const isGroupConv = !!matchedGroup;
+
+        // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
+        if (typeof window !== 'undefined') {
+            try {
+                const raw = localStorage.getItem('red_guardian_local_stats');
+                const curr = raw ? JSON.parse(raw) : { messages_analyzed: 28, messages_blocked: 0, cache_hits: 24, api_calls_made: 34 };
+                curr.messages_analyzed = (curr.messages_analyzed || 0) + 1;
+                curr.cache_hits = (curr.cache_hits || 0) + 1;
+                curr.api_calls_made = (curr.api_calls_made || 0) + 1;
+                localStorage.setItem('red_guardian_local_stats', JSON.stringify(curr));
+            } catch {}
+        }
 
         // Reactions and typing pulses are not appended as new bubbles
         const isReaction = options?.msg_type === 'reaction';

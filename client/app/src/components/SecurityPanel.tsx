@@ -132,15 +132,24 @@ export default function SecurityPanel() {
         }
     };
 
+    const [savedDecoyPin, setSavedDecoyPin] = useState("");
+
+    useEffect(() => {
+        getSecurePin("decoy_pin").then(p => { if (p) setSavedDecoyPin(p); });
+    }, []);
+
     const savePanicPin = async () => {
         if (!panicPin || panicPin.length < 4) return;
         await setSecurePin("panic_pin", panicPin);
         setSavedPined(panicPin);
+        toast.success("🚨 PIN de Pánico (Wipe) guardado y activo");
     };
 
     const saveDecoyPin = async () => {
         if (!decoyPin || decoyPin.length < 4) return;
         await setSecurePin("decoy_pin", decoyPin);
+        setSavedDecoyPin(decoyPin);
+        toast.success("🛡️ Bóveda Señuelo (Decoy) guardada y activa");
     };
 
 
@@ -369,13 +378,13 @@ export default function SecurityPanel() {
                         />
                         <button 
                             onClick={saveDecoyPin}
-                            disabled={decoyPin.length < 4}
+                            disabled={decoyPin.length < 4 || decoyPin === savedDecoyPin}
                             style={{ 
                                 background: 'var(--solid-bg)', color: 'var(--primary)', padding: '0 18px', borderRadius: '10px', fontWeight: 'bold', border: '1px solid var(--primary)', fontSize: '0.85rem',
-                                opacity: decoyPin.length < 4 ? 0.3 : 1
+                                opacity: (decoyPin.length < 4 || decoyPin === savedDecoyPin) ? 0.3 : 1
                             }}
                         >
-                            Guardar
+                            {savedDecoyPin && decoyPin === savedDecoyPin ? 'Activo' : 'Guardar'}
                         </button>
                     </div>
                 </div>

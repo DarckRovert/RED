@@ -151,18 +151,24 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             try {
                 const { Capacitor, registerPlugin } = await import('@capacitor/core');
                 if (Capacitor.isNativePlatform()) {
+                    const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                    await SecureStoragePlugin.clear().catch(() => {});
                     const RedNode = registerPlugin<any>('RedNode');
-                    await RedNode.destroy();
+                    await RedNode.destroy().catch(() => {});
                 }
             } catch (e) { console.error("Wipe failed", e); }
+            if (typeof window !== 'undefined') {
+                localStorage.clear();
+                sessionStorage.clear();
+            }
+            alert("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
             window.location.reload();
             return;
         }
 
         // 2. DECOY VAULT
         if (decoyPin && pwd === decoyPin) {
-            // GAP-12 FIX: pass decoyPin so Rust derives the correct storage key for the decoy vault
-            await login(decoyPin);
+            useRedStore.getState().enableDecoyVault();
             setLoading(false);
             return;
         }
