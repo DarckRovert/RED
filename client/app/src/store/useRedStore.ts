@@ -1020,6 +1020,29 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
                     continue;
                 }
+                // Handle 404/Short ID gracefully: Add to local contacts store so user can communicate over mesh!
+                const is404 = msg.includes('404') || msg.toLowerCase().includes('short id') || msg.toLowerCase().includes('not found');
+                if (is404) {
+                    console.log(`[addContact] Peer ${cleanHash} not resolved via REST API, registering in local store`);
+                    const existingContacts = get().contacts || [];
+                    if (!existingContacts.some(c => c.identity_hash === cleanHash || c.display_name === cleanName)) {
+                        const localContact = {
+                            identity_hash: cleanHash,
+                            display_name: cleanName,
+                            public_key: pubKey
+                        };
+                        set({ contacts: [...existingContacts, localContact] });
+                    }
+                    const myIdentity = get().identity;
+                    const myName = myIdentity?.nickname || 'Operador RED';
+                    if (myIdentity?.identity_hash) {
+                        RedAPI.sendMessage(cleanHash, JSON.stringify({
+                            sender_hash: myIdentity.identity_hash,
+                            sender_name: myName
+                        }), { msg_type: 'contact_request' }).catch(() => {});
+                    }
+                    return true;
+                }
                 throw new Error(
                     isInitializing
                         ? `El nodo aún está iniciando. Espera unos segundos y vuelve a intentarlo.`
