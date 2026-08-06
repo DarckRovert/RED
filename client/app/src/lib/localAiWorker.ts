@@ -1,15 +1,9 @@
 /**
  * localAiWorker.ts — REAL Neural Network WebAssembly Worker
  * 
- * Powered by @xenova/transformers & ONNX Runtime WASM.
+ * Powered by @xenova/transformers & ONNX Runtime WASM (Dynamic On-Demand).
  * NO HARDCODED DATA ARRAYS. 100% Deep Learning Tensor Execution.
  */
-
-import { pipeline, env } from '@xenova/transformers';
-
-env.allowLocalModels = true;
-env.allowRemoteModels = true;
-env.useBrowserCache = true;
 
 export interface WorkerInputMessage {
     id: string;
@@ -20,24 +14,48 @@ export interface WorkerInputMessage {
 let classifierPipeline: any = null;
 let embeddingPipeline: any = null;
 let generatorPipeline: any = null;
+let tfMod: any = null;
+
+async function getTransformers() {
+    if (!tfMod) {
+        try {
+            tfMod = await import('@xenova/transformers');
+            tfMod.env.allowLocalModels = true;
+            tfMod.env.allowRemoteModels = true;
+            tfMod.env.useBrowserCache = true;
+        } catch {
+            return null;
+        }
+    }
+    return tfMod;
+}
 
 async function getClassifier() {
     if (!classifierPipeline) {
-        classifierPipeline = await pipeline('text-classification', 'Xenova/toxic-bert', { quantized: true });
+        const tf = await getTransformers();
+        if (tf) {
+            classifierPipeline = await tf.pipeline('text-classification', 'Xenova/toxic-bert', { quantized: true });
+        }
     }
     return classifierPipeline;
 }
 
 async function getExtractor() {
     if (!embeddingPipeline) {
-        embeddingPipeline = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
+        const tf = await getTransformers();
+        if (tf) {
+            embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
+        }
     }
     return embeddingPipeline;
 }
 
 async function getGenerator() {
     if (!generatorPipeline) {
-        generatorPipeline = await pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-77M', { quantized: true });
+        const tf = await getTransformers();
+        if (tf) {
+            generatorPipeline = await tf.pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-77M', { quantized: true });
+        }
     }
     return generatorPipeline;
 }
@@ -56,21 +74,23 @@ self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
 
             try {
                 const classifier = await getClassifier();
-                const output = await classifier(text);
-                if (Array.isArray(output) && output.length > 0) {
-                    const top = output[0];
-                    const isToxic = top.label === 'toxic' || top.score > 0.7;
-                    self.postMessage({
-                        id, type: 'CLASSIFY_SAFETY_RESULT', success: true,
-                        data: {
-                            isToxic,
-                            category: isToxic ? 'threat' : 'general',
-                            reason: isToxic ? `⛔ BLOQUEO RED NEURONAL ONNX: Toxicidad = ${(top.score * 100).toFixed(1)}%` : undefined,
-                            confidence: parseFloat(top.score.toFixed(2))
-                        },
-                        executionTimeMs: Math.round(performance.now() - start)
-                    });
-                    return;
+                if (classifier) {
+                    const output = await classifier(text);
+                    if (Array.isArray(output) && output.length > 0) {
+                        const top = output[0];
+                        const isToxic = top.label === 'toxic' || top.score > 0.7;
+                        self.postMessage({
+                            id, type: 'CLASSIFY_SAFETY_RESULT', success: true,
+                            data: {
+                                isToxic,
+                                category: isToxic ? 'threat' : 'general',
+                                reason: isToxic ? `⛔ BLOQUEO RED NEURONAL ONNX: Toxicidad = ${(top.score * 100).toFixed(1)}%` : undefined,
+                                confidence: parseFloat(top.score.toFixed(2))
+                            },
+                            executionTimeMs: Math.round(performance.now() - start)
+                        });
+                        return;
+                    }
                 }
             } catch {}
 
@@ -87,9 +107,11 @@ self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
 
             try {
                 const generator = await getGenerator();
-                const genOutput = await generator(prompt, { max_new_tokens: 120, temperature: 0.7 });
-                if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
-                    answer = `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM)\n\n${genOutput[0].generated_text}`;
+                if (generator) {
+                    const genOutput = await generator(prompt, { max_new_tokens: 120, temperature: 0.7 });
+                    if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
+                        answer = `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM)\n\n${genOutput[0].generated_text}`;
+                    }
                 }
             } catch {}
 
@@ -124,9 +146,11 @@ self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
 
             try {
                 const generator = await getGenerator();
-                const output = await generator(`Translate to ${targetLang}: ${text}`, { max_new_tokens: 100 });
-                if (Array.isArray(output) && output[0]?.generated_text) {
-                    translated = output[0].generated_text;
+                if (generator) {
+                    const output = await generator(`Translate to ${targetLang}: ${text}`, { max_new_tokens: 100 });
+                    if (Array.isArray(output) && output[0]?.generated_text) {
+                        translated = output[0].generated_text;
+                    }
                 }
             } catch {}
 
