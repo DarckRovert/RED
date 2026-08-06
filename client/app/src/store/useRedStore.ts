@@ -763,43 +763,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
         const { activeConversationId, messages, typingTimeout } = get();
 
-        // ── Live stream events ────────────────────────────────────────────────
-        if (item.msg_type === 'live_announce') {
-            const streamId = item.content || '';
-            if (!streamId) return;
-            const contacts = get().contacts;
-            const contact = contacts.find((c: any) => c.identity_hash === item.sender);
-            const broadcasterName = contact?.display_name || `${item.sender.substring(0, 8)}…`;
-            const liveStreams = { ...get().liveStreams };
-            liveStreams[streamId] = {
-                stream_id: streamId,
-                broadcaster_hash: item.sender,
-                broadcaster_name: broadcasterName,
-                started_at: Date.now(),
-                is_active: true,
-                frames: [],
-                frame_seq: -1,
-                comments: [],
-            };
-            set({ liveStreams });
-            return;
-        }
 
-        if (item.msg_type === 'live_frame') {
-            const streamId = item.conversation_id || '';
-            const frame = item.media_data || '';
-            const seq = typeof item.duration_ms === 'number' ? item.duration_ms : 0; // reuse field for seq
-            if (streamId && frame) {
-                get().addLiveFrame(streamId, frame, seq);
-            }
-            return;
-        }
-
-        if (item.msg_type === 'live_end') {
-            const streamId = item.content || '';
-            if (streamId) get().removeLiveStream(streamId);
-            return;
-        }
 
         // ── Incoming status/story entry from peer ─────────────────────────────
         if (item.msg_type === 'status') {
