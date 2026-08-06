@@ -102,12 +102,12 @@ export default function Sidebar() {
     const totalUnread = conversations.reduce((sum, c) => sum + (c?.unread_count || 0), 0);
 
     const quickActions = [
-        { icon: '📺', label: 'LIVE TikTok', action: 'status',    color: '#FF0050' },
-        { icon: '📢', label: 'Difusión',    action: 'broadcast', color: '#E8213A' },
-        { icon: '🧭', label: 'Brújula',     action: 'compass',   color: '#38bdf8' },
-        { icon: '📻', label: 'Canales',     action: 'channels',  color: '#c084fc' },
-        { icon: '🛡️', label: 'Guardian',    action: 'guardian',  color: '#63b3ed' },
-        { icon: '🟠', label: 'AMBER',       action: 'amber',     color: '#ff8c00' },
+        { icon: '📺', label: 'LIVE TikTok', action: 'liveStream', color: '#FF0050' },
+        { icon: '📢', label: 'Difusión',    action: 'broadcast',  color: '#E8213A' },
+        { icon: '🧭', label: 'Brújula',     action: 'compass',    color: '#38bdf8' },
+        { icon: '📻', label: 'Canales',     action: 'channels',   color: '#c084fc' },
+        { icon: '🛡️', label: 'Guardian',    action: 'guardian',   color: '#63b3ed' },
+        { icon: '🟠', label: 'AMBER',       action: 'amber',      color: '#ff8c00' },
     ];
 
     const menuItems = [

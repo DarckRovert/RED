@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRedStore } from "../store/useRedStore";
 
@@ -129,7 +129,8 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
  * Lazy-loads all components with ssr:false to prevent hydration crashes.
  */
 export default function AppRouter() {
-  const { currentScreen, nodeOnline, identity, navigate, goBack, activeLiveStreamId } = useRedStore();
+  const { currentScreen, nodeOnline, identity, navigate, goBack, activeLiveStreamId, liveStreams, openLiveStream } = useRedStore();
+  const activeLive = useMemo(() => Object.values(liveStreams || {}).find(s => s.is_active && s.broadcaster_hash !== identity?.identity_hash), [liveStreams, identity]);
   const [mounted, setMounted] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
   const [showLanding, setShowLanding] = useState<boolean>(true);
@@ -272,6 +273,24 @@ export default function AppRouter() {
               {/* FIX 1.4: SOS overlay — always mounted while authenticated so banners are always visible */}
               <SOSEmergencyBanner />
               <IncomingCallBanner />
+              {/* Floating Active Live Stream Banner */}
+              {activeLive && currentScreen !== 'liveStream' && (
+                <div
+                  onClick={() => openLiveStream(activeLive.stream_id)}
+                  style={{
+                    position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
+                    zIndex: 9999, background: 'linear-gradient(135deg, #FF3B30 0%, #C0152A 100%)',
+                    color: 'white', padding: '10px 20px', borderRadius: 30,
+                    boxShadow: '0 8px 30px rgba(255,59,48,0.6)', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.3)',
+                    backdropFilter: 'blur(10px)',
+                  }}
+                >
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'white', boxShadow: '0 0 10px white' }} />
+                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>🔴 LIVE TIKTOK: {activeLive.broadcaster_name}</span>
+                  <span style={{ background: 'rgba(255,255,255,0.25)', padding: '4px 10px', borderRadius: 14, fontSize: '0.75rem', fontWeight: 800 }}>UNIRSE AHORA 📺</span>
+                </div>
+              )}
               {!nodeOnline && (
                 <div style={{ background: 'var(--danger)', color: 'white', textAlign: 'center', padding: '6px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                    <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>

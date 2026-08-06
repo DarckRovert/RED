@@ -144,9 +144,15 @@ export default function ChatWindow() {
     const audioChunksRef   = useRef<BlobPart[]>([]);
     const recordSecRef     = useRef<number>(0);
 
-    /* Sync messages from store — filter out reaction and typing entries */
+    /* Sync messages from store — filter out protocol entries (reaction, typing, live_*, contact_*) */
     useEffect(() => {
-        setChatMessages(messages.filter(m => m.msg_type !== 'reaction' && m.msg_type !== 'typing'));
+        setChatMessages(messages.filter(m => 
+            m.msg_type !== 'reaction' && 
+            m.msg_type !== 'typing' && 
+            m.msg_type !== 'contact_request' && 
+            m.msg_type !== 'contact_response' && 
+            !m.msg_type?.startsWith('live_')
+        ));
     }, [messages]);
 
     /* Auto-scroll */
