@@ -95,14 +95,14 @@ export const P2PCompassModal: React.FC = () => {
 
     return (
         <div style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 900,
+            height: '100%',
+            width: '100%',
             background: '#04060A',
             color: '#fff',
             display: 'flex',
             flexDirection: 'column',
-            fontFamily: 'Inter, sans-serif'
+            fontFamily: 'Inter, sans-serif',
+            overflow: 'hidden'
         }}>
             {/* TOP BAR */}
             <div style={{

@@ -315,7 +315,8 @@ export default function RadarWindow() {
                                             try {
                                                 const peerTarget = peer.id || peer.name.replace('RED-', '');
                                                 await addContact(peerTarget, peer.name);
-                                                toast.success(`🤝 Vinculación directa enviada a ${peer.name}`);
+                                                toast.success(`🤝 ${peer.name} añadido a contactos.`);
+                                                navigate('chat', peerTarget);
                                             } catch (e) {
                                                 const msg = e instanceof Error ? e.message : String(e);
                                                 toast.error(`❌ ${msg}`);

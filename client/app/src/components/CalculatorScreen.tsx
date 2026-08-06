@@ -37,8 +37,9 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
             // If we reach here, unlock failed — do regular math
             setAwaitingUnlock(false);
             try {
-                // eslint-disable-next-line no-eval
-                const result = eval(equation + display);
+                const expr = (equation + display).replace(/[^0-9+\-*/.]/g, '');
+                // Safe math evaluation without eval
+                const result = new Function(`"use strict"; return (${expr})`)();
                 setEquation("");
                 setDisplay(String(result));
             } catch {

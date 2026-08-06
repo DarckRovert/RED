@@ -115,7 +115,18 @@ export const IdentityVaultModal: React.FC = () => {
             expires: Date.now() + 300000 // 5 min
         });
         const encoded = btoa(payload);
-        setQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=RED_ID_VAULT:${encoded}&color=00d97e&bgcolor=080810`);
+        const qrText = `RED_ID_VAULT:${encoded}`;
+        try {
+            const QRCode = await import('qrcode');
+            const dataUrl = await QRCode.toDataURL(qrText, {
+                width: 200,
+                margin: 1,
+                color: { dark: '#00d97e', light: '#080810' }
+            });
+            setQrCodeData(dataUrl);
+        } catch {
+            setQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrText)}&color=00d97e&bgcolor=080810`);
+        }
     };
 
 
