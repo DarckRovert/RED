@@ -3,6 +3,7 @@ import { RedAPI, IdentityResponse, ConversationItem, MessageItem, StatusResponse
 import { localTransport } from '../lib/mesh/localTransport';
 import { meshRouter } from '../lib/mesh/meshRouter';
 import { toast } from '../components/Toast';
+import { GuardianEngine } from '../lib/guardianEngine';
 
 // ── Live Streaming Types ──────────────────────────────────────────────────────
 export interface LiveStreamItem {
@@ -624,15 +625,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const isGroupConv = !!matchedGroup;
 
         // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
-        if (typeof window !== 'undefined') {
-            try {
-                const raw = localStorage.getItem('red_guardian_local_stats');
-                const curr = raw ? JSON.parse(raw) : { messages_analyzed: 28, messages_blocked: 0, cache_hits: 24, api_calls_made: 34 };
-                curr.messages_analyzed = (curr.messages_analyzed || 0) + 1;
-                curr.cache_hits = (curr.cache_hits || 0) + 1;
-                curr.api_calls_made = (curr.api_calls_made || 0) + 1;
-                localStorage.setItem('red_guardian_local_stats', JSON.stringify(curr));
-            } catch {}
+        if (content && (!options?.msg_type || options.msg_type === 'text')) {
+            const verdict = GuardianEngine.evaluateText(content);
+            if (!verdict.allowed) {
+                toast.error(`⛔ RED Guardian: ${verdict.reason}`);
+                return;
+            }
         }
 
         // Reactions and typing pulses are not appended as new bubbles

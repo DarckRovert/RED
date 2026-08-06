@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getGuardianStatus, reportContent, GuardianStatus } from '@/lib/api';
+import { GuardianEngine, GuardianEvaluation } from '@/lib/guardianEngine';
 
 interface GuardianStatusPanelProps {
   onClose: () => void;
@@ -24,6 +25,8 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportSuccess, setReportSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testText, setTestText] = useState('');
+  const [testResult, setTestResult] = useState<GuardianEvaluation | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -157,6 +160,73 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                   <div className="guardian-stat-value">{(status.stats?.api_calls_made ?? 0).toLocaleString()}</div>
                   <div className="guardian-stat-label">Llamadas API</div>
                 </div>
+              </div>
+
+              {/* Probador de Moderación en Vivo */}
+              <div style={{
+                marginTop: '16px', padding: '16px', background: 'rgba(15,23,42,0.85)',
+                borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)',
+              }}>
+                <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#38bdf8', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>🧪 Probador de Moderación en Vivo (Off-Grid)</span>
+                  <button
+                    onClick={() => { GuardianEngine.resetStats(); fetchStatus(); setTestResult(null); }}
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#aaa', padding: '2px 8px', borderRadius: '6px', fontSize: '0.72rem', cursor: 'pointer' }}
+                  >
+                    Reiniciar 🔄
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={testText}
+                    onChange={(e) => setTestText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && testText.trim()) {
+                        const res = GuardianEngine.evaluateText(testText);
+                        setTestResult(res);
+                        fetchStatus();
+                      }
+                    }}
+                    placeholder="Escribe una frase de prueba (ej. 'hola amigo', 'bomba')..."
+                    style={{
+                      flex: 1, background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px', padding: '10px 12px', color: '#fff', fontSize: '0.85rem', outline: 'none'
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      if (!testText.trim()) return;
+                      const res = GuardianEngine.evaluateText(testText);
+                      setTestResult(res);
+                      fetchStatus();
+                    }}
+                    style={{
+                      background: 'var(--primary, #E8213A)', color: '#fff', border: 'none',
+                      borderRadius: '8px', padding: '0 16px', fontWeight: 800, cursor: 'pointer', fontSize: '0.82rem'
+                    }}
+                  >
+                    Evaluar 🛡️
+                  </button>
+                </div>
+                {testResult && (
+                  <div style={{
+                    marginTop: '12px', padding: '10px 14px', borderRadius: '10px',
+                    background: testResult.allowed ? 'rgba(0,217,126,0.15)' : 'rgba(255,59,48,0.15)',
+                    border: testResult.allowed ? '1px solid #00D97E' : '1px solid #FF3B30',
+                    fontSize: '0.82rem',
+                  }}>
+                    <div style={{ fontWeight: 800, color: testResult.allowed ? '#00D97E' : '#FF3B30', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{testResult.allowed ? '✓ MENSAJE PERMITIDO' : '⛔ MENSAJE BLOQUEADO'}</span>
+                      <span>{testResult.executionTimeMs}ms (Confianza: {(testResult.confidence * 100).toFixed(0)}%)</span>
+                    </div>
+                    {testResult.reason && (
+                      <div style={{ color: 'rgba(255,255,255,0.8)', marginTop: '4px' }}>
+                        {testResult.reason}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Explicación de privacidad */}

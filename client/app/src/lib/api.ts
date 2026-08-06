@@ -2,6 +2,7 @@
  * RED 6.0 API Client
  * Full-typed bridge to the local Rust Node (Axum HTTP + SSE).
  */
+import { GuardianEngine } from './guardianEngine';
 
 export interface IdentityResponse {
     identity_hash: string;
@@ -737,30 +738,7 @@ async function stripExifCanvas(imageB64: string): Promise<{ cleanedB64: string; 
 // ─── v19.0: Funciones API Guardian ───────────────────────────────────────────
 
 export async function getGuardianStatus(): Promise<GuardianStatus> {
-    const defaultStats: GuardianStats = {
-        messages_analyzed: 28,
-        messages_blocked: 0,
-        messages_flagged: 0,
-        images_analyzed: 6,
-        images_blocked: 0,
-        api_calls_made: 34,
-        api_errors: 0,
-        cache_hits: 24,
-    };
-
-    let localStats = defaultStats;
-    try {
-        if (typeof window !== 'undefined') {
-            const raw = localStorage.getItem('red_guardian_local_stats');
-            if (raw) {
-                const parsed = JSON.parse(raw);
-                localStats = { ...defaultStats, ...parsed };
-            } else {
-                localStorage.setItem('red_guardian_local_stats', JSON.stringify(defaultStats));
-            }
-        }
-    } catch {}
-
+    const liveStats = GuardianEngine.getStats();
     const identity = await RedAPI.getIdentity().catch(() => null);
     const localDid = identity ? `did:red:${identity.short_id || identity.identity_hash.slice(0, 10)}` : 'did:red:local_node';
 
@@ -769,7 +747,7 @@ export async function getGuardianStatus(): Promise<GuardianStatus> {
         mode: 'strict',
         has_api_key: true,
         model: 'RED-Guardian-Local-S4 (Off-Grid Engine)',
-        stats: localStats,
+        stats: liveStats,
         authorities: [localDid],
     };
 }
