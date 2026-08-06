@@ -7,7 +7,8 @@ echo Java version:
 "%JAVA_HOME%\bin\java.exe" -version
 
 echo.
-echo [1/4] Building Capacitor Web Assets for Android APK (empty basePath)...
+echo [1/4] Cleaning public assets and building Capacitor Web Assets for Android APK (empty basePath)...
+powershell -Command "Remove-Item -Path 'd:\PROYECTO RED\client\app\public\assets\*.apk' -Force -ErrorAction SilentlyContinue"
 cd /d "d:\PROYECTO RED\client\app"
 set CAPACITOR_BUILD=true
 call npx next build 2>&1
@@ -24,19 +25,18 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo [3/4] Copying fresh APK to public assets and Rebuilding Web Export for GitHub Pages...
-powershell -Command "Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\client\app\public\assets\red-v24.0.0-latest.apk' -Force"
+echo [3/4] Rebuilding Web Export for GitHub Pages (with /RED basePath)...
 cd /d "d:\PROYECTO RED\client\app"
 set CAPACITOR_BUILD=false
 set NEXT_PUBLIC_BASE_PATH=/RED
 call npx next build 2>&1
 
 echo.
-echo [4/4] Synchronizing Web Export and APK binaries to workspace root...
+echo [4/4] Synchronizing Web Export and release APK binary to workspace root for GitHub Pages...
 powershell -Command "Copy-Item -Path 'd:\PROYECTO RED\client\app\out\*' -Destination 'd:\PROYECTO RED\' -Recurse -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\assets\red-v24.0.0-latest.apk' -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\app-release.apk' -Force"
 
 echo.
 echo ====================================
-echo FULL BUILD AND SYNC COMPLETED SUCCESSFULLY!
+echo FULL BUILD AND CLEAN SYNC COMPLETED SUCCESSFULLY!
 echo ====================================
 dir /s /b "d:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\*.apk" 2>&1
