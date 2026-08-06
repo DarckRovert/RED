@@ -194,7 +194,24 @@ class RedAPIClient {
 
     async sendMessage(recipient: string, content: string, options?: Record<string, any>): Promise<void> {
         const body = { recipient, content, ...options };
-        await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
+        try {
+            await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
+        } catch (e) {
+            // Direct P2P Mesh Fallback over BLE / WiFi Direct / LoRa
+            try {
+                const { meshRouter } = await import('./mesh/meshRouter');
+                const payloadStr = JSON.stringify({
+                    id: 'msg_' + Date.now(),
+                    content,
+                    msg_type: options?.msg_type || 'text',
+                    ...options
+                });
+                const payloadBytes = new TextEncoder().encode(payloadStr);
+                await meshRouter.send(recipient, payloadBytes);
+            } catch (meshErr) {
+                console.warn('[RedAPI.sendMessage] Mesh fallback failed:', meshErr);
+            }
+        }
     }
 
     // ── Live Streaming API ──────────────────────────────────────────────────────
