@@ -2,7 +2,7 @@
  * RED LocalAIEngine.ts — Real ONNX WebAssembly Neural AI Engine v24.0
  * 
  * Powered by @xenova/transformers & ONNX Runtime WASM (Dynamic On-Demand Imports).
- * Safe against React Hydration and SSR top-level client exceptions.
+ * ZERO HARDCODED DUMMY FALLBACK STRINGS. Pure Real Neural Model Execution.
  */
 
 export interface NeuralSafetyEvaluation {
@@ -52,16 +52,11 @@ class LocalAIEngineClass {
     private async getTransformers() {
         if (typeof window === 'undefined') return null;
         if (!this.transformersLib) {
-            try {
-                const mod = await import('@xenova/transformers');
-                mod.env.allowLocalModels = true;
-                mod.env.allowRemoteModels = true;
-                mod.env.useBrowserCache = true;
-                this.transformersLib = mod;
-            } catch (e) {
-                console.warn('Transformers.js dynamic import deferred:', e);
-                return null;
-            }
+            const mod = await import('@xenova/transformers');
+            mod.env.allowLocalModels = true;
+            mod.env.allowRemoteModels = true;
+            mod.env.useBrowserCache = true;
+            this.transformersLib = mod;
         }
         return this.transformersLib;
     }
@@ -70,7 +65,7 @@ class LocalAIEngineClass {
     private async getClassifier() {
         if (!this.classifierPipeline) {
             const tf = await this.getTransformers();
-            if (!tf) return null;
+            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible en este entorno.');
             this.classifierPipeline = await tf.pipeline('text-classification', 'Xenova/toxic-bert', {
                 quantized: true,
             });
@@ -82,7 +77,7 @@ class LocalAIEngineClass {
     private async getExtractor() {
         if (!this.embeddingPipeline) {
             const tf = await this.getTransformers();
-            if (!tf) return null;
+            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
             this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
                 quantized: true,
             });
@@ -94,7 +89,7 @@ class LocalAIEngineClass {
     private async getGenerator() {
         if (!this.generatorPipeline) {
             const tf = await this.getTransformers();
-            if (!tf) return null;
+            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
             this.generatorPipeline = await tf.pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-77M', {
                 quantized: true,
             });
@@ -113,45 +108,42 @@ class LocalAIEngineClass {
 
         try {
             const classifier = await this.getClassifier();
-            if (classifier) {
-                const results = await classifier(trimmed);
-                if (Array.isArray(results) && results.length > 0) {
-                    const top = results[0];
-                    const score = typeof top.score === 'number' ? top.score : 0;
-                    const isToxic = top.label === 'toxic' || score > 0.7;
+            const results = await classifier(trimmed);
+            if (Array.isArray(results) && results.length > 0) {
+                const top = results[0];
+                const score = typeof top.score === 'number' ? top.score : 0;
+                const isToxic = top.label === 'toxic' || score > 0.7;
 
-                    return {
-                        isToxic,
-                        category: isToxic ? 'threat' : 'general',
-                        reason: isToxic ? `⛔ BLOQUEO RED NEURONAL ONNX (Toxic-BERT): Toxicidad = ${(score * 100).toFixed(1)}%` : undefined,
-                        confidence: parseFloat(score.toFixed(2)),
-                        executionTimeMs: Math.round(performance.now() - start),
-                    };
-                }
+                return {
+                    isToxic,
+                    category: isToxic ? 'threat' : 'general',
+                    reason: isToxic ? `⛔ BLOQUEO RED NEURONAL ONNX (Toxic-BERT): Toxicidad = ${(score * 100).toFixed(1)}%` : undefined,
+                    confidence: parseFloat(score.toFixed(2)),
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
             }
-        } catch {
+        } catch (e: any) {
+            // Feature extraction fallback
             try {
                 const extractor = await this.getExtractor();
-                if (extractor) {
-                    const tensor = await extractor(trimmed, { pooling: 'mean', normalize: true });
-                    const data = Array.from(tensor.data as Float32Array);
-                    const normVal = data.reduce((acc, v) => acc + Math.abs(v), 0) / (data.length || 1);
+                const tensor = await extractor(trimmed, { pooling: 'mean', normalize: true });
+                const data = Array.from(tensor.data as Float32Array);
+                const normVal = data.reduce((acc, v) => acc + Math.abs(v), 0) / (data.length || 1);
 
-                    return {
-                        isToxic: normVal > 0.85,
-                        category: normVal > 0.85 ? 'threat' : 'general',
-                        reason: normVal > 0.85 ? '⛔ BLOQUEO TENSOR NEURONAL (384-Dim Vector Similarity)' : undefined,
-                        confidence: 0.95,
-                        executionTimeMs: Math.round(performance.now() - start),
-                    };
-                }
+                return {
+                    isToxic: normVal > 0.85,
+                    category: normVal > 0.85 ? 'threat' : 'general',
+                    reason: normVal > 0.85 ? '⛔ BLOQUEO TENSOR NEURONAL (384-Dim Vector Similarity)' : undefined,
+                    confidence: 0.95,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
             } catch {}
         }
 
         return this.classifySafetySync(text);
     }
 
-    /** Síncrono rápido seguro */
+    /** Síncrono rápido para pre-filtro de transmisión */
     public classifySafetySync(text: string): NeuralSafetyEvaluation {
         const start = performance.now();
         const lower = text.toLowerCase();
@@ -184,36 +176,34 @@ class LocalAIEngineClass {
         };
     }
 
-    /** 2. Copiloto Generativo Táctico Real */
+    /** 2. Copiloto Generativo Táctico Real (Sin Respuestas Fijas) */
     public async generateCopilotResponse(prompt: string, context?: string): Promise<CopilotAIResponse> {
         const start = performance.now();
         const trimmed = prompt.trim();
 
         try {
             const generator = await this.getGenerator();
-            if (generator) {
-                const output = await generator(trimmed, { max_new_tokens: 140, temperature: 0.7 });
-                if (Array.isArray(output) && output.length > 0 && output[0].generated_text) {
-                    return {
-                        answer: `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM)\n\n${output[0].generated_text}`,
-                        topicCategory: 'Inferencia Neuronal Flan-T5',
-                        confidence: 0.98,
-                        modelInfo: 'Xenova/LaMini-Flan-T5-77M (Quantized ONNX)',
-                        executionTimeMs: Math.round(performance.now() - start),
-                    };
-                }
+            const output = await generator(trimmed, { max_new_tokens: 140, temperature: 0.7 });
+            
+            if (Array.isArray(output) && output.length > 0 && output[0].generated_text) {
+                return {
+                    answer: `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM)\n\n${output[0].generated_text}`,
+                    topicCategory: 'Inferencia Neuronal Flan-T5',
+                    confidence: 0.98,
+                    modelInfo: 'Xenova/LaMini-Flan-T5-77M (Quantized ONNX)',
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
             }
+            throw new Error('El modelo ONNX no devolvió texto generado.');
         } catch (e: any) {
-            console.warn('Transformer generation error:', e);
+            return {
+                answer: `❌ Error de Inferencia Neuronal Real ONNX:\n\n${e?.message || e}\n\nNota: Para ejecutar la IA Neuronal por primera vez se requieren los pesos del modelo ONNX descargas desde HuggingFace.`,
+                topicCategory: 'Error de Inferencia Real',
+                confidence: 0,
+                modelInfo: 'Xenova/LaMini-Flan-T5-77M',
+                executionTimeMs: Math.round(performance.now() - start),
+            };
         }
-
-        return {
-            answer: `🤖 COPILOTO IA NEURONAL LOCAL (ONNX WASM Engine)\n\nConsulta: "${trimmed}"\n\n• Motor de Inferencia: Proceso 100% local ejecutado en WebAssembly sin servidores externos.\n• Estado de Red: Nodos locales conectados por BLE y WiFi-Direct activos.\n• Protocolo Táctico: Para emergencias médicas o desastres sísmicos, la red mantiene prioridad cero-latencia.`,
-            topicCategory: 'Respuesta Táctica Local',
-            confidence: 0.95,
-            modelInfo: 'RED Local Neural WASM Engine',
-            executionTimeMs: Math.round(performance.now() - start),
-        };
     }
 
     /** 3. Resumidor Neuronal de Canales / Chats */
@@ -233,33 +223,31 @@ class LocalAIEngineClass {
         try {
             const sampleText = messages.slice(-5).join('. ');
             const generator = await this.getGenerator();
-            if (generator) {
-                const output = await generator(`Summarize: ${sampleText}`, { max_new_tokens: 80 });
-                if (Array.isArray(output) && output[0]?.generated_text) {
-                    return {
-                        summaryBullets: [
-                            `Síntesis Neuronal: ${output[0].generated_text}`,
-                            `Total de mensajes analizados: ${count}`,
-                            `Red Mesh operando con seguridad E2E`
-                        ],
-                        sentiment: 'Táctico Neutral',
-                        totalMessages: count,
-                        executionTimeMs: Math.round(performance.now() - start),
-                    };
-                }
-            }
-        } catch {}
+            const output = await generator(`Summarize: ${sampleText}`, { max_new_tokens: 80 });
 
-        return {
-            summaryBullets: [
-                `Análisis Neuronal de ${count} mensaje(s) procesados localmente en el canal.`,
-                `Coordinación de nodos P2P activa y protegida con cifrado ChaCha20.`,
-                `Sin alertas de seguridad críticas detectadas por el filtro ONNX.`
-            ],
-            sentiment: 'Táctico Neutral',
-            totalMessages: count,
-            executionTimeMs: Math.round(performance.now() - start),
-        };
+            if (Array.isArray(output) && output[0]?.generated_text) {
+                return {
+                    summaryBullets: [
+                        `Síntesis Neuronal Real: ${output[0].generated_text}`,
+                        `Total de mensajes analizados: ${count}`
+                    ],
+                    sentiment: 'Táctico Neutral',
+                    totalMessages: count,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+            throw new Error('Inferencia vacía');
+        } catch (e: any) {
+            return {
+                summaryBullets: [
+                    `Error en Síntesis Neuronal ONNX: ${e?.message || e}`,
+                    `Mensajes en canal: ${count}`
+                ],
+                sentiment: 'Error',
+                totalMessages: count,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+        }
     }
 
     /** 4. Traductor Neuronal Off-Grid */
@@ -268,25 +256,25 @@ class LocalAIEngineClass {
         
         try {
             const generator = await this.getGenerator();
-            if (generator) {
-                const output = await generator(`Translate to ${targetLang}: ${text}`, { max_new_tokens: 100 });
-                if (Array.isArray(output) && output[0]?.generated_text) {
-                    return {
-                        originalText: text,
-                        translatedText: output[0].generated_text,
-                        targetLang,
-                        executionTimeMs: Math.round(performance.now() - start),
-                    };
-                }
+            const output = await generator(`Translate to ${targetLang}: ${text}`, { max_new_tokens: 100 });
+            
+            if (Array.isArray(output) && output[0]?.generated_text) {
+                return {
+                    originalText: text,
+                    translatedText: output[0].generated_text,
+                    targetLang,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
             }
-        } catch {}
-
-        return {
-            originalText: text,
-            translatedText: text,
-            targetLang,
-            executionTimeMs: Math.round(performance.now() - start),
-        };
+            throw new Error('Traducción vacía');
+        } catch (e: any) {
+            return {
+                originalText: text,
+                translatedText: `[Error ONNX]: ${e?.message || e}`,
+                targetLang,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+        }
     }
 
     /** 5. Diagnóstico Real de Salud del Nodo Mesh */
