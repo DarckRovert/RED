@@ -97,6 +97,12 @@ interface RedStore {
     isStreaming: boolean;                 // true when broadcasting
     streamId: string | null;             // own active stream id
 
+    // ── WebRTC Voice & Video Call State ───────────────────────────────────────
+    incomingCall: { callerHash: string; callerName: string; offer: any } | null;
+    activeCallSignal: { senderHash: string; signal: any } | null;
+    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any } | null) => void;
+    setActiveCallSignal: (sig: { senderHash: string; signal: any } | null) => void;
+
     publishStatus: (content: string, media?: string | null, theme?: number) => Promise<void>;
     openLiveStream: (streamId: string) => void;
     closeLiveStream: () => void;
@@ -194,6 +200,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
     // We start displaying the sidebar (contacts/chats list)
     currentScreen: 'sidebar',
     activeConversationId: null,
+
+    // WebRTC Call Signaling State
+    incomingCall: null,
+    activeCallSignal: null,
+    setIncomingCall: (call) => set({ incomingCall: call }),
+    setActiveCallSignal: (sig) => set({ activeCallSignal: sig }),
 
     // Navigation mechanism for SPA
     navigate: (screen: ScreenView, contextId?: string) => {
@@ -896,6 +908,32 @@ export const useRedStore = create<RedStore>((set, get) => ({
             )) ||
             (itemSender.length >= 8 && itemSender !== myHash && activeConversationId?.includes(itemSender.substring(0, 8))) ||
             (itemRecipient && itemRecipient.length >= 8 && itemRecipient !== myHash && activeConversationId?.includes(itemRecipient.substring(0, 8)));
+
+        // ── WebRTC Signaling: intercept for calls, never append as chat bubble ──
+        if (item.msg_type === 'webrtc_signal') {
+            try {
+                const signal = JSON.parse(item.content);
+                const senderHash = item.sender;
+                const contacts = get().contacts || [];
+                const contact = contacts.find((c: any) => c.identity_hash === senderHash);
+                const callerName = contact?.display_name || `Operador ${senderHash.substring(0, 8)}`;
+
+                if (signal.offer) {
+                    set({
+                        incomingCall: {
+                            callerHash: senderHash,
+                            callerName: callerName,
+                            offer: signal.offer
+                        }
+                    });
+                } else {
+                    set({ activeCallSignal: { senderHash, signal } });
+                }
+            } catch (e) {
+                console.warn('[WebRTC Signal Parse Error]', e);
+            }
+            return;
+        }
 
         // ── Reactions: apply to target bubble, never append as new message ──
         if (item.msg_type === 'reaction' && typeof item.content === 'string') {

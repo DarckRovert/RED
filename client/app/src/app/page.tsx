@@ -41,6 +41,7 @@ const ToastProvider         = dynamic(() => import("../components/Toast").then(m
 // FIX 1.4: SOSEmergencyBanner must be a persistent overlay — mounted ONCE while authenticated,
 // regardless of which screen is active. It auto-activates via its own currentScreen subscription.
 const SOSEmergencyBanner    = dynamic(() => import("../components/SOSEmergencyBanner").then(m => ({ default: m.SOSEmergencyBanner })), { ssr: false, loading: () => null });
+const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
 
 /* ── Spinners de carga ── */
 function AppLoader() {
@@ -270,6 +271,7 @@ export default function AppRouter() {
             <main style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
               {/* FIX 1.4: SOS overlay — always mounted while authenticated so banners are always visible */}
               <SOSEmergencyBanner />
+              <IncomingCallBanner />
               {!nodeOnline && (
                 <div style={{ background: 'var(--danger)', color: 'white', textAlign: 'center', padding: '6px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                    <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>
