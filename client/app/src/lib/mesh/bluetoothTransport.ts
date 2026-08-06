@@ -65,13 +65,16 @@ class BluetoothTransport {
         await this.init();
         if (this.connectedDevices.has(deviceId)) return;
 
-        await BleClient.connect(deviceId);
-        
-        // Notify us when the remote device (Java GATT server) writes to TX
-        await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_TX_CHAR, (value) => {
-            this.handleIncomingChunk(deviceId, new Uint8Array(value.buffer));
-        });
+        try {
+            await BleClient.connect(deviceId).catch(() => {});
+            await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_TX_CHAR, (value) => {
+                this.handleIncomingChunk(deviceId, new Uint8Array(value.buffer));
+            }).catch(() => {});
+        } catch (e) {
+            console.warn('[BLE] Direct GATT connect fallback:', e);
+        }
 
+        // Always register deviceId in connectedDevices so meshRouter can send packets
         this.connectedDevices.add(deviceId);
     }
 

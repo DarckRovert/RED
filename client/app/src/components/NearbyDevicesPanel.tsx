@@ -76,13 +76,24 @@ export default function NearbyDevicesPanel() {
         return () => clearInterval(t);
     }, []);
 
-    const handleConnect = async (deviceId: string) => {
+    const handleConnect = async (deviceId: string, deviceName?: string) => {
         setConnecting(deviceId);
         try {
             await localTransport.connectBluetooth(deviceId);
             setConnectedIds(s => new Set(s).add(deviceId));
+            const store = useRedStore.getState();
+            await store.addContact(deviceId, deviceName || `Nodo RED (${deviceId.substring(0, 6)})`);
+            // Add peer directly to meshPeers list so it moves to active relay section
+            setMeshPeers(prev => {
+                if (prev.some(p => p.id === deviceId)) return prev;
+                return [...prev, { id: deviceId, transport: 'ble', lastSeen: Date.now(), rssi: -50 }];
+            });
+            const { toast } = await import("./Toast");
+            toast.success(`✅ Conectado y enlazado con ${deviceName || 'Nodo RED'}`);
         } catch (e) {
             console.error("BLE connect failed:", e);
+            const { toast } = await import("./Toast");
+            toast.error(`❌ Error de conexión BLE`);
         } finally {
             setConnecting(null);
         }
@@ -255,15 +266,15 @@ export default function NearbyDevicesPanel() {
                                             </div>
                                         </div>
                                         <button
-                                            onClick={() => !isConnected && handleConnect(dev.id)}
-                                            disabled={isConnecting || isConnected}
+                                            onClick={() => !isConnected && handleConnect(dev.id, dev.name)}
+                                            disabled={isConnecting}
                                             className="btn-secondary"
                                             style={{
                                                 padding: '7px 14px', fontSize: '0.75rem', fontWeight: 700,
                                                 background: isConnected ? 'rgba(0,217,126,0.12)' : undefined,
                                                 borderColor: isConnected ? 'rgba(0,217,126,0.3)' : undefined,
                                                 color: isConnected ? 'var(--success)' : undefined,
-                                                minWidth: 80,
+                                                minWidth: 80, cursor: 'pointer',
                                             }}
                                         >
                                             {isConnecting ? (
