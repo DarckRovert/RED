@@ -145,7 +145,7 @@ export default function AppRouter() {
           setShowLanding(false);
         } else {
           const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('app') === 'true' || localStorage.getItem("enter_app_direct") === "true") {
+          if (urlParams.get('app') === 'true') {
             setShowLanding(false);
           } else {
             setShowLanding(true);
