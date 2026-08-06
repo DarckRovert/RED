@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
-import { MessageItem, RedAPI } from "../lib/api";
+import { MessageItem, RedAPI, summarizeChannelAI, translateTextAI } from "../lib/api";
 import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
@@ -466,32 +466,18 @@ export default function ChatWindow() {
 
     // ── Long-press → context menu ───────────────────────────────────────────────
 
-    const handleSynthesizeChat = () => {
+    const handleSynthesizeChat = async () => {
         if (chatMessages.length === 0) {
             alert('Sin mensajes en este chat para sintetizar.');
             return;
         }
         const sendersSet = new Set<string>();
-        const wordFreq: Record<string, number> = {};
-        const stopWords = new Set(['para', 'como', 'esta', 'este', 'estos', 'esto', 'pero', 'mas', 'menos', 'aqui', 'alla', 'todo', 'nada', 'hola', 'bien', 'bueno', 'gracias']);
-
         chatMessages.forEach(m => {
             if (m.sender) sendersSet.add(m.sender === identity?.identity_hash ? 'Tú' : peerName);
-            if (typeof m.content === 'string') {
-                const words = m.content.toLowerCase().split(/\s+/);
-                words.forEach(w => {
-                    const clean = w.replace(/[^a-záéíóúñ0-9]/gi, '');
-                    if (clean.length >= 4 && !stopWords.has(clean)) {
-                        wordFreq[clean] = (wordFreq[clean] || 0) + 1;
-                    }
-                });
-            }
         });
 
-        const topWords = Object.entries(wordFreq)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([w, c]) => `"#${w}" (${c})`);
+        const rawMsgs = chatMessages.map(m => typeof m.content === 'string' ? m.content : '');
+        const aiSummary = await summarizeChannelAI(activeConversationId || 'current_chat', rawMsgs);
 
         const firstTs = chatMessages[0]?.timestamp ? new Date(chatMessages[0].timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Inicio';
         const lastTs = chatMessages[chatMessages.length - 1]?.timestamp ? new Date(chatMessages[chatMessages.length - 1].timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ahora';
@@ -499,7 +485,7 @@ export default function ChatWindow() {
         setSummaryData({
             total: chatMessages.length,
             senders: Array.from(sendersSet),
-            topWords,
+            topWords: aiSummary.summary_bullets,
             timespan: `${firstTs} ➔ ${lastTs}`
         });
         setShowSummaryModal(true);

@@ -2,35 +2,63 @@
 
 import React, { useState } from 'react';
 import { useRedStore } from '../store/useRedStore';
-import { queryAICopilot, CopilotResponse } from '../lib/api';
+import { queryAICopilot, translateTextAI, summarizeChannelAI, CopilotResponse } from '../lib/api';
+import { LocalAIEngine } from '../lib/localAiEngine';
+
+type AIMode = 'copilot' | 'summarizer' | 'translator' | 'diagnose';
 
 export const AICopilotModal: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, messages: chatMessages, activeConversationId } = useRedStore();
+    const [mode, setMode] = useState<AIMode>('copilot');
     const [input, setInput] = useState('');
+    const [targetLang, setTargetLang] = useState('es');
     const [loading, setLoading] = useState(false);
     const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; category?: string; source?: string }>>([
         {
             sender: 'ai',
-            text: '🤖 Hola. Soy el Copiloto IA Táctico de RED. Opero 100% en local (<15 MB RAM) sin necesidad de internet.\n\n¿En qué puedo ayudarte? Puedes preguntarme sobre primeros auxilios, protocolos de desastres o ayuda de red.',
-            category: 'Asistencia General',
-            source: 'RED Local Nano-AI Engine'
+            text: '🤖 Hola. Soy el Copiloto IA Neuronal de RED. Opero 100% en WebAssembly / ONNX sin enviar datos a la nube.\n\nPuedo asistirte en asistencia médica, protocolos de sismos, traducción offline, síntesis de chats y diagnóstico de red Mesh.',
+            category: 'IA Neuronal WASM',
+            source: 'RED Local Transformer WASM Engine'
         }
     ]);
 
     const handleSend = async (queryText?: string) => {
         const text = queryText || input;
-        if (!text.trim()) return;
+        if (!text.trim() && mode !== 'summarizer' && mode !== 'diagnose') return;
 
-        setMessages((prev) => [...prev, { sender: 'user', text }]);
+        setMessages((prev) => [...prev, { sender: 'user', text: text || `[Ejecutar ${mode.toUpperCase()}]` }]);
         if (!queryText) setInput('');
         setLoading(true);
 
         try {
-            const res: CopilotResponse = await queryAICopilot(text);
-            setMessages((prev) => [
-                ...prev,
-                { sender: 'ai', text: res.answer, category: res.topic_category, source: res.source }
-            ]);
+            if (mode === 'copilot') {
+                const res: CopilotResponse = await queryAICopilot(text);
+                setMessages((prev) => [
+                    ...prev,
+                    { sender: 'ai', text: res.answer, category: res.topic_category, source: res.source }
+                ]);
+            } else if (mode === 'translator') {
+                const res = await translateTextAI(text, targetLang);
+                setMessages((prev) => [
+                    ...prev,
+                    { sender: 'ai', text: `🌐 Traducción Neuronal [${targetLang.toUpperCase()}]:\n\n${res.translated_text}`, category: 'Traductor Off-Grid', source: 'ONNX WASM Neural Translator' }
+                ]);
+            } else if (mode === 'summarizer') {
+                const rawTexts = chatMessages.map(m => m.content);
+                const res = await summarizeChannelAI(activeConversationId || 'general', rawTexts);
+                const summaryStr = `📝 Resumen Neuronal de Canal (${res.total_messages_analyzed} mensajes):\n\n` + res.summary_bullets.map(b => `• ${b}`).join('\n') + `\n\nSentimiento: ${res.sentiment}`;
+                setMessages((prev) => [
+                    ...prev,
+                    { sender: 'ai', text: summaryStr, category: 'Resumen de Canal', source: 'ONNX WASM Summarizer' }
+                ]);
+            } else if (mode === 'diagnose') {
+                const diag = await LocalAIEngine.diagnoseHealth();
+                const diagStr = `🛰️ Diagnóstico de Salud Mesh:\n\n• Estado: ${diag.status}\n• Puntuación: ${diag.score}/100\n• Recomendación: ${diag.recommendation}`;
+                setMessages((prev) => [
+                    ...prev,
+                    { sender: 'ai', text: diagStr, category: 'Diagnóstico de Red', source: 'Mesh Neural Predictor' }
+                ]);
+            }
         } catch (e: any) {
             setMessages((prev) => [
                 ...prev,
@@ -75,12 +103,47 @@ export const AICopilotModal: React.FC = () => {
                 >
                     ← Volver
                 </button>
-                <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-                    🤖 COPILOTO IA TÁCTICO OFFLINE
+                <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>
+                    🤖 COPILOTO IA NEURONAL REAL (ONNX / WASM)
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#00D97E', fontWeight: 800, fontFamily: 'monospace' }}>
-                    DUAL-ENGINE (&lt;15MB RAM)
+                    100% OFF-GRID
                 </div>
+            </div>
+
+            {/* AI MODES TABS */}
+            <div style={{
+                display: 'flex',
+                background: 'rgba(15,23,42,0.6)',
+                borderBottom: '1px solid rgba(255,255,255,0.1)',
+                padding: '6px 12px',
+                gap: '8px',
+                overflowX: 'auto'
+            }}>
+                {[
+                    { id: 'copilot', label: '🤖 Copiloto' },
+                    { id: 'summarizer', label: '📝 Resumidor' },
+                    { id: 'translator', label: '🌐 Traductor' },
+                    { id: 'diagnose', label: '🛰️ Diagnóstico' },
+                ].map(t => (
+                    <button
+                        key={t.id}
+                        onClick={() => setMode(t.id as AIMode)}
+                        style={{
+                            background: mode === t.id ? 'var(--primary, #E8213A)' : 'rgba(255,255,255,0.05)',
+                            color: mode === t.id ? '#fff' : '#aaa',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '6px 14px',
+                            fontWeight: 700,
+                            fontSize: '0.8rem',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        {t.label}
+                    </button>
+                ))}
             </div>
 
             {/* CHAT MESSAGES BODY */}
@@ -99,72 +162,56 @@ export const AICopilotModal: React.FC = () => {
                         }}
                     >
                         {m.category && (
-                            <div style={{ fontSize: '0.72rem', color: '#38bdf8', fontWeight: 800, marginBottom: '6px', fontFamily: 'monospace' }}>
-                                [{m.category.toUpperCase()}] • {m.source}
+                            <div style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                {m.category} {m.source && `• ${m.source}`}
                             </div>
                         )}
-                        <div style={{ fontSize: '0.9rem', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                        <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.45' }}>
                             {m.text}
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* QUICK SUGGESTIONS PILS */}
-            <div style={{ padding: '8px 20px', display: 'flex', gap: '8px', overflowX: 'auto', background: 'rgba(0,0,0,0.4)' }}>
-                <button
-                    onClick={() => handleSend('¿Qué hago en caso de primeros auxilios por herida?')}
-                    style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
-                >
-                    🚑 Primeros Auxilios
-                </button>
-                <button
-                    onClick={() => handleSend('¿Cuál es el protocolo de seguridad en sismos?')}
-                    style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fcd34d', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
-                >
-                    🚨 Protocolo Sismo
-                </button>
-                <button
-                    onClick={() => handleSend('¿Cómo funciona el cifrado y la red mesh en RED?')}
-                    style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid #38bdf8', color: '#7dd3fc', padding: '6px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}
-                >
-                    🛰️ Diagnóstico RED
-                </button>
-            </div>
-
-            {/* INPUT BAR */}
-            <div style={{ padding: '16px 20px', background: 'rgba(15,23,42,0.95)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '12px' }}>
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                    placeholder="Pregunta al Copiloto IA Off-Grid..."
-                    style={{
-                        flex: 1,
-                        background: 'rgba(0,0,0,0.5)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        borderRadius: '12px',
-                        padding: '12px 16px',
-                        color: '#fff',
-                        fontSize: '0.9rem'
-                    }}
-                />
+            {/* INPUT CONTROLS */}
+            <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15,23,42,0.9)', display: 'flex', gap: '10px' }}>
+                {mode === 'translator' && (
+                    <select
+                        value={targetLang}
+                        onChange={(e) => setTargetLang(e.target.value)}
+                        style={{ background: '#0F172A', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '10px', padding: '0 8px', fontSize: '0.8rem' }}
+                    >
+                        <option value="es">Español</option>
+                        <option value="en">English</option>
+                        <option value="pt">Português</option>
+                    </select>
+                )}
+                {mode !== 'summarizer' && mode !== 'diagnose' ? (
+                    <input
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
+                        placeholder={mode === 'translator' ? "Escribe texto a traducir..." : "Pregunta a la IA Neuronal (ej. 'torniquete', 'sismo')..."}
+                        style={{
+                            flex: 1, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)',
+                            borderRadius: '10px', padding: '12px 14px', color: '#fff', outline: 'none'
+                        }}
+                    />
+                ) : (
+                    <div style={{ flex: 1, color: '#aaa', fontSize: '0.85rem', display: 'flex', alignItems: 'center' }}>
+                        {mode === 'summarizer' ? 'Presiona "Ejecutar" para resumir la conversación activa.' : 'Presiona "Ejecutar" para diagnosticar la red Mesh.'}
+                    </div>
+                )}
                 <button
                     onClick={() => handleSend()}
                     disabled={loading}
                     style={{
-                        background: 'linear-gradient(135deg, #0284c7, #0369a1)',
-                        border: 'none',
-                        color: '#fff',
-                        padding: '0 20px',
-                        borderRadius: '12px',
-                        fontWeight: 800,
-                        fontSize: '0.9rem',
-                        cursor: 'pointer'
+                        background: 'var(--primary, #E8213A)', color: '#fff', border: 'none',
+                        borderRadius: '10px', padding: '0 20px', fontWeight: 800, cursor: 'pointer'
                     }}
                 >
-                    {loading ? '...' : 'Enviar'}
+                    {loading ? 'Procesando...' : 'Ejecutar ⚡'}
                 </button>
             </div>
         </div>

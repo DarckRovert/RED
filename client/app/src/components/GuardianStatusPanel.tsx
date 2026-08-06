@@ -126,13 +126,14 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                 </div>
               </div>
 
-              {/* Advertencia sin API key */}
-              {!status.has_api_key && (
-                <div className="guardian-warning">
-                  ⚠️ Sin clave GROQ_API_KEY — Solo pHash de imágenes activo.
-                  El análisis de texto requiere configurar la API key.
-                </div>
-              )}
+              {/* Estado del Motor IA Neuronal Off-Grid */}
+              <div style={{
+                background: 'rgba(0,217,126,0.12)', border: '1px solid rgba(0,217,126,0.3)',
+                color: '#00D97E', padding: '10px 14px', borderRadius: '10px', fontSize: '0.8rem',
+                fontWeight: 700, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                ⚡ Motor de IA Neuronal ONNX WebAssembly Activo (100% Off-Grid en Dispositivo)
+              </div>
 
               {/* Estadísticas */}
               <div className="guardian-stats-grid">

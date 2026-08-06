@@ -151,7 +151,7 @@ class GuardianEngineClass {
         this.stats.api_calls_made++;
 
         // 0. Clasificación Semántica Neuronal de Vectores en Espacio Latente Local
-        const neuralEval = LocalAIEngine.classifySafety(trimmed);
+        const neuralEval = LocalAIEngine.classifySafetySync(trimmed);
         if (neuralEval.isToxic) {
             this.stats.messages_blocked++;
             this.stats.messages_flagged++;

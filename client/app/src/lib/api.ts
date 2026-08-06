@@ -1317,38 +1317,31 @@ export async function summarizeChannelAI(channelId: string, messages: string[]):
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel_id: channelId, messages }),
-    }, () => {
-        const total = messages.length;
-        const summary_bullets = total > 0 ? [
-            `Canal [${channelId}] con ${total} mensajes procesados localmente.`,
-            `Coordinación de operaciones tácticas y reporte de nodos activos.`,
-            `Sin alertas críticas no resueltas detectadas por el filtro.`,
-        ] : [
-            `Canal [${channelId}] sin mensajes suficientes para síntesis.`,
-        ];
-
+    }, async () => {
+        const res = await LocalAIEngine.summarizeChannel(messages);
         return {
             channel_id: channelId,
-            summary_bullets,
-            total_messages_analyzed: total,
-            sentiment: 'Táctico/Neutral',
-            execution_time_ms: 15,
+            summary_bullets: res.summaryBullets,
+            total_messages_analyzed: res.totalMessages,
+            sentiment: res.sentiment,
+            execution_time_ms: res.executionTimeMs,
         };
     });
 }
 
-/** Traducir texto en tiempo real off-grid */
+/** Traducir texto en tiempo real off-grid con IA Neuronal */
 export async function translateTextAI(text: string, targetLanguage: string): Promise<TranslateResponse> {
     return fetchWithFallback('/api/ai/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, target_language: targetLanguage }),
-    }, () => {
+    }, async () => {
+        const res = await LocalAIEngine.translateText(text, targetLanguage);
         return {
-            original_text: text,
-            translated_text: `[${targetLanguage.toUpperCase()}] ${text}`,
-            target_language: targetLanguage,
-            execution_time_ms: 8,
+            original_text: res.originalText,
+            translated_text: res.translatedText,
+            target_language: res.targetLang,
+            execution_time_ms: res.executionTimeMs,
         };
     });
 }
