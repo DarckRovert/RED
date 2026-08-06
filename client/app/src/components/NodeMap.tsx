@@ -5,63 +5,48 @@ import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
 import { RedAPI } from "../lib/api";
 
-/** Derive deterministic lat/lng from peer ID if no GPS provided. */
-function peerToCoords(peerId: string): { lat: number; lng: number } {
-    let hash1 = 0, hash2 = 0;
-    for (let i = 0; i < peerId.length; i++) {
-        const c = peerId.charCodeAt(i);
-        if (i % 2 === 0) hash1 = (hash1 * 31 + c) & 0xFFFFFF;
-        else             hash2 = (hash2 * 31 + c) & 0xFFFFFF;
-    }
-    const lat = ((hash1 % 140000) / 1000) - 70;   // -70 .. +70
-    const lng = ((hash2 % 360000) / 1000) - 180;  // -180 .. +180
-    return { lat, lng };
-}
-
 const TRANSPORT_COLOR: Record<string, string> = {
     wifi:    '#00D97E',
     ble:     '#38bdf8',
     lorawan: '#9b59b6',
 };
 
-/** Generate local offline canvas texture for 3D Globe */
-function createLocalGlobeTexture(): string {
-    if (typeof document === 'undefined') return '';
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-        const grad = ctx.createLinearGradient(0, 0, 0, 256);
-        grad.addColorStop(0, '#040814');
-        grad.addColorStop(0.5, '#0b162c');
-        grad.addColorStop(1, '#040814');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, 512, 256);
-
-        // Tactical grid lines
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.18)';
-        ctx.lineWidth = 1;
-        for (let x = 0; x <= 512; x += 32) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 256); ctx.stroke();
-        }
-        for (let y = 0; y <= 256; y += 32) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
-        }
+/** Calculate relative lat/lng offset based on node index & hash for realistic tactical positioning */
+function derivePeerPosition(myLat: number, myLng: number, peerId: string, index: number): { lat: number; lng: number; distMeters: number } {
+    let hash = 0;
+    for (let i = 0; i < peerId.length; i++) {
+        hash = (hash * 31 + peerId.charCodeAt(i)) & 0xFFFFFF;
     }
-    return canvas.toDataURL();
+    // Radius between 15 meters and 120 meters for local mesh simulation
+    const angleRad = ((hash % 360) * Math.PI) / 180;
+    const distMeters = 15 + ((hash % 90) + (index * 20));
+    
+    // 1 degree lat ~ 111,000 meters
+    const deltaLat = (distMeters * Math.cos(angleRad)) / 111000;
+    const deltaLng = (distMeters * Math.sin(angleRad)) / (111000 * Math.cos((myLat * Math.PI) / 180));
+    
+    return {
+        lat: myLat + deltaLat,
+        lng: myLng + deltaLng,
+        distMeters: Math.round(distMeters)
+    };
 }
 
 export default function NodeMap() {
-    const { status, goBack } = useRedStore();
+    const { status, goBack, navigate, addContact } = useRedStore();
     const mapContainerRef = useRef<HTMLDivElement>(null);
-    const globeInstanceRef = useRef<any>(null);
-    const [globeLoaded, setGlobeLoaded] = useState(false);
-    const [peers, setPeers] = useState<Array<{ id: string; transport: string }>>([]);
+    const leafletMapRef = useRef<any>(null);
+    const markersGroupRef = useRef<any>(null);
+    
+    const [mapMode, setMapMode] = useState<'tactical' | 'satellite' | 'globe'>('tactical');
+    const [peers, setPeers] = useState<Array<{ id: string; transport: string; name?: string; rssi?: number }>>([]);
     const [myPos, setMyPos] = useState<{ lat: number; lng: number }>({ lat: -12.1383, lng: -76.9828 });
     const [realGPS, setRealGPS] = useState(false);
+    const [selectedPeer, setSelectedPeer] = useState<any>(null);
+    const [globeLoaded, setGlobeLoaded] = useState(false);
+    const globeInstanceRef = useRef<any>(null);
 
-    // 1. Fetch real GPS position
+    // 1. Fetch Real Native GPS Position
     useEffect(() => {
         let mounted = true;
         const fetchGeo = async () => {
@@ -71,34 +56,33 @@ export default function NodeMap() {
                 if (permission?.location !== 'granted') {
                     await Geolocation.requestPermissions().catch(() => null);
                 }
-                
                 const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
                 if (mounted && pos?.coords) {
                     setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
                     setRealGPS(true);
                 }
             } catch (e) {
-                console.warn("[NodeMap] GPS fallback to active center:", e);
+                console.warn("[NodeMap] GPS fallback:", e);
             }
         };
         fetchGeo();
         return () => { mounted = false; };
     }, []);
 
-    // 2. Poll active peers
+    // 2. Poll Active Peers (RedAPI + localTransport)
     useEffect(() => {
         const updatePeers = async () => {
             try {
                 const apiPeers = await RedAPI.getPeers().catch(() => []);
                 const localPeers = localTransport.allPeers;
                 
-                const map = new Map<string, { id: string; transport: string }>();
+                const map = new Map<string, { id: string; transport: string; name?: string; rssi?: number }>();
                 for (const p of localPeers) {
-                    map.set(p.id, { id: p.id, transport: p.transport });
+                    map.set(p.id, { id: p.id, transport: p.transport, name: p.id.slice(0, 10), rssi: p.rssi || -65 });
                 }
                 for (const p of apiPeers) {
                     if (!map.has(p.id)) {
-                        map.set(p.id, { id: p.id, transport: p.transport || 'wifi' });
+                        map.set(p.id, { id: p.id, transport: p.transport || 'wifi', name: p.id.slice(0, 10), rssi: -70 });
                     }
                 }
                 setPeers(Array.from(map.values()));
@@ -112,143 +96,284 @@ export default function NodeMap() {
         return () => clearInterval(t);
     }, []);
 
-    // 3. Initialize Globe ONCE on mount
+    // 3. Inject Leaflet CSS dynamically
     useEffect(() => {
-        if (typeof window === "undefined" || !mapContainerRef.current) return;
-        let isSubscribed = true;
-
-        import("globe.gl").then((GlobeModule) => {
-            if (!isSubscribed || !mapContainerRef.current) return;
-            const Globe = GlobeModule.default;
-            const localImg = createLocalGlobeTexture();
-
-            // Initialize Three.js Globe once
-            // @ts-ignore
-            const globe = Globe()(mapContainerRef.current)
-                .globeImageUrl(localImg)
-                .backgroundColor('#050914')
-                .arcColor('color')
-                .arcDashLength(0.4)
-                .arcDashGap(0.2)
-                .arcDashAnimateTime(1500)
-                .ringColor(() => '#e74c3c')
-                .ringMaxRadius(6)
-                .ringPropagationSpeed(3)
-                .ringRepeatPeriod(700);
-
-            globe.controls().autoRotate = true;
-            globe.controls().autoRotateSpeed = 1.0;
-
-            globeInstanceRef.current = globe;
-            setGlobeLoaded(true);
-        }).catch(err => {
-            console.warn('[NodeMap] Globe WebGL init fallback:', err);
-            setGlobeLoaded(false);
-        });
-
-        return () => {
-            isSubscribed = false;
-            if (globeInstanceRef.current && typeof globeInstanceRef.current._destructor === 'function') {
-                globeInstanceRef.current._destructor();
-                globeInstanceRef.current = null;
-            }
-        };
+        if (typeof document === 'undefined') return;
+        const cssId = 'leaflet-css-cdn';
+        if (!document.getElementById(cssId)) {
+            const link = document.createElement('link');
+            link.id = cssId;
+            link.rel = 'stylesheet';
+            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            document.head.appendChild(link);
+        }
     }, []);
 
-    // 4. Update data on existing Globe instance WITHOUT destroying WebGL context
+    // 4. Initialize & Update 2D Tactical Leaflet Map
     useEffect(() => {
-        if (!globeInstanceRef.current) return;
+        if (mapMode === 'globe') return;
+        if (typeof window === 'undefined' || !mapContainerRef.current) return;
 
-        const arcsData = peers.map(peer => {
-            const { lat, lng } = peerToCoords(peer.id);
-            return {
-                startLat: myPos.lat,
-                startLng: myPos.lng,
-                endLat: lat,
-                endLng: lng,
-                color: TRANSPORT_COLOR[peer.transport] || '#e8213a',
-                peerId: peer.id,
-            };
-        });
+        let map = leafletMapRef.current;
 
-        const ringsData = [
-            { lat: myPos.lat, lng: myPos.lng },
-            ...arcsData.map(d => ({ lat: d.endLat, lng: d.endLng }))
-        ];
+        const initLeaflet = async () => {
+            const L = (await import('leaflet')).default;
 
-        globeInstanceRef.current
-            .arcsData(arcsData)
-            .ringsData(ringsData);
+            if (!map) {
+                // Create map centered on user GPS
+                map = L.map(mapContainerRef.current!, {
+                    center: [myPos.lat, myPos.lng],
+                    zoom: 17,
+                    zoomControl: false,
+                    attributionControl: false,
+                });
+                leafletMapRef.current = map;
+                markersGroupRef.current = L.layerGroup().addTo(map);
 
-        if (realGPS) {
-            globeInstanceRef.current.pointOfView({ lat: myPos.lat, lng: myPos.lng, altitude: 2.2 }, 1000);
-        }
-    }, [peers, myPos, realGPS]);
+                // Re-center button action
+                L.control.zoom({ position: 'bottomright' }).addTo(map);
+            }
+
+            // Remove existing tile layers
+            map.eachLayer((layer: any) => {
+                if (layer instanceof L.TileLayer) map.removeLayer(layer);
+            });
+
+            // Select Tile Layer based on mode
+            const tileUrl = mapMode === 'satellite'
+                ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+
+            L.tileLayer(tileUrl, {
+                maxZoom: 19,
+                subdomains: 'abcd',
+            }).addTo(map);
+
+            // Clear old markers & polylines
+            markersGroupRef.current.clearLayers();
+
+            // Custom User Icon (Glowing Red Operator Beacon)
+            const userIcon = L.divIcon({
+                className: 'custom-user-icon',
+                html: `
+                    <div style="position:relative; width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
+                        <div style="position:absolute; inset:0; border-radius:50%; background:rgba(232,33,58,0.25); border:2px solid #E8213A; animation:ping 2s cubic-bezier(0,0,0.2,1) infinite;"></div>
+                        <div style="width:16px; height:16px; border-radius:50%; background:#E8213A; border:2px solid white; box-shadow:0 0 12px #E8213A;"></div>
+                    </div>
+                `,
+                iconSize: [36, 36],
+                iconAnchor: [18, 18],
+            });
+
+            // User GPS Marker
+            const userMarker = L.marker([myPos.lat, myPos.lng], { icon: userIcon })
+                .bindPopup(`
+                    <div style="background:#0b0f19; color:white; padding:10px; border-radius:10px; font-family:sans-serif;">
+                        <strong style="color:#E8213A;">📍 TU POSICIÓN</strong><br/>
+                        <span style="font-size:0.75rem; color:#aaa;">GPS: ${myPos.lat.toFixed(5)}, ${myPos.lng.toFixed(5)}</span>
+                    </div>
+                `);
+            markersGroupRef.current.addLayer(userMarker);
+
+            // User Accuracy Pulse Circle
+            const userCircle = L.circle([myPos.lat, myPos.lng], {
+                radius: 25,
+                color: '#E8213A',
+                fillColor: '#E8213A',
+                fillOpacity: 0.08,
+                weight: 1,
+            });
+            markersGroupRef.current.addLayer(userCircle);
+
+            // Render Peer Markers & Vectors
+            peers.forEach((peer, idx) => {
+                const pos = derivePeerPosition(myPos.lat, myPos.lng, peer.id, idx);
+                const color = TRANSPORT_COLOR[peer.transport] || '#38bdf8';
+
+                // Vector line linking user to peer
+                const polyline = L.polyline([
+                    [myPos.lat, myPos.lng],
+                    [pos.lat, pos.lng]
+                ], {
+                    color: color,
+                    weight: 2,
+                    dashArray: '6, 8',
+                    opacity: 0.85
+                });
+                markersGroupRef.current.addLayer(polyline);
+
+                // Peer Marker Icon
+                const peerIcon = L.divIcon({
+                    className: 'custom-peer-icon',
+                    html: `
+                        <div style="position:relative; width:30px; height:30px; display:flex; align-items:center; justify-content:center;">
+                            <div style="width:14px; height:14px; border-radius:50%; background:${color}; border:2px solid white; box-shadow:0 0 10px ${color};"></div>
+                            <span style="position:absolute; top:-18px; white-space:nowrap; background:rgba(0,0,0,0.85); color:white; padding:2px 6px; border-radius:6px; font-size:10px; font-weight:800; border:1px solid ${color}; font-family:monospace;">
+                                ${peer.id.slice(0, 8)} (${pos.distMeters}m)
+                            </span>
+                        </div>
+                    `,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15],
+                });
+
+                const marker = L.marker([pos.lat, pos.lng], { icon: peerIcon });
+                marker.on('click', () => {
+                    setSelectedPeer({ ...peer, ...pos });
+                });
+                markersGroupRef.current.addLayer(marker);
+            });
+
+            // Smooth pan to user location
+            map.panTo([myPos.lat, myPos.lng], { animate: true });
+        };
+
+        initLeaflet();
+    }, [mapMode, myPos, peers]);
 
     return (
         <div style={{ position: 'relative', width: '100%', height: '100%', background: '#050914', overflow: 'hidden' }}>
 
-            {/* Context Header */}
+            {/* Header Controls */}
             <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0,
-                padding: 'calc(16px + var(--safe-top, 0px)) 16px 16px 16px',
-                zIndex: 10, display: 'flex', alignItems: 'flex-start',
+                padding: 'calc(16px + var(--safe-top, 0px)) 16px 12px 16px',
+                zIndex: 1000, display: 'flex', alignItems: 'flex-start',
                 justifyContent: 'space-between', pointerEvents: 'none'
             }}>
-                <div style={{ display: 'flex', gap: '12px', pointerEvents: 'auto', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '10px', pointerEvents: 'auto', alignItems: 'center' }}>
                     <button
                         onClick={goBack}
                         style={{
-                            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)',
-                            color: 'white', width: 44, height: 44, borderRadius: 22,
-                            fontSize: '1.3rem', border: '1px solid rgba(255,255,255,0.15)',
+                            background: 'rgba(10,15,28,0.9)', backdropFilter: 'blur(12px)',
+                            color: 'white', width: 44, height: 44, borderRadius: 14,
+                            fontSize: '1.2rem', border: '1px solid rgba(255,255,255,0.15)',
                             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
                         }}
                     >
                         ←
                     </button>
                     <div>
-                        <h1 style={{ color: 'white', margin: 0, fontSize: '1.3rem', fontWeight: 800 }}>Geometría de Nodos</h1>
-                        <p style={{ color: 'var(--primary-bright)', margin: 0, fontWeight: 700, fontSize: '0.8rem' }}>
-                            {peers.length} nodo{peers.length !== 1 ? 's' : ''} en malla — RED P2P
+                        <h1 style={{ color: 'white', margin: 0, fontSize: '1.2rem', fontWeight: 800, textShadow: '0 2px 8px rgba(0,0,0,0.8)' }}>
+                            MAPA TÁCTICO P2P
+                        </h1>
+                        <p style={{ color: '#00D97E', margin: 0, fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#00D97E', display: 'inline-block', boxShadow: '0 0 6px #00D97E' }} />
+                            {peers.length} nodo{peers.length !== 1 ? 's' : ''} en rango · GPS Nativo
                         </p>
                     </div>
                 </div>
 
-                <div style={{
-                    background: 'linear-gradient(135deg, rgba(13,13,22,0.9), rgba(8,8,16,0.95))',
-                    backdropFilter: 'blur(16px)', padding: '12px 16px', borderRadius: '16px',
-                    border: '1px solid rgba(232,33,58,0.3)', pointerEvents: 'auto',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: 8 }}>
-                        <div className="pulsing-dot" style={{ width: 10, height: 10, borderRadius: 5, background: peers.length > 0 ? '#00D97E' : '#E8213A' }} />
-                        <span style={{ color: 'white', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8rem', fontWeight: 800, letterSpacing: 1 }}>
-                            {peers.length > 0 ? 'MALLA ACTIVA' : 'MALLA OFFLINE'}
-                        </span>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'min-content 1fr', gap: '4px 10px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        <span style={{ fontWeight: 700 }}>Origen:</span>
-                        <span style={{ fontFamily: 'monospace', color: realGPS ? '#00D97E' : '#E8213A', fontWeight: 700 }}>
-                            {myPos.lat.toFixed(4)}, {myPos.lng.toFixed(4)}
-                        </span>
-                        <span style={{ fontWeight: 700 }}>Chain:</span>
-                        <span style={{ fontFamily: 'monospace' }}>#{status?.chain_height ?? '0'}</span>
-                    </div>
+                {/* Mode Selector (Tactical / Satellite) */}
+                <div style={{ display: 'flex', gap: 6, pointerEvents: 'auto', background: 'rgba(10,15,28,0.9)', backdropFilter: 'blur(12px)', padding: 4, borderRadius: 14, border: '1px solid rgba(255,255,255,0.12)' }}>
+                    <button
+                        onClick={() => setMapMode('tactical')}
+                        style={{
+                            padding: '6px 12px', borderRadius: 10, border: 'none',
+                            background: mapMode === 'tactical' ? 'var(--primary)' : 'transparent',
+                            color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer'
+                        }}
+                    >
+                        🗺️ Táctico
+                    </button>
+                    <button
+                        onClick={() => setMapMode('satellite')}
+                        style={{
+                            padding: '6px 12px', borderRadius: 10, border: 'none',
+                            background: mapMode === 'satellite' ? 'var(--primary)' : 'transparent',
+                            color: 'white', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer'
+                        }}
+                    >
+                        🛰️ Satélite
+                    </button>
                 </div>
             </div>
 
-            {/* WebGL Mount Point */}
-            <div ref={mapContainerRef} style={{ width: '100%', height: '100%', opacity: globeLoaded ? 1 : 0, transition: 'opacity 0.5s' }} />
+            {/* Tactical Info Badge */}
+            <div style={{
+                position: 'absolute', bottom: '24px', left: '16px', zIndex: 1000,
+                background: 'linear-gradient(135deg, rgba(13,13,22,0.92), rgba(8,8,16,0.96))',
+                backdropFilter: 'blur(16px)', padding: '12px 16px', borderRadius: '16px',
+                border: '1px solid rgba(56,189,248,0.3)', boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                maxWidth: 280
+            }}>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 4 }}>
+                    Coordenadas GPS de Operador
+                </div>
+                <div style={{ fontSize: '0.9rem', color: '#38bdf8', fontWeight: 800, fontFamily: 'JetBrains Mono, monospace' }}>
+                    {myPos.lat.toFixed(5)}, {myPos.lng.toFixed(5)}
+                </div>
+                <div style={{ fontSize: '0.68rem', color: realGPS ? '#00D97E' : '#f59e0b', marginTop: 4, fontWeight: 700 }}>
+                    {realGPS ? '✓ GPS NATIVO ALTA PRECISIÓN' : '⚠️ GPS EN MODO ESTIMADO'}
+                </div>
+            </div>
 
-            {!globeLoaded && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, background: '#050914' }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid var(--primary)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
-                    <span style={{ color: 'var(--primary-bright)', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem', fontWeight: 700 }}>
-                        Construyendo Malla Satelital P2P…
-                    </span>
+            {/* Selected Peer Tactical Card */}
+            {selectedPeer && (
+                <div style={{
+                    position: 'absolute', bottom: '24px', right: '16px', left: '16px', zIndex: 1001,
+                    margin: '0 auto', maxWidth: 360,
+                    background: 'linear-gradient(145deg, #0f172a, #0b0f19)',
+                    border: '1px solid rgba(56,189,248,0.4)', borderRadius: 20,
+                    padding: 18, boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
+                    animation: 'slideUp 0.25s ease-out'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                        <div style={{ fontWeight: 800, color: 'white', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 10, height: 10, borderRadius: '50%', background: TRANSPORT_COLOR[selectedPeer.transport] || '#38bdf8' }} />
+                            Nodo {selectedPeer.id.slice(0, 12)}…
+                        </div>
+                        <button onClick={() => setSelectedPeer(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: '0.78rem', color: '#94a3b8', marginBottom: 14 }}>
+                        <div style={{ background: 'rgba(0,0,0,0.4)', padding: 8, borderRadius: 8 }}>
+                            <span style={{ color: '#fff', fontWeight: 700 }}>Distancia:</span> ~{selectedPeer.distMeters} m
+                        </div>
+                        <div style={{ background: 'rgba(0,0,0,0.4)', padding: 8, borderRadius: 8 }}>
+                            <span style={{ color: '#fff', fontWeight: 700 }}>Transporte:</span> {selectedPeer.transport.toUpperCase()}
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <button
+                            onClick={async () => {
+                                await addContact(selectedPeer.id, `Nodo ${selectedPeer.id.slice(0, 8)}`);
+                                setSelectedPeer(null);
+                                navigate('chat', selectedPeer.id);
+                            }}
+                            className="btn-primary"
+                            style={{ flex: 1, padding: 10, fontSize: '0.82rem', borderRadius: 12 }}
+                        >
+                            💬 Abrir Chat P2P
+                        </button>
+                    </div>
                 </div>
             )}
+
+            {/* 2D Leaflet Map Container */}
+            <div ref={mapContainerRef} style={{ width: '100%', height: '100%', zIndex: 1 }} />
+
+            <style jsx global>{`
+                .leaflet-container {
+                    background: #050914 !important;
+                }
+                .leaflet-popup-content-wrapper {
+                    background: #0b0f19 !important;
+                    color: white !important;
+                    border: 1px solid rgba(255,255,255,0.15) !important;
+                    border-radius: 12px !important;
+                }
+                .leaflet-popup-tip {
+                    background: #0b0f19 !important;
+                }
+                @keyframes ping {
+                    75%, 100% {
+                        transform: scale(2.2);
+                        opacity: 0;
+                    }
+                }
+            `}</style>
         </div>
     );
 }
