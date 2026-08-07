@@ -282,14 +282,63 @@ class LocalAIEngineClass {
         }
     }
 
-    /** 5. Diagnóstico Real de Salud del Nodo Mesh */
+    /** 5. Diagnóstico Real de Salud del Nodo Mesh (Telemetría en Vivo) */
     public async diagnoseHealth(metrics?: any): Promise<HealthDiagnosticResponse> {
         const start = performance.now();
 
+        let batteryLevel = 100;
+        let isCharging = true;
+        if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+            try {
+                const batt: any = await (navigator as any).getBattery();
+                batteryLevel = Math.round((batt.level || 1) * 100);
+                isCharging = !!batt.charging;
+            } catch {}
+        }
+
+        let peersCount = 0;
+        let activeSosCount = 0;
+        let totalChatMessages = 0;
+
+        if (typeof window !== 'undefined') {
+            try {
+                const { useRedStore } = await import('../store/useRedStore');
+                const state = useRedStore.getState() as any;
+                peersCount = state.conversations?.length || 0;
+                activeSosCount = state.activeSosBeacons?.length || 0;
+                totalChatMessages = state.messages?.length || 0;
+            } catch {}
+        }
+
+        let score = 100;
+        const issues: string[] = [];
+
+        if (batteryLevel < 20 && !isCharging) {
+            score -= 25;
+            issues.push(`⚠️ Batería baja (${batteryLevel}%). Activar Eco-Mesh.`);
+        } else {
+            issues.push(`🔋 Batería: ${batteryLevel}% ${isCharging ? '(Cargando)' : ''}.`);
+        }
+
+        if (peersCount === 0) {
+            score -= 15;
+            issues.push('📡 Sin pares P2P conectados en alcance directo BLE/WiFi.');
+        } else {
+            issues.push(`🔗 ${peersCount} nodo(s) P2P conectados.`);
+        }
+
+        if (activeSosCount > 0) {
+            issues.push(`🚨 ${activeSosCount} alerta(s) SOS activa(s).`);
+        }
+
+        issues.push(`💬 ${totalChatMessages} mensaje(s) en historial.`);
+
+        const statusLabel = score >= 85 ? 'Óptimo' : (score >= 60 ? 'Moderado' : 'Alerta');
+
         return {
-            status: 'Óptimo (IA Neuronal Real Local WASM Active)',
-            recommendation: 'Topología Mesh saludable. Inferencia neuronal ONNX y transceptores BLE/WiFi operando al 100% de capacidad local sin internet.',
-            score: 100,
+            status: `${statusLabel} (${score}/100)`,
+            recommendation: issues.join('\n• '),
+            score,
             executionTimeMs: Math.round(performance.now() - start),
         };
     }

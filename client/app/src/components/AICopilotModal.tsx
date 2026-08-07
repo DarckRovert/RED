@@ -53,10 +53,10 @@ export const AICopilotModal: React.FC = () => {
                 ]);
             } else if (mode === 'diagnose') {
                 const diag = await LocalAIEngine.diagnoseHealth();
-                const diagStr = `🛰️ Diagnóstico de Salud Mesh:\n\n• Estado: ${diag.status}\n• Puntuación: ${diag.score}/100\n• Recomendación: ${diag.recommendation}`;
+                const diagStr = `🛰️ Diagnóstico de Salud Mesh Telemetría en Vivo:\n\n• Estado: ${diag.status}\n• Telemetría de Dispositivo & Red:\n• ${diag.recommendation}`;
                 setMessages((prev) => [
                     ...prev,
-                    { sender: 'ai', text: diagStr, category: 'Diagnóstico de Red', source: 'Mesh Neural Predictor' }
+                    { sender: 'ai', text: diagStr, category: 'Diagnóstico de Red', source: 'Live Telemetry Neural Predictor' }
                 ]);
             }
         } catch (e: any) {
