@@ -770,7 +770,7 @@ export async function reportContent(payload: {
         body: JSON.stringify(payload),
     }, () => {
         const reports = getStored<any[]>(STORAGE_KEYS.GUARDIAN_REPORTS, []);
-        const report_id = `rep_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const report_id = `rep_${Date.now()}_${typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`;
         reports.unshift({ id: report_id, timestamp: Date.now(), ...payload });
         setStored(STORAGE_KEYS.GUARDIAN_REPORTS, reports);
         return { ok: true, report_id };

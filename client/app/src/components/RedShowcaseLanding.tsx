@@ -50,9 +50,14 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
 
   const triggerRatchetSim = () => {
     const nextCount = ratchetCount + 1;
-    const randomDh = 'X25519_DH_' + Math.random().toString(36).substring(2, 9).toUpperCase();
-    const randomKdf = 'HKDF_CHAIN_' + Math.random().toString(36).substring(2, 9).toUpperCase();
-    const randomCipher = 'CHACHA20_' + Array.from({ length: 12 }, () => Math.floor(Math.random() * 16).toString(16)).join('').toUpperCase();
+    const randBuf = new Uint8Array(16);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(randBuf);
+    }
+    const hex = Array.from(randBuf, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    const randomDh = 'X25519_DH_' + hex.slice(0, 8);
+    const randomKdf = 'HKDF_CHAIN_' + hex.slice(8, 16);
+    const randomCipher = 'CHACHA20_' + hex.slice(16, 28);
 
     setRatchetCount(nextCount);
     setRatchetDh(`DH_Key_${nextCount} = X25519(Alice_Ephemeral_${nextCount}, Bob_Public) -> [${randomDh}]`);
