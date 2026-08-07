@@ -1061,11 +1061,11 @@ export async function postWeatherReport(payload: {
         const report: WeatherReport = {
             id: `wx_${now}_${Math.random().toString(36).slice(2, 6)}`,
             sender_did,
-            sender_name: payload.sender_name || 'Estación RED Local',
-            pressure_hpa: payload.pressure_hpa || 1013,
-            temperature_c: payload.temperature_c ?? 22,
-            humidity_percent: payload.humidity_percent ?? 65,
-            condition_summary: payload.condition_summary || 'Despejado / Estable',
+            sender_name: payload.sender_name || (identity && identity.nickname ? identity.nickname : 'Nodo Local'),
+            pressure_hpa: payload.pressure_hpa,
+            temperature_c: payload.temperature_c,
+            humidity_percent: payload.humidity_percent,
+            condition_summary: payload.condition_summary || 'Reporte Manual Sensor',
             is_disaster_alert: payload.is_disaster_alert || false,
             timestamp: now,
         };

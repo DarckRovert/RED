@@ -95,30 +95,10 @@ export default function BlockchainExplorer() {
                 const currentStatus = liveState.status;
                 const currentIdentity = liveState.identity;
 
-                const nowSec = Math.floor(Date.now() / 1000);
-                const localHeight = currentStatus?.chain_height || (currentStatus as any)?.pow_score || 0;
-                
-                const localValidators: ValidatorItem[] = currentIdentity ? [{
-                    public_key: currentIdentity.public_key || `did:red:${currentIdentity.identity_hash.slice(0, 12)}`,
-                    stake: 1000,
-                    active: true,
-                    blocks_produced: localHeight,
-                    missed_slots: 0,
-                    weight: 100,
-                }] : [];
-
-                const localConsensus: ConsensusStatus = {
-                    epoch: Math.floor(nowSec / 3600),
-                    current_slot: Math.floor(nowSec % 3600),
-                    total_stake: localValidators.reduce((acc, v) => acc + v.stake, 0),
-                    active_validators: localValidators.length,
-                    chain_height: localHeight,
-                };
-
                 const [blockData, validatorData, consensusData] = await Promise.all([
                     RedAPI.req<BlockItem[]>('/blockchain/blocks').catch(() => []),
-                    RedAPI.req<ValidatorItem[]>('/blockchain/validators').catch(() => localValidators),
-                    RedAPI.req<ConsensusStatus>('/blockchain/consensus').catch(() => localConsensus),
+                    RedAPI.req<ValidatorItem[]>('/blockchain/validators').catch(() => []),
+                    RedAPI.req<ConsensusStatus>('/blockchain/consensus').catch(() => null),
                 ]);
                 if (isActive) {
                     const finalBlocks = Array.isArray(blockData) ? blockData : [];
@@ -128,8 +108,8 @@ export default function BlockchainExplorer() {
                     }
                     prevHeight = finalBlocks[0]?.height ?? -1;
                     setBlocks(finalBlocks);
-                    setValidators(Array.isArray(validatorData) && validatorData.length > 0 ? validatorData : localValidators);
-                    setConsensus(consensusData || localConsensus);
+                    setValidators(Array.isArray(validatorData) ? validatorData : []);
+                    setConsensus(consensusData || null);
                     setLoading(false);
                 }
             } catch (e) {
