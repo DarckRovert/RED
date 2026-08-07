@@ -620,8 +620,11 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     }, async () => {
+        const identity = await RedAPI.getIdentity();
+        if (!identity || !identity.identity_hash) {
+            throw new Error('Identidad de nodo requerida para emitir alerta AMBER');
+        }
         const now = Date.now();
-        const identity = await RedAPI.getIdentity().catch(() => null);
         const alert: AmberAlert = {
             id: `amber_${now}_${Math.random().toString(36).slice(2, 7)}`,
             name: payload.name,
@@ -633,8 +636,8 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
             last_seen_location: payload.last_seen_location,
             issued_at: Math.floor(now / 1000),
             expires_at: Math.floor(now / 1000) + (payload.ttl_secs || 86400),
-            authority_node_id: payload.authority_node_id || (identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : `did:red:${now}`),
-            authority_signature: payload.authority_signature || (identity?.public_key ? identity.public_key.slice(0, 16) : `sig_${now}`),
+            authority_node_id: payload.authority_node_id || `did:red:${identity.identity_hash.slice(0, 12)}`,
+            authority_signature: payload.authority_signature || identity.public_key || identity.identity_hash,
             status: 'Active',
             sighting_count: 0,
         };
@@ -824,9 +827,12 @@ export async function emitSos(payload: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     }, async () => {
+        const identity = await RedAPI.getIdentity();
+        if (!identity || !identity.identity_hash) {
+            throw new Error('Identidad de nodo no inicializada para emitir baliza SOS');
+        }
         const now = Date.now();
-        const identity = await RedAPI.getIdentity().catch(() => null);
-        const sender_did = identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : `did:red:${now.toString(36)}`;
+        const sender_did = `did:red:${identity.identity_hash.slice(0, 12)}`;
         
         let battLevel = payload.battery_level;
         if (!battLevel && typeof navigator !== 'undefined' && 'getBattery' in navigator) {
@@ -839,7 +845,7 @@ export async function emitSos(payload: {
         const sos: SosBeacon = {
             id: `sos_${now}_${Math.random().toString(36).slice(2, 6)}`,
             sender_did,
-            sender_name: payload.sender_name || (identity && identity.nickname ? identity.nickname : 'Usuario RED'),
+            sender_name: payload.sender_name || identity.nickname || 'Operador',
             lat: payload.lat,
             lon: payload.lon,
             altitude: payload.altitude,
