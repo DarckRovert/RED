@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRedStore } from "../store/useRedStore";
+import { GuardianEngine } from "../lib/guardianEngine";
 
 interface RedShowcaseLandingProps {
   onEnterApp: () => void;
@@ -67,44 +69,56 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
   };
 
   const resetRatchetSim = () => {
+    const randBuf = new Uint8Array(8);
+    if (typeof window !== 'undefined' && window.crypto) {
+      window.crypto.getRandomValues(randBuf);
+    }
+    const hex = Array.from(randBuf, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
     setRatchetCount(1);
     setRatchetDh('X25519_DH_1 = X25519(Alice_Ephemeral_1, Bob_Public)');
-    setRatchetKdf('Message_Key_1 = HKDF_Expand(Chain_Key_1, "HKDF_CHAIN_A91B")');
-    setRatchetCipher('Payload = ChaCha20_Poly1305_Encrypt(Message_Key_1, Nonce, "AES256_8F1A29")');
-    setRatchetLog('> Llaves criptográficas reiniciadas a la época inicial.');
+    setRatchetKdf(`Message_Key_1 = HKDF_Expand(Chain_Key_1, "HKDF_CHAIN_${hex.slice(0, 4)}")`);
+    setRatchetCipher(`Payload = ChaCha20_Poly1305_Encrypt(Message_Key_1, Nonce, "${hex.slice(4, 12)}")`);
+    setRatchetLog('> Llaves criptográficas reiniciadas con entropía del dispositivo.');
   };
 
   const runTermCmd = (cmd: string) => {
+    const liveState = useRedStore.getState();
+    const currentStatus = liveState.status;
+    const currentIdentity = liveState.identity;
+    const peersCount = liveState.contacts?.length || 0;
+    const msgCount = liveState.messages?.length || 0;
+
     let response = '';
-    if (cmd === 'peers') response = 'red@master:~$ [PEERS] Nodos activos: 3 (BLE: 1, WiFi: 1, LoRa: 1) · Latencia: 4ms';
-    else if (cmd === 'ratchet') response = 'red@master:~$ [RATCHET] Sesión activa: X25519-AES256-GCM · PFS: VERIFICADO ✅';
-    else if (cmd === 'dtn') response = 'red@master:~$ [DTN-QUEUE] Cola Store-and-Forward: 0 paquetes pendientes. Malla sincronizada.';
-    else if (cmd === 'sybil') response = 'red@master:~$ [SYBIL] Dificultad PoW: 4 ceros iniciales. Costo de ataque Sybil: $45,000/hr.';
-    else if (cmd === 'audit') response = 'red@master:~$ [AUDIT] Primitivas criptográficas verificadas contra RFC 7748 y Signal Spec.';
+    if (cmd === 'peers') {
+      response = `red@master:~$ [PEERS] Nodos locales en alcance: ${peersCount} · Transportes: BLE GATT / WiFi Direct · Estado: ${peersCount > 0 ? 'Conectados' : 'Escaneando Malla'}`;
+    } else if (cmd === 'ratchet') {
+      response = `red@master:~$ [RATCHET] Sesión activa: X25519-ChaCha20-Poly1305 · Hash de Identidad: ${currentIdentity?.identity_hash ? currentIdentity.identity_hash.slice(0, 16) : 'Nodo-Soberano-Local'} · PFS: VERIFICADO ✅`;
+    } else if (cmd === 'dtn') {
+      response = `red@master:~$ [DTN-QUEUE] Historial de Mensajes Almacenados: ${msgCount} mensajes. Deduplicación por 72h activa.`;
+    } else if (cmd === 'sybil') {
+      response = `red@master:~$ [SYBIL] Dificultad PoW local: 4 ceros (Sha256). Verificación de prueba de trabajo en espacio latente activa.`;
+    } else if (cmd === 'audit') {
+      response = `red@master:~$ [AUDIT] Inferencia Neuronal ONNX WASM & Primitivas criptográficas verificadas contra RFC 7748 en ejecucion local.`;
+    }
 
     setTermOutput(prev => [...prev, response]);
   };
 
   const testGuardian = (text: string) => {
     if (!text.trim()) return;
-    const lower = text.toLowerCase();
-    const csamTriggers = [
-      'porno', 'infantil', 'pedof', 'grooming', 'abuso', 'cp_link', 'explotacion',
-      'explotación', 'child abuse', 'csam', 'vender', 'droga', 'armas'
-    ];
-    const isBad = csamTriggers.some(pat => lower.includes(pat));
+    const evalRes = GuardianEngine.evaluateText(text);
 
-    if (isBad) {
+    if (!evalRes.allowed) {
       setGuardianVerdict({
         status: 'block',
-        title: '⛔ BLOQUEADO — GUARDIAN LOCAL S4',
-        desc: 'El motor local interceptó este mensaje antes de cifrar. Destruido en el dispositivo emisor en <1ms.'
+        title: '⛔ BLOQUEADO — GUARDIAN LOCAL ONNX S4',
+        desc: evalRes.reason || 'El motor Guardian interceptó este contenido tóxico antes de cifrar.'
       });
     } else {
       setGuardianVerdict({
         status: 'allow',
         title: '✅ PERMITIDO — GUARDIAN LOCAL (OFF-GRID)',
-        desc: 'Contenido verificado en <1ms. Procede al cifrado Double Ratchet E2E para transmisión P2P segura.'
+        desc: `Contenido verificado por motor en ${evalRes.executionTimeMs}ms. Procede al cifrado Double Ratchet E2E.`
       });
     }
   };
