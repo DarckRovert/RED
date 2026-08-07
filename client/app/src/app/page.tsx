@@ -185,16 +185,18 @@ export default function AppRouter() {
         const { Capacitor } = await import('@capacitor/core');
         if (Capacitor.isNativePlatform()) {
           const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
-          const res = await SecureStoragePlugin.get({ key: "profile_created" }).catch(() => null);
+          const getPromise = SecureStoragePlugin.get({ key: "profile_created" }).catch(() => null);
+          const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 350));
+          const res = await Promise.race([getPromise, timeoutPromise]);
           if (res && res.value === "true") {
             setNeedsProfile(false);
             return;
           }
         }
-        // ROOT-CAUSE FIX: For new users, profile_created is not set yet, so needsProfile MUST be true!
-        setNeedsProfile(true);
+        const hasNick = typeof window !== 'undefined' && (localStorage.getItem("user_nickname") || localStorage.getItem("red_displayName"));
+        setNeedsProfile(!hasNick);
       } catch {
-        setNeedsProfile(true);
+        setNeedsProfile(false);
       }
     };
 
@@ -203,7 +205,15 @@ export default function AppRouter() {
     checkLanding();
     checkProfile();
 
-    return () => { cleanupFn?.(); };
+    // ROOT-CAUSE SAFETY TIMEOUT: Force needsProfile to resolve within 500ms if plugins hang
+    const profileSafetyTimer = setTimeout(() => {
+      setNeedsProfile(prev => (prev === null ? false : prev));
+    }, 500);
+
+    return () => {
+      cleanupFn?.();
+      clearTimeout(profileSafetyTimer);
+    };
   }, []);
 
   // SSR Hydration Fix: No renderizar nada del lado del servidor si no está montado

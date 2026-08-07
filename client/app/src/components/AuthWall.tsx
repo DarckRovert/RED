@@ -101,7 +101,9 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
                         if (masterPin && info.isAvailable && localStorage.getItem("red_disguise_mode") !== "true") {
                             try {
-                                await BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
+                                const authPromise = BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
+                                const authTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Biometric timeout")), 2500));
+                                await Promise.race([authPromise, authTimeout]);
                                 if (!isMounted) return;
                                 setMode("unlock");
                                 setIsLoaded(true);
