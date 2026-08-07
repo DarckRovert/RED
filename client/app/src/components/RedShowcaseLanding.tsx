@@ -35,9 +35,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
   const [guardianInput, setGuardianInput] = useState('');
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
-  const apkDownloadUrl = process.env.NEXT_PUBLIC_BASE_PATH 
-    ? `${process.env.NEXT_PUBLIC_BASE_PATH}/assets/red-v30.0.0-latest.apk`
-    : `/assets/red-v30.0.0-latest.apk`;
+  const apkDownloadUrl = `https://github.com/DarckRovert/RED/releases/download/v30.0.0/red-v30.0.0-latest.apk`;
 
   const heroBannerUrl = process.env.NEXT_PUBLIC_BASE_PATH 
     ? `${process.env.NEXT_PUBLIC_BASE_PATH}/assets/red_investor_hero_banner.png`
