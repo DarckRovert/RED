@@ -96,67 +96,40 @@ export default function BlockchainExplorer() {
                 const currentIdentity = liveState.identity;
 
                 const nowSec = Math.floor(Date.now() / 1000);
-                const localHeight = (currentStatus?.chain_height || (currentStatus as any)?.pow_score || 100) + 120;
-                const fallbackBlocks: BlockItem[] = [
-                    {
-                        height: localHeight,
-                        hash: `0000${currentIdentity?.identity_hash?.slice(0, 20) || 'a1b2c3d4e5f678901234'}`,
-                        prev_hash: `0000${currentIdentity?.identity_hash?.slice(4, 24) || 'b2c3d4e5f67890123456'}`,
-                        timestamp: nowSec - 12,
-                        tx_count: 4,
-                        validator: currentIdentity?.nickname || 'Nodo Local Leader',
-                    },
-                    {
-                        height: localHeight - 1,
-                        hash: `0000${currentIdentity?.identity_hash?.slice(4, 24) || 'b2c3d4e5f67890123456'}`,
-                        prev_hash: `0000${currentIdentity?.identity_hash?.slice(8, 28) || 'c3d4e5f6789012345678'}`,
-                        timestamp: nowSec - 42,
-                        tx_count: 2,
-                        validator: 'Validador Peer Alpha',
-                    }
-                ];
-                const fallbackValidators: ValidatorItem[] = [
-                    {
-                        public_key: currentIdentity?.public_key || 'did:red:validator_local_01',
-                        stake: 25000,
-                        active: true,
-                        blocks_produced: (currentStatus?.chain_height || 10) + 42,
-                        missed_slots: 0,
-                        weight: 88,
-                    },
-                    {
-                        public_key: 'did:red:validator_peer_02',
-                        stake: 18000,
-                        active: true,
-                        blocks_produced: 38,
-                        missed_slots: 1,
-                        weight: 64,
-                    }
-                ];
-                const fallbackConsensus: ConsensusStatus = {
+                const localHeight = currentStatus?.chain_height || (currentStatus as any)?.pow_score || 0;
+                
+                const localValidators: ValidatorItem[] = currentIdentity ? [{
+                    public_key: currentIdentity.public_key || `did:red:${currentIdentity.identity_hash.slice(0, 12)}`,
+                    stake: 1000,
+                    active: true,
+                    blocks_produced: localHeight,
+                    missed_slots: 0,
+                    weight: 100,
+                }] : [];
+
+                const localConsensus: ConsensusStatus = {
                     epoch: Math.floor(nowSec / 3600),
                     current_slot: Math.floor(nowSec % 3600),
-                    total_stake: 43000,
-                    active_validators: Math.max(2, (currentStatus?.peer_count || 1) + 1),
+                    total_stake: localValidators.reduce((acc, v) => acc + v.stake, 0),
+                    active_validators: localValidators.length,
                     chain_height: localHeight,
                 };
 
                 const [blockData, validatorData, consensusData] = await Promise.all([
-                    RedAPI.req<BlockItem[]>('/blockchain/blocks').catch(() => fallbackBlocks),
-                    RedAPI.req<ValidatorItem[]>('/blockchain/validators').catch(() => fallbackValidators),
-                    RedAPI.req<ConsensusStatus>('/blockchain/consensus').catch(() => fallbackConsensus),
+                    RedAPI.req<BlockItem[]>('/blockchain/blocks').catch(() => []),
+                    RedAPI.req<ValidatorItem[]>('/blockchain/validators').catch(() => localValidators),
+                    RedAPI.req<ConsensusStatus>('/blockchain/consensus').catch(() => localConsensus),
                 ]);
                 if (isActive) {
-                    // Flash animation when new block detected
-                    const finalBlocks = blockData && blockData.length > 0 ? blockData : fallbackBlocks;
+                    const finalBlocks = Array.isArray(blockData) ? blockData : [];
                     if (finalBlocks.length > 0 && finalBlocks[0].height !== prevHeight && prevHeight !== -1) {
                         setNewBlock(true);
                         setTimeout(() => setNewBlock(false), 1200);
                     }
                     prevHeight = finalBlocks[0]?.height ?? -1;
                     setBlocks(finalBlocks);
-                    setValidators(validatorData && validatorData.length > 0 ? validatorData : fallbackValidators);
-                    setConsensus(consensusData || fallbackConsensus);
+                    setValidators(Array.isArray(validatorData) && validatorData.length > 0 ? validatorData : localValidators);
+                    setConsensus(consensusData || localConsensus);
                     setLoading(false);
                 }
             } catch (e) {

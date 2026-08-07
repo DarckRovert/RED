@@ -19,18 +19,7 @@ export const P2PCompassModal: React.FC = () => {
             if (rawList.length > 0) {
                 setNodes(rawList);
             } else {
-                // Fallback to active contacts and local mesh router
-                const storeState = useRedStore.getState();
-                const contacts = Array.isArray(storeState.contacts) ? storeState.contacts : [];
-                const fallbackNodes: ProximityNode[] = contacts.map((c: any, i: number) => ({
-                    identity_hash: c.identity_hash || `peer_${i}`,
-                    display_name: c.display_name || `Nodo ${c.identity_hash?.substring(0, 6) || i}`,
-                    distance_meters: Math.floor(12 + (i * 18)),
-                    rssi_dbm: -55 - (i * 12),
-                    transport: i % 2 === 0 ? 'BLE mesh' : 'WiFi Direct',
-                    last_seen: Date.now() / 1000
-                }));
-                setNodes(fallbackNodes);
+                setNodes([]);
             }
             setLoadError(null);
         } catch (e: any) {
