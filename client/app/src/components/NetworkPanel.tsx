@@ -32,6 +32,25 @@ export default function NetworkPanel() {
     const [connectStatus, setConnectStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [blackoutModalOpen, setBlackoutModalOpen] = useState(false);
 
+    // Covert Channel Dynamic Tunnel States
+    const [dnsStats, setDnsStats] = useState(DnsTunnelEngine.getStats());
+    const [sniStats, setSniStats] = useState(SniSpoofEngine.getStats());
+    const [tunnelTesting, setTunnelTesting] = useState(false);
+    const [testResult, setTestResult] = useState<string | null>(null);
+
+    const handleTestTunnel = async () => {
+        setTunnelTesting(true);
+        setTestResult(null);
+        const testPayload = "6d079229_NOISE_XK_TEST_PACKET_V30";
+        const queries = DnsTunnelEngine.packPayloadIntoDnsQuery(testPayload);
+        const res = await DnsTunnelEngine.transmitDnsQuery(queries[0]);
+        const sniRes = await SniSpoofEngine.transmitSniBypass(testPayload);
+        setDnsStats(DnsTunnelEngine.getStats());
+        setSniStats(SniSpoofEngine.getStats());
+        setTestResult(`✅ Trama DNS Base32 enviada en ${res.latencyMs}ms (${res.responseTxt}) | Fronting SNI: ${sniRes.provider}`);
+        setTunnelTesting(false);
+    };
+
     const handleConnectManual = async () => {
         if (!manualAddress.trim()) return;
         setConnectingManual(true);
@@ -263,16 +282,45 @@ Respuesta: Con esta topología, la cobertura de la red es`;
                         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', color: '#CBD5E1' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Proveedor DNS DoH:</span>
-                                <strong style={{ color: '#00E676' }}>Cloudflare (1.1.1.1) / Google (8.8.8.8)</strong>
+                                <strong style={{ color: '#00E676' }}>{dnsStats.activeProvider}</strong>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Estado de Evasión SNI:</span>
-                                <strong style={{ color: '#38BDF8' }}>100% ACTIVO (recargas.claro.com)</strong>
+                                <strong style={{ color: '#38BDF8' }}>100% ACTIVO ({sniStats.currentHostFront})</strong>
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Latencia de Tunelización:</span>
-                                <strong style={{ color: '#FFF' }}>18 ms (UDP 53 Base32)</strong>
+                                <strong style={{ color: '#FFF' }}>{dnsStats.lastResponseTimeMs} ms (UDP 53 Base32) • Paquetes: {dnsStats.packetsSent}</strong>
                             </div>
+
+                            {testResult && (
+                                <div style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.4)', color: '#00E676', fontSize: '11px', fontWeight: 600 }}>
+                                    {testResult}
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleTestTunnel}
+                                disabled={tunnelTesting}
+                                style={{
+                                    marginTop: '6px',
+                                    padding: '10px 16px',
+                                    borderRadius: '10px',
+                                    background: 'linear-gradient(90deg, #0EA5E9 0%, #0284C7 100%)',
+                                    color: '#FFF',
+                                    fontWeight: 700,
+                                    fontSize: '12px',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                }}
+                            >
+                                {tunnelTesting ? "📡 PROBANDO TRAMA BASE32..." : "⚡ PROBAR TUNELIZACIÓN EN VIVO (UDP 53 / DoH)"}
+                            </button>
                         </div>
                     </div>
 
