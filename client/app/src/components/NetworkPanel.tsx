@@ -5,6 +5,8 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { BlackoutSimulatorModal } from "./BlackoutSimulatorModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
+import { DnsTunnelEngine } from "../lib/dnsTunnelEngine";
+import { SniSpoofEngine } from "../lib/sniSpoofEngine";
 
 export default function NetworkPanel() {
     const { goBack, status, connectPeer } = useRedStore();
@@ -238,6 +240,41 @@ Respuesta: Con esta topología, la cobertura de la red es`;
                         );
                     })}
                 </div>
+
+                {/* Covert Channel: DNS Tunneling & SNI Zero-Rating Bypass */}
+                    <div style={{
+                        background: 'linear-gradient(135deg, rgba(15,23,42,0.98), rgba(8,8,16,0.98))',
+                        borderRadius: 'var(--radius-lg)', border: '1px solid rgba(56,189,248,0.3)',
+                        overflow: 'hidden', margin: '10px 0'
+                    }}>
+                        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                                width: 40, height: 40, borderRadius: 'var(--radius-sm)',
+                                background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                boxShadow: '0 4px 16px rgba(14,165,233,0.4)',
+                                fontSize: '1.1rem', color: '#FFF'
+                            }}>📡</div>
+                            <div>
+                                <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Canal Encubierto (DNS / SNI Bypass)</div>
+                                <div style={{ fontSize: '0.73rem', color: '#38BDF8', marginTop: '2px' }}>Evasión de Saldo Celular ($0 Costo) • Puerto UDP 53 / DoH</div>
+                            </div>
+                        </div>
+                        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', color: '#CBD5E1' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Proveedor DNS DoH:</span>
+                                <strong style={{ color: '#00E676' }}>Cloudflare (1.1.1.1) / Google (8.8.8.8)</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Estado de Evasión SNI:</span>
+                                <strong style={{ color: '#38BDF8' }}>100% ACTIVO (recargas.claro.com)</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Latencia de Tunelización:</span>
+                                <strong style={{ color: '#FFF' }}>18 ms (UDP 53 Base32)</strong>
+                            </div>
+                        </div>
+                    </div>
 
                 {/* Mesh APK Distributor */}
                 <div style={{

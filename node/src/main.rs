@@ -15,6 +15,7 @@ mod battery;
 mod channels;
 mod chunker;
 mod discovery;
+mod dns_tunnel;
 mod ephemeral;
 mod guardian;
 mod rate_limit;

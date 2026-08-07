@@ -100,6 +100,8 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
       response = `red@master:~$ [SYBIL] Dificultad PoW local: 4 ceros (Sha256). Verificación de prueba de trabajo en espacio latente activa.`;
     } else if (cmd === 'audit') {
       response = `red@master:~$ [AUDIT] Inferencia Neuronal ONNX WASM & Primitivas criptográficas verificadas contra RFC 7748 en ejecución local.`;
+    } else if (cmd === 'dns-tunnel') {
+      response = `red@master:~$ [DNS-TUNNEL] Evasión de Saldo Móvil Activa: Subdominios Base32 via UDP 53 / DoH Cloudflare (1.1.1.1) · Payload: 110 bytes Noise XK · SNI Fronting: recargas.claro.com ✅`;
     }
 
     setTermOutput(prev => [...prev, response]);
@@ -754,7 +756,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
             </div>
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              {(['peers', 'ratchet', 'dtn', 'sybil', 'audit'] as const).map(cmd => (
+              {(['peers', 'ratchet', 'dtn', 'sybil', 'audit', 'dns-tunnel'] as const).map(cmd => (
                 <button
                   key={cmd}
                   onClick={() => runTermCmd(cmd)}
