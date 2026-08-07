@@ -619,8 +619,9 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-    }, () => {
+    }, async () => {
         const now = Date.now();
+        const identity = await RedAPI.getIdentity().catch(() => null);
         const alert: AmberAlert = {
             id: `amber_${now}_${Math.random().toString(36).slice(2, 7)}`,
             name: payload.name,
@@ -632,8 +633,8 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
             last_seen_location: payload.last_seen_location,
             issued_at: Math.floor(now / 1000),
             expires_at: Math.floor(now / 1000) + (payload.ttl_secs || 86400),
-            authority_node_id: payload.authority_node_id || 'did:red:authority_node_local',
-            authority_signature: payload.authority_signature || 'sig_ed25519_local',
+            authority_node_id: payload.authority_node_id || (identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : `did:red:${now}`),
+            authority_signature: payload.authority_signature || (identity?.public_key ? identity.public_key.slice(0, 16) : `sig_${now}`),
             status: 'Active',
             sighting_count: 0,
         };
@@ -825,18 +826,26 @@ export async function emitSos(payload: {
     }, async () => {
         const now = Date.now();
         const identity = await RedAPI.getIdentity().catch(() => null);
-        const sender_did = identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : 'did:red:local_node';
+        const sender_did = identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : `did:red:${now.toString(36)}`;
         
+        let battLevel = payload.battery_level;
+        if (!battLevel && typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+            try {
+                const b: any = await (navigator as any).getBattery();
+                battLevel = Math.round((b.level || 1) * 100);
+            } catch {}
+        }
+
         const sos: SosBeacon = {
             id: `sos_${now}_${Math.random().toString(36).slice(2, 6)}`,
             sender_did,
-            sender_name: payload.sender_name || 'Operador RED',
+            sender_name: payload.sender_name || (identity && identity.nickname ? identity.nickname : 'Usuario RED'),
             lat: payload.lat,
             lon: payload.lon,
             altitude: payload.altitude,
             timestamp: now,
-            battery_level: payload.battery_level || 90,
-            note: payload.note || 'EMERGENCIA SOS ACTIVADA',
+            battery_level: battLevel || 100,
+            note: payload.note || 'ALERTA SOS SOLICITANDO AUXILIO',
             is_active: true,
             signature: await sha256Hex(`sos_${now}_${payload.lat}_${payload.lon}`),
         };
