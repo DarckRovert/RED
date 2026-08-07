@@ -1311,54 +1311,36 @@ export interface TranslateResponse {
 
 /** Consultar al Copiloto / Asistente Táctico de Emergencia Offline */
 export async function queryAICopilot(prompt: string, context?: string): Promise<CopilotResponse> {
-    return fetchWithFallback('/api/ai/copilot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, context }),
-    }, async () => {
-        const aiRes = await LocalAIEngine.generateCopilotResponse(prompt, context);
-        return {
-            answer: aiRes.answer,
-            topic_category: aiRes.topicCategory,
-            source: aiRes.modelInfo,
-            execution_time_ms: aiRes.executionTimeMs,
-        };
-    });
+    const aiRes = await LocalAIEngine.generateCopilotResponse(prompt, context);
+    return {
+        answer: aiRes.answer,
+        topic_category: aiRes.topicCategory,
+        source: aiRes.modelInfo,
+        execution_time_ms: aiRes.executionTimeMs,
+    };
 }
 
 /** Generar resumen sintético con IA de un canal local */
 export async function summarizeChannelAI(channelId: string, messages: string[]): Promise<ChannelSummaryResponse> {
-    return fetchWithFallback('/api/ai/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel_id: channelId, messages }),
-    }, async () => {
-        const res = await LocalAIEngine.summarizeChannel(messages);
-        return {
-            channel_id: channelId,
-            summary_bullets: res.summaryBullets,
-            total_messages_analyzed: res.totalMessages,
-            sentiment: res.sentiment,
-            execution_time_ms: res.executionTimeMs,
-        };
-    });
+    const res = await LocalAIEngine.summarizeChannel(messages);
+    return {
+        channel_id: channelId,
+        summary_bullets: res.summaryBullets,
+        total_messages_analyzed: res.totalMessages,
+        sentiment: res.sentiment,
+        execution_time_ms: res.executionTimeMs,
+    };
 }
 
 /** Traducir texto en tiempo real off-grid con IA Neuronal */
 export async function translateTextAI(text: string, targetLanguage: string): Promise<TranslateResponse> {
-    return fetchWithFallback('/api/ai/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, target_language: targetLanguage }),
-    }, async () => {
-        const res = await LocalAIEngine.translateText(text, targetLanguage);
-        return {
-            original_text: res.originalText,
-            translated_text: res.translatedText,
-            target_language: res.targetLang,
-            execution_time_ms: res.executionTimeMs,
-        };
-    });
+    const res = await LocalAIEngine.translateText(text, targetLanguage);
+    return {
+        original_text: res.originalText,
+        translated_text: res.translatedText,
+        target_language: res.targetLang,
+        execution_time_ms: res.executionTimeMs,
+    };
 }
 
 
