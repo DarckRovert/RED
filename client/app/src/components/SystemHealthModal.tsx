@@ -84,7 +84,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
         setTests([...updated]);
         const storageStart = Date.now();
         try {
-            const testPayload = JSON.stringify({ t: Date.now(), rand: Math.random() });
+            const testPayload = JSON.stringify({ t: Date.now(), rand: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) });
             localStorage.setItem('red_health_test', testPayload);
             const readBack = localStorage.getItem('red_health_test');
             localStorage.removeItem('red_health_test');
