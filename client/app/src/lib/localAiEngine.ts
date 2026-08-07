@@ -58,10 +58,9 @@ class LocalAIEngineClass {
             mod.env.allowLocalModels = true;
             
             const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
-            const origin = typeof window !== 'undefined' ? window.location.origin : '';
-            let modelsUrl = '/models/';
-            if (origin.startsWith('http://') || origin.startsWith('https://')) {
-                modelsUrl = `${origin}${basePath}/models/`;
+            let modelsUrl = `${basePath}/models/`;
+            if (typeof window !== 'undefined' && window.location.pathname.includes('/RED/')) {
+                modelsUrl = '/RED/models/';
             }
             if (!modelsUrl.endsWith('/')) modelsUrl += '/';
 
