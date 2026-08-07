@@ -16,7 +16,7 @@ const MODELS = [
     {
         name: 'LaMini-Flan-T5-77M',
         repo: 'Xenova/LaMini-Flan-T5-77M',
-        files: ['onnx/decoder_model_merged_quantized.onnx', 'onnx/encoder_model_quantized.onnx', 'config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json']
+        files: ['onnx/decoder_model_merged_quantized.onnx', 'onnx/encoder_model_quantized.onnx', 'config.json', 'generation_config.json', 'tokenizer.json', 'tokenizer_config.json', 'special_tokens_map.json']
     }
 ];
 

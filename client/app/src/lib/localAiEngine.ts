@@ -56,7 +56,16 @@ class LocalAIEngineClass {
             // Strict Offline Settings: ZERO calls to HuggingFace
             mod.env.allowRemoteModels = false;
             mod.env.allowLocalModels = true;
-            (mod.env as any).localURL = '/models/';
+            
+            const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+            const origin = typeof window !== 'undefined' ? window.location.origin : '';
+            let modelsUrl = '/models/';
+            if (origin.startsWith('http://') || origin.startsWith('https://')) {
+                modelsUrl = `${origin}${basePath}/models/`;
+            }
+            if (!modelsUrl.endsWith('/')) modelsUrl += '/';
+
+            (mod.env as any).localURL = modelsUrl;
             mod.env.useBrowserCache = true;
             this.transformersLib = mod;
         }
