@@ -1,5 +1,5 @@
 /**
- * RED Guardian IA — Engine de Moderación Off-Grid Real v24.0
+ * RED Guardian IA — Engine de Moderación Off-Grid Real v30.0
  * 
  * Evaluación híbrida (Heurística + Clasificador Semántico IA Local + De-obfuscator Leetspeak).
  * Opera 100% en el dispositivo emisor (<15MB RAM) sin enviar datos a internet.
@@ -127,6 +127,52 @@ class GuardianEngineClass {
     /**
      * Evalúa un texto en tiempo real con el Motor IA Semántico y Desofuscador Local
      */
+    /** Evaluador Asíncrono con Inferencia Neuronal Real toxic-bert (110MB ONNX) */
+    public async evaluateTextAsync(text: string): Promise<GuardianEvaluation> {
+        const start = performance.now();
+        const trimmed = text.trim();
+
+        if (!trimmed) {
+            return { allowed: true, confidence: 1.0, executionTimeMs: 0 };
+        }
+
+        const normalized = normalizeAndDeobfuscate(trimmed);
+
+        if (MEMORY_CACHE.has(normalized)) {
+            this.stats.cache_hits++;
+            this.stats.api_calls_made++;
+            this.saveStats();
+            const cached = MEMORY_CACHE.get(normalized)!;
+            return { ...cached, executionTimeMs: Math.round(performance.now() - start) };
+        }
+
+        this.stats.messages_analyzed++;
+        this.stats.api_calls_made++;
+
+        // Inferencia Neuronal Real toxic-bert ONNX WASM
+        try {
+            const neuralEval = await LocalAIEngine.classifySafety(trimmed);
+            if (neuralEval.isToxic) {
+                this.stats.messages_blocked++;
+                this.stats.messages_flagged++;
+                const result: GuardianEvaluation = {
+                    allowed: false,
+                    reason: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA ONNX (toxic-bert): Detectada intencionalidad tóxica/amenaza.',
+                    category: neuralEval.category,
+                    confidence: neuralEval.confidence,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+                MEMORY_CACHE.set(normalized, result);
+                this.saveStats();
+                return result;
+            }
+        } catch (e) {
+            console.warn('[RED Guardian ONNX Eval Error]', e);
+        }
+
+        return this.evaluateText(text);
+    }
+
     public evaluateText(text: string): GuardianEvaluation {
         const start = performance.now();
         const trimmed = text.trim();

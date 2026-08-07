@@ -8,6 +8,8 @@ export const EcoMeshPanel: React.FC = () => {
     const { navigate } = useRedStore();
     const [status, setStatus] = useState<EcoMeshStatus | null>(null);
     const [batteryInput, setBatteryInput] = useState<number>(85);
+    const [isCharging, setIsCharging] = useState<boolean>(false);
+    const [isRealHardwareSensor, setIsRealHardwareSensor] = useState<boolean>(false);
 
     const loadStatus = async () => {
         try {
@@ -21,18 +23,61 @@ export const EcoMeshPanel: React.FC = () => {
         }
     };
 
-    useEffect(() => {
-        loadStatus();
-    }, []);
-
-    const handleUpdate = async (val: number) => {
-        setBatteryInput(val);
+    const syncRealBattery = async (levelPercent: number) => {
+        setBatteryInput(levelPercent);
         try {
-            const res = await updateBatteryOptimize(val);
+            const res = await updateBatteryOptimize(levelPercent);
             setStatus(res.battery_status);
         } catch (e: any) {
             console.error('Battery update error:', e);
         }
+    };
+
+    const detectHardwareBattery = async () => {
+        let detected = false;
+        // Attempt 1: Capacitor Device Plugin (Mobile Android/iOS)
+        try {
+            const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+            if (cap && cap.Plugins && cap.Plugins.Device) {
+                const info = await cap.Plugins.Device.getBatteryInfo();
+                if (info && typeof info.batteryLevel === 'number') {
+                    const pct = Math.round(info.batteryLevel * 100);
+                    setIsCharging(!!info.isCharging);
+                    setIsRealHardwareSensor(true);
+                    await syncRealBattery(pct);
+                    detected = true;
+                }
+            }
+        } catch {}
+
+        // Attempt 2: HTML5 Navigator Battery Status API (Desktop Chrome/Edge/Firefox)
+        if (!detected && typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+            try {
+                const battery: any = await (navigator as any).getBattery();
+                const updateHtml5Battery = () => {
+                    const pct = Math.round(battery.level * 100);
+                    setIsCharging(!!battery.charging);
+                    setIsRealHardwareSensor(true);
+                    syncRealBattery(pct);
+                };
+                updateHtml5Battery();
+                battery.addEventListener('levelchange', updateHtml5Battery);
+                battery.addEventListener('chargingchange', updateHtml5Battery);
+                detected = true;
+            } catch {}
+        }
+
+        if (!detected) {
+            loadStatus();
+        }
+    };
+
+    useEffect(() => {
+        detectHardwareBattery();
+    }, []);
+
+    const handleUpdate = async (val: number) => {
+        await syncRealBattery(val);
     };
 
     return (
@@ -105,7 +150,10 @@ export const EcoMeshPanel: React.FC = () => {
                     <div style={{ marginBottom: '24px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem', fontWeight: 700 }}>
                             <span>NIVEL DE BATERÍA DEL TELÉFONO:</span>
-                            <span style={{ color: '#22c55e' }}>{batteryInput}%</span>
+                            <span style={{ color: '#22c55e', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {isRealHardwareSensor && <span style={{ background: 'rgba(34,197,94,0.2)', border: '1px solid #22c55e', borderRadius: '4px', padding: '2px 6px', fontSize: '0.7rem' }}>⚡ SENSOR REAL DISPOSITIVO {isCharging ? '(CARGANDO)' : ''}</span>}
+                                {batteryInput}%
+                            </span>
                         </div>
                         <input
                             type="range"

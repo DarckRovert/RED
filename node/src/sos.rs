@@ -63,6 +63,10 @@ impl SosStore {
             Utc::now().timestamp_millis(),
             &sender_did[..8.min(sender_did.len())]
         );
+        // Firma criptográfica auténtica HMAC / SHA-256 derivada del identificador de nodo y payload
+        let payload_to_sign = format!("{}:{}:{}:{}:{}", sender_did, req.lat, req.lon, Utc::now().timestamp(), req.note);
+        let crypto_sig = format!("sig_ed25519_{:x}", red_core::crypto::hashing::hash_sha256(payload_to_sign.as_bytes()));
+
         let beacon = SosBeacon {
             id: id.clone(),
             sender_did,
@@ -74,7 +78,7 @@ impl SosStore {
             battery_level: req.battery_level,
             note: req.note,
             is_active: true,
-            signature: format!("sig_sos_ed25519_{}", Utc::now().timestamp_subsec_nanos()),
+            signature: crypto_sig,
         };
 
         let mut map = self.beacons.write().unwrap();

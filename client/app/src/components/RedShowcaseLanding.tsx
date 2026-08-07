@@ -9,7 +9,7 @@ interface RedShowcaseLandingProps {
 }
 
 export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingProps) {
-  const [activeTab, setActiveTab] = useState<'hero' | 'radar' | 'crypto' | 'terminal' | 'guardian' | 'features' | 'architecture' | 'faq'>('hero');
+  const [activeTab, setActiveTab] = useState<'hero' | 'investors' | 'radar' | 'crypto' | 'terminal' | 'guardian' | 'features' | 'architecture' | 'faq'>('hero');
   const [quickAlias, setQuickAlias] = useState('');
   
   // Interactive Double Ratchet / Noise XK Simulator State
@@ -36,8 +36,12 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
   const apkDownloadUrl = process.env.NEXT_PUBLIC_BASE_PATH 
-    ? `${process.env.NEXT_PUBLIC_BASE_PATH}/assets/red-v24.0.0-latest.apk`
-    : `/assets/red-v24.0.0-latest.apk`;
+    ? `${process.env.NEXT_PUBLIC_BASE_PATH}/assets/red-v30.0.0-latest.apk`
+    : `/assets/red-v30.0.0-latest.apk`;
+
+  const heroBannerUrl = process.env.NEXT_PUBLIC_BASE_PATH 
+    ? `${process.env.NEXT_PUBLIC_BASE_PATH}/assets/red_investor_hero_banner.png`
+    : `/assets/red_investor_hero_banner.png`;
 
   const handleCreateWebUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +69,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
     setRatchetDh(`DH_Key_${nextCount} = X25519(Alice_Ephemeral_${nextCount}, Bob_Public) -> [${randomDh}]`);
     setRatchetKdf(`Message_Key_${nextCount} = HKDF_Expand(Chain_Key_${nextCount}, "${randomKdf}")`);
     setRatchetCipher(`Payload = ChaCha20_Poly1305_Encrypt(Message_Key_${nextCount}, Nonce, "${randomCipher}")`);
-    setRatchetLog(`> [MENSAJE ${nextCount} TRANSMITIDO] Clave epímera renovada con éxito. PFS activo. Ciphertext: ${randomCipher}`);
+    setRatchetLog(`> [MENSAJE ${nextCount} TRANSMITIDO] Clave efímera renovada con éxito. PFS activo. Ciphertext: ${randomCipher}`);
   };
 
   const resetRatchetSim = () => {
@@ -83,7 +87,6 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
 
   const runTermCmd = (cmd: string) => {
     const liveState = useRedStore.getState();
-    const currentStatus = liveState.status;
     const currentIdentity = liveState.identity;
     const peersCount = liveState.contacts?.length || 0;
     const msgCount = liveState.messages?.length || 0;
@@ -98,7 +101,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
     } else if (cmd === 'sybil') {
       response = `red@master:~$ [SYBIL] Dificultad PoW local: 4 ceros (Sha256). Verificación de prueba de trabajo en espacio latente activa.`;
     } else if (cmd === 'audit') {
-      response = `red@master:~$ [AUDIT] Inferencia Neuronal ONNX WASM & Primitivas criptográficas verificadas contra RFC 7748 en ejecucion local.`;
+      response = `red@master:~$ [AUDIT] Inferencia Neuronal ONNX WASM & Primitivas criptográficas verificadas contra RFC 7748 en ejecución local.`;
     }
 
     setTermOutput(prev => [...prev, response]);
@@ -248,7 +251,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         transform: 'translateX(-50%)',
         width: '900px',
         height: '550px',
-        background: 'radial-gradient(ellipse at center, rgba(232,33,58,0.25) 0%, rgba(3,3,6,0) 70%)',
+        background: 'radial-gradient(ellipse at center, rgba(232,33,58,0.22) 0%, rgba(3,3,6,0) 70%)',
         pointerEvents: 'none',
         zIndex: 0,
       }} />
@@ -258,7 +261,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         width: '100%',
         maxWidth: '1280px',
         margin: '0 auto',
-        padding: '20px 24px',
+        padding: '16px 24px',
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -271,15 +274,15 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{
-            width: '44px',
-            height: '44px',
+            width: '42px',
+            height: '42px',
             borderRadius: '12px',
             background: 'linear-gradient(135deg, #E8213A 0%, #7F0010 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 900,
-            fontSize: '24px',
+            fontSize: '22px',
             color: '#FFF',
             boxShadow: '0 0 24px rgba(232,33,58,0.4)',
             border: '1px solid rgba(255,255,255,0.2)',
@@ -287,8 +290,8 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
             Ω
           </div>
           <div>
-            <div style={{ fontWeight: 800, fontSize: '20px', color: '#FFF', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              RED <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontFamily: 'monospace' }}>v24.0.0 Master</span>
+            <div style={{ fontWeight: 800, fontSize: '19px', color: '#FFF', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              RED <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontFamily: 'monospace' }}>v30.0.0 Master</span>
             </div>
             <div style={{ fontSize: '10px', color: '#94A3B8', letterSpacing: '2px', textTransform: 'uppercase', fontFamily: 'monospace' }}>
               Plataforma Soberana P2P Off-Grid
@@ -297,8 +300,8 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         </div>
 
         {/* Navigation Tabs */}
-        <nav style={{ display: 'flex', gap: '6px', background: 'rgba(15,23,42,0.6)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-          {(['hero', 'radar', 'crypto', 'terminal', 'guardian', 'features', 'architecture', 'faq'] as const).map(tab => (
+        <nav style={{ display: 'flex', gap: '4px', background: 'rgba(15,23,42,0.6)', padding: '4px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {(['hero', 'investors', 'radar', 'crypto', 'terminal', 'guardian', 'features', 'architecture', 'faq'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -315,7 +318,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
                 textTransform: 'capitalize',
               }}
             >
-              {tab === 'hero' ? 'Inicio' : tab === 'radar' ? '📡 Radar' : tab === 'crypto' ? '🔐 Cifrado' : tab === 'terminal' ? '💻 CLI' : tab === 'guardian' ? '🛡️ Guardian' : tab === 'features' ? 'Capacidades' : tab === 'architecture' ? 'Arquitectura' : 'FAQ'}
+              {tab === 'hero' ? 'Inicio' : tab === 'investors' ? '💼 Inversores' : tab === 'radar' ? '📡 Radar' : tab === 'crypto' ? '🔐 Cifrado' : tab === 'terminal' ? '💻 CLI' : tab === 'guardian' ? '🛡️ Guardian' : tab === 'features' ? 'Capacidades' : tab === 'architecture' ? 'Arquitectura' : 'FAQ'}
             </button>
           ))}
         </nav>
@@ -338,7 +341,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
           </button>
           <a
             href={apkDownloadUrl}
-            download="red-v24.0.0-latest.apk"
+            download="red-v30.0.0-latest.apk"
             style={{
               padding: '10px 18px',
               fontSize: '13px',
@@ -354,7 +357,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
               gap: '6px',
             }}
           >
-            📥 Descargar APK
+            📥 APK
           </a>
         </div>
       </header>
@@ -364,7 +367,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         width: '100%',
         maxWidth: '1200px',
         margin: '0 auto',
-        padding: '50px 24px 80px',
+        padding: '40px 24px 80px',
         zIndex: 10,
         flex: 1,
       }}>
@@ -382,60 +385,87 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
               color: '#FF4D66',
               fontSize: '12px',
               fontFamily: 'monospace',
-              marginBottom: '24px',
+              marginBottom: '20px',
             }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#E8213A', boxShadow: '0 0 10px #E8213A' }} />
-              Cifrado E2E Noise XK • Descentralizado Zero-Server • Tolerante a Apagones
+              Cifrado E2E Noise XK • Descentralizado Zero-Server • Inferencia IA Neuronal ONNX WASM
             </div>
 
             {/* Main Headline */}
             <h1 style={{
-              fontSize: 'clamp(34px, 5.5vw, 62px)',
+              fontSize: 'clamp(32px, 5vw, 58px)',
               fontWeight: 900,
               textAlign: 'center',
               lineHeight: 1.12,
               letterSpacing: '-1.5px',
-              maxWidth: '900px',
+              maxWidth: '920px',
               color: '#FFFFFF',
-              marginBottom: '24px',
+              marginBottom: '20px',
             }}>
-              La Red Militar de Comunicaciones P2P e Inmunidad Criptográfica
+              Comunicaciones Soberanas Cero-Servidor e Inteligencia Neuronal Off-Grid
             </h1>
 
             <p style={{
-              fontSize: 'clamp(16px, 2vw, 19px)',
+              fontSize: 'clamp(15px, 1.8vw, 18px)',
               color: '#94A3B8',
               textAlign: 'center',
-              maxWidth: '800px',
+              maxWidth: '820px',
               lineHeight: 1.6,
               fontWeight: 300,
+              marginBottom: '36px',
+            }}>
+              RED transforma cualquier teléfono o navegador web en un nodo de comunicaciones soberano. Transmite mensajes, notas de voz (12 Kbps), mapas y coordenadas GPS mediante <strong style={{ color: '#FF4D66', fontWeight: 600 }}>Bluetooth LE, WiFi Direct, LoRa y Redes P2P</strong> sin depender de servidores centrales ni torres telefónicas.
+            </p>
+
+            {/* KPI Executive Highlights Strip */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px',
+              width: '100%',
+              maxWidth: '940px',
               marginBottom: '40px',
             }}>
-              RED transforma cualquier teléfono o computadora en un nodo de comunicaciones soberano. Transmite mensajes, voz comprimida (12 Kbps) y ubicación GPS a través de <strong style={{ color: '#FF4D66', fontWeight: 600 }}>Bluetooth LE, WiFi Direct, LoRa y Redes Celulares 4G/5G</strong> sin depender de servidores centrales ni torres telefónicas.
-            </p>
+              <div style={{ padding: '16px 20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(232,33,58,0.25)', textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#FF4D66' }}>0 Servidores</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>100% Volátil / P2P Directo</div>
+              </div>
+              <div style={{ padding: '16px 20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(0,230,118,0.25)', textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#00E676' }}>&lt; 1 ms</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>Latencia Criptográfica Noise XK</div>
+              </div>
+              <div style={{ padding: '16px 20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(56,189,248,0.25)', textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#38BDF8' }}>100% Offline</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>IA Neuronal ONNX WASM</div>
+              </div>
+              <div style={{ padding: '16px 20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(168,85,247,0.25)', textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 900, color: '#A855F7' }}>0 Metadatos</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>Identidad DID Soberana</div>
+              </div>
+            </div>
 
             {/* Quick Web User Creation Card */}
             <div style={{
               width: '100%',
-              maxWidth: '560px',
+              maxWidth: '580px',
               padding: '28px',
               borderRadius: '24px',
               background: 'linear-gradient(135deg, rgba(15,23,42,0.9) 0%, rgba(3,3,6,0.95) 100%)',
-              border: '1px solid rgba(232,33,58,0.3)',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
-              marginBottom: '60px',
+              border: '1px solid rgba(232,33,58,0.35)',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.7)',
+              marginBottom: '50px',
             }}>
               <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px', textAlign: 'center' }}>
-                ⚡ Crear Identidad Web Instantánea
+                🚀 Crear Tu Usuario Soberano & Entrar a la Web App
               </div>
-              <div style={{ fontSize: '13px', color: '#94A3B8', textAlign: 'center', marginBottom: '20px' }}>
-                Ingresa tu apodo para generar tus claves elípticas en el navegador y comunicarte directamente con los teléfonos Android conectados.
+              <div style={{ fontSize: '13px', color: '#94A3B8', textAlign: 'center', marginBottom: '20px', lineHeight: 1.5 }}>
+                Cada visitante obtiene su propio identificador soberano único (<code style={{ color: '#FF4D66' }}>did:red:</code>) y llaves elípticas generadas localmente en su navegador para chatear en vivo.
               </div>
 
               <form onSubmit={handleCreateWebUser} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <input
                   type="text"
-                  placeholder="Ej. Operador Alpha-1"
+                  placeholder="Ingresa tu alias táctico (ej. Operador_Alpha)"
                   value={quickAlias}
                   onChange={(e) => setQuickAlias(e.target.value)}
                   style={{
@@ -466,15 +496,32 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
                     gap: '10px',
                   }}
                 >
-                  <span>🚀</span> Iniciar Cliente Web & Conectar con Celulares
+                  <span>⚡</span> Iniciar Sesión Soberana Web
                 </button>
               </form>
+            </div>
+
+            {/* Investor Banner Visual */}
+            <div style={{
+              width: '100%',
+              maxWidth: '920px',
+              borderRadius: '24px',
+              overflow: 'hidden',
+              border: '1px solid rgba(232,33,58,0.25)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
+              marginBottom: '50px',
+            }}>
+              <img 
+                src={heroBannerUrl} 
+                alt="RED Tactical Smartphone & Mesh Network"
+                style={{ width: '100%', height: 'auto', display: 'block' }}
+              />
             </div>
 
             {/* Direct APK Download Highlight */}
             <div style={{
               width: '100%',
-              maxWidth: '900px',
+              maxWidth: '920px',
               padding: '24px 32px',
               borderRadius: '20px',
               background: 'rgba(15,23,42,0.6)',
@@ -484,15 +531,14 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: '20px',
-              marginBottom: '60px',
             }}>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: 800, color: '#FFF' }}>📱 APK Oficial para Dispositivos Móviles Android</div>
-                <div style={{ fontSize: '13px', color: '#94A3B8', marginTop: '4px' }}>Compilado y probado en Motorola Moto G22 y Lenovo Tablet. Inmune a VPNs.</div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', marginTop: '4px' }}>Compilado y probado en hardware real Motorola Moto G22 y Lenovo Tablet. Inmune a VPNs.</div>
               </div>
               <a
                 href={apkDownloadUrl}
-                download="red-v24.0.0-latest.apk"
+                download="red-v30.0.0-latest.apk"
                 style={{
                   padding: '12px 24px',
                   fontSize: '14px',
@@ -505,8 +551,89 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
                   whiteSpace: 'nowrap',
                 }}
               >
-                📥 Descargar APK (99 MB)
+                📥 Descargar APK (v30.0.0)
               </a>
+            </div>
+          </div>
+        )}
+
+        {/* INVESTORS & MARKET OPPORTUNITY TAB */}
+        {activeTab === 'investors' && (
+          <div style={{ maxWidth: '940px', margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+              <span style={{ fontSize: '11px', padding: '4px 12px', borderRadius: '20px', background: 'rgba(56,189,248,0.15)', color: '#38BDF8', border: '1px solid rgba(56,189,248,0.3)', fontFamily: 'monospace', fontWeight: 700 }}>EXECUTIVE DECK & INVESTOR SUMMARY</span>
+              <h2 style={{ fontSize: '36px', fontWeight: 900, color: '#FFF', marginTop: '12px', marginBottom: '12px' }}>Oportunidad Estratégica & Tesis de Inversión</h2>
+              <p style={{ fontSize: '15px', color: '#94A3B8', maxWidth: '750px', margin: '0 auto', lineHeight: 1.6 }}>
+                RED resuelve la vulnerabilidad más crítica de las comunicaciones globales: la dependencia total de servidores en la nube y torres celulares vulnerables a ciberataques, bloqueos estatales o desastres naturales.
+              </p>
+            </div>
+
+            {/* Core Pillars Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+              <div style={{ padding: '24px', borderRadius: '20px', background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(232,33,58,0.3)' }}>
+                <div style={{ fontSize: '28px', marginBottom: '12px' }}>💰</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px' }}>Costos de Nube $0 / Usuario</div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', lineHeight: 1.6 }}>
+                  Al operar como una red P2P mesh descentralizada, RED elimina los costos masivos de infraestructura de servidores centrales. La malla escala orgánicamente a medida que se suman más nodos.
+                </div>
+              </div>
+
+              <div style={{ padding: '24px', borderRadius: '20px', background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(0,230,118,0.3)' }}>
+                <div style={{ fontSize: '28px', marginBottom: '12px' }}>🤖</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px' }}>IA Neuronal 100% Offline</div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', lineHeight: 1.6 }}>
+                  Primera arquitectura de mensajería que ejecuta inferencia de modelos ONNX (`LaMini-Flan-T5`) directamente en el dispositivo cliente mediante WebAssembly, sin enviar datos a la nube.
+                </div>
+              </div>
+
+              <div style={{ padding: '24px', borderRadius: '20px', background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(56,189,248,0.3)' }}>
+                <div style={{ fontSize: '28px', marginBottom: '12px' }}>🛡️</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px' }}>Seguridad Táctica de Hardware</div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', lineHeight: 1.6 }}>
+                  Protecciones físicas directas: Bloqueo de capturas `FLAG_SECURE`, Modo Camuflaje Calculadora, PIN de Pánico (Wipe), Bóveda Señuelo y Dead Man's Switch en Android Keystore.
+                </div>
+              </div>
+            </div>
+
+            {/* Target Verticals */}
+            <h3 style={{ fontSize: '22px', fontWeight: 800, color: '#FFF', marginBottom: '20px', textAlign: 'center' }}>Sectores de Mercado Clave</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '40px' }}>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontWeight: 800, color: '#FF4D66', fontSize: '15px' }}>🪖 Defensa & Fuerzas de Orden</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px' }}>Comunicaciones seguras en zonas de conflicto y entornos de denegación electrónica.</div>
+              </div>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontWeight: 800, color: '#00E676', fontSize: '15px' }}>🚨 Respuesta a Emergencias</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px' }}>Mallas tácticas para brigadas de rescate durante terremotos, huracanes y apagones.</div>
+              </div>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontWeight: 800, color: '#38BDF8', fontSize: '15px' }}>🏢 Infraestructura Corporativa</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px' }}>Canales directos de comando ejecutivo sin exposición a fugas ni metadatos en la nube.</div>
+              </div>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <div style={{ fontWeight: 800, color: '#A855F7', fontSize: '15px' }}>⛏️ Logística & Minería Off-Grid</div>
+                <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px' }}>Conectividad constante en minas subterráneas, buques y sitios remotos fuera de cobertura.</div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+              <button
+                onClick={onEnterApp}
+                style={{
+                  padding: '14px 28px',
+                  borderRadius: '12px',
+                  background: 'linear-gradient(90deg, #E8213A 0%, #990014 100%)',
+                  color: '#FFF',
+                  fontWeight: 800,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  boxShadow: '0 4px 20px rgba(232,33,58,0.4)',
+                }}
+              >
+                ⚡ Probar Plataforma Web en Vivo
+              </button>
             </div>
           </div>
         )}
@@ -737,7 +864,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         {activeTab === 'features' && (
           <div>
             <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Capacidades Tácticas de Producción</h2>
-            <p style={{ fontSize: '15px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>Resumen de las características criptográficas y de hardware del sistema RED v24.0.0.</p>
+            <p style={{ fontSize: '15px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>Resumen de las características criptográficas y de hardware del sistema RED v30.0.0.</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
               <div style={{ padding: '28px', borderRadius: '20px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -793,7 +920,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
 
         {activeTab === 'architecture' && (
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v24.0.0</h2>
+            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v30.0.0</h2>
             <p style={{ fontSize: '14px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>
               Flujo de procesamiento en tiempo real entre el Frontend SPA, Middleware Android Java JNI, Motor Rust NDK y Radios de Hardware Off-Grid.
             </p>
@@ -919,11 +1046,15 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <div style={{ fontWeight: 700, color: '#FFF', marginBottom: '6px' }}>¿Pueden comunicarse la Web y los Celulares?</div>
-                <div style={{ fontSize: '14px', color: '#94A3B8' }}>Sí. Al crear un usuario en el cliente Web, obtienes tu identidad soberana y puedes comunicarte en tiempo real con los dispositivos móviles agregando su contacto o escaneando su QR.</div>
+                <div style={{ fontSize: '14px', color: '#94A3B8' }}>Sí. Al crear tu usuario en la versión Web, obtienes tu identidad soberana única y puedes comunicarse en tiempo real con los dispositivos móviles Android agregando su Hash de contacto o escaneando su código QR.</div>
+              </div>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div style={{ fontWeight: 700, color: '#FFF', marginBottom: '6px' }}>¿Cada usuario Web tiene su propia cuenta o la comparten?</div>
+                <div style={{ fontSize: '14px', color: '#94A3B8' }}>Cada navegador genera su propio par de claves criptográficas y DID soberano único (`did:red:`). No se comparten cuentas: cada visitante es un nodo independiente con su propia bóveda cifrada local.</div>
               </div>
               <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
                 <div style={{ fontWeight: 700, color: '#FFF', marginBottom: '6px' }}>¿Qué sucede si un usuario activa una VPN?</div>
-                <div style={{ fontSize: '14px', color: '#94A3B8' }}>El canal Bluetooth LE opera a nivel de hardware nativo y continúa transmitiendo datos sin verse afectado por VPNs ni Kill-Switches.</div>
+                <div style={{ fontSize: '14px', color: '#94A3B8' }}>El canal Bluetooth LE opera a nivel de hardware nativo HCI y continúa transmitiendo datos sin verse afectado por VPNs ni Kill-Switches.</div>
               </div>
             </div>
           </div>
@@ -941,7 +1072,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         fontFamily: 'monospace',
         zIndex: 10,
       }}>
-        © 2026 PROYECTO RED — Plataforma Soberana de Comunicaciones P2P Mesh. Código Abierto.
+        © 2026 PROYECTO RED — Plataforma Soberana de Comunicaciones P2P Mesh & IA Neuronal WASM. Código Abierto.
       </footer>
     </div>
   );

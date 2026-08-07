@@ -1,6 +1,6 @@
-# 📜 Especificación del Protocolo Ω (RED v24.0.0 Zenith Master)
+# 📜 Especificación del Protocolo Ω (RED v30.0.0 Sovereign Master)
 
-**Versión**: 24.0.0 | **Estado**: Estándar de Producción Aprobado | **Fecha**: Agosto 2026
+**Versión**: 30.0.0 | **Estado**: Estándar de Producción Aprobado | **Fecha**: Agosto 2026
 
 ---
 

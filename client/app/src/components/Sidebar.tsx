@@ -266,7 +266,7 @@ export default function Sidebar() {
                                     <div>
                                         <div 
                                             onClick={() => { setNickInput(userNick); setShowEditNickModal(true); }}
-                                            style={{ display: 'flex', alignItems: 'center', gap: '6px', maxWidth: 150, cursor: 'pointer' }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: '4px', maxWidth: 115, cursor: 'pointer' }}
                                             title="Toca para cambiar alias táctico"
                                         >
                                             <span style={{ fontSize: '1.05rem', fontWeight: 900, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -317,33 +317,34 @@ export default function Sidebar() {
                             );
                         })()}
 
-                        {/* Right: Action buttons */}
-                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        {/* Right: Action buttons (scrollable & non-clipping) */}
+                        <div className="no-scrollbar" style={{ display: 'flex', gap: '4px', alignItems: 'center', overflowX: 'auto', flexShrink: 1, paddingLeft: '2px' }}>
                             <button
                                 className="btn-primary"
                                 onClick={() => navigate('radar')}
                                 title="Mi Código QR e Identidad"
                                 style={{
-                                    padding: '6px 12px', borderRadius: '14px',
-                                    fontSize: '0.78rem', fontWeight: 800,
+                                    padding: '6px 10px', borderRadius: '12px',
+                                    fontSize: '0.76rem', fontWeight: 800,
                                     background: 'linear-gradient(135deg, #E8213A, #C0152A)',
                                     color: 'white', border: 'none', cursor: 'pointer',
                                     display: 'flex', alignItems: 'center', gap: '4px',
-                                    boxShadow: '0 2px 10px rgba(232,33,58,0.4)'
+                                    boxShadow: '0 2px 10px rgba(232,33,58,0.4)',
+                                    whiteSpace: 'nowrap', flexShrink: 0
                                 }}
                             >
                                 📷 Mi QR
                             </button>
-                            <button className="btn-icon" title="Búsqueda Global" onClick={() => setGlobalSearchOpen(true)}>
-                                <span style={{ fontSize: '1rem' }}>🔍</span>
+                            <button className="btn-icon" title="Búsqueda Global" onClick={() => setGlobalSearchOpen(true)} style={{ flexShrink: 0, width: 34, height: 34 }}>
+                                <span style={{ fontSize: '0.95rem' }}>🔍</span>
                             </button>
-                            <button className="btn-icon" title="Filtrar Lista" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 80); }}>
-                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <button className="btn-icon" title="Filtrar Lista" onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 80); }} style={{ flexShrink: 0, width: 34, height: 34 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                                 </svg>
                             </button>
-                            <button className="btn-icon" onClick={() => navigate('contacts')} style={{ position: 'relative' }}>
-                                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <button className="btn-icon" onClick={() => navigate('contacts')} title="Agregar contacto" style={{ position: 'relative', flexShrink: 0, width: 34, height: 34 }}>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
                                 </svg>
                             </button>
@@ -356,16 +357,18 @@ export default function Sidebar() {
                                     borderRadius: '12px',
                                     color: 'white',
                                     padding: '6px 10px',
-                                    fontSize: '0.78rem',
+                                    fontSize: '0.76rem',
                                     fontWeight: 800,
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '5px',
+                                    gap: '4px',
                                     cursor: 'pointer',
                                     boxShadow: '0 2px 12px rgba(232,33,58,0.3)',
                                     transition: 'all 0.2s ease',
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0
                                 }}
-                                onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                                onMouseOver={e => { e.currentTarget.style.transform = 'scale(1.03)'; }}
                                 onMouseOut={e => { e.currentTarget.style.transform = 'scale(1)'; }}
                             >
                                 ⚡ Módulos
@@ -391,7 +394,23 @@ export default function Sidebar() {
 
             {/* ── Quick action strip ────────────────────────────────────────── */}
             <div style={{ padding: '14px 16px 6px', flexShrink: 0 }}>
-                <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+                <div className="no-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+                    <button
+                        onClick={e => { e.preventDefault(); setMenuOpen(true); }}
+                        className="zenith-card"
+                        style={{
+                            flex: '1 0 70px', minWidth: 70, padding: '10px 6px', display: 'flex', flexDirection: 'column',
+                            alignItems: 'center', gap: '6px', borderRadius: '16px',
+                            background: 'linear-gradient(145deg, rgba(232,33,58,0.4), rgba(99,179,237,0.25))',
+                            border: '1px solid rgba(232,33,58,0.65)',
+                            cursor: 'pointer', color: 'white',
+                            boxShadow: '0 4px 16px rgba(232,33,58,0.4)'
+                        }}
+                    >
+                        <span style={{ fontSize: '1.25rem', lineHeight: 1, filter: 'drop-shadow(0 2px 8px #E8213A)' }}>⚡</span>
+                        <span style={{ fontSize: '0.66rem', fontWeight: 900, letterSpacing: '0.3px', color: '#FFF', whiteSpace: 'nowrap' }}>MÓDULOS</span>
+                    </button>
+
                     {quickActions.map(a => (
                         <button
                             key={a.action}

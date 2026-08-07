@@ -1,4 +1,4 @@
-# 🛡️ RED — Red Militar Criptográfica Off-Grid & P2P Mesh v24.0.0
+# 🛡️ RED — Red Militar Criptográfica Off-Grid & P2P Mesh v30.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet.
 
@@ -11,10 +11,11 @@
 3. [Motor Criptográfico & Cifrado E2E](#-motor-criptográfico--cifrado-e2e)
 4. [Capa de Red Multi-Radio Off-Grid (DTN)](#-capa-de-red-multi-radio-off-grid-dtn)
 5. [Inmunidad a VPNs & Seguridad Operativa (OPSEC)](#-inmunidad-a-vpns--seguridad-operativa-opsec)
-6. [Características Clave & Módulos Integrados](#-características-clave--módulos-integrados)
-7. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
-8. [Estructura del Proyecto](#-estructura-del-proyecto)
-9. [Índice de Documentación Técnica](#-índice-de-documentación-técnica)
+6. [Motor de IA Neuronal Local ONNX WASM & Resiliencia](#-motor-de-ia-neuronal-local-onnx-wasm--resiliencia)
+7. [Características Clave & Módulos Integrados](#-características-clave--módulos-integrados)
+8. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
+9. [Estructura del Proyecto](#-estructura-del-proyecto)
+10. [Índice de Documentación Técnica](#-índice-de-documentación-técnica)
 
 ---
 
@@ -22,11 +23,12 @@
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada teléfono inteligente en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales.
 
-| Característica | Aplicaciones Tradicionales | RED v24.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v30.0.0 |
 |---|---|---|
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE, WiFi Direct y LoRa** |
 | **Identidad** | Vinculada a número telefónico/email | **Soberana Criptográfica (`did:red:`)** |
+| **Inteligencia IA** | Dependiente de APIs en la Nube | **100% Offline Neuronal ONNX WASM (`LaMini-Flan-T5`)** |
 | **Resiliencia** | Fallo total en apagones | **Tolerante a Retrasos (DTN Store-and-Forward)** |
 | **Resistencia a Censura** | Susceptible a bloqueos de IP/DNS | **Inmune / Enrutamiento Malla de Inundación Controlada** |
 
@@ -99,12 +101,27 @@ El proyecto está construido bajo una arquitectura híbrida de alto rendimiento:
 
 ---
 
+---
+
+## 🤖 Motor de IA Neuronal Local ONNX WASM & Resiliencia
+
+**RED v30.0.0** integra un motor de inteligencia artificial totalmente soberano y **100% offline** basado en el modelo `LaMini-Flan-T5` optimizado para ejecución directa en WebAssembly mediante `onnxruntime-web`:
+
+- **Auditoría de Seguridad Zero-Trust ([SecurityReportModal.tsx](file:///d:/PROYECTO%20RED/client/app/src/components/SecurityReportModal.tsx)):** Invocación de dictamen de resiliencia en tiempo real sobre políticas activas (`FLAG_SECURE`, camuflaje y almacenamiento en RAM).
+- **Auditoría Criptográfica & Resiliencia ([CryptoPanel.tsx](file:///d:/PROYECTO%20RED/client/app/src/components/CryptoPanel.tsx)):** Evaluación de entropía de llaves y estado de pares poscuánticos Kyber1024 / Dilithium5.
+- **Topología & Salud de Red ([NetworkPanel.tsx](file:///d:/PROYECTO%20RED/client/app/src/components/NetworkPanel.tsx)):** Diagnóstico neuronal off-grid de rutas mesh y dispersión P2P.
+- **Copiloto Táctico Off-Grid ([AICopilotModal.tsx](file:///d:/PROYECTO%20RED/client/app/src/components/AICopilotModal.tsx)):** Asistencia, traducción y síntesis sin requerir conexión a la nube ni consumo de datos.
+
+---
+
 ## 🌟 Características Clave & Módulos Integrados
 
 - **Mensajería Directa E2E & Grupos Cifrados**: Chat individual y soporte para grupos tácticos con distribución de llaves.
+- **Acceso Prominente a Módulos (`⚡ MÓDULOS`)**: Tarjeta glowing de acceso inmediato en la franja principal de Quick Actions en la pantalla de inicio.
 - **Notas de Voz de Alta Eficiencia**: Grabación de audio comprimido a 12 Kbps (OGG/Opus) optimizada para transmisión en radios de baja velocidad (LoRa/BLE).
 - **Baliza de Emergencia SOS**: Transmisión instantánea de coordenadas GPS reales y alerta de socorro a todos los nodos P2P en el área.
-- **Radar de Nodos Cercanos**: Escaneo visual en tiempo real de pares detectados por Bluetooth y subred local.
+- **Radar de Nodos Cercanos**: Escaneo visual en tiempo real de pares detectados por Bluetooth y subred local con filtrado de potencia de señal (-75 dBm).
+- **Consola de Logs de Nodo SSE**: Transmisión de telemetría y logs de Rust en vivo con intervalos de heartbeat de 3 segundos.
 - **Transmisión de Video en Vivo Off-Grid**: Emisión y recepción de video local de baja latencia entre nodos.
 - **Pizarra Colaborativa Táctica (Live Canvas)**: Dibujo táctico sincronizado en tiempo real por la red mesh.
 
@@ -146,7 +163,7 @@ $Apk = "app\build\outputs\apk\debug\app-debug.apk"
 ```
 
 ### Artefacto Oficial de Distribución:
-- **Ruta del APK**: `d:\PROYECTO RED\assets\red-v24.0.0-latest.apk`
+- **Ruta del APK**: `d:\PROYECTO RED\assets\red-v30.0.0-latest.apk`
 
 ---
 
@@ -155,7 +172,7 @@ $Apk = "app\build\outputs\apk\debug\app-debug.apk"
 ```
 D:\PROYECTO RED
 ├── assets/                               # Artefactos y APKs oficiales de distribución
-│   └── red-v24.0.0-latest.apk           # Binario APK oficial compilado y probado
+│   └── red-v30.0.0-latest.apk           # Binario APK oficial compilado y probado
 ├── client/                               # Aplicación cliente frontend/móvil
 │   └── app/                              # Proyecto Next.js 16 (Turbopack) + Capacitor
 │       ├── android/                      # Proyecto nativo de Android Gradle

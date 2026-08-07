@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v24.0.0
+# 📘 Manual Operativo del Usuario — RED v30.0.0
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura o censura.
 
@@ -7,16 +7,18 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 ## 📋 Tabla de Contenidos
 
 1. [Primer Inicio & Configuración de Seguridad](#1-primer-inicio--configuración-de-seguridad)
-2. [Modo Señuelo (Decoy Mode - Clave `9999`)](#2-modo-señuelo-decoy-mode---clave-9999)
-3. [Gestión de Identidad & Bóveda Criptográfica](#3-gestión-de-identidad--bóveda-criptográfica)
-4. [Agregar Contactos & Escaneo QR](#4-agregar-contactos--escaneo-qr)
-5. [Mensajería Directa & Notas de Voz Tácticas](#5-mensajería-directa--notas-de-voz-tácticas)
-6. [Navegación & Interfaz de Usuario](#6-navegación--interfaz-de-usuario)
-7. [Radar P2P & Descubrimiento de Nodos](#7-radar-p2p--descubrimiento-de-nodos)
-8. [Balizas de Emergencia SOS](#8-balizas-de-emergencia-sos)
-9. [Herramientas Tácticas Avanzadas](#9-herramientas-tácticas-avanzadas)
-10. [Interruptor del Hombre Muerto (DMS)](#10-interruptor-del-hombre-muerto-dms)
-11. [Preguntas Frecuentes & Solución de Problemas](#11-preguntas-frecuentes--solución-de-problemas)
+2. [Acceso Prominente a Módulos (`⚡ MÓDULOS`)](#2-acceso-prominente-a-módulos--módulos)
+3. [Modo Señuelo (Decoy Mode - Clave `9999`)](#3-modo-señuelo-decoy-mode---clave-9999)
+4. [Seguridad Táctica Zero-Trust & Auditoría IA Neuronal ONNX](#4-seguridad-táctica-zero-trust--auditoría-ia-neuronal-onnx)
+5. [Gestión de Identidad & Bóveda Criptográfica](#5-gestión-de-identidad--bóveda-criptográfica)
+6. [Agregar Contactos & Escaneo QR](#6-agregar-contactos--escaneo-qr)
+7. [Mensajería Directa & Notas de Voz Tácticas](#7-mensajería-directa--notas-de-voz-tácticas)
+8. [Consola de Logs de Nodo SSE en Vivo](#8-consola-de-logs-de-nodo-sse-en-vivo)
+9. [Radar P2P & Descubrimiento de Nodos](#9-radar-p2p--descubrimiento-de-nodos)
+10. [Balizas de Emergencia SOS](#10-balizas-de-emergencia-sos)
+11. [Herramientas Tácticas Avanzadas](#11-herramientas-tácticas-avanzadas)
+12. [Interruptor del Hombre Muerto (DMS)](#12-interruptor-del-hombre-muerto-dms)
+13. [Preguntas Frecuentes & Solución de Problemas](#13-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
@@ -28,7 +30,16 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 ---
 
-## 2. Modo Señuelo (Decoy Mode - Clave `9999`)
+## 2. Acceso Prominente a Módulos (`⚡ MÓDULOS`)
+
+Para acceder instantáneamente a todas las herramientas tácticas del sistema:
+- Haz clic o toca la tarjeta **`⚡ MÓDULOS`** destacada en la franja principal de **Acciones Rápidas (Quick Actions)** de la pantalla de inicio.
+- También puedes presionar el botón **`⚡ MÓDULOS`** situado en la barra superior navegable del encabezado.
+- Se desplegará la grilla completa con más de 12 módulos tácticos (Bóveda Criptográfica, Radar, Balizas SOS, Brújula P2P, Pizarra Canvas, Video Stream, Copiloto IA y Seguridad Táctica).
+
+---
+
+## 3. Modo Señuelo (Decoy Mode - Clave `9999`)
 
 Si te encuentras en una situación de riesgo donde seas forzado a desbloquear tu dispositivo:
 - Ingresa la contraseña de emboscada **`9999`**.
@@ -37,7 +48,17 @@ Si te encuentras en una situación de riesgo donde seas forzado a desbloquear tu
 
 ---
 
-## 3. Gestión de Identidad & Bóveda Criptográfica
+## 4. Seguridad Táctica Zero-Trust & Auditoría IA Neuronal ONNX
+
+Desde el módulo **Seguridad Táctica** puedes gestionar la protección física del hardware:
+- **Bloqueo de Capturas (`FLAG_SECURE` OS):** Impide físicamente tomar capturas de pantalla, grabar video de la aplicación u obtener miniaturas en las apps recientes del sistema Android.
+- **Auto-Diagnóstico del Nodo (`Auditar`):** Realiza benchmarks en vivo sobre el puerto HTTP de Rust (`7333`), canal SSE, almacenamiento seguro y la generación Web Crypto `ECDSA P-256`.
+- **Ficha de Auditoría e IA Neuronal (`Informe 📄`):** Presiona el botón **`🤖 Evaluar Resiliencia Táctica con IA (ONNX WASM)`** para que la IA neuronal local `LaMini-Flan-T5` evalúe tus políticas de seguridad activas y genere un dictamen en español sobre la resiliencia del dispositivo.
+- **Purga Anti-Forense:** Elimina de inmediato los archivos temporales y caché del sistema (`Directory.Cache`).
+
+---
+
+## 5. Gestión de Identidad & Bóveda Criptográfica
 
 En la pestaña de **Bóveda de Identidad (ID Vault)** podrás:
 - Consultar tu **Hash de Identidad Soberana** y tu **Short ID** táctico.
@@ -46,7 +67,7 @@ En la pestaña de **Bóveda de Identidad (ID Vault)** podrás:
 
 ---
 
-## 4. Agregar Contactos & Escaneo QR
+## 6. Agregar Contactos & Escaneo QR
 
 Para establecer comunicación cifrada E2E con otro usuario existen tres métodos:
 
@@ -65,7 +86,7 @@ Para establecer comunicación cifrada E2E con otro usuario existen tres métodos
 
 ---
 
-## 5. Mensajería Directa & Notas de Voz Tácticas
+## 7. Mensajería Directa & Notas de Voz Tácticas
 
 - **Burbujas de Chat & Reacciones**: Envía mensajes de texto, imágenes y reacciona con emojis manteniendo presionado un mensaje.
 - **Notas de Voz Tácticas (12 Kbps)**: Mantén presionado el icono de micrófono. El audio se grabará y comprimirá a **12 Kbps (OGG/Opus)** para permitir su transmisión ágil por radios de baja velocidad como LoRa o Bluetooth BLE.
@@ -73,7 +94,14 @@ Para establecer comunicación cifrada E2E con otro usuario existen tres métodos
 
 ---
 
-## 6. Navegación & Interfaz de Usuario
+## 8. Consola de Logs de Nodo SSE en Vivo
+
+- **Acceso a Logs del Nodo:** Presiona el indicador de estado del nodo en el encabezado para desplegar la consola de logs.
+- **Telemetría SSE en Tiempo Real:** El motor de Rust emite señales de latencia e información de pares cada 3 segundos, permitiendo auditar la actividad interna del proceso local.
+
+---
+
+## 9. Navegación & Interfaz de Usuario
 
 - **Salir de un Chat**: Para volver a la lista principal de conversaciones desde cualquier chat, presiona la flecha **`←`** ubicada en la barra superior o presiona el botón físico/gesto de retroceso de Android.
 - **Indicadores de Estado de Red**:
@@ -85,21 +113,21 @@ Para establecer comunicación cifrada E2E con otro usuario existen tres métodos
 
 ---
 
-## 7. Radar P2P & Descubrimiento de Nodos
+## 10. Radar P2P & Descubrimiento de Nodos
 
 - Accede al **Radar P2P** para visualizar un mapa de calor y listado en tiempo real de todos los dispositivos RED detectados en tu radio de alcance por Bluetooth LE o red WiFi local.
 - Podrás consultar la distancia aproximada en metros, la fuerza de señal (RSSI) y agregar nodos directamente con un toque.
 
 ---
 
-## 8. Balizas de Emergencia SOS
+## 11. Balizas de Emergencia SOS
 
 - En caso de desastre o emergencia física, presiona el botón flotante **SOS** o ingresa a la pestaña SOS.
 - El sistema transmitirá una **Baliza de Socorro de Máxima Prioridad** que contiene tu ubicación GPS real y una señal auditiva a todos los nodos P2P en tu área de cobertura.
 
 ---
 
-## 9. Herramientas Tácticas Avanzadas
+## 12. Herramientas Tácticas Avanzadas
 
 - **P2P Walkie-Talkie**: Transmisión de voz en vivo por radio digital sin servidores.
 - **Pizarra Táctica Colaborativa (Live Canvas)**: Dibujo y mapa esquemático sincronizado entre nodos.
@@ -108,7 +136,7 @@ Para establecer comunicación cifrada E2E con otro usuario existen tres métodos
 
 ---
 
-## 10. Interruptor del Hombre Muerto (DMS)
+## 13. Interruptor del Hombre Muerto (DMS)
 
 - Configura el **Dead Man's Switch (DMS)** en la pestaña de Configuración.
 - Si dejas de usar la aplicación durante el tiempo especificado (por ejemplo, 24 horas), el sistema destruirá automáticamente la base de datos cifrada y las claves de identidad.

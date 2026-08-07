@@ -4,6 +4,25 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+## [30.0.0-p2p-master] - 2026-08-07
+
+### Añadido y Corregido — RED v30.0.0 Sovereign Master & AI Resiliencia Release
+
+**Motor de IA Neuronal Local Off-Grid ONNX WASM (`localAiEngine.ts` & `onnxruntime-web`)**
+- **Dictamen Neuronal Zero-Trust:** Integración del botón `🤖 Evaluar Resiliencia Táctica con IA (ONNX WASM)` en `SecurityReportModal.tsx` para generar evaluaciones de resiliencia en español utilizando el modelo `LaMini-Flan-T5` 100% en memoria.
+- **Auditoría Criptográfica e Integridad en Tiempo Real:** Evaluación neuronal integrada en `CryptoPanel.tsx`, `NetworkPanel.tsx` y `BlockchainExplorer.tsx`.
+
+**Seguridad Táctica Zero-Trust & Protección a Nivel de Sistema Operativo (`SecurityPanel.tsx`)**
+- **Bloqueo Físico de Capturas (`FLAG_SECURE` OS):** Integración nativa de `PrivacyScreen` en Android impidiendo capturas de pantalla, grabaciones de pantalla y capturas en el selector de aplicaciones recientes.
+- **Auto-Diagnóstico de Nodo Real (`SystemHealthModal.tsx`):** Benchmarks de latencia HTTP (`/api/status`), streaming SSE (`/api/events`), almacenamiento encriptado y generación de llaves `ECDSA P-256` en Web Crypto API.
+- **Purga Anti-Forense y Burner Chats:** Borrado automático del directorio de caché nativo (`Directory.Cache`) y bypass de persistencia en disco SQLite retener mensajes únicamente en memoria RAM.
+
+**Rediseño de Navegación & Botón Prominente `⚡ MÓDULOS` (`Sidebar.tsx`)**
+- **Acceso Prominente Módulos:** Inclusión de la tarjeta `⚡ MÓDULOS` como primera opción destacada en la franja de Quick Actions y botón adaptativo en la barra superior navegable.
+- **Stream de Telemetría SSE en Vivo (`api.rs` & `NodeLogsModal.tsx`):** Implementación de heartbeat de 3 segundos en `/api/events` para mantener viva la consola de logs del nodo Rust en tiempo real.
+
+---
+
 ## [24.0.0-p2p-master] - 2026-08-05
 
 ### Añadido y Corregido — RED v24.0.0 Native P2P & Navigation Master Release

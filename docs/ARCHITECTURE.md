@@ -1,6 +1,6 @@
-# 🏗️ Especificación Arquitectónica de RED v24.0.0
+# 🏗️ Especificación Arquitectónica de RED v30.0.0
 
-Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware y el sistema de gestión de estado en el cliente JavaScript.
+Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware, el motor de IA Neuronal ONNX WASM local y el sistema de gestión de estado en el cliente JavaScript.
 
 ---
 
@@ -10,9 +10,10 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 2. [Capa Nativa Android & Servicio de Fondo Java](#2-capa-nativa-android--servicio-de-fondo-java)
 3. [Motor Criptográfico Nativo en Rust (`red_core` y `red_mobile`)](#3-motor-criptográfico-nativo-en-rust-red_core-y-red_mobile)
 4. [Capa de Red Mesh Multi-Radio (GATT, WiFi Direct, LoRa)](#4-capa-de-red-mesh-multi-radio-gatt-wifi-direct-lora)
-5. [Capa de Almacenamiento & Cifrado en Disco](#5-capa-de-almacenamiento--cifrado-en-disco)
-6. [Manejo de Estado SPA & Navegación (Next.js / Zustand)](#6-manejo-de-estado-spa--navegación-nextjs--zustand)
-7. [Endpoints de la API Axum REST & SSE](#7-endpoints-de-la-api-axum-rest--sse)
+5. [Motor de IA Neuronal Off-Grid ONNX WASM (`localAiEngine.ts`)](#5-motor-de-ia-neuronal-off-grid-onnx-wasm-localaienginets)
+6. [Capa de Almacenamiento & Cifrado en Disco](#6-capa-de-almacenamiento--cifrado-en-disco)
+7. [Manejo de Estado SPA & Navegación (Next.js / Zustand)](#7-manejo-de-estado-spa--navegación-nextjs--zustand)
+8. [Endpoints de la API Axum REST & SSE](#8-endpoints-de-la-api-axum-rest--sse)
 
 ---
 

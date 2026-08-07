@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { BlockDetailsModal } from "./BlockDetailsModal";
+import { LocalAIEngine } from "../lib/localAiEngine";
 
 interface BlockItem {
     height: number;
@@ -33,11 +34,16 @@ interface ConsensusStatus {
 
 type TabType = 'blocks' | 'validators' | 'consensus' | 'stake';
 
-function timeAgo(ts: number): string {
+function timeAgo(ts: number, isGenesis = false): string {
+    if (isGenesis || ts <= 1704067200) {
+        return 'Génesis (Red Omega)';
+    }
     const secs = Math.floor(Date.now() / 1000 - ts);
+    if (secs < 0) return 'Ahora mismo';
     if (secs < 60) return `${secs}s`;
     if (secs < 3600) return `${Math.floor(secs / 60)}m`;
-    return `${Math.floor(secs / 3600)}h`;
+    if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
+    return `${Math.floor(secs / 86400)}d`;
 }
 
 export default function BlockchainExplorer() {
@@ -49,6 +55,37 @@ export default function BlockchainExplorer() {
     const [loading, setLoading] = useState(true);
     const [newBlock, setNewBlock] = useState(false);
     const [selectedBlock, setSelectedBlock] = useState<BlockItem | null>(null);
+
+    // AI Audit state
+    const [aiAudit, setAiAudit] = useState<string | null>(null);
+    const [auditLoading, setAuditLoading] = useState(false);
+
+    const handleRunAiAudit = async () => {
+        setAuditLoading(true);
+        setAiAudit(null);
+        try {
+            const activeVal = consensus?.active_validators ?? 1;
+            const totalStk = (consensus?.total_stake ?? 1000000000000) / 1000;
+            const prompt = `Pregunta: ¿Cuál es el estado de salud de esta red blockchain local con altura ${chainHeight}, ${activeVal} validador activo y ${totalStk}K RED en stake?
+Respuesta en español: El estado de la red blockchain local es`;
+            const res = await LocalAIEngine.generateCopilotResponse(prompt);
+            // Clean up model header tags and normalize text
+            let cleanText = res.answer
+                .replace(/🤖 COPILOTO IA NEURONAL REAL \(LaMini-Flan-T5 ONNX WASM\)\n\n/g, '')
+                .replace(/📚 \[Fundamento RAG Táctico:.*\]/g, '')
+                .trim();
+
+            if (!cleanText.startsWith('El estado de la red')) {
+                cleanText = `El estado de la red blockchain local es: ${cleanText}`;
+            }
+
+            setAiAudit(cleanText);
+        } catch (e: any) {
+            setAiAudit(`⚠️ Error en auditoría ONNX: ${e.message}`);
+        } finally {
+            setAuditLoading(false);
+        }
+    };
 
     // Staking states
     const [stakeAmount, setStakeAmount] = useState("");
@@ -166,6 +203,7 @@ export default function BlockchainExplorer() {
                     background: newBlock ? 'rgba(0,217,126,0.15)' : 'rgba(52,152,219,0.1)',
                     border: `1px solid ${newBlock ? 'rgba(0,217,126,0.4)' : 'rgba(52,152,219,0.25)'}`,
                     borderRadius: 20, padding: '4px 12px', transition: 'all 0.4s ease',
+                    flexShrink: 0
                 }}>
                     <div style={{
                         width: 7, height: 7, borderRadius: '50%',
@@ -228,6 +266,51 @@ export default function BlockchainExplorer() {
 
             {/* Content */}
             <div className="scroll-container" style={{ flex: 1, padding: '14px 16px calc(80px + var(--safe-bottom, 0px)) 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                
+                {/* AI Audit Action Bar */}
+                <button
+                    onClick={handleRunAiAudit}
+                    disabled={auditLoading}
+                    style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '14px',
+                        background: 'linear-gradient(135deg, rgba(232,33,58,0.2), rgba(155,89,182,0.2))',
+                        border: '1px solid rgba(232,33,58,0.4)',
+                        color: '#fff',
+                        fontWeight: 800,
+                        fontSize: '0.82rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        boxShadow: '0 4px 15px rgba(232,33,58,0.2)'
+                    }}
+                >
+                    {auditLoading ? '⏳ Ejecutando Inferencia ONNX WASM...' : '🤖 Auditar Salud de Cadena con IA Neuronal'}
+                </button>
+
+                {/* AI Audit Output Card */}
+                {aiAudit && (
+                    <div style={{
+                        padding: '14px 16px', borderRadius: '16px',
+                        background: 'linear-gradient(135deg, rgba(232,33,58,0.15), rgba(15,23,42,0.9))',
+                        border: '1px solid rgba(232,33,58,0.4)', backdropFilter: 'blur(12px)',
+                        marginBottom: '4px'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#E8213A', textTransform: 'uppercase' }}>
+                                🤖 AUDITORÍA IA DE SALUD DE CADENA (LaMini-Flan-T5 ONNX)
+                            </span>
+                            <button onClick={() => setAiAudit(null)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '0.9rem', cursor: 'pointer' }}>✕</button>
+                        </div>
+                        <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: 1.5, color: '#e2e8f0' }}>
+                            {aiAudit}
+                        </div>
+                    </div>
+                )}
+
                 {loading ? (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14 }}>
                         <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid #3498db', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }} />
@@ -287,7 +370,7 @@ export default function BlockchainExplorer() {
                                     )}
                                 </div>
                                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                                    hace {timeAgo(b.timestamp)}
+                                    {timeAgo(b.timestamp, b.height === 0)}
                                 </span>
                             </div>
                             <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.72rem', lineHeight: 1.8 }}>

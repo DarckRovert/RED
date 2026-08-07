@@ -1285,7 +1285,7 @@ export async function getDiscoveryDigest(): Promise<ProximityDigest> {
     });
 }
 
-// ─── v24.0: Interfaces & API AI Copilot + Summarizer + Translator ──────────────
+// ─── v30.0: Interfaces & API AI Copilot + Summarizer + Translator ──────────────
 
 export interface CopilotResponse {
     answer: string;

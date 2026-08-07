@@ -1,4 +1,4 @@
-# RED API Reference (v24.0.0 Zenith Master)
+# RED API Reference (v30.0.0 Sovereign Master)
 
 ## Overview
 

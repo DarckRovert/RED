@@ -68,35 +68,12 @@ impl DiscoveryEngine {
                 }],
             })),
         };
-        engine.seed_demo_nodes();
         engine
     }
 
-    fn seed_demo_nodes(&self) {
+    pub fn register_discovered_node(&self, node: ProximityNode) {
         let mut map = self.nearby_nodes.write().unwrap();
-        let now = chrono::Utc::now().timestamp();
-        map.insert(
-            "node_nearby_alice".to_string(),
-            ProximityNode {
-                identity_hash: "3f7a8291c4e2".to_string(),
-                display_name: "Alice (BLE Proximity)".to_string(),
-                rssi_dbm: -58,
-                distance_meters: 2.4,
-                transport: "BLE".to_string(),
-                last_seen: now,
-            },
-        );
-        map.insert(
-            "node_nearby_bob".to_string(),
-            ProximityNode {
-                identity_hash: "9b12c3e4a5f6".to_string(),
-                display_name: "Bob (WiFi Direct)".to_string(),
-                rssi_dbm: -64,
-                distance_meters: 4.1,
-                transport: "WiFi-Direct".to_string(),
-                last_seen: now,
-            },
-        );
+        map.insert(node.identity_hash.clone(), node);
     }
 
     pub fn get_config(&self) -> ProximityFilterConfig {

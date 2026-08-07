@@ -5,7 +5,7 @@ import { useRedStore } from '../store/useRedStore';
 import { queryAICopilot, translateTextAI, summarizeChannelAI, CopilotResponse } from '../lib/api';
 import { LocalAIEngine } from '../lib/localAiEngine';
 
-type AIMode = 'copilot' | 'summarizer' | 'translator' | 'diagnose';
+type AIMode = 'copilot' | 'guardian' | 'embeddings' | 'summarizer' | 'translator' | 'diagnose';
 
 export const AICopilotModal: React.FC = () => {
     const { navigate, messages: chatMessages, activeConversationId } = useRedStore();
@@ -16,9 +16,9 @@ export const AICopilotModal: React.FC = () => {
     const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; category?: string; source?: string }>>([
         {
             sender: 'ai',
-            text: '🤖 Hola. Soy el Copiloto IA Neuronal de RED. Opero 100% en WebAssembly / ONNX sin enviar datos a la nube.\n\nPuedo asistirte en asistencia médica, protocolos de sismos, traducción offline, síntesis de chats y diagnóstico de red Mesh.',
-            category: 'IA Neuronal WASM',
-            source: 'RED Local Transformer WASM Engine'
+            text: '🤖 Hola. Soy el Copiloto IA Neuronal de RED (3 Redes Neuronales ONNX Locales en WASM).\n\nPuedes probar cada modelo directamente:\n• 🤖 Copiloto / Resumidor / Traductor: LaMini-Flan-T5-77M (ONNX 95MB)\n• 🛡️ Guardian: toxic-bert (Clasificador de Toxicidad 110MB)\n• 🧠 Embeddings: all-MiniLM-L6-v2 (Extractor Vectorial 384-D 23MB)',
+            category: '3 Modelos ONNX WASM',
+            source: 'RED Local Neural Engine'
         }
     ]);
 
@@ -36,6 +36,21 @@ export const AICopilotModal: React.FC = () => {
                 setMessages((prev) => [
                     ...prev,
                     { sender: 'ai', text: res.answer, category: res.topic_category, source: res.source }
+                ]);
+            } else if (mode === 'guardian') {
+                const safety = await LocalAIEngine.classifySafety(text);
+                const categoryStr = (safety.category || 'general').toUpperCase();
+                const textOut = `🛡️ INFERENCIA NEURONAL REAL (toxic-bert 110MB ONNX WASM)\n\nTexto analizado: "${text}"\n\n• ¿Es Contenido Tóxico/Amenaza?: ${safety.isToxic ? '⛔ SÍ (Bloqueado por RED Guardian)' : '✅ NO (Seguro)'}\n• Categoría Detectada: ${categoryStr}\n• Confianza ONNX: ${(safety.confidence * 100).toFixed(1)}%\n• Tiempo Inferencia: ${safety.executionTimeMs} ms\n${safety.reason ? `• Razón: ${safety.reason}` : ''}`;
+                setMessages((prev) => [
+                    ...prev,
+                    { sender: 'ai', text: textOut, category: 'toxic-bert (Clasificador ONNX)', source: 'ONNX WASM Safety Classifier' }
+                ]);
+            } else if (mode === 'embeddings') {
+                const emb = await LocalAIEngine.extractEmbeddings(text);
+                const textOut = `🧠 EXTRACCIÓN VECTORIAL REAL (all-MiniLM-L6-v2 23MB ONNX WASM)\n\nTexto analizado: "${text}"\n\n• Dimensiones Vectoriales: ${emb.dimensions}-D\n• Magnitud Vectorial: ${emb.magnitude}\n• Muestra de Vector (Primeros 10 de 384 Float32):\n[${emb.vectorPreview.join(', ')}...]\n• Tiempo Inferencia: ${emb.executionTimeMs} ms`;
+                setMessages((prev) => [
+                    ...prev,
+                    { sender: 'ai', text: textOut, category: 'all-MiniLM-L6-v2 (Vector 384-D ONNX)', source: 'ONNX WASM Vector Extractor' }
                 ]);
             } else if (mode === 'translator') {
                 const res = await translateTextAI(text, targetLang);
@@ -104,7 +119,7 @@ export const AICopilotModal: React.FC = () => {
                     ← Volver
                 </button>
                 <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>
-                    🤖 COPILOTO IA NEURONAL REAL (ONNX / WASM)
+                    🤖 COPILOTO IA NEURONAL REAL (3 MODELOS ONNX)
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#00D97E', fontWeight: 800, fontFamily: 'monospace' }}>
                     100% OFF-GRID
@@ -122,6 +137,8 @@ export const AICopilotModal: React.FC = () => {
             }}>
                 {[
                     { id: 'copilot', label: '🤖 Copiloto' },
+                    { id: 'guardian', label: '🛡️ Guardian (Toxic-BERT)' },
+                    { id: 'embeddings', label: '🧠 Embeddings (MiniLM)' },
                     { id: 'summarizer', label: '📝 Resumidor' },
                     { id: 'translator', label: '🌐 Traductor' },
                     { id: 'diagnose', label: '🛰️ Diagnóstico' },

@@ -100,11 +100,41 @@ function initMeshCanvas() {
   let width = canvas.width = canvas.parentElement.clientWidth;
   let height = canvas.height = 420;
 
-  const nodes = [
-    { id: 'did:red:3f7a8291', name: 'Nodo Alice (BLE)', x: width * 0.25, y: height * 0.45, type: 'ble', color: '#3498db', rssi: '-42 dBm', pkts: '1,420 msgs' },
-    { id: 'did:red:9e12084c', name: 'Nodo Bob (WiFi-Direct)', x: width * 0.5, y: height * 0.65, type: 'wifi', color: '#00E676', rssi: '-38 dBm', pkts: '3,892 msgs' },
-    { id: 'did:red:77c19b02', name: 'Nodo Relay (LoRa)', x: width * 0.75, y: height * 0.35, type: 'lora', color: '#9b59b6', rssi: '-55 dBm', pkts: '8,104 msgs' }
-  ];
+  let liveNodes = [];
+
+  // Polling dinámico de pares reales desde el nodo Axum en localhost/127.0.0.1
+  async function fetchRealPeers() {
+    try {
+      const res = await fetch('http://127.0.0.1:7333/api/peers');
+      if (res.ok) {
+        const peers = await res.json();
+        if (Array.isArray(peers) && peers.length > 0) {
+          liveNodes = peers.map((p, idx) => {
+            const angle = (idx / peers.length) * Math.PI * 2;
+            const dist = 80 + (idx % 3) * 40;
+            return {
+              id: p.id || `peer_${idx}`,
+              name: p.address || `Nodo P2P #${idx + 1}`,
+              x: width / 2 + Math.cos(angle) * dist,
+              y: height / 2 + Math.sin(angle) * dist,
+              type: p.address?.includes('ble') ? 'ble' : p.address?.includes('lora') ? 'lora' : 'wifi',
+              color: p.address?.includes('ble') ? '#3498db' : p.address?.includes('lora') ? '#9b59b6' : '#00E676',
+              rssi: p.latency_ms ? `${p.latency_ms} ms` : '-45 dBm',
+              pkts: p.is_connected ? 'Conectado' : 'En cola'
+            };
+          });
+          return;
+        }
+      }
+    } catch {}
+    // Si el nodo aún no tiene otros pares físicos conectados en el espectro local
+    liveNodes = [
+      { id: 'nodo_local_self', name: 'Este Nodo RED (Activo)', x: width * 0.5, y: height * 0.5, type: 'wifi', color: '#00E676', rssi: 'Localhost', pkts: 'Escaneando Radio...' }
+    ];
+  }
+
+  fetchRealPeers();
+  setInterval(fetchRealPeers, 4000);
 
   // Packet animation state
   let packetProgress = 0;
@@ -116,7 +146,7 @@ function initMeshCanvas() {
     const clickY = e.clientY - rect.top;
 
     let found = null;
-    nodes.forEach(node => {
+    liveNodes.forEach(node => {
       const dist = Math.hypot(node.x - clickX, node.y - clickY);
       if (dist <= 25) found = node;
     });
@@ -164,37 +194,33 @@ function initMeshCanvas() {
     ctx.fill();
 
     // Connecting Vectors
-    ctx.strokeStyle = isBlackout ? '#E8213A' : '#00E676';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.moveTo(nodes[0].x, nodes[0].y);
-    ctx.lineTo(nodes[1].x, nodes[1].y);
-    ctx.lineTo(nodes[2].x, nodes[2].y);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (liveNodes.length >= 2) {
+      ctx.strokeStyle = isBlackout ? '#E8213A' : '#00E676';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(liveNodes[0].x, liveNodes[0].y);
+      for (let i = 1; i < liveNodes.length; i++) {
+        ctx.lineTo(liveNodes[i].x, liveNodes[i].y);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // Animated Packet Pulses traveling along mesh links
     packetProgress = (packetProgress + 0.015) % 1;
     
-    // Packet 1: Alice -> Bob
-    const p1x = nodes[0].x + (nodes[1].x - nodes[0].x) * packetProgress;
-    const p1y = nodes[0].y + (nodes[1].y - nodes[0].y) * packetProgress;
-    ctx.beginPath();
-    ctx.arc(p1x, p1y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#FF3355';
-    ctx.fill();
-
-    // Packet 2: Bob -> Relay
-    const p2x = nodes[1].x + (nodes[2].x - nodes[1].x) * packetProgress;
-    const p2y = nodes[1].y + (nodes[2].y - nodes[1].y) * packetProgress;
-    ctx.beginPath();
-    ctx.arc(p2x, p2y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#00F2FE';
-    ctx.fill();
+    if (liveNodes.length >= 2) {
+      const p1x = liveNodes[0].x + (liveNodes[1].x - liveNodes[0].x) * packetProgress;
+      const p1y = liveNodes[0].y + (liveNodes[1].y - liveNodes[0].y) * packetProgress;
+      ctx.beginPath();
+      ctx.arc(p1x, p1y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#FF3355';
+      ctx.fill();
+    }
 
     // Render Nodes
-    nodes.forEach(node => {
+    liveNodes.forEach(node => {
       // Glow Ring
       ctx.beginPath();
       ctx.arc(node.x, node.y, 18 + Math.sin(sweepAngle * 2) * 4, 0, Math.PI * 2);

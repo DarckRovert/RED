@@ -1,8 +1,8 @@
 # Informe de Auditoría de Seguridad - Sistema RED
 
-**Versión**: 18.3.0 (Zenith Master Edition)  
-**Fecha**: Marzo 2026  
-**Estado**: Estable / Auditado (Internal)
+**Versión**: 30.0.0 (Sovereign Master Edition)  
+**Fecha**: Agosto 2026  
+**Estado**: Estable / Auditado (Internal & ONNX WASM Zero-Trust)
 
 ---
 

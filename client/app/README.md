@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v30.0.0
+
+Plataforma de interfaz táctica soberana e integración con motor nativo de Rust.
 
 ## Getting Started
 
@@ -18,19 +20,26 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🛠️ Comandos de Compilación & Sincronización
 
-## Learn More
+```bash
+# 1. Instalar dependencias del cliente
+npm install
 
-To learn more about Next.js, take a look at the following resources:
+# 2. Servidor de desarrollo SPA
+npm run dev
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# 3. Exportación estática e integración con Capacitor Android
+npm run build
+npx cap sync android
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 📱 Arquitectura de Componentes de Interfaz
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **`src/app/page.tsx`**: Enrutador principal SPA e hidratación dinámica de componentes tácticos.
+- **`src/components/Sidebar.tsx`**: Panel principal de chat y acceso prominente a `⚡ MÓDULOS`.
+- **`src/components/SecurityPanel.tsx`**: Módulo de Seguridad Táctica Zero-Trust y `FLAG_SECURE`.
+- **`src/components/SecurityReportModal.tsx`**: Ficha de auditoría con dictamen de **IA Neuronal ONNX WASM** (`LaMini-Flan-T5`).
+- **`src/components/NodeLogsModal.tsx`**: Consola de logs en vivo conectada al stream SSE del motor de Rust.
+- **`src/lib/localAiEngine.ts`**: Motor de IA local 100% offline basado en `onnxruntime-web`.
+- **`src/lib/api.ts`**: Cliente REST/SSE de comunicación local con `http://127.0.0.1:7333`.
