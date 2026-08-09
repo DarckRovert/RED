@@ -115,14 +115,15 @@ export class VitalScanEngine {
                 }
             });
 
-            // Turn on camera torch/flash if supported
+            // Turn on camera torch/flash on Android WebViews using direct applyConstraints
             const videoTrack = this.stream.getVideoTracks()[0];
             if (videoTrack) {
-                const capabilities = videoTrack.getCapabilities() as { torch?: boolean };
-                if (capabilities && capabilities.torch) {
+                try {
                     await videoTrack.applyConstraints({
                         advanced: [{ torch: true } as unknown as MediaTrackConstraintSet]
-                    }).catch(() => {});
+                    });
+                } catch {
+                    console.warn('[VitalScanEngine] Camera torch constraint not accepted by device.');
                 }
             }
 
@@ -215,7 +216,7 @@ export class VitalScanEngine {
 
     /**
      * Analyzes PPG red & green intensity signals using detrending & refractory peak detection to calculate BPM and SpO2%
-     * Zero simulated fallbacks: Returns bpm: 0 and signalQuality: 'insuficiente' if finger was removed or signal is noisy.
+     * Uses peak-to-trough beat averages for SpO2 calculation to eliminate motion artifact distortion.
      */
     private static analyzePPGData(reds: number[], greens: number[], timestamps: number[]): PPGScanResult {
         if (reds.length < 60) {
@@ -241,9 +242,10 @@ export class VitalScanEngine {
 
         // Peak detection with refractory period (minimum 300ms between beats)
         const peaks: number[] = [];
+        const peakIndices: number[] = [];
         let maxVal = Math.max(...detrendedRed);
         let minVal = Math.min(...detrendedRed);
-        const threshold = (maxVal - minVal) * 0.30;
+        const threshold = (maxVal - minVal) * 0.28;
 
         let lastPeakTime = 0;
         for (let i = 1; i < detrendedRed.length - 1; i++) {
@@ -253,6 +255,7 @@ export class VitalScanEngine {
                 detrendedRed[i] > threshold &&
                 (time - lastPeakTime) > 300) {
                 peaks.push(time);
+                peakIndices.push(i);
                 lastPeakTime = time;
             }
         }
@@ -271,16 +274,41 @@ export class VitalScanEngine {
         const confidence = Math.min(96, 70 + peaks.length * 3);
         const quality: 'excelente' | 'buena' | 'débil' | 'insuficiente' = confidence > 85 ? 'excelente' : 'buena';
 
-        // Calculate SpO2 using Ratio of Ratios R = (AC_red/DC_red) / (AC_green/DC_green)
-        const acRed = maxVal - minVal;
-        const dcRed = reds.reduce((a, b) => a + b, 0) / reds.length;
+        // Robust SpO2 Ratio of Ratios: compute mean AC peak-to-trough amplitude across beats
+        let redACSum = 0;
+        let greenACSum = 0;
+        let validBeats = 0;
 
-        const maxG = Math.max(...detrendedGreen);
-        const minG = Math.min(...detrendedGreen);
-        const acGreen = Math.max(0.001, maxG - minG);
+        for (let k = 0; k < peakIndices.length - 1; k++) {
+            const p1 = peakIndices[k];
+            const p2 = peakIndices[k + 1];
+            
+            // Find trough between beat k and beat k+1
+            let minR = detrendedRed[p1];
+            let minG = detrendedGreen[p1];
+            for (let idx = p1; idx <= p2; idx++) {
+                if (detrendedRed[idx] < minR) minR = detrendedRed[idx];
+                if (detrendedGreen[idx] < minG) minG = detrendedGreen[idx];
+            }
+
+            const peakR = detrendedRed[p1];
+            const peakG = detrendedGreen[p1];
+
+            const diffR = Math.max(0.01, peakR - minR);
+            const diffG = Math.max(0.01, peakG - minG);
+
+            redACSum += diffR;
+            greenACSum += diffG;
+            validBeats++;
+        }
+
+        const acRedAvg = validBeats > 0 ? redACSum / validBeats : (maxVal - minVal);
+        const acGreenAvg = validBeats > 0 ? greenACSum / validBeats : 1;
+
+        const dcRed = reds.reduce((a, b) => a + b, 0) / reds.length;
         const dcGreen = greens.reduce((a, b) => a + b, 0) / greens.length;
 
-        const R = (acRed / Math.max(1, dcRed)) / (acGreen / Math.max(1, dcGreen));
+        const R = (acRedAvg / Math.max(1, dcRed)) / (acGreenAvg / Math.max(1, dcGreen));
         let calculatedSpo2 = Math.round(108 - 20 * R);
         calculatedSpo2 = Math.max(88, Math.min(99, calculatedSpo2));
 

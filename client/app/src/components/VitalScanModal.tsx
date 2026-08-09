@@ -54,7 +54,7 @@ export function VitalScanModal() {
         }
     }, []);
 
-    // Draw Real-time PPG Pulse Waveform on Canvas
+    // Draw Real-time PPG Pulse Waveform on Canvas with Dynamic Automatic Gain Control (AGC)
     const drawWaveform = (waveSample: number) => {
         waveBuffer.current.push(waveSample);
         if (waveBuffer.current.length > 100) waveBuffer.current.shift();
@@ -75,16 +75,23 @@ export function VitalScanModal() {
         ctx.lineTo(w, h / 2);
         ctx.stroke();
 
+        // Calculate dynamic Automatic Gain Control (AGC) peak-to-peak amplitude
+        const buf = waveBuffer.current;
+        let maxVal = Math.max(...buf);
+        let minVal = Math.min(...buf);
+        const p2p = Math.max(0.1, maxVal - minVal);
+        const gain = (h * 0.35) / (p2p / 2); // Scale wave to occupy 70% of canvas height
+
         ctx.strokeStyle = "#E8213A";
         ctx.lineWidth = 2.5;
         ctx.shadowColor = "#E8213A";
         ctx.shadowBlur = 8;
         ctx.beginPath();
 
-        const step = w / (waveBuffer.current.length - 1);
-        waveBuffer.current.forEach((val, i) => {
+        const step = w / (buf.length - 1);
+        buf.forEach((val, i) => {
             const x = i * step;
-            const y = h / 2 - val * 22;
+            const y = h / 2 - val * gain;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         });
