@@ -145,7 +145,7 @@ export class VitalScanEngine {
             const redSamples: number[] = [];
             const greenSamples: number[] = [];
             const timestamps: number[] = [];
-            const SCAN_DURATION_MS = 10000; // 10 seconds scan
+            const SCAN_DURATION_MS = 12000; // 12 seconds optimal PPG scan duration
             const startTime = Date.now();
 
             let localWindow: number[] = [];
@@ -179,8 +179,8 @@ export class VitalScanEngine {
                 const avgRed = redSum / totalPixels;
                 const avgGreen = greenSum / totalPixels;
 
-                // Optical Finger Coverage Check: Finger over lens absorbs green and passes high red (Red > 55 & Red > 1.25 * Green)
-                const isFingerDetected = avgRed > 55 && avgRed > (avgGreen * 1.25);
+                // Calibrated Finger Detection: Finger covering lens absorbs green light and dominates red (avgRed > 40 & avgRed > avgGreen * 1.05)
+                const isFingerDetected = avgRed > 40 && avgRed > (avgGreen * 1.05);
 
                 if (isFingerDetected) {
                     redSamples.push(avgRed);
@@ -231,11 +231,10 @@ export class VitalScanEngine {
     }
 
     /**
-     * Analyzes PPG red & green intensity signals using detrending & refractory peak detection to calculate BPM and SpO2%
-     * Filters physiological Inter-Beat Intervals (300ms to 1500ms) to exclude finger-disconnection pauses.
+     * Analyzes PPG red & green intensity signals using detrending & adaptive std-dev peak detection
      */
     private static analyzePPGData(reds: number[], greens: number[], timestamps: number[]): PPGScanResult {
-        if (reds.length < 60) {
+        if (reds.length < 50) {
             return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 0, rawPeaks: [], peakIndices: [], fullWaveform: [] };
         }
 
@@ -256,19 +255,27 @@ export class VitalScanEngine {
             detrendedGreen.push(greens[i] - meanG);
         }
 
-        // Peak detection with refractory period (minimum 300ms between beats)
+        if (detrendedRed.length < 30) {
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 5, rawPeaks: [], peakIndices: [], fullWaveform: detrendedRed };
+        }
+
+        // Calculate standard deviation of detrendedRed for robust adaptive thresholding
+        const meanDetrended = detrendedRed.reduce((a, b) => a + b, 0) / detrendedRed.length;
+        const variance = detrendedRed.reduce((a, b) => a + Math.pow(b - meanDetrended, 2), 0) / detrendedRed.length;
+        const stdDev = Math.sqrt(variance);
+
+        // Adaptive peak threshold resistant to motion spikes
+        const adaptiveThreshold = Math.max(0.06, meanDetrended + 0.35 * stdDev);
+
         const peaks: number[] = [];
         const peakIndices: number[] = [];
-        let maxVal = Math.max(...detrendedRed);
-        let minVal = Math.min(...detrendedRed);
-        const threshold = (maxVal - minVal) * 0.28;
-
         let lastPeakTime = 0;
+
         for (let i = 1; i < detrendedRed.length - 1; i++) {
             const time = timestamps[i + 5];
             if (detrendedRed[i] > detrendedRed[i - 1] &&
                 detrendedRed[i] > detrendedRed[i + 1] &&
-                detrendedRed[i] > threshold &&
+                detrendedRed[i] > adaptiveThreshold &&
                 (time - lastPeakTime) > 300) {
                 peaks.push(time);
                 peakIndices.push(i);
@@ -280,7 +287,7 @@ export class VitalScanEngine {
             return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 15, rawPeaks: peaks, peakIndices: [], fullWaveform: detrendedRed };
         }
 
-        // Filter physiological IBIs (300ms <= IBI <= 1500ms) to exclude finger removal pauses
+        // Filter physiological IBIs (300ms <= IBI <= 1500ms)
         const ibis: number[] = [];
         for (let i = 1; i < peaks.length; i++) {
             const diff = peaks[i] - peaks[i - 1];
@@ -327,6 +334,8 @@ export class VitalScanEngine {
             validBeats++;
         }
 
+        const maxVal = Math.max(...detrendedRed);
+        const minVal = Math.min(...detrendedRed);
         const acRedAvg = validBeats > 0 ? redACSum / validBeats : (maxVal - minVal);
         const acGreenAvg = validBeats > 0 ? greenACSum / validBeats : 1;
 

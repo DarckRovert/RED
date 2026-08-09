@@ -375,7 +375,7 @@ export function VitalScanModal() {
                             boxShadow: isScanning ? 'none' : '0 4px 14px rgba(232,33,58,0.4)'
                         }}
                     >
-                        {isScanning ? "MEDICIÓN EN PROCESO..." : "⚡ ESCANEAR PULSO CARDIACO & SpO2 (10 SEG)"}
+                        {isScanning ? "MEDICIÓN EN PROCESO..." : "⚡ ESCANEAR PULSO CARDIACO & SpO2 (12 SEG)"}
                     </button>
                 </div>
 
