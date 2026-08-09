@@ -6,7 +6,7 @@
  * 2. Resection Triangulation (determines current position given bearings to 2 known landmarks)
  * 3. Distance & Bearing calculation (Haversine & Vincenty approximations)
  * 4. Geodesic Destination Point calculation (Direct Vincenty/Haversine geodesy)
- * 5. WGS84 GPS to UTM/MGRS coordinate conversion
+ * 5. WGS84 GPS to UTM/MGRS coordinate conversion (NATO Standard 6-digit Easting & 7-digit Northing)
  */
 
 export interface Landmark {
@@ -228,7 +228,7 @@ export class OffGridNavigationEngine {
     }
 
     /**
-     * Converts WGS84 GPS Lat/Lon into UTM Zone & Coordinates string (e.g., "18N 432500E 0482100N")
+     * Converts WGS84 GPS Lat/Lon into UTM Zone & Coordinates string with NATO standard 6-digit Easting & 7-digit Northing padding
      */
     public static gpsToUtm(lat: number, lon: number): string {
         const zone = Math.floor((lon + 180) / 6) + 1;
@@ -251,10 +251,13 @@ export class OffGridNavigationEngine {
             - (3 * e2 / 8 + 3 * e2 * e2 / 32) * Math.sin(2 * radLat)
             + (15 * e2 * e2 / 256) * Math.sin(4 * radLat));
 
-        const easting = Math.round(500000 + k0 * N * (A + (1 - T + C) * A * A * A / 6));
-        let northing = Math.round(k0 * (M + N * Math.tan(radLat) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24)));
-        if (lat < 0) northing += 10000000;
+        const eastingVal = Math.round(500000 + k0 * N * (A + (1 - T + C) * A * A * A / 6));
+        let northingVal = Math.round(k0 * (M + N * Math.tan(radLat) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A * A * A * A / 24)));
+        if (lat < 0) northingVal += 10000000;
 
-        return `${zone}${hemi} ${easting}E ${northing}N`;
+        const eastingPadded = String(eastingVal).padStart(6, '0');
+        const northingPadded = String(northingVal).padStart(7, '0');
+
+        return `${zone}${hemi} ${eastingPadded}E ${northingPadded}N`;
     }
 }

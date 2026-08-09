@@ -20,7 +20,7 @@ export function OffGridCompassModal() {
     // Dynamic Radar Scale: 500m, 1000m (1km), 2000m (2km), 5000m (5km)
     const [radarMaxDist, setRadarMaxDist] = useState<number>(2000);
 
-    // Resection Triangulation State
+    // Resection Triangulation State with Permanent Storage
     const [landmark1, setLandmark1] = useState<Landmark>({ id: "1", name: "Pico Norte", lat: 4.6097, lon: -74.0817 });
     const [bearing1, setBearing1] = useState<string>("45");
     const [landmark2, setLandmark2] = useState<Landmark>({ id: "2", name: "Torre Este", lat: 4.6150, lon: -74.0720 });
@@ -34,10 +34,22 @@ export function OffGridCompassModal() {
     const vecY = useRef<number>(0);
 
     useEffect(() => {
-        // Load stored waypoints
+        // Load stored waypoints & landmarks from localStorage
         try {
-            const saved = localStorage.getItem("red_offgrid_waypoints");
-            if (saved) setWaypoints(JSON.parse(saved));
+            const savedWps = localStorage.getItem("red_offgrid_waypoints");
+            if (savedWps) setWaypoints(JSON.parse(savedWps));
+
+            const savedLm1 = localStorage.getItem("red_offgrid_landmark1");
+            if (savedLm1) setLandmark1(JSON.parse(savedLm1));
+
+            const savedLm2 = localStorage.getItem("red_offgrid_landmark2");
+            if (savedLm2) setLandmark2(JSON.parse(savedLm2));
+
+            const savedB1 = localStorage.getItem("red_offgrid_bearing1");
+            if (savedB1) setBearing1(savedB1);
+
+            const savedB2 = localStorage.getItem("red_offgrid_bearing2");
+            if (savedB2) setBearing2(savedB2);
         } catch {}
 
         // Listen for device orientation with single listener registration & vector low-pass filter
@@ -214,29 +226,39 @@ export function OffGridCompassModal() {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Draw Triangulation Landmarks if userCoords is set
+        // Draw Triangulation Landmarks with Range Scaling (Solid inside range, hollow on outer bezel if beyond range)
         if (userCoords) {
             [landmark1, landmark2].forEach((lm, idx) => {
                 if (lm.lat !== 0 && lm.lon !== 0) {
                     const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, lm.lat, lm.lon);
                     const lmRad = (rel.bearingDegrees * Math.PI) / 180;
-                    const normDistRatio = Math.min(1.0, rel.distanceMeters / radarMaxDist);
+                    const isBeyondRange = rel.distanceMeters > radarMaxDist;
+                    const normDistRatio = isBeyondRange ? 1.0 : (rel.distanceMeters / radarMaxDist);
                     const distPx = normDistRatio * (radius - 32);
                     const lx = Math.sin(lmRad) * distPx;
                     const ly = -Math.cos(lmRad) * distPx;
 
-                    ctx.fillStyle = idx === 0 ? "#38BDF8" : "#A855F7";
+                    const color = idx === 0 ? "#38BDF8" : "#A855F7";
+                    ctx.strokeStyle = color;
+                    ctx.fillStyle = color;
+                    ctx.lineWidth = 1.5;
+
                     ctx.beginPath();
                     ctx.moveTo(lx, ly - 6);
                     ctx.lineTo(lx - 5, ly + 5);
                     ctx.lineTo(lx + 5, ly + 5);
                     ctx.closePath();
-                    ctx.fill();
+
+                    if (isBeyondRange) {
+                        ctx.stroke(); // Hollow triangle for targets out of active zoom range
+                    } else {
+                        ctx.fill(); // Solid triangle for in-range targets
+                    }
                 }
             });
         }
 
-        // Draw Waypoints on Compass Radar with live distance and bearing relative to current GPS
+        // Draw Waypoints on Compass Radar with Range Scaling
         waypoints.forEach(wp => {
             let liveBearing = wp.bearingDegrees;
             let liveDist = wp.distanceMeters;
@@ -248,18 +270,27 @@ export function OffGridCompassModal() {
             }
 
             const wpRad = (liveBearing * Math.PI) / 180;
-            const normDistRatio = Math.min(1.0, liveDist / radarMaxDist);
+            const isBeyondRange = liveDist > radarMaxDist;
+            const normDistRatio = isBeyondRange ? 1.0 : (liveDist / radarMaxDist);
             const distPx = normDistRatio * (radius - 32);
             const wx = Math.sin(wpRad) * distPx;
             const wy = -Math.cos(wpRad) * distPx;
 
+            ctx.strokeStyle = "#00E676";
             ctx.fillStyle = "#00E676";
-            ctx.shadowColor = "#00E676";
-            ctx.shadowBlur = 8;
+            ctx.lineWidth = 1.5;
+
             ctx.beginPath();
             ctx.arc(wx, wy, 5, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
+
+            if (isBeyondRange) {
+                ctx.stroke(); // Hollow circle on edge if beyond active zoom range
+            } else {
+                ctx.shadowColor = "#00E676";
+                ctx.shadowBlur = 8;
+                ctx.fill(); // Solid circle if in range
+                ctx.shadowBlur = 0;
+            }
         });
 
         ctx.restore();
@@ -274,6 +305,26 @@ export function OffGridCompassModal() {
         ctx.lineTo(cx + 12, cy);
         ctx.stroke();
     }, [heading, solarAzimuth, waypoints, userCoords, radarMaxDist, landmark1, landmark2]);
+
+    const updateLandmark1 = (newLm: Landmark) => {
+        setLandmark1(newLm);
+        try { localStorage.setItem("red_offgrid_landmark1", JSON.stringify(newLm)); } catch {}
+    };
+
+    const updateLandmark2 = (newLm: Landmark) => {
+        setLandmark2(newLm);
+        try { localStorage.setItem("red_offgrid_landmark2", JSON.stringify(newLm)); } catch {}
+    };
+
+    const updateBearing1 = (val: string) => {
+        setBearing1(val);
+        try { localStorage.setItem("red_offgrid_bearing1", val); } catch {}
+    };
+
+    const updateBearing2 = (val: string) => {
+        setBearing2(val);
+        try { localStorage.setItem("red_offgrid_bearing2", val); } catch {}
+    };
 
     const handleAddWaypoint = () => {
         if (!newWpName.trim()) return;
@@ -384,7 +435,7 @@ export function OffGridCompassModal() {
                 {/* Tactical Stats & UTM Coordinate Box */}
                 <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
                     <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#38BDF8', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>📍 Cuadrícula Táctica UTM</div>
-                    <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,230,118,0.3)', fontFamily: 'monospace', fontSize: '1rem', color: '#00E676', textAlign: 'center', fontWeight: 800, letterSpacing: '0.5px', overflowX: 'auto' }}>
+                    <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,230,118,0.3)', fontFamily: 'monospace', fontSize: '1.05rem', color: '#00E676', textAlign: 'center', fontWeight: 800, letterSpacing: '0.5px', overflowX: 'auto' }}>
                         {utmString}
                     </div>
                     {userCoords ? (
@@ -418,18 +469,18 @@ export function OffGridCompassModal() {
                             <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38BDF8' }}>📍 Punto 1 de Referencia</span>
                             {userCoords && (
                                 <button
-                                    onClick={() => setLandmark1({ ...landmark1, lat: userCoords.lat, lon: userCoords.lon })}
+                                    onClick={() => updateLandmark1({ ...landmark1, lat: userCoords.lat, lon: userCoords.lon })}
                                     style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
                                 >
                                     Usar GPS Actual
                                 </button>
                             )}
                         </div>
-                        <input value={landmark1.name} onChange={e => setLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Pico Norte)" />
+                        <input value={landmark1.name} onChange={e => updateLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Pico Norte)" />
                         <div style={{ display: 'flex', gap: '6px' }}>
-                            <input value={landmark1.lat} onChange={e => setLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 1" />
-                            <input value={landmark1.lon} onChange={e => setLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 1" />
-                            <input value={bearing1} onChange={e => setBearing1(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
+                            <input value={landmark1.lat} onChange={e => updateLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 1" />
+                            <input value={landmark1.lon} onChange={e => updateLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 1" />
+                            <input value={bearing1} onChange={e => updateBearing1(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
                         </div>
                     </div>
 
@@ -439,18 +490,18 @@ export function OffGridCompassModal() {
                             <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#A855F7' }}>📍 Punto 2 de Referencia</span>
                             {userCoords && (
                                 <button
-                                    onClick={() => setLandmark2({ ...landmark2, lat: userCoords.lat, lon: userCoords.lon })}
+                                    onClick={() => updateLandmark2({ ...landmark2, lat: userCoords.lat, lon: userCoords.lon })}
                                     style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
                                 >
                                     Usar GPS Actual
                                 </button>
                             )}
                         </div>
-                        <input value={landmark2.name} onChange={e => setLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Torre Este)" />
+                        <input value={landmark2.name} onChange={e => updateLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Torre Este)" />
                         <div style={{ display: 'flex', gap: '6px' }}>
-                            <input value={landmark2.lat} onChange={e => setLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 2" />
-                            <input value={landmark2.lon} onChange={e => setLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 2" />
-                            <input value={bearing2} onChange={e => setBearing2(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
+                            <input value={landmark2.lat} onChange={e => updateLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 2" />
+                            <input value={landmark2.lon} onChange={e => updateLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 2" />
+                            <input value={bearing2} onChange={e => updateBearing2(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
                         </div>
                     </div>
 
