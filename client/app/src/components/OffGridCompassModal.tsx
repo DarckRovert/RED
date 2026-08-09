@@ -34,16 +34,25 @@ export function OffGridCompassModal() {
     const vecY = useRef<number>(0);
 
     useEffect(() => {
+        let hasStoredLm1 = false;
+        let hasStoredLm2 = false;
+
         // Load stored waypoints & landmarks from localStorage
         try {
             const savedWps = localStorage.getItem("red_offgrid_waypoints");
             if (savedWps) setWaypoints(JSON.parse(savedWps));
 
             const savedLm1 = localStorage.getItem("red_offgrid_landmark1");
-            if (savedLm1) setLandmark1(JSON.parse(savedLm1));
+            if (savedLm1) {
+                setLandmark1(JSON.parse(savedLm1));
+                hasStoredLm1 = true;
+            }
 
             const savedLm2 = localStorage.getItem("red_offgrid_landmark2");
-            if (savedLm2) setLandmark2(JSON.parse(savedLm2));
+            if (savedLm2) {
+                setLandmark2(JSON.parse(savedLm2));
+                hasStoredLm2 = true;
+            }
 
             const savedB1 = localStorage.getItem("red_offgrid_bearing1");
             if (savedB1) setBearing1(savedB1);
@@ -112,13 +121,13 @@ export function OffGridCompassModal() {
 
                     // Dynamically set landmark defaults from real GPS if not saved yet
                     setLandmark1(prev => {
-                        if (prev.lat === 0 && prev.lon === 0 && !localStorage.getItem("red_offgrid_landmark1")) {
+                        if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm1) {
                             return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
                         }
                         return prev;
                     });
                     setLandmark2(prev => {
-                        if (prev.lat === 0 && prev.lon === 0 && !localStorage.getItem("red_offgrid_landmark2")) {
+                        if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm2) {
                             return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
                         }
                         return prev;
@@ -341,14 +350,28 @@ export function OffGridCompassModal() {
     };
 
     const handleAddWaypoint = () => {
-        if (!newWpName.trim()) return;
+        if (!newWpName.trim()) {
+            alert("⚠️ Por favor ingresa un nombre para el waypoint.");
+            return;
+        }
+
         if (!userCoords) {
             alert("⚠️ Esperando señal GPS o ubicación fija para determinar la posición base del waypoint.");
             return;
         }
 
-        const dist = parseFloat(newWpDist) || 100;
-        const brg = parseFloat(newWpBearing) || 0;
+        const dist = parseFloat(newWpDist);
+        const brg = parseFloat(newWpBearing);
+
+        if (isNaN(dist) || dist <= 0) {
+            alert("⚠️ Por favor ingresa una distancia válida mayor a 0 metros.");
+            return;
+        }
+
+        if (isNaN(brg) || brg < 0 || brg >= 360) {
+            alert("⚠️ Por favor ingresa un rumbo válido entre 0° y 360°.");
+            return;
+        }
         
         const target = OffGridNavigationEngine.calculateDestinationPoint(userCoords.lat, userCoords.lon, dist, brg);
 
@@ -382,6 +405,12 @@ export function OffGridCompassModal() {
 
         const b1 = parseFloat(bearing1);
         const b2 = parseFloat(bearing2);
+
+        if (isNaN(b1) || b1 < 0 || b1 >= 360 || isNaN(b2) || b2 < 0 || b2 >= 360) {
+            alert("⚠️ Por favor ingresa rumbos numéricos válidos entre 0° y 360° para ambos puntos.");
+            return;
+        }
+
         const res = OffGridNavigationEngine.calculateResection(landmark1, b1, landmark2, b2);
         if (res) {
             setTriangulatedPos(res);
