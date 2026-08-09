@@ -21,34 +21,70 @@ export function SurvivalBeaconModal() {
     const audioCtxRef = useRef<AudioContext | null>(null);
     const sirenOscRef = useRef<OscillatorNode | null>(null);
     const flashIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const beaconStreamRef = useRef<MediaStream | null>(null);
 
-    // Toggle Flash LED Morse SOS
+    // Complete Unmount Cleanup Hook
+    useEffect(() => {
+        return () => {
+            if (sirenOscRef.current) {
+                try { sirenOscRef.current.stop(); } catch {}
+                sirenOscRef.current = null;
+            }
+            if (flashIntervalRef.current) {
+                clearInterval(flashIntervalRef.current);
+                flashIntervalRef.current = null;
+            }
+            if (beaconStreamRef.current) {
+                beaconStreamRef.current.getTracks().forEach(t => t.stop());
+                beaconStreamRef.current = null;
+            }
+            SoundMeshEngine.stopListening();
+        };
+    }, []);
+
+    // Flash LED Morse SOS Beacon with persistent stream reference
     useEffect(() => {
         if (flashActive) {
             let step = 0;
             // Morse SOS sequence durations: . = 100ms, - = 300ms
             const morsePattern = [100, 100, 100, 300, 300, 300, 100, 100, 100, 600];
 
-            flashIntervalRef.current = setInterval(() => {
-                const dur = morsePattern[step % morsePattern.length];
-                step++;
+            // Request rear camera stream once for flash control
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && !beaconStreamRef.current) {
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(stream => {
+                    beaconStreamRef.current = stream;
+                }).catch(() => {});
+            }
 
-                // Toggle Torch via WebRTC Track constraints if available
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(stream => {
-                        const track = stream.getVideoTracks()[0];
-                        if (track) {
-                            track.applyConstraints({ advanced: [{ torch: step % 2 === 1 } as unknown as MediaTrackConstraintSet] }).catch(() => {});
-                        }
-                    }).catch(() => {});
+            flashIntervalRef.current = setInterval(() => {
+                step++;
+                const isTorchOn = step % 2 === 1;
+
+                if (beaconStreamRef.current) {
+                    const track = beaconStreamRef.current.getVideoTracks()[0];
+                    if (track) {
+                        track.applyConstraints({
+                            advanced: [{ torch: isTorchOn } as unknown as MediaTrackConstraintSet]
+                        }).catch(() => {});
+                    }
                 }
             }, 250);
         } else {
-            if (flashIntervalRef.current) clearInterval(flashIntervalRef.current);
+            if (flashIntervalRef.current) {
+                clearInterval(flashIntervalRef.current);
+                flashIntervalRef.current = null;
+            }
+            if (beaconStreamRef.current) {
+                beaconStreamRef.current.getTracks().forEach(t => t.stop());
+                beaconStreamRef.current = null;
+            }
         }
 
         return () => {
-            if (flashIntervalRef.current) clearInterval(flashIntervalRef.current);
+            if (flashIntervalRef.current) {
+                clearInterval(flashIntervalRef.current);
+                flashIntervalRef.current = null;
+            }
         };
     }, [flashActive]);
 
@@ -56,7 +92,7 @@ export function SurvivalBeaconModal() {
     const toggleSiren = () => {
         if (soundSirenActive) {
             if (sirenOscRef.current) {
-                sirenOscRef.current.stop();
+                try { sirenOscRef.current.stop(); } catch {}
                 sirenOscRef.current = null;
             }
             setSoundSirenActive(false);
@@ -136,7 +172,14 @@ export function SurvivalBeaconModal() {
                     </div>
                 </div>
                 <button onClick={() => {
-                    if (sirenOscRef.current) sirenOscRef.current.stop();
+                    if (sirenOscRef.current) {
+                        try { sirenOscRef.current.stop(); } catch {}
+                        sirenOscRef.current = null;
+                    }
+                    if (beaconStreamRef.current) {
+                        beaconStreamRef.current.getTracks().forEach(t => t.stop());
+                        beaconStreamRef.current = null;
+                    }
                     SoundMeshEngine.stopListening();
                     navigate('sidebar');
                 }} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>✕ Cerrar</button>

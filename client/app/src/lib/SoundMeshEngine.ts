@@ -1,9 +1,8 @@
 /**
  * SoundMeshEngine.ts — RED 100% Offline Ultrasonic Sound-Modem Engine
  * 
- * Encodes encrypted Noise XK payloads (32-128 bytes) into high-frequency FSK audio tones (18.5 kHz - 20.5 kHz)
- * emitted by the device speaker and decoded by nearby device microphones (5-15m range).
- * Useful when WiFi, Bluetooth, and Cellular radios are completely disabled or jammed.
+ * Encodes encrypted Noise XK payloads into high-frequency FSK audio tones (18.5 kHz - 20.5 kHz)
+ * emitted by the device speaker and decoded with symbol-timed FSK demodulation by nearby microphones.
  */
 
 export interface SoundMeshPacket {
@@ -21,7 +20,9 @@ export class SoundMeshEngine {
 
     private static audioCtx: AudioContext | null = null;
     private static isReceiving = false;
+    private static micStream: MediaStream | null = null;
     private static onPacketCallback: ((pkt: SoundMeshPacket) => void) | null = null;
+    private static sampleInterval: NodeJS.Timeout | null = null;
 
     private static getAudioContext(): AudioContext {
         if (!this.audioCtx) {
@@ -43,7 +44,7 @@ export class SoundMeshEngine {
             const encoder = new TextEncoder();
             const bytes = encoder.encode(payload);
 
-            // Convert bytes to bit array
+            // Convert bytes to bit array (8 bits per byte)
             const bits: number[] = [];
             for (let i = 0; i < bytes.length; i++) {
                 for (let bit = 7; bit >= 0; bit--) {
@@ -59,7 +60,7 @@ export class SoundMeshEngine {
             const gainPreamble = ctx.createGain();
             oscPreamble.type = 'sine';
             oscPreamble.frequency.setValueAtTime(this.FREQ_PREAMBLE, timeOffset);
-            gainPreamble.gain.setValueAtTime(0.3, timeOffset);
+            gainPreamble.gain.setValueAtTime(0.35, timeOffset);
             gainPreamble.gain.exponentialRampToValueAtTime(0.001, timeOffset + 0.2);
             oscPreamble.connect(gainPreamble);
             gainPreamble.connect(ctx.destination);
@@ -77,8 +78,8 @@ export class SoundMeshEngine {
 
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(freq, timeOffset);
-                gain.gain.setValueAtTime(0.25, timeOffset);
-                gain.gain.setValueAtTime(0.25, timeOffset + bitDurationSec - 0.005);
+                gain.gain.setValueAtTime(0.3, timeOffset);
+                gain.gain.setValueAtTime(0.3, timeOffset + bitDurationSec - 0.005);
                 gain.gain.exponentialRampToValueAtTime(0.001, timeOffset + bitDurationSec);
 
                 osc.connect(gain);
@@ -97,16 +98,16 @@ export class SoundMeshEngine {
     }
 
     /**
-     * Starts listening on microphone for incoming ultrasonic SoundMesh packets
+     * Starts listening on microphone for incoming ultrasonic SoundMesh packets using symbol-timed FSK demodulation
      */
     public static async startListening(onPacketReceived: (pkt: SoundMeshPacket) => void): Promise<boolean> {
         this.onPacketCallback = onPacketReceived;
         if (this.isReceiving) return true;
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
+            this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
             const ctx = this.getAudioContext();
-            const source = ctx.createMediaStreamSource(stream);
+            const source = ctx.createMediaStreamSource(this.micStream);
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
             source.connect(analyser);
@@ -120,69 +121,91 @@ export class SoundMeshEngine {
             const binMark = Math.round((this.FREQ_MARK_1 * analyser.fftSize) / sampleRate);
             const binSpace = Math.round((this.FREQ_SPACE_0 * analyser.fftSize) / sampleRate);
 
-            let receivingBits: number[] = [];
             let isDecoding = false;
-            let decodeTimer: NodeJS.Timeout | null = null;
+            let receivingBits: number[] = [];
+            let bitsExpected = 0;
 
-            const checkFrequency = () => {
+            const listenLoop = () => {
                 if (!this.isReceiving) return;
                 analyser.getFloatFrequencyData(dataArray);
 
                 const dbPreamble = dataArray[binPreamble] || -120;
-                const dbMark = dataArray[binMark] || -120;
-                const dbSpace = dataArray[binSpace] || -120;
 
-                // Detect preamble signal > -70 dB
+                // Detect preamble signal > -70 dB to synchronize symbol clock
                 if (!isDecoding && dbPreamble > -70) {
                     isDecoding = true;
                     receivingBits = [];
-                    if (decodeTimer) clearTimeout(decodeTimer);
+                    bitsExpected = 160; // Up to 20 bytes (160 bits)
 
-                    // Collect bits over duration
-                    decodeTimer = setTimeout(() => {
-                        isDecoding = false;
-                        if (receivingBits.length >= 8 && this.onPacketCallback) {
-                            // Reconstruct byte array from bit stream
-                            const bytes: number[] = [];
-                            for (let i = 0; i < receivingBits.length; i += 8) {
-                                let byteVal = 0;
-                                for (let b = 0; b < 8 && (i + b) < receivingBits.length; b++) {
-                                    byteVal = (byteVal << 1) | receivingBits[i + b];
+                    let sampledCount = 0;
+                    if (this.sampleInterval) clearInterval(this.sampleInterval);
+
+                    // Symbol-timed sampling every 40ms (matching transmitter bit clock)
+                    this.sampleInterval = setInterval(() => {
+                        if (!this.isReceiving || sampledCount >= bitsExpected) {
+                            if (this.sampleInterval) clearInterval(this.sampleInterval);
+                            this.sampleInterval = null;
+                            isDecoding = false;
+
+                            if (receivingBits.length >= 8 && this.onPacketCallback) {
+                                const bytes: number[] = [];
+                                for (let i = 0; i < receivingBits.length; i += 8) {
+                                    let byteVal = 0;
+                                    for (let b = 0; b < 8 && (i + b) < receivingBits.length; b++) {
+                                        byteVal = (byteVal << 1) | receivingBits[i + b];
+                                    }
+                                    if (byteVal > 0 && byteVal < 128) bytes.push(byteVal);
                                 }
-                                bytes.push(byteVal);
+
+                                if (bytes.length > 0) {
+                                    const decodedStr = new TextDecoder().decode(new Uint8Array(bytes));
+                                    this.onPacketCallback({
+                                        senderId: `sound-node-${Math.floor(Math.random() * 8999 + 1000)}`,
+                                        payloadHex: decodedStr,
+                                        timestamp: Date.now(),
+                                        rssiDb: Math.round(dbPreamble)
+                                    });
+                                }
                             }
-                            const decodedStr = new TextDecoder().decode(new Uint8Array(bytes));
-                            this.onPacketCallback({
-                                senderId: `sound-node-${Math.floor(Math.random() * 8999 + 1000)}`,
-                                payloadHex: decodedStr,
-                                timestamp: Date.now(),
-                                rssiDb: Math.round(dbPreamble)
-                            });
+                            return;
                         }
-                    }, 3000);
+
+                        analyser.getFloatFrequencyData(dataArray);
+                        const dbM = dataArray[binMark] || -120;
+                        const dbS = dataArray[binSpace] || -120;
+
+                        if (dbM >= dbS) {
+                            receivingBits.push(1);
+                        } else {
+                            receivingBits.push(0);
+                        }
+                        sampledCount++;
+                    }, this.BIT_DURATION_MS);
                 }
 
-                if (isDecoding) {
-                    if (dbMark > dbSpace && dbMark > -80) {
-                        receivingBits.push(1);
-                    } else if (dbSpace > dbMark && dbSpace > -80) {
-                        receivingBits.push(0);
-                    }
+                if (this.isReceiving) {
+                    requestAnimationFrame(listenLoop);
                 }
-
-                requestAnimationFrame(checkFrequency);
             };
 
-            requestAnimationFrame(checkFrequency);
+            requestAnimationFrame(listenLoop);
             return true;
         } catch (e) {
             console.error('[SoundMeshEngine] Listen error:', e);
-            this.isReceiving = false;
+            this.stopListening();
             return false;
         }
     }
 
     public static stopListening() {
         this.isReceiving = false;
+        if (this.sampleInterval) {
+            clearInterval(this.sampleInterval);
+            this.sampleInterval = null;
+        }
+        if (this.micStream) {
+            this.micStream.getTracks().forEach(t => t.stop());
+            this.micStream = null;
+        }
     }
 }
