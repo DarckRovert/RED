@@ -33,17 +33,20 @@ export function OffGridCompassModal() {
             if (saved) setWaypoints(JSON.parse(saved));
         } catch {}
 
-        // Listen for device orientation for geomagnetic compass
+        // Listen for device orientation for geomagnetic compass with exponential low-pass filter
         const handleOrientation = (e: DeviceOrientationEvent) => {
             let compass = e.alpha || 0;
-            // Handle iOS / Android webkitCompassHeading
             const webkitHeading = (e as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
             if (webkitHeading !== undefined) {
                 compass = webkitHeading;
             } else if (e.alpha !== null) {
                 compass = 360 - e.alpha;
             }
-            setHeading(Math.round(compass % 360));
+            const rawHeading = Math.round(compass % 360);
+            setHeading(prev => {
+                const diff = (rawHeading - prev + 540) % 360 - 180;
+                return Math.round((prev + diff * 0.35 + 360) % 360);
+            });
         };
 
         window.addEventListener("deviceorientationabsolute", handleOrientation, true);
@@ -60,7 +63,6 @@ export function OffGridCompassModal() {
                 const solar = OffGridNavigationEngine.calculateSolarAzimuth(lat, lon);
                 setSolarAzimuth(solar);
             }, () => {
-                // Fallback default coordinates if GPS unavailable
                 const lat = 4.6097;
                 const lon = -74.0817;
                 setUserCoords({ lat, lon });
@@ -169,6 +171,12 @@ export function OffGridCompassModal() {
         setNewWpName("");
     };
 
+    const handleDeleteWaypoint = (id: string) => {
+        const updated = waypoints.filter(w => w.id !== id);
+        setWaypoints(updated);
+        try { localStorage.setItem("red_offgrid_waypoints", JSON.stringify(updated)); } catch {}
+    };
+
     const handleCalculateTriangulation = () => {
         const b1 = parseFloat(bearing1);
         const b2 = parseFloat(bearing2);
@@ -239,13 +247,19 @@ export function OffGridCompassModal() {
                     <div style={{ fontSize: '0.75rem', color: '#AAA', marginBottom: '12px' }}>Alinea 2 puntos visibles de referencia para calcular tu posición sin GPS:</div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.8rem' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <input value={landmark1.name} onChange={e => setLandmark1({ ...landmark1, name: e.target.value })} style={{ flex: 1, padding: '6px 10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Punto 1" />
-                            <input value={bearing1} onChange={e => setBearing1(e.target.value)} style={{ width: '80px', padding: '6px 10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Rumbo °" />
+                        {/* Landmark 1 Inputs */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <input value={landmark1.name} onChange={e => setLandmark1({ ...landmark1, name: e.target.value })} style={{ flex: 1, minWidth: '90px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Punto 1" />
+                            <input value={landmark1.lat} onChange={e => setLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ width: '75px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Lat 1" />
+                            <input value={landmark1.lon} onChange={e => setLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ width: '75px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Lon 1" />
+                            <input value={bearing1} onChange={e => setBearing1(e.target.value)} style={{ width: '60px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Rumbo°" />
                         </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <input value={landmark2.name} onChange={e => setLandmark2({ ...landmark2, name: e.target.value })} style={{ flex: 1, padding: '6px 10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Punto 2" />
-                            <input value={bearing2} onChange={e => setBearing2(e.target.value)} style={{ width: '80px', padding: '6px 10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Rumbo °" />
+                        {/* Landmark 2 Inputs */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <input value={landmark2.name} onChange={e => setLandmark2({ ...landmark2, name: e.target.value })} style={{ flex: 1, minWidth: '90px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Punto 2" />
+                            <input value={landmark2.lat} onChange={e => setLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ width: '75px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Lat 2" />
+                            <input value={landmark2.lon} onChange={e => setLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ width: '75px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Lon 2" />
+                            <input value={bearing2} onChange={e => setBearing2(e.target.value)} style={{ width: '60px', padding: '6px 8px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px' }} placeholder="Rumbo°" />
                         </div>
 
                         <button onClick={handleCalculateTriangulation} style={{ padding: '8px 12px', background: '#38BDF8', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 800, cursor: 'pointer', marginTop: '4px' }}>
@@ -272,9 +286,12 @@ export function OffGridCompassModal() {
 
                     <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {waypoints.map(wp => (
-                            <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                            <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
                                 <span>📍 <strong>{wp.name}</strong></span>
-                                <span style={{ color: '#38BDF8' }}>{wp.bearingDegrees}° • {wp.distanceMeters}m</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ color: '#38BDF8' }}>{wp.bearingDegrees}° • {wp.distanceMeters}m</span>
+                                    <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
+                                </div>
                             </div>
                         ))}
                     </div>
