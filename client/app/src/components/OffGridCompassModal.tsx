@@ -17,7 +17,7 @@ export function OffGridCompassModal() {
     const [newWpDist, setNewWpDist] = useState("500");
     const [newWpBearing, setNewWpBearing] = useState("45");
 
-    // Dynamic Radar Scale: 500m, 1000m (1km), 5000m (5km), 20000m (20km)
+    // Dynamic Radar Scale: 500m, 1000m (1km), 2000m (2km), 5000m (5km)
     const [radarMaxDist, setRadarMaxDist] = useState<number>(2000);
 
     // Resection Triangulation State
@@ -196,6 +196,28 @@ export function OffGridCompassModal() {
         ctx.fill();
         ctx.shadowBlur = 0;
 
+        // Draw Triangulation Landmarks if userCoords is set
+        if (userCoords) {
+            [landmark1, landmark2].forEach((lm, idx) => {
+                if (lm.lat !== 0 && lm.lon !== 0) {
+                    const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, lm.lat, lm.lon);
+                    const lmRad = (rel.bearingDegrees * Math.PI) / 180;
+                    const normDistRatio = Math.min(1.0, rel.distanceMeters / radarMaxDist);
+                    const distPx = normDistRatio * (radius - 32);
+                    const lx = Math.sin(lmRad) * distPx;
+                    const ly = -Math.cos(lmRad) * distPx;
+
+                    ctx.fillStyle = idx === 0 ? "#38BDF8" : "#A855F7";
+                    ctx.beginPath();
+                    ctx.moveTo(lx, ly - 6);
+                    ctx.lineTo(lx - 5, ly + 5);
+                    ctx.lineTo(lx + 5, ly + 5);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            });
+        }
+
         // Draw Waypoints on Compass Radar with live distance and bearing relative to current GPS
         waypoints.forEach(wp => {
             let liveBearing = wp.bearingDegrees;
@@ -213,8 +235,8 @@ export function OffGridCompassModal() {
             const wx = Math.sin(wpRad) * distPx;
             const wy = -Math.cos(wpRad) * distPx;
 
-            ctx.fillStyle = "#38BDF8";
-            ctx.shadowColor = "#38BDF8";
+            ctx.fillStyle = "#00E676";
+            ctx.shadowColor = "#00E676";
             ctx.shadowBlur = 8;
             ctx.beginPath();
             ctx.arc(wx, wy, 5, 0, Math.PI * 2);
@@ -233,7 +255,7 @@ export function OffGridCompassModal() {
         ctx.moveTo(cx - 12, cy);
         ctx.lineTo(cx + 12, cy);
         ctx.stroke();
-    }, [heading, solarAzimuth, waypoints, userCoords, radarMaxDist]);
+    }, [heading, solarAzimuth, waypoints, userCoords, radarMaxDist, landmark1, landmark2]);
 
     const handleAddWaypoint = () => {
         if (!newWpName.trim()) return;
@@ -273,7 +295,7 @@ export function OffGridCompassModal() {
         if (res) {
             setTriangulatedPos(res);
         } else {
-            alert("No se pudo calcular intersección: las líneas de rumbo son paralelas o apuntan en sentidos opuestos.");
+            alert("No se pudo calcular intersección: los rumbos no intersectan hacia adelante o son paralelos.");
         }
     };
 
@@ -399,7 +421,7 @@ export function OffGridCompassModal() {
                         {/* Landmark 2 Card */}
                         <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38BDF8' }}>📍 Punto 2 de Referencia</span>
+                                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#A855F7' }}>📍 Punto 2 de Referencia</span>
                                 {userCoords && (
                                     <button
                                         onClick={() => setLandmark2({ ...landmark2, lat: userCoords.lat, lon: userCoords.lon })}
@@ -470,7 +492,7 @@ export function OffGridCompassModal() {
                                         <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
                                             <span>📍 <strong>{wp.name}</strong></span>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <span style={{ color: '#38BDF8', fontWeight: 700, fontFamily: 'monospace' }}>{liveBrg}° • {liveDst}m</span>
+                                                <span style={{ color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>{liveBrg}° • {liveDst}m</span>
                                                 <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.95rem' }}>🗑️</button>
                                             </div>
                                         </div>
