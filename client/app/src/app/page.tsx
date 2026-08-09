@@ -39,6 +39,8 @@ const LiveStreamViewer      = dynamic(() => import("../components/LiveStreamView
 const OffGridCompassModal   = dynamic(() => import("../components/OffGridCompassModal").then(m => ({ default: m.OffGridCompassModal })), { ssr: false, loading: () => <AppLoader /> });
 const VitalScanModal       = dynamic(() => import("../components/VitalScanModal").then(m => ({ default: m.VitalScanModal })),       { ssr: false, loading: () => <AppLoader /> });
 const SurvivalBeaconModal  = dynamic(() => import("../components/SurvivalBeaconModal").then(m => ({ default: m.SurvivalBeaconModal })),  { ssr: false, loading: () => <AppLoader /> });
+const RfSpectrumModal      = dynamic(() => import("../components/RfSpectrumModal").then(m => ({ default: m.RfSpectrumModal })),      { ssr: false, loading: () => <AppLoader /> });
+const StegoVaultModal      = dynamic(() => import("../components/StegoVaultModal").then(m => ({ default: m.StegoVaultModal })),      { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 // FIX 1.4: SOSEmergencyBanner must be a persistent overlay — mounted ONCE while authenticated,
@@ -273,6 +275,8 @@ export default function AppRouter() {
       case 'offGridCompass':  return <OffGridCompassModal />;
       case 'vitalScan':       return <VitalScanModal />;
       case 'survivalBeacon':  return <SurvivalBeaconModal />;
+      case 'rfSpectrum':      return <RfSpectrumModal />;
+      case 'stegoVault':      return <StegoVaultModal />;
       case 'sos':             return <Sidebar />;
       default:                return <Sidebar />;
     }

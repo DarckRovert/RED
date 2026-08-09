@@ -111,6 +111,8 @@ export default function Sidebar() {
     ];
 
     const menuItems = [
+        { icon: '🛡️', label: 'Analizador Espectro RF', action: 'rfSpectrum' },
+        { icon: '🖼️', label: 'Bóveda Esteganográfica', action: 'stegoVault' },
         { icon: '🧭', label: 'Radar Topográfico Off-Grid', action: 'offGridCompass' },
         { icon: '🫀', label: 'Signos Vitales & Triaje PPG', action: 'vitalScan' },
         { icon: '🚨', label: 'Baliza Ultrasonido SOS', action: 'survivalBeacon' },

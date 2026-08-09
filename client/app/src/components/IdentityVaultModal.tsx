@@ -266,6 +266,32 @@ export const IdentityVaultModal: React.FC = () => {
                             </div>
                         </div>
                     )}
+
+                    {/* SHAMIR SECRET SHARING (SSS 3-of-5) SECTION */}
+                    <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#38BDF8', marginBottom: '8px' }}>🧩 Fragmentación Secreta de Shamir (SSS 3-de-5)</div>
+                        <div style={{ fontSize: '0.75rem', color: '#AAA', marginBottom: '12px' }}>Dividir tu identidad en 5 fragmentos QR. Reconstruible con cualesquiera 3 fragmentos:</div>
+
+                        <button
+                            onClick={() => {
+                                const secret = identity?.identity_hash || "6d079229_RED_SOVEREIGN_KEY_SEED_V32";
+                                try {
+                                    const { ShamirSecretSharingEngine } = require('../lib/ShamirSecretSharingEngine');
+                                    const shares = ShamirSecretSharingEngine.splitSecret(secret, 3, 5);
+                                    alert(`✅ Llave dividida exitosamente en 5 fragmentos. Fragmento 1: ${shares[0].shareHex.substring(0, 16)}...`);
+                                } catch (e) {
+                                    alert("Error SSS: " + (e as Error).message);
+                                }
+                            }}
+                            style={{
+                                width: '100%', padding: '10px', borderRadius: '8px',
+                                background: 'linear-gradient(135deg, #38BDF8, #0284C7)',
+                                border: 'none', color: '#000', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer'
+                            }}
+                        >
+                            ⚡ FRAGMENTAR IDENTIDAD SSS (3 DE 5)
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

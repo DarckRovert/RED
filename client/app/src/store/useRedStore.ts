@@ -38,7 +38,7 @@ let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'guardian' | 'compass' | 'channels' | 'sos' | 'walkie' | 'weather' | 'idVault' | 'proximity' | 'canvas' | 'ecoMesh' | 'proximitySettings' | 'aiCopilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon';
+export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'guardian' | 'compass' | 'channels' | 'sos' | 'walkie' | 'weather' | 'idVault' | 'proximity' | 'canvas' | 'ecoMesh' | 'proximitySettings' | 'aiCopilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault';
 
 
 interface RedStore {
