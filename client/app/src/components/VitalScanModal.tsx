@@ -173,6 +173,7 @@ export function VitalScanModal() {
     const alt = Math.max(0, parseFloat(altitudeMeters) || 0);
     const chlorineMultiplier = isTurbidWater ? 4 : 2;
     const chlorineDrops = Math.ceil(liters * chlorineMultiplier);
+    const dropsText = chlorineDrops === 1 ? "1 gota" : `${chlorineDrops} gotas`;
     const boilingTempC = (100 - (alt / 300)).toFixed(1);
     const requiredBoilingMins = alt > 2000 ? 3 : 1;
 
@@ -304,7 +305,7 @@ export function VitalScanModal() {
 
                                         <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span>Tiempo Llenado Capilar (Llenado Uncheal):</span>
+                                                <span>Tiempo Llenado Capilar (Llenado Ungueal):</span>
                                                 <strong style={{ color: capRefillSec > 2 ? '#E8213A' : '#00E676', fontSize: '0.9rem' }}>{capRefillSec} seg</strong>
                                             </div>
                                             <input type="range" min={0.5} max={4} step={0.5} value={capRefillSec} onChange={e => setCapRefillSec(parseFloat(e.target.value))} style={{ width: '100%' }} />
@@ -366,7 +367,9 @@ export function VitalScanModal() {
                                     <div key={rec.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', borderLeft: `4px solid ${catColor}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
                                         <div>
                                             <strong style={{ color: catColor }}>[{rec.category}] {rec.victimLabel}</strong>
-                                            <div style={{ fontSize: '0.7rem', color: '#AAA' }}>{rec.notes} {rec.bpm ? `• ${rec.bpm} BPM` : ''}</div>
+                                            <div style={{ fontSize: '0.7rem', color: '#AAA' }}>
+                                                {rec.notes} {rec.bpm ? `• ${rec.bpm} BPM` : ''} {rec.spo2 ? `• ${rec.spo2}% SpO2` : ''}
+                                            </div>
                                         </div>
                                         <button onClick={() => handleDeleteRecord(rec.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
                                     </div>
@@ -398,7 +401,7 @@ export function VitalScanModal() {
                         </label>
 
                         <div style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#00E676', fontSize: '0.78rem' }}>
-                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{chlorineDrops} gotas</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes de consumir.
+                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{dropsText}</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes de consumir.
                         </div>
 
                         <div style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#FFB300', fontSize: '0.78rem' }}>

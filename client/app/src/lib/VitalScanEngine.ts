@@ -230,7 +230,7 @@ export class VitalScanEngine {
 
     /**
      * Analyzes PPG red & green intensity signals using detrending & refractory peak detection to calculate BPM and SpO2%
-     * Uses peak-to-trough beat averages for SpO2 calculation to eliminate motion artifact distortion.
+     * Filters physiological Inter-Beat Intervals (300ms to 1500ms) to exclude finger-disconnection pauses.
      */
     private static analyzePPGData(reds: number[], greens: number[], timestamps: number[]): PPGScanResult {
         if (reds.length < 60) {
@@ -278,10 +278,19 @@ export class VitalScanEngine {
             return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 15, rawPeaks: peaks };
         }
 
+        // Filter physiological IBIs (300ms <= IBI <= 1500ms) to exclude finger removal pauses
         const ibis: number[] = [];
         for (let i = 1; i < peaks.length; i++) {
-            ibis.push(peaks[i] - peaks[i - 1]);
+            const diff = peaks[i] - peaks[i - 1];
+            if (diff >= 300 && diff <= 1500) {
+                ibis.push(diff);
+            }
         }
+
+        if (ibis.length === 0) {
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 20, rawPeaks: peaks };
+        }
+
         const meanIbiMs = ibis.reduce((a, b) => a + b, 0) / ibis.length;
         let calculatedBpm = Math.round(60000 / meanIbiMs);
         calculatedBpm = Math.max(45, Math.min(180, calculatedBpm));
