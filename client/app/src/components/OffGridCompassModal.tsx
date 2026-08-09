@@ -33,6 +33,9 @@ export function OffGridCompassModal() {
     const vecX = useRef<number>(0);
     const vecY = useRef<number>(0);
 
+    // One-time initialization guard to prevent GPS watch ticks from overwriting user typing input
+    const hasInitializedLandmarks = useRef<boolean>(false);
+
     useEffect(() => {
         let hasStoredLm1 = false;
         let hasStoredLm2 = false;
@@ -119,19 +122,22 @@ export function OffGridCompassModal() {
                     setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
                     try { localStorage.setItem("red_last_known_gps", JSON.stringify(coords)); } catch {}
 
-                    // Dynamically set landmark defaults from real GPS if not saved yet
-                    setLandmark1(prev => {
-                        if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm1) {
-                            return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
-                        }
-                        return prev;
-                    });
-                    setLandmark2(prev => {
-                        if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm2) {
-                            return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
-                        }
-                        return prev;
-                    });
+                    // Dynamically set landmark defaults ONCE on first GPS fix to avoid overwriting user typing input
+                    if (!hasInitializedLandmarks.current) {
+                        hasInitializedLandmarks.current = true;
+                        setLandmark1(prev => {
+                            if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm1) {
+                                return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
+                            }
+                            return prev;
+                        });
+                        setLandmark2(prev => {
+                            if (prev.lat === 0 && prev.lon === 0 && !hasStoredLm2) {
+                                return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
+                            }
+                            return prev;
+                        });
+                    }
                 },
                 (err) => {
                     console.warn("[OffGridCompass] GPS watch warning:", err.message);
