@@ -53,6 +53,11 @@ export function VitalScanModal() {
                 { enableHighAccuracy: true, timeout: 5000 }
             );
         }
+
+        // Cleanup camera stream and Flash LED on unmount
+        return () => {
+            VitalScanEngine.stopPPGScan();
+        };
     }, []);
 
     // Draw Real-time PPG Pulse Waveform on Canvas with Dynamic Automatic Gain Control (AGC)
@@ -393,7 +398,7 @@ export function VitalScanModal() {
                         </label>
 
                         <div style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#00E676', fontSize: '0.78rem' }}>
-                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{chlorineDrops} gotas</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes of consumir.
+                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{chlorineDrops} gotas</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes de consumir.
                         </div>
 
                         <div style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#FFB300', fontSize: '0.78rem' }}>
