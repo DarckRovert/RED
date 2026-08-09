@@ -12,6 +12,8 @@ export interface PPGScanResult {
     signalQuality: 'excelente' | 'buena' | 'débil' | 'insuficiente';
     confidencePercent: number;
     rawPeaks: number[];
+    peakIndices: number[];
+    fullWaveform: number[];
 }
 
 export interface StartTriageResult {
@@ -234,7 +236,7 @@ export class VitalScanEngine {
      */
     private static analyzePPGData(reds: number[], greens: number[], timestamps: number[]): PPGScanResult {
         if (reds.length < 60) {
-            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 0, rawPeaks: [] };
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 0, rawPeaks: [], peakIndices: [], fullWaveform: [] };
         }
 
         // Detrend signal by subtracting local moving average (window size = 11)
@@ -275,7 +277,7 @@ export class VitalScanEngine {
         }
 
         if (peaks.length < 3) {
-            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 15, rawPeaks: peaks };
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 15, rawPeaks: peaks, peakIndices: [], fullWaveform: detrendedRed };
         }
 
         // Filter physiological IBIs (300ms <= IBI <= 1500ms) to exclude finger removal pauses
@@ -288,7 +290,7 @@ export class VitalScanEngine {
         }
 
         if (ibis.length === 0) {
-            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 20, rawPeaks: peaks };
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 20, rawPeaks: peaks, peakIndices: [], fullWaveform: detrendedRed };
         }
 
         const meanIbiMs = ibis.reduce((a, b) => a + b, 0) / ibis.length;
@@ -340,7 +342,9 @@ export class VitalScanEngine {
             spo2: calculatedSpo2,
             signalQuality: quality,
             confidencePercent: confidence,
-            rawPeaks: peaks
+            rawPeaks: peaks,
+            peakIndices,
+            fullWaveform: detrendedRed
         };
     }
 }

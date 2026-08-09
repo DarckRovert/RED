@@ -54,13 +54,58 @@ export function VitalScanModal() {
             );
         }
 
+        // Initial draw of static medical ECG grid on canvas
+        drawMedicalGrid();
+
         // Cleanup camera stream and Flash LED on unmount
         return () => {
             VitalScanEngine.stopPPGScan();
         };
     }, []);
 
-    // Draw Real-time PPG Pulse Waveform on Canvas with Dynamic Automatic Gain Control (AGC)
+    // Render ICU Patient Monitor Medical Grid (Rejilla Médica ECG)
+    const drawMedicalGrid = () => {
+        const canvas = waveCanvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const w = canvas.width;
+        const h = canvas.height;
+
+        ctx.fillStyle = "rgba(4, 10, 20, 0.95)";
+        ctx.fillRect(0, 0, w, h);
+
+        // Minor grid (every 8px)
+        ctx.strokeStyle = "rgba(0, 230, 118, 0.07)";
+        ctx.lineWidth = 0.5;
+        for (let x = 0; x < w; x += 8) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 8) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // Major grid (every 32px)
+        ctx.strokeStyle = "rgba(0, 230, 118, 0.18)";
+        ctx.lineWidth = 1;
+        for (let x = 0; x < w; x += 32) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        }
+        for (let y = 0; y < h; y += 32) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+        }
+
+        // Baseline zero line
+        ctx.strokeStyle = "rgba(232, 33, 58, 0.35)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+    };
+
+    // Draw Real-time PPG Pulse Waveform on Canvas with Medical Grid & Automatic Gain Control
     const drawWaveform = (waveSample: number) => {
         waveBuffer.current.push(waveSample);
         if (waveBuffer.current.length > 100) waveBuffer.current.shift();
@@ -70,28 +115,22 @@ export function VitalScanModal() {
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
+        drawMedicalGrid();
+
         const w = canvas.width;
         const h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
-
-        ctx.strokeStyle = "rgba(232, 33, 58, 0.3)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, h / 2);
-        ctx.lineTo(w, h / 2);
-        ctx.stroke();
+        const buf = waveBuffer.current;
 
         // Calculate dynamic Automatic Gain Control (AGC) peak-to-peak amplitude
-        const buf = waveBuffer.current;
         let maxVal = Math.max(...buf);
         let minVal = Math.min(...buf);
         const p2p = Math.max(0.1, maxVal - minVal);
         const gain = (h * 0.35) / (p2p / 2); // Scale wave to occupy 70% of canvas height
 
-        ctx.strokeStyle = "#E8213A";
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = "#E8213A";
-        ctx.shadowBlur = 8;
+        ctx.strokeStyle = "#FF1744";
+        ctx.lineWidth = 2.2;
+        ctx.shadowColor = "#FF1744";
+        ctx.shadowBlur = 10;
         ctx.beginPath();
 
         const step = w / (buf.length - 1);
@@ -104,6 +143,70 @@ export function VitalScanModal() {
 
         ctx.stroke();
         ctx.shadowBlur = 0;
+
+        // Draw live sweep cursor
+        const currentX = (buf.length - 1) * step;
+        const currentY = h / 2 - buf[buf.length - 1] * gain;
+        ctx.fillStyle = "#00E676";
+        ctx.beginPath();
+        ctx.arc(currentX, currentY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    };
+
+    // Draw Full Post-Scan Captured PPG Signal Waveform with Detected Beat Markers (🔴)
+    const drawResultWaveform = (result: PPGScanResult) => {
+        const canvas = waveCanvasRef.current;
+        if (!canvas || !result.fullWaveform || result.fullWaveform.length === 0) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        drawMedicalGrid();
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const wave = result.fullWaveform;
+
+        let maxVal = Math.max(...wave);
+        let minVal = Math.min(...wave);
+        const p2p = Math.max(0.1, maxVal - minVal);
+        const gain = (h * 0.35) / (p2p / 2);
+
+        ctx.strokeStyle = "#00E676";
+        ctx.lineWidth = 2;
+        ctx.shadowColor = "#00E676";
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+
+        const step = w / (wave.length - 1);
+        wave.forEach((val, i) => {
+            const x = i * step;
+            const y = h / 2 - val * gain;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Render detected beat markers (🔴) at peak indices
+        if (result.peakIndices && result.peakIndices.length > 0) {
+            result.peakIndices.forEach((peakIdx) => {
+                const px = peakIdx * step;
+                const py = h / 2 - wave[peakIdx] * gain;
+
+                // Red pulse aura
+                ctx.fillStyle = "rgba(232, 33, 58, 0.4)";
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Core beat dot
+                ctx.fillStyle = "#E8213A";
+                ctx.beginPath();
+                ctx.arc(px, py, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
     };
 
     const handleStartPPG = async () => {
@@ -122,6 +225,7 @@ export function VitalScanModal() {
             (result) => {
                 setIsScanning(false);
                 setScanResult(result);
+                drawResultWaveform(result);
             }
         );
 
@@ -227,10 +331,19 @@ export function VitalScanModal() {
                         )}
                     </div>
 
-                    {/* Live PPG BVP Cardiac Waveform Canvas */}
-                    <div style={{ width: '100%', marginTop: '14px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '8px', border: '1px solid rgba(255,255,255,0.08)', boxSizing: 'border-box' }}>
-                        <div style={{ fontSize: '0.68rem', color: '#AAA', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Onda de Pulso Pulmonar (BVP) en Tiempo Real</div>
-                        <canvas ref={waveCanvasRef} width={280} height={45} style={{ width: '100%', height: '45px', display: 'block' }} />
+                    {/* Real-Time & Post-Scan ECG/PPG Patient Monitor Graph Canvas */}
+                    <div style={{ width: '100%', marginTop: '14px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '8px', border: '1px solid rgba(0,230,118,0.2)', boxSizing: 'border-box' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '0.68rem', color: '#00E676', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>
+                                {isScanning ? "📡 ONDA DE PULSO CAPILAR (PPG EN VIVO)" : scanResult && scanResult.bpm > 0 ? "📈 REGISTRO CARDIACO COMPLETO CON PICOS DETECTADOS (🔴)" : "📟 MONITOR CARDIACO PACIENTE — REJILLA ECG"}
+                            </div>
+                            {scanResult && scanResult.peakIndices && scanResult.peakIndices.length > 0 && (
+                                <div style={{ fontSize: '0.66rem', color: '#E8213A', fontWeight: 800 }}>
+                                    {scanResult.peakIndices.length} latidos detectados
+                                </div>
+                            )}
+                        </div>
+                        <canvas ref={waveCanvasRef} width={300} height={55} style={{ width: '100%', height: '55px', display: 'block', borderRadius: '6px' }} />
                     </div>
 
                     {isScanning && !isFingerDetected && (
