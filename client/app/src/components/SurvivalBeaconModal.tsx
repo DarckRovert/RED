@@ -5,7 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { SoundMeshEngine, SoundMeshPacket } from "../lib/SoundMeshEngine";
 
 export function SurvivalBeaconModal() {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
 
     const [flashActive, setFlashActive] = useState(false);
     const [soundSirenActive, setSoundSirenActive] = useState(false);
@@ -13,7 +13,8 @@ export function SurvivalBeaconModal() {
     const [screenColor, setScreenColor] = useState<"#E8213A" | "#00E676">("#E8213A");
 
     // SoundMesh Ultrasonic Modem states
-    const [soundMeshMsg, setSoundMeshMsg] = useState("RED_SOS_NODE_6D079229");
+    const localHash = (identity?.identity_hash || "LOCAL_NODE").substring(0, 8).toUpperCase();
+    const [soundMeshMsg, setSoundMeshMsg] = useState(`${localHash}:RED_SOS_ACTIVE`);
     const [isTransmitting, setIsTransmitting] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [receivedPackets, setReceivedPackets] = useState<SoundMeshPacket[]>([]);
@@ -46,8 +47,6 @@ export function SurvivalBeaconModal() {
     useEffect(() => {
         if (flashActive) {
             let step = 0;
-            // Morse SOS sequence durations: . = 100ms, - = 300ms
-            const morsePattern = [100, 100, 100, 300, 300, 300, 100, 100, 100, 600];
 
             // Request rear camera stream once for flash control
             if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && !beaconStreamRef.current) {

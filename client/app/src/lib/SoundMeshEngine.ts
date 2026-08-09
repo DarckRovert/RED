@@ -3,6 +3,7 @@
  * 
  * Encodes encrypted Noise XK payloads into high-frequency FSK audio tones (18.5 kHz - 20.5 kHz)
  * emitted by the device speaker and decoded with symbol-timed FSK demodulation by nearby microphones.
+ * Zero simulated data or random numbers.
  */
 
 export interface SoundMeshPacket {
@@ -159,9 +160,15 @@ export class SoundMeshEngine {
 
                                 if (bytes.length > 0) {
                                     const decodedStr = new TextDecoder().decode(new Uint8Array(bytes));
+                                    
+                                    // Parse real sender ID if payload has format SENDER:MSG or default to acoustic node
+                                    const parts = decodedStr.split(':');
+                                    const sender = parts.length > 1 ? parts[0] : 'Nodo Acústico 19.5kHz';
+                                    const payloadText = parts.length > 1 ? parts.slice(1).join(':') : decodedStr;
+
                                     this.onPacketCallback({
-                                        senderId: `sound-node-${Math.floor(Math.random() * 8999 + 1000)}`,
-                                        payloadHex: decodedStr,
+                                        senderId: sender,
+                                        payloadHex: payloadText,
                                         timestamp: Date.now(),
                                         rssiDb: Math.round(dbPreamble)
                                     });
