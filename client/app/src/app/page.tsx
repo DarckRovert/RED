@@ -36,6 +36,9 @@ const AICopilotModal        = dynamic(() => import("../components/AICopilotModal
 const NearbyDevicesPanel    = dynamic(() => import("../components/NearbyDevicesPanel"),    { ssr: false, loading: () => <AppLoader /> });
 const LiveStreamBroadcaster = dynamic(() => import("../components/LiveStreamBroadcaster").then(m => ({ default: m.LiveStreamBroadcaster })), { ssr: false, loading: () => <AppLoader /> });
 const LiveStreamViewer      = dynamic(() => import("../components/LiveStreamViewer").then(m => ({ default: m.LiveStreamViewer })),      { ssr: false, loading: () => <AppLoader /> });
+const OffGridCompassModal   = dynamic(() => import("../components/OffGridCompassModal").then(m => ({ default: m.OffGridCompassModal })), { ssr: false, loading: () => <AppLoader /> });
+const VitalScanModal       = dynamic(() => import("../components/VitalScanModal").then(m => ({ default: m.VitalScanModal })),       { ssr: false, loading: () => <AppLoader /> });
+const SurvivalBeaconModal  = dynamic(() => import("../components/SurvivalBeaconModal").then(m => ({ default: m.SurvivalBeaconModal })),  { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 // FIX 1.4: SOSEmergencyBanner must be a persistent overlay — mounted ONCE while authenticated,
@@ -267,6 +270,9 @@ export default function AppRouter() {
       case 'liveStream':      return activeLiveStreamId
                                 ? <LiveStreamViewer streamId={activeLiveStreamId} onClose={() => navigate('sidebar')} />
                                 : <LiveStreamBroadcaster onClose={() => navigate('sidebar')} />;
+      case 'offGridCompass':  return <OffGridCompassModal />;
+      case 'vitalScan':       return <VitalScanModal />;
+      case 'survivalBeacon':  return <SurvivalBeaconModal />;
       case 'sos':             return <Sidebar />;
       default:                return <Sidebar />;
     }

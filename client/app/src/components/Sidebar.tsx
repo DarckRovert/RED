@@ -103,14 +103,17 @@ export default function Sidebar() {
 
     const quickActions = [
         { icon: '📺', label: 'LIVE TikTok', action: 'liveStream', color: '#FF0050' },
-        { icon: '📢', label: 'Difusión',    action: 'broadcast',  color: '#E8213A' },
-        { icon: '🧭', label: 'Brújula',     action: 'compass',    color: '#38bdf8' },
+        { icon: '🧭', label: 'Radar Off-Grid', action: 'offGridCompass', color: '#00E676' },
+        { icon: '🫀', label: 'Signos Vitales', action: 'vitalScan', color: '#E8213A' },
+        { icon: '🚨', label: 'Baliza SOS',  action: 'survivalBeacon', color: '#FF9800' },
         { icon: '📻', label: 'Canales',     action: 'channels',   color: '#c084fc' },
         { icon: '🛡️', label: 'Guardian',    action: 'guardian',   color: '#63b3ed' },
-        { icon: '🟠', label: 'AMBER',       action: 'amber',      color: '#ff8c00' },
     ];
 
     const menuItems = [
+        { icon: '🧭', label: 'Radar Topográfico Off-Grid', action: 'offGridCompass' },
+        { icon: '🫀', label: 'Signos Vitales & Triaje PPG', action: 'vitalScan' },
+        { icon: '🚨', label: 'Baliza Ultrasonido SOS', action: 'survivalBeacon' },
         { icon: '👤', label: 'Nuevo contacto',      action: 'contacts'  },
         { icon: '🤖', label: 'Copiloto IA Offline',  action: 'aiCopilot' },
         { icon: '👋', label: 'Proximidad Zero-Touch', action: 'proximity' },
@@ -119,9 +122,7 @@ export default function Sidebar() {
         { icon: '🎙️', label: 'Walkie-Talkie Mesh',  action: 'walkie'    },
         { icon: '🌤️', label: 'Clima & Barómetro',   action: 'weather'   },
         { icon: '🪪', label: 'Bóveda de Identidad', action: 'idVault'   },
-        { icon: '🧭', label: 'Brújula Táctica P2P', action: 'compass'   },
         { icon: '📻', label: 'Canales Mesh Locales', action: 'channels' },
-        { icon: '🚨', label: 'Baliza SOS Auxilio',   action: 'sos'      },
         { icon: '📢', label: 'Difusión privada',     action: 'broadcast' },
         { icon: '🛡️', label: 'Guardian IA (Moderación)', action: 'guardian' },
         { icon: '🟠', label: 'Sistema Alerta AMBER', action: 'amber'     },
