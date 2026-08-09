@@ -5,7 +5,8 @@
  * 1. Solar & Stellar Azimuth calculation (True North determination without GPS/Geomagnetic compass)
  * 2. Resection Triangulation (determines current position given bearings to 2 or 3 known landmarks)
  * 3. Distance & Bearing calculation (Haversine & Vincenty approximations)
- * 4. WGS84 GPS to UTM/MGRS coordinate conversion
+ * 4. Geodesic Destination Point calculation (Direct Vincenty/Haversine geodesy)
+ * 5. WGS84 GPS to UTM/MGRS coordinate conversion
  */
 
 export interface Landmark {
@@ -65,8 +66,39 @@ export class OffGridNavigationEngine {
     }
 
     /**
-     * Computes Solar Azimuth (degrees True North) and Elevation based on UTC time and approximate location.
-     * Allows determining True North with a stick shadow or sun position offline.
+     * Calculates target GPS coordinates given starting point (lat, lon), distance (meters), and bearing (degrees)
+     */
+    public static calculateDestinationPoint(
+        lat: number, lon: number,
+        distanceMeters: number, bearingDegrees: number
+    ): { lat: number; lon: number } {
+        const R = 6371000;
+        const d = distanceMeters / R;
+        const brg = (bearingDegrees * Math.PI) / 180;
+        const lat1 = (lat * Math.PI) / 180;
+        const lon1 = (lon * Math.PI) / 180;
+
+        const lat2 = Math.asin(
+            Math.sin(lat1) * Math.cos(d) +
+            Math.cos(lat1) * Math.sin(d) * Math.cos(brg)
+        );
+        const lon2 = lon1 + Math.atan2(
+            Math.sin(brg) * Math.sin(d) * Math.cos(lat1),
+            Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+        );
+
+        const resLat = (lat2 * 180) / Math.PI;
+        const resLon = ((lon2 * 180) / Math.PI + 540) % 360 - 180;
+
+        return {
+            lat: Math.round(resLat * 100000) / 100000,
+            lon: Math.round(resLon * 100000) / 100000
+        };
+    }
+
+    /**
+     * Computes Solar Azimuth (degrees True North) and Elevation based on UTC time and location.
+     * Normalizes hour angle H to [-pi, pi] to ensure exact solar geometry across all longitudes.
      */
     public static calculateSolarAzimuth(
         lat: number,
@@ -103,19 +135,20 @@ export class OffGridNavigationEngine {
         const lmst = (gmst * 15 + lon) % 360;
         const radLmst = (lmst * Math.PI) / 180;
 
-        // Hour angle
+        // Hour angle normalized to [-pi, pi]
         const ra = Math.atan2(Math.cos(radE) * Math.sin(radL), Math.cos(radL));
-        const ha = radLmst - ra;
+        const rawHa = radLmst - ra;
+        const ha = Math.atan2(Math.sin(rawHa), Math.cos(rawHa));
 
         // Elevation angle
         const sinElev = Math.sin(radLat) * Math.sin(dec) + Math.cos(radLat) * Math.cos(dec) * Math.cos(ha);
-        const elevationDegrees = (Math.asin(sinElev) * 180) / Math.PI;
+        const elevationDegrees = (Math.asin(Math.max(-1, Math.min(1, sinElev))) * 180) / Math.PI;
 
         // Azimuth angle
         const cosAz = (Math.sin(dec) - Math.sin(radLat) * sinElev) / (Math.cos(radLat) * Math.sqrt(Math.max(0.0001, 1 - sinElev * sinElev)));
         let azimuth = (Math.acos(Math.max(-1, Math.min(1, cosAz))) * 180) / Math.PI;
 
-        if (Math.sin(ha) > 0) {
+        if (ha > 0) {
             azimuth = 360 - azimuth;
         }
 
@@ -134,14 +167,12 @@ export class OffGridNavigationEngine {
         p2: Landmark,
         bearing2Degrees: number
     ): TriangulatedPosition | null {
-        // Convert bearings from observer to landmarks into back-bearings (from landmarks to observer)
         const backBearing1 = (bearing1Degrees + 180) % 360;
         const backBearing2 = (bearing2Degrees + 180) % 360;
 
         const radBB1 = (backBearing1 * Math.PI) / 180;
         const radBB2 = (backBearing2 * Math.PI) / 180;
 
-        // Convert lat/lon to Mercator planar approximation for local intersection
         const lat1 = (p1.lat * Math.PI) / 180;
         const lat2 = (p2.lat * Math.PI) / 180;
         const lon1 = (p1.lon * Math.PI) / 180;
@@ -172,7 +203,7 @@ export class OffGridNavigationEngine {
         return {
             lat: Math.round(latObs * 100000) / 100000,
             lon: Math.round(lonObs * 100000) / 100000,
-            accuracyMeters: 25
+            accuracyMeters: 15
         };
     }
 

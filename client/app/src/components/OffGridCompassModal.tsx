@@ -52,28 +52,43 @@ export function OffGridCompassModal() {
         window.addEventListener("deviceorientationabsolute", handleOrientation, true);
         window.addEventListener("deviceorientation", handleOrientation, true);
 
-        // Get GPS location
+        // Restore last known GPS coordinates if available
+        try {
+            const cachedGps = localStorage.getItem("red_last_known_gps");
+            if (cachedGps) {
+                const parsed = JSON.parse(cachedGps);
+                setUserCoords(parsed);
+                setUtmString(OffGridNavigationEngine.gpsToUtm(parsed.lat, parsed.lon));
+                setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(parsed.lat, parsed.lon));
+            }
+        } catch {}
+
+        // Continuous real-time GPS tracking via watchPosition
+        let watchId: number | null = null;
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition((pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                setUserCoords({ lat, lon });
-                setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));
-                
-                const solar = OffGridNavigationEngine.calculateSolarAzimuth(lat, lon);
-                setSolarAzimuth(solar);
-            }, () => {
-                const lat = 4.6097;
-                const lon = -74.0817;
-                setUserCoords({ lat, lon });
-                setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));
-                setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
-            });
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    const coords = { lat, lon };
+                    setUserCoords(coords);
+                    setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));
+                    setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
+                    try { localStorage.setItem("red_last_known_gps", JSON.stringify(coords)); } catch {}
+                },
+                (err) => {
+                    console.warn("[OffGridCompass] GPS watch error:", err.message);
+                },
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+            );
         }
 
         return () => {
             window.removeEventListener("deviceorientationabsolute", handleOrientation);
             window.removeEventListener("deviceorientation", handleOrientation);
+            if (watchId !== null && navigator.geolocation) {
+                navigator.geolocation.clearWatch(watchId);
+            }
         };
     }, []);
 
@@ -124,16 +139,25 @@ export function OffGridCompassModal() {
         ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
         ctx.fill();
 
-        // Draw Waypoints on Compass Radar
+        // Draw Waypoints on Compass Radar with live distance and bearing relative to current GPS
         waypoints.forEach(wp => {
-            const wpRad = (wp.bearingDegrees * Math.PI) / 180;
-            const distPx = Math.min(radius - 35, (wp.distanceMeters / 2000) * (radius - 35));
+            let liveBearing = wp.bearingDegrees;
+            let liveDist = wp.distanceMeters;
+
+            if (userCoords && (wp.lat !== 0 || wp.lon !== 0)) {
+                const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
+                liveBearing = rel.bearingDegrees;
+                liveDist = rel.distanceMeters;
+            }
+
+            const wpRad = (liveBearing * Math.PI) / 180;
+            const distPx = Math.min(radius - 35, (liveDist / 2000) * (radius - 35));
             const wx = Math.sin(wpRad) * distPx;
             const wy = -Math.cos(wpRad) * distPx;
 
             ctx.fillStyle = "#38BDF8";
             ctx.beginPath();
-            ctx.arc(wx, wy, 4, 0, Math.PI * 2);
+            ctx.arc(wx, wy, 5, 0, Math.PI * 2);
             ctx.fill();
         });
 
@@ -148,18 +172,23 @@ export function OffGridCompassModal() {
         ctx.moveTo(cx - 12, cy);
         ctx.lineTo(cx + 12, cy);
         ctx.stroke();
-    }, [heading, solarAzimuth, waypoints]);
+    }, [heading, solarAzimuth, waypoints, userCoords]);
 
     const handleAddWaypoint = () => {
         if (!newWpName.trim()) return;
         const dist = parseFloat(newWpDist) || 100;
         const brg = parseFloat(newWpBearing) || 0;
         
+        // Calculate true geodesic target lat/lon using direct geodesic formula
+        const startLat = userCoords ? userCoords.lat : 4.6097;
+        const startLon = userCoords ? userCoords.lon : -74.0817;
+        const target = OffGridNavigationEngine.calculateDestinationPoint(startLat, startLon, dist, brg);
+
         const wp: Waypoint = {
             id: Date.now().toString(),
             name: newWpName.trim(),
-            lat: userCoords ? userCoords.lat : 0,
-            lon: userCoords ? userCoords.lon : 0,
+            lat: target.lat,
+            lon: target.lon,
             bearingDegrees: brg,
             distanceMeters: dist,
             createdAt: Date.now()
@@ -285,15 +314,26 @@ export function OffGridCompassModal() {
                     </div>
 
                     <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {waypoints.map(wp => (
-                            <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
-                                <span>📍 <strong>{wp.name}</strong></span>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ color: '#38BDF8' }}>{wp.bearingDegrees}° • {wp.distanceMeters}m</span>
-                                    <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
+                        {waypoints.map(wp => {
+                            let liveBrg = wp.bearingDegrees;
+                            let liveDst = wp.distanceMeters;
+
+                            if (userCoords && (wp.lat !== 0 || wp.lon !== 0)) {
+                                const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
+                                liveBrg = rel.bearingDegrees;
+                                liveDst = rel.distanceMeters;
+                            }
+
+                            return (
+                                <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                                    <span>📍 <strong>{wp.name}</strong></span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ color: '#38BDF8' }}>{liveBrg}° • {liveDst}m</span>
+                                        <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </div>
