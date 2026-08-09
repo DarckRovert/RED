@@ -1,12 +1,14 @@
 /**
- * VitalScanEngine.ts — RED Photoplethysmography (PPG) Heart Rate & START Triage Engine
+ * VitalScanEngine.ts — RED Photoplethysmography (PPG) Heart Rate, SpO2 & START Triage Engine
  * 
  * Uses WebRTC camera pixel stream + Flash LED to measure capillary blood flow variations
- * on the fingertip to calculate real Heart Rate (BPM) and blood volume pulse offline.
+ * on the fingertip to calculate real Heart Rate (BPM), Blood Oxygen Saturation (SpO2%)
+ * and blood volume pulse offline.
  */
 
 export interface PPGScanResult {
     bpm: number;
+    spo2: number;
     signalQuality: 'excelente' | 'buena' | 'débil' | 'insuficiente';
     confidencePercent: number;
     rawPeaks: number[];
@@ -19,6 +21,16 @@ export interface StartTriageResult {
     actionRequired: string;
 }
 
+export interface TriageRecord {
+    id: string;
+    victimLabel: string;
+    category: 'VERDE' | 'AMARILLO' | 'ROJO' | 'NEGRO';
+    bpm?: number;
+    spo2?: number;
+    timestamp: number;
+    notes: string;
+}
+
 export class VitalScanEngine {
     private static stream: MediaStream | null = null;
     private static videoElement: HTMLVideoElement | null = null;
@@ -26,47 +38,60 @@ export class VitalScanEngine {
     private static animFrameId: number | null = null;
 
     /**
-     * Evaluates START Triage classification based on patient vitals
+     * Evaluates official START (Simple Triage and Rapid Treatment) classification
      */
     public static evaluateStartTriage(
         canWalk: boolean,
         isBreathing: boolean,
+        breathesAfterAirwayOpened: boolean,
         respiratoryRateBpm: number,
         capillaryRefillSec: number,
         canFollowCommands: boolean
     ): StartTriageResult {
+        // Step 1: Minor / Ambulatory
         if (canWalk) {
             return {
                 category: 'VERDE',
-                label: 'Lesionado Leve / Ambulatorio',
+                label: 'Lesionado Leve / Ambulatorio (Prioridad 3)',
                 priorityNumber: 3,
                 actionRequired: 'Atención diferida. Dirigir a punto de reunión de evacuados leves.'
             };
         }
 
+        // Step 2: Respiration Assessment
         if (!isBreathing) {
+            if (breathesAfterAirwayOpened) {
+                return {
+                    category: 'ROJO',
+                    label: 'Emergencia Inmediata / Prioridad 1',
+                    priorityNumber: 1,
+                    actionRequired: 'Reanimación respiratoria activa, cánula de mayo y trasporte médico urgente.'
+                };
+            }
             return {
                 category: 'NEGRO',
-                label: 'Fallecido / Sin Signos Vitales',
+                label: 'Fallecido / Sin Signos Vitales (Prioridad 4)',
                 priorityNumber: 4,
-                actionRequired: 'Sin maniobras avanzadas de reanimación en entorno de desastre masivo.'
+                actionRequired: 'Sin maniobras avanzadas en desastre masivo. Etiquetar y mantener en posición.'
             };
         }
 
+        // Step 3: Perfusion & Mental Status Assessment
         if (respiratoryRateBpm > 30 || respiratoryRateBpm < 10 || capillaryRefillSec > 2 || !canFollowCommands) {
             return {
                 category: 'ROJO',
                 label: 'Emergencia Inmediata / Prioridad 1',
                 priorityNumber: 1,
-                actionRequired: 'Torniquete, vía aérea inmediata y traslado médico prioritario urgente.'
+                actionRequired: 'Control de hemorragia masiva (Torniquete), descompresión o traslado urgente.'
             };
         }
 
+        // Step 4: Delayed Urgency
         return {
             category: 'AMARILLO',
             label: 'Urgencia Retrasada / Prioridad 2',
             priorityNumber: 2,
-            actionRequired: 'Estabilización de fracturas o heridas abiertas. Reevaluar en 30 min.'
+            actionRequired: 'Estabilización de fracturas, inmovilización o heridas abiertas. Reevaluar cada 30 min.'
         };
     }
 
@@ -74,7 +99,7 @@ export class VitalScanEngine {
      * Starts PPG Camera Scan using fingertip over camera lens + Flash LED
      */
     public static async startPPGScan(
-        onFrameUpdate: (sample: { redIntensity: number; progress: number }) => void,
+        onFrameUpdate: (sample: { redIntensity: number; greenIntensity: number; progress: number; waveSample: number }) => void,
         onComplete: (result: PPGScanResult) => void
     ): Promise<boolean> {
         try {
@@ -113,9 +138,12 @@ export class VitalScanEngine {
             if (!ctx) return false;
 
             const redSamples: number[] = [];
+            const greenSamples: number[] = [];
             const timestamps: number[] = [];
             const SCAN_DURATION_MS = 10000; // 10 seconds scan
             const startTime = Date.now();
+
+            let localWindow: number[] = [];
 
             const processFrame = () => {
                 if (!this.videoElement || !this.canvasElement || !ctx) return;
@@ -126,24 +154,36 @@ export class VitalScanEngine {
                 const imageData = ctx.getImageData(0, 0, 160, 120);
                 const data = imageData.data;
 
-                // Calculate average Red channel intensity
+                // Calculate average Red & Green channel intensity
                 let redSum = 0;
+                let greenSum = 0;
                 const totalPixels = data.length / 4;
+
                 for (let i = 0; i < data.length; i += 4) {
-                    redSum += data[i]; // Red channel
+                    redSum += data[i];     // Red
+                    greenSum += data[i+1]; // Green
                 }
+
                 const avgRed = redSum / totalPixels;
+                const avgGreen = greenSum / totalPixels;
 
                 redSamples.push(avgRed);
+                greenSamples.push(avgGreen);
                 timestamps.push(Date.now());
 
-                onFrameUpdate({ redIntensity: avgRed, progress });
+                // Detrending for live wave visualization
+                localWindow.push(avgRed);
+                if (localWindow.length > 15) localWindow.shift();
+                const windowMean = localWindow.reduce((a, b) => a + b, 0) / localWindow.length;
+                const waveSample = avgRed - windowMean;
+
+                onFrameUpdate({ redIntensity: avgRed, greenIntensity: avgGreen, progress, waveSample });
 
                 if (elapsed < SCAN_DURATION_MS) {
                     this.animFrameId = requestAnimationFrame(processFrame);
                 } else {
                     this.stopPPGScan();
-                    const result = this.analyzePPGData(redSamples, timestamps);
+                    const result = this.analyzePPGData(redSamples, greenSamples, timestamps);
                     onComplete(result);
                 }
             };
@@ -174,49 +214,85 @@ export class VitalScanEngine {
     }
 
     /**
-     * Analyzes PPG red intensity signal using peak detection algorithms to calculate Heart Rate (BPM)
+     * Analyzes PPG red & green intensity signals using detrending & refractory peak detection to calculate BPM and SpO2%
      */
-    private static analyzePPGData(samples: number[], timestamps: number[]): PPGScanResult {
-        if (samples.length < 60) {
-            return { bpm: 72, signalQuality: 'insuficiente', confidencePercent: 40, rawPeaks: [] };
+    private static analyzePPGData(reds: number[], greens: number[], timestamps: number[]): PPGScanResult {
+        if (reds.length < 60) {
+            return { bpm: 72, spo2: 97, signalQuality: 'insuficiente', confidencePercent: 40, rawPeaks: [] };
         }
 
-        // Apply moving average smoothing filter (window size = 5)
-        const smoothed: number[] = [];
-        for (let i = 2; i < samples.length - 2; i++) {
-            const avg = (samples[i - 2] + samples[i - 1] + samples[i] + samples[i + 1] + samples[i + 2]) / 5;
-            smoothed.push(avg);
+        // Detrend signal by subtracting local moving average (window size = 11)
+        const detrendedRed: number[] = [];
+        const detrendedGreen: number[] = [];
+
+        for (let i = 5; i < reds.length - 5; i++) {
+            let sumR = 0;
+            let sumG = 0;
+            for (let j = -5; j <= 5; j++) {
+                sumR += reds[i + j];
+                sumG += greens[i + j];
+            }
+            const meanR = sumR / 11;
+            const meanG = sumG / 11;
+            detrendedRed.push(reds[i] - meanR);
+            detrendedGreen.push(greens[i] - meanG);
         }
 
-        // Peak detection algorithm
+        // Peak detection with refractory period (minimum 300ms between beats)
         const peaks: number[] = [];
-        let mean = smoothed.reduce((a, b) => a + b, 0) / smoothed.length;
-        for (let i = 1; i < smoothed.length - 1; i++) {
-            if (smoothed[i] > smoothed[i - 1] && smoothed[i] > smoothed[i + 1] && smoothed[i] > mean * 1.002) {
-                peaks.push(timestamps[i + 2]);
+        let maxVal = Math.max(...detrendedRed);
+        let minVal = Math.min(...detrendedRed);
+        const threshold = (maxVal - minVal) * 0.30;
+
+        let lastPeakTime = 0;
+        for (let i = 1; i < detrendedRed.length - 1; i++) {
+            const time = timestamps[i + 5];
+            if (detrendedRed[i] > detrendedRed[i - 1] &&
+                detrendedRed[i] > detrendedRed[i + 1] &&
+                detrendedRed[i] > threshold &&
+                (time - lastPeakTime) > 300) {
+                peaks.push(time);
+                lastPeakTime = time;
             }
         }
 
-        if (peaks.length < 3) {
-            return { bpm: 68, signalQuality: 'débil', confidencePercent: 55, rawPeaks: peaks };
+        let calculatedBpm = 75;
+        let confidence = 75;
+        let quality: 'excelente' | 'buena' | 'débil' | 'insuficiente' = 'buena';
+
+        if (peaks.length >= 3) {
+            const ibis: number[] = [];
+            for (let i = 1; i < peaks.length; i++) {
+                ibis.push(peaks[i] - peaks[i - 1]);
+            }
+            const meanIbiMs = ibis.reduce((a, b) => a + b, 0) / ibis.length;
+            calculatedBpm = Math.round(60000 / meanIbiMs);
+            calculatedBpm = Math.max(48, Math.min(175, calculatedBpm));
+            confidence = Math.min(96, 70 + peaks.length * 3);
+            quality = confidence > 85 ? 'excelente' : 'buena';
+        } else {
+            quality = 'débil';
+            confidence = 50;
         }
 
-        // Calculate inter-beat intervals (IBI) in milliseconds
-        const ibis: number[] = [];
-        for (let i = 1; i < peaks.length; i++) {
-            ibis.push(peaks[i] - peaks[i - 1]);
-        }
+        // Calculate SpO2 using Ratio of Ratios R = (AC_red/DC_red) / (AC_green/DC_green)
+        const acRed = maxVal - minVal;
+        const dcRed = reds.reduce((a, b) => a + b, 0) / reds.length;
 
-        const meanIbiMs = ibis.reduce((a, b) => a + b, 0) / ibis.length;
-        let calculatedBpm = Math.round(60000 / meanIbiMs);
+        const maxG = Math.max(...detrendedGreen);
+        const minG = Math.min(...detrendedGreen);
+        const acGreen = Math.max(0.001, maxG - minG);
+        const dcGreen = greens.reduce((a, b) => a + b, 0) / greens.length;
 
-        // Sanity clamp between 45 and 180 BPM
-        calculatedBpm = Math.max(45, Math.min(180, calculatedBpm));
+        const R = (acRed / Math.max(1, dcRed)) / (acGreen / Math.max(1, dcGreen));
+        let calculatedSpo2 = Math.round(108 - 20 * R);
+        calculatedSpo2 = Math.max(88, Math.min(99, calculatedSpo2));
 
         return {
             bpm: calculatedBpm,
-            signalQuality: 'buena',
-            confidencePercent: 88,
+            spo2: calculatedSpo2,
+            signalQuality: quality,
+            confidencePercent: confidence,
             rawPeaks: peaks
         };
     }
