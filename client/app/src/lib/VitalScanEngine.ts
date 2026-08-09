@@ -3,7 +3,7 @@
  * 
  * Uses WebRTC camera pixel stream + Flash LED to measure capillary blood flow variations
  * on the fingertip to calculate real Heart Rate (BPM), Blood Oxygen Saturation (SpO2%)
- * and blood volume pulse offline.
+ * and blood volume pulse offline with zero simulated fallbacks.
  */
 
 export interface PPGScanResult {
@@ -215,10 +215,11 @@ export class VitalScanEngine {
 
     /**
      * Analyzes PPG red & green intensity signals using detrending & refractory peak detection to calculate BPM and SpO2%
+     * Zero simulated fallbacks: Returns bpm: 0 and signalQuality: 'insuficiente' if finger was removed or signal is noisy.
      */
     private static analyzePPGData(reds: number[], greens: number[], timestamps: number[]): PPGScanResult {
         if (reds.length < 60) {
-            return { bpm: 72, spo2: 97, signalQuality: 'insuficiente', confidencePercent: 40, rawPeaks: [] };
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 0, rawPeaks: [] };
         }
 
         // Detrend signal by subtracting local moving average (window size = 11)
@@ -256,24 +257,19 @@ export class VitalScanEngine {
             }
         }
 
-        let calculatedBpm = 75;
-        let confidence = 75;
-        let quality: 'excelente' | 'buena' | 'débil' | 'insuficiente' = 'buena';
-
-        if (peaks.length >= 3) {
-            const ibis: number[] = [];
-            for (let i = 1; i < peaks.length; i++) {
-                ibis.push(peaks[i] - peaks[i - 1]);
-            }
-            const meanIbiMs = ibis.reduce((a, b) => a + b, 0) / ibis.length;
-            calculatedBpm = Math.round(60000 / meanIbiMs);
-            calculatedBpm = Math.max(48, Math.min(175, calculatedBpm));
-            confidence = Math.min(96, 70 + peaks.length * 3);
-            quality = confidence > 85 ? 'excelente' : 'buena';
-        } else {
-            quality = 'débil';
-            confidence = 50;
+        if (peaks.length < 3) {
+            return { bpm: 0, spo2: 0, signalQuality: 'insuficiente', confidencePercent: 15, rawPeaks: peaks };
         }
+
+        const ibis: number[] = [];
+        for (let i = 1; i < peaks.length; i++) {
+            ibis.push(peaks[i] - peaks[i - 1]);
+        }
+        const meanIbiMs = ibis.reduce((a, b) => a + b, 0) / ibis.length;
+        let calculatedBpm = Math.round(60000 / meanIbiMs);
+        calculatedBpm = Math.max(45, Math.min(180, calculatedBpm));
+        const confidence = Math.min(96, 70 + peaks.length * 3);
+        const quality: 'excelente' | 'buena' | 'débil' | 'insuficiente' = confidence > 85 ? 'excelente' : 'buena';
 
         // Calculate SpO2 using Ratio of Ratios R = (AC_red/DC_red) / (AC_green/DC_green)
         const acRed = maxVal - minVal;

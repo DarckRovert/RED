@@ -31,7 +31,7 @@ export function VitalScanModal() {
 
     // Water purification calculator states
     const [waterLiters, setWaterLiters] = useState("2");
-    const [altitudeMeters, setAltitudeMeters] = useState("1500");
+    const [altitudeMeters, setAltitudeMeters] = useState("0");
     const [isTurbidWater, setIsTurbidWater] = useState(false);
 
     useEffect(() => {
@@ -39,6 +39,19 @@ export function VitalScanModal() {
             const savedTriage = localStorage.getItem("red_triage_records");
             if (savedTriage) setTriageRecords(JSON.parse(savedTriage));
         } catch {}
+
+        // Read real altitude from device GPS if available
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    if (pos.coords.altitude !== null && pos.coords.altitude !== undefined) {
+                        setAltitudeMeters(Math.round(pos.coords.altitude).toString());
+                    }
+                },
+                () => {},
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
     }, []);
 
     // Draw Real-time PPG Pulse Waveform on Canvas
@@ -122,8 +135,8 @@ export function VitalScanModal() {
             id: Date.now().toString(),
             victimLabel: label,
             category: triageResult.category,
-            bpm: scanResult ? scanResult.bpm : undefined,
-            spo2: scanResult ? scanResult.spo2 : undefined,
+            bpm: (scanResult && scanResult.bpm > 0) ? scanResult.bpm : undefined,
+            spo2: (scanResult && scanResult.spo2 > 0) ? scanResult.spo2 : undefined,
             timestamp: Date.now(),
             notes: triageResult.label
         };
@@ -183,12 +196,14 @@ export function VitalScanModal() {
                                 <div style={{ fontSize: '1.8rem', animation: 'pulse 0.8s infinite' }}>❤️</div>
                                 <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#E8213A', marginTop: 4 }}>{(scanProgress * 100).toFixed(0)}%</div>
                             </>
-                        ) : scanResult ? (
+                        ) : scanResult && scanResult.bpm > 0 ? (
                             <>
                                 <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace', lineHeight: 1 }}>{scanResult.bpm}</div>
                                 <div style={{ fontSize: '0.68rem', color: '#AAA', fontWeight: 700 }}>BPM (Frecuencia)</div>
                                 <div style={{ fontSize: '0.85rem', color: '#38BDF8', fontWeight: 800, marginTop: 4 }}>{scanResult.spo2}% SpO2</div>
                             </>
+                        ) : scanResult && scanResult.bpm === 0 ? (
+                            <div style={{ fontSize: '0.7rem', color: '#FFB300', textAlign: 'center', padding: '10px' }}>⚠️ Señal Débil / Repetir</div>
                         ) : (
                             <div style={{ fontSize: '2rem' }}>☝️</div>
                         )}
@@ -199,6 +214,12 @@ export function VitalScanModal() {
                         <div style={{ fontSize: '0.68rem', color: '#AAA', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Onda de Pulso Pulmonar (BVP) en Tiempo Real</div>
                         <canvas ref={waveCanvasRef} width={280} height={45} style={{ width: '100%', height: '45px', display: 'block' }} />
                     </div>
+
+                    {scanResult && scanResult.bpm === 0 && (
+                        <div style={{ marginTop: '10px', fontSize: '0.74rem', color: '#FFB300', background: 'rgba(255,179,0,0.1)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,179,0,0.3)', textAlign: 'center' }}>
+                            ⚠️ Señal óptica insuficiente. Mantén el dedo firme sobre la cámara sin presionar fuerte y enciende la luz ambiente si no hay Flash.
+                        </div>
+                    )}
 
                     {isScanning && (
                         <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
@@ -297,7 +318,7 @@ export function VitalScanModal() {
                                         value={victimLabelInput}
                                         onChange={e => setVictimLabelInput(e.target.value)}
                                         style={{ flex: 1, minWidth: 0, padding: '7px 10px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }}
-                                        placeholder="Etiqueta / Nombre vídima (opcional)"
+                                        placeholder="Etiqueta / Nombre víctima (opcional)"
                                     />
                                     <button
                                         onClick={handleSaveTriageRecord}
