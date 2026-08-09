@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { queryAICopilot, translateTextAI, summarizeChannelAI, CopilotResponse } from '../lib/api';
 import { LocalAIEngine } from '../lib/localAiEngine';
@@ -21,6 +21,15 @@ export const AICopilotModal: React.FC = () => {
             source: 'RED Local Neural Engine'
         }
     ]);
+
+    const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+    // Auto-scroll on new message
+    useEffect(() => {
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [messages, loading]);
 
     const handleSend = async (queryText?: string) => {
         const text = queryText || input;
@@ -164,7 +173,7 @@ export const AICopilotModal: React.FC = () => {
             </div>
 
             {/* CHAT MESSAGES BODY */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {messages.map((m, idx) => (
                     <div
                         key={idx}
@@ -201,6 +210,9 @@ export const AICopilotModal: React.FC = () => {
                         <option value="es">Español</option>
                         <option value="en">English</option>
                         <option value="pt">Português</option>
+                        <option value="fr">Français</option>
+                        <option value="de">Deutsch</option>
+                        <option value="it">Italiano</option>
                     </select>
                 )}
                 {mode !== 'summarizer' && mode !== 'diagnose' ? (
