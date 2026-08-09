@@ -29,6 +29,10 @@ export function OffGridCompassModal() {
 
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+    // Vector Low-Pass Filter state for silky smooth compass without 0<->360 jumps
+    const vecX = useRef<number>(0);
+    const vecY = useRef<number>(0);
+
     useEffect(() => {
         // Load stored waypoints
         try {
@@ -36,24 +40,39 @@ export function OffGridCompassModal() {
             if (saved) setWaypoints(JSON.parse(saved));
         } catch {}
 
-        // Listen for device orientation for geomagnetic compass with exponential low-pass filter
+        // Listen for device orientation with single listener registration & vector low-pass filter
         const handleOrientation = (e: DeviceOrientationEvent) => {
-            let compass = e.alpha || 0;
+            let compass: number | null = null;
             const webkitHeading = (e as unknown as { webkitCompassHeading?: number }).webkitCompassHeading;
-            if (webkitHeading !== undefined) {
+            if (webkitHeading !== undefined && webkitHeading !== null) {
                 compass = webkitHeading;
-            } else if (e.alpha !== null) {
-                compass = 360 - e.alpha;
+            } else if (e.alpha !== null && e.alpha !== undefined) {
+                compass = (360 - e.alpha) % 360;
             }
-            const rawHeading = Math.round(compass % 360);
-            setHeading(prev => {
-                const diff = (rawHeading - prev + 540) % 360 - 180;
-                return Math.round((prev + diff * 0.35 + 360) % 360);
-            });
+
+            if (compass === null) return;
+
+            // Vector Low-Pass Filter: Prevents 0 <-> 360 degree wraparound jumps
+            const rad = (compass * Math.PI) / 180;
+            const curSin = Math.sin(rad);
+            const curCos = Math.cos(rad);
+
+            if (vecX.current === 0 && vecY.current === 0) {
+                vecX.current = curCos;
+                vecY.current = curSin;
+            } else {
+                vecX.current = vecX.current * 0.82 + curCos * 0.18;
+                vecY.current = vecY.current * 0.82 + curSin * 0.18;
+            }
+
+            let smoothDeg = Math.round((Math.atan2(vecY.current, vecX.current) * 180) / Math.PI);
+            smoothDeg = ((smoothDeg % 360) + 360) % 360;
+
+            setHeading(smoothDeg);
         };
 
-        window.addEventListener("deviceorientationabsolute", handleOrientation, true);
-        window.addEventListener("deviceorientation", handleOrientation, true);
+        const eventName = ("ondeviceorientationabsolute" in window) ? "deviceorientationabsolute" : "deviceorientation";
+        window.addEventListener(eventName, handleOrientation, true);
 
         // Restore last known GPS coordinates if available
         try {
@@ -87,8 +106,7 @@ export function OffGridCompassModal() {
         }
 
         return () => {
-            window.removeEventListener("deviceorientationabsolute", handleOrientation);
-            window.removeEventListener("deviceorientation", handleOrientation);
+            window.removeEventListener(eventName, handleOrientation, true);
             if (watchId !== null && navigator.geolocation) {
                 navigator.geolocation.clearWatch(watchId);
             }
@@ -103,8 +121,8 @@ export function OffGridCompassModal() {
         if (!ctx) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const displayWidth = 280;
-        const displayHeight = 280;
+        const displayWidth = 260;
+        const displayHeight = 260;
 
         canvas.width = displayWidth * dpr;
         canvas.height = displayHeight * dpr;
@@ -112,7 +130,7 @@ export function OffGridCompassModal() {
 
         const cx = displayWidth / 2;
         const cy = displayHeight / 2;
-        const radius = Math.min(cx, cy) - 24;
+        const radius = Math.min(cx, cy) - 22;
 
         ctx.clearRect(0, 0, displayWidth, displayHeight);
 
@@ -313,193 +331,189 @@ export function OffGridCompassModal() {
     return (
         <div style={{
             position: 'fixed', inset: 0, zIndex: 999,
-            background: 'rgba(4,6,10,0.96)', color: '#fff',
-            display: 'flex', flexDirection: 'column', padding: '16px',
-            overflowY: 'auto', backdropFilter: 'blur(12px)'
+            background: 'rgba(4,6,10,0.98)', color: '#fff',
+            display: 'flex', flexDirection: 'column',
+            padding: '14px 14px 90px 14px',
+            overflowY: 'auto', overflowX: 'hidden',
+            backdropFilter: 'blur(12px)', boxSizing: 'border-box'
         }}>
-            <div style={{ maxWidth: '960px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: 40, height: 40, borderRadius: '12px', background: 'linear-gradient(135deg, #00E676, #00A859)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>🧭</div>
+                        <div style={{ width: 38, height: 38, borderRadius: '12px', background: 'linear-gradient(135deg, #00E676, #00A859)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🧭</div>
                         <div>
-                            <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>Radar Topográfico Off-Grid</div>
-                            <div style={{ fontSize: '0.72rem', color: '#00E676' }}>Navegación Táctica Sin Conexión & Geodesia</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Radar Topográfico Off-Grid</div>
+                            <div style={{ fontSize: '0.7rem', color: '#00E676' }}>Navegación Táctica Sin Conexión & Geodesia</div>
                         </div>
                     </div>
-                    <button onClick={() => navigate('sidebar')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 16px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700 }}>✕ Cerrar</button>
+                    <button onClick={() => navigate('sidebar')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>✕ Cerrar</button>
                 </div>
 
-                {/* Main HUD: Radar Canvas + Tactical Stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                    {/* Compass Canvas Box */}
-                    <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(0,230,118,0.3)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                        <canvas ref={canvasRef} style={{ width: 280, height: 280 }} />
-                        
-                        {/* Heading & Zoom Selector */}
-                        <div style={{ marginTop: '12px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>{heading}°</div>
-                                <div style={{ fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Rumbo Geomagnético Actual</div>
-                            </div>
-
-                            {/* Radar Range Scale Selector */}
-                            <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                                {[500, 1000, 2000, 5000].map(dist => (
-                                    <button
-                                        key={dist}
-                                        onClick={() => setRadarMaxDist(dist)}
-                                        style={{
-                                            padding: '4px 8px', borderRadius: '6px',
-                                            background: radarMaxDist === dist ? '#00E676' : 'rgba(255,255,255,0.06)',
-                                            color: radarMaxDist === dist ? '#000' : '#AAA',
-                                            border: 'none', fontWeight: 800, fontSize: '0.7rem', cursor: 'pointer'
-                                        }}
-                                    >
-                                        {dist >= 1000 ? `${dist / 1000}km` : `${dist}m`}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Tactical Stats & UTM Coordinate Box */}
-                    <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#38BDF8', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px' }}>📍 Cuadrícula Táctica UTM</div>
-                        <div style={{ background: 'rgba(0,0,0,0.5)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(0,230,118,0.3)', fontFamily: 'monospace', fontSize: '1.05rem', color: '#00E676', textAlign: 'center', fontWeight: 800, letterSpacing: '0.5px' }}>
-                            {utmString}
-                        </div>
-                        {userCoords ? (
-                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '10px', fontSize: '0.8rem', color: '#AAA', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Lat: <strong style={{ color: '#fff' }}>{userCoords.lat.toFixed(5)}°</strong></span>
-                                <span>Lon: <strong style={{ color: '#fff' }}>{userCoords.lon.toFixed(5)}°</strong></span>
-                            </div>
-                        ) : (
-                            <div style={{ fontSize: '0.75rem', color: '#FFB300', fontStyle: 'italic' }}>⚠️ Obteniendo fijación de satélites GPS...</div>
-                        )}
-
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#FFB300', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '8px', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{solarAzimuth.isNight ? "🌙 Reloj Nocturno" : "☀️ Reloj Solar"} (Norte Verdadero)</span>
-                        </div>
-                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 14px', borderRadius: '10px', fontSize: '0.8rem', color: '#DDD', display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Azimut: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.azimuthDegrees}°</strong></span>
-                            <span>Elevación: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.elevationDegrees}°</strong></span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Triangulation & Waypoints Section */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '16px' }}>
-                    {/* Resection Triangulation */}
-                    <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div>
-                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#38BDF8' }}>📐 Triangulación por Resección (2 Puntos)</div>
-                            <div style={{ fontSize: '0.74rem', color: '#AAA', marginTop: '2px' }}>Alinea 2 puntos visibles de referencia para calcular tu posición sin GPS:</div>
+                {/* Compass Radar Canvas Card */}
+                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(0,230,118,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
+                    <canvas ref={canvasRef} style={{ width: 260, height: 260 }} />
+                    
+                    {/* Heading & Zoom Selector */}
+                    <div style={{ marginTop: '10px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace' }}>{heading}°</div>
+                            <div style={{ fontSize: '0.68rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Rumbo Geomagnético Actual</div>
                         </div>
 
-                        {/* Landmark 1 Card */}
-                        <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38BDF8' }}>📍 Punto 1 de Referencia</span>
-                                {userCoords && (
-                                    <button
-                                        onClick={() => setLandmark1({ ...landmark1, lat: userCoords.lat, lon: userCoords.lon })}
-                                        style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
-                                    >
-                                        Usar GPS Actual
-                                    </button>
-                                )}
-                            </div>
-                            <input value={landmark1.name} onChange={e => setLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem' }} placeholder="Nombre (ej. Pico Norte)" />
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
-                                <input value={landmark1.lat} onChange={e => setLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }} placeholder="Lat 1" />
-                                <input value={landmark1.lon} onChange={e => setLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }} placeholder="Lon 1" />
-                                <input value={bearing1} onChange={e => setBearing1(e.target.value)} style={{ padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }} placeholder="Rumbo°" />
-                            </div>
-                        </div>
-
-                        {/* Landmark 2 Card */}
-                        <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#A855F7' }}>📍 Punto 2 de Referencia</span>
-                                {userCoords && (
-                                    <button
-                                        onClick={() => setLandmark2({ ...landmark2, lat: userCoords.lat, lon: userCoords.lon })}
-                                        style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
-                                    >
-                                        Usar GPS Actual
-                                    </button>
-                                )}
-                            </div>
-                            <input value={landmark2.name} onChange={e => setLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem' }} placeholder="Nombre (ej. Torre Este)" />
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
-                                <input value={landmark2.lat} onChange={e => setLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }} placeholder="Lat 2" />
-                                <input value={landmark2.lon} onChange={e => setLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }} placeholder="Lon 2" />
-                                <input value={bearing2} onChange={e => setBearing2(e.target.value)} style={{ padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }} placeholder="Rumbo°" />
-                            </div>
-                        </div>
-
-                        <button onClick={handleCalculateTriangulation} style={{ padding: '10px', background: '#38BDF8', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', marginTop: '2px' }}>
-                            ⚡ CALCULAR POSICIÓN TRIANGULADA
-                        </button>
-
-                        {triangulatedPos && (
-                            <div style={{ background: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.4)', padding: '12px', borderRadius: '10px', color: '#00E676', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <div style={{ fontWeight: 800, fontSize: '0.82rem' }}>
-                                    🎯 Posición Triangulada: Lat {triangulatedPos.lat} | Lon {triangulatedPos.lon} (Precisión ~{triangulatedPos.accuracyMeters}m)
-                                </div>
+                        {/* Radar Range Scale Selector */}
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                            {[500, 1000, 2000, 5000].map(dist => (
                                 <button
-                                    onClick={handleAdoptTriangulatedPos}
-                                    style={{ padding: '6px 10px', background: '#00E676', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', alignSelf: 'flex-start' }}
+                                    key={dist}
+                                    onClick={() => setRadarMaxDist(dist)}
+                                    style={{
+                                        padding: '5px 10px', borderRadius: '6px',
+                                        background: radarMaxDist === dist ? '#00E676' : 'rgba(255,255,255,0.06)',
+                                        color: radarMaxDist === dist ? '#000' : '#AAA',
+                                        border: 'none', fontWeight: 800, fontSize: '0.72rem', cursor: 'pointer'
+                                    }}
                                 >
-                                    🎯 Adoptar Posición como Ubicación Actual
+                                    {dist >= 1000 ? `${dist / 1000}km` : `${dist}m`}
                                 </button>
-                            </div>
-                        )}
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tactical Stats & UTM Coordinate Box */}
+                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#38BDF8', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>📍 Cuadrícula Táctica UTM</div>
+                    <div style={{ background: 'rgba(0,0,0,0.5)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(0,230,118,0.3)', fontFamily: 'monospace', fontSize: '1rem', color: '#00E676', textAlign: 'center', fontWeight: 800, letterSpacing: '0.5px', overflowX: 'auto' }}>
+                        {utmString}
+                    </div>
+                    {userCoords ? (
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#AAA', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Lat: <strong style={{ color: '#fff' }}>{userCoords.lat.toFixed(5)}°</strong></span>
+                            <span>Lon: <strong style={{ color: '#fff' }}>{userCoords.lon.toFixed(5)}°</strong></span>
+                        </div>
+                    ) : (
+                        <div style={{ fontSize: '0.75rem', color: '#FFB300', fontStyle: 'italic' }}>⚠️ Obteniendo fijación de satélites GPS...</div>
+                    )}
+
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#FFB300', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px', marginTop: '2px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>{solarAzimuth.isNight ? "🌙 Reloj Nocturno" : "☀️ Reloj Solar"} (Norte Verdadero)</span>
+                    </div>
+                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#DDD', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Azimut: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.azimuthDegrees}°</strong></span>
+                        <span>Elevación: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.elevationDegrees}°</strong></span>
+                    </div>
+                </div>
+
+                {/* Resection Triangulation Card */}
+                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
+                    <div>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38BDF8' }}>📐 Triangulación por Resección (2 Puntos)</div>
+                        <div style={{ fontSize: '0.72rem', color: '#AAA', marginTop: '2px' }}>Alinea 2 puntos visibles de referencia para calcular tu posición sin GPS:</div>
                     </div>
 
-                    {/* Waypoints Management */}
-                    <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div>
-                            <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#FFF' }}>📌 Registrar Waypoint de Supervivencia</div>
-                            <div style={{ fontSize: '0.74rem', color: '#AAA', marginTop: '2px' }}>Calcula la posición de destino por distancia y rumbo:</div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <input value={newWpName} onChange={e => setNewWpName(e.target.value)} style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem' }} placeholder="Nombre (ej. Fuente de Agua)" />
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '8px' }}>
-                                <input value={newWpDist} onChange={e => setNewWpDist(e.target.value)} style={{ padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem' }} placeholder="Distancia (m)" />
-                                <input value={newWpBearing} onChange={e => setNewWpBearing(e.target.value)} style={{ padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem' }} placeholder="Rumbo°" />
-                                <button onClick={handleAddWaypoint} style={{ background: '#00E676', color: '#000', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '0.9rem' }}>+ Agregar</button>
-                            </div>
-                        </div>
-
-                        <div style={{ marginTop: '6px', maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {waypoints.length === 0 ? (
-                                <div style={{ fontSize: '0.75rem', color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '12px' }}>No hay waypoints registrados aún.</div>
-                            ) : (
-                                waypoints.map(wp => {
-                                    let liveBrg = wp.bearingDegrees;
-                                    let liveDst = wp.distanceMeters;
-
-                                    if (userCoords && (wp.lat !== 0 || wp.lon !== 0)) {
-                                        const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
-                                        liveBrg = rel.bearingDegrees;
-                                        liveDst = rel.distanceMeters;
-                                    }
-
-                                    return (
-                                        <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
-                                            <span>📍 <strong>{wp.name}</strong></span>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <span style={{ color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>{liveBrg}° • {liveDst}m</span>
-                                                <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.95rem' }}>🗑️</button>
-                                            </div>
-                                        </div>
-                                    );
-                                })
+                    {/* Landmark 1 Card */}
+                    <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#38BDF8' }}>📍 Punto 1 de Referencia</span>
+                            {userCoords && (
+                                <button
+                                    onClick={() => setLandmark1({ ...landmark1, lat: userCoords.lat, lon: userCoords.lon })}
+                                    style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                    Usar GPS Actual
+                                </button>
                             )}
                         </div>
+                        <input value={landmark1.name} onChange={e => setLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Pico Norte)" />
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            <input value={landmark1.lat} onChange={e => setLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 1" />
+                            <input value={landmark1.lon} onChange={e => setLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 1" />
+                            <input value={bearing1} onChange={e => setBearing1(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
+                        </div>
+                    </div>
+
+                    {/* Landmark 2 Card */}
+                    <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', padding: '10px 12px', borderRadius: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#A855F7' }}>📍 Punto 2 de Referencia</span>
+                            {userCoords && (
+                                <button
+                                    onClick={() => setLandmark2({ ...landmark2, lat: userCoords.lat, lon: userCoords.lon })}
+                                    style={{ background: 'transparent', border: 'none', color: '#00E676', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                    Usar GPS Actual
+                                </button>
+                            )}
+                        </div>
+                        <input value={landmark2.name} onChange={e => setLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Torre Este)" />
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            <input value={landmark2.lat} onChange={e => setLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 2" />
+                            <input value={landmark2.lon} onChange={e => setLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 2" />
+                            <input value={bearing2} onChange={e => setBearing2(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
+                        </div>
+                    </div>
+
+                    <button onClick={handleCalculateTriangulation} style={{ width: '100%', padding: '10px', background: '#38BDF8', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer', marginTop: '2px' }}>
+                        ⚡ CALCULAR POSICIÓN TRIANGULADA
+                    </button>
+
+                    {triangulatedPos && (
+                        <div style={{ background: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.4)', padding: '12px', borderRadius: '10px', color: '#00E676', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <div style={{ fontWeight: 800, fontSize: '0.82rem' }}>
+                                🎯 Posición Triangulada: Lat {triangulatedPos.lat} | Lon {triangulatedPos.lon} (Precisión ~{triangulatedPos.accuracyMeters}m)
+                            </div>
+                            <button
+                                onClick={handleAdoptTriangulatedPos}
+                                style={{ padding: '6px 10px', background: '#00E676', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 800, fontSize: '0.74rem', cursor: 'pointer', alignSelf: 'flex-start' }}
+                            >
+                                🎯 Adoptar Posición como Ubicación Actual
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Waypoints Management Card */}
+                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
+                    <div>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#FFF' }}>📌 Registrar Waypoint de Supervivencia</div>
+                        <div style={{ fontSize: '0.72rem', color: '#AAA', marginTop: '2px' }}>Calcula la posición de destino por distancia y rumbo:</div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <input value={newWpName} onChange={e => setNewWpName(e.target.value)} style={{ width: '100%', padding: '8px 12px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Fuente de Agua)" />
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                            <input value={newWpDist} onChange={e => setNewWpDist(e.target.value)} style={{ flex: 1, minWidth: 0, padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', boxSizing: 'border-box' }} placeholder="Distancia (m)" />
+                            <input value={newWpBearing} onChange={e => setNewWpBearing(e.target.value)} style={{ flex: 1, minWidth: 0, padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.82rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
+                            <button onClick={handleAddWaypoint} style={{ background: '#00E676', color: '#000', border: 'none', padding: '8px 14px', borderRadius: '8px', fontWeight: 900, cursor: 'pointer', fontSize: '0.85rem' }}>+ Agregar</button>
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: '4px', maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {waypoints.length === 0 ? (
+                            <div style={{ fontSize: '0.75rem', color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>No hay waypoints registrados aún.</div>
+                        ) : (
+                            waypoints.map(wp => {
+                                let liveBrg = wp.bearingDegrees;
+                                let liveDst = wp.distanceMeters;
+
+                                if (userCoords && (wp.lat !== 0 || wp.lon !== 0)) {
+                                    const rel = OffGridNavigationEngine.calculateDistanceAndBearing(userCoords.lat, userCoords.lon, wp.lat, wp.lon);
+                                    liveBrg = rel.bearingDegrees;
+                                    liveDst = rel.distanceMeters;
+                                }
+
+                                return (
+                                    <div key={wp.id} style={{ background: 'rgba(255,255,255,0.04)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                                        <span>📍 <strong>{wp.name}</strong></span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <span style={{ color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>{liveBrg}° • {liveDst}m</span>
+                                            <button onClick={() => handleDeleteWaypoint(wp.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.95rem' }}>🗑️</button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
                     </div>
                 </div>
             </div>
