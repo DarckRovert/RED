@@ -20,10 +20,10 @@ export function OffGridCompassModal() {
     // Dynamic Radar Scale: 500m, 1000m (1km), 2000m (2km), 5000m (5km)
     const [radarMaxDist, setRadarMaxDist] = useState<number>(2000);
 
-    // Resection Triangulation State with Permanent Storage
-    const [landmark1, setLandmark1] = useState<Landmark>({ id: "1", name: "Pico Norte", lat: 4.6097, lon: -74.0817 });
+    // Resection Triangulation State with Permanent Storage & Dynamic Location Defaults
+    const [landmark1, setLandmark1] = useState<Landmark>({ id: "1", name: "Punto Referencia A", lat: 0, lon: 0 });
     const [bearing1, setBearing1] = useState<string>("45");
-    const [landmark2, setLandmark2] = useState<Landmark>({ id: "2", name: "Torre Este", lat: 4.6150, lon: -74.0720 });
+    const [landmark2, setLandmark2] = useState<Landmark>({ id: "2", name: "Punto Referencia B", lat: 0, lon: 0 });
     const [bearing2, setBearing2] = useState<string>("135");
     const [triangulatedPos, setTriangulatedPos] = useState<TriangulatedPosition | null>(null);
 
@@ -109,6 +109,20 @@ export function OffGridCompassModal() {
                     setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));
                     setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(lat, lon));
                     try { localStorage.setItem("red_last_known_gps", JSON.stringify(coords)); } catch {}
+
+                    // Dynamically set landmark defaults from real GPS if not saved yet
+                    setLandmark1(prev => {
+                        if (prev.lat === 0 && prev.lon === 0 && !localStorage.getItem("red_offgrid_landmark1")) {
+                            return { ...prev, lat: Math.round((lat + 0.003) * 100000) / 100000, lon: Math.round((lon + 0.003) * 100000) / 100000 };
+                        }
+                        return prev;
+                    });
+                    setLandmark2(prev => {
+                        if (prev.lat === 0 && prev.lon === 0 && !localStorage.getItem("red_offgrid_landmark2")) {
+                            return { ...prev, lat: Math.round((lat - 0.003) * 100000) / 100000, lon: Math.round((lon + 0.005) * 100000) / 100000 };
+                        }
+                        return prev;
+                    });
                 },
                 (err) => {
                     console.warn("[OffGridCompass] GPS watch warning:", err.message);
@@ -328,12 +342,15 @@ export function OffGridCompassModal() {
 
     const handleAddWaypoint = () => {
         if (!newWpName.trim()) return;
+        if (!userCoords) {
+            alert("⚠️ Esperando señal GPS o ubicación fija para determinar la posición base del waypoint.");
+            return;
+        }
+
         const dist = parseFloat(newWpDist) || 100;
         const brg = parseFloat(newWpBearing) || 0;
         
-        const startLat = userCoords ? userCoords.lat : 4.6097;
-        const startLon = userCoords ? userCoords.lon : -74.0817;
-        const target = OffGridNavigationEngine.calculateDestinationPoint(startLat, startLon, dist, brg);
+        const target = OffGridNavigationEngine.calculateDestinationPoint(userCoords.lat, userCoords.lon, dist, brg);
 
         const wp: Waypoint = {
             id: Date.now().toString(),
@@ -358,6 +375,11 @@ export function OffGridCompassModal() {
     };
 
     const handleCalculateTriangulation = () => {
+        if (landmark1.lat === 0 || landmark1.lon === 0 || landmark2.lat === 0 || landmark2.lon === 0) {
+            alert("⚠️ Por favor ingresa o selecciona las coordenadas reales del Punto 1 y Punto 2.");
+            return;
+        }
+
         const b1 = parseFloat(bearing1);
         const b2 = parseFloat(bearing2);
         const res = OffGridNavigationEngine.calculateResection(landmark1, b1, landmark2, b2);
@@ -476,10 +498,10 @@ export function OffGridCompassModal() {
                                 </button>
                             )}
                         </div>
-                        <input value={landmark1.name} onChange={e => updateLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Pico Norte)" />
+                        <input value={landmark1.name} onChange={e => updateLandmark1({ ...landmark1, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Punto A)" />
                         <div style={{ display: 'flex', gap: '6px' }}>
-                            <input value={landmark1.lat} onChange={e => updateLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 1" />
-                            <input value={landmark1.lon} onChange={e => updateLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 1" />
+                            <input value={landmark1.lat || ''} onChange={e => updateLandmark1({ ...landmark1, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 1" />
+                            <input value={landmark1.lon || ''} onChange={e => updateLandmark1({ ...landmark1, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 1" />
                             <input value={bearing1} onChange={e => updateBearing1(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
                         </div>
                     </div>
@@ -497,10 +519,10 @@ export function OffGridCompassModal() {
                                 </button>
                             )}
                         </div>
-                        <input value={landmark2.name} onChange={e => updateLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Torre Este)" />
+                        <input value={landmark2.name} onChange={e => updateLandmark2({ ...landmark2, name: e.target.value })} style={{ width: '100%', padding: '7px 10px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Nombre (ej. Punto B)" />
                         <div style={{ display: 'flex', gap: '6px' }}>
-                            <input value={landmark2.lat} onChange={e => updateLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 2" />
-                            <input value={landmark2.lon} onChange={e => updateLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 2" />
+                            <input value={landmark2.lat || ''} onChange={e => updateLandmark2({ ...landmark2, lat: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lat 2" />
+                            <input value={landmark2.lon || ''} onChange={e => updateLandmark2({ ...landmark2, lon: parseFloat(e.target.value) || 0 })} style={{ flex: 1, minWidth: 0, padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Lon 2" />
                             <input value={bearing2} onChange={e => updateBearing2(e.target.value)} style={{ width: '65px', padding: '6px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem', boxSizing: 'border-box' }} placeholder="Rumbo°" />
                         </div>
                     </div>
@@ -512,7 +534,7 @@ export function OffGridCompassModal() {
                     {triangulatedPos && (
                         <div style={{ background: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.4)', padding: '12px', borderRadius: '10px', color: '#00E676', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ fontWeight: 800, fontSize: '0.82rem' }}>
-                                🎯 Posición Triangulada: Lat {triangulatedPos.lat} | Lon {triangulatedPos.lon} (Precisión ~{triangulatedPos.accuracyMeters}m)
+                                🎯 Posición Triangulada: Lat {triangulatedPos.lat} | Lon {triangulatedPos.lon} (Precisión Geométrica ~{triangulatedPos.accuracyMeters}m)
                             </div>
                             <button
                                 onClick={handleAdoptTriangulatedPos}

@@ -3,7 +3,7 @@
  * 
  * Provides:
  * 1. Solar & Stellar Azimuth calculation (True North determination without GPS/Geomagnetic compass)
- * 2. Resection Triangulation (determines current position given bearings to 2 known landmarks)
+ * 2. Resection Triangulation with dynamic Snellius-Pothenot geometric accuracy modeling
  * 3. Distance & Bearing calculation (Haversine & Vincenty approximations)
  * 4. Geodesic Destination Point calculation (Direct Vincenty/Haversine geodesy)
  * 5. WGS84 GPS to UTM/MGRS coordinate conversion (NATO Standard 6-digit Easting & 7-digit Northing)
@@ -169,7 +169,7 @@ export class OffGridNavigationEngine {
 
     /**
      * Resection Triangulation: Calculates unknown observer position given 2 known landmarks and measured bearings to them.
-     * Enforces forward-ray condition (t1 > 0 and t2 > 0) and uses 2-pass mean latitude projection for 1m accuracy.
+     * Enforces forward-ray condition (t1 > 0 and t2 > 0) and computes dynamic geometrical precision error.
      */
     public static calculateResection(
         p1: Landmark,
@@ -220,10 +220,14 @@ export class OffGridNavigationEngine {
         const latObs = (yObs * 180) / Math.PI;
         const lonObs = ((xObs / Math.cos(meanLat)) * 180) / Math.PI;
 
+        // Real dynamic geometrical precision accuracy (inverse sine of intersection angle)
+        const geomFactor = Math.abs(denom); // sin(BB1 - BB2)
+        const dynamicAccuracy = Math.round(Math.max(2, Math.min(50, 4 / Math.max(0.08, geomFactor))));
+
         return {
             lat: Math.round(latObs * 100000) / 100000,
             lon: Math.round(lonObs * 100000) / 100000,
-            accuracyMeters: 5
+            accuracyMeters: dynamicAccuracy
         };
     }
 
