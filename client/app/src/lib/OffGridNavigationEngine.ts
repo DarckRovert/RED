@@ -98,13 +98,13 @@ export class OffGridNavigationEngine {
 
     /**
      * Computes Solar Azimuth (degrees True North) and Elevation based on UTC time and location.
-     * Normalizes hour angle H to [-pi, pi] to ensure exact solar geometry across all longitudes.
+     * Normalizes hour angle H to [-pi, pi] and protects against division by zero near poles or night hours.
      */
     public static calculateSolarAzimuth(
         lat: number,
         lon: number,
         date: Date = new Date()
-    ): { azimuthDegrees: number; elevationDegrees: number } {
+    ): { azimuthDegrees: number; elevationDegrees: number; isNight: boolean } {
         const radLat = (lat * Math.PI) / 180;
 
         // Days since Jan 1, 2000 12:00 UTC
@@ -142,10 +142,13 @@ export class OffGridNavigationEngine {
 
         // Elevation angle
         const sinElev = Math.sin(radLat) * Math.sin(dec) + Math.cos(radLat) * Math.cos(dec) * Math.cos(ha);
-        const elevationDegrees = (Math.asin(Math.max(-1, Math.min(1, sinElev))) * 180) / Math.PI;
+        const elevationRad = Math.asin(Math.max(-1, Math.min(1, sinElev)));
+        const elevationDegrees = (elevationRad * 180) / Math.PI;
 
-        // Azimuth angle
-        const cosAz = (Math.sin(dec) - Math.sin(radLat) * sinElev) / (Math.cos(radLat) * Math.sqrt(Math.max(0.0001, 1 - sinElev * sinElev)));
+        // Cosine of solar azimuth calculation with division safety
+        const cosElev = Math.cos(elevationRad);
+        const denom = Math.max(1e-6, Math.cos(radLat) * cosElev);
+        const cosAz = (Math.sin(dec) - Math.sin(radLat) * sinElev) / denom;
         let azimuth = (Math.acos(Math.max(-1, Math.min(1, cosAz))) * 180) / Math.PI;
 
         if (ha > 0) {
@@ -154,12 +157,14 @@ export class OffGridNavigationEngine {
 
         return {
             azimuthDegrees: Math.round(azimuth * 10) / 10,
-            elevationDegrees: Math.round(elevationDegrees * 10) / 10
+            elevationDegrees: Math.round(elevationDegrees * 10) / 10,
+            isNight: elevationDegrees < -0.833 // Solar disk fully below horizon
         };
     }
 
     /**
      * Resection Triangulation: Calculates unknown observer position given 2 known landmarks and measured bearings to them.
+     * Enforces forward-ray condition (t1 > 0 and t2 > 0) to ensure valid planar intersection.
      */
     public static calculateResection(
         p1: Landmark,
@@ -178,9 +183,10 @@ export class OffGridNavigationEngine {
         const lon1 = (p1.lon * Math.PI) / 180;
         const lon2 = (p2.lon * Math.PI) / 180;
 
-        const x1 = lon1 * Math.cos((lat1 + lat2) / 2);
+        const meanLat = (lat1 + lat2) / 2;
+        const x1 = lon1 * Math.cos(meanLat);
         const y1 = lat1;
-        const x2 = lon2 * Math.cos((lat1 + lat2) / 2);
+        const x2 = lon2 * Math.cos(meanLat);
         const y2 = lat2;
 
         const dx1 = Math.sin(radBB1);
@@ -190,15 +196,22 @@ export class OffGridNavigationEngine {
 
         const denom = dx1 * dy2 - dy1 * dx2;
         if (Math.abs(denom) < 1e-6) {
+            return null; // Rays are parallel or collinear
+        }
+
+        const t1 = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / denom;
+        const t2 = ((x2 - x1) * dy1 - (y2 - y1) * dx1) / denom;
+
+        // Ensure forward ray intersection (Observer is in front of both back-bearings)
+        if (t1 <= 0 || t2 <= 0) {
             return null;
         }
 
-        const t = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / denom;
-        const xObs = x1 + t * dx1;
-        const yObs = y1 + t * dy1;
+        const xObs = x1 + t1 * dx1;
+        const yObs = y1 + t1 * dy1;
 
         const latObs = (yObs * 180) / Math.PI;
-        const lonObs = (xObs / Math.cos((lat1 + lat2) / 2) * 180) / Math.PI;
+        const lonObs = ((xObs / Math.cos(meanLat)) * 180) / Math.PI;
 
         return {
             lat: Math.round(latObs * 100000) / 100000,
