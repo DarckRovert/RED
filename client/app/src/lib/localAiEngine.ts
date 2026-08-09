@@ -403,10 +403,22 @@ class LocalAIEngineClass {
     public async diagnoseHealth(metrics?: any): Promise<HealthDiagnosticResponse> {
         const start = performance.now();
 
-        // Batería real del dispositivo
+        // Batería real del dispositivo (Attempt 1: Capacitor Device API, Attempt 2: HTML5 Battery API)
         let batteryLevel = -1;
         let isCharging = false;
-        if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+
+        try {
+            const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+            if (cap && cap.Plugins && cap.Plugins.Device) {
+                const info = await cap.Plugins.Device.getBatteryInfo();
+                if (info && typeof info.batteryLevel === 'number') {
+                    batteryLevel = Math.round(info.batteryLevel * 100);
+                    isCharging = !!info.isCharging;
+                }
+            }
+        } catch {}
+
+        if (batteryLevel === -1 && typeof navigator !== 'undefined' && 'getBattery' in navigator) {
             try {
                 const batt: any = await (navigator as any).getBattery();
                 batteryLevel = Math.round((batt.level ?? 1) * 100);
@@ -414,57 +426,61 @@ class LocalAIEngineClass {
             } catch {}
         }
 
-        // Estado real de peers desde el store de Zustand
+        // Estado real de peers y motor Rust desde el store de Zustand
         let peersCount = 0;
         let activeSosCount = 0;
         let totalChatMessages = 0;
+        let isNodeRunning = false;
 
         if (typeof window !== 'undefined') {
             try {
                 const { useRedStore } = await import('../store/useRedStore');
                 const state = useRedStore.getState() as any;
-                peersCount = state.conversations?.length ?? 0;
+                const statusPeers = state.status?.peer_count ?? 0;
+                const convPeers = state.conversations?.length ?? 0;
+                peersCount = Math.max(statusPeers, convPeers);
                 activeSosCount = state.activeSosBeacons?.length ?? 0;
                 totalChatMessages = state.messages?.length ?? 0;
+                isNodeRunning = !!state.status?.is_running;
             } catch {}
         }
 
         // Estado del motor ONNX
         const onnxStatus = this.generatorPipeline
-            ? '✅ Motor ONNX LaMini-T5 cargado y activo'
-            : '⏳ Motor ONNX LaMini-T5 pendiente de inicialización (primera consulta activa)';
+            ? '✅ Motor ONNX LaMini-T5 cargado y activo en memoria'
+            : '⏳ Motor ONNX LaMini-T5 en espera (inicialización automática en primera consulta)';
 
         let score = 100;
         const issues: string[] = [];
 
         // Batería
         if (batteryLevel === -1) {
-            issues.push('🔋 Sensor de batería no disponible en este navegador.');
+            issues.push('🔋 Sensor de batería: No disponible en el motor del navegador');
         } else if (batteryLevel < 20 && !isCharging) {
             score -= 25;
             issues.push(`⚠️ Batería crítica: ${batteryLevel}% — Activar Eco-Mesh urgente.`);
         } else {
-            issues.push(`🔋 Batería: ${batteryLevel}% ${isCharging ? '🔌 (Cargando)' : ''}`);
+            issues.push(`🔋 Batería Hardware: ${batteryLevel}% ${isCharging ? '🔌 (Cargando)' : ''}`);
         }
 
         // Peers
         if (peersCount === 0) {
             score -= 15;
-            issues.push('📡 Sin pares P2P detectados en rango BLE/WiFi Direct.');
+            issues.push('📡 Red Mesh: Buscando nodos P2P por BLE / WiFi Direct / Local Transport');
         } else {
-            issues.push(`🔗 ${peersCount} nodo(s) activos en la malla P2P.`);
+            issues.push(`🔗 Red Mesh: ${peersCount} nodo(s) activos en la malla P2P ${isNodeRunning ? '(Motor Rust ON)' : ''}`);
         }
 
         // SOS activos
         if (activeSosCount > 0) {
-            issues.push(`🚨 ${activeSosCount} alerta(s) SOS activa(s) en la red.`);
+            issues.push(`🚨 Alertas SOS: ${activeSosCount} baliza(s) activa(s) en el perímetro`);
         }
 
         // Mensajes
-        issues.push(`💬 ${totalChatMessages} mensaje(s) en historial de conversaciones.`);
+        issues.push(`💬 Historial: ${totalChatMessages} mensaje(s) sincronizados`);
 
         // Estado del motor IA
-        issues.push(onnxStatus);
+        issues.push(`🧠 Motor IA: ${onnxStatus}`);
 
         return {
             status: score > 75 ? '🟢 Óptimo' : score > 45 ? '🟡 Moderado' : '🔴 Crítico',
