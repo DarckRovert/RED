@@ -99,7 +99,7 @@ export class VitalScanEngine {
      * Starts PPG Camera Scan using fingertip over camera lens + Flash LED
      */
     public static async startPPGScan(
-        onFrameUpdate: (sample: { redIntensity: number; greenIntensity: number; progress: number; waveSample: number }) => void,
+        onFrameUpdate: (sample: { redIntensity: number; greenIntensity: number; progress: number; waveSample: number; isFingerDetected: boolean }) => void,
         onComplete: (result: PPGScanResult) => void
     ): Promise<boolean> {
         try {
@@ -130,6 +130,8 @@ export class VitalScanEngine {
             this.videoElement = document.createElement('video');
             this.videoElement.srcObject = this.stream;
             this.videoElement.playsInline = true;
+            this.videoElement.muted = true; // Required for reliable Android WebView autoplay
+            this.videoElement.setAttribute('playsinline', 'true');
             await this.videoElement.play();
 
             this.canvasElement = document.createElement('canvas');
@@ -148,6 +150,13 @@ export class VitalScanEngine {
 
             const processFrame = () => {
                 if (!this.videoElement || !this.canvasElement || !ctx) return;
+                
+                // Guard: ensure video frame data is ready
+                if (this.videoElement.readyState < 2) {
+                    this.animFrameId = requestAnimationFrame(processFrame);
+                    return;
+                }
+
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(1.0, elapsed / SCAN_DURATION_MS);
 
@@ -168,17 +177,22 @@ export class VitalScanEngine {
                 const avgRed = redSum / totalPixels;
                 const avgGreen = greenSum / totalPixels;
 
-                redSamples.push(avgRed);
-                greenSamples.push(avgGreen);
-                timestamps.push(Date.now());
+                // Optical Finger Coverage Check: Finger over lens absorbs green and passes high red (Red > 55 & Red > 1.25 * Green)
+                const isFingerDetected = avgRed > 55 && avgRed > (avgGreen * 1.25);
+
+                if (isFingerDetected) {
+                    redSamples.push(avgRed);
+                    greenSamples.push(avgGreen);
+                    timestamps.push(Date.now());
+                }
 
                 // Detrending for live wave visualization
                 localWindow.push(avgRed);
                 if (localWindow.length > 15) localWindow.shift();
                 const windowMean = localWindow.reduce((a, b) => a + b, 0) / localWindow.length;
-                const waveSample = avgRed - windowMean;
+                const waveSample = isFingerDetected ? (avgRed - windowMean) : 0;
 
-                onFrameUpdate({ redIntensity: avgRed, greenIntensity: avgGreen, progress, waveSample });
+                onFrameUpdate({ redIntensity: avgRed, greenIntensity: avgGreen, progress, waveSample, isFingerDetected });
 
                 if (elapsed < SCAN_DURATION_MS) {
                     this.animFrameId = requestAnimationFrame(processFrame);

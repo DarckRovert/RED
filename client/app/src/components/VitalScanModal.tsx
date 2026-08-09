@@ -11,6 +11,7 @@ export function VitalScanModal() {
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
     const [scanResult, setScanResult] = useState<PPGScanResult | null>(null);
+    const [isFingerDetected, setIsFingerDetected] = useState(true);
 
     // Live PPG Cardiac Waveform Buffer
     const waveBuffer = useRef<number[]>(new Array(100).fill(0));
@@ -104,11 +105,13 @@ export function VitalScanModal() {
         setIsScanning(true);
         setScanResult(null);
         setScanProgress(0);
+        setIsFingerDetected(true);
         waveBuffer.current = new Array(100).fill(0);
 
         const ok = await VitalScanEngine.startPPGScan(
             (sample) => {
                 setScanProgress(sample.progress);
+                setIsFingerDetected(sample.isFingerDetected);
                 drawWaveform(sample.waveSample);
             },
             (result) => {
@@ -197,11 +200,13 @@ export function VitalScanModal() {
                         Cubre el lente de la cámara principal y el Flash LED con la yema del dedo:
                     </div>
 
-                    <div style={{ width: 130, height: 130, borderRadius: '50%', border: '4px solid #E8213A', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(232,33,58,0.1)', boxShadow: isScanning ? '0 0 24px rgba(232,33,58,0.6)' : 'none', transition: 'all 0.3s' }}>
+                    <div style={{ width: 130, height: 130, borderRadius: '50%', border: `4px solid ${isScanning && !isFingerDetected ? '#FFB300' : '#E8213A'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(232,33,58,0.1)', boxShadow: isScanning ? '0 0 24px rgba(232,33,58,0.6)' : 'none', transition: 'all 0.3s' }}>
                         {isScanning ? (
                             <>
                                 <div style={{ fontSize: '1.8rem', animation: 'pulse 0.8s infinite' }}>❤️</div>
-                                <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#E8213A', marginTop: 4 }}>{(scanProgress * 100).toFixed(0)}%</div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 900, color: isFingerDetected ? '#E8213A' : '#FFB300', marginTop: 4 }}>
+                                    {isFingerDetected ? `${(scanProgress * 100).toFixed(0)}%` : '¡COLOCA EL DEDO!'}
+                                </div>
                             </>
                         ) : scanResult && scanResult.bpm > 0 ? (
                             <>
@@ -221,6 +226,12 @@ export function VitalScanModal() {
                         <div style={{ fontSize: '0.68rem', color: '#AAA', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Onda de Pulso Pulmonar (BVP) en Tiempo Real</div>
                         <canvas ref={waveCanvasRef} width={280} height={45} style={{ width: '100%', height: '45px', display: 'block' }} />
                     </div>
+
+                    {isScanning && !isFingerDetected && (
+                        <div style={{ marginTop: '10px', fontSize: '0.74rem', color: '#FFB300', background: 'rgba(255,179,0,0.1)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,179,0,0.3)', textAlign: 'center' }}>
+                            ⚠️ Por favor cubre bien el lente de la cámara con el dedo para detectar el pulso capilar.
+                        </div>
+                    )}
 
                     {scanResult && scanResult.bpm === 0 && (
                         <div style={{ marginTop: '10px', fontSize: '0.74rem', color: '#FFB300', background: 'rgba(255,179,0,0.1)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,179,0,0.3)', textAlign: 'center' }}>
@@ -382,7 +393,7 @@ export function VitalScanModal() {
                         </label>
 
                         <div style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#00E676', fontSize: '0.78rem' }}>
-                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{chlorineDrops} gotas</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes de consumir.
+                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{chlorineDrops} gotas</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes of consumir.
                         </div>
 
                         <div style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#FFB300', fontSize: '0.78rem' }}>
