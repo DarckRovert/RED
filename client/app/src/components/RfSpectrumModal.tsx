@@ -91,7 +91,7 @@ export function RfSpectrumModal() {
                                     background: 'linear-gradient(180deg, #A855F7 0%, #3B82F6 100%)',
                                     borderRadius: '6px 6px 0 0', transition: 'height 0.3s ease'
                                 }} />
-                                <div style={{ fontSize: '0.68rem', color: '#888', marginTop: '6px' }}>Ch {idx + 1}</div>
+                                <div style={{ fontSize: '0.68rem', color: '#888', marginTop: '6px' }}>Ch {ch.channelNumber}</div>
                             </div>
                         );
                     })}
