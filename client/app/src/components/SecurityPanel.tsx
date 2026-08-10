@@ -139,14 +139,30 @@ export default function SecurityPanel() {
     }, []);
 
     const savePanicPin = async () => {
-        if (!panicPin || panicPin.length < 4) return;
+        if (!panicPin || panicPin.length < 4) {
+            toast.error("El PIN de pánico debe tener al menos 4 dígitos");
+            return;
+        }
+        const masterPin = await getSecurePin("master_pin");
+        if (masterPin && panicPin === masterPin) {
+            toast.error("El PIN de Pánico no puede ser igual al PIN Maestro.");
+            return;
+        }
         await setSecurePin("panic_pin", panicPin);
         setSavedPined(panicPin);
         toast.success("🚨 PIN de Pánico (Wipe) guardado y activo");
     };
 
     const saveDecoyPin = async () => {
-        if (!decoyPin || decoyPin.length < 4) return;
+        if (!decoyPin || decoyPin.length < 4) {
+            toast.error("El PIN señuelo debe tener al menos 4 dígitos");
+            return;
+        }
+        const masterPin = await getSecurePin("master_pin");
+        if (masterPin && decoyPin === masterPin) {
+            toast.error("El PIN Señuelo no puede ser igual al PIN Maestro.");
+            return;
+        }
         await setSecurePin("decoy_pin", decoyPin);
         setSavedDecoyPin(decoyPin);
         toast.success("🛡️ Bóveda Señuelo (Decoy) guardada y activa");
