@@ -3,6 +3,7 @@
  * 
  * Hides encrypted Noise XK text/payloads inside the Least Significant Bits (LSB) of HTML5 Canvas
  * 2D image pixel buffers without creating visually perceptible distortion (deltaE < 1.0).
+ * Fully unicode/emoji-safe bitwise byte-length header packing.
  */
 
 export class StegoEngine {
@@ -26,10 +27,15 @@ export class StegoEngine {
                 const imageData = ctx.getImageData(0, 0, img.width, img.height);
                 const data = imageData.data;
 
-                // Format payload: HEADER + Payload Length + Secret Content
-                const fullPayload = `${this.HEADER_MAGIC}:${secretPayload.length}:${secretPayload}`;
+                // Format payload: HEADER_MAGIC + ":" + BYTE_LENGTH + ":" + SECRET_PAYLOAD
                 const encoder = new TextEncoder();
-                const payloadBytes = encoder.encode(fullPayload);
+                const secretBytes = encoder.encode(secretPayload);
+                const headerStr = `${this.HEADER_MAGIC}:${secretBytes.length}:`;
+                const headerBytes = encoder.encode(headerStr);
+
+                const payloadBytes = new Uint8Array(headerBytes.length + secretBytes.length);
+                payloadBytes.set(headerBytes, 0);
+                payloadBytes.set(secretBytes, headerBytes.length);
 
                 const totalBits = payloadBytes.length * 8;
                 const maxBits = (data.length / 4) * 2; // 2 bits per pixel Blue channel
@@ -88,30 +94,33 @@ export class StegoEngine {
                 }
 
                 // Reconstruct bytes
-                const bytes: number[] = [];
-                for (let i = 0; i < bits.length; i += 8) {
+                const rawBytes = new Uint8Array(Math.floor(bits.length / 8));
+                for (let i = 0; i < rawBytes.length; i++) {
                     let byteVal = 0;
                     for (let b = 0; b < 8; b++) {
-                        byteVal = (byteVal << 1) | (bits[i + b] || 0);
+                        byteVal = (byteVal << 1) | (bits[i * 8 + b] || 0);
                     }
-                    bytes.push(byteVal);
+                    rawBytes[i] = byteVal;
                 }
 
-                const decodedStr = new TextDecoder().decode(new Uint8Array(bytes));
-                if (decodedStr.startsWith(this.HEADER_MAGIC)) {
-                    const parts = decodedStr.split(":");
-                    if (parts.length >= 3) {
-                        const payloadLen = parseInt(parts[1], 10);
-                        const actualPayload = parts.slice(2).join(":");
-                        if (!isNaN(payloadLen) && payloadLen >= 0) {
-                            resolve(actualPayload.slice(0, payloadLen));
+                const fullText = new TextDecoder().decode(rawBytes);
+                if (fullText.startsWith(this.HEADER_MAGIC)) {
+                    const firstColon = fullText.indexOf(":");
+                    const secondColon = fullText.indexOf(":", firstColon + 1);
+
+                    if (firstColon !== -1 && secondColon !== -1) {
+                        const byteLenStr = fullText.substring(firstColon + 1, secondColon);
+                        const byteLen = parseInt(byteLenStr, 10);
+
+                        if (!isNaN(byteLen) && byteLen >= 0) {
+                            const headerByteCount = new TextEncoder().encode(fullText.substring(0, secondColon + 1)).length;
+                            const secretBuffer = rawBytes.subarray(headerByteCount, headerByteCount + byteLen);
+                            resolve(new TextDecoder().decode(secretBuffer));
                             return;
                         }
                     }
-                    resolve(parts.slice(1).join(":"));
-                } else {
-                    resolve(null);
                 }
+                resolve(null);
             };
             img.onerror = () => resolve(null);
             img.src = stegoImageDataUrl;
