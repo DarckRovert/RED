@@ -1131,16 +1131,40 @@ export interface EcoMeshStatus {
 export async function getProximityNodes(): Promise<ProximityNode[]> {
     const res = await fetchWithFallback<any>('/api/discovery/proximity', undefined, async () => {
         const peers = await RedAPI.getPeers().catch(() => []);
+        let storeContacts: any[] = [];
+        if (typeof window !== 'undefined') {
+            try {
+                const { useRedStore } = await import('../store/useRedStore');
+                storeContacts = useRedStore.getState().contacts || [];
+            } catch {}
+        }
+
         if (peers.length > 0) {
-            return peers.map(p => ({
-                identity_hash: p.id,
-                display_name: `Nodo Peer (${p.id.slice(0, 8)})`,
-                rssi_dbm: -50 - Math.min(40, (p.latency_ms || 10)),
-                distance_meters: parseFloat((((p.latency_ms || 10) * 0.15)).toFixed(1)),
-                transport: p.transport || 'P2P Mesh',
+            return peers.map(p => {
+                const matched = storeContacts.find((c: any) => c.identity_hash === p.id || (c.identity_hash && p.id.startsWith(c.identity_hash)));
+                const name = matched?.display_name || `Nodo Peer (${p.id.slice(0, 8)})`;
+                return {
+                    identity_hash: p.id,
+                    display_name: name,
+                    rssi_dbm: -50 - Math.min(40, (p.latency_ms || 10)),
+                    distance_meters: parseFloat((((p.latency_ms || 10) * 0.15)).toFixed(1)),
+                    transport: p.transport || 'P2P Mesh',
+                    last_seen: Date.now(),
+                };
+            });
+        }
+
+        if (storeContacts.length > 0) {
+            return storeContacts.map((c: any) => ({
+                identity_hash: c.identity_hash,
+                display_name: c.display_name || `Contacto (${c.identity_hash.slice(0, 8)})`,
+                rssi_dbm: c.online ? -55 : -80,
+                distance_meters: c.online ? 1.5 : 6.0,
+                transport: 'BLE / WiFi Direct',
                 last_seen: Date.now(),
             }));
         }
+
         return [];
     });
     if (Array.isArray(res)) return res;
