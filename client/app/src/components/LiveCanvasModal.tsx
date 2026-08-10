@@ -7,16 +7,28 @@ import { postChannelMessage, getChannelMessages } from '../lib/api';
 const CANVAS_SYNC_CHANNEL = 'canvas-sync';
 const SYNC_INTERVAL_MS = 2000;
 
+interface PeerFrame {
+    senderName: string;
+    senderId: string;
+    frameBase64: string;
+    timestamp: number;
+}
+
 export const LiveCanvasModal: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [color, setColor] = useState('#e8213a');
+    const [lineWidth, setLineWidth] = useState(4);
+    const [isEraser, setIsEraser] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
-    const [peerCanvases, setPeerCanvases] = useState<string[]>([]);
+    const [peerFrames, setPeerFrames] = useState<PeerFrame[]>([]);
     const [syncStatus, setSyncStatus] = useState<'idle' | 'synced' | 'error'>('idle');
     const hasDrawnSinceLastSync = useRef(false);
+
+    const myNickname = identity?.nickname || 'Operador RED';
+    const myHash = identity?.identity_hash || 'local_node';
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -27,7 +39,7 @@ export const LiveCanvasModal: React.FC = () => {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }, []);
 
-    // Sync canvas snapshot to P2P network channel every SYNC_INTERVAL_MS if there was new drawing
+    // Sync canvas snapshot to P2P network channel with real sender identity
     const syncCanvasToNetwork = useCallback(async () => {
         if (!hasDrawnSinceLastSync.current) return;
         const canvas = canvasRef.current;
@@ -41,7 +53,7 @@ export const LiveCanvasModal: React.FC = () => {
             await postChannelMessage({
                 channel_id: CANVAS_SYNC_CHANNEL,
                 content: `CANVAS_FRAME:${base64}`,
-                sender_name: 'Operador RED'
+                sender_name: myNickname
             });
 
             hasDrawnSinceLastSync.current = false;
@@ -53,22 +65,36 @@ export const LiveCanvasModal: React.FC = () => {
         } finally {
             setIsSyncing(false);
         }
-    }, []);
+    }, [myNickname]);
 
-    // Fetch peer canvas frames from network channel
+    // Fetch peer canvas frames from network channel with real node identities
     const fetchPeerFrames = useCallback(async () => {
         try {
             const response = await getChannelMessages(CANVAS_SYNC_CHANNEL);
-            const messages = response.messages ?? [];
-            const frames = messages
-                .filter((m) => m.content?.startsWith('CANVAS_FRAME:'))
-                .map((m) => m.content.replace('CANVAS_FRAME:', ''))
-                .slice(-3); // Keep last 3 peer frames
-            setPeerCanvases(frames);
+            const rawMessages = response.messages ?? [];
+            
+            // Group latest frame per peer (excluding own messages)
+            const peerLatestMap = new Map<string, PeerFrame>();
+
+            rawMessages.forEach((m: any) => {
+                if (m.content?.startsWith('CANVAS_FRAME:') && m.sender !== myHash) {
+                    const base64 = m.content.replace('CANVAS_FRAME:', '');
+                    const senderName = m.sender_name || (m.sender ? m.sender.slice(0, 8) : 'Nodo Peer');
+                    peerLatestMap.set(m.sender || senderName, {
+                        senderName,
+                        senderId: m.sender || 'peer',
+                        frameBase64: base64,
+                        timestamp: m.timestamp || Date.now()
+                    });
+                }
+            });
+
+            const framesArray = Array.from(peerLatestMap.values()).slice(-4);
+            setPeerFrames(framesArray);
         } catch {
             // Channel may not exist yet — silent fail
         }
-    }, []);
+    }, [myHash]);
 
     useEffect(() => {
         const syncInterval = setInterval(syncCanvasToNetwork, SYNC_INTERVAL_MS);
@@ -109,9 +135,9 @@ export const LiveCanvasModal: React.FC = () => {
         const { x, y } = getEventCoords(e, rect);
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineWidth = 4;
+        ctx.lineWidth = isEraser ? lineWidth * 3 : lineWidth;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = isEraser ? '#04060A' : color;
         ctx.lineTo(x, y);
         ctx.stroke();
         hasDrawnSinceLastSync.current = true;
@@ -136,9 +162,9 @@ export const LiveCanvasModal: React.FC = () => {
         const rect = canvas.getBoundingClientRect();
         const { x, y } = getEventCoords(e, rect);
 
-        ctx.lineWidth = 4;
+        ctx.lineWidth = isEraser ? lineWidth * 3 : lineWidth;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = isEraser ? '#04060A' : color;
         ctx.lineTo(x, y);
         ctx.stroke();
         ctx.beginPath();
@@ -147,7 +173,6 @@ export const LiveCanvasModal: React.FC = () => {
         hasDrawnSinceLastSync.current = true;
     };
 
-
     const clearCanvas = () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -155,7 +180,7 @@ export const LiveCanvasModal: React.FC = () => {
         if (!ctx) return;
         ctx.fillStyle = '#04060A';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        hasDrawnSinceLastSync.current = true; // Sync the clear action
+        hasDrawnSinceLastSync.current = true; // Sync clear action
     };
 
     const syncNow = async () => {
@@ -211,49 +236,78 @@ export const LiveCanvasModal: React.FC = () => {
                 </div>
             </div>
 
-            {/* COLOR SELECTOR + SYNC BUTTON */}
-            <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.4)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
+            {/* COLOR & BRUSH CONTROLS */}
+            <div style={{ padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.4)', borderBottom: '1px solid rgba(255,255,255,0.06)', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     {['#e8213a', '#38bdf8', '#4ade80', '#f59e0b', '#c084fc', '#ffffff'].map((c) => (
                         <div
                             key={c}
-                            onClick={() => setColor(c)}
+                            onClick={() => { setColor(c); setIsEraser(false); }}
                             style={{
                                 width: '28px',
                                 height: '28px',
                                 borderRadius: '50%',
                                 background: c,
-                                border: color === c ? '3px solid #fff' : '1px solid rgba(255,255,255,0.2)',
+                                border: !isEraser && color === c ? '3px solid #fff' : '1px solid rgba(255,255,255,0.2)',
                                 cursor: 'pointer',
                                 flexShrink: 0
                             }}
                         />
                     ))}
+                    <button
+                        onClick={() => setIsEraser(!isEraser)}
+                        style={{
+                            background: isEraser ? '#ef4444' : 'rgba(255,255,255,0.1)',
+                            color: '#fff', border: 'none', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer'
+                        }}
+                    >
+                        🧹 Borrador
+                    </button>
                 </div>
-                <button
-                    onClick={syncNow}
-                    disabled={isSyncing}
-                    style={{
-                        background: 'rgba(74,222,128,0.1)',
-                        border: '1px solid #4ade80',
-                        color: '#4ade80',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                        fontSize: '0.75rem',
-                        fontWeight: 800,
-                        cursor: isSyncing ? 'not-allowed' : 'pointer',
-                        opacity: isSyncing ? 0.5 : 1
-                    }}
-                >
-                    📡 Enviar a Red
-                </button>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Grosor:</div>
+                    {[2, 4, 8, 12].map((w) => (
+                        <button
+                            key={w}
+                            onClick={() => setLineWidth(w)}
+                            style={{
+                                background: lineWidth === w ? '#38bdf8' : 'rgba(255,255,255,0.1)',
+                                color: lineWidth === w ? '#000' : '#fff',
+                                border: 'none', width: '26px', height: '26px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 800, cursor: 'pointer'
+                            }}
+                        >
+                            {w}
+                        </button>
+                    ))}
+
+                    <button
+                        onClick={syncNow}
+                        disabled={isSyncing}
+                        style={{
+                            background: 'rgba(74,222,128,0.1)',
+                            border: '1px solid #4ade80',
+                            color: '#4ade80',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            fontSize: '0.75rem',
+                            fontWeight: 800,
+                            cursor: isSyncing ? 'not-allowed' : 'pointer',
+                            opacity: isSyncing ? 0.5 : 1
+                        }}
+                    >
+                        📡 Enviar a Red
+                    </button>
+                </div>
             </div>
 
             {/* CANVAS WORKSPACE */}
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', gap: '16px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px', gap: '16px', flexWrap: 'wrap', overflowY: 'auto' }}>
                 {/* MY CANVAS */}
                 <div>
-                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '4px', textAlign: 'center', fontWeight: 700 }}>TU PIZARRA</div>
+                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: '4px', textAlign: 'center', fontWeight: 700 }}>
+                        TU PIZARRA ({myNickname})
+                    </div>
                     <canvas
                         ref={canvasRef}
                         width={320}
@@ -280,12 +334,14 @@ export const LiveCanvasModal: React.FC = () => {
                 </div>
 
                 {/* PEER CANVASES FROM NETWORK */}
-                {peerCanvases.length > 0 && peerCanvases.map((frame, idx) => (
+                {peerFrames.length > 0 && peerFrames.map((pf, idx) => (
                     <div key={idx}>
-                        <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginBottom: '4px', textAlign: 'center', fontWeight: 700 }}>NODO PEER {idx + 1}</div>
+                        <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginBottom: '4px', textAlign: 'center', fontWeight: 700 }}>
+                            NODO PEER: {pf.senderName.toUpperCase()}
+                        </div>
                         <img
-                            src={`data:image/png;base64,${frame}`}
-                            alt={`Pizarra del Nodo Peer ${idx + 1}`}
+                            src={`data:image/png;base64,${pf.frameBase64}`}
+                            alt={`Pizarra de ${pf.senderName}`}
                             style={{
                                 width: '160px',
                                 height: '210px',
@@ -298,7 +354,7 @@ export const LiveCanvasModal: React.FC = () => {
                     </div>
                 ))}
 
-                {peerCanvases.length === 0 && (
+                {peerFrames.length === 0 && (
                     <div style={{ color: '#374151', fontSize: '0.8rem', textAlign: 'center', padding: '20px', maxWidth: '160px' }}>
                         Las pizarras de otros nodos aparecerán aquí cuando se conecten.
                     </div>
