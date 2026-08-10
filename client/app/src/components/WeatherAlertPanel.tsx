@@ -35,7 +35,22 @@ export const WeatherAlertPanel: React.FC = () => {
         setDetecting(true);
         setFormError(null);
         try {
-            let lat = 4.6097, lon = -74.0817; // Default Bogotá coordinates fallback
+            let lat: number | null = null;
+            let lon: number | null = null;
+
+            if (typeof window !== 'undefined') {
+                try {
+                    const cached = localStorage.getItem('red_last_known_gps');
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        if (typeof parsed.lat === 'number' && typeof parsed.lon === 'number') {
+                            lat = parsed.lat;
+                            lon = parsed.lon;
+                        }
+                    }
+                } catch {}
+            }
+
             try {
                 const { Geolocation } = await import('@capacitor/geolocation');
                 const pos = await Geolocation.getCurrentPosition({ timeout: 5000, enableHighAccuracy: true });
@@ -51,6 +66,18 @@ export const WeatherAlertPanel: React.FC = () => {
                         );
                     });
                 }
+            }
+
+            if (lat === null || lon === null) {
+                setSensorMeta('⚠️ GPS no disponible. Ingrese la presión barométrica manualmente.');
+                return;
+            }
+
+            // Persist last known empirical GPS coordinates
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem('red_last_known_gps', JSON.stringify({ lat, lon }));
+                } catch {}
             }
 
             // Fetch real meteorological & barometric data from Open-Meteo (100% free, real atmospheric sensor grid)
