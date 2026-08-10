@@ -251,7 +251,7 @@ export const AICopilotModal: React.FC = () => {
                                                         cursor: 'pointer'
                                                     }}
                                                 >
-                                                    ⚡ Establacer como Modelo Activo
+                                                    ⚡ Establecer como Modelo Activo
                                                 </button>
                                             ) : (
                                                 <button
