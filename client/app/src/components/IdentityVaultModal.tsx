@@ -119,7 +119,7 @@ export const IdentityVaultModal: React.FC = () => {
             contact: emergencyContact,
             expires: Date.now() + 300000 // 5 min
         });
-        const encoded = btoa(payload);
+        const encoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(payload))) : btoa(payload);
         const qrText = `RED_ID_VAULT:${encoded}`;
         try {
             const QRCode = await import('qrcode');
