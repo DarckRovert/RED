@@ -144,8 +144,13 @@ export default function SecurityPanel() {
             return;
         }
         const masterPin = await getSecurePin("master_pin");
+        const decoyPinVal = await getSecurePin("decoy_pin");
         if (masterPin && panicPin === masterPin) {
             toast.error("El PIN de Pánico no puede ser igual al PIN Maestro.");
+            return;
+        }
+        if (decoyPinVal && panicPin === decoyPinVal) {
+            toast.error("El PIN de Pánico no puede ser igual al PIN Señuelo.");
             return;
         }
         await setSecurePin("panic_pin", panicPin);
@@ -159,8 +164,13 @@ export default function SecurityPanel() {
             return;
         }
         const masterPin = await getSecurePin("master_pin");
+        const panicPinVal = await getSecurePin("panic_pin");
         if (masterPin && decoyPin === masterPin) {
             toast.error("El PIN Señuelo no puede ser igual al PIN Maestro.");
+            return;
+        }
+        if (panicPinVal && decoyPin === panicPinVal) {
+            toast.error("El PIN Señuelo no puede ser igual al PIN de Pánico.");
             return;
         }
         await setSecurePin("decoy_pin", decoyPin);
