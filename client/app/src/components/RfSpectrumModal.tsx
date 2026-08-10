@@ -20,6 +20,15 @@ export function RfSpectrumModal() {
                 return Math.max(-95, Math.min(-30, -50 - Math.round(latency * 0.4)));
             });
 
+            // Sample physical network interface RTT if available
+            if (typeof navigator !== 'undefined' && 'connection' in navigator) {
+                const conn = (navigator as any).connection;
+                if (conn && typeof conn.rtt === 'number' && conn.rtt > 0) {
+                    const phyRssi = Math.max(-95, Math.min(-35, -45 - Math.round(conn.rtt * 0.2)));
+                    realRssiList.push(phyRssi);
+                }
+            }
+
             // Default baseline clean spectrum sampling if no P2P contacts connected
             const sampleRssiList = realRssiList.length > 0 ? realRssiList : [-55, -62, -58, -64, -53, -60];
             const updated = RfSpectrumAnalyzerEngine.analyzeEnvironment(sampleRssiList);
