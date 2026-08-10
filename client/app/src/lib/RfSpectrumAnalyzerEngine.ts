@@ -33,8 +33,16 @@ export class RfSpectrumAnalyzerEngine {
      * Analyzes current RF environment and calculates Electronic Warfare / Jamming threat index
      */
     public static analyzeEnvironment(sampleRssiList: number[]): RfSpectrumMetrics {
+        // BUG-10 Fix: Do NOT substitute real hardware data with hardcoded samples.
+        // If no RSSI data is available, throw an explicit error so the caller
+        // can surface it to the UI ("No BLE scan data available").
+        // Real RSSI values must come from the Web Bluetooth API:
+        //   navigator.bluetooth.requestDevice() → device.gatt.connect() → readRSSI()
         if (sampleRssiList.length === 0) {
-            sampleRssiList = [-65, -72, -58, -80, -62, -70];
+            throw new Error(
+                '[RfSpectrumAnalyzer] No RSSI samples provided. ' +
+                'Obtain real values from Web Bluetooth API before calling analyzeEnvironment().'
+            );
         }
 
         this.rssiHistory.push(...sampleRssiList);

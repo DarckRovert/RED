@@ -125,7 +125,7 @@ export const ProximityWaveModal: React.FC = () => {
                                 <div>
                                     <div style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem' }}>{n.display_name}</div>
                                     <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace', marginTop: '2px' }}>
-                                        Distancia: ~{n.distance_meters}m | RSSI: {n.rssi_dbm} dBm ({n.transport})
+                                        Distancia: {n.distance_meters !== null ? `~${n.distance_meters}m` : '—'} | RSSI: {n.rssi_dbm !== null ? `${n.rssi_dbm} dBm` : '—'} ({n.transport})
                                     </div>
                                 </div>
                                 <button

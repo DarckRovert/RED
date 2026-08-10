@@ -348,27 +348,36 @@ impl Node {
                 tokio::time::sleep(tokio::time::Duration::from_secs(wait_secs)).await;
                 
                 // Phase 18: Anti-Traffic Analysis (Zero-Overhead Dummy Traffic)
+                // BUG-16 FIX: Do NOT call send_message() — it persists to SQLite.
+                // Instead, serialize a dummy OnionPacket and emit it directly via transport.
+                // This flattens ISP bandwidth graphs without polluting the message store.
                 let mut noise = vec![0u8; 1024];
                 rand::thread_rng().fill_bytes(&mut noise);
-                
-                let dummy_recipient = crate::identity::IdentityHash::from_bytes([0u8; 32]);
-                let my_hash = node_for_padding.lock().await.identity.identity_hash().clone();
-                
-                // Wrap in a valid Message structure to satisfy the type system
-                let dummy_msg = crate::protocol::Message {
-                    id: crate::protocol::MessageId::generate(),
-                    sender: my_hash,
-                    recipient: dummy_recipient.clone(),
-                    content: crate::protocol::MessageType::Text(hex::encode(noise)),
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
-                    reply_to: None,
-                    status: crate::protocol::MessageStatus::Pending,
-                    edited: false,
-                };
 
-                let _ = node_for_padding.lock().await.send_message(dummy_recipient, dummy_msg).await;
+                // Build a minimal dummy payload: 32-byte zero recipient + random noise
+                let mut dummy_payload = vec![0u8; 32]; // zero recipient hash
+                dummy_payload.extend_from_slice(&noise);
+
+                // Emit directly via transport (broadcast to all connected peers).
+                // Acquire and immediately release the lock so we don't block incoming messages.
+                let transport_clone = {
+                    let n = node_for_padding.lock().await;
+                    n.transport.clone()
+                };
+                let peer_ids: Vec<crate::network::PeerId> = {
+                    let n = node_for_padding.lock().await;
+                    n.transport_peer_ids()
+                };
+                for peer_id in peer_ids {
+                    let _ = transport_clone
+                        .send(&peer_id, crate::network::transport::TransportMessage::Data {
+                            payload: dummy_payload.clone(),
+                        })
+                        .await;
+                }
             }
         });
+
     }
 
     /// Set message notifier
@@ -816,6 +825,11 @@ impl Node {
         self.transport.connected_peers().len()
     }
 
+    /// Get the list of currently connected peer IDs (for direct transport emission)
+    pub fn transport_peer_ids(&self) -> Vec<crate::network::PeerId> {
+        self.transport.connected_peers()
+    }
+
     /// List known peers via transport
     pub async fn list_peers(&self) -> NetworkResult<Vec<crate::network::PeerInfo>> {
         Ok(self.transport.known_peers())
@@ -1010,16 +1024,40 @@ impl Node {
     }
 
     // ── E1: Add a member to a group ───────────────────────────────────────────
-    pub async fn add_group_member_by_hash(&mut self, group_id: crate::protocol::GroupId, member_hash: crate::identity::IdentityHash) -> NetworkResult<()> {
+    // BUG-17 FIX: Resolve the member's real public key from the contacts store
+    // before creating the GroupMember. Using [0u8;32] broke SenderKey encryption.
+    pub async fn add_group_member_by_hash(
+        &mut self,
+        group_id: crate::protocol::GroupId,
+        member_hash: crate::identity::IdentityHash,
+    ) -> NetworkResult<()> {
+        // Resolve real public key from stored contacts
+        let public_key = {
+            let s = self.storage.lock().await;
+            if let Some(contact) = s.get_contact(&member_hash) {
+                // Contact.public_key is [u8;32]; GroupMember.public_key is PublicKey — convert.
+                crate::crypto::keys::PublicKey::from_bytes(contact.public_key)
+            } else {
+                return Err(NetworkError::TransportError(format!(
+                    "Cannot add member {}: contact not found in storage, \
+                     public key unknown. Add them as a contact first.",
+                    member_hash.short()
+                )));
+            }
+        };
+
         let member = crate::protocol::GroupMember {
             identity_hash: member_hash,
-            public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+            public_key,
             joined_at: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
             role: crate::protocol::MemberRole::Member,
         };
         self.add_group_member(group_id, member).await
     }
+
 
     // ── E1: Remove a member from a group ─────────────────────────────────────
     pub async fn remove_group_member(&mut self, group_id: crate::protocol::GroupId, member_hash: crate::identity::IdentityHash) -> NetworkResult<()> {

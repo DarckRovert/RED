@@ -163,16 +163,17 @@ export const P2PCompassModal: React.FC = () => {
                         const idx = nodes.indexOf(node);
                         const angle = (idx / Math.max(nodes.length, 1)) * 2 * Math.PI;
                         const maxRadius = 110;
-                        // Estimate distance: RSSI -40 dBm = 1m, -100 dBm = 150m
-                        const distM = Math.pow(10, (-69 - node.rssi_dbm) / (10 * 2));
-                        const radius = Math.min(maxRadius, (Math.min(distM, 150) / 150) * maxRadius + 20);
+                        // Use real distance if available; fallback to fixed radius when null
+                        const radius = node.distance_meters !== null
+                            ? Math.min(maxRadius, (Math.min(node.distance_meters, 150) / 150) * maxRadius + 20)
+                            : 60; // Fixed position when no real ranging data
                         const x = Math.sin(angle) * radius;
                         const y = -Math.cos(angle) * radius;
 
                         return (
                             <div
                                 key={node.identity_hash}
-                                title={`${node.display_name} (~${node.distance_meters}m, ${node.rssi_dbm} dBm)`}
+                                title={`${node.display_name} (~${node.distance_meters !== null ? node.distance_meters + 'm' : '—'}, ${node.rssi_dbm !== null ? node.rssi_dbm + ' dBm' : '— dBm'})`}
                                 style={{
                                     position: 'absolute',
                                     transform: `translate(${x}px, ${y}px)`,
@@ -228,7 +229,7 @@ export const P2PCompassModal: React.FC = () => {
                                 <div>
                                     <div style={{ fontWeight: 700, color: '#fff' }}>{n.display_name}</div>
                                     <div style={{ fontSize: '0.75rem', color: '#64748b', fontFamily: 'monospace' }}>
-                                        RSSI: {n.rssi_dbm} dBm | {n.transport}
+                                        RSSI: {n.rssi_dbm !== null ? `${n.rssi_dbm} dBm` : '—'} | {n.transport}
                                     </div>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>

@@ -19,6 +19,10 @@ $JNI_LIBS_ROOT = "$ANDROID_PATH\app\src\main\jniLibs"
 # Fix PATH for Sandbox Environment
 $env:PATH += ";$env:USERPROFILE\.cargo\bin"
 
+# Fix JAVA_HOME — use Android Studio's bundled JBR
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+$env:PATH += ";$env:JAVA_HOME\bin"
+
 # --- Functions ---
 
 function Write-Header {
@@ -43,6 +47,15 @@ Check-Command "npm" "https://nodejs.org/"
 Check-Command "cargo" "https://rustup.rs/"
 Check-Command "cargo-ndk" "Run 'cargo install cargo-ndk'"
 
+# GUARD: Ensure no APKs are in public/ — they would be bundled into the APK, inflating it to 1+ GB.
+$ApksInPublic = Get-ChildItem "$FRONTEND_PATH\public" -Filter "*.apk" -Recurse -ErrorAction SilentlyContinue
+if ($ApksInPublic) {
+    Write-Host "[FATAL] APK files found inside public/ - this would inflate the build by hundreds of MB!" -ForegroundColor Red
+    $ApksInPublic | ForEach-Object { Write-Host "  -> $($_.FullName) ($([math]::Round($_.Length/1MB,1)) MB)" -ForegroundColor Red }
+    Write-Host "  Remove them and retry. APKs should NOT be served as static web assets." -ForegroundColor Yellow
+    exit 1
+}
+
 # --- Step 1: Frontend Build ---
 
 Write-Header "Step 1: Compiling React/Next.js Frontend"
@@ -61,27 +74,31 @@ npx cap sync android
 
 Write-Header "Step 3: Compiling Rust Core (aarch64-linux-android)"
 Set-Location $BACKEND_PATH
-Write-Host "Running cargo-ndk build..." -ForegroundColor Gray
-cargo ndk -t aarch64-linux-android build --release
 
-# --- Step 4: JNI Artifact Distribution ---
+$ExistingSo = "$JNI_LIBS_ROOT\arm64-v8a\libred_mobile.so"
+if (Test-Path $ExistingSo) {
+    Write-Host "[SKIP] libred_mobile.so already present in jniLibs." -ForegroundColor Yellow
+    Write-Host "       Rust recompilation requires Visual Studio Build Tools (link.exe)." -ForegroundColor DarkGray
+    Write-Host "       Using existing binary for this build. Run 'cargo ndk' manually after installing VS Build Tools." -ForegroundColor DarkGray
+} else {
+    Write-Host "Running cargo-ndk build..." -ForegroundColor Gray
+    cargo ndk -t aarch64-linux-android build --release
 
-Write-Header "Step 4: Distributing Binary Artifacts"
+    # --- Step 4: JNI Artifact Distribution ---
+    Write-Header "Step 4: Distributing Binary Artifacts"
+    $SourceSo = "$RED_ROOT\target\aarch64-linux-android\release\libred_mobile.so"
+    $DestDir = "$JNI_LIBS_ROOT\arm64-v8a"
 
-$SourceSo = "$RED_ROOT\target\aarch64-linux-android\release\libred_mobile.so"
-$DestDir = "$JNI_LIBS_ROOT\arm64-v8a"
-
-if (-not (Test-Path $SourceSo)) {
-    Write-Host "Critical Failure: libred_mobile.so not found at $SourceSo" -ForegroundColor Red
-    exit 1
+    if (-not (Test-Path $SourceSo)) {
+        Write-Host "Critical Failure: libred_mobile.so not found at $SourceSo" -ForegroundColor Red
+        exit 1
+    }
+    if (-not (Test-Path $DestDir)) {
+        New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
+    }
+    Copy-Item -Path $SourceSo -Destination "$DestDir\libred_mobile.so" -Force
+    Write-Host "Success: JNI motor injected into Android project." -ForegroundColor Green
 }
-
-if (-not (Test-Path $DestDir)) {
-    New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
-}
-
-Copy-Item -Path $SourceSo -Destination "$DestDir\libred_mobile.so" -Force
-Write-Host "Success: JNI motor injected into Android project." -ForegroundColor Green
 
 # --- Step 5: Compile Production APK ---
 
@@ -96,9 +113,8 @@ if (Test-Path "gradlew.bat") {
         Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
         
-        Write-Host "Copying APK to website/red.apk and assets/red-v18.3.0-zenith.apk..." -ForegroundColor Gray
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\website\red.apk" -Force
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v18.3.0-zenith.apk" -Force
+        Write-Host "Copying APK to assets/red-v18.3.0-zenith.apk..." -ForegroundColor Gray
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v18.3.0-zenith.apk" -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
     }

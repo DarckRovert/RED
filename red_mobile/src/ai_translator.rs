@@ -26,9 +26,9 @@ impl AITranslatorEngine {
         let text = req.text.trim();
 
         let translated_text = match req.target_language.to_lowercase().as_str() {
-            "en" => format!("[AI Translated to EN]: {}", text),
-            "qu" => format!("[AI Translated to Quechua]: Allinllachu - {}", text),
-            _ => format!("[AI Translated to ES]: {}", text),
+            "en" => format!("[EN]: {}", text),
+            "qu" => format!("[Quechua]: {}", text),
+            _ => format!("[ES]: {}", text),
         };
 
         let execution_time_ms = start.elapsed().as_millis() as u64;

@@ -34,4 +34,5 @@ thiserror = "1.0"
 # [DEBUG-31] Android Native Logging
 android_logger = "0.13"
 log = "0.4"
+local-ip-address = "0.6"
 

@@ -15,6 +15,7 @@ pub mod amber_authority;
 pub mod battery;
 pub mod channels;
 pub mod discovery;
+pub mod embeddings;
 pub mod ephemeral;
 pub mod guardian;
 pub mod sanitizer;

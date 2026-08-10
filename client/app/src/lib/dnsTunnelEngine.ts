@@ -137,8 +137,15 @@ export class DnsTunnelEngine {
     }
 
     const latencyMs = Math.round(performance.now() - startTime);
-    this.stats.packetsReceived++;
-    return { success: true, responseTxt: "RED_DNS_ACK_OK", latencyMs: Math.max(12, latencyMs) };
+    // BUG-15 Fix: DoH failed — report failure honestly instead of simulating success.
+    // The caller should decide whether to retry with another provider or abort.
+    return {
+        success: false,
+        responseTxt: undefined,
+        latencyMs,
+        // Expose reason for UI/logging
+        reason: 'DoH request failed — DNS tunneling unavailable on current network',
+    } as { success: boolean; responseTxt?: string; latencyMs: number };
   }
 
   public static getStats(): DnsTunnelStats {

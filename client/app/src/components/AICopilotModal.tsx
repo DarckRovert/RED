@@ -4,8 +4,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { queryAICopilot, translateTextAI, summarizeChannelAI, CopilotResponse } from '../lib/api';
 import { LocalAIEngine } from '../lib/localAiEngine';
+import { HiveMindEngine } from '../lib/hiveMindEngine';
+import { ModelManager, LocalModelMetaData } from '../lib/modelManager';
 
-type AIMode = 'copilot' | 'guardian' | 'embeddings' | 'summarizer' | 'translator' | 'diagnose';
+type AIMode = 'copilot' | 'hivemind' | 'guardian' | 'embeddings' | 'summarizer' | 'translator' | 'diagnose';
 
 export const AICopilotModal: React.FC = () => {
     const { navigate, messages: chatMessages, activeConversationId } = useRedStore();
@@ -22,7 +24,25 @@ export const AICopilotModal: React.FC = () => {
         }
     ]);
 
+    const [availableModels, setAvailableModels] = useState<LocalModelMetaData[]>([]);
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+    const [downloadProgress, setDownloadProgress] = useState<number>(0);
+
     const chatContainerRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        setAvailableModels(ModelManager.getModels());
+    }, []);
+
+    const handleDownloadModel = async (modelId: string) => {
+        setDownloadingId(modelId);
+        setDownloadProgress(0);
+        await ModelManager.downloadModel(modelId, (pct) => {
+            setDownloadProgress(pct);
+        });
+        setAvailableModels([...ModelManager.getModels()]);
+        setDownloadingId(null);
+    };
 
     // Auto-scroll on new message
     useEffect(() => {
@@ -40,12 +60,16 @@ export const AICopilotModal: React.FC = () => {
         setLoading(true);
 
         try {
-            if (mode === 'copilot') {
+            if (mode === 'copilot' || mode === 'hivemind') {
                 const res: CopilotResponse = await queryAICopilot(text);
                 setMessages((prev) => [
                     ...prev,
                     { sender: 'ai', text: res.answer, category: res.topic_category, source: res.source }
                 ]);
+                if (mode === 'hivemind') {
+                    // Switch back to copilot view to show response thread
+                    setMode('copilot');
+                }
             } else if (mode === 'guardian') {
                 const safety = await LocalAIEngine.classifySafety(text);
                 const categoryStr = (safety.category || 'general').toUpperCase();
@@ -128,7 +152,7 @@ export const AICopilotModal: React.FC = () => {
                     ← Volver
                 </button>
                 <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>
-                    🤖 COPILOTO IA NEURONAL REAL (3 MODELOS ONNX)
+                    🤖 COPILOTO IA & MENTE COLMENA (P2P MESH)
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#00D97E', fontWeight: 800, fontFamily: 'monospace' }}>
                     100% OFF-GRID
@@ -146,6 +170,7 @@ export const AICopilotModal: React.FC = () => {
             }}>
                 {[
                     { id: 'copilot', label: '🤖 Copiloto' },
+                    { id: 'hivemind', label: '🐝 Mente Colmena / Modelos' },
                     { id: 'guardian', label: '🛡️ Guardian (Toxic-BERT)' },
                     { id: 'embeddings', label: '🧠 Embeddings (MiniLM)' },
                     { id: 'summarizer', label: '📝 Resumidor' },
@@ -172,32 +197,109 @@ export const AICopilotModal: React.FC = () => {
                 ))}
             </div>
 
-            {/* CHAT MESSAGES BODY */}
-            <div ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                {messages.map((m, idx) => (
-                    <div
-                        key={idx}
-                        style={{
-                            alignSelf: m.sender === 'user' ? 'flex-end' : 'flex-start',
-                            maxWidth: '85%',
-                            background: m.sender === 'user' ? 'rgba(56,189,248,0.2)' : 'rgba(15,23,42,0.85)',
-                            border: m.sender === 'user' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '16px',
-                            padding: '14px 18px',
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
-                        }}
-                    >
-                        {m.category && (
-                            <div style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase' }}>
-                                {m.category} {m.source && `• ${m.source}`}
-                            </div>
-                        )}
-                        <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.45' }}>
-                            {m.text}
+            {/* CHAT MESSAGES BODY / HIVEMIND DASHBOARD */}
+            {mode === 'hivemind' ? (
+                <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div style={{ background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '12px', padding: '16px' }}>
+                        <h3 style={{ margin: '0 0 8px 0', color: '#38bdf8', fontSize: '1.1rem' }}>🐝 Red Mente Colmena P2P (Hive Mind)</h3>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+                            Permite delegar consultas de IA a otros dispositivos de la red RED con más memoria RAM o procesador libre, o ejecutar modelos nativos de alta capacidad (3.8B+) sin servidores en la nube.
+                        </p>
+                    </div>
+
+                    <div>
+                        <h4 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '0.95rem' }}>📦 Modelos Neuronal de Alta Capacidad Disponibles</h4>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                            {availableModels.map((m) => (
+                                <div key={m.id} style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <span style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem' }}>{m.name}</span>
+                                            <span style={{ fontSize: '0.75rem', background: '#1e293b', color: '#00D97E', padding: '2px 8px', borderRadius: '6px', fontWeight: 700 }}>{m.parameterCount}</span>
+                                        </div>
+                                        <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '0 0 12px 0', lineHeight: 1.4 }}>{m.description}</p>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '8px' }}>
+                                            Tamaño: {(m.fileSizeMb / 1024).toFixed(1)} GB | RAM Rec: {(m.recommendedMinRamMb / 1024).toFixed(1)} GB
+                                        </div>
+                                        {m.isDownloaded ? (
+                                            <div style={{ background: 'rgba(0,217,126,0.15)', color: '#00D97E', padding: '8px', borderRadius: '8px', textAlign: 'center', fontWeight: 800, fontSize: '0.8rem' }}>
+                                                ✅ Modelo Instalado & Activo
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleDownloadModel(m.id)}
+                                                disabled={downloadingId === m.id}
+                                                style={{
+                                                    width: '100%',
+                                                    background: downloadingId === m.id ? '#334155' : 'var(--primary, #E8213A)',
+                                                    color: '#fff',
+                                                    border: 'none',
+                                                    borderRadius: '8px',
+                                                    padding: '10px',
+                                                    fontWeight: 800,
+                                                    fontSize: '0.8rem',
+                                                    cursor: downloadingId === m.id ? 'default' : 'pointer'
+                                                }}
+                                            >
+                                                {downloadingId === m.id ? `Descargando... (${downloadProgress}%)` : `⚡ Descargar e Instalar (${m.fileSizeMb} MB)`}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                ))}
-            </div>
+
+                    <div>
+                        <h4 style={{ margin: '0 0 12px 0', color: '#fff', fontSize: '0.95rem' }}>🛰️ Nodos Mesh P2P con Capacidad de IA</h4>
+                        <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '14px' }}>
+                            {HiveMindEngine.getKnownCapabilities().length === 0 ? (
+                                <div style={{ fontSize: '0.85rem', color: '#64748b', textAlign: 'center', padding: '12px 0' }}>
+                                    Buscando otros nodos de la red Mesh por Bluetooth BLE y WiFi Direct...
+                                </div>
+                            ) : (
+                                HiveMindEngine.getKnownCapabilities().map((node, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                        <div>
+                                            <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: '0.85rem' }}>Nodo ID: {node.nodeId.slice(0, 12)}</div>
+                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>RAM Libre: {node.availableRamMb} MB | Modelo: {node.activeModel || 'Básico ONNX'}</div>
+                                        </div>
+                                        <span style={{ fontSize: '0.75rem', color: '#00D97E', fontWeight: 800 }}>🟢 Disponible</span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div ref={chatContainerRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {messages.map((m, idx) => (
+                        <div
+                            key={idx}
+                            style={{
+                                alignSelf: m.sender === 'user' ? 'flex-end' : 'flex-start',
+                                maxWidth: '85%',
+                                background: m.sender === 'user' ? 'rgba(56,189,248,0.2)' : 'rgba(15,23,42,0.85)',
+                                border: m.sender === 'user' ? '1px solid #38bdf8' : '1px solid rgba(255,255,255,0.1)',
+                                borderRadius: '16px',
+                                padding: '14px 18px',
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                            }}
+                        >
+                            {m.category && (
+                                <div style={{ fontSize: '0.7rem', color: '#38bdf8', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase' }}>
+                                    {m.category} {m.source && `• ${m.source}`}
+                                </div>
+                            )}
+                            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.9rem', lineHeight: '1.45' }}>
+                                {m.text}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* INPUT CONTROLS */}
             <div style={{ padding: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', background: 'rgba(15,23,42,0.9)', display: 'flex', gap: '10px' }}>
@@ -221,7 +323,11 @@ export const AICopilotModal: React.FC = () => {
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
-                        placeholder={mode === 'translator' ? "Escribe texto a traducir..." : "Pregunta a la IA Neuronal (ej. 'torniquete', 'sismo')..."}
+                        placeholder={
+                            mode === 'translator' ? "Escribe texto a traducir..." :
+                            mode === 'hivemind' ? "Pregunta a la Mente Colmena Mesh (ej. 'evaluar ruta', 'sismo')..." :
+                            "Pregunta a la IA Neuronal (ej. 'torniquete', 'sismo')..."
+                        }
                         style={{
                             flex: 1, background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.15)',
                             borderRadius: '10px', padding: '12px 14px', color: '#fff', outline: 'none'

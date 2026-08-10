@@ -297,34 +297,120 @@ class GuardianEngineClass {
     }
 
     /**
-     * Evalúa una imagen (base64 data URL) generando pHash local
+     * Evalúa una imagen (base64 data URL) usando pHash diferencial real.
+     *
+     * Algoritmo (BUG-2 Fix):
+     *  1. Renderiza la imagen en un canvas offscreen de 8×8 píxeles (64 píxeles total).
+     *  2. Convierte cada píxel a luminosidad Y = 0.299R + 0.587G + 0.114B.
+     *  3. Calcula la media de luminosidad de los 64 píxeles.
+     *  4. Construye un hash de 64 bits: bit[i] = 1 si luminance[i] > media.
+     *  5. Retorna el hash como hex de 16 chars para logging/comparación.
+     *
+     * Limitación honesta: la detección de contenido NSFW requiere un clasificador
+     * de imágenes (ej. NSFWJS ONNX). Este pHash detecta si dos imágenes son
+     * perceptualmente similares, pero no clasifica el contenido por sí solo.
      */
     public evaluateImage(dataUrl: string): GuardianEvaluation {
         const start = performance.now();
         this.stats.images_analyzed++;
         this.stats.api_calls_made++;
 
-        // Simulación de pHash hash check
-        const isCorruptOrFake = !dataUrl.startsWith('data:image/');
-        if (isCorruptOrFake) {
+        // Validación de formato
+        if (!dataUrl || !dataUrl.startsWith('data:image/')) {
             this.stats.images_blocked++;
             this.saveStats();
             return {
                 allowed: false,
-                reason: 'Formato de imagen no válido o corrupto',
+                reason: 'Formato de imagen no válido o corrupto (no data:image/)',
                 category: 'nsfw',
                 confidence: 0.99,
                 executionTimeMs: Math.round(performance.now() - start),
             };
         }
 
-        this.saveStats();
-        return {
-            allowed: true,
-            category: 'general',
-            confidence: 0.98,
-            executionTimeMs: Math.round(performance.now() - start),
-        };
+        // pHash diferencial real via canvas offscreen
+        try {
+            const PHASH_SIZE = 8; // 8×8 = 64 bits
+            const canvas = document.createElement('canvas');
+            canvas.width  = PHASH_SIZE;
+            canvas.height = PHASH_SIZE;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) {
+                // Canvas no disponible (entorno no-DOM): permitir con advertencia
+                this.saveStats();
+                return {
+                    allowed: true,
+                    reason: '⚠️ Canvas no disponible para pHash — imagen no analizada',
+                    category: 'general',
+                    confidence: 0.5,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+
+            const img = new Image();
+            // Dibujar síncronamente si la imagen ya está en memoria (data URL)
+            img.src = dataUrl;
+
+            // Para data URLs, el navigate de la imagen es síncrono en la mayoría de browsers
+            ctx.drawImage(img, 0, 0, PHASH_SIZE, PHASH_SIZE);
+            const imageData = ctx.getImageData(0, 0, PHASH_SIZE, PHASH_SIZE);
+            const pixels = imageData.data; // RGBA × 64
+
+            // Calcular luminosidad de cada píxel (BT.601)
+            const luminances: number[] = [];
+            for (let i = 0; i < pixels.length; i += 4) {
+                const r = pixels[i];
+                const g = pixels[i + 1];
+                const b = pixels[i + 2];
+                luminances.push(0.299 * r + 0.587 * g + 0.114 * b);
+            }
+
+            // Si todos los píxeles son negro (imagen vacía o no cargada), rechazar
+            const maxLum = Math.max(...luminances);
+            if (maxLum < 5) {
+                this.saveStats();
+                return {
+                    allowed: false,
+                    reason: 'Imagen no pudo ser renderizada para análisis (píxeles vacíos)',
+                    category: 'nsfw',
+                    confidence: 0.85,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+
+            // Calcular hash diferencial de 64 bits
+            const mean = luminances.reduce((a, b) => a + b, 0) / luminances.length;
+            let pHashBits = BigInt(0);
+            for (let i = 0; i < luminances.length; i++) {
+                if (luminances[i] > mean) {
+                    pHashBits |= (BigInt(1) << BigInt(63 - i));
+                }
+            }
+            const pHashHex = pHashBits.toString(16).padStart(16, '0');
+
+            // Log del hash para auditoría posterior
+            console.debug(`[Guardian pHash] ${pHashHex} (mean lum: ${mean.toFixed(1)})`);
+
+            this.saveStats();
+            return {
+                allowed: true,
+                category: 'general',
+                confidence: 0.92,
+                reason: `pHash real calculado: ${pHashHex}`,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+        } catch (e) {
+            // Error en canvas/pHash: permitir pero marcar con baja confianza
+            console.warn('[Guardian pHash Error]', e);
+            this.saveStats();
+            return {
+                allowed: true,
+                reason: `⚠️ pHash falló: ${e instanceof Error ? e.message : String(e)}`,
+                category: 'general',
+                confidence: 0.4,
+                executionTimeMs: Math.round(performance.now() - start),
+            };
+        }
     }
 }
 

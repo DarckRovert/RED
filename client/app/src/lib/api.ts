@@ -1125,11 +1125,22 @@ export async function cleanImageExif(imageB64: string): Promise<CleanImageRespon
         body: JSON.stringify({ image_b64: imageB64 }),
     }, async () => {
         const stripped = await stripExifCanvas(imageB64);
+
+        // BUG-7 Fix: Report metadata removal honestly.
+        // Canvas re-render eliminates ALL JPEG EXIF chunks (APP1 marker segments).
+        // We can only report what JPEG/canvas stripping removes in general —
+        // reading the actual tags requires an EXIF parser library (e.g. exifr).
+        // Report the actual bytes difference; tag names are structural JPEG metadata.
+        const bytesStripped = stripped.bytesStripped;
+        const removedTags = bytesStripped > 0
+            ? ['JPEG_APP1_EXIF_SEGMENT'] // The entire APP1 block was stripped (canvas guarantees this)
+            : [];                         // No EXIF data was present in the original
+
         return {
             ok: true,
             cleaned_b64: stripped.cleanedB64,
-            bytes_stripped: stripped.bytesStripped,
-            metadata_removed: ['EXIF_GPS_LATITUDE', 'EXIF_GPS_LONGITUDE', 'EXIF_CAMERA_MAKE', 'EXIF_TIMESTAMP'],
+            bytes_stripped: bytesStripped,
+            metadata_removed: removedTags,
         };
     });
 }
@@ -1187,8 +1198,8 @@ export async function getWeatherReports(): Promise<WeatherReport[]> {
 export interface ProximityNode {
     identity_hash: string;
     display_name: string;
-    rssi_dbm: number;
-    distance_meters: number;
+    rssi_dbm: number | null;        // null = sin medición BLE hardware real
+    distance_meters: number | null; // null = sin ranging (UWB/BLE) real
     transport: string;
     last_seen: number;
 }
@@ -1223,14 +1234,12 @@ export async function getProximityNodes(): Promise<ProximityNode[]> {
             return peers.map(p => {
                 const matched = storeContacts.find((c: any) => c.identity_hash === p.id || (c.identity_hash && p.id.startsWith(c.identity_hash)));
                 const name = matched?.display_name || `Nodo Peer (${p.id.slice(0, 8)})`;
-                const latency = p.latency_ms || 12;
-                const distanceMeters = parseFloat((latency * 0.12).toFixed(1));
-                const rssi = -50 - Math.min(40, latency);
+                // BUG-5 Fix: latencia TCP ≠ distancia física. Sin hardware BLE real → null.
                 return {
                     identity_hash: p.id,
                     display_name: name,
-                    rssi_dbm: rssi,
-                    distance_meters: distanceMeters,
+                    rssi_dbm: null,         // null = sin medición BLE real
+                    distance_meters: null,  // null = sin ranging hardware
                     transport: p.transport || 'P2P Mesh',
                     last_seen: Date.now(),
                 };
@@ -1241,8 +1250,8 @@ export async function getProximityNodes(): Promise<ProximityNode[]> {
             return storeContacts.map((c: any) => ({
                 identity_hash: c.identity_hash,
                 display_name: c.display_name || `Contacto (${c.identity_hash.slice(0, 8)})`,
-                rssi_dbm: c.online ? -52 : -78,
-                distance_meters: c.online ? 1.2 : 5.5,
+                rssi_dbm: null,        // Sin hardware BLE: no inventar RSSI
+                distance_meters: null, // Sin ranging: no inventar distancia
                 transport: 'BLE / WiFi Direct',
                 last_seen: Date.now(),
             }));
@@ -1276,11 +1285,12 @@ export async function triggerWaveHandshake(targetIdentityHash: string): Promise<
             } catch {}
         }
 
+        // BUG-6 Fix: Sin hardware BLE real, no inventar RSSI ni distancia.
         const wave_handshake: ProximityNode = {
             identity_hash: targetIdentityHash,
             display_name: contactName,
-            rssi_dbm: -45,
-            distance_meters: 0.8,
+            rssi_dbm: null,        // Requiere medición BLE hardware real
+            distance_meters: null, // Requiere UWB/BLE ranging real
             transport: 'BLE Handshake',
             last_seen: Date.now(),
         };

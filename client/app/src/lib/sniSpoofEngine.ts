@@ -51,22 +51,60 @@ export class SniSpoofEngine {
   }
 
   /**
-   * Transmite el paquete a través del túnel con spoofing SNI
+   * Transmite el paquete a través del túnel con spoofing SNI.
+   *
+   * BUG-14 Fix: Reemplaza el setTimeout simulado por un fetch() real al host
+   * Zero-Rating con los headers de Domain Fronting. El éxito/fallo refleja la
+   * respuesta real de la red, no un valor hardcodeado.
+   *
+   * Limitación arquitectónica documentada: Los navegadores no exponen el socket
+   * TLS subyacente — el SNI real del ClientHello es controlado por el browser,
+   * no por el header Host de HTTP. Por tanto, este método implementa Domain
+   * Fronting a nivel de HTTP Host header (funciona en CDNs que lo soporten),
+   * no SNI-level spoofing nativo. En entornos Capacitor/Android con proxy local,
+   * el tunelado SNI real requiere una implementación nativa (NDK/JNI).
    */
-  public static async transmitSniBypass(encryptedPayloadHex: string): Promise<{ success: boolean; latencyMs: number; provider: string }> {
+  public static async transmitSniBypass(encryptedPayloadHex: string): Promise<{ success: boolean; latencyMs: number; provider: string; reason?: string }> {
     const startTime = performance.now();
     this.stats.requestsSent++;
     this.stats.bytesBypassed += encryptedPayloadHex.length;
 
-    // Simulación de respuesta de gateway con evasión DPI exitosa
-    await new Promise(r => setTimeout(r, 24));
-    const latencyMs = Math.round(performance.now() - startTime);
+    const targetIdx = this.stats.requestsSent % this.ZERO_RATING_TARGETS.length;
+    const target = this.ZERO_RATING_TARGETS[targetIdx];
+    this.stats.currentHostFront = `${target.sniHost} (${target.provider})`;
 
-    return {
-      success: true,
-      latencyMs,
-      provider: this.stats.currentHostFront
-    };
+    const { headers, body } = this.createSpoofedFrontRequest(encryptedPayloadHex, targetIdx);
+
+    try {
+      const response = await fetch(`https://${target.sniHost}/red-tunnel`, {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(5000), // 5s timeout
+      });
+
+      const latencyMs = Math.round(performance.now() - startTime);
+
+      if (response.ok || response.status === 204) {
+        return { success: true, latencyMs, provider: this.stats.currentHostFront };
+      } else {
+        return {
+          success: false,
+          latencyMs,
+          provider: this.stats.currentHostFront,
+          reason: `HTTP ${response.status} — Domain Fronting bloqueado o no soportado por CDN`,
+        };
+      }
+    } catch (e: unknown) {
+      const latencyMs = Math.round(performance.now() - startTime);
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        success: false,
+        latencyMs,
+        provider: this.stats.currentHostFront,
+        reason: `Error de red: ${msg}`,
+      };
+    }
   }
 
   public static getStats(): SniSpoofStats {
