@@ -153,7 +153,7 @@ export default function GroupsPanel() {
                 <GroupAdminModal
                     groupId={adminGroup.id}
                     groupName={adminGroup.name}
-                    members={adminGroup.members || []}
+                    members={(adminGroup.members || []).map((m: any) => typeof m === 'string' ? m : (m.identity_hash || m.hash || String(m)))}
                     onClose={() => setAdminGroup(null)}
                 />
             )}
