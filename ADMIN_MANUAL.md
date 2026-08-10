@@ -1,6 +1,17 @@
-# 🔴 RED - Manual del Administrador (Node Ops v18.3.0)
+# 🔴 RED - Manual del Administrador (Node Ops v30.0.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED, ahora con soporte para interconexión P2P Web ↔ Mobile y clusters de señalización ampliados (hasta 50 pares P2P por sala).
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v30.0.0, con soporte para interconexión P2P Web ↔ Mobile, clusters de señalización ampliados (hasta 50 pares P2P por sala) y administración de los 3 motores de bajo nivel.
+
+---
+
+## 📋 Tabla de Contenidos
+
+1. [Despliegue del Servidor de Señalización (`signaling/server.js`)](#1-despliegue-del-servidor-de-señalización-signalingserverjs)
+2. [Conectividad y Hardware P2P (BLE, WiFi Direct, LoRa, SoundMesh)](#2-conectividad-y-hardware-p2p-ble-wifi-direct-lora-soundmesh)
+3. [API REST Axum & Eventos SSE en Tiempo Real](#3-api-rest-axum--eventos-sse-en-tiempo-real)
+4. [Configuración de Guardian IA & Alertas AMBER](#4-configuración-de-guardian-ia--alertas-amber)
+5. [Hardening, Seguridad OPSEC & Bóvedas de Memoria](#5-hardening-seguridad-opsec--bóvedas-de-memoria)
+6. [Resolución de Problemas & Diagnósticos NDK/JNI](#6-resolución-de-problemas--diagnósticos-ndkjni)
 
 ---
 
@@ -14,7 +25,7 @@ npm install
 PORT=3001 node server.js
 ```
 
-### Características del Servidor de Señalización v18.3:
+### Características del Servidor de Señalización v30.0.0:
 - **Capacidad de Sala Ampliada:** Soporta hasta **50 pares P2P simultáneos** por sala (`roomId = sort([DID1, DID2]).join("-")`).
 - **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociación de red.
 - **Health Check HTTP:** Monitoreo en vivo vía `GET /health` (`status`, `uptime`, `peers`, `rooms`).
@@ -23,117 +34,56 @@ PORT=3001 node server.js
 
 ## 🌐 2. Conectividad y Hardware P2P
 
-### BLE Advertiser (Nuevo en v5.0)
-El dispositivo ahora actúa como un Periférico GATT (Advertiser).
+### BLE Advertiser & Central Mode
+El dispositivo actúa como un Periférico y Central GATT simultáneo:
 - **UUID de Servicio:** `00001818-0000-1000-8000-00805f9b34fb`.
-- **Funcionamiento:** Emite una señal constante que permite a otros nodos descubrir la identidad del dispositivo sin necesidad de escaneos manuales intrusivos.
+- **Características:** `RED_BLE_RX_CHAR` (`00002a6e...`) y `RED_BLE_TX_CHAR` (`00002a4d...`).
+- **Inmunidad a VPNs:** Opera a nivel de hardware HCI sin atravesar la pila TCP/IP de Android.
 
-### WiFi Direct & Mesh
-- **WiFi Direct:** Proporciona un canal de alta velocidad para ruteo local.
-- **Mesh Storage:** El nodo implementa una política de *Store-and-Forward* para mensajes volátiles en la red táctica local.
-- **WebRTC Offline (Sin STUN):** Todo el signaling ocurre mediante sockets locales. Como operador, no necesitas desplegar servidores STUN/TURN (ej: Coturn). Todo el tráfico P2P WebRTC se establece en LAN.
-
----
-
-## 📊 3. API y Sincronización de Estado
-
-El nodo expone una API REST (puerto 7333) y eventos SSE.
-- **Handshake Crítico:** Tras el inicio exitoso del node Rust, el frontend debe realizar un handshake explícito para mutar el estado a `online` en el store de Zustand.
-- **Eventos SSE:** `/api/v1/events` es el canal principal para recibir mensajes entrantes e indicadores de latencia de la red mesh.
-- **LoRaWAN Bridge (`POST /api/settings/lora`):** Recibe la configuración en caliente `{"port": "COM3", "baud": 115200}` para que el nodo Rust inicie la interfaz serial hacia el transceptor físico.
-- **Read Receipts (`POST /api/conversations/{id}/read`):** Actualiza el horizonte de lectura de la base de datos Sled para una conversación sin necesidad de leer todo su historial de mensajes.
-- **Bloqueo y Verificación:** Expone endpoints Axum `/api/contacts/:hash/block` y `/verify` para actualizar la base de datos de contactos local y forzar filtros en caliente a nivel de transporte.
+### WiFi Direct, LoRa & SoundMesh Ultrasonido
+- **WiFi Direct:** Canal de alta velocidad para ruteo local y llamadas WebRTC.
+- **LoRa Bridge:** Enlace de radio serie a 915 MHz / 868 MHz en paquetes ruteados por el binario Rust.
+- **SoundMesh:** Módem acústico en 18–20 kHz BFSK para transmisión por altavoz cuando la radio RF esté deshabilitada.
 
 ---
 
-## 🛡️ 5. Configuración de Guardian IA y Autoridades AMBER (v19.0 Node Ops)
+## 📊 3. API REST Axum & Eventos SSE
 
-### 5.1 Variables de Entorno del Nodo Rust (`red-node`)
+El nodo Rust expone una API REST (puerto 7333) y eventos SSE en `127.0.0.1:7333/api`:
+- **Handshake Crítico:** Tras el inicio exitoso del nodo Rust, el frontend realiza un handshake explícito para mutar el estado a `online` en Zustand.
+- **Eventos SSE:** `/api/v1/events` transmite eventos de mensajes entrantes y latencia gossip cada 3 segundos.
+- **Enrutamiento Mesh:** `POST /api/mesh/receive` procesa la inyección directa de bytes capturados por las antenas nativas.
+
+---
+
+## 🛡️ 4. Configuración de Guardian IA & Alertas AMBER
+
+### 4.1 Variables de Entorno del Nodo Rust (`red-node`)
 
 | Variable | Descripción | Valor por Defecto |
 |---|---|---|
-| `GROQ_API_KEY` | Clave API de Groq para análisis remoto LlamaGuard 4. Si falta, opera en modo degradado (solo pHash local). | (Vacío) |
 | `GUARDIAN_MODE` | Modo del motor de moderación: `strict` (bloqueo total), `warn` (solo alerta), `off` (desactivado). | `strict` |
-| `AMBER_AUTHORITY_NODE_IDS` | Lista separada por comas de identity hashes autorizados para emitir/resolver alertas AMBER. | (Vacío) |
-| `AMBER_DEV_MODE` | `1` o `true` habilita que el nodo local se auto-registre como autoridad para testing/demos. | `1` |
-
-### 5.2 Comandos de Administración de Alertas AMBER
-
-```bash
-# Probar emisión de alerta AMBER desde el nodo autoridad
-curl -X POST http://localhost:7333/api/amber/alert \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Persona Prueba",
-    "age": 10,
-    "description": "Prueba de emisión de alerta AMBER P2P",
-    "ttl_secs": 259200,
-    "authority_signature": "LOCAL_DEV_SIGNATURE",
-    "authority_node_id": "TU_IDENTITY_HASH"
-  }'
-
-# Consultar estado del Guardian IA
-curl http://localhost:7333/api/guardian/status
-```
+| `AMBER_AUTHORITY_NODE_IDS` | Lista separada por comas de identity hashes autorizados para emitir alertas AMBER. | (Vacío) |
+| `AMBER_DEV_MODE` | `1` o `true` habilita que el nodo local se auto-registre como autoridad para testing. | `1` |
 
 ---
 
-## 🔒 6. Hardening y Seguridad
+## 🔒 5. Hardening, Seguridad OPSEC & Bóvedas de Memoria
 
-### Cifrado de Almacenamiento
-La base de datos **Sled** utiliza árboles transaccionales (`conversations`, `contacts`, `profile`, `pending_deliveries`, `config`, `identity`, `groups`, `devices`) cifrados individualmente en reposo ( ChaCha20-Poly1305) mediante derivación HKDF a partir del PIN/Contraseña maestro del usuario (`RED_PASSWORD`). No se almacenan claves privadas en texto claro.
-
-### Firewall
-- **Port 7331 (UDP/TCP):** Tráfico P2P (libp2p).
-- **Port 7333 (Local):** Acceso a la API REST (no exponer al exterior).
+- **Cifrado de Almacenamiento:** Base de datos SQLite / Sled cifrada individualmente en reposo (AES-256-GCM / ChaCha20-Poly1305) mediante derivación PBKDF2 (100,000 iteraciones).
+- **Protección Hardware:** Claves privadas de identidad Ed25519 alojadas en `AndroidKeyStore`.
+- **Destrucción de Pánico:** Ejecución de `RedNodePlugin.destroy` mediante PIN de pánico o por inactividad del Hombre Muerto DMS (`evaluateLocalDMS`).
 
 ---
 
-## 🚑 5. Resolución de Problemas
+## 🚑 6. Resolución de Problemas & Diagnósticos NDK/JNI
 
 **El nodo se cierra inmediatamente en Android:**
-- Verifica los permisos de `POST_NOTIFICATIONS` y `FOREGROUND_SERVICE` en el dispositivo. Android 14 requiere aprobación explícita del usuario.
+- Verifica los permisos de `POST_NOTIFICATIONS`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN` y `FOREGROUND_SERVICE` en el dispositivo. Android 14 requiere aprobación explícita del usuario.
 
 **Fallo de Handshake (Node Offline):**
 - Revisa el Logcat de Android. Si el nodo Rust falla al bindear el puerto 7333, asegúrate de que no haya otra instancia de la app corriendo en segundo plano.
 
 ---
 
-## 🛠️ 7. Administración de Motores Avanzados (v20.0 - v23.0)
-
-### 1. Auditoría del Filtro Anti-Spam y Modo Sigilo de Proximidad
-```bash
-# Consultar parámetros activos de Cooldown y Modo Sigilo
-curl -s http://localhost:7333/api/discovery/config | jq .
-
-# Actualizar el Cooldown a 1 hora (3600s) y activar Modo Sigilo por Vibración
-curl -X POST http://localhost:7333/api/discovery/config \
-  -H "Content-Type: application/json" \
-  -d '{
-    "cooldown_seconds": 3600,
-    "rssi_threshold_dbm": -75,
-    "stealth_mode": "vibrate",
-    "digest_enabled": true,
-    "safe_zones": []
-  }'
-```
-
-### 2. Administración de Balizas SOS Tácticas y Canales Locales
-```bash
-# Consultar balizas SOS de auxilio activas en la red local
-curl -s http://localhost:7333/api/sos/active | jq .
-
-# Publicar en el canal local descentralizado (con moderación pre-difusión Guardian IA)
-curl -X POST http://localhost:7333/api/channels/post \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel_id": "red-local-general",
-    "sender_name": "Administrador Nodo",
-    "content": "Aviso oficial de mantenimiento de nodo local."
-  }'
-```
-
----
-
-**RED Admin Docs** — Soberanía tecnológica mediante hardware real y criptografía robusta.
-
+**RED Admin Docs v30.0.0** — Soberanía tecnológica mediante hardware real y criptografía robusta.
