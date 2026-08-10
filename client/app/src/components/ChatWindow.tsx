@@ -151,6 +151,7 @@ export default function ChatWindow() {
             m.msg_type !== 'typing' && 
             m.msg_type !== 'contact_request' && 
             m.msg_type !== 'contact_response' && 
+            m.msg_type !== 'webrtc_signal' &&
             !m.msg_type?.startsWith('live_')
         ));
     }, [messages]);
