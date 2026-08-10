@@ -5,7 +5,8 @@ import { useRedStore } from '../store/useRedStore';
 import { getWeatherReports, postWeatherReport, WeatherReport } from '../lib/api';
 
 export const WeatherAlertPanel: React.FC = () => {
-    const { navigate, isAuthenticated } = useRedStore();
+    const { navigate, isAuthenticated, identity } = useRedStore();
+    const myNickname = identity?.nickname || 'Estación Vecinal RED';
     const [reports, setReports] = useState<WeatherReport[]>([]);
     const [pressure, setPressure] = useState<string>('');
     const [temperature, setTemperature] = useState<string>('');
@@ -137,7 +138,7 @@ export const WeatherAlertPanel: React.FC = () => {
 
         try {
             await postWeatherReport({
-                sender_name: 'Estación Vecinal RED',
+                sender_name: myNickname,
                 pressure_hpa: pressureVal,
                 temperature_c: tempVal,
                 humidity_percent: humidityVal,
