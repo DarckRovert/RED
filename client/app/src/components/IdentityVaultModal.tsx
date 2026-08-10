@@ -135,8 +135,15 @@ export const IdentityVaultModal: React.FC = () => {
     };
 
     const handleGenerateSSS = () => {
-        const rawSecret = identity?.identity_hash || '6d079229af10d57e5a4179e83b24f1c9';
-        // Ensure secret is hex formatted 32-byte string
+        let rawSecret = identity?.identity_hash || identity?.public_key;
+        if (!rawSecret) {
+            const buf = new Uint8Array(16);
+            if (typeof window !== 'undefined' && window.crypto) {
+                window.crypto.getRandomValues(buf);
+            }
+            rawSecret = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        // Ensure secret is hex formatted 32-character string
         let cleanHex = rawSecret.replace(/[^0-9a-fA-F]/g, '');
         if (cleanHex.length < 32) {
             cleanHex = cleanHex.padEnd(32, '0');
