@@ -215,7 +215,7 @@ export const AICopilotModal: React.FC = () => {
                     </div>
 
                     <div>
-                        <h4 style={{ margin: '0 0 14px 0', color: '#fff', fontSize: '1rem', fontWeight: 800 }}>📦 Modelos Neuronal de Alta Capacidad</h4>
+                        <h4 style={{ margin: '0 0 14px 0', color: '#fff', fontSize: '1rem', fontWeight: 800 }}>📦 Modelos Neuronales de Alta Capacidad</h4>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                             {availableModels.map((m) => {
                                 const isCurrentlyActive = activeModel?.id === m.id || (m.id === 'gemma-2b' && !activeModel);
