@@ -593,7 +593,8 @@ function setStored<T>(key: string, val: T): void {
 export async function getAmberAlerts(): Promise<AmberAlert[]> {
     const res = await fetchWithFallback<any>('/api/amber/alerts', undefined, () => {
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
-        return alerts.filter(a => a.status === 'Active');
+        const nowSecs = Math.floor(Date.now() / 1000);
+        return alerts.filter(a => a.status === 'Active' && (!a.expires_at || a.expires_at > nowSecs));
     });
     if (Array.isArray(res)) return res;
     if (res && typeof res === 'object') {
