@@ -19,6 +19,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
     const frameSeqRef = useRef(0);
 
     const [streamId]     = useState(() => `live-${Date.now()}-${identity?.identity_hash ? identity.identity_hash.slice(0, 6) : 'local'}`);
+    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
     const [isLive, setIsLive]       = useState(false);
     const [camReady, setCamReady]   = useState(false);
     const [camError, setCamError]   = useState<string | null>(null);
@@ -38,18 +39,22 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
     useEffect(() => {
         let cancelled = false;
         navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: FRAME_WIDTH }, height: { ideal: FRAME_HEIGHT } },
+            video: { facingMode, width: { ideal: FRAME_WIDTH }, height: { ideal: FRAME_HEIGHT } },
             audio: false,
         }).then(stream => {
             if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+            }
             streamRef.current = stream;
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
                 videoRef.current.play().catch(() => {});
             }
             setCamReady(true);
+            setCamError(null);
         }).catch(err => {
-            if (!cancelled) setCamError(err.message || 'Camera no disponible');
+            if (!cancelled) setCamError(err.message || 'Cámara no disponible');
         });
 
         return () => {
@@ -57,7 +62,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
             streamRef.current?.getTracks().forEach(t => t.stop());
             streamRef.current = null;
         };
-    }, []);
+    }, [facingMode]);
 
     /* ── Start / Stop broadcasting ───────────────────────────────── */
     const startLive = useCallback(async () => {
@@ -162,7 +167,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
                     playsInline
                     style={{
                         width: '100%', height: '100%', objectFit: 'cover',
-                        transform: 'scaleX(-1)', // mirror for selfie cam
+                        transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
                     }}
                 />
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -185,6 +190,19 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
                         LIVE · {formatElapsed(elapsed)}
                     </div>
                 )}
+
+                {/* Camera Flip Button */}
+                <button
+                    onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')}
+                    style={{
+                        position: 'absolute', top: 16, right: 64,
+                        background: 'rgba(0,0,0,0.55)', border: 'none', color: 'white',
+                        borderRadius: '50%', width: 40, height: 40,
+                        fontSize: '1.1rem', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    title="Cambiar Cámara"
+                >🔄</button>
 
                 {/* Close button */}
                 <button
@@ -218,89 +236,72 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
                     }}>
                         <span style={{ fontSize: '2.5rem' }}>📷</span>
                         <span style={{ color: '#FF6B6B', fontWeight: 700 }}>Cámara no disponible</span>
-                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>{camError}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>{camError}</span>
                     </div>
                 )}
 
-                {/* Comments overlay */}
+                {/* Live comments feed */}
                 {isLive && comments.length > 0 && (
                     <div style={{
-                        position: 'absolute', bottom: 80, left: 0, right: 0,
-                        padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 6,
+                        position: 'absolute', bottom: 100, left: 16, right: 16,
+                        display: 'flex', flexDirection: 'column', gap: 6,
+                        maxHeight: 180, overflowY: 'auto',
+                        maskImage: 'linear-gradient(to bottom, transparent, black 20%)',
                     }}>
-                        {comments.slice(-5).map((c, i) => (
+                        {comments.map((c, i) => (
                             <div key={i} style={{
-                                background: 'rgba(0,0,0,0.65)', borderRadius: 20,
-                                padding: '5px 12px', fontSize: '0.82rem',
-                                alignSelf: 'flex-start', maxWidth: '85%',
-                                backdropFilter: 'blur(6px)',
+                                background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)',
+                                padding: '6px 12px', borderRadius: 12,
+                                fontSize: '0.82rem', alignSelf: 'flex-start', maxWidth: '85%',
                             }}>
-                                <strong style={{ color: '#FFA726', marginRight: 6 }}>
-                                    {c.sender.substring(0, 6)}
-                                </strong>
-                                {c.text}
+                                <span style={{ fontWeight: 700, color: '#FF6B35', marginRight: 6 }}>{c.sender}:</span>
+                                <span>{c.text}</span>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* Control bar */}
+            {/* Controls */}
             <div style={{
-                padding: '16px 24px 36px',
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.95))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24,
+                padding: '20px 24px 28px',
+                background: 'rgba(10,10,15,0.95)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderTop: '1px solid rgba(255,255,255,0.06)',
             }}>
                 {!isLive ? (
                     <button
                         onClick={startLive}
                         disabled={!camReady}
                         style={{
-                            width: 76, height: 76, borderRadius: '50%',
-                            background: camReady ? '#FF3B30' : '#444',
-                            border: '4px solid rgba(255,255,255,0.3)',
-                            color: 'white', fontSize: '1.4rem',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            cursor: camReady ? 'pointer' : 'default',
-                            boxShadow: camReady ? '0 0 30px rgba(255,59,48,0.5)' : 'none',
-                            transition: 'all 0.25s',
+                            background: camReady
+                                ? 'linear-gradient(135deg, #FF3B30, #FF6B35)'
+                                : 'rgba(255,255,255,0.1)',
+                            color: 'white', border: 'none',
+                            padding: '14px 40px', borderRadius: 30,
+                            fontWeight: 900, fontSize: '1rem', letterSpacing: '0.5px',
+                            cursor: camReady ? 'pointer' : 'not-allowed',
+                            boxShadow: camReady ? '0 4px 20px rgba(255,59,48,0.4)' : 'none',
+                            opacity: camReady ? 1 : 0.5,
                         }}
                     >
-                        {camReady ? '📡' : '⏳'}
+                        🔴 TRANSMITIR EN VIVO
                     </button>
                 ) : (
                     <button
                         onClick={stopLive}
                         style={{
-                            width: 76, height: 76, borderRadius: '50%',
-                            background: '#FF3B30',
-                            border: '4px solid rgba(255,255,255,0.6)',
-                            color: 'white', fontSize: '1.4rem',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: 'rgba(255,255,255,0.15)',
+                            color: '#FF3B30', border: '1px solid #FF3B30',
+                            padding: '14px 40px', borderRadius: 30,
+                            fontWeight: 900, fontSize: '1rem', letterSpacing: '0.5px',
                             cursor: 'pointer',
-                            boxShadow: '0 0 30px rgba(255,59,48,0.7)',
-                            animation: 'live-blink 2s ease-in-out infinite',
                         }}
                     >
-                        ⏹
+                        ⏹️ FINALIZAR TRANSMISIÓN
                     </button>
                 )}
-                <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>
-                        {isLive ? 'EN VIVO' : 'Iniciar LIVE'}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>
-                        {isLive ? `${contacts.length} contactos` : 'Solo tus contactos lo verán'}
-                    </div>
-                </div>
             </div>
-
-            <style>{`
-                @keyframes live-blink {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.6; }
-                }
-            `}</style>
         </div>
     );
 }
