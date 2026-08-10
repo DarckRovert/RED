@@ -133,6 +133,7 @@ export default function Sidebar() {
         { icon: '⚡',  label: 'Explorador de Bloques', action: 'explorer' },
         { icon: '🗺️', label: 'Mapa de Nodos',        action: 'nodemap'   },
         { icon: '📡', label: 'Radar Hardware BLE/WiFi', action: 'nearby'  },
+        { icon: '💀', label: 'Hombre Muerto DMS', action: 'dms'      },
         { icon: '⚙️', label: 'Seguridad',            action: 'settings'  },
     ];
 
