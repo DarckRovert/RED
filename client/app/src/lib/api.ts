@@ -1143,11 +1143,14 @@ export async function getProximityNodes(): Promise<ProximityNode[]> {
             return peers.map(p => {
                 const matched = storeContacts.find((c: any) => c.identity_hash === p.id || (c.identity_hash && p.id.startsWith(c.identity_hash)));
                 const name = matched?.display_name || `Nodo Peer (${p.id.slice(0, 8)})`;
+                const latency = p.latency_ms || 12;
+                const distanceMeters = parseFloat((latency * 0.12).toFixed(1));
+                const rssi = -50 - Math.min(40, latency);
                 return {
                     identity_hash: p.id,
                     display_name: name,
-                    rssi_dbm: -50 - Math.min(40, (p.latency_ms || 10)),
-                    distance_meters: parseFloat((((p.latency_ms || 10) * 0.15)).toFixed(1)),
+                    rssi_dbm: rssi,
+                    distance_meters: distanceMeters,
                     transport: p.transport || 'P2P Mesh',
                     last_seen: Date.now(),
                 };
@@ -1158,8 +1161,8 @@ export async function getProximityNodes(): Promise<ProximityNode[]> {
             return storeContacts.map((c: any) => ({
                 identity_hash: c.identity_hash,
                 display_name: c.display_name || `Contacto (${c.identity_hash.slice(0, 8)})`,
-                rssi_dbm: c.online ? -55 : -80,
-                distance_meters: c.online ? 1.5 : 6.0,
+                rssi_dbm: c.online ? -52 : -78,
+                distance_meters: c.online ? 1.2 : 5.5,
                 transport: 'BLE / WiFi Direct',
                 last_seen: Date.now(),
             }));
@@ -1182,12 +1185,22 @@ export async function triggerWaveHandshake(targetIdentityHash: string): Promise<
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_identity_hash: targetIdentityHash }),
-    }, () => {
+    }, async () => {
+        let contactName = `Nodo (${targetIdentityHash.slice(0, 8)})`;
+        if (typeof window !== 'undefined') {
+            try {
+                const { useRedStore } = await import('../store/useRedStore');
+                const contacts = useRedStore.getState().contacts || [];
+                const matched = contacts.find((c: any) => c.identity_hash === targetIdentityHash || targetIdentityHash.startsWith(c.identity_hash));
+                if (matched?.display_name) contactName = matched.display_name;
+            } catch {}
+        }
+
         const wave_handshake: ProximityNode = {
             identity_hash: targetIdentityHash,
-            display_name: `Nodo Saludado (${targetIdentityHash.slice(0, 8)})`,
+            display_name: contactName,
             rssi_dbm: -45,
-            distance_meters: 0.9,
+            distance_meters: 0.8,
             transport: 'BLE Handshake',
             last_seen: Date.now(),
         };
