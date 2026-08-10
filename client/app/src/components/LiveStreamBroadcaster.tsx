@@ -18,7 +18,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
     const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const frameSeqRef = useRef(0);
 
-    const [streamId]     = useState(() => `live-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    const [streamId]     = useState(() => `live-${Date.now()}-${identity?.identity_hash ? identity.identity_hash.slice(0, 6) : 'local'}`);
     const [isLive, setIsLive]       = useState(false);
     const [camReady, setCamReady]   = useState(false);
     const [camError, setCamError]   = useState<string | null>(null);
