@@ -192,13 +192,21 @@ export default function SecurityPanel() {
         setDisguiseEnabled(nextState);
         localStorage.setItem("red_disguise_mode", nextState.toString());
         
-        // Trigger native Android component change
         try {
-            await RedDisguise.setDisguiseMode({ enabled: nextState });
-            if (nextState) {
-                toast.success("Camuflaje activado. El icono de la app cambiará pronto.");
+            const { Capacitor } = await import('@capacitor/core');
+            if (Capacitor.isNativePlatform()) {
+                await RedDisguise.setDisguiseMode({ enabled: nextState });
+                if (nextState) {
+                    toast.success("Camuflaje activado. El icono de la app cambiará pronto.");
+                } else {
+                    toast.info("Camuflaje desactivado. Icono RED restaurado.");
+                }
             } else {
-                toast.info("Camuflaje desactivado. Icono RED restaurado.");
+                if (nextState) {
+                    toast.success("Camuflaje activado en modo web (Calculadora).");
+                } else {
+                    toast.info("Camuflaje desactivado. Icono RED restaurado.");
+                }
             }
         } catch (e) {
             console.warn("Disguise plugin not available or failed", e);
