@@ -6,23 +6,16 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 ## 📋 Tabla de Contenidos
 
-1. [Primer Inicio & Configuración de Seguridad](#1-primer-inicio--configuración-de-seguridad)
-2. [Acceso Prominente a Módulos (`⚡ MÓDULOS`)](#2-acceso-prominente-a-módulos--módulos)
-3. [Modo Señuelo (Decoy Mode - Clave `9999`)](#3-modo-señuelo-decoy-mode---clave-9999)
-4. [Seguridad Táctica Zero-Trust & Auditoría IA Neuronal ONNX](#4-seguridad-táctica-zero-trust--auditoría-ia-neuronal-onnx)
-5. [Gestión de Identidad & Bóveda Criptográfica](#5-gestión-de-identidad--bóveda-criptográfica)
-6. [Agregar Contactos & Escaneo QR](#6-agregar-contactos--escaneo-qr)
-7. [Mensajería Directa & Notas de Voz Tácticas](#7-mensajería-directa--notas-de-voz-tácticas)
-8. [Consola de Logs de Nodo SSE en Vivo](#8-consola-de-logs-de-nodo-sse-en-vivo)
-9. [Radar P2P & Descubrimiento de Nodos](#9-radar-p2p--descubrimiento-de-nodos)
-10. [Balizas de Emergencia SOS](#10-balizas-de-emergencia-sos)
-11. [Herramientas Tácticas Avanzadas](#11-herramientas-tácticas-avanzadas)
-12. [Interruptor del Hombre Muerto (DMS)](#12-interruptor-del-hombre-muerto-dms)
-13. [Preguntas Frecuentes & Solución de Problemas](#13-preguntas-frecuentes--solución-de-problemas)
+1. [Primer Inicio & Autenticación Soberana](#1-primer-inicio--autenticación-soberana)
+2. [Gestión de Seguridad & Modo Señuelo](#2-gestión-de-seguridad--modo-señuelo)
+3. [Manual Operativo de los 28 Módulos Tácticos](#3-manual-operativo-de-los-28-módulos-tácticos)
+4. [Interruptor del Hombre Muerto (DMS) & Purga](#4-interruptor-del-hombre-muerto-dms--purga)
+5. [Inmunidad a VPNs & Red Mesh Off-Grid](#5-inmunidad-a-vpns--red-mesh-off-grid)
+6. [Preguntas Frecuentes & Solución de Problemas](#6-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
-## 1. Primer Inicio & Configuración de Seguridad
+## 1. Primer Inicio & Autenticación Soberana
 
 1. Al abrir la aplicación RED por primera vez, el sistema te solicitará ingresar una **Contraseña Maestra**.
 2. Esta contraseña protege tu **Bóveda de Claves Criptográficas** en la memoria segura del dispositivo (Android KeyStore / Secure Storage).
@@ -30,122 +23,64 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 ---
 
-## 2. Acceso Prominente a Módulos (`⚡ MÓDULOS`)
+## 2. Gestión de Seguridad & Modo Señuelo
 
-Para acceder instantáneamente a todas las herramientas tácticas del sistema:
-- Haz clic o toca la tarjeta **`⚡ MÓDULOS`** destacada en la franja principal de **Acciones Rápidas (Quick Actions)** de la pantalla de inicio.
-- También puedes presionar el botón **`⚡ MÓDULOS`** situado en la barra superior navegable del encabezado.
-- Se desplegará la grilla completa con más de 12 módulos tácticos (Bóveda Criptográfica, Radar, Balizas SOS, Brújula P2P, Pizarra Canvas, Video Stream, Copiloto IA y Seguridad Táctica).
-
----
-
-## 3. Modo Señuelo (Decoy Mode - Clave `9999`)
-
-Si te encuentras en una situación de riesgo donde seas forzado a desbloquear tu dispositivo:
-- Ingresa la contraseña de emboscada **`9999`**.
-- La aplicación abrirá un **Perfil Señuelo completamente limpio** sin rastro de tus chats, contactos reales, claves privadas ni archivos personales.
-- No existe ninguna indicación visual en la pantalla que revele que el sistema está operando en modo señuelo.
+- **PIN Maestro:** Acceso a la bóveda principal con todos los chats, contactos e historial cifrado.
+- **PIN Señuelo (`decoy_pin`):** Iniciar sesión con el PIN señuelo abre un entorno totalmente limpio y verosímil sin dejar rastro de tus comunicaciones reales.
+- **PIN de Pánico (`panic_pin`):** Iniciar sesión con el PIN de pánico ejecuta inmediatamente el protocolo de autodestrucción nativo (`RedNodePlugin.destroy`), purgando las llaves y la base de datos SQLite.
 
 ---
 
-## 4. Seguridad Táctica Zero-Trust & Auditoría IA Neuronal ONNX
+## 3. Manual Operativo de los 28 Módulos Tácticos
 
-Desde el módulo **Seguridad Táctica** puedes gestionar la protección física del hardware:
-- **Bloqueo de Capturas (`FLAG_SECURE` OS):** Impide físicamente tomar capturas de pantalla, grabar video de la aplicación u obtener miniaturas en las apps recientes del sistema Android.
-- **Auto-Diagnóstico del Nodo (`Auditar`):** Realiza benchmarks en vivo sobre el puerto HTTP de Rust (`7333`), canal SSE, almacenamiento seguro y la generación Web Crypto `ECDSA P-256`.
-- **Ficha de Auditoría e IA Neuronal (`Informe 📄`):** Presiona el botón **`🤖 Evaluar Resiliencia Táctica con IA (ONNX WASM)`** para que la IA neuronal local `LaMini-Flan-T5` evalúe tus políticas de seguridad activas y genere un dictamen en español sobre la resiliencia del dispositivo.
-- **Purga Anti-Forense:** Elimina de inmediato los archivos temporales y caché del sistema (`Directory.Cache`).
-
----
-
-## 5. Gestión de Identidad & Bóveda Criptográfica
-
-En la pestaña de **Bóveda de Identidad (ID Vault)** podrás:
-- Consultar tu **Hash de Identidad Soberana** y tu **Short ID** táctico.
-- Configurar datos médicos de emergencia opcionales (Tipo de sangre, alergias y contacto de emergencia) cifrados localmente.
-- Generar un **Código QR de Verificación Temporal (validez de 5 minutos)** para validar tu identidad de forma presencial.
-
----
-
-## 6. Agregar Contactos & Escaneo QR
-
-Para establecer comunicación cifrada E2E con otro usuario existen tres métodos:
-
-### Método A: Escaneo de Código QR (Recomendado)
-1. En el teléfono A, abre la pestaña **Radar P2P** o presiona **📷 Mi QR** en el menú.
-2. En el teléfono B, presiona el botón de **Escanear QR**.
-3. Apunta la cámara al código QR del teléfono A.
-4. El sistema extraerá el `identity_hash` y la `public_key` del contacto, guardando ambos datos y abriendo la conversación de forma instantánea.
-
-### Método B: Auto-Intercambio Recíproco
-- Si agregas manualmente a un usuario por su Hash o Short ID, tu teléfono enviará automáticamente una solicitud de contacto (`contact_request`) incluyendo tu clave pública (`sender_pk`).
-- El destinatario recibirá un aviso `🤝 Operador te ha agregado como contacto` y su teléfono responderá guardando tu clave pública automáticamente.
-
-### Método C: Ingreso Manual de Hash / Short ID
-- Presiona el botón **+** en la lista de chats e ingresa el hash de 64 caracteres hex o el Short ID de 8 caracteres.
+1. **Radar Topográfico Off-Grid:** Abre `OffGridCompassModal.tsx` para orientación con magnetómetro, declinación WMM2025 y altímetro barométrico.
+2. **Escáner Signos Vitales PPG:** Usa `VitalScanModal.tsx` colocando el índice en la cámara y linterna LED para medir pulso y nivel de estrés.
+3. **Baliza SOS & Módem SoundMesh:** En `SurvivalBeaconModal.tsx`, emite alertas de socorro GPS y transmisiones por ultrasonido en 18–20 kHz BFSK.
+4. **Copiloto IA Neuronal Offline:** Invocación de `AICopilotModal.tsx` para consultas, traducción y resúmenes sin internet mediante `LaMini-Flan-T5`.
+5. **Proximidad Zero-Touch & Radar Wave:** En `ProximityWaveModal.tsx`, detecta pares físicamente cercanos mediante firmas Doppler de ultrasonido.
+6. **Pizarra Táctica P2P en Vivo:** En `LiveCanvasModal.tsx`, dibuja planos tácticos sincronizados en tiempo real por la red malla.
+7. **Resiliencia de Batería Eco-Mesh:** Ajusta el consumo energético en `EcoMeshPanel.tsx` adaptando el intervalo de beaconing.
+8. **Walkie-Talkie Mesh Push-To-Talk:** Presiona en `P2PWalkieTalkieModal.tsx` para hablar por radio digital cifrada en tiempo real.
+9. **Alertas Tácticas AMBER:** Gestiona emergencias comunitarias en `AmberAdminPanel.tsx` con avisos de alta prioridad.
+10. **Boletines Climáticos Off-Grid:** Revisa el barómetro e informes meteorológicos en `WeatherAlertPanel.tsx`.
+11. **Canales Públicos Locales:** Explora temas abiertos en `PublicChannelsPanel.tsx` con moderación automática por Guardian IA.
+12. **Bóveda Criptográfica StegoVault:** Oculta mensajes cifrados en fotos usando `StegoVaultModal.tsx`.
+13. **Historias Tácticas & Estados:** Publica imágenes efímeras de 24 horas desde `StoriesBar.tsx`.
+14. **Transmisión de Video P2P en Vivo:** Emite o recibe video local en tiempo real con `LiveStreamBroadcaster.tsx` y `LiveStreamViewer.tsx`.
+15. **Notas de Voz Cifradas:** Graba notas comprimidas a 12 Kbps en `VoiceMessage.tsx` para transmisión fluida en LoRa/BLE.
+16. **Encuestas y Votaciones Tácticas:** Crea votaciones P2P con firma digital en `PollMessage.tsx`.
+17. **Respaldo Cifrado AES-256-GCM:** Exporta e importa copias de seguridad en `BackupRestoreModal.tsx`.
+18. **Explorador Blockchain RED:** Consulta transacciones y bloques de la red en `BlockchainExplorer.tsx`.
+19. **Espectro RF & Monitoreo SDR:** Analiza interferencias de radiofrecuencia en `RfSpectrumModal.tsx`.
+20. **Mapa de Nodos & Telemetría P2P:** Visualiza las posiciones GPS de tus pares en `NodeMap.tsx`.
+21. **Hombre Muerto DMS:** Configura la ventana de purga por inactividad en `DMSSettings.tsx`.
+22. **Identidad Digital DID & Shamir SSS:** Divide tu clave en 5 fragmentos en `IdentityVaultModal.tsx`.
+23. **Protocolo Incógnito / Señuelo:** Configura PINs de pánico y camuflaje de icono en `SecurityPanel.tsx`.
+24. **Infraestructura de Red Mesh:** Revisa las métricas del enrutador Controlled Flood en `meshRouter.ts`.
+25. **Llamadas Tácticas WebRTC:** Inicia videollamadas cifradas P2P en `CallScreen.tsx`.
+26. **Contactos & Grupos Cifrados:** Administra integrantes e identidades en `GroupsPanel.tsx`.
+27. **Mensajería E2EE en Tiempo Real:** Envía mensajes con confirmación de entrega en `ChatWindow.tsx`.
+28. **Centro de Control Táctico:** Controla la navegación general del nodo desde `StatusView.tsx` y `Sidebar.tsx`.
 
 ---
 
-## 7. Mensajería Directa & Notas de Voz Tácticas
+## 4. Interruptor del Hombre Muerto (DMS) & Purga
 
-- **Burbujas de Chat & Reacciones**: Envía mensajes de texto, imágenes y reacciona con emojis manteniendo presionado un mensaje.
-- **Notas de Voz Tácticas (12 Kbps)**: Mantén presionado el icono de micrófono. El audio se grabará y comprimirá a **12 Kbps (OGG/Opus)** para permitir su transmisión ágil por radios de baja velocidad como LoRa o Bluetooth BLE.
-- **Respuestas & Reenvíos**: Mantén presionado cualquier mensaje para responder directamente o reenviarlo a otros contactos o grupos.
-
----
-
-## 8. Consola de Logs de Nodo SSE en Vivo
-
-- **Acceso a Logs del Nodo:** Presiona el indicador de estado del nodo en el encabezado para desplegar la consola de logs.
-- **Telemetría SSE en Tiempo Real:** El motor de Rust emite señales de latencia e información de pares cada 3 segundos, permitiendo auditar la actividad interna del proceso local.
+- Si el operador entra en estado de incapacitación o arresto, el motor `evaluateLocalDMS` detecta la inactividad.
+- Al expirar el temporizador, se emite una última baliza de socorro y se limpian las bases de datos y la Keystore.
 
 ---
 
-## 9. Navegación & Interfaz de Usuario
+## 5. Inmunidad a VPNs & Red Mesh Off-Grid
 
-- **Salir de un Chat**: Para volver a la lista principal de conversaciones desde cualquier chat, presiona la flecha **`←`** ubicada en la barra superior o presiona el botón físico/gesto de retroceso de Android.
-- **Indicadores de Estado de Red**:
-  - **`⚡ P2P MESH`**: Conectado a la malla mediante subred local IP o relés.
-  - **`🔵 BLE`**: Conectado directamente por la antena física de Bluetooth LE (Inmune a VPNs).
-  - **`📶 WIFI`**: Conectado por canal ad-hoc WiFi Direct.
-  - **`📻 LORA`**: Conectado por módem de radio LoRa.
-  - **`🛡️ STANDALONE`**: Operación local aislada.
+- El transporte **Bluetooth LE (BLE)** funciona a nivel de hardware HCI y no pasa por la pila TCP/IP de Android.
+- La aplicación permanece 100% operativa incluso si una VPN activa bloquea el tráfico de red comercial.
 
 ---
 
-## 10. Radar P2P & Descubrimiento de Nodos
+## 6. Preguntas Frecuentes & Solución de Problemas
 
-- Accede al **Radar P2P** para visualizar un mapa de calor y listado en tiempo real de todos los dispositivos RED detectados en tu radio de alcance por Bluetooth LE o red WiFi local.
-- Podrás consultar la distancia aproximada en metros, la fuerza de señal (RSSI) y agregar nodos directamente con un toque.
-
----
-
-## 11. Balizas de Emergencia SOS
-
-- En caso de desastre o emergencia física, presiona el botón flotante **SOS** o ingresa a la pestaña SOS.
-- El sistema transmitirá una **Baliza de Socorro de Máxima Prioridad** que contiene tu ubicación GPS real y una señal auditiva a todos los nodos P2P en tu área de cobertura.
-
----
-
-## 12. Herramientas Tácticas Avanzadas
-
-- **P2P Walkie-Talkie**: Transmisión de voz en vivo por radio digital sin servidores.
-- **Pizarra Táctica Colaborativa (Live Canvas)**: Dibujo y mapa esquemático sincronizado entre nodos.
-- **Transmisión de Video en Vivo Off-Grid**: Emisión y recepción de video local entre pares.
-- **Brújula P2P (P2P Compass)**: Orientación mediante magnetómetro para localizar la dirección de nodos cercanos.
-
----
-
-## 13. Interruptor del Hombre Muerto (DMS)
-
-- Configura el **Dead Man's Switch (DMS)** en la pestaña de Configuración.
-- Si dejas de usar la aplicación durante el tiempo especificado (por ejemplo, 24 horas), el sistema destruirá automáticamente la base de datos cifrada y las claves de identidad.
-
----
-
-## 11. Preguntas Frecuentes & Solución de Problemas
-
-- **¿Qué pasa si tengo una VPN activa?**  
-  No hay ningún problema. El transporte Bluetooth LE (BLE) opera a nivel de hardware y no es afectado por VPNs ni Kill-Switches.
-- **¿Qué ocurre si no hay Internet ni señal celular?**  
-  RED opera en modo **DTN Store-and-Forward**. Los mensajes saltarán de teléfono en teléfono hasta llegar a su destinatario.
+- **¿Dónde se guardan los mensajes?**  
+  Exclusivamente en la base de datos cifrada SQLite local de tu dispositivo.
+- **¿Cómo me conecto con otros nodos?**  
+  Automáticamente mediante BLE, WiFi Direct, LoRa o SoundMesh al abrir la aplicación.
