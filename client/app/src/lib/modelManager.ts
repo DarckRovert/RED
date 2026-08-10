@@ -82,10 +82,28 @@ class ModelManagerClass {
 
     /** Returns metadata of active high-capacity model */
     public getActiveModel(): LocalModelMetaData | null {
+        if (typeof window !== 'undefined') {
+            const activeId = localStorage.getItem('red_active_model_id');
+            if (activeId && this.models.has(activeId)) {
+                return this.models.get(activeId)!;
+            }
+        }
         for (const m of this.models.values()) {
             if (m.isDownloaded) return m;
         }
         return null;
+    }
+
+    /** Sets the primary active model */
+    public setActiveModel(modelId: string): void {
+        const target = this.models.get(modelId);
+        if (target) {
+            target.isDownloaded = true;
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(`red_model_${modelId}_ready`, 'true');
+                localStorage.setItem('red_active_model_id', modelId);
+            }
+        }
     }
 
     /** Simulates or executes chunked download with progress reporting */

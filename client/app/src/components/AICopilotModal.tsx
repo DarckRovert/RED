@@ -18,9 +18,9 @@ export const AICopilotModal: React.FC = () => {
     const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string; category?: string; source?: string }>>([
         {
             sender: 'ai',
-            text: '🤖 Hola. Soy el Copiloto IA Neuronal de RED (3 Redes Neuronales ONNX Locales en WASM).\n\nPuedes probar cada modelo directamente:\n• 🤖 Copiloto / Resumidor / Traductor: LaMini-Flan-T5-77M (ONNX 95MB)\n• 🛡️ Guardian: toxic-bert (Clasificador de Toxicidad 110MB)\n• 🧠 Embeddings: all-MiniLM-L6-v2 (Extractor Vectorial 384-D 23MB)',
-            category: '3 Modelos ONNX WASM',
-            source: 'RED Local Neural Engine'
+            text: '🤖 Hola. Soy el Copiloto IA Neuronal Soberano de RED.\n\nEspecializado en conversación libre y supervivencia offline en chip ARM64 nativo:\n• 🌟 Motor Principal LLM: Gemma 2B Instruct (Google) / Phi-3 Mini 3.8B (Microsoft)\n• 🐝 Mente Colmena P2P: Inferencia delegada en red malla\n• 🛡️ Guardian S4: Filtro de toxicidad y seguridad en 15ms\n• 🌐 Traducción & RAG: Glosario táctico en 6 idiomas y búsqueda semántica 384-D',
+            category: 'Motor Nativo ARM64 + Gemma 2B',
+            source: 'RED Sovereign AI Engine'
         }
     ]);
 
@@ -224,9 +224,25 @@ export const AICopilotModal: React.FC = () => {
                                             Tamaño: {(m.fileSizeMb / 1024).toFixed(1)} GB | RAM Rec: {(m.recommendedMinRamMb / 1024).toFixed(1)} GB
                                         </div>
                                         {m.isDownloaded ? (
-                                            <div style={{ background: 'rgba(0,217,126,0.15)', color: '#00D97E', padding: '8px', borderRadius: '8px', textAlign: 'center', fontWeight: 800, fontSize: '0.8rem' }}>
-                                                ✅ Modelo Instalado & Activo
-                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    ModelManager.setActiveModel(m.id);
+                                                    setAvailableModels([...ModelManager.getModels()]);
+                                                }}
+                                                style={{
+                                                    width: '100%',
+                                                    background: 'rgba(0,217,126,0.2)',
+                                                    color: '#00D97E',
+                                                    border: '1px solid rgba(0,217,126,0.4)',
+                                                    borderRadius: '8px',
+                                                    padding: '10px',
+                                                    fontWeight: 800,
+                                                    fontSize: '0.8rem',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                🌟 Modelo Principal Activo
+                                            </button>
                                         ) : (
                                             <button
                                                 onClick={() => handleDownloadModel(m.id)}
@@ -243,7 +259,7 @@ export const AICopilotModal: React.FC = () => {
                                                     cursor: downloadingId === m.id ? 'default' : 'pointer'
                                                 }}
                                             >
-                                                {downloadingId === m.id ? `Descargando... (${downloadProgress}%)` : `⚡ Descargar e Instalar (${m.fileSizeMb} MB)`}
+                                                {downloadingId === m.id ? `Descargando... (${downloadProgress}%)` : `⚡ Activar e Instalar (${m.fileSizeMb} MB)`}
                                             </button>
                                         )}
                                     </div>
