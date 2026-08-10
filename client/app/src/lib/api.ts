@@ -421,12 +421,14 @@ class RedAPIClient {
     async getConsensus(): Promise<ConsensusStatus | null> {
         return fetchWithFallback('/api/blockchain/consensus', undefined, async () => {
             const userStake = getStored<number>('red_user_stake', 5000);
+            const blocks = await this.getBlocks().catch(() => []);
+            const maxHeight = blocks.length > 0 ? Math.max(...blocks.map(b => b.height)) : 1;
             return {
-                epoch: 1,
+                epoch: Math.floor(Date.now() / 86400000),
                 current_slot: Math.floor(Date.now() / 10000),
                 total_stake: userStake,
                 active_validators: 1,
-                chain_height: 1,
+                chain_height: maxHeight,
             };
         });
     }
