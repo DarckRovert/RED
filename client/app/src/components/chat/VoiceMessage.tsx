@@ -35,7 +35,8 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const getAudioDataUrl = (dataStr: string): string => {
         if (dataStr.startsWith('data:') || dataStr.startsWith('http')) return dataStr;
         if (dataStr.startsWith('GkXf')) return `data:audio/webm;base64,${dataStr}`;
-        if (dataStr.startsWith('AAAA') || dataStr.startsWith('UklG')) return `data:audio/mp4;base64,${dataStr}`;
+        if (dataStr.startsWith('AAAA')) return `data:audio/mp4;base64,${dataStr}`;
+        if (dataStr.startsWith('UklG')) return `data:audio/wav;base64,${dataStr}`;
         if (dataStr.startsWith('T2dn')) return `data:audio/ogg;base64,${dataStr}`;
         return `data:audio/webm;base64,${dataStr}`;
     };
