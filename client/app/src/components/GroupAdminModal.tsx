@@ -31,7 +31,7 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
             await RedAPI.req(`/groups/${groupId}`, {
                 method: 'PUT',
                 body: JSON.stringify({ members: nextMembers })
-            }).catch(() => {});
+            });
             
             setMembers(nextMembers);
             setSelectedNewContact("");
@@ -51,7 +51,7 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
             await RedAPI.req(`/groups/${groupId}`, {
                 method: 'PUT',
                 body: JSON.stringify({ members: nextMembers })
-            }).catch(() => {});
+            });
 
             setMembers(nextMembers);
             toast.info("🚫 Miembro removido del grupo P2P");
