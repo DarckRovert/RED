@@ -102,7 +102,9 @@ export default function StoryCreator({ onClose }: StoryCreatorProps) {
             }}>
                 <div style={{ fontSize: '3rem' }}>✅</div>
                 <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Estado enviado a {sentCount} contacto{sentCount !== 1 ? 's' : ''}
+                    {sentCount > 0
+                        ? `Estado enviado a ${sentCount} contacto${sentCount !== 1 ? 's' : ''}`
+                        : 'Estado publicado en nodo local P2P'}
                 </div>
             </div>
         );
