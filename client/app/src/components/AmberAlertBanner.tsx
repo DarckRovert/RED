@@ -71,8 +71,23 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
 
   const handleSightingSubmit = async () => {
     setSubmitting(true);
+    let lat: number | undefined;
+    let lon: number | undefined;
+
+    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000, enableHighAccuracy: true });
+        });
+        lat = pos.coords.latitude;
+        lon = pos.coords.longitude;
+      } catch {}
+    }
+
     try {
       await reportSighting(currentAlert.id, {
+        lat,
+        lon,
         notes: sightingNotes || undefined,
       });
       setSubmitted(true);

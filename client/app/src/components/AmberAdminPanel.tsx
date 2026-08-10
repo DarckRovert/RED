@@ -85,14 +85,28 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
     if (!form.description?.trim()) { setError('La descripción es requerida'); return; }
 
     setSubmitting(true);
+
+    let lat = form.last_seen_lat;
+    let lon = form.last_seen_lon;
+
+    if ((lat === undefined || lon === undefined) && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000, enableHighAccuracy: true });
+        });
+        lat = pos.coords.latitude;
+        lon = pos.coords.longitude;
+      } catch {}
+    }
+
     try {
       await createAmberAlert({
         name: form.name!,
         age: form.age!,
         description: form.description!,
         photo_b64: form.photo_b64,
-        last_seen_lat: form.last_seen_lat,
-        last_seen_lon: form.last_seen_lon,
+        last_seen_lat: lat,
+        last_seen_lon: lon,
         last_seen_location: form.last_seen_location,
         ttl_secs: form.ttl_secs,
         authority_signature: localNodeId,
