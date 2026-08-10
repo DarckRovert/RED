@@ -897,9 +897,12 @@ export async function getChannelMessages(channelId = 'red-local-general'): Promi
     return fetchWithFallback(`/api/channels/messages?channel=${encodeURIComponent(channelId)}`, undefined, () => {
         const allMsgs = getStored<ChannelMessage[]>(STORAGE_KEYS.CHANNEL_MESSAGES, []);
         const filtered = allMsgs.filter(m => m.channel_id === channelId);
+        const storedChannels = Array.from(new Set(allMsgs.map(m => m.channel_id).filter(Boolean)));
+        const defaultChannels = ['red-local-general', 'emergencias-tacticas', 'anuncios-comunitarios'];
+        const uniqueChannels = Array.from(new Set([...defaultChannels, ...storedChannels]));
         return {
             channel_id: channelId,
-            channels: ['red-local-general', 'emergencias-tacticas', 'anuncios-comunitarios'],
+            channels: uniqueChannels,
             messages: filtered,
         };
     });
