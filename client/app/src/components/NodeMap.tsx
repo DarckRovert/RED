@@ -113,7 +113,21 @@ export default function NodeMap() {
                 const apiPeers = await RedAPI.getPeers().catch(() => []);
                 const localPeers = localTransport.allPeers;
                 
-                const map = new Map<string, { id: string; transport: string; name?: string; rssi?: number }>();
+                const map = new Map<string, { id: string; transport: string; name?: string; rssi?: number; lat?: number; lng?: number }>();
+                const storeContacts = useRedStore.getState().contacts || [];
+                for (const c of storeContacts) {
+                    const peerId = c.identity_hash || c.public_key || c.id || c.address;
+                    if (peerId) {
+                        map.set(peerId, {
+                            id: peerId,
+                            transport: c.transport || 'wifi',
+                            name: c.alias || c.name || peerId.slice(0, 10),
+                            rssi: c.rssi || -68,
+                            lat: c.lat,
+                            lng: c.lng,
+                        });
+                    }
+                }
                 for (const p of localPeers) {
                     map.set(p.id, { id: p.id, transport: p.transport, name: p.id.slice(0, 10), rssi: p.rssi || -65 });
                 }
