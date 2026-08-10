@@ -1,18 +1,20 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { getChannelMessages, postChannelMessage, summarizeChannelAI, ChannelMessage } from '../lib/api';
 
 export const PublicChannelsPanel: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
     const [channelId, setChannelId] = useState('red-local-general');
     const [channels, setChannels] = useState<string[]>(['red-local-general', 'red-emergency-lima']);
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
     const [inputText, setInputText] = useState('');
-    const [senderName, setSenderName] = useState('Operador Táctico');
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const feedRef = useRef<HTMLDivElement | null>(null);
+
+    const senderName = identity?.nickname || 'Operador Táctico';
 
     const loadMessages = async () => {
         try {
@@ -33,6 +35,13 @@ export const PublicChannelsPanel: React.FC = () => {
         const interval = setInterval(loadMessages, 4000);
         return () => clearInterval(interval);
     }, [channelId]);
+
+    // Auto-scroll feed on new messages
+    useEffect(() => {
+        if (feedRef.current) {
+            feedRef.current.scrollTop = feedRef.current.scrollHeight;
+        }
+    }, [messages]);
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -148,7 +157,7 @@ export const PublicChannelsPanel: React.FC = () => {
             </div>
 
             {/* MESSAGES FEED */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {errorMsg && (
                     <div style={{ padding: '10px', background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', borderRadius: '8px', fontSize: '0.85rem' }}>
                         ⛔ {errorMsg}
@@ -170,7 +179,7 @@ export const PublicChannelsPanel: React.FC = () => {
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem' }}>
                                 <span style={{ fontWeight: 800, color: '#a855f7' }}>{m.sender_name}</span>
                                 <span style={{ color: '#64748b', fontFamily: 'monospace' }}>
-                                    {new Date(m.timestamp * 1000).toLocaleTimeString()}
+                                    {new Date(m.timestamp * (m.timestamp < 1e11 ? 1000 : 1)).toLocaleTimeString()}
                                 </span>
                             </div>
                             <div style={{ color: '#e2e8f0', fontSize: '0.92rem', lineHeight: '1.4' }}>
@@ -197,7 +206,7 @@ export const PublicChannelsPanel: React.FC = () => {
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder={`Transmitir boletín en #${channelId}...`}
+                    placeholder={`Transmitir boletín en #${channelId} como ${senderName}...`}
                     style={{
                         flex: 1,
                         background: 'rgba(0,0,0,0.5)',
