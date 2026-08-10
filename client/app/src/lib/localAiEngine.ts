@@ -312,16 +312,34 @@ class LocalAIEngineClass {
             }
         }
 
-        // 2. MODELO LOCAL DE ALTA CAPACIDAD (Phi-3-Mini 3.8B si está descargado)
+        // 2. MODELO LOCAL DE ALTA CAPACIDAD (Phi-3-Mini 3.8B / Gemma 2B cargados en Rust Nativo)
         const activeModel = ModelManager.getActiveModel();
         if (activeModel) {
-            return {
-                answer: `🧠 MODELO DE ALTA CAPACIDAD (${activeModel.name})\n\nConsulta: "${trimmed}"\n\n[Inferencia nativa activa con ${activeModel.parameterCount} parámetros].${ragTitle ? `\n\n📚 [Fundamento RAG Táctico: ${ragTitle}]` : ''}`,
-                topicCategory: `Modelo Nativo ${activeModel.name}`,
-                confidence: 0.99,
-                modelInfo: `${activeModel.name} (${activeModel.parameterCount} params)`,
-                executionTimeMs: Math.round(performance.now() - start),
-            };
+            try {
+                const rustResp = await fetch('http://127.0.0.1:7333/api/ai/copilot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: trimmed,
+                        context: ragContext || undefined,
+                        model_id: activeModel.name,
+                        model_path: activeModel.localPath || activeModel.fileName
+                    })
+                });
+
+                if (rustResp.ok) {
+                    const data = await rustResp.json();
+                    return {
+                        answer: `${data.answer}${ragTitle ? `\n\n📚 [Fundamento RAG Táctico: ${ragTitle}]` : ''}`,
+                        topicCategory: data.topic_category || `Modelo Nativo ${activeModel.name}`,
+                        confidence: 0.99,
+                        modelInfo: `${data.model_used || activeModel.name} (${activeModel.parameterCount} params)`,
+                        executionTimeMs: data.execution_time_ms || Math.round(performance.now() - start),
+                    };
+                }
+            } catch (e) {
+                console.warn('[RED LocalAIEngine] Error llamando a motor Rust nativo, ejecutando fallback:', e);
+            }
         }
 
         // 3. Intentar con el generador LaMini-Flan-T5 ONNX WASM local
