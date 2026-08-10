@@ -26,8 +26,8 @@ export class StegoEngine {
                 const imageData = ctx.getImageData(0, 0, img.width, img.height);
                 const data = imageData.data;
 
-                // Format payload: HEADER + Length (4 bytes) + Content
-                const fullPayload = `${this.HEADER_MAGIC}:${secretPayload}`;
+                // Format payload: HEADER + Payload Length + Secret Content
+                const fullPayload = `${this.HEADER_MAGIC}:${secretPayload.length}:${secretPayload}`;
                 const encoder = new TextEncoder();
                 const payloadBytes = encoder.encode(fullPayload);
 
@@ -100,6 +100,14 @@ export class StegoEngine {
                 const decodedStr = new TextDecoder().decode(new Uint8Array(bytes));
                 if (decodedStr.startsWith(this.HEADER_MAGIC)) {
                     const parts = decodedStr.split(":");
+                    if (parts.length >= 3) {
+                        const payloadLen = parseInt(parts[1], 10);
+                        const actualPayload = parts.slice(2).join(":");
+                        if (!isNaN(payloadLen) && payloadLen >= 0) {
+                            resolve(actualPayload.slice(0, payloadLen));
+                            return;
+                        }
+                    }
                     resolve(parts.slice(1).join(":"));
                 } else {
                     resolve(null);
