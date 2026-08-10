@@ -746,7 +746,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
         // Persist own story locally (24h TTL)
         const entry: StoryEntry = {
-            id: `story-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            id: `story-${Date.now()}-${identity.identity_hash.slice(0, 8)}`,
             content,
             media_data: media || undefined,
             theme,
