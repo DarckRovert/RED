@@ -32,11 +32,15 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const [playing, setPlaying] = useState(false);
     const [, setProgress] = useState(0);
 
-    const audioSrc = msg.media_data
-        ? (msg.media_data.startsWith('data:') || msg.media_data.startsWith('http')
-            ? msg.media_data
-            : `data:audio/ogg;base64,${msg.media_data}`)
-        : undefined;
+    const getAudioDataUrl = (dataStr: string): string => {
+        if (dataStr.startsWith('data:') || dataStr.startsWith('http')) return dataStr;
+        if (dataStr.startsWith('GkXf')) return `data:audio/webm;base64,${dataStr}`;
+        if (dataStr.startsWith('AAAA') || dataStr.startsWith('UklG')) return `data:audio/mp4;base64,${dataStr}`;
+        if (dataStr.startsWith('T2dn')) return `data:audio/ogg;base64,${dataStr}`;
+        return `data:audio/webm;base64,${dataStr}`;
+    };
+
+    const audioSrc = msg.media_data ? getAudioDataUrl(msg.media_data) : undefined;
 
     const toggle = () => {
         const a = audioRef.current;
