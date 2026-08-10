@@ -11,11 +11,27 @@ const TRANSPORT_COLOR: Record<string, string> = {
     lorawan: '#9b59b6',
 };
 
-/** Calculate relative lat/lng offset based on node index & hash for realistic tactical positioning */
-function derivePeerPosition(myLat: number, myLng: number, peerId: string, index: number): { lat: number; lng: number; distMeters: number } {
+function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.round(R * c);
+}
+
+/** Calculate relative lat/lng offset based on real GPS or node index & hash for realistic tactical positioning */
+function derivePeerPosition(myLat: number, myLng: number, peer: { id: string; lat?: number; lng?: number }, index: number): { lat: number; lng: number; distMeters: number } {
+    if (typeof peer.lat === 'number' && typeof peer.lng === 'number' && peer.lat !== 0 && peer.lng !== 0) {
+        const distMeters = getHaversineDistanceMeters(myLat, myLng, peer.lat, peer.lng);
+        return { lat: peer.lat, lng: peer.lng, distMeters };
+    }
+
     let hash = 0;
-    for (let i = 0; i < peerId.length; i++) {
-        hash = (hash * 31 + peerId.charCodeAt(i)) & 0xFFFFFF;
+    for (let i = 0; i < peer.id.length; i++) {
+        hash = (hash * 31 + peer.id.charCodeAt(i)) & 0xFFFFFF;
     }
     // Radius between 15 meters and 120 meters for local mesh simulation
     const angleRad = ((hash % 360) * Math.PI) / 180;
@@ -215,7 +231,7 @@ export default function NodeMap() {
 
             // Render Peer Markers & Vectors
             peers.forEach((peer, idx) => {
-                const pos = derivePeerPosition(myPos.lat, myPos.lng, peer.id, idx);
+                const pos = derivePeerPosition(myPos.lat, myPos.lng, peer, idx);
                 const color = TRANSPORT_COLOR[peer.transport] || '#38bdf8';
 
                 // Vector line linking user to peer
