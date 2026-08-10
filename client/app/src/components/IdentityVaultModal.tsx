@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRedStore } from '../store/useRedStore';
+import { ShamirSecretSharingEngine, SecretShare } from '../lib/ShamirSecretSharingEngine';
 
 const STORAGE_KEY = 'red_identity_vault_v1';
 
@@ -60,6 +61,10 @@ export const IdentityVaultModal: React.FC = () => {
     const [qrCodeData, setQrCodeData] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useState(false);
     const [syncing, setSyncing] = useState(false);
+
+    // SSS State
+    const [sssShares, setSssShares] = useState<SecretShare[]>([]);
+    const [reconstructedSecret, setReconstructedSecret] = useState<string | null>(null);
 
     // Instant initial load on mount without blocking render
     useEffect(() => {
@@ -129,6 +134,34 @@ export const IdentityVaultModal: React.FC = () => {
         }
     };
 
+    const handleGenerateSSS = () => {
+        const rawSecret = identity?.identity_hash || '6d079229af10d57e5a4179e83b24f1c9';
+        // Ensure secret is hex formatted 32-byte string
+        let cleanHex = rawSecret.replace(/[^0-9a-fA-F]/g, '');
+        if (cleanHex.length < 32) {
+            cleanHex = cleanHex.padEnd(32, '0');
+        } else if (cleanHex.length > 32) {
+            cleanHex = cleanHex.substring(0, 32);
+        }
+        try {
+            const shares = ShamirSecretSharingEngine.splitSecret(cleanHex, 3, 5);
+            setSssShares(shares);
+            setReconstructedSecret(null);
+        } catch (e: any) {
+            alert("Error dividiendo la llave con SSS: " + e.message);
+        }
+    };
+
+    const handleTestReconstruct = () => {
+        if (sssShares.length < 3) return;
+        try {
+            // Reconstruct using any 3 shares (shares 0, 1, 2)
+            const reconstructed = ShamirSecretSharingEngine.combineShares(sssShares.slice(0, 3));
+            setReconstructedSecret(reconstructed);
+        } catch (e: any) {
+            alert("Error reconstruyendo la llave: " + e.message);
+        }
+    };
 
     return (
         <div style={{
@@ -168,7 +201,6 @@ export const IdentityVaultModal: React.FC = () => {
                 </div>
             </div>
 
-
             {/* MAIN FORM */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{
@@ -186,7 +218,6 @@ export const IdentityVaultModal: React.FC = () => {
                     <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '20px', lineHeight: '1.4' }}>
                         Información guardada con cifrado por hardware en el Keystore seguro del dispositivo.
                     </div>
-
 
                     <div style={{ marginBottom: '14px' }}>
                         <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>TIPO DE SANGRE</label>
@@ -270,19 +301,10 @@ export const IdentityVaultModal: React.FC = () => {
                     {/* SHAMIR SECRET SHARING (SSS 3-of-5) SECTION */}
                     <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
                         <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#38BDF8', marginBottom: '8px' }}>🧩 Fragmentación Secreta de Shamir (SSS 3-de-5)</div>
-                        <div style={{ fontSize: '0.75rem', color: '#AAA', marginBottom: '12px' }}>Dividir tu identidad en 5 fragmentos QR. Reconstruible con cualesquiera 3 fragmentos:</div>
+                        <div style={{ fontSize: '0.75rem', color: '#AAA', marginBottom: '12px' }}>Dividir tu identidad en 5 fragmentos GF(2^8). Reconstruible con cualesquiera 3 fragmentos:</div>
 
                         <button
-                            onClick={() => {
-                                const secret = identity?.identity_hash || "6d079229_RED_SOVEREIGN_KEY_SEED_V32";
-                                try {
-                                    const { ShamirSecretSharingEngine } = require('../lib/ShamirSecretSharingEngine');
-                                    const shares = ShamirSecretSharingEngine.splitSecret(secret, 3, 5);
-                                    alert(`✅ Llave dividida exitosamente en 5 fragmentos. Fragmento 1: ${shares[0].shareHex.substring(0, 16)}...`);
-                                } catch (e) {
-                                    alert("Error SSS: " + (e as Error).message);
-                                }
-                            }}
+                            onClick={handleGenerateSSS}
                             style={{
                                 width: '100%', padding: '10px', borderRadius: '8px',
                                 background: 'linear-gradient(135deg, #38BDF8, #0284C7)',
@@ -291,6 +313,35 @@ export const IdentityVaultModal: React.FC = () => {
                         >
                             ⚡ FRAGMENTAR IDENTIDAD SSS (3 DE 5)
                         </button>
+
+                        {sssShares.length > 0 && (
+                            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {sssShares.map((s) => (
+                                    <div key={s.shareIndex} style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(56,189,248,0.3)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.75rem' }}>
+                                        <div style={{ color: '#38BDF8', fontWeight: 800 }}>Fragmento {s.shareIndex}/5:</div>
+                                        <div style={{ fontFamily: 'monospace', color: '#fff', wordBreak: 'break-all' }}>{s.shareHex}</div>
+                                    </div>
+                                ))}
+
+                                <button
+                                    onClick={handleTestReconstruct}
+                                    style={{
+                                        marginTop: '8px', padding: '8px', borderRadius: '6px',
+                                        background: 'rgba(0,230,118,0.2)', border: '1px solid #00E676',
+                                        color: '#00E676', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer'
+                                    }}
+                                >
+                                    🔍 Probar Reconstrucción Lagrange (Fragmentos 1, 2 y 3)
+                                </button>
+
+                                {reconstructedSecret && (
+                                    <div style={{ background: 'rgba(0,230,118,0.15)', border: '1px solid #00E676', padding: '10px', borderRadius: '8px', marginTop: '6px', fontSize: '0.78rem' }}>
+                                        <div style={{ color: '#00E676', fontWeight: 800 }}>✅ Llave Reconstruida con Éxito:</div>
+                                        <div style={{ fontFamily: 'monospace', color: '#fff', wordBreak: 'break-all' }}>{reconstructedSecret}</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
