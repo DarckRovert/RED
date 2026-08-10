@@ -1268,7 +1268,7 @@ export async function updateBatteryOptimize(batteryLevel: number): Promise<{ ok:
             battery_level: batteryLevel,
             ble_scan_interval_ms: isLow ? 10000 : 3000,
             lora_tx_power_dbm: isLow ? 10 : 14,
-            estimated_mesh_hours: Math.round((batteryLevel / 100) * 36),
+            estimated_mesh_hours: Math.round((batteryLevel / 100) * (isLow ? 52 : 36)),
             eco_mode_enabled: true,
         };
         return { ok: true, battery_status };
