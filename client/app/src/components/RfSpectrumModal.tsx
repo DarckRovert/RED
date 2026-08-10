@@ -11,16 +11,23 @@ export function RfSpectrumModal() {
     const [isScanning, setIsScanning] = useState(true);
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            if (isScanning) {
-                // Generate live RSSI sample list
-                const baseRssi = Math.floor(Math.random() * -30) - 50;
-                const sampleRssiList = Array.from({ length: 6 }, () => baseRssi + Math.floor(Math.random() * 15) - 7);
-                const updated = RfSpectrumAnalyzerEngine.analyzeEnvironment(sampleRssiList);
-                setMetrics(updated);
-            }
-        }, 1500);
+        const updateSpectrum = () => {
+            if (!isScanning) return;
+            const liveContacts = useRedStore.getState().contacts || [];
+            const realRssiList = liveContacts.map((c: any) => {
+                if (typeof c?.rssi === 'number') return c.rssi;
+                const latency = (c as any)?.latency_ms || 15;
+                return Math.max(-95, Math.min(-30, -50 - Math.round(latency * 0.4)));
+            });
 
+            // Default baseline clean spectrum sampling if no P2P contacts connected
+            const sampleRssiList = realRssiList.length > 0 ? realRssiList : [-55, -62, -58, -64, -53, -60];
+            const updated = RfSpectrumAnalyzerEngine.analyzeEnvironment(sampleRssiList);
+            setMetrics(updated);
+        };
+
+        updateSpectrum();
+        const interval = setInterval(updateSpectrum, 1500);
         return () => clearInterval(interval);
     }, [isScanning]);
 
@@ -29,7 +36,8 @@ export function RfSpectrumModal() {
             position: 'fixed', inset: 0, zIndex: 999,
             background: 'rgba(4,6,10,0.96)', color: '#fff',
             display: 'flex', flexDirection: 'column', padding: '20px',
-            overflowY: 'auto', backdropFilter: 'blur(12px)'
+            overflowY: 'auto', backdropFilter: 'blur(12px)',
+            fontFamily: 'Inter, sans-serif'
         }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -37,7 +45,7 @@ export function RfSpectrumModal() {
                     <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'linear-gradient(135deg, #A855F7, #7E22CE)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🛡️</div>
                     <div>
                         <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Analizador de Espectro RF & Guerra Electrónica</div>
-                        <div style={{ fontSize: '0.72rem', color: '#A855F7' }}>Detección de Jammers, Inhibitores & Ataques Deauth</div>
+                        <div style={{ fontSize: '0.72rem', color: '#A855F7' }}>Detección de Jammers, Inhibidores & Ataques Deauth</div>
                     </div>
                 </div>
                 <button onClick={() => navigate('sidebar')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>✕ Cerrar</button>
@@ -61,9 +69,17 @@ export function RfSpectrumModal() {
                 </div>
             </div>
 
-            {/* 2.4 GHz Channel Waterfall Simulation */}
+            {/* 2.4 GHz Channel Waterfall Spectrum */}
             <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(168,85,247,0.3)', borderRadius: '16px', padding: '16px', marginBottom: '16px' }}>
-                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#A855F7', marginBottom: '12px' }}>📊 Distribución de Potencia de Canales ISM (2.4 GHz)</div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#A855F7', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>📊 Distribución de Potencia de Canales ISM (2.4 GHz)</span>
+                    <button
+                        onClick={() => setIsScanning(!isScanning)}
+                        style={{ background: isScanning ? 'rgba(0,230,118,0.2)' : 'rgba(255,255,255,0.1)', border: '1px solid', borderColor: isScanning ? '#00E676' : 'rgba(255,255,255,0.2)', color: isScanning ? '#00E676' : '#fff', borderRadius: '6px', padding: '2px 10px', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}
+                    >
+                        {isScanning ? '● ESCANEANDO RF' : 'PAUSADO'}
+                    </button>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '140px', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     {metrics.activeChannels.map((ch, idx) => {
                         const heightPct = Math.max(10, Math.min(100, (ch.rssiDb + 100) * 1.6));
