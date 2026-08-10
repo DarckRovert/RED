@@ -625,8 +625,9 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
             throw new Error('Identidad de nodo requerida para emitir alerta AMBER');
         }
         const now = Date.now();
+        const idHash = await sha256Hex(`amber_${now}_${payload.name}`);
         const alert: AmberAlert = {
-            id: `amber_${now}_${Math.random().toString(36).slice(2, 7)}`,
+            id: `amber_${now}_${idHash.slice(0, 8)}`,
             name: payload.name,
             age: payload.age,
             description: payload.description,
@@ -842,8 +843,9 @@ export async function emitSos(payload: {
             } catch {}
         }
 
+        const idHash = await sha256Hex(`sos_${now}_${sender_did}`);
         const sos: SosBeacon = {
-            id: `sos_${now}_${Math.random().toString(36).slice(2, 6)}`,
+            id: `sos_${now}_${idHash.slice(0, 8)}`,
             sender_did,
             sender_name: payload.sender_name || identity.nickname || 'Operador',
             lat: payload.lat,
@@ -915,7 +917,7 @@ export async function postChannelMessage(payload: { channel_id: string; sender_n
         const msgHash = await sha256Hex(`${now}_${payload.content}`);
 
         const msg: ChannelMessage = {
-            id: `msg_ch_${now}_${Math.random().toString(36).slice(2, 6)}`,
+            id: `msg_ch_${now}_${msgHash.slice(0, 8)}`,
             channel_id: payload.channel_id || 'red-local-general',
             sender_did,
             sender_name: payload.sender_name || 'Operador RED',
@@ -1009,8 +1011,9 @@ export async function sendVoiceBurst(payload: {
         const identity = await RedAPI.getIdentity().catch(() => null);
         const sender_did = identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : 'did:red:local_node';
 
+        const burstHash = await sha256Hex(`vburst_${now}_${payload.duration_seconds || 3}`);
         const burst: VoiceBurst = {
-            id: `vburst_${now}_${Math.random().toString(36).slice(2, 6)}`,
+            id: `vburst_${now}_${burstHash.slice(0, 8)}`,
             sender_did,
             sender_name: payload.sender_name || 'Operador RED',
             duration_seconds: payload.duration_seconds || 3,
@@ -1073,8 +1076,9 @@ export async function postWeatherReport(payload: {
         const identity = await RedAPI.getIdentity().catch(() => null);
         const sender_did = identity ? `did:red:${identity.identity_hash.slice(0, 12)}` : 'did:red:local_node';
 
+        const wxHash = await sha256Hex(`wx_${now}_${payload.pressure_hpa}`);
         const report: WeatherReport = {
-            id: `wx_${now}_${Math.random().toString(36).slice(2, 6)}`,
+            id: `wx_${now}_${wxHash.slice(0, 8)}`,
             sender_did,
             sender_name: payload.sender_name || (identity && identity.nickname ? identity.nickname : 'Nodo Local'),
             pressure_hpa: payload.pressure_hpa,
