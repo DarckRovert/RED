@@ -5,13 +5,15 @@ import { useRedStore } from '../store/useRedStore';
 import { sendVoiceBurst, getVoiceBursts, VoiceBurst } from '../lib/api';
 
 export const P2PWalkieTalkieModal: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
     const [isRecording, setIsRecording] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [bursts, setBursts] = useState<VoiceBurst[]>([]);
     const [permissionGranted, setPermissionGranted] = useState(false);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+    const myNickname = identity?.nickname || 'Operador RED';
 
     // Helper to dynamically obtain VoiceRecorder plugin when running natively
     const getVoiceRecorder = async () => {
@@ -142,12 +144,12 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             }
 
             await sendVoiceBurst({
-                sender_name: 'Operador RED Web',
+                sender_name: myNickname,
                 duration_seconds: duration,
                 audio_opus_b64: audioB64
             });
             await loadBursts();
-            setStatusMsg(`✅ Ráfaga de ${duration}s transmitida a la red P2P.`);
+            setStatusMsg(`✅ Ráfaga de ${duration}s transmitida a la red P2P por ${myNickname}.`);
         } catch (e: any) {
             setStatusMsg(`Error de transmisión: ${e.message}`);
         }
@@ -172,7 +174,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             }
             audio.currentTime = 0;
             audio.play().catch(() => {
-                // Retry with fallback audio/mp3 or audio/ogg
+                // Retry with fallback audio/mp4
                 const fallbackAudio = new Audio(`data:audio/mp4;base64,${burst.audio_opus_b64}`);
                 fallbackAudio.play().catch(() => setStatusMsg('⚠️ Formato no compatible con este navegador.'));
             });
@@ -288,7 +290,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                                 <div>
                                     <div style={{ fontWeight: 700, color: '#fff' }}>{b.sender_name}</div>
                                     <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
-                                        {b.duration_seconds}s · {new Date(b.timestamp * 1000).toLocaleTimeString()}
+                                        {b.duration_seconds}s · {new Date(b.timestamp * (b.timestamp < 1e11 ? 1000 : 1)).toLocaleTimeString()}
                                     </div>
                                 </div>
                                 <button
