@@ -79,7 +79,7 @@ export default function StoryCreator({ onClose }: StoryCreatorProps) {
         setIsSending(true);
         try {
             await publishStatus(
-                mode === 'text' ? text.trim() : '📷 Estado con foto',
+                mode === 'text' ? text.trim() : (text.trim() || '📷 Estado con foto'),
                 mode === 'photo' ? photoData : null,
                 mode === 'text' ? theme : undefined,
             );
