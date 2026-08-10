@@ -1015,7 +1015,7 @@ export async function sendVoiceBurst(payload: {
         const burst: VoiceBurst = {
             id: `vburst_${now}_${burstHash.slice(0, 8)}`,
             sender_did,
-            sender_name: payload.sender_name || 'Operador RED',
+            sender_name: payload.sender_name || (identity && identity.nickname ? identity.nickname : 'Operador RED'),
             duration_seconds: payload.duration_seconds || 3,
             audio_opus_b64: payload.audio_opus_b64,
             timestamp: now,
