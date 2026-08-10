@@ -1228,10 +1228,21 @@ export async function setEphemeralTimer(config: EphemeralConfig): Promise<{ ok: 
 export async function getBatteryStatus(): Promise<EcoMeshStatus> {
     return fetchWithFallback('/api/battery/status', undefined, async () => {
         let level = 85;
-        if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+
+        try {
+            const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+            if (cap && cap.Plugins && cap.Plugins.Device) {
+                const info = await cap.Plugins.Device.getBatteryInfo();
+                if (info && typeof info.batteryLevel === 'number') {
+                    level = Math.round(info.batteryLevel * 100);
+                }
+            }
+        } catch {}
+
+        if (level === 85 && typeof navigator !== 'undefined' && 'getBattery' in navigator) {
             try {
                 const b: any = await (navigator as any).getBattery();
-                level = Math.round(b.level * 100);
+                level = Math.round((b.level || 1) * 100);
             } catch {}
         }
         const isLow = level < 20;
@@ -1239,7 +1250,7 @@ export async function getBatteryStatus(): Promise<EcoMeshStatus> {
             battery_level: level,
             ble_scan_interval_ms: isLow ? 10000 : 3000,
             lora_tx_power_dbm: isLow ? 10 : 14,
-            estimated_mesh_hours: Math.round((level / 100) * 36),
+            estimated_mesh_hours: Math.round((level / 100) * (isLow ? 52 : 36)),
             eco_mode_enabled: true,
         };
     });
