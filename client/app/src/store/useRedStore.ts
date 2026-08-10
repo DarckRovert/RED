@@ -111,6 +111,7 @@ interface RedStore {
     addLiveFrame: (streamId: string, frame: string, seq: number) => void;
     removeLiveStream: (streamId: string) => void;
     addLiveComment: (streamId: string, sender: string, text: string) => void;
+    evaluateLocalDMS: () => Promise<void>;
 }
 
 /** Screens that act as overlays and must NOT clear activeConversationId */
@@ -544,8 +545,60 @@ export const useRedStore = create<RedStore>((set, get) => ({
         return false;
     },
 
+    evaluateLocalDMS: async () => {
+        if (typeof window === 'undefined') return;
+        try {
+            const dms = RedAPI.getDmsConfig ? await RedAPI.getDmsConfig().catch(() => null) : null;
+            if (!dms || !dms.enabled) {
+                localStorage.setItem('red_last_activity', Date.now().toString());
+                return;
+            }
+
+            const lastActivityStr = localStorage.getItem('red_last_activity');
+            const now = Date.now();
+            const lastActivity = lastActivityStr ? parseInt(lastActivityStr) : now;
+
+            // Update activity timestamp on interaction
+            localStorage.setItem('red_last_activity', now.toString());
+
+            const triggerMs = (dms.trigger_hours || 72) * 3600 * 1000;
+            if (now - lastActivity > triggerMs) {
+                console.warn("[DMS] Dead Man's Switch triggered! Initiating emergency purge protocol...");
+                
+                // Broadcast posthumous message if configured
+                if (dms.dead_message && dms.dead_message.trim()) {
+                    try {
+                        await RedAPI.sendMessage('broadcast', dms.dead_message.trim(), { msg_type: 'text' }).catch(() => {});
+                    } catch {}
+                }
+
+                // Execute wipe options
+                if (dms.wipe_messages) {
+                    localStorage.removeItem('red_messages');
+                    localStorage.removeItem('red_conversations');
+                    set({ messages: [], conversations: [] });
+                }
+
+                if (dms.wipe_identity) {
+                    localStorage.clear();
+                    set({
+                        identity: null,
+                        isAuthenticated: false,
+                        messages: [],
+                        contacts: [],
+                        groups: [],
+                        conversations: []
+                    });
+                }
+            }
+        } catch (err) {
+            console.error("[DMS] Evaluation error:", err);
+        }
+    },
+
     fetchData: async () => {
         if (get().isDecoyMode) return;
+        get().evaluateLocalDMS().catch(() => {});
         try {
             const [convs, conts, grps] = await Promise.all([
                 RedAPI.getConversations(),
