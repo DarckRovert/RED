@@ -103,12 +103,14 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
         }
 
         try {
+            const myStories = useRedStore.getState().myStories || [];
             const payload = {
                 version: "v30.0",
                 timestamp: Date.now(),
                 identity,
-                contacts,
-                groups
+                contacts: contacts || [],
+                groups: groups || [],
+                myStories
             };
 
             const jsonString = JSON.stringify(payload);
@@ -155,6 +157,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
 
             if (parsed.contacts && Array.isArray(parsed.contacts)) {
                 localStorage.setItem('red_contacts_backup', JSON.stringify(parsed.contacts));
+            }
+            if (parsed.myStories && Array.isArray(parsed.myStories)) {
+                localStorage.setItem('red_my_stories', JSON.stringify(parsed.myStories));
             }
             toast.success("✅ Respaldo autenticado y restaurado con éxito.");
             await fetchData();
