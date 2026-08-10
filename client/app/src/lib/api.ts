@@ -450,6 +450,28 @@ class RedAPIClient {
         await this.req('/settings/burner', { method: 'POST', body: JSON.stringify({ enabled }) }).catch(() => {});
     }
 
+    async getDmsConfig(): Promise<any> {
+        return fetchWithFallback('/api/settings/dms', undefined, async () => {
+            return getStored<any>('red_dms_config', {
+                enabled: false,
+                trigger_hours: 72,
+                wipe_messages: true,
+                wipe_identity: false,
+                dead_message: '',
+            });
+        });
+    }
+
+    async saveDmsConfig(config: any): Promise<void> {
+        return fetchWithFallback('/api/settings/dms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        }, async () => {
+            setStored('red_dms_config', config);
+        });
+    }
+
     /** 
      * Update only the trigger window of the Dead Man's Switch.
      * Reads the current DMS config first so we don't clobber wipe_messages /
@@ -457,18 +479,13 @@ class RedAPIClient {
      */
     async setDeadMansDays(days: number): Promise<void> {
         try {
-            const current = await this.req<any>('/settings/dms').catch(() => ({}));
+            const current = await this.getDmsConfig();
             const updated = {
-                enabled: current?.enabled ?? true,
+                ...current,
+                enabled: true,
                 trigger_hours: days * 24,
-                wipe_messages: current?.wipe_messages ?? true,
-                wipe_identity: current?.wipe_identity ?? false,
-                dead_message: current?.dead_message ?? '',
             };
-            await this.req('/settings/dms', {
-                method: 'POST',
-                body: JSON.stringify(updated),
-            });
+            await this.saveDmsConfig(updated);
         } catch {
             // Node not ready yet — silently ignore
         }

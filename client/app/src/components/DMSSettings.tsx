@@ -28,9 +28,9 @@ export default function DMSSettings() {
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
 
-    // Load existing config from Rust node (real GET now supported)
+    // Load existing config with offline fallback
     useEffect(() => {
-        RedAPI.req('/settings/dms')
+        RedAPI.getDmsConfig()
             .then((data: any) => {
                 if (data && typeof data.enabled !== 'undefined') {
                     setConfig({
@@ -42,17 +42,14 @@ export default function DMSSettings() {
                     });
                 }
             })
-            .catch(() => {/* Node not ready yet — defaults are fine */});
+            .catch(() => {/* Defaults are fine */});
     }, []);
 
     const handleSave = async () => {
         setSaving(true);
         setSaved(false);
         try {
-            await RedAPI.req('/settings/dms', {
-                method: 'POST',
-                body: JSON.stringify(config)
-            });
+            await RedAPI.saveDmsConfig(config);
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
         } catch (e) {
