@@ -267,7 +267,7 @@ export default function NodeMap() {
                         <div style="position:relative; width:30px; height:30px; display:flex; align-items:center; justify-content:center;">
                             <div style="width:14px; height:14px; border-radius:50%; background:${color}; border:2px solid white; box-shadow:0 0 10px ${color};"></div>
                             <span style="position:absolute; top:-18px; white-space:nowrap; background:rgba(0,0,0,0.85); color:white; padding:2px 6px; border-radius:6px; font-size:10px; font-weight:800; border:1px solid ${color}; font-family:monospace;">
-                                ${peer.id.slice(0, 8)} (${pos.distMeters}m)
+                                ${peer.name || peer.id.slice(0, 8)} (${pos.distMeters}m)
                             </span>
                         </div>
                     `,
