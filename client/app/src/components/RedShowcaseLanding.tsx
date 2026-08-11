@@ -45,8 +45,8 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
   const apkDownloadUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
-    ? '/RED/assets/red-v30.0.0-latest.apk'
-    : 'assets/red-v30.0.0-latest.apk';
+    ? '/RED/assets/red-v3.1.0-latest.apk'
+    : 'assets/red-v3.1.0-latest.apk';
 
   const heroBannerUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
     ? '/RED/assets/red_investor_hero_banner.png'
@@ -302,7 +302,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
           </div>
           <div>
             <div style={{ fontWeight: 800, fontSize: '19px', color: '#FFF', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              RED <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontFamily: 'monospace' }}>v30.0.0 Master</span>
+              RED <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontFamily: 'monospace' }}>v3.1.0 Master</span>
             </div>
             <div style={{ fontSize: '10px', color: '#94A3B8', letterSpacing: '2px', textTransform: 'uppercase', fontFamily: 'monospace' }}>
               Plataforma Soberana P2P Off-Grid
@@ -352,7 +352,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
           </button>
           <a
             href={apkDownloadUrl}
-            download="red-v30.0.0-latest.apk"
+            download="red-v3.1.0-latest.apk"
             style={{
               padding: '10px 18px',
               fontSize: '13px',
@@ -549,7 +549,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
               </div>
               <a
                 href={apkDownloadUrl}
-                download="red-v30.0.0-latest.apk"
+                download="red-v3.1.0-latest.apk"
                 style={{
                   padding: '12px 24px',
                   fontSize: '14px',
@@ -562,7 +562,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
                   whiteSpace: 'nowrap',
                 }}
               >
-                📥 Descargar APK (v30.0.0)
+                📥 Descargar APK (v3.1.0)
               </a>
             </div>
           </div>
@@ -1085,7 +1085,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         {activeTab === 'features' && (
           <div>
             <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Capacidades Tácticas de Producción</h2>
-            <p style={{ fontSize: '15px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>Resumen de las características criptográficas y de hardware del sistema RED v30.0.0.</p>
+            <p style={{ fontSize: '15px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>Resumen de las características criptográficas y de hardware del sistema RED v3.1.0.</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
               <div style={{ padding: '28px', borderRadius: '20px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1141,7 +1141,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
 
         {activeTab === 'architecture' && (
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v30.0.0</h2>
+            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v3.1.0</h2>
             <p style={{ fontSize: '14px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>
               Flujo de procesamiento en tiempo real entre el Frontend SPA, Middleware Android Java JNI, Motor Rust NDK y Radios de Hardware Off-Grid.
             </p>

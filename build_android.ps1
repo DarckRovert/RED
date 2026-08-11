@@ -42,6 +42,21 @@ function Check-Command {
 
 Write-Header "RED Android Build System - Initializing"
 
+# Ensure JDK environment points to Android Studio's stable OpenJDK (jbr)
+$AndroidStudioJbr = "C:\Program Files\Android\Android Studio\jbr"
+if (Test-Path "$AndroidStudioJbr\bin\java.exe") {
+    $env:JAVA_HOME = $AndroidStudioJbr
+    $env:PATH = "$AndroidStudioJbr\bin;$env:PATH"
+    Write-Host "JDK environment set to Android Studio JBR ($AndroidStudioJbr)" -ForegroundColor Gray
+}
+
+# Stop cached Gradle daemons using outdated JRE paths
+if (Test-Path "$ANDROID_PATH\gradlew.bat") {
+    Push-Location $ANDROID_PATH
+    .\gradlew.bat --stop | Out-Null
+    Pop-Location
+}
+
 Check-Command "node" "https://nodejs.org/"
 Check-Command "npm" "https://nodejs.org/"
 Check-Command "cargo" "https://rustup.rs/"
@@ -113,8 +128,8 @@ if (Test-Path "gradlew.bat") {
         Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
         
-        Write-Host "Copying APK to assets/red-v18.3.0-zenith.apk..." -ForegroundColor Gray
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v18.3.0-zenith.apk" -Force -ErrorAction SilentlyContinue
+        Write-Host "Copying APK to assets/red-v3.1.0-latest.apk..." -ForegroundColor Gray
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v3.1.0-latest.apk" -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
     }

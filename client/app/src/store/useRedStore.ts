@@ -322,7 +322,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 }
                 set({
                     identity: { identity_hash: localHash, short_id: shortId, public_key: localHash, nickname: savedNick || 'Operador RED' },
-                    status: { is_running: true, peer_count: 0, identity_hash: localHash, version: "30.0.0-web", chain_height: 1 },
+                    status: { is_running: true, peer_count: 0, identity_hash: localHash, version: "3.1.0-web", chain_height: 1 },
                     nodeOnline: true,
                     isAuthenticated: true
                 });
