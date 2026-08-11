@@ -767,7 +767,7 @@ export default function ChatWindow() {
                                         {peerHash ? `${peerHash.substring(0, 10)}…` : ''}
                                     </span>
                                     <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} />
-                                    <span style={{ fontSize: '0.69rem', color: 'var(--success)', fontWeight: 600 }}>E2E cifrado</span>
+                                    <span style={{ fontSize: '0.69rem', color: '#00E676', fontWeight: 800, fontFamily: 'monospace' }}>🛡️ Kyber-1024 PQC</span>
                                 </>
                             )}
                         </div>
