@@ -1,10 +1,4 @@
-/**
- * modelManager.ts — RED Offline Model Storage & Download Manager
- *
- * Manages downloading, caching, and verifying high-capacity LLM models
- * (e.g., Phi-3-Mini 3.8B Q4_K_M GGUF / ONNX binaries).
- * Ensures models are stored in local persistent storage and NOT bundled in the APK.
- */
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 export interface LocalModelMetaData {
     id: string;
@@ -18,6 +12,7 @@ export interface LocalModelMetaData {
     isDownloaded: boolean;
     downloadProgress: number; // 0 - 100
     localPath?: string;
+    downloadedBytes?: number;
 }
 
 export const SUPPORTED_MODELS: LocalModelMetaData[] = [
@@ -71,6 +66,16 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     }
 ];
 
+// Helper to convert Uint8Array chunk to base64 string safely
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
 class ModelManagerClass {
     private models: Map<string, LocalModelMetaData> = new Map();
     private activeDownloads: Map<string, AbortController> = new Map();
@@ -86,11 +91,35 @@ class ModelManagerClass {
 
         for (const [id, model] of this.models.entries()) {
             try {
-                // Check in IndexedDB / Local Storage cache flag
-                const isCached = localStorage.getItem(`red_model_${id}_ready`) === 'true';
-                if (isCached) {
-                    model.isDownloaded = true;
-                    model.downloadProgress = 100;
+                // Check physical file via Capacitor Filesystem
+                try {
+                    const filePath = `models/${model.fileName}`;
+                    const stat = await Filesystem.stat({
+                        path: filePath,
+                        directory: Directory.Data
+                    });
+
+                    if (stat && stat.size > 10 * 1024 * 1024) { // Valid GGUF file > 10MB
+                        const uri = await Filesystem.getUri({
+                            path: filePath,
+                            directory: Directory.Data
+                        });
+                        model.isDownloaded = true;
+                        model.downloadProgress = 100;
+                        model.downloadedBytes = stat.size;
+                        model.localPath = uri.uri;
+                        localStorage.setItem(`red_model_${id}_ready`, 'true');
+                        localStorage.setItem(`red_model_${id}_path`, uri.uri);
+                        continue;
+                    }
+                } catch {
+                    // Fallback to localStorage flag if Filesystem plugin is not ready
+                    const isCached = localStorage.getItem(`red_model_${id}_ready`) === 'true';
+                    if (isCached) {
+                        model.isDownloaded = true;
+                        model.downloadProgress = 100;
+                        model.localPath = localStorage.getItem(`red_model_${id}_path`) || `models/${model.fileName}`;
+                    }
                 }
             } catch (e) {
                 console.warn('[ModelManager] Cache check failed for', id, e);
@@ -131,7 +160,7 @@ class ModelManagerClass {
         }
     }
 
-    /** Simulates or executes chunked download with progress reporting */
+    /** Downloads model with low RAM usage (2MB chunked writing to disk) */
     public async downloadModel(
         modelId: string,
         onProgress?: (progress: number, loadedBytes: number, totalBytes: number) => void
@@ -148,28 +177,78 @@ class ModelManagerClass {
         this.activeDownloads.set(modelId, controller);
 
         try {
-            console.log(`[ModelManager] Starting download for ${model.name}...`);
+            console.log(`[ModelManager] Starting persistent disk download for ${model.name}...`);
             model.downloadProgress = 0;
+            model.downloadedBytes = 0;
 
-            // Execute fetch request
+            // Ensure destination folder exists in persistent storage
+            await Filesystem.mkdir({
+                path: 'models',
+                directory: Directory.Data,
+                recursive: true
+            }).catch(() => {});
+
+            const targetFilePath = `models/${model.fileName}`;
+
+            // Delete old partial download file if exists
+            await Filesystem.deleteFile({
+                path: targetFilePath,
+                directory: Directory.Data
+            }).catch(() => {});
+
+            // Execute CORS fetch request
             const response = await fetch(model.downloadUrl, {
-                signal: controller.signal
+                signal: controller.signal,
+                mode: 'cors'
             });
 
             if (!response.ok || !response.body) {
-                throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+                throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
             }
 
             const contentLength = response.headers.get('Content-Length');
             const totalBytes = contentLength ? parseInt(contentLength, 10) : model.fileSizeMb * 1024 * 1024;
             let loadedBytes = 0;
+            let chunkBuffer: number[] = [];
+            const CHUNK_SIZE = 2 * 1024 * 1024; // Write to disk every 2 MB to keep RAM usage < 15MB
 
             const reader = response.body.getReader();
+            let isFirstWrite = true;
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
                 loadedBytes += value.byteLength;
+                model.downloadedBytes = loadedBytes;
+
+                // Push bytes to chunk buffer
+                for (let i = 0; i < value.byteLength; i++) {
+                    chunkBuffer.push(value[i]);
+                }
+
+                // If chunk buffer reached 2MB, flush to disk via Capacitor Filesystem
+                if (chunkBuffer.length >= CHUNK_SIZE) {
+                    const u8 = new Uint8Array(chunkBuffer);
+                    const base64Data = uint8ArrayToBase64(u8);
+
+                    if (isFirstWrite) {
+                        await Filesystem.writeFile({
+                            path: targetFilePath,
+                            data: base64Data,
+                            directory: Directory.Data
+                        });
+                        isFirstWrite = false;
+                    } else {
+                        await Filesystem.appendFile({
+                            path: targetFilePath,
+                            data: base64Data,
+                            directory: Directory.Data
+                        });
+                    }
+                    chunkBuffer = [];
+                }
+
                 const pct = Math.round((loadedBytes / totalBytes) * 100);
                 model.downloadProgress = Math.min(99, pct);
 
@@ -178,13 +257,43 @@ class ModelManagerClass {
                 }
             }
 
+            // Write any remaining bytes in chunk buffer
+            if (chunkBuffer.length > 0) {
+                const u8 = new Uint8Array(chunkBuffer);
+                const base64Data = uint8ArrayToBase64(u8);
+                if (isFirstWrite) {
+                    await Filesystem.writeFile({
+                        path: targetFilePath,
+                        data: base64Data,
+                        directory: Directory.Data
+                    });
+                } else {
+                    await Filesystem.appendFile({
+                        path: targetFilePath,
+                        data: base64Data,
+                        directory: Directory.Data
+                    });
+                }
+            }
+
+            // Retrieve physical file URI
+            const uriResult = await Filesystem.getUri({
+                path: targetFilePath,
+                directory: Directory.Data
+            });
+
             model.isDownloaded = true;
             model.downloadProgress = 100;
+            model.localPath = uriResult.uri;
+
             if (typeof window !== 'undefined') {
                 localStorage.setItem(`red_model_${modelId}_ready`, 'true');
+                localStorage.setItem(`red_model_${modelId}_path`, uriResult.uri);
+                localStorage.setItem('red_active_model_id', modelId);
             }
+
             this.activeDownloads.delete(modelId);
-            console.log(`[ModelManager] Download complete for ${model.name}!`);
+            console.log(`[ModelManager] Physical disk download complete for ${model.name} at ${uriResult.uri}!`);
             return true;
         } catch (err: any) {
             this.activeDownloads.delete(modelId);

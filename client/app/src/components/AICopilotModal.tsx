@@ -229,9 +229,14 @@ export const AICopilotModal: React.FC = () => {
                                             <p style={{ fontSize: '0.85rem', color: '#94a3b8', margin: '0 0 14px 0', lineHeight: 1.5 }}>{m.description}</p>
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '10px' }}>
+                                            <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '8px' }}>
                                                 Tamaño: {(m.fileSizeMb / 1024).toFixed(1)} GB | RAM Recomendada: {(m.recommendedMinRamMb / 1024).toFixed(1)} GB
                                             </div>
+                                            {m.localPath && (
+                                                <div style={{ fontSize: '0.7rem', color: '#38bdf8', marginBottom: '10px', wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                                                    📁 {m.localPath}
+                                                </div>
+                                            )}
                                             {isCurrentlyActive ? (
                                                 <div style={{ background: 'rgba(0,230,118,0.15)', color: '#00E676', border: '1px solid #00E676', padding: '10px', borderRadius: '10px', textAlign: 'center', fontWeight: 800, fontSize: '0.85rem' }}>
                                                     🌟 Modelo Principal Activo
@@ -269,7 +274,9 @@ export const AICopilotModal: React.FC = () => {
                                                         cursor: downloadingId === m.id ? 'default' : 'pointer'
                                                     }}
                                                 >
-                                                    {downloadingId === m.id ? `Descargando... (${downloadProgress}%)` : `⚡ Activar e Instalar (${m.fileSizeMb} MB)`}
+                                                    {downloadingId === m.id
+                                                        ? `📥 Escribiendo a Disco... (${downloadProgress}%)`
+                                                        : `⚡ Descargar e Instalar en Disco (${m.fileSizeMb} MB)`}
                                                 </button>
                                             )}
                                         </div>
