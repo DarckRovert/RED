@@ -182,7 +182,7 @@ export const AICopilotModal: React.FC = () => {
                             🤖 Copiloto IA Soberano RED
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>
-                            🟢 Motor Activo: {activeModel?.name || 'Qwen 2.5 1.5B Instruct (Alibaba ARM64)'}
+                            🟢 Motor Activo: {activeModel ? activeModel.name : 'Ningún Modelo Seleccionado'}
                         </div>
                     </div>
                 </div>
