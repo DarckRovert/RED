@@ -133,19 +133,19 @@ class ModelManagerClass {
         return Array.from(this.models.values());
     }
 
-    /** Returns metadata of active high-capacity model */
+    /** Returns metadata of active high-capacity model (only if downloaded) */
     public getActiveModel(): LocalModelMetaData | null {
         if (typeof window !== 'undefined') {
             const activeId = localStorage.getItem('red_active_model_id');
             if (activeId && this.models.has(activeId)) {
-                return this.models.get(activeId)!;
+                const m = this.models.get(activeId)!;
+                if (m.isDownloaded) return m;
             }
         }
         for (const m of this.models.values()) {
             if (m.isDownloaded) return m;
         }
-        // Default to Qwen 2.5 1.5B Instruct for mobile optimization
-        return this.models.get('qwen-2.5-1.5b-q4') || null;
+        return null;
     }
 
     /** Sets the primary active model */
@@ -213,7 +213,7 @@ class ModelManagerClass {
                     progress: true
                 });
 
-                progressListener.remove();
+                await progressListener.remove();
                 if (res && res.path) {
                     nativeSuccess = true;
                 }
@@ -235,7 +235,7 @@ class ModelManagerClass {
                 const contentLength = response.headers.get('Content-Length');
                 const totalBytes = contentLength ? parseInt(contentLength, 10) : model.fileSizeMb * 1024 * 1024;
                 let loadedBytes = 0;
-                let chunkBuffer: number[] = [];
+                let chunkBuffer = new Uint8Array(0);
                 const CHUNK_SIZE = 2 * 1024 * 1024;
 
                 const reader = response.body.getReader();
@@ -248,13 +248,14 @@ class ModelManagerClass {
                     loadedBytes += value.byteLength;
                     model.downloadedBytes = loadedBytes;
 
-                    for (let i = 0; i < value.byteLength; i++) {
-                        chunkBuffer.push(value[i]);
-                    }
+                    // High-performance typed buffer concatenation
+                    const merged = new Uint8Array(chunkBuffer.length + value.byteLength);
+                    merged.set(chunkBuffer, 0);
+                    merged.set(value, chunkBuffer.length);
+                    chunkBuffer = merged;
 
                     if (chunkBuffer.length >= CHUNK_SIZE) {
-                        const u8 = new Uint8Array(chunkBuffer);
-                        const base64Data = uint8ArrayToBase64(u8);
+                        const base64Data = uint8ArrayToBase64(chunkBuffer);
                         if (isFirstWrite) {
                             await Filesystem.writeFile({
                                 path: targetFilePath,
@@ -269,7 +270,7 @@ class ModelManagerClass {
                                 directory: Directory.Data
                             });
                         }
-                        chunkBuffer = [];
+                        chunkBuffer = new Uint8Array(0);
                     }
 
                     const pct = Math.round((loadedBytes / totalBytes) * 100);
