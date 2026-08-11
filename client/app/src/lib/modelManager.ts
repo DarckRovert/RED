@@ -177,11 +177,11 @@ class ModelManagerClass {
         this.activeDownloads.set(modelId, controller);
 
         try {
-            console.log(`[ModelManager] Starting persistent disk download for ${model.name}...`);
+            console.log(`[ModelManager] Iniciando descarga nativa persistente para ${model.name}...`);
             model.downloadProgress = 0;
             model.downloadedBytes = 0;
 
-            // Ensure destination folder exists in persistent storage
+            // Ensure models directory exists
             try {
                 await Filesystem.mkdir({
                     path: 'models',
@@ -192,18 +192,46 @@ class ModelManagerClass {
 
             const targetFilePath = `models/${model.fileName}`;
 
-            // Try CORS fetch request
-            let response: Response | null = null;
+            // 1. Intentar descarga nativa multihilo mediante Filesystem.downloadFile (Bypasses CORS en Android)
+            let nativeSuccess = false;
             try {
-                response = await fetch(model.downloadUrl, {
+                const progressListener = await Filesystem.addListener('progress', (status: any) => {
+                    if (status.bytes) {
+                        model.downloadedBytes = status.bytes;
+                        const total = status.contentLength || (model.fileSizeMb * 1024 * 1024);
+                        model.downloadProgress = Math.min(99, Math.round((status.bytes / total) * 100));
+                        if (onProgress) {
+                            onProgress(model.downloadProgress, model.downloadedBytes || 0, total);
+                        }
+                    }
+                });
+
+                const res = await Filesystem.downloadFile({
+                    url: model.downloadUrl,
+                    path: targetFilePath,
+                    directory: Directory.Data,
+                    progress: true
+                });
+
+                progressListener.remove();
+                if (res && res.path) {
+                    nativeSuccess = true;
+                }
+            } catch (nativeErr) {
+                console.warn('[ModelManager] DownloadFile nativo no disponible o falló en Web, intentando fetch stream:', nativeErr);
+            }
+
+            // 2. Si es entorno Web SPA, utilizar streaming real por Fetch (sin simulaciones)
+            if (!nativeSuccess) {
+                const response = await fetch(model.downloadUrl, {
                     signal: controller.signal,
                     mode: 'cors'
                 });
-            } catch (fetchErr) {
-                console.warn('[ModelManager] Direct fetch failed, trying no-cors / stream fallback:', fetchErr);
-            }
 
-            if (response && response.ok && response.body) {
+                if (!response.ok || !response.body) {
+                    throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const contentLength = response.headers.get('Content-Length');
                 const totalBytes = contentLength ? parseInt(contentLength, 10) : model.fileSizeMb * 1024 * 1024;
                 let loadedBytes = 0;
@@ -227,23 +255,19 @@ class ModelManagerClass {
                     if (chunkBuffer.length >= CHUNK_SIZE) {
                         const u8 = new Uint8Array(chunkBuffer);
                         const base64Data = uint8ArrayToBase64(u8);
-                        try {
-                            if (isFirstWrite) {
-                                await Filesystem.writeFile({
-                                    path: targetFilePath,
-                                    data: base64Data,
-                                    directory: Directory.Data
-                                });
-                                isFirstWrite = false;
-                            } else {
-                                await Filesystem.appendFile({
-                                    path: targetFilePath,
-                                    data: base64Data,
-                                    directory: Directory.Data
-                                });
-                            }
-                        } catch (fsErr) {
-                            console.warn('[ModelManager] Filesystem write chunk warning:', fsErr);
+                        if (isFirstWrite) {
+                            await Filesystem.writeFile({
+                                path: targetFilePath,
+                                data: base64Data,
+                                directory: Directory.Data
+                            });
+                            isFirstWrite = false;
+                        } else {
+                            await Filesystem.appendFile({
+                                path: targetFilePath,
+                                data: base64Data,
+                                directory: Directory.Data
+                            });
                         }
                         chunkBuffer = [];
                     }
@@ -259,29 +283,15 @@ class ModelManagerClass {
                 if (chunkBuffer.length > 0) {
                     const u8 = new Uint8Array(chunkBuffer);
                     const base64Data = uint8ArrayToBase64(u8);
-                    try {
-                        await Filesystem.appendFile({
-                            path: targetFilePath,
-                            data: base64Data,
-                            directory: Directory.Data
-                        });
-                    } catch {}
-                }
-            } else {
-                // Simulated chunk progress for offline/restricted environments
-                console.log(`[ModelManager] Executing fast local persistent provisioning for ${model.name}...`);
-                const totalBytes = model.fileSizeMb * 1024 * 1024;
-                for (let pct = 10; pct <= 100; pct += 15) {
-                    await new Promise(r => setTimeout(r, 120));
-                    model.downloadProgress = Math.min(100, pct);
-                    model.downloadedBytes = Math.round((pct / 100) * totalBytes);
-                    if (onProgress) {
-                        onProgress(model.downloadProgress, model.downloadedBytes, totalBytes);
-                    }
+                    await Filesystem.appendFile({
+                        path: targetFilePath,
+                        data: base64Data,
+                        directory: Directory.Data
+                    });
                 }
             }
 
-            // Retrieve physical file URI or assign path
+            // Confirmación de ruta URI física final en disco
             let localUri = `models/${model.fileName}`;
             try {
                 const uriResult = await Filesystem.getUri({
@@ -302,7 +312,7 @@ class ModelManagerClass {
             }
 
             this.activeDownloads.delete(modelId);
-            console.log(`[ModelManager] Persistent disk download complete for ${model.name}!`);
+            console.log(`[ModelManager] Descarga real finalizada para ${model.name} en ${localUri}!`);
             return true;
         } catch (err: any) {
             this.activeDownloads.delete(modelId);
