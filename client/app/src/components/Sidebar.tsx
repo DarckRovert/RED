@@ -110,33 +110,49 @@ export default function Sidebar() {
         { icon: '🛡️', label: 'Guardian',    action: 'guardian',   color: '#63b3ed' },
     ];
 
-    const menuItems = [
-        { icon: '🛡️', label: 'Analizador Espectro RF', action: 'rfSpectrum' },
-        { icon: '🖼️', label: 'Bóveda Esteganográfica', action: 'stegoVault' },
-        { icon: '🧭', label: 'Radar Topográfico Off-Grid', action: 'offGridCompass' },
-        { icon: '🫀', label: 'Signos Vitales & Triaje PPG', action: 'vitalScan' },
-        { icon: '🚨', label: 'Baliza Ultrasonido SOS', action: 'survivalBeacon' },
-        { icon: '👤', label: 'Nuevo contacto',      action: 'contacts'  },
-        { icon: '🤖', label: 'Copiloto IA Offline',  action: 'aiCopilot' },
-        { icon: '👋', label: 'Proximidad Zero-Touch', action: 'proximity' },
-        { icon: '🎨', label: 'Canvas Táctico P2P',   action: 'canvas'   },
-        { icon: '🔋', label: 'Batería Eco-Mesh',     action: 'ecoMesh'  },
-        { icon: '🎙️', label: 'Walkie-Talkie Mesh',  action: 'walkie'    },
-        { icon: '🌤️', label: 'Clima & Barómetro',   action: 'weather'   },
-        { icon: '🪪', label: 'Bóveda de Identidad', action: 'idVault'   },
-        { icon: '📻', label: 'Canales Mesh Locales', action: 'channels' },
-        { icon: '📢', label: 'Difusión privada',     action: 'broadcast' },
-        { icon: '🛡️', label: 'Guardian IA (Moderación)', action: 'guardian' },
-        { icon: '🟠', label: 'Sistema Alerta AMBER', action: 'amber'     },
-        { icon: '🔐', label: 'Bóveda Criptográfica', action: 'crypto'    },
-        { icon: '🛰️', label: 'Estado de Red',        action: 'network'   },
-        { icon: '⚡',  label: 'Explorador de Bloques', action: 'explorer' },
-        { icon: '🗺️', label: 'Mapa de Nodos',        action: 'nodemap'   },
-        { icon: '📡', label: 'Radar Hardware BLE/WiFi', action: 'nearby'  },
-        { icon: '💀', label: 'Hombre Muerto DMS', action: 'dms'      },
-        { icon: '⚙️', label: 'Seguridad',            action: 'settings'  },
+    const menuCategories = [
+        {
+            title: '💬 Mensajería P2P & Canales',
+            items: [
+                { icon: '📻', label: 'Canales Mesh Locales', action: 'channels' },
+                { icon: '📢', label: 'Difusión Privada', action: 'broadcast' },
+                { icon: '🎙️', label: 'Walkie-Talkie Mesh', action: 'walkie' },
+                { icon: '🎨', label: 'Canvas Táctico P2P', action: 'canvas' },
+                { icon: '📺', label: 'Live Broadcast Stream', action: 'liveStream' },
+            ]
+        },
+        {
+            title: '📡 Red Malla & Radar Off-Grid',
+            items: [
+                { icon: '🧭', label: 'Radar Topográfico Off-Grid', action: 'offGridCompass' },
+                { icon: '🗺️', label: 'Mapa de Nodos P2P', action: 'nodemap' },
+                { icon: '📡', label: 'Radar Hardware BLE/WiFi', action: 'nearby' },
+                { icon: '🛡️', label: 'Analizador Espectro RF', action: 'rfSpectrum' },
+                { icon: '🌤️', label: 'Clima & Barómetro', action: 'weather' },
+                { icon: '🔋', label: 'Batería Eco-Mesh', action: 'ecoMesh' },
+            ]
+        },
+        {
+            title: '🤖 Copiloto IA Neuronal',
+            items: [
+                { icon: '🤖', label: 'Copiloto IA Offline', action: 'aiCopilot' },
+                { icon: '🛡️', label: 'Guardian IA (Moderación)', action: 'guardian' },
+            ]
+        },
+        {
+            title: '🛡️ Seguridad & Soberanía',
+            items: [
+                { icon: '🖼️', label: 'Bóveda Esteganográfica', action: 'stegoVault' },
+                { icon: '🫀', label: 'Signos Vitales & Triaje PPG', action: 'vitalScan' },
+                { icon: '🚨', label: 'Baliza Ultrasonido SOS', action: 'survivalBeacon' },
+                { icon: '🔐', label: 'Bóveda Criptográfica PQC', action: 'crypto' },
+                { icon: '🪪', label: 'Bóveda de Identidad', action: 'idVault' },
+                { icon: '🟠', label: 'Sistema Alerta AMBER', action: 'amber' },
+                { icon: '💀', label: 'Hombre Muerto DMS', action: 'dms' },
+                { icon: '⚙️', label: 'Configuración de Seguridad', action: 'settings' },
+            ]
+        }
     ];
-
 
     return (
         <aside style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)', position: 'relative', overflow: 'hidden' }}>
@@ -152,47 +168,51 @@ export default function Sidebar() {
             {/* ── Context Menu ─────────────────────────────────────────────────── */}
             {menuOpen && (
                 <div
-                    style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+                    style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}
                     onClick={() => setMenuOpen(false)}
                 >
                     <div
                         className="glass-panel-elevated animate-pop"
                         style={{
-                            position: 'absolute', top: 68, right: 12, width: 260,
+                            position: 'absolute', top: 68, right: 12, width: 290,
                             maxHeight: 'calc(100vh - 90px)', overflowY: 'auto',
                             borderRadius: 'var(--radius-lg)',
-                            zIndex: 101, padding: '8px',
+                            zIndex: 101, padding: '12px',
                             background: 'linear-gradient(145deg, rgba(15,15,28,0.98), rgba(8,8,18,0.99))',
                             border: '1px solid rgba(255,255,255,0.12)',
                             boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
                         }}
-
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Menu header */}
-                        <div style={{ padding: '10px 14px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', marginBottom: '6px' }}>
-                            <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.7px', fontWeight: 700 }}>
-                                Módulos RED
+                        <div style={{ padding: '4px 8px 10px', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: '10px' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#00E676', textTransform: 'uppercase', letterSpacing: '0.8px', fontWeight: 900 }}>
+                                🛡️ Módulos RED Categorizados
                             </div>
                         </div>
-                        {menuItems.map((item, i) => (
-                            <button
-                                key={item.action}
-                                onClick={e => { e.preventDefault(); navigate(item.action as ScreenView); setMenuOpen(false); }}
-                                style={{
-                                    width: '100%', display: 'flex', alignItems: 'center', gap: '14px',
-                                    padding: '11px 14px', background: 'transparent', color: 'var(--text-primary)',
-                                    border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                                    fontSize: '0.91rem', fontWeight: 500, textAlign: 'left',
-                                    transition: 'background 0.15s ease',
-                                    animationDelay: `${i * 30}ms`,
-                                }}
-                                onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                                onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
-                            >
-                                <span style={{ fontSize: '1.15rem', width: 26, textAlign: 'center' }}>{item.icon}</span>
-                                {item.label}
-                            </button>
+                        {menuCategories.map((cat) => (
+                            <div key={cat.title} style={{ marginBottom: '14px' }}>
+                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 800, padding: '4px 8px', marginBottom: '4px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px' }}>
+                                    {cat.title}
+                                </div>
+                                {cat.items.map((item) => (
+                                    <button
+                                        key={item.action}
+                                        onClick={e => { e.preventDefault(); navigate(item.action as ScreenView); setMenuOpen(false); }}
+                                        style={{
+                                            width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+                                            padding: '9px 10px', background: 'transparent', color: 'var(--text-primary)',
+                                            border: 'none', borderRadius: '8px', cursor: 'pointer',
+                                            fontSize: '0.88rem', fontWeight: 600, textAlign: 'left',
+                                            transition: 'background 0.15s ease',
+                                        }}
+                                        onMouseOver={e => (e.currentTarget.style.background = 'rgba(232,33,58,0.15)')}
+                                        onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                                    >
+                                        <span style={{ fontSize: '1.1rem', width: 24, textAlign: 'center' }}>{item.icon}</span>
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
                         ))}
                     </div>
                 </div>
