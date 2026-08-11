@@ -312,10 +312,13 @@ class LocalAIEngineClass {
             }
         }
 
-        // 2. MODELO LOCAL DE ALTA CAPACIDAD (Phi-3-Mini 3.8B / Gemma 2B cargados en Rust Nativo)
+        // 2. MODELO LOCAL DE ALTA CAPACIDAD (Qwen 2.5 1.5B / Llama 3.2 1B / Gemma 2B cargados en Rust Nativo)
         const activeModel = ModelManager.getActiveModel();
         if (activeModel) {
             try {
+                const rawPath = activeModel.localPath || activeModel.fileName;
+                const cleanPosixPath = rawPath.replace(/^file:\/\//, '');
+
                 const rustResp = await fetch('http://127.0.0.1:7333/api/ai/copilot', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -323,7 +326,7 @@ class LocalAIEngineClass {
                         prompt: trimmed,
                         context: ragContext || undefined,
                         model_id: activeModel.name,
-                        model_path: activeModel.localPath || activeModel.fileName
+                        model_path: cleanPosixPath
                     })
                 });
 
@@ -333,12 +336,12 @@ class LocalAIEngineClass {
                         answer: `${data.answer}${ragTitle ? `\n\n📚 [Fundamento RAG Táctico: ${ragTitle}]` : ''}`,
                         topicCategory: data.topic_category || `Modelo Nativo ${activeModel.name}`,
                         confidence: 0.99,
-                        modelInfo: `${data.model_used || activeModel.name} (${activeModel.parameterCount} params)`,
+                        modelInfo: `${data.model_used || activeModel.name} (Motor Nativo ARM64)`,
                         executionTimeMs: data.execution_time_ms || Math.round(performance.now() - start),
                     };
                 }
             } catch (e) {
-                console.warn('[RED LocalAIEngine] Error llamando a motor Rust nativo, ejecutando fallback:', e);
+                console.warn('[RED LocalAIEngine] Servidor nativo 127.0.0.1:7333 no alcanzable (modo Web SPA fallback):', e);
             }
         }
 

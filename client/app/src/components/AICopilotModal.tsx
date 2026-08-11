@@ -26,7 +26,7 @@ export const AICopilotModal: React.FC = () => {
         {
             sender: 'ai',
             text: '🤖 Hola. Soy el Copiloto IA Neuronal de RED.\n\nPuedo asistirte en conversación libre, guías de supervivencia médica, protocolos de desastres y traducción táctica 100% offline.',
-            modelTag: 'Gemma 2B Instruct (Google ARM64 Nativo)'
+            modelTag: 'Qwen 2.5 1.5B Instruct (Alibaba ARM64 Nativo)'
         }
     ]);
 
@@ -35,13 +35,24 @@ export const AICopilotModal: React.FC = () => {
     useEffect(() => {
         const models = ModelManager.getModels();
         setAvailableModels(models);
-        setActiveModel(ModelManager.getActiveModel());
+        const currentActive = ModelManager.getActiveModel();
+        setActiveModel(currentActive);
+        if (currentActive) {
+            setMessages(prev => prev.map((m, idx) => idx === 0 ? { ...m, modelTag: `${currentActive.name} (ARM64 Nativo)` } : m));
+        }
     }, []);
 
     const handleSelectModel = (modelId: string) => {
         ModelManager.setActiveModel(modelId);
-        setActiveModel(ModelManager.getActiveModel());
+        const selected = ModelManager.getActiveModel();
+        setActiveModel(selected);
         setAvailableModels([...ModelManager.getModels()]);
+        if (selected) {
+            setMessages(prev => [
+                ...prev,
+                { sender: 'ai', text: `🔄 Modelo activo cambiado a ${selected.name}. Todas las consultas posteriores se procesarán con este motor.`, modelTag: selected.name }
+            ]);
+        }
     };
 
     const handleDownloadModel = async (modelId: string) => {
@@ -51,9 +62,16 @@ export const AICopilotModal: React.FC = () => {
             setDownloadProgress(pct);
         });
         ModelManager.setActiveModel(modelId);
-        setActiveModel(ModelManager.getActiveModel());
+        const downloaded = ModelManager.getActiveModel();
+        setActiveModel(downloaded);
         setAvailableModels([...ModelManager.getModels()]);
         setDownloadingId(null);
+        if (downloaded) {
+            setMessages(prev => [
+                ...prev,
+                { sender: 'ai', text: `✅ Modelo ${downloaded.name} instalado e integrado en disco local.`, modelTag: downloaded.name }
+            ]);
+        }
     };
 
     // Auto-scroll on new message
@@ -73,13 +91,13 @@ export const AICopilotModal: React.FC = () => {
 
         try {
             const res: CopilotResponse = await queryAICopilot(text);
-            const currentModelName = activeModel?.name || res.topic_category || 'Gemma 2B Instruct';
+            const tag = res.source || (activeModel ? `${activeModel.name} (ARM64 Nativo)` : 'Qwen 2.5 1.5B (ARM64 Nativo)');
             setMessages((prev) => [
                 ...prev,
                 { 
                     sender: 'ai', 
                     text: res.answer, 
-                    modelTag: `${currentModelName} (Nativo ARM64)`
+                    modelTag: tag
                 }
             ]);
         } catch (e: any) {
