@@ -22,26 +22,50 @@ export interface LocalModelMetaData {
 
 export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     {
-        id: 'phi-3-mini-q4',
-        name: 'Phi-3 Mini (3.8B Q4)',
-        description: 'Microsoft 3.8B instruct model cuantizado en Q4. Excelente razonamiento en español y capacidad táctica.',
-        parameterCount: '3.8B',
-        fileSizeMb: 2200,
-        downloadUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf',
-        fileName: 'Phi-3-mini-4k-instruct-q4.gguf',
-        recommendedMinRamMb: 3000,
+        id: 'qwen-2.5-1.5b-q4',
+        name: 'Qwen 2.5 1.5B Instruct (Alibaba)',
+        description: '🌟 RECOMENDADO PARA MÓVILES. El modelo sub-2B más inteligente del mundo. Razonamiento táctico brillante en español con solo 1.6 GB de RAM.',
+        parameterCount: '1.5B',
+        fileSizeMb: 1040,
+        downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
+        fileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+        recommendedMinRamMb: 1600,
+        isDownloaded: false,
+        downloadProgress: 0,
+    },
+    {
+        id: 'llama-3.2-1b-q4',
+        name: 'Llama 3.2 1B Instruct (Meta)',
+        description: '⚡ ULTRA-RÁPIDO. Modelo oficial 1B de Meta optimizado para velocidad extrema en procesadores ARM64 móviles (1.2 GB RAM).',
+        parameterCount: '1.0B',
+        fileSizeMb: 770,
+        downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        fileName: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        recommendedMinRamMb: 1200,
         isDownloaded: false,
         downloadProgress: 0,
     },
     {
         id: 'gemma-2b-q4',
-        name: 'Gemma 2B Instruct (Gemma 2)',
-        description: 'Google 2B model optimizado para dispositivos móviles con baja memoria.',
+        name: 'Gemma 2B Instruct (Google)',
+        description: 'Modelo 2B de Google optimizado para razonamiento táctico estándar.',
         parameterCount: '2.0B',
         fileSizeMb: 1600,
         downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
         fileName: 'gemma-2-2b-it-Q4_K_M.gguf',
-        recommendedMinRamMb: 2000,
+        recommendedMinRamMb: 2500,
+        isDownloaded: false,
+        downloadProgress: 0,
+    },
+    {
+        id: 'phi-3-mini-q4',
+        name: 'Phi-3 Mini 3.8B (Microsoft)',
+        description: 'Modelo de 3.8B parámetros cuantizado en Q4 para dispositivos con 6GB+ de memoria RAM.',
+        parameterCount: '3.8B',
+        fileSizeMb: 2200,
+        downloadUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf',
+        fileName: 'Phi-3-mini-4k-instruct-q4.gguf',
+        recommendedMinRamMb: 3500,
         isDownloaded: false,
         downloadProgress: 0,
     }
@@ -91,7 +115,8 @@ class ModelManagerClass {
         for (const m of this.models.values()) {
             if (m.isDownloaded) return m;
         }
-        return null;
+        // Default to Qwen 2.5 1.5B Instruct for mobile optimization
+        return this.models.get('qwen-2.5-1.5b-q4') || null;
     }
 
     /** Sets the primary active model */

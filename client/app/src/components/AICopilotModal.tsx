@@ -164,7 +164,7 @@ export const AICopilotModal: React.FC = () => {
                             🤖 Copiloto IA Soberano RED
                         </div>
                         <div style={{ fontSize: '0.72rem', color: '#00E676', fontWeight: 700, fontFamily: 'monospace' }}>
-                            🟢 Motor Activo: {activeModel?.name || 'Gemma 2B Instruct (Google Nativo)'}
+                            🟢 Motor Activo: {activeModel?.name || 'Qwen 2.5 1.5B Instruct (Alibaba ARM64)'}
                         </div>
                     </div>
                 </div>
@@ -218,7 +218,7 @@ export const AICopilotModal: React.FC = () => {
                         <h4 style={{ margin: '0 0 14px 0', color: '#fff', fontSize: '1rem', fontWeight: 800 }}>📦 Modelos Neuronales de Alta Capacidad</h4>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                             {availableModels.map((m) => {
-                                const isCurrentlyActive = activeModel?.id === m.id || (m.id === 'gemma-2b' && !activeModel);
+                                const isCurrentlyActive = activeModel?.id === m.id || (m.id === 'qwen-2.5-1.5b-q4' && !activeModel);
                                 return (
                                     <div key={m.id} style={{ background: 'rgba(15,23,42,0.9)', border: isCurrentlyActive ? '2px solid #00E676' : '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                         <div>

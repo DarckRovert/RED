@@ -34,7 +34,7 @@ impl AICopilotEngine {
         let prompt = req.prompt.trim();
         let prompt_lower = prompt.to_lowercase();
 
-        let model_name = req.model_id.as_deref().unwrap_or("Gemma 2B Instruct (Q4_K_M)");
+        let model_name = req.model_id.as_deref().unwrap_or("Qwen 2.5 1.5B Instruct (Q4_K_M)");
 
         // Synthesize response based on prompt analysis and tactical knowledge
         let (answer, category) = if prompt_lower.contains("primeros auxilios") || prompt_lower.contains("herida") || prompt_lower.contains("sangre") || prompt_lower.contains("torniquete") || prompt_lower.contains("fractura") {
