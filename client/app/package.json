@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:gh": "node -e \"process.env.GITHUB_PAGES='true'; process.env.NEXT_PUBLIC_BASE_PATH='/RED'; require('child_process').execSync('next build', {stdio: 'inherit', env: {...process.env, GITHUB_PAGES: 'true', NEXT_PUBLIC_BASE_PATH: '/RED'}});\"",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "node scripts/copy-wasm.js",
