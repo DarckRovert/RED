@@ -66,9 +66,21 @@ Identidad Hash   : ${reportData.identity_hash}
         setAiLoading(true);
         setAiAudit(null);
         try {
-            const prompt = `Evalúa en 2 oraciones la seguridad táctica del nodo: Capturas: ${reportData.security_features.privacy_screen}, Camuflaje: ${reportData.security_features.disguise_calculator}, PIN Pánico: ${reportData.security_features.panic_pin}.`;
-            const res = await LocalAIEngine.generateCopilotResponse(prompt);
-            setAiAudit(res.answer || "Nodo con protocolo Zero-Trust verificado. Cifrado Noise activo.");
+            const posture = await LocalAIEngine.evaluateSecurityPosture({
+                privacyScreen,
+                disguiseMode,
+                burnerChats,
+                hasPanicPin,
+                hasDecoyPin
+            });
+
+            const verdictText = `🛡️ CLASIFICACIÓN DEFENSIVA: ${posture.rating}\n` +
+                `📊 Índice de Resiliencia: ${posture.score}/100\n\n` +
+                `📋 Dictamen Forense:\n${posture.verdict}\n\n` +
+                (posture.recommendations.length > 0 ? `⚡ Recomendaciones Tácticas:\n• ${posture.recommendations.join('\n• ')}\n\n` : '') +
+                `[Latencia de análisis: ${posture.executionTimeMs}ms]`;
+
+            setAiAudit(verdictText);
         } catch {
             setAiAudit("Dispositivo con protocolo Zero-Trust activo. Blindaje de hardware Keystore verificado.");
         } finally {
