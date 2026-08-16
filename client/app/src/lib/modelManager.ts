@@ -10,6 +10,8 @@ export interface LocalModelMetaData {
     quantization?: string;
     downloadUrl: string;
     fileName: string;
+    tokenizerUrl?: string;
+    tokenizerFileName?: string;
     recommendedMinRamMb: number;
     isDownloaded: boolean;
     is_downloaded?: boolean;
@@ -27,6 +29,8 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         fileSizeMb: 1040,
         downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
         fileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
+        tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/tokenizer.json',
+        tokenizerFileName: 'qwen2.5-1.5b-instruct-q4_k_m.json',
         recommendedMinRamMb: 1600,
         isDownloaded: false,
         downloadProgress: 0,
@@ -39,6 +43,8 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         fileSizeMb: 770,
         downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
         fileName: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
+        tokenizerUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/raw/main/tokenizer.json',
+        tokenizerFileName: 'Llama-3.2-1B-Instruct-Q4_K_M.json',
         recommendedMinRamMb: 1200,
         isDownloaded: false,
         downloadProgress: 0,
@@ -51,6 +57,8 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         fileSizeMb: 1600,
         downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
         fileName: 'gemma-2-2b-it-Q4_K_M.gguf',
+        tokenizerUrl: 'https://huggingface.co/google/gemma-2-2b-it/raw/main/tokenizer.json',
+        tokenizerFileName: 'gemma-2-2b-it-Q4_K_M.json',
         recommendedMinRamMb: 2500,
         isDownloaded: false,
         downloadProgress: 0,
@@ -63,6 +71,8 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         fileSizeMb: 2200,
         downloadUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf',
         fileName: 'Phi-3-mini-4k-instruct-q4.gguf',
+        tokenizerUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/raw/main/tokenizer.json',
+        tokenizerFileName: 'Phi-3-mini-4k-instruct-q4.json',
         recommendedMinRamMb: 3500,
         isDownloaded: false,
         downloadProgress: 0,
@@ -113,6 +123,9 @@ class ModelManagerClass {
                         model.localPath = uri.uri;
                         localStorage.setItem(`red_model_${id}_ready`, 'true');
                         localStorage.setItem(`red_model_${id}_path`, uri.uri);
+                        
+                        // Auto-sanación proactiva: asegurar que el tokenizer existe
+                        this.ensureTokenizerDownloaded(id).catch(() => {});
                         continue;
                     }
                 } catch {
@@ -122,10 +135,11 @@ class ModelManagerClass {
                         model.isDownloaded = true;
                         model.downloadProgress = 100;
                         model.localPath = localStorage.getItem(`red_model_${id}_path`) || `models/${model.fileName}`;
+                        this.ensureTokenizerDownloaded(id).catch(() => {});
                     }
                 }
             } catch (e) {
-                console.warn('[ModelManager] Cache check failed for', id, e);
+                console.warn(`[ModelManager] Error verificando estado de ${id}:`, e);
             }
         }
         return Array.from(this.models.values());
@@ -136,14 +150,17 @@ class ModelManagerClass {
         return Array.from(this.models.values());
     }
 
-    /** Returns metadata of active high-capacity model (only if downloaded) */
+    public getModel(id: string): LocalModelMetaData | undefined {
+        return this.models.get(id);
+    }
+
+    /** Returns currently selected active model if downloaded */
     public getActiveModel(): LocalModelMetaData | null {
-        if (typeof window !== 'undefined') {
-            const activeId = localStorage.getItem('red_active_model_id');
-            if (activeId && this.models.has(activeId)) {
-                const m = this.models.get(activeId)!;
-                if (m.isDownloaded) return m;
-            }
+        if (typeof window === 'undefined') return null;
+        const activeId = localStorage.getItem('red_active_model_id') || 'llama-3.2-1b-q4';
+        const model = this.models.get(activeId);
+        if (model && model.isDownloaded) {
+            return model;
         }
         for (const m of this.models.values()) {
             if (m.isDownloaded) return m;
@@ -160,10 +177,62 @@ class ModelManagerClass {
                 localStorage.setItem(`red_model_${modelId}_ready`, 'true');
                 localStorage.setItem('red_active_model_id', modelId);
             }
+            this.ensureTokenizerDownloaded(modelId).catch(() => {});
         }
     }
 
-    /** Downloads model with low RAM usage (2MB chunked writing to disk) */
+    /** Auto-sanación de Tokenizer: descarga tokenizer.json si falta para el modelo activo */
+    public async ensureTokenizerDownloaded(modelId: string): Promise<boolean> {
+        const model = this.models.get(modelId);
+        if (!model || !model.tokenizerUrl) return false;
+
+        const tokenizerFileName = model.tokenizerFileName || 'tokenizer.json';
+        const targetPath = `models/${tokenizerFileName}`;
+        const defaultPath = `models/tokenizer.json`;
+
+        try {
+            // Verificar si ya existe en disco
+            try {
+                const stat = await Filesystem.stat({
+                    path: targetPath,
+                    directory: Directory.Data
+                });
+                if (stat && stat.size > 100) {
+                    return true;
+                }
+            } catch {}
+
+            console.log(`[ModelManager] Auto-descargando tokenizer.json para ${model.name}...`);
+            
+            // Intentar descarga directa de texto
+            const resp = await fetch(model.tokenizerUrl);
+            if (resp.ok) {
+                const text = await resp.text();
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(text);
+                const base64Data = uint8ArrayToBase64(bytes);
+
+                // Escribir en nombre específico y genérico
+                await Filesystem.writeFile({
+                    path: targetPath,
+                    data: base64Data,
+                    directory: Directory.Data
+                });
+                await Filesystem.writeFile({
+                    path: defaultPath,
+                    data: base64Data,
+                    directory: Directory.Data
+                });
+                console.log(`[ModelManager] ✅ Tokenizer sincronizado con éxito para ${model.name}`);
+                return true;
+            }
+        } catch (e) {
+            console.warn(`[ModelManager] Falló la auto-descarga de tokenizer para ${modelId}:`, e);
+        }
+        return false;
+    }
+
+    /** Downloads model with low RAM usage (2MB chunked writing to disk) + Tokenizer pairing */
     public async downloadModel(
         modelId: string,
         onProgress?: (progress: number, loadedBytes: number, totalBytes: number) => void
@@ -294,6 +363,9 @@ class ModelManagerClass {
                     });
                 }
             }
+
+            // 3. Descargar y emparejar Tokenizer JSON correspondiente
+            await this.ensureTokenizerDownloaded(modelId);
 
             // Confirmación de ruta URI física final en disco
             let localUri = `models/${model.fileName}`;

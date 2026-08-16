@@ -154,38 +154,48 @@ impl AICopilotEngine {
             }
         };
 
-        // Buscamos un tokenizer adjunto
-        let tokenizer_path = path.with_extension("").with_extension("json"); // asume .json junto al .gguf
-        let tokenizer_path_alt = path.parent().unwrap().join("tokenizer.json");
-        
-        let tokenizer_file = if tokenizer_path.exists() {
-            Some(tokenizer_path)
-        } else if tokenizer_path_alt.exists() {
-            Some(tokenizer_path_alt)
-        } else {
-            None
-        };
+        // Buscamos un tokenizer adjunto con resolución profunda de candidatos
+        let parent_dir = path.parent().unwrap_or(Path::new("."));
+        let mut candidates = vec![
+            path.with_extension("").with_extension("json"), // Llama-3.2-1B-Instruct-Q4_K_M.json
+            path.with_extension("json"),                    // Llama-3.2-1B-Instruct-Q4_K_M.gguf.json
+            parent_dir.join("tokenizer.json"),              // models/tokenizer.json
+            parent_dir.join("Llama-3.2-1B-Instruct-Q4_K_M.json"),
+            parent_dir.join("qwen2.5-1.5b-instruct-q4_k_m.json"),
+            parent_dir.join("gemma-2-2b-it-Q4_K_M.json"),
+            parent_dir.join("Phi-3-mini-4k-instruct-q4.json"),
+        ];
 
-        let tokenizer = match tokenizer_file {
-            Some(p) => match tokenizers::Tokenizer::from_file(p) {
-                Ok(t) => t,
-                Err(_) => return CopilotResponse {
-                    answer: "⚠️ [Error]: tokenizer.json no válido.".to_string(),
-                    topic_category: "Error Interno".to_string(),
-                    source: "Tokenizers".to_string(),
-                    model_used: model_name,
-                    execution_time_ms: start.elapsed().as_millis() as u64,
+        // Si existe algún .json en el directorio que cargue como Tokenizer, agregarlo como fallback
+        if let Ok(entries) = std::fs::read_dir(parent_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("json") && !candidates.contains(&p) {
+                    candidates.push(p);
                 }
-            },
+            }
+        }
+
+        let mut loaded_tokenizer = None;
+        for cand in candidates {
+            if cand.exists() {
+                if let Ok(tok) = tokenizers::Tokenizer::from_file(&cand) {
+                    loaded_tokenizer = Some(tok);
+                    break;
+                }
+            }
+        }
+
+        let tokenizer = match loaded_tokenizer {
+            Some(t) => t,
             None => {
-                // Fallback de tokenizer simple si no existe
                 return CopilotResponse {
                     answer: "⚠️ [Advertencia]: Falta el archivo tokenizer.json en el mismo directorio del modelo.".to_string(),
-                    topic_category: "Error Interno".to_string(),
+                    topic_category: "Tokenizer No Encontrado".to_string(),
                     source: "Tokenizers".to_string(),
                     model_used: model_name,
                     execution_time_ms: start.elapsed().as_millis() as u64,
-                }
+                };
             }
         };
 

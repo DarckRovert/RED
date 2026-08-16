@@ -347,13 +347,22 @@ class LocalAIEngineClass {
 
                 if (rustResp.ok) {
                     const data = await rustResp.json();
-                    return {
-                        answer: `${data.answer}${ragTitle ? `\n\n📚 [Fundamento RAG Táctico: ${ragTitle}]` : ''}`,
-                        topicCategory: data.topic_category || `Modelo Nativo ${activeModel.name}`,
-                        confidence: 0.99,
-                        modelInfo: `${data.model_used || activeModel.name} (Motor Nativo ARM64)`,
-                        executionTimeMs: data.execution_time_ms || Math.round(performance.now() - start),
-                    };
+                    const isMissingTokenizer = typeof data.answer === 'string' && data.answer.includes('Falta el archivo tokenizer.json');
+                    const isEngineError = typeof data.answer === 'string' && data.answer.startsWith('⚠️ [');
+
+                    if (isMissingTokenizer) {
+                        console.warn('[RED LocalAIEngine] Detectada ausencia de tokenizer.json. Disparando auto-sanación en segundo plano...');
+                        ModelManager.ensureTokenizerDownloaded(activeModel.id).catch(() => {});
+                        // Conmutamos suavemente al generador neural ONNX WASM local o RAG
+                    } else if (!isEngineError && data.answer && data.answer.trim().length > 0) {
+                        return {
+                            answer: `${data.answer}${ragTitle ? `\n\n📚 [Fundamento RAG Táctico: ${ragTitle}]` : ''}`,
+                            topicCategory: data.topic_category || `Modelo Nativo ${activeModel.name}`,
+                            confidence: 0.99,
+                            modelInfo: `${data.model_used || activeModel.name} (Motor Nativo ARM64)`,
+                            executionTimeMs: data.execution_time_ms || Math.round(performance.now() - start),
+                        };
+                    }
                 }
             } catch (e) {
                 console.warn('[RED LocalAIEngine] Servidor nativo 127.0.0.1:7333 no alcanzable (modo Web SPA fallback):', e);
