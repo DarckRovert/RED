@@ -50,8 +50,7 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
   const githubReleaseUrl = `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`;
-  const githubDirectApkUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
-  const apkDownloadUrl = githubDirectApkUrl;
+  const apkDownloadUrl = githubReleaseUrl;
 
   const heroBannerUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
     ? '/RED/assets/red_investor_hero_banner.png'
@@ -365,10 +364,9 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
           </button>
           <a
             href={apkDownloadUrl}
-            download={RED_APK_NAME}
             target="_blank"
             rel="noopener noreferrer"
-            title={`Descargar APK Android (${RED_VERSION})`}
+            title={`Ver Release y Descargar APK Android (v${RED_VERSION})`}
             style={{
               padding: '10px 18px',
               fontSize: '13px',
@@ -571,7 +569,6 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <a
                   href={apkDownloadUrl}
-                  download={RED_APK_NAME}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{

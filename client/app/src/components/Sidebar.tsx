@@ -196,7 +196,7 @@ export default function Sidebar() {
                         ))}
                         <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--glass-border)", display: "flex", flexDirection: "column", gap: "8px" }}>
                             <a
-                                href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`}
+                                href={`https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
