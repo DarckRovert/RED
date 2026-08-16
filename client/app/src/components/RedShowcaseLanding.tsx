@@ -50,7 +50,7 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
   const githubReleaseUrl = `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`;
-  const apkDownloadUrl = githubReleaseUrl;
+  const apkDownloadUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
 
   const heroBannerUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
     ? '/RED/assets/red_investor_hero_banner.png'
