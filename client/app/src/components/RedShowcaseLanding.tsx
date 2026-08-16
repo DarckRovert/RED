@@ -48,9 +48,9 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
   const [guardianInput, setGuardianInput] = useState('');
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
-  const apkDownloadUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
-    ? `/RED/assets/${RED_APK_NAME}`
-    : `assets/${RED_APK_NAME}`;
+  const githubReleaseUrl = `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`;
+  const githubDirectApkUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
+  const apkDownloadUrl = githubDirectApkUrl;
 
   const heroBannerUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
     ? '/RED/assets/red_investor_hero_banner.png'
@@ -357,6 +357,9 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
           <a
             href={apkDownloadUrl}
             download={RED_APK_NAME}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`Descargar APK Android (${RED_VERSION})`}
             style={{
               padding: '10px 18px',
               fontSize: '13px',
@@ -372,7 +375,7 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
               gap: '6px',
             }}
           >
-            📥 APK
+            📥 Descargar APK (v{RED_VERSION})
           </a>
         </div>
       </header>
@@ -539,8 +542,9 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
               maxWidth: '920px',
               padding: '24px 32px',
               borderRadius: '20px',
-              background: 'rgba(15,23,42,0.6)',
-              border: '1px solid rgba(255,255,255,0.1)',
+              background: 'rgba(15,23,42,0.7)',
+              border: '1px solid rgba(232,33,58,0.3)',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
               display: 'flex',
               flexWrap: 'wrap',
               alignItems: 'center',
@@ -548,26 +552,58 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
               gap: '20px',
             }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: '#FFF' }}>📱 APK Oficial para Dispositivos Móviles Android</div>
-                <div style={{ fontSize: '13px', color: '#94A3B8', marginTop: '4px' }}>Compilado y probado en hardware real Motorola Moto G22 y Lenovo Tablet. Inmune a VPNs.</div>
+                <div style={{ fontSize: '17px', fontWeight: 900, color: '#FFF', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📱</span> APK Oficial para Dispositivos Móviles Android (v{RED_VERSION})
+                </div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', marginTop: '4px' }}>
+                  Compilado para arquitectura ARM64 (`arm64-v8a`). Probado en hardware real Motorola Moto G22 con radio BLE/WiFi Direct e inmunidad a VPNs.
+                </div>
               </div>
-              <a
-                href={apkDownloadUrl}
-                download={RED_APK_NAME}
-                style={{
-                  padding: '12px 24px',
-                  fontSize: '14px',
-                  fontWeight: 800,
-                  color: '#FFF',
-                  background: '#E8213A',
-                  borderRadius: '12px',
-                  textDecoration: 'none',
-                  boxShadow: '0 4px 15px rgba(232,33,58,0.4)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                📥 Descargar APK (v{RED_VERSION})
-              </a>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <a
+                  href={apkDownloadUrl}
+                  download={RED_APK_NAME}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '12px 24px',
+                    fontSize: '14px',
+                    fontWeight: 800,
+                    color: '#FFF',
+                    background: 'linear-gradient(90deg, #E8213A 0%, #990014 100%)',
+                    borderRadius: '12px',
+                    textDecoration: 'none',
+                    boxShadow: '0 4px 15px rgba(232,33,58,0.4)',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <span>📥</span> Descargar APK Directo
+                </a>
+                <a
+                  href={githubReleaseUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: '12px 20px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: '#94A3B8',
+                    background: 'rgba(255,255,255,0.05)',
+                    borderRadius: '12px',
+                    textDecoration: 'none',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>📦</span> Ver Releases ↗
+                </a>
+              </div>
             </div>
           </div>
         )}

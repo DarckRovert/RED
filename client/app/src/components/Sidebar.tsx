@@ -8,7 +8,7 @@ import StoriesBar from "./stories/StoriesBar";
 import StoryCreator from "./stories/StoryCreator";
 import StoryViewer from "./stories/StoryViewer";
 import { LiveStreamViewer } from "./LiveStreamViewer";
-import { RED_VERSION } from "../lib/version";
+import { RED_VERSION, RED_APK_NAME } from "../lib/version";
 import { meshRouter } from "../lib/mesh/meshRouter";
 
 const AVATAR_COLORS = [
@@ -194,9 +194,25 @@ export default function Sidebar() {
                                 ))}
                             </div>
                         ))}
-                        <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--glass-border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>RED v{RED_VERSION}</span>
-                            <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>SOVEREIGN MASTER</span>
+                        <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--glass-border)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <a
+                                href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                    padding: "8px 12px", background: "linear-gradient(90deg, #E8213A 0%, #990014 100%)",
+                                    color: "#FFF", borderRadius: "var(--radius-sm)", textDecoration: "none",
+                                    fontSize: "0.78rem", fontWeight: 800, textAlign: "center",
+                                    boxShadow: "0 4px 12px rgba(232,33,58,0.3)"
+                                }}
+                            >
+                                <span>📥</span> Descargar APK Android (v{RED_VERSION})
+                            </a>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>RED v{RED_VERSION}</span>
+                                <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>SOVEREIGN MASTER</span>
+                            </div>
                         </div>
                     </div>
                 </div>
