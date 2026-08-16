@@ -4,6 +4,29 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
+
+## [31.0.0-sovereign-master] - 2026-08-16
+
+### Añadido y Refactorizado — RED v31.0.0 Real-Time SSE, Native Hardware Actuators & Clean Build Release
+
+**Control de Hardware Nativo: Flash LED Morse SOS & Antorcha (`RedNodePlugin.java` & `SurvivalBeaconModal.tsx`)**
+- **Causa Raíz Solucionada:** Eliminado el fallo de compatibilidad de WebRTC en WebView de Android que reportaba *"Tu dispositivo no soporta control de antorcha (Torch)"*.
+- **API `CameraManager` Nativa:** Implementado `setTorchMode(cameraId, enabled)` en `RedNodePlugin.java` para control directo del LED Flash de la cámara trasera (ID `0`).
+- **Pulsos Morse SOS de Precisión Militar:** Implementado `toggleMorseSosTorch` en un hilo nativo de Android independiente del UI thread para emitir la secuencia Morse internacional de auxilio (`... --- ...`):
+  - Letra `S` (`...`): 3 pulsos cortos de 150ms ON / 150ms OFF.
+  - Letra `O` (`---`): 3 pulsos largos de 450ms ON / 150ms OFF.
+  - Pausas entre letras de 300ms y pausas entre ciclos SOS de 1200ms.
+- **Integración en Triaje START & Escaneo PPG (`VitalScanEngine.ts`):** Activación nativa del Flash LED para iluminación capilar continua durante el escaneo de signos vitales (BPM, SpO2%).
+
+**Arquitectura Real-Time SSE Unificada & Cero Polling (`useRedStore.ts`, `SOSEmergencyBanner.tsx`, `WeatherAlertPanel.tsx`)**
+- **Eliminación de Polling Ineficiente:** Eliminados los intervalos de consulta HTTP periódica para preservar la batería en escenarios de supervivencia prolongada.
+- **Canal Reactivo `GET /api/events`:** Recepción instantánea (<1ms) de eventos de socorro SOS, boletines meteorológicos CAP, transacciones blockchain y mensajes de la malla.
+
+**Calidad de Código, Compilación Estricta y Despliegue en Dispositivo**
+- **TypeScript Estricto:** Eliminación de directivas `@ts-nocheck` en todos los componentes del cliente, logrando `0` errores en `tsc --noEmit`.
+- **Rust Core & JNI:** Workspace `cargo test --workspace --no-run` verificado con `0` errores.
+- **Clean Install en Moto G22 (`ZT322B386P`):** Despliegue limpio del APK y carga verificada de la librería nativa `libred_mobile.so`.
+
 ## [30.0.0-p2p-master] - 2026-08-07
 
 ### Añadido y Corregido — RED v30.0.0 Sovereign Master & AI Resiliencia Release

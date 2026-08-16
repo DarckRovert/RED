@@ -2,13 +2,14 @@
 
 import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { toast } from "./Toast";
 
 /**
- * OnboardingProfile — shown ONCE after first successful login.
- * Lets the user set their display name and optional avatar.
- * Sets `profile_created` flag in Keystore so it only appears once.
+ * OnboardingProfile — Shown once after master PIN is created.
+ * Sets the operator nickname and initializes tactical Keystore state.
  */
-export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
+export default function OnboardingProfile({ onDone, onComplete }: { onDone?: () => void; onComplete?: () => void }) {
+    const handleFinish = onComplete || onDone || (() => {});
     const { identity, fetchData } = useRedStore();
     const [displayName, setDisplayName] = useState("");
     const [saving, setSaving] = useState(false);
@@ -16,7 +17,10 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         const cleanName = displayName.trim();
-        if (!cleanName) return;
+        if (!cleanName) {
+            toast.warning("Ingresa tu alias táctico");
+            return;
+        }
 
         setSaving(true);
         try {
@@ -25,113 +29,111 @@ export default function OnboardingProfile({ onDone }: { onDone: () => void }) {
             console.warn("Profile save failed:", e);
         }
 
-        // Reload store data to update nickname header immediately
         try {
             await fetchData();
         } catch {}
 
-        // Mark profile as created in Keystore & localStorage
         try {
-            if (typeof window !== 'undefined') localStorage.setItem("profile_created", "true");
-            const { Capacitor } = await import('@capacitor/core');
+            if (typeof window !== "undefined") localStorage.setItem("profile_created", "true");
+            const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
-                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
                 await SecureStoragePlugin.set({ key: "profile_created", value: "true" }).catch(() => null);
             }
         } catch {}
 
         setSaving(false);
-        onDone();
+        toast.success(`Bienvenido a bordo, ${cleanName}`);
+        handleFinish();
     };
 
     const handleSkip = async () => {
         try {
-            if (typeof window !== 'undefined') localStorage.setItem("profile_created", "true");
-            const { Capacitor } = await import('@capacitor/core');
+            if (typeof window !== "undefined") localStorage.setItem("profile_created", "true");
+            const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
-                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
                 await SecureStoragePlugin.set({ key: "profile_created", value: "true" }).catch(() => null);
             }
         } catch {}
-        onDone();
+        handleFinish();
     };
+
+    const shortId = identity?.short_id || "NODE_01";
 
     return (
         <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', height: '100dvh', width: '100%',
-            background: 'var(--bg-deep)', padding: '32px', boxSizing: 'border-box',
-            backgroundImage: 'radial-gradient(circle at 50% -10%, var(--primary-subtle) 0%, transparent 60%)'
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            height: "100dvh", width: "100%", background: "var(--bg-void)", color: "var(--text-primary)",
+            padding: "24px 20px", boxSizing: "border-box"
         }}>
-            {/* Avatar */}
-            <div className="pulsing-dot" style={{
-                width: '100px', height: '100px', borderRadius: '50%',
-                background: 'var(--primary)', border: 'none',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '3rem', marginBottom: '28px',
-                boxShadow: '0 0 48px var(--primary-glow)'
-            }}>
-                {displayName ? displayName[0].toUpperCase() : '🔴'}
-            </div>
+            <div style={{ maxWidth: "380px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
 
-            <h1 style={{ color: 'var(--text-primary)', fontSize: '1.8rem', fontWeight: 800, margin: '0 0 8px 0', letterSpacing: '2px' }}>
-                BIENVENIDO A RED
-            </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '12px', textAlign: 'center', letterSpacing: '1px' }}>
-                IDENTIDAD CRIPTOGRÁFICA GENERADA
-            </p>
-            {identity && (
+                {/* Avatar Táctico */}
                 <div style={{
-                    color: 'var(--primary)', fontSize: '0.75rem',
-                    fontFamily: 'monospace', background: 'var(--bg-lifted)',
-                    padding: '8px 16px', borderRadius: '12px', marginBottom: '36px',
-                    border: '1px solid var(--solid-border-active)', letterSpacing: '2px'
+                    width: "80px", height: "80px", borderRadius: "50%",
+                    background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "2.2rem", fontWeight: 900, color: "white",
+                    boxShadow: "0 0 40px rgba(232,33,58,0.4)"
                 }}>
-                    ID: {identity.short_id}
-                </div>
-            )}
-
-            <form onSubmit={handleSave} className="glass-panel" style={{ width: '100%', maxWidth: '340px', display: 'flex', flexDirection: 'column', gap: '20px', padding: '32px', borderRadius: '24px' }}>
-                <div>
-                    <label style={{ color: 'var(--text-secondary)', fontSize: '0.8rem', fontWeight: 700, display: 'block', marginBottom: '10px', letterSpacing: '2px' }}>
-                        ALIAS TÁCTICO
-                    </label>
-                    <input
-                        type="text"
-                        value={displayName}
-                        onChange={e => setDisplayName(e.target.value)}
-                        placeholder="¿Cómo te llamas?"
-                        maxLength={32}
-                        autoFocus
-                        style={{
-                            width: '100%', padding: '14px 16px',
-                            background: 'var(--bg-deep)',
-                            border: '1px solid var(--solid-border)',
-                            color: 'var(--text-primary)', borderRadius: '12px',
-                            fontSize: '1rem', outline: 'none', boxSizing: 'border-box'
-                        }}
-                    />
+                    {displayName ? displayName[0].toUpperCase() : "🔴"}
                 </div>
 
-                <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={!displayName.trim() || saving}
-                >
-                    {saving ? "GUARDANDO..." : "ENTRAR A RED →"}
-                </button>
+                {/* Título & Identidad PoW */}
+                <div style={{ textAlign: "center" }}>
+                    <h1 style={{ fontSize: "1.4rem", fontWeight: 900, letterSpacing: "0.5px", margin: 0 }}>
+                        BIENVENIDO A RED
+                    </h1>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                        IDENTIDAD CRIPTOGRÁFICA ED25519 GENERADA
+                    </div>
 
-                <button
-                    type="button"
-                    onClick={handleSkip}
-                    style={{
-                        padding: '12px', background: 'transparent', color: 'var(--text-muted)',
-                        border: 'none', fontSize: '0.85rem', cursor: 'pointer'
-                    }}
-                >
-                    Saltar por ahora
-                </button>
-            </form>
+                    <div style={{
+                        marginTop: "12px", display: "inline-block",
+                        fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem",
+                        color: "var(--accent-emerald)", background: "rgba(0,230,118,0.1)",
+                        padding: "6px 14px", borderRadius: "var(--radius-full)",
+                        border: "1px solid rgba(0,230,118,0.3)"
+                    }}>
+                        NODO: {shortId}
+                    </div>
+                </div>
+
+                {/* Formulario de Alias */}
+                <form onSubmit={handleSave} className="card-tactical animate-enter" style={{ width: "100%", padding: "24px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                            ALIAS TÁCTICO / NOMBRE DE GUERRA:
+                        </label>
+                        <input
+                            type="text"
+                            value={displayName}
+                            onChange={e => setDisplayName(e.target.value)}
+                            placeholder="Ej. Sombra, Halcón, Alfa-1"
+                            autoFocus
+                        />
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={saving || !displayName.trim()}
+                        className="btn-tactical-primary"
+                        style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
+                    >
+                        {saving ? "Registrando en Keystore..." : "⚡ ENTRAR A LA RED SOBERANA"}
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleSkip}
+                        className="btn-ghost"
+                        style={{ width: "100%", padding: "8px", fontSize: "0.76rem", color: "var(--text-muted)" }}
+                    >
+                        Omitir por ahora
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }

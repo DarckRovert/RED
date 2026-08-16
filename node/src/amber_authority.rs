@@ -74,7 +74,7 @@ pub fn list_authorities() -> Vec<String> {
 /// En producción esto requeriría consenso multifirma — aquí es admin-only.
 pub fn add_authority(node_id: &str) -> bool {
     match AUTHORIZED_AUTHORITIES.get() {
-        Some(list) => {
+        Some(_list) => {
             // OnceLock es inmutable después de init — en producción usar RwLock
             // Por ahora documentamos la limitación:
             // Para agregar autoridades en runtime, reiniciar el nodo con AMBER_AUTHORITY_NODE_IDS actualizado

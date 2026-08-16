@@ -11,28 +11,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   useEffect(() => {
-    // 1. NATIVE MOBILE CSS INJECTION
-    // This safely adds the .native-app class only after initial React mount,
-    // guaranteeing no hydration mismatch between SSR and Client.
     const applyNativeOverrides = async () => {
       try {
-        const { Capacitor } = await import('@capacitor/core');
-        if (Capacitor.isNativePlatform() || window.location.protocol === 'capacitor:') {
-          document.body.classList.add('native-app');
-          console.log("[RED 2.0] Mobile UI Context Activated");
+        const { Capacitor } = await import("@capacitor/core");
+        if (Capacitor.isNativePlatform() || window.location.protocol === "capacitor:") {
+          document.body.classList.add("native-app");
           
-          // Clear splash immediately to show the app UI instantly
           try {
-            const { SplashScreen } = await import('@capacitor/splash-screen');
+            const { SplashScreen } = await import("@capacitor/splash-screen");
             await SplashScreen.hide();
-          } catch (e) {
-            console.warn("Splash plugin error", e);
-          }
+          } catch {}
         }
-      } catch (e) {
-        // Fallback for local web testing
-        if (window.location.hostname === 'localhost' && !window.location.port) {
-            document.body.classList.add('native-app');
+      } catch {
+        if (window.location.hostname === "localhost" && !window.location.port) {
+          document.body.classList.add("native-app");
         }
       }
     };
@@ -43,11 +35,10 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <head>
-        <title>RED</title>
+        <title>RED — Sovereign Mesh OS</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
       </head>
       <body>
-        {/* v19.0 & v20.0: Banners de Alta Prioridad AMBER y SOS */}
         <AmberAlertBanner />
         <SOSEmergencyBanner />
         <div className="app-container">

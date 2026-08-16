@@ -1,6 +1,6 @@
-# 🔴 RED - Manual del Administrador (Node Ops v30.0.0)
+# 🔴 RED - Manual del Administrador (Node Ops v31.0.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v30.0.0, con soporte para interconexión P2P Web ↔ Mobile, clusters de señalización ampliados (hasta 50 pares P2P por sala) y administración de los 3 motores de bajo nivel.
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v31.0.0, con soporte para interconexión P2P Web ↔ Mobile, actuadores de hardware nativos (Flash LED Morse SOS, sensores barométricos) y arquitectura de eventos en tiempo real SSE unificada sin polling.
 
 ---
 

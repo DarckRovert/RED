@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v30.0.0
+# 📘 Manual Operativo del Usuario — RED v31.0.0 Sovereign Master
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura o censura.
 
@@ -8,10 +8,11 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 1. [Primer Inicio & Autenticación Soberana](#1-primer-inicio--autenticación-soberana)
 2. [Gestión de Seguridad & Modo Señuelo](#2-gestión-de-seguridad--modo-señuelo)
-3. [Manual Operativo de los 28 Módulos Tácticos](#3-manual-operativo-de-los-28-módulos-tácticos)
-4. [Interruptor del Hombre Muerto (DMS) & Purga](#4-interruptor-del-hombre-muerto-dms--purga)
-5. [Inmunidad a VPNs & Red Mesh Off-Grid](#5-inmunidad-a-vpns--red-mesh-off-grid)
-6. [Preguntas Frecuentes & Solución de Problemas](#6-preguntas-frecuentes--solución-de-problemas)
+3. [Manual Operativo de los 35 Módulos Tácticos](#3-manual-operativo-de-los-35-módulos-tácticos)
+4. [Actuadores de Hardware: Flash LED Morse SOS & Triaje START](#4-actuadores-de-hardware-flash-led-morse-sos--triaje-start)
+5. [Interruptor del Hombre Muerto (DMS) & Purga](#5-interruptor-del-hombre-muerto-dms--purga)
+6. [Inmunidad a VPNs & Red Mesh Off-Grid](#6-inmunidad-a-vpns--red-mesh-off-grid)
+7. [Preguntas Frecuentes & Solución de Problemas](#7-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
@@ -27,44 +28,71 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 - **PIN Maestro:** Acceso a la bóveda principal con todos los chats, contactos e historial cifrado.
 - **PIN Señuelo (`decoy_pin`):** Iniciar sesión con el PIN señuelo abre un entorno totalmente limpio y verosímil sin dejar rastro de tus comunicaciones reales.
-- **PIN de Pánico (`panic_pin`):** Iniciar sesión con el PIN de pánico ejecuta inmediatamente el protocolo de autodestrucción nativo (`RedNodePlugin.destroy`), purgando las llaves y la base de datos SQLite.
+- **PIN de Pánico (`panic_pin`):** Iniciar sesión con el PIN de pánico ejecuta inmediatamente el protocolo de autodestrucción nativo (`RedNodePlugin.destroy`), purgando las llaves y la base de datos Sled.
 
 ---
 
-## 3. Manual Operativo de los 28 Módulos Tácticos
+## 3. Manual Operativo de los 35 Módulos Tácticos
 
-1. **Radar Topográfico Off-Grid:** Abre `OffGridCompassModal.tsx` para orientación con magnetómetro, declinación WMM2025 y altímetro barométrico.
-2. **Escáner Signos Vitales PPG:** Usa `VitalScanModal.tsx` colocando el índice en la cámara y linterna LED para medir pulso y nivel de estrés.
-3. **Baliza SOS & Módem SoundMesh:** En `SurvivalBeaconModal.tsx`, emite alertas de socorro GPS y transmisiones por ultrasonido en 18–20 kHz BFSK.
-4. **Copiloto IA Neuronal Offline:** Invocación de `AICopilotModal.tsx` para consultas, traducción y resúmenes sin internet mediante `LaMini-Flan-T5`.
-5. **Proximidad Zero-Touch & Radar Wave:** En `ProximityWaveModal.tsx`, detecta pares físicamente cercanos mediante firmas Doppler de ultrasonido.
-6. **Pizarra Táctica P2P en Vivo:** En `LiveCanvasModal.tsx`, dibuja planos tácticos sincronizados en tiempo real por la red malla.
-7. **Resiliencia de Batería Eco-Mesh:** Ajusta el consumo energético en `EcoMeshPanel.tsx` adaptando el intervalo de beaconing.
-8. **Walkie-Talkie Mesh Push-To-Talk:** Presiona en `P2PWalkieTalkieModal.tsx` para hablar por radio digital cifrada en tiempo real.
-9. **Alertas Tácticas AMBER:** Gestiona emergencias comunitarias en `AmberAdminPanel.tsx` con avisos de alta prioridad.
-10. **Boletines Climáticos Off-Grid:** Revisa el barómetro e informes meteorológicos en `WeatherAlertPanel.tsx`.
-11. **Canales Públicos Locales:** Explora temas abiertos en `PublicChannelsPanel.tsx` con moderación automática por Guardian IA.
-12. **Bóveda Criptográfica StegoVault:** Oculta mensajes cifrados en fotos usando `StegoVaultModal.tsx`.
-13. **Historias Tácticas & Estados:** Publica imágenes efímeras de 24 horas desde `StoriesBar.tsx`.
-14. **Transmisión de Video P2P en Vivo:** Emite o recibe video local en tiempo real con `LiveStreamBroadcaster.tsx` y `LiveStreamViewer.tsx`.
-15. **Notas de Voz Cifradas:** Graba notas comprimidas a 12 Kbps en `VoiceMessage.tsx` para transmisión fluida en LoRa/BLE.
-16. **Encuestas y Votaciones Tácticas:** Crea votaciones P2P con firma digital en `PollMessage.tsx`.
-17. **Respaldo Cifrado AES-256-GCM:** Exporta e importa copias de seguridad en `BackupRestoreModal.tsx`.
-18. **Explorador Blockchain RED:** Consulta transacciones y bloques de la red en `BlockchainExplorer.tsx`.
-19. **Espectro RF & Monitoreo SDR:** Analiza interferencias de radiofrecuencia en `RfSpectrumModal.tsx`.
-20. **Mapa de Nodos & Telemetría P2P:** Visualiza las posiciones GPS de tus pares en `NodeMap.tsx`.
-21. **Hombre Muerto DMS:** Configura la ventana de purga por inactividad en `DMSSettings.tsx`.
-22. **Identidad Digital DID & Shamir SSS:** Divide tu clave en 5 fragmentos en `IdentityVaultModal.tsx`.
-23. **Protocolo Incógnito / Señuelo:** Configura PINs de pánico y camuflaje de icono en `SecurityPanel.tsx`.
-24. **Infraestructura de Red Mesh:** Revisa las métricas del enrutador Controlled Flood en `meshRouter.ts`.
-25. **Llamadas Tácticas WebRTC:** Inicia videollamadas cifradas P2P en `CallScreen.tsx`.
-26. **Contactos & Grupos Cifrados:** Administra integrantes e identidades en `GroupsPanel.tsx`.
-27. **Mensajería E2EE en Tiempo Real:** Envía mensajes con confirmación de entrega en `ChatWindow.tsx`.
-28. **Centro de Control Táctico:** Controla la navegación general del nodo desde `StatusView.tsx` y `Sidebar.tsx`.
+1. **Canales Mesh Locales:** Explora temas abiertos en `PublicChannelsPanel.tsx` con moderación automática por Guardian IA.
+2. **RED Social Feed P2P:** Publicaciones descentralizadas resistentes a censura en `SocialFeedPanel.tsx`.
+3. **Difusión Privada (Broadcast):** Envía comunicados simultáneos cifrados en `BroadcastPanel.tsx`.
+4. **Walkie-Talkie Mesh Push-To-Talk:** Presiona en `P2PWalkieTalkieModal.tsx` para hablar por radio digital en tiempo real.
+5. **Canvas Táctico P2P en Vivo:** En `LiveCanvasModal.tsx`, dibuja planos tácticos sincronizados en tiempo real por la red malla.
+6. **Live Broadcast Stream:** Emite o recibe video local en tiempo real con `LiveStreamBroadcaster.tsx` y `LiveStreamViewer.tsx`.
+7. **Shake & Pair (Acelerómetro):** En `ShakePairModal.tsx`, sacude tu teléfono (>15 m/s²) cerca de otro operador para emparejarte al instante.
+8. **Radar Topográfico GPS & UTM:** Abre `OffGridCompassModal.tsx` para orientación con magnetómetro, declinación WMM2025 y altímetro barométrico.
+9. **Mapa de Nodos P2P:** Visualiza nodos cercanos, distancias estimadas y telemetría en `NodeMap.tsx`.
+10. **Radar Hardware BLE / WiFi:** Escaneo de dispositivos de radio en `NearbyDevicesPanel.tsx`.
+11. **Analizador Espectro RF / EW:** Monitorea interferencias en `RfSpectrumModal.tsx`.
+12. **Ondas de Proximidad:** En `ProximityWaveModal.tsx`, detecta pares físicamente cercanos mediante firmas de radio.
+13. **Clima & Barómetro CAP:** Revisa el barómetro e informes meteorológicos en `WeatherAlertPanel.tsx`.
+14. **Batería Eco-Mesh:** Ajusta el consumo energético en `EcoMeshPanel.tsx` adaptando el intervalo de beaconing.
+15. **Topología de Red:** Supervisa la salud del enjambre libp2p en `NetworkPanel.tsx`.
+16. **Perfil & Bóveda DID:** Gestiona tu identidad soberana y esquema de fragmentación Shamir en `IdentityVaultModal.tsx`.
+17. **Pagos & Vouchers P2P:** Genera y transfiere vouchers de valor fuera de línea en `RedP2PPayModal.tsx`.
+18. **Bóveda Criptográfica PQC:** Inspecciona claves Post-Cuánticas Kyber-1024 en `CryptoPanel.tsx`.
+19. **Explorador Blockchain RED:** Verifica bloques y transacciones inmutables en `BlockchainExplorer.tsx`.
+20. **Bóveda Esteganográfica:** Oculta mensajes cifrados en fotos usando `StegoVaultModal.tsx`.
+21. **Respaldos & Restauración:** Exporta respaldos cifrados protegidos por PBKDF2 en `BackupRestoreModal.tsx`.
+22. **Signos Vitales & Triaje START:** En `VitalScanModal.tsx`, coloca el dedo sobre la cámara trasera y el flash LED para medir pulso cardíaco, SpO2 y evaluar el triaje de víctimas.
+23. **Baliza SOS & Módem SoundMesh:** En `SurvivalBeaconModal.tsx`, emite alertas de socorro GPS, activa el flash LED SOS en código Morse y transmite por ultrasonido en 18–20 kHz BFSK.
+24. **Sistema Alerta AMBER:** Gestiona emergencias comunitarias en `AmberAdminPanel.tsx` con avisos de alta prioridad.
+25. **Hombre Muerto DMS:** Configura el temporizador de inactividad de seguridad en `DMSSettings.tsx`.
+26. **Simulador Apagón Blackout:** Realiza pruebas de estrés desconectando la WAN en `BlackoutSimulatorModal.tsx`.
+27. **Copiloto IA Offline:** Invocación de `AICopilotModal.tsx` para consultas tácticas mediante LLM en memoria.
+28. **Guardian IA (Firewall):** Supervisa el firewall cognitivo en `GuardianStatusPanel.tsx`.
+29. **Diagnóstico Salud Sistema:** Evalúa el rendimiento de CPU, memoria y almacenamiento en `SystemHealthModal.tsx`.
+30. **Logs del Nodo Rust SSE:** Visualiza la consola de eventos en tiempo real en `NodeLogsModal.tsx`.
+31. **Calculadora Señuelo (Camuflaje):** Accede al camuflaje de calculadora en `CalculatorScreen.tsx`.
+32. **Reporte Auditoría Seguridad:** Revisa el informe de integridad Zero-Trust en `SecurityReportModal.tsx`.
+33. **Seguridad Zero-Trust:** Configura tus PINs de acceso y políticas de purga en `SecurityPanel.tsx`.
+34. **Llamadas Tácticas P2P:** Inicia videollamadas cifradas en `CallScreen.tsx`.
+35. **Centro de Mensajería E2EE:** Chatea de forma privada con Double Ratchet en `ChatWindow.tsx`.
 
 ---
 
-## 4. Interruptor del Hombre Muerto (DMS) & Purga
+## 4. Actuadores de Hardware: Flash LED Morse SOS & Triaje START
+
+### Flash LED Morse SOS
+Al activar la función en la Baliza de Supervivencia (`SurvivalBeaconModal.tsx`):
+- El sistema toma control directo del hardware mediante `CameraManager.setTorchMode()`.
+- Un hilo nativo genera pulsos luminosos de emergencia con el patrón internacional SOS:
+  - 3 pulsos cortos (150ms)
+  - 3 pulsos largos (450ms)
+  - 3 pulsos cortos (150ms)
+- El flash opera incluso si la pantalla se apaga o la interfaz cambia de pestaña.
+
+### Triaje START & Escáner Fotopletismográfico (PPG)
+En `VitalScanModal.tsx`:
+1. Coloca la yema del dedo cubriendo completamente el lente de la cámara trasera y el flash LED.
+2. El flash LED se encenderá a máxima intensidad para iluminar el lecho capilar.
+3. El algoritmo extraerá la curva de pulso hemodinámico rojo/verde calculando BPM y SpO2% reales.
+4. Responde las 5 preguntas del protocolo START para clasificar a la víctima con código de color internacional.
+
+---
+
+## 5. Interruptor del Hombre Muerto (DMS) & Purga
 
 - Si el operador entra en estado de incapacitación o arresto, el motor `evaluateLocalDMS` detecta la inactividad.
 - Al expirar el temporizador, se emite una última baliza de socorro y se limpian las bases de datos y la Keystore.
@@ -84,3 +112,4 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
   Exclusivamente en la base de datos cifrada SQLite local de tu dispositivo.
 - **¿Cómo me conecto con otros nodos?**  
   Automáticamente mediante BLE, WiFi Direct, LoRa o SoundMesh al abrir la aplicación.
+

@@ -1,5 +1,5 @@
 /**
- * AmberAlertBanner.tsx — RED v19.0
+ * AmberAlertBanner.tsx — RED v31.0.0
  *
  * Banner de alta prioridad para alertas AMBER activas.
  * Se monta sobre toda la UI con z-index máximo.

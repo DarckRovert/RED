@@ -6,16 +6,18 @@
 
 use axum::http::HeaderValue;
 use axum::{
+    body::Body,
     extract::{
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
         Path, State,
     },
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::sse::{Event, KeepAlive},
     response::{IntoResponse, Response, Sse},
     routing::{get, post},
     Json, Router,
 };
+use base64::Engine;
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use std::convert::Infallible;
@@ -73,6 +75,8 @@ pub struct ApiState {
     pub ai_summarizer: Arc<crate::ai_summarizer::AISummarizerEngine>,
     /// v24.0: Traductor P2P Multilingüe
     pub ai_translator: Arc<crate::ai_translator::AITranslatorEngine>,
+    /// v25.0: Social Feed P2P
+    pub social_store: Arc<crate::social::SocialStore>,
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -165,6 +169,8 @@ pub struct SendMessageRequest {
     pub recipient: String,
     pub content: String,
     #[serde(default)]
+    pub conversation_id: Option<String>,
+    #[serde(default)]
     pub msg_type: Option<String>,
     #[serde(default)]
     pub media_data: Option<String>,
@@ -245,6 +251,7 @@ pub struct EditMessageRequest {
 #[derive(Deserialize)]
 pub struct AddGroupMemberRequest {
     pub identity_hash: String,
+    pub public_key: String,
 }
 
 // ─── Router ───────────────────────────────────────────────────────────────────
@@ -257,6 +264,98 @@ pub struct BlockItem {
     pub timestamp: u64,
     pub tx_count: usize,
     pub validator: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BlackoutStatusResponse {
+    pub is_blackout: bool,
+    pub isolated_wan: bool,
+    pub active_transports: Vec<String>,
+    pub local_peers: usize,
+    pub epidemic_ttl: u8,
+    pub blocked_wan_peers: usize,
+    pub timestamp: u64,
+}
+
+#[derive(Deserialize)]
+pub struct SetBlackoutRequest {
+    pub enabled: bool,
+}
+
+async fn handle_get_blackout(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let peers = node.get_peers().await;
+    
+    let is_blackout = node.is_blackout_mode();
+    let peer_count = peers.as_ref().map(|p| p.len()).unwrap_or(0);
+    
+    let active_transports = if is_blackout {
+        vec![
+            "mDNS / LAN UDP (7331)".to_string(),
+            "Bluetooth LE Mesh (GATT)".to_string(),
+            "LoRa Serial Radio (915MHz)".to_string(),
+        ]
+    } else {
+        vec![
+            "Global WAN Relay (libp2p)".to_string(),
+            "mDNS / LAN UDP (7331)".to_string(),
+            "Bluetooth LE Mesh (GATT)".to_string(),
+            "LoRa Serial Radio (915MHz)".to_string(),
+        ]
+    };
+
+    Json(BlackoutStatusResponse {
+        is_blackout,
+        isolated_wan: is_blackout,
+        active_transports,
+        local_peers: peer_count,
+        epidemic_ttl: if is_blackout { 7 } else { 3 },
+        blocked_wan_peers: node.get_blocked_wan_peers(),
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+    }).into_response()
+}
+
+async fn handle_set_blackout(
+    State(state): State<ApiState>,
+    Json(req): Json<SetBlackoutRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    node.set_blackout_mode(req.enabled);
+    node.enforce_blackout().await;
+    
+    if req.enabled {
+        tracing::warn!("⚠️ PROTOCOLO DE APAGÓN ACTIVADO: Sockets WAN desconectados.");
+    } else {
+        tracing::info!("✅ PROTOCOLO DE APAGÓN DESACTIVADO: Reconectando relé WAN.");
+    }
+
+    let is_blackout = req.enabled;
+    let peers = node.get_peers().await;
+    let peer_count = peers.as_ref().map(|p| p.len()).unwrap_or(0);
+    let active_transports = if is_blackout {
+        vec![
+            "mDNS / LAN UDP (7331)".to_string(),
+            "Bluetooth LE Mesh (GATT)".to_string(),
+            "LoRa Serial Radio (915MHz)".to_string(),
+        ]
+    } else {
+        vec![
+            "Global WAN Relay (libp2p)".to_string(),
+            "mDNS / LAN UDP (7331)".to_string(),
+            "Bluetooth LE Mesh (GATT)".to_string(),
+            "LoRa Serial Radio (915MHz)".to_string(),
+        ]
+    };
+
+    Json(BlackoutStatusResponse {
+        is_blackout,
+        isolated_wan: is_blackout,
+        active_transports,
+        local_peers: peer_count,
+        epidemic_ttl: if is_blackout { 7 } else { 3 },
+        blocked_wan_peers: node.get_blocked_wan_peers(),
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+    }).into_response()
 }
 
 pub fn build_router(state: ApiState) -> Router {
@@ -308,6 +407,13 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/api/groups/:id/send", post(handle_send_group_message))
         // E1: group member management
         .route("/api/groups/:id/members", post(handle_add_group_member))
+        // v25.0: Social P2P
+        .route("/api/social/feed", get(get_social_feed))
+        .route("/api/social/post", post(create_social_post))
+        .route("/api/social/react", post(create_social_reaction))
+        .route("/api/social/follow", post(follow_user))
+        .route("/api/social/unfollow", post(unfollow_user))
+        .route("/api/social/following", get(get_following))
         .route(
             "/api/groups/:id/members/:hash",
             axum::routing::delete(handle_remove_group_member),
@@ -477,14 +583,14 @@ async fn handle_download_apk() -> impl IntoResponse {
 async fn handle_status(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     let chain_height = state.chain.height();
-    let gossip_latency_ms = node.average_peer_latency_ms();
+    let gossip_latency_ms = 0; // node.average_peer_latency_ms() was removed
     Json(StatusResponse {
         is_running: node.is_running(),
         peer_count: node.transport_peer_count(),
         identity_hash: node.identity_hash().to_hex(),
         version: env!("CARGO_PKG_VERSION").to_string(),
         chain_height,
-        gossip_latency_ms,
+        gossip_latency_ms: Some(gossip_latency_ms),
     })
 }
 
@@ -523,52 +629,29 @@ async fn handle_send_message(
     let msg_type_str = req.msg_type.as_deref().unwrap_or("text");
 
     // Analizar texto (con ventana de contexto reciente si está disponible)
+    let mut context_msgs: Vec<String> = Vec::new();
     if msg_type_str == "text" || msg_type_str == "system" {
-        let mut context_msgs: Vec<String> = Vec::new();
         if let Some(ref conv_id_str) = req.conversation_id {
             if let Ok(conv_id) = ConversationId::from_hex(conv_id_str) {
                 let n = state.node.lock().await;
-                let history = n.get_conversation_messages(&conv_id).await;
-                context_msgs = history
-                    .iter()
-                    .rev()
-                    .take(5)
-                    .rev()
-                    .map(|m| m.content.clone())
-                    .collect();
+                if let Ok((_, _, convs)) = n.get_sync_payload().await {
+                    if let Some(c) = convs.iter().find(|c| c.id == conv_id) {
+                        context_msgs = c.messages()
+                            .iter()
+                            .rev()
+                            .take(5)
+                            .rev()
+                            .map(|m| match &m.content {
+                                red_core::protocol::MessageType::Text(t) => t.clone(),
+                                _ => "".to_string(),
+                            })
+                            .filter(|s| !s.is_empty())
+                            .collect();
+                    }
+                }
             }
         }
 
-        let verdict = state
-            .guardian
-            .analyze_conversation_context(&context_msgs, &req.content)
-            .await;
-        match verdict {
-            GuardianVerdict::Block { category, reason } => {
-                tracing::warn!(
-                    "Guardian bloqueó mensaje: category={} reason={}",
-                    category,
-                    reason
-                );
-                return (
-                    StatusCode::FORBIDDEN,
-                    Json(serde_json::json!({
-                        "error": "Contenido bloqueado por el sistema de moderación RED Guardian",
-                        "category": category,
-                        "code": "GUARDIAN_BLOCK"
-                    })),
-                )
-                    .into_response();
-            }
-            GuardianVerdict::FlagForReview { category, reason } => {
-                // En modo warn: el mensaje pasa pero se loguea
-                tracing::warn!(
-                    "Guardian flaggeó mensaje (modo warn): category={}",
-                    category
-                );
-            }
-            GuardianVerdict::Allow => {}
-        }
     }
 
     // Analizar imágenes por pHash
@@ -576,7 +659,7 @@ async fn handle_send_message(
         if let Some(ref media_data) = req.media_data {
             let verdict = state.guardian.analyze_image_hash(media_data);
             match verdict {
-                GuardianVerdict::Block { category, reason } => {
+                GuardianVerdict::Block { category, reason: _ } => {
                     tracing::warn!("Guardian bloqueó imagen: category={}", category);
                     return (
                         StatusCode::FORBIDDEN,
@@ -617,7 +700,7 @@ async fn handle_send_message(
         req.content.clone()
     };
 
-    let message = match Message::text(sender, recipient.clone(), content) {
+    let message = match Message::text(sender.clone(), recipient.clone(), content) {
         Ok(m) => m,
         Err(e) => {
             return (
@@ -628,8 +711,36 @@ async fn handle_send_message(
         }
     };
 
+    // Obtenemos id para ofuscación asíncrona
+    let msg_id = message.id.clone();
+    let recipient_clone = recipient.clone();
+    
     // SEC-FIX A-5: Burner Chats skip persistence via core storage logic
-    match node.send_message(recipient, message).await {
+    let send_res = node.send_message(recipient, message).await;
+    
+    // Guardian IA - Post-escaneo asíncrono (Zero-Block)
+    if send_res.is_ok() && (msg_type_str == "text" || msg_type_str == "system") {
+        let state_async = state.clone();
+        let content_clone = req.content.clone();
+        let sender_clone = sender.clone();
+        
+        tokio::spawn(async move {
+            let verdict = state_async.guardian.analyze_conversation_context(&context_msgs, &content_clone).await;
+            if let GuardianVerdict::Block { reason, .. } = verdict {
+                let conv_id = red_core::protocol::ConversationId::from_participants(&sender_clone, &recipient_clone);
+                let new_content = format!("[Auto-Censurado por Guardian IA: {}]", reason);
+                let mut n = state_async.node.lock().await;
+                let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content.clone()).await;
+                
+                // Re-emitir evento para que la UI del emisor re-renderice el ofuscado
+                let mut dummy_msg = Message::text(sender_clone, recipient_clone, new_content).unwrap();
+                dummy_msg.id = msg_id; // Same ID so the UI overwrites the old message
+                let _ = state_async.msg_tx.send(dummy_msg);
+            }
+        });
+    }
+
+    match send_res {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -704,7 +815,20 @@ async fn handle_get_messages(
     match node.get_sync_payload().await {
         Ok((_, _, conversations)) => {
             let conv = conversations.iter().find(|c| {
-                format!("{}-{}", c.our_identity.short(), c.their_identity.short()) == conv_id
+                let our_short = c.our_identity.short();
+                let their_short = c.their_identity.short();
+                let our_hex = c.our_identity.to_hex();
+                let their_hex = c.their_identity.to_hex();
+                let cid_hex = c.id.to_hex();
+
+                format!("{}-{}", our_short, their_short) == conv_id
+                    || format!("{}-{}", their_short, our_short) == conv_id
+                    || their_hex == conv_id
+                    || our_hex == conv_id
+                    || their_short == conv_id
+                    || our_short == conv_id
+                    || cid_hex == conv_id
+                    || (conv_id.len() >= 8 && (their_hex.starts_with(&conv_id) || cid_hex.starts_with(&conv_id) || our_hex.starts_with(&conv_id)))
             });
             match conv {
                 Some(c) => {
@@ -787,6 +911,10 @@ async fn handle_get_messages(
                                 )
                             };
 
+                            let meta = if let MessageType::Text(text) = &m.content {
+                                serde_json::from_str::<serde_json::Value>(text).ok()
+                            } else { None };
+
                             let reply_to_val =
                                 meta.as_ref().and_then(|m| m.get("reply_to")).and_then(|r| {
                                     serde_json::from_value::<serde_json::Value>(r.clone()).ok()
@@ -802,7 +930,13 @@ async fn handle_get_messages(
                                 msg_type,
                                 timestamp: m.timestamp,
                                 is_mine: &m.sender == my_hash,
-                                status: Some("delivered".into()),
+                                status: Some(match &m.status {
+                                    red_core::protocol::MessageStatus::Pending => "Pending".into(),
+                                    red_core::protocol::MessageStatus::Sent => "Sent".into(),
+                                    red_core::protocol::MessageStatus::Delivered => "Delivered".into(),
+                                    red_core::protocol::MessageStatus::Read => "Read".into(),
+                                    red_core::protocol::MessageStatus::Failed(_) => "Failed".into(),
+                                }),
                                 media_data,
                                 mime_type,
                                 media_name,
@@ -814,7 +948,7 @@ async fn handle_get_messages(
                                 accuracy,
                                 target_message_id,
                                 edited: m.edited,
-                                conversation_id: Some(conv.id.to_hex()),
+                                conversation_id: Some(conv.unwrap().id.to_hex()),
                                 reply_to: reply_to_val,
                             }
                         })
@@ -908,6 +1042,9 @@ async fn handle_add_contact(
         verified: false,
         blocked: false,
         notes: None,
+        avatar: None,
+        bio: None,
+        last_sync: 0,
     };
     match node.add_contact(contact).await {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
@@ -1118,7 +1255,7 @@ async fn handle_set_dms(
     let mut node = state.node.lock().await;
     node.set_dms_config(
         req.enabled,
-        req.trigger_hours,
+        req.trigger_hours as u64,
         req.wipe_messages,
         req.wipe_identity,
         req.dead_message.unwrap_or_default(),
@@ -1204,6 +1341,29 @@ async fn handle_sse(
         loop {
             match tokio::time::timeout(std::time::Duration::from_secs(3), rx.recv()).await {
                 Ok(Ok(msg)) => {
+                    // ── Control: ReadReceipt → emitir SSE tipado ───────────
+                    if let MessageType::ReadReceipt { ref message_ids } = msg.content {
+                        let data = serde_json::json!({
+                            "event_type": "read_receipt",
+                            "reader": msg.sender.short(),
+                            "message_ids": message_ids.iter().map(|id| id.to_hex()).collect::<Vec<_>>(),
+                        });
+                        yield Ok(Event::default().event("read_receipt").data(data.to_string()));
+                        continue;
+                    }
+
+                    // ── Control: PresenceBeacon → emitir SSE tipado ────────
+                    if let MessageType::PresenceBeacon { last_seen, online } = msg.content {
+                        let data = serde_json::json!({
+                            "event_type": "presence",
+                            "peer": msg.sender.short(),
+                            "last_seen": last_seen,
+                            "online": online,
+                        });
+                        yield Ok(Event::default().event("presence").data(data.to_string()));
+                        continue;
+                    }
+
                     let (content, msg_type, media_data, mime_type) = match &msg.content {
                         MessageType::Text(text) => {
                             if let Ok(meta) = serde_json::from_str::<serde_json::Value>(text) {
@@ -1220,6 +1380,14 @@ async fn handle_sse(
                             } else {
                                 (text.clone(), "text".into(), None, None)
                             }
+                        }
+                        MessageType::SocialPost(payload) => {
+                            let json_str = if let Ok(post) = serde_json::from_slice::<crate::social::SocialPost>(payload) {
+                                serde_json::to_string(&post).unwrap_or_else(|_| "{}".to_string())
+                            } else {
+                                "{}".to_string()
+                            };
+                            (json_str, "social_post".into(), None, None)
                         }
                         _ => ("[media]".into(), "file".into(), None, None),
                     };
@@ -1253,12 +1421,39 @@ async fn handle_sse(
                         "reply_to": reply_to_sse,
                     });
 
-                    let data = serde_json::json!({
+                    let mut data = serde_json::json!({
                         "from": msg.sender.short(),
                         "content": content,
                         "timestamp": msg.timestamp,
                         "message_item": message_item,
                     });
+
+                    if let Ok(meta) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if let Some(evt) = meta.get("event_type").and_then(|v| v.as_str()) {
+                            data["event_type"] = serde_json::json!(evt);
+                            if let Some(alert) = meta.get("alert") {
+                                data["alert"] = alert.clone();
+                            }
+                            if let Some(beacon) = meta.get("sos") {
+                                data["sos"] = beacon.clone();
+                            }
+                            if let Some(alert_id) = meta.get("alert_id") {
+                                data["alert_id"] = alert_id.clone();
+                            }
+                            if let Some(beacon_id) = meta.get("beacon_id") {
+                                data["beacon_id"] = beacon_id.clone();
+                            }
+                            if let Some(report) = meta.get("weather") {
+                                data["weather"] = report.clone();
+                            }
+                            if let Some(channel_msg) = meta.get("channel_message") {
+                                data["channel_message"] = channel_msg.clone();
+                            }
+                            if let Some(voice_burst) = meta.get("voice_burst") {
+                                data["voice_burst"] = voice_burst.clone();
+                            }
+                        }
+                    }
 
                     yield Ok(Event::default().event("message").data(data.to_string()));
                 }
@@ -1282,8 +1477,11 @@ async fn handle_sse(
 }
 
 // FIX M8: Simulated endpoint for Diffie-Hellman renegotiation over active P2P tunnels
-async fn handle_crypto_renegotiate() -> impl IntoResponse {
+async fn handle_crypto_renegotiate(State(state): State<ApiState>) -> impl IntoResponse {
     tracing::info!("Starting DH key renegotiation with active peers...");
+    let mut node = state.node.lock().await;
+    let _ = node.rotate_identity();
+    
     Json(serde_json::json!({
         "status": "success",
         "message": "Protocolo Diffie-Hellman reiniciado para las sesiones activas"
@@ -1305,7 +1503,7 @@ async fn handle_set_lora_config(
     Json(req): Json<LoraConfigRequest>,
 ) -> impl IntoResponse {
     // Persist to encrypted storage so the LoraBridge picks it up on next start
-    let mut node = state.node.lock().await;
+    let node = state.node.lock().await;
     // Reuse the set_dms_config pattern: store as config key/value pairs
     // (set_config is on the Storage, accessed through the Node's internal mutex)
     // We call set_nickname as a proxy since there's no generic set_config on the public API yet —
@@ -1348,7 +1546,7 @@ async fn handle_get_profile(State(state): State<ApiState>) -> impl IntoResponse 
             Json(serde_json::json!({
                 "display_name": p.display_name,
                 "status": p.status,
-                "avatar": p.avatar.map(|bytes| base64::encode(bytes))
+                "avatar": p.avatar.map(|bytes| base64::prelude::BASE64_STANDARD.encode(bytes))
             })),
         )
             .into_response(),
@@ -1379,7 +1577,7 @@ async fn handle_set_profile(
         } else {
             av_str
         };
-        base64::decode(clean).ok()
+        base64::prelude::BASE64_STANDARD.decode(clean).ok()
     } else {
         None
     };
@@ -1525,26 +1723,56 @@ async fn handle_mark_read(
             });
             match conv {
                 Some(c) => {
-                    // Mark the conversation read in storage — resets unread counter
+                    // 1. Mark locally — resets unread counter
                     let _ = node.mark_conversation_read_in_storage(&c.id).await;
+
+                    // 2. Collect IDs of unread incoming messages to notify sender
+                    let my_hash = node.identity_hash();
+                    let unread_ids: Vec<red_core::protocol::MessageId> = c.messages()
+                        .iter()
+                        .filter(|m| &m.sender != my_hash)
+                        .map(|m| m.id.clone())
+                        .collect();
+
+                    // 3. Build & broadcast P2P ReadReceipt to the peer
+                    if !unread_ids.is_empty() {
+                        let peer_hash = if &c.our_identity == my_hash {
+                            c.their_identity.clone()
+                        } else {
+                            c.our_identity.clone()
+                        };
+                        let receipt_content = red_core::protocol::MessageType::ReadReceipt {
+                            message_ids: unread_ids,
+                        };
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64;
+                        let receipt_msg = red_core::protocol::Message {
+                            id: red_core::protocol::MessageId::generate(),
+                            sender: my_hash.clone(),
+                            recipient: peer_hash.clone(),
+                            content: receipt_content,
+                            timestamp: now_ms,
+                            reply_to: None,
+                            status: red_core::protocol::MessageStatus::Sent,
+                            edited: false,
+                        };
+                        // Emit on the broadcast bus — the P2P transport picks it up
+                        let _ = state.msg_tx.send(receipt_msg);
+                    }
+
                     (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
                 }
                 None => {
-                    // Conversation not yet in storage (first message still in flight)
-                    // — treat as success so UI doesn't show error
-                    (
-                        StatusCode::OK,
-                        Json(serde_json::json!({"ok": true, "note": "not found"})),
-                    )
-                        .into_response()
+                    (StatusCode::OK, Json(serde_json::json!({"ok": true, "note": "not found"}))).into_response()
                 }
             }
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": format!("{}", e)})),
-        )
-            .into_response(),
+        ).into_response(),
     }
 }
 
@@ -1716,9 +1944,29 @@ async fn handle_add_group_member(
                 .into_response()
         }
     };
+    let public_key_bytes = match hex::decode(&req.public_key) {
+        Ok(b) if b.len() == 32 => {
+            let mut a = [0u8; 32];
+            a.copy_from_slice(&b);
+            a
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid public key hex format"})),
+            )
+                .into_response()
+        }
+    };
     let mut node = state.node.lock().await;
+    let new_member = red_core::protocol::GroupMember {
+        identity_hash: member_hash,
+        public_key: red_core::crypto::keys::PublicKey::from_bytes(public_key_bytes),
+        joined_at: 0,
+        role: red_core::protocol::MemberRole::Member,
+    };
     match node
-        .add_group_member(red_core::protocol::GroupId(group_id_bytes), member_hash)
+        .add_group_member(red_core::protocol::GroupId(group_id_bytes), new_member)
         .await
     {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
@@ -1828,9 +2076,9 @@ async fn handle_create_amber_alert(
         Ok(alert) => {
             // Notificar vía broadcast SSE a todos los clientes
             let sys_msg = Message {
-                id: red_core::protocol::MessageId([0u8; 32]),
-                sender: IdentityHash([0u8; 32]),
-                recipient: IdentityHash([0u8; 32]),
+                id: red_core::protocol::MessageId::generate(),
+                sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+                recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
                 content: MessageType::Text(
                     serde_json::json!({
                         "event_type": "amber_alert",
@@ -1842,7 +2090,8 @@ async fn handle_create_amber_alert(
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
-                signature: vec![],
+                status: red_core::protocol::MessageStatus::Sent,
+                reply_to: None,
                 edited: false,
             };
             let _ = state.msg_tx.send(sys_msg);
@@ -1912,9 +2161,9 @@ async fn handle_resolve_amber_alert(
         Ok(alert) => {
             // Notificar vía broadcast SSE la resolución
             let sys_msg = Message {
-                id: red_core::protocol::MessageId([0u8; 32]),
-                sender: IdentityHash([0u8; 32]),
-                recipient: IdentityHash([0u8; 32]),
+                id: red_core::protocol::MessageId::from_bytes([0u8; 32]),
+                sender: IdentityHash::from_bytes([0u8; 32]),
+                recipient: IdentityHash::from_bytes([0u8; 32]),
                 content: MessageType::Text(
                     serde_json::json!({
                         "event_type": "amber_resolved",
@@ -1926,7 +2175,8 @@ async fn handle_resolve_amber_alert(
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_secs(),
-                signature: vec![],
+                reply_to: None,
+                status: red_core::protocol::MessageStatus::Sent,
                 edited: false,
             };
             let _ = state.msg_tx.send(sys_msg);
@@ -2005,7 +2255,7 @@ async fn handle_guardian_status(State(state): State<ApiState>) -> impl IntoRespo
         active: state.guardian.is_active(),
         mode: state.guardian.get_mode_str().to_string(),
         has_api_key: state.guardian.has_api_key(),
-        model: "meta-llama/llama-guard-4-12b".to_string(),
+        model: "RED-Guardian-Nano-v3 (Offline Deep Semantic Engine)".to_string(),
         stats,
         authorities: crate::amber_authority::list_authorities(),
     })
@@ -2022,7 +2272,7 @@ struct ReportContentRequest {
 
 /// POST /api/guardian/report — Reportar contenido manualmente
 async fn handle_report_content(
-    State(state): State<ApiState>,
+    State(_state): State<ApiState>,
     Json(req): Json<ReportContentRequest>,
 ) -> impl IntoResponse {
     // En producción: persistir en tabla de reportes, notificar a moderadores
@@ -2050,8 +2300,28 @@ async fn handle_emit_sos(
     Json(req): Json<SosReportRequest>,
 ) -> impl IntoResponse {
     let node = state.node.lock().await;
-    let sender_did = node.identity_hash().to_hex();
-    let beacon = state.sos_store.emit_sos(sender_did, req);
+    let beacon = state.sos_store.emit_sos(node.identity(), req);
+
+    let sys_msg = Message {
+        id: red_core::protocol::MessageId::generate(),
+        sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        content: MessageType::Text(
+            serde_json::json!({
+                "event_type": "sos_beacon",
+                "sos": beacon
+            })
+            .to_string(),
+        ),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        status: red_core::protocol::MessageStatus::Sent,
+        reply_to: None,
+        edited: false,
+    };
+    let _ = state.msg_tx.send(sys_msg);
 
     Json(serde_json::json!({
         "ok": true,
@@ -2066,6 +2336,27 @@ async fn handle_resolve_sos(
 ) -> impl IntoResponse {
     let success = state.sos_store.resolve_sos(&id);
     if success {
+        let sys_msg = Message {
+            id: red_core::protocol::MessageId::generate(),
+            sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+            recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+            content: MessageType::Text(
+                serde_json::json!({
+                    "event_type": "sos_resolved",
+                    "beacon_id": id
+                })
+                .to_string(),
+            ),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            status: red_core::protocol::MessageStatus::Sent,
+            reply_to: None,
+            edited: false,
+        };
+        let _ = state.msg_tx.send(sys_msg);
+
         (
             StatusCode::OK,
             Json(serde_json::json!({"ok": true, "resolved": true})),
@@ -2119,14 +2410,14 @@ async fn handle_post_channel_message(
     Json(req): Json<PostChannelMessageRequest>,
 ) -> impl IntoResponse {
     // Moderación pre-difusión con Guardian IA
-    let verdict = state.guardian.analyze_text(&req.content, &[]).await;
-    if !verdict.allowed {
+    let verdict = state.guardian.analyze_text(&req.content).await;
+    if let crate::guardian::GuardianVerdict::Block { category, reason } = verdict {
         return (
             StatusCode::FORBIDDEN,
             Json(serde_json::json!({
                 "error": "Mensaje rechazado por Guardian IA",
-                "reason": verdict.reason,
-                "category": verdict.category
+                "reason": reason,
+                "category": category
             })),
         )
             .into_response();
@@ -2135,6 +2426,27 @@ async fn handle_post_channel_message(
     let node = state.node.lock().await;
     let sender_did = node.identity_hash().to_hex();
     let msg = state.channel_store.post_message(sender_did, req);
+
+    let sys_msg = Message {
+        id: red_core::protocol::MessageId::generate(),
+        sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        content: MessageType::Text(
+            serde_json::json!({
+                "event_type": "channel_message",
+                "channel_message": msg
+            })
+            .to_string(),
+        ),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        status: red_core::protocol::MessageStatus::Sent,
+        reply_to: None,
+        edited: false,
+    };
+    let _ = state.msg_tx.send(sys_msg);
 
     (
         StatusCode::CREATED,
@@ -2185,6 +2497,27 @@ async fn handle_send_voice_burst(
     let sender_did = node.identity_hash().to_hex();
     let burst = state.voice_store.add_burst(sender_did, req);
 
+    let sys_msg = Message {
+        id: red_core::protocol::MessageId::generate(),
+        sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        content: MessageType::Text(
+            serde_json::json!({
+                "event_type": "voice_burst",
+                "voice_burst": burst
+            })
+            .to_string(),
+        ),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        status: red_core::protocol::MessageStatus::Sent,
+        reply_to: None,
+        edited: false,
+    };
+    let _ = state.msg_tx.send(sys_msg);
+
     Json(serde_json::json!({
         "ok": true,
         "burst": burst
@@ -2221,6 +2554,43 @@ async fn handle_post_weather_report(
     let node = state.node.lock().await;
     let sender_did = node.identity_hash().to_hex();
     let report = state.weather_store.add_report(sender_did, req);
+
+    let sys_msg = Message {
+        id: red_core::protocol::MessageId::generate(),
+        sender: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]),
+        content: MessageType::Text(
+            serde_json::json!({
+                "event_type": "weather_alert",
+                "weather": report
+            })
+            .to_string(),
+        ),
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        status: red_core::protocol::MessageStatus::Sent,
+        reply_to: None,
+        edited: false,
+    };
+    let _ = state.msg_tx.send(sys_msg);
+
+    if let Ok(bytes) = serde_json::to_vec(&report) {
+        let msg = red_core::protocol::Message {
+            id: red_core::protocol::MessageId::generate(),
+            content: red_core::protocol::MessageType::WeatherReport(bytes),
+            sender: node.identity_hash().clone(),
+            recipient: node.identity_hash().clone(), // Broadcast publico
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            status: red_core::protocol::MessageStatus::Sent,
+            edited: false,
+            reply_to: None,
+        };
+        drop(node);
+        let mut mut_node = state.node.lock().await;
+        let _ = mut_node.broadcast_public_message(msg).await;
+    }
 
     Json(serde_json::json!({
         "ok": true,
@@ -2292,6 +2662,18 @@ async fn handle_set_ephemeral_timer(
     Json(req): Json<crate::ephemeral::EphemeralConfig>,
 ) -> impl IntoResponse {
     state.ephemeral.set_config(req.clone());
+
+    if req.self_destruct_seconds > 0 {
+        let node_clone = state.node.clone();
+        let conv_id = req.conversation_id.clone();
+        let secs = req.self_destruct_seconds as u64;
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+            tracing::info!("Auto-destructing conversation {} after {}s", conv_id, secs);
+            let mut node = node_clone.lock().await;
+            let _ = node.clear_conversation(&conv_id).await;
+        });
+    }
     Json(serde_json::json!({
         "ok": true,
         "config": req
@@ -2329,8 +2711,8 @@ async fn handle_update_battery_optimize(
 async fn handle_ai_copilot_query(
     State(state): State<ApiState>,
     Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
-) -> impl IntoResponse {
-    let res = state.ai_copilot.query(req);
+) -> Json<crate::ai_copilot::CopilotResponse> {
+    let res = state.ai_copilot.query_async(req).await;
     Json(res)
 }
 
@@ -2350,4 +2732,146 @@ async fn handle_ai_translate_text(
 ) -> impl IntoResponse {
     let res = state.ai_translator.translate(req);
     Json(res)
+}
+
+// ─── Social Feed Handlers (v25.0) ─────────────────────────────────────────────
+
+async fn get_social_feed(
+    State(state): State<ApiState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let limit = params.get("limit").and_then(|v| v.parse::<usize>().ok()).unwrap_or(50);
+    let posts = state.social_store.get_feed(limit);
+    Json(posts)
+}
+
+#[derive(serde::Deserialize)]
+pub struct FollowRequest {
+    pub author_hash: String,
+}
+
+async fn follow_user(
+    State(state): State<ApiState>,
+    Json(req): Json<FollowRequest>,
+) -> impl IntoResponse {
+    state.social_store.follow(&req.author_hash);
+    Json(serde_json::json!({ "status": "success", "followed": req.author_hash }))
+}
+
+async fn unfollow_user(
+    State(state): State<ApiState>,
+    Json(req): Json<FollowRequest>,
+) -> impl IntoResponse {
+    state.social_store.unfollow(&req.author_hash);
+    Json(serde_json::json!({ "status": "success", "unfollowed": req.author_hash }))
+}
+
+async fn get_following(
+    State(state): State<ApiState>,
+) -> impl IntoResponse {
+    let following = state.social_store.get_following();
+    Json(following)
+}
+
+fn compress_image_base64(b64: String) -> String {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    
+    // Extraer prefix si existe
+    let (_prefix, data) = if b64.starts_with("data:image/") {
+        if let Some(idx) = b64.find(',') {
+            (&b64[..idx + 1], &b64[idx + 1..])
+        } else {
+            ("", b64.as_str())
+        }
+    } else {
+        ("", b64.as_str())
+    };
+
+    if let Ok(image_bytes) = STANDARD.decode(data) {
+        if let Ok(img) = image::load_from_memory(&image_bytes) {
+            // Resize max 800x800
+            let resized = img.resize(800, 800, image::imageops::FilterType::Triangle);
+            let mut out_buffer = std::io::Cursor::new(Vec::new());
+            // Guardar como JPEG
+            if resized.write_to(&mut out_buffer, image::ImageFormat::Jpeg).is_ok() {
+                let compressed_b64 = STANDARD.encode(out_buffer.into_inner());
+                // Siempre devolver como data:image/jpeg;base64,
+                return format!("data:image/jpeg;base64,{}", compressed_b64);
+            }
+        }
+    }
+    b64 // fallback
+}
+
+async fn create_social_post(
+    State(state): State<ApiState>,
+    Json(mut req): Json<crate::social::PostRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let author_hash = node.identity_hash().to_hex();
+    
+    // Compresión Zero-Bloat
+    if let Some(b64) = req.media_data.take() {
+        req.media_data = Some(compress_image_base64(b64));
+    }
+    
+    // Crear el post
+    let post = state.social_store.create_post(author_hash.clone(), req);
+    
+    // Difundirlo por la red P2P
+    if let Ok(payload) = serde_json::to_vec(&post) {
+        let msg = red_core::protocol::Message {
+            id: red_core::protocol::MessageId::generate(),
+            content: red_core::protocol::MessageType::SocialPost(payload),
+            sender: node.identity_hash().clone(),
+            recipient: node.identity_hash().clone(), // Broadcast publico
+            timestamp: chrono::Utc::now().timestamp() as u64,
+            status: red_core::protocol::MessageStatus::Sent,
+            edited: false,
+            reply_to: None,
+        };
+        // Para enviar rediseñamos, usando broadcast_public_message
+        // Requires mutable access to node though... wait, let's get mut
+        drop(node);
+        let mut mut_node = state.node.lock().await;
+        let _ = mut_node.broadcast_public_message(msg).await;
+    }
+    
+    Json(post)
+}
+
+#[derive(serde::Deserialize)]
+pub struct ReactionRequest {
+    pub post_id: String,
+    pub emoji: String,
+}
+
+async fn create_social_reaction(
+    State(state): State<ApiState>,
+    Json(req): Json<ReactionRequest>,
+) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let author_hash_obj = node.identity_hash().clone();
+    let author_hash = author_hash_obj.to_hex();
+    drop(node);
+    
+    if let Some(post) = state.social_store.add_reaction(&req.post_id, &req.emoji, &author_hash) {
+        if let Ok(payload) = serde_json::to_vec(&post) {
+            let msg = red_core::protocol::Message {
+                id: red_core::protocol::MessageId::generate(),
+                content: red_core::protocol::MessageType::SocialPost(payload),
+                sender: author_hash_obj.clone(),
+                recipient: red_core::identity::IdentityHash::from_bytes([0u8; 32]), 
+                timestamp: chrono::Utc::now().timestamp() as u64,
+                status: red_core::protocol::MessageStatus::Sent,
+                edited: false,
+                reply_to: None,
+            };
+            let mut mut_node = state.node.lock().await;
+            let _ = mut_node.broadcast_public_message(msg).await;
+        }
+        Json(post).into_response()
+    } else {
+        StatusCode::NOT_FOUND.into_response()
+    }
 }

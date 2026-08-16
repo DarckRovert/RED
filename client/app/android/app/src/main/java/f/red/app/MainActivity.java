@@ -20,7 +20,18 @@ public class MainActivity extends BridgeActivity {
             android.webkit.WebSettings settings = webView.getSettings();
             settings.setUseWideViewPort(true);
             settings.setLoadWithOverviewMode(true);
+            settings.setMediaPlaybackRequiresUserGesture(false);
             webView.setInitialScale(0);
+
+            // Grant WebRTC and Media Capture permissions inside Capacitor WebView
+            webView.setWebChromeClient(new android.webkit.WebChromeClient() {
+                @Override
+                public void onPermissionRequest(final android.webkit.PermissionRequest request) {
+                    runOnUiThread(() -> {
+                        request.grant(request.getResources());
+                    });
+                }
+            });
         }
 
         copyDebugLogsToPublicStorage();
@@ -30,6 +41,9 @@ public class MainActivity extends BridgeActivity {
     private void requestP2pPermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             String[] permissions = {
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.RECORD_AUDIO,
+                android.Manifest.permission.MODIFY_AUDIO_SETTINGS,
                 android.Manifest.permission.BLUETOOTH_SCAN,
                 android.Manifest.permission.BLUETOOTH_ADVERTISE,
                 android.Manifest.permission.BLUETOOTH_CONNECT,
@@ -42,8 +56,17 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.ACCESS_FINE_LOCATION}, 1001);
+            String[] permissions = {
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.RECORD_AUDIO,
+                android.Manifest.permission.MODIFY_AUDIO_SETTINGS,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            };
+            for (String perm : permissions) {
+                if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(permissions, 1001);
+                    break;
+                }
             }
         }
     }

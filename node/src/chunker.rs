@@ -51,14 +51,14 @@ impl ChunkerEngine {
         let chunk_size = 64 * 1024; // 64 KB per chunk
         let total_chunks = (total_size + chunk_size - 1) / chunk_size;
 
-        let root_hash = format!("{:x}", blake3::hash(&raw_bytes));
+        let root_hash = blake3::hash(&raw_bytes).to_hex().to_string();
         let file_id = format!("file_{}_{}", &root_hash[..10], total_chunks);
 
         let mut chunk_hashes = Vec::with_capacity(total_chunks);
         let mut file_chunks = Vec::with_capacity(total_chunks);
 
         for (idx, slice) in raw_bytes.chunks(chunk_size).enumerate() {
-            let chk_hash = format!("{:x}", blake3::hash(slice));
+            let chk_hash = blake3::hash(slice).to_hex().to_string();
             chunk_hashes.push(chk_hash.clone());
 
             let b64_chunk =

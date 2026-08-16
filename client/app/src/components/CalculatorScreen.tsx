@@ -3,16 +3,15 @@
 import React, { useState } from "react";
 
 interface CalculatorScreenProps {
-    // Called with the PIN typed when user presses "="
-    onUnlock: (pin: string) => Promise<void>;
+    onUnlock?: (pin: string) => Promise<void> | void;
 }
 
 /**
- * Anti-forensic disguise: RED masquerades as a standard calculator.
+ * Anti-forensic disguise: RED masquerades as a standard iOS/Android clean calculator.
  * Typing the secret PIN + "=" unlocks the vault instead of evaluating math.
- * The secret PIN is validated externally (from Keystore) via onUnlock().
  */
 export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
+    const handleUnlock = onUnlock || (async () => {});
     const [display, setDisplay] = useState("0");
     const [equation, setEquation] = useState("");
     const [awaitingUnlock, setAwaitingUnlock] = useState(false);
@@ -27,18 +26,14 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
         }
 
         if (key === "=") {
-            // Always try the unlock first — it validates against Keystore
             const typed = display;
             setAwaitingUnlock(true);
             
-            // Try unlock (AuthWall checks the Keystore — won't open if wrong)
-            await onUnlock(typed);
+            await handleUnlock(typed);
 
-            // If we reach here, unlock failed — do regular math
             setAwaitingUnlock(false);
             try {
-                const expr = (equation + display).replace(/[^0-9+\-*/.]/g, '');
-                // Safe math evaluation without eval
+                const expr = (equation + display).replace(/[^0-9+\-*/.]/g, "");
                 const result = new Function(`"use strict"; return (${expr})`)();
                 setEquation("");
                 setDisplay(String(result));
@@ -63,54 +58,61 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
     };
 
     const keys = [
-        "7", "8", "9", "/",
-        "4", "5", "6", "*",
-        "1", "2", "3", "-",
-        "C", "0", "=", "+"
+        "C", "+/-", "%", "/",
+        "7", "8", "9", "*",
+        "4", "5", "6", "-",
+        "1", "2", "3", "+",
+        "0", ".", "="
     ];
 
     return (
         <div style={{
-            position: 'absolute', inset: 0,
-            background: '#ffffff', color: '#000000',
-            display: 'flex', flexDirection: 'column',
-            fontFamily: 'sans-serif', zIndex: 9999
+            position: "fixed", inset: 0,
+            background: "#000000", color: "#ffffff",
+            display: "flex", flexDirection: "column",
+            fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            zIndex: 99999
         }}>
             {/* Display */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '32px', borderBottom: '1px solid #e0e0e0' }}>
-                <div style={{ textAlign: 'right', fontSize: '1.1rem', color: '#7f8c8d', minHeight: '24px' }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "24px 20px" }}>
+                <div style={{ textAlign: "right", fontSize: "1.2rem", color: "#888888", minHeight: "28px" }}>
                     {equation}
                 </div>
-                <div style={{ textAlign: 'right', fontSize: '4.5rem', fontWeight: 300, color: '#2c3e50', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ textAlign: "right", fontSize: "4.2rem", fontWeight: 300, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {awaitingUnlock ? "..." : display}
                 </div>
             </div>
 
-            {/* Keypad */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px', background: '#e0e0e0' }}>
-                {keys.map(k => (
-                    <button
-                        key={k}
-                        onClick={() => handleKey(k)}
-                        disabled={awaitingUnlock}
-                        style={{
-                            padding: '32px', fontSize: '1.8rem', fontWeight: 400,
-                            border: 'none', background: '#fafafa',
-                            color: ['/', '*', '-', '+', '='].includes(k) ? '#e74c3c' : '#2c3e50',
-                            cursor: 'pointer', transition: 'background 0.1s',
-                            opacity: awaitingUnlock ? 0.5 : 1
-                        }}
-                        onMouseDown={e => (e.currentTarget.style.background = '#f0f0f0')}
-                        onMouseUp={e => (e.currentTarget.style.background = '#fafafa')}
-                        onTouchStart={e => (e.currentTarget.style.background = '#f0f0f0')}
-                        onTouchEnd={e => (e.currentTarget.style.background = '#fafafa')}
-                    >
-                        {k}
-                    </button>
-                ))}
+            {/* Keypad Circular Táctico */}
+            <div style={{ padding: "0 16px 36px 16px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px" }}>
+                {keys.map(k => {
+                    const isOrange = ["/", "*", "-", "+", "="].includes(k);
+                    const isGray = ["C", "+/-", "%"].includes(k);
+                    const isZero = k === "0";
+
+                    return (
+                        <button
+                            key={k}
+                            onClick={() => handleKey(k)}
+                            disabled={awaitingUnlock}
+                            style={{
+                                gridColumn: isZero ? "span 2" : "span 1",
+                                height: "72px",
+                                borderRadius: isZero ? "36px" : "50%",
+                                fontSize: "1.7rem", fontWeight: 400,
+                                border: "none",
+                                background: isOrange ? "#FF9F0A" : isGray ? "#A5A5A5" : "#333333",
+                                color: isGray ? "#000000" : "#ffffff",
+                                cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: isZero ? "flex-start" : "center",
+                                paddingLeft: isZero ? "28px" : "0"
+                            }}
+                        >
+                            {k}
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );
 }
-
-export default CalculatorScreen;

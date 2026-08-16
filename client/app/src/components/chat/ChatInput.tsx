@@ -1,183 +1,133 @@
-import React, { useRef, useState } from "react";
-import { MessageItem } from "../../lib/api";
-import { VoiceWave } from "./VoiceMessage";
+﻿"use client";
 
-interface ChatInputProps {
-    inputText: string;
-    setInputText: (text: string) => void;
-    handleSend: () => void;
-    sendTyping: () => void;
-    attachOpen: boolean;
-    setAttachOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    replyTo: MessageItem | null;
-    setReplyTo: (msg: MessageItem | null) => void;
-    peerName: string;
-    isRecording: boolean;
-    recordSec: number;
-    startRecording: () => void;
-    stopRecording: () => void;
-    handleCamera: () => void;
-    handleGallery: () => void;
-    handleLocation: () => void;
-    setShowPollModal: (show: boolean) => void;
+import React, { useRef, useState, useEffect, useCallback } from "react";
+import { MessageItem } from "../../lib/api";
+
+export interface ChatInputProps {
+    inputText?: string;
+    setInputText?: (text: string) => void;
+    handleSend?: () => void;
+    onSendMessage?: (text: string, replyToId?: string) => Promise<void> | void;
+    onSendVoice?: (blob?: Blob) => void;
+    sendTyping?: () => void;
+    attachOpen?: boolean;
+    setAttachOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+    replyTo?: MessageItem | null;
+    setReplyTo?: (msg: MessageItem | null) => void;
+    peerName?: string;
+    peerHash?: string;
+    burnTimer?: number;
+    isRecording?: boolean;
+    recordSec?: number;
+    startRecording?: () => void;
+    stopRecording?: () => void;
+    handleCamera?: () => void;
+    handleGallery?: () => void;
+    handleLocation?: () => void;
+    setShowPollModal?: (show: boolean) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
-    inputText,
-    setInputText,
-    handleSend,
-    sendTyping,
-    attachOpen,
-    setAttachOpen,
-    replyTo,
-    setReplyTo,
-    peerName,
-    isRecording,
-    recordSec,
-    startRecording,
-    stopRecording,
-    handleCamera,
-    handleGallery,
-    handleLocation,
-    setShowPollModal
+    inputText, setInputText, handleSend, onSendMessage, onSendVoice, sendTyping,
+    attachOpen, setAttachOpen, replyTo, setReplyTo, peerName, peerHash, burnTimer,
+    isRecording = false, recordSec = 0,
+    startRecording = () => {}, stopRecording = () => {},
+    handleCamera = () => {}, handleGallery = () => {},
+    handleLocation = () => {}, setShowPollModal = () => {}
 }) => {
-    const [inputFocused, setInputFocused] = useState(false);
-    const inputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [localText, setLocalText] = useState("");
+    const [localAttachOpen, setLocalAttachOpen] = useState(false);
+    const [multiline, setMultiline] = useState(false);
+
+    const text = inputText !== undefined ? inputText : localText;
+    const setText = setInputText || setLocalText;
+    const isAttachOpen = attachOpen !== undefined ? attachOpen : localAttachOpen;
+    const setIsAttachOpen = setAttachOpen || setLocalAttachOpen;
+
+    useEffect(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        ta.style.height = "auto";
+        const maxH = 20 * 5 + 20;
+        const newH = Math.min(ta.scrollHeight, maxH);
+        ta.style.height = newH + "px";
+        ta.style.overflowY = ta.scrollHeight > maxH ? "auto" : "hidden";
+        setMultiline(newH > 40);
+    }, [text]);
+
+    const onSend = useCallback(() => {
+        if (!text.trim()) return;
+        if (onSendMessage) onSendMessage(text.trim(), replyTo?.id);
+        else if (handleSend) handleSend();
+        setText("");
+        setMultiline(false);
+        const ta = textareaRef.current;
+        if (ta) { ta.style.height = "auto"; ta.style.overflowY = "hidden"; }
+    }, [text, onSendMessage, handleSend, setText, replyTo]);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
+    };
 
     return (
         <React.Fragment>
-            {/* Attachment Menu */}
-            {attachOpen && (
-                <div className="attach-menu" style={{ flexShrink: 0, background: 'rgba(8,8,16,0.98)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            {isAttachOpen && (
+                <div style={{ display: "flex", gap: "10px", padding: "12px 16px", background: "rgba(10,12,22,0.98)", borderTop: "1px solid var(--glass-border)", overflowX: "auto", flexShrink: 0 }}>
                     {[
-                        { icon: '📷', label: 'Cámara', color: '#E8213A', action: handleCamera },
-                        { icon: '🖼️', label: 'Galería', color: '#FF7043', action: handleGallery },
-                        { icon: '📍', label: 'Ubicación', color: '#29B6F6', action: handleLocation },
-                        { icon: '📊', label: 'Encuesta', color: '#9b59b6', action: () => { setAttachOpen(false); setShowPollModal(true); } },
+                        { icon: "📷", label: "Cámara", action: handleCamera },
+                        { icon: "🖼️", label: "Galería", action: handleGallery },
+                        { icon: "📍", label: "Ubicación", action: handleLocation },
+                        { icon: "📊", label: "Encuesta", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
                     ].map(a => (
-                        <button key={a.label} className="attach-btn" onClick={a.action}
-                            style={{ color: a.color, background: `${a.color}0d` }}>
-                            <div className="attach-btn-icon" style={{ background: `${a.color}18` }}>
-                                {a.icon}
-                            </div>
-                            <span className="attach-btn-label">{a.label}</span>
+                        <button key={a.label} onClick={a.action} className="btn-tactical-secondary" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "8px 12px", minWidth: "60px", fontSize: "0.72rem", fontWeight: 700 }}>
+                            <span style={{ fontSize: "1.2rem" }}>{a.icon}</span>{a.label}
                         </button>
                     ))}
                 </div>
             )}
-
-            {/* Reply Preview Bar */}
             {replyTo && (
-                <div className="reply-bar" style={{ flexShrink: 0 }}>
-                    <div className="reply-bar-content">
-                        <div className="reply-bar-name">
-                            {replyTo.is_mine ? 'Tú' : peerName}
-                        </div>
-                        <div className="reply-bar-text">
-                            {replyTo.msg_type === 'image' ? '📷 Foto' :
-                             replyTo.msg_type === 'voice' ? '🎤 Nota de voz' :
-                             replyTo.msg_type === 'location' ? '📍 Ubicación' :
-                             replyTo.content}
-                        </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", background: "rgba(232,33,58,0.1)", borderTop: "1px solid var(--accent-crimson)", fontSize: "0.78rem", color: "#fff" }}>
+                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span style={{ color: "var(--accent-crimson-bright)", fontWeight: 800 }}>Respondiendo: </span>
+                        {replyTo.content?.startsWith("data:") ? "📎 Archivo adjunto" : (replyTo.content || "Archivo adjunto")}
                     </div>
-                    <button onClick={() => setReplyTo(null)} style={{
-                        background: 'transparent', border: 'none', color: 'var(--text-muted)',
-                        cursor: 'pointer', fontSize: '1.2rem', padding: '4px', lineHeight: 1,
-                    }}>×</button>
+                    <button onClick={() => setReplyTo && setReplyTo(null)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem" }}>✕</button>
                 </div>
             )}
-
-            {/* Input Footer */}
-            <footer style={{
-                padding: '8px 12px calc(8px + env(safe-area-inset-bottom, 0px)) 12px',
-                display: 'flex', gap: '8px', alignItems: 'flex-end',
-                background: 'linear-gradient(180deg, rgba(10,10,18,0.97) 0%, rgba(6,6,12,0.99) 100%)',
-                borderTop: '1px solid rgba(255,255,255,0.06)', zIndex: 10, flexShrink: 0,
-            }}>
-                {/* Attach Toggle */}
-                <button onClick={() => setAttachOpen(a => !a)} style={{
-                    width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
-                    background: attachOpen ? 'rgba(232,33,58,0.15)' : 'rgba(255,255,255,0.06)',
-                    border: `1px solid ${attachOpen ? 'rgba(232,33,58,0.35)' : 'rgba(255,255,255,0.09)'}`,
-                    color: attachOpen ? 'var(--primary-bright)' : 'var(--text-muted)',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.2s var(--ease-spring)',
-                    transform: attachOpen ? 'rotate(45deg)' : 'none',
-                }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                </button>
-
-                {/* Main Input Textfield / Voice Indicator */}
-                <div style={{
-                    flex: 1, display: 'flex', alignItems: 'center',
-                    background: 'rgba(20,20,32,0.9)',
-                    border: `1px solid ${inputFocused ? 'rgba(232,33,58,0.4)' : 'rgba(255,255,255,0.09)'}`,
-                    borderRadius: 24, padding: '4px 8px 4px 14px',
-                    minHeight: 46, transition: 'all 0.2s ease',
-                    boxShadow: inputFocused ? '0 0 0 3px rgba(232,33,58,0.10)' : 'none',
-                }}>
-                    {isRecording ? (
-                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--danger)', fontWeight: 600, fontSize: '0.9rem' }}>
-                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--danger)', boxShadow: '0 0 8px var(--danger)', animation: 'pulse-glow 1s infinite' }} />
-                            Grabando {Math.floor(recordSec / 60)}:{(recordSec % 60).toString().padStart(2, '0')}
-                            <VoiceWave playing color="rgba(232,33,58,0.8)" />
-                        </div>
-                    ) : (
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            placeholder="Mensaje…"
-                            value={inputText}
-                            onChange={e => {
-                                setInputText(e.target.value);
-                                sendTyping();
-                            }}
-                            onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                            onFocus={() => { setInputFocused(true); setAttachOpen(false); }}
-                            onBlur={() => setInputFocused(false)}
-                            style={{
-                                flex: 1, background: 'transparent', border: 'none', color: 'var(--text-primary)',
-                                fontSize: '0.97rem', outline: 'none', padding: '6px 0',
-                            }}
-                        />
-                    )}
+            <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", padding: "10px 14px", paddingBottom: "calc(10px + var(--safe-bottom, 0px))" }}>
+                <button onClick={() => setIsAttachOpen(v => !v)} className="btn-icon" style={{ width: 38, height: 38, flexShrink: 0 }} title="Adjuntar">📎</button>
+                <div style={{ flex: 1, position: "relative" }}>
+                    <textarea
+                        ref={textareaRef}
+                        value={text}
+                        rows={1}
+                        onChange={e => { setText(e.target.value); sendTyping && sendTyping(); }}
+                        onKeyDown={handleKeyDown}
+                        placeholder={isRecording ? ("🔴 Grabando... " + recordSec + "s") : "Mensaje cifrado…"}
+                        disabled={isRecording}
+                        style={{
+                            width: "100%", padding: "10px 14px",
+                            background: "rgba(20, 22, 38, 0.9)",
+                            border: "1px solid var(--glass-border)",
+                            borderRadius: multiline ? "16px" : "var(--radius-full)",
+                            color: "#fff", fontSize: "0.90rem", outline: "none",
+                            resize: "none", overflowY: "hidden",
+                            lineHeight: "20px", display: "block",
+                            boxSizing: "border-box",
+                            transition: "border-radius 0.15s ease",
+                            fontFamily: "inherit", minHeight: "40px",
+                        }}
+                    />
                 </div>
-
-                {/* Send / Mic Action Button */}
-                <button
-                    onClick={inputText.trim() ? handleSend : (isRecording ? stopRecording : startRecording)}
-                    style={{
-                        width: 46, height: 46, borderRadius: '50%', flexShrink: 0,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: inputText.trim()
-                            ? 'linear-gradient(135deg, #E8213A, #FF3355)'
-                            : isRecording ? 'var(--danger)' : 'rgba(255,255,255,0.07)',
-                        border: `1px solid ${inputText.trim() || isRecording ? 'transparent' : 'rgba(255,255,255,0.09)'}`,
-                        boxShadow: inputText.trim() ? '0 4px 20px rgba(232,33,58,0.5)' : isRecording ? '0 0 16px rgba(232,33,58,0.4)' : 'none',
-                        color: inputText.trim() || isRecording ? 'white' : 'var(--text-muted)',
-                        cursor: 'pointer', transition: 'all 0.2s var(--ease-spring)',
-                        transform: inputText.trim() ? 'scale(1.06)' : 'scale(1)',
-                    }}
-                >
-                    {inputText.trim() ? (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                        </svg>
-                    ) : isRecording ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                            <rect x="3" y="3" width="18" height="18" rx="3"/>
-                        </svg>
-                    ) : (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                            <line x1="12" y1="19" x2="12" y2="23"/>
-                        </svg>
-                    )}
-                </button>
-            </footer>
+                {text.trim().length > 0 ? (
+                    <button onClick={onSend} className="btn-tactical-primary" style={{ width: 40, height: 40, borderRadius: "50%", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>➤</button>
+                ) : (
+                    <button onMouseDown={startRecording} onMouseUp={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording} className="btn-icon" style={{ width: 38, height: 38, flexShrink: 0, background: isRecording ? "var(--accent-crimson)" : "rgba(255,255,255,0.05)", color: isRecording ? "#fff" : "var(--text-primary)" }} title="Mantén presionado para nota de voz">🎤</button>
+                )}
+            </div>
         </React.Fragment>
     );
 };
+
+export default ChatInput;

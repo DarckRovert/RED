@@ -8,6 +8,10 @@
 export interface SecretShare {
     shareIndex: number; // 1..5
     shareHex: string;
+    x?: number;
+    yHex?: string;
+    threshold?: number;
+    totalShares?: number;
 }
 
 export class ShamirSecretSharingEngine {
@@ -72,15 +76,23 @@ export class ShamirSecretSharingEngine {
      * Reconstructs the 32-byte secret hex string using k (>= 3) shares via Lagrange Interpolation
      */
     public static combineShares(shares: SecretShare[]): string {
-        if (shares.length < 3) {
+        return this.reconstructSecret(shares);
+    }
+
+    public static reconstructSecret(shares: SecretShare[]): string {
+        const normalized = shares.map(s => ({
+            shareIndex: s.shareIndex || s.x || 1,
+            shareHex: s.shareHex || s.yHex || ""
+        }));
+        if (normalized.length < 3) {
             throw new Error("Insufficient shares for SSS 3-of-5 reconstruction");
         }
 
-        const shareLength = this.hexToBytes(shares[0].shareHex).length;
+        const shareLength = this.hexToBytes(normalized[0].shareHex).length;
         const secretBytes = new Uint8Array(shareLength);
 
-        const xValues = shares.map(s => s.shareIndex);
-        const yValues = shares.map(s => this.hexToBytes(s.shareHex));
+        const xValues = normalized.map(s => s.shareIndex);
+        const yValues = normalized.map(s => this.hexToBytes(s.shareHex));
 
         for (let byteIdx = 0; byteIdx < shareLength; byteIdx++) {
             let secretByte = 0;

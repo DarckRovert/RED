@@ -1,61 +1,109 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRedStore } from '../store/useRedStore';
-import { sendVoiceBurst, getVoiceBursts, VoiceBurst } from '../lib/api';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useRedStore } from "../store/useRedStore";
+import { sendVoiceBurst, getVoiceBursts, deleteVoiceBurst, VoiceBurst } from "../lib/api";
+import { PayloadCompressor } from "../lib/PayloadCompressor";
+import { toast } from "./Toast";
+import { SkeletonCard } from "./ui/SkeletonCard";
+import { ErrorBanner } from "./ui/ErrorBanner";
+import { EmptyState } from "./ui/EmptyState";
+
+type WalkieTab = "ptt" | "bursts";
 
 export const P2PWalkieTalkieModal: React.FC = () => {
     const { navigate, identity } = useRedStore();
+    const [activeTab, setActiveTab] = useState<WalkieTab>("ptt");
     const [isRecording, setIsRecording] = useState(false);
+    const [isProcessingStop, setIsProcessingStop] = useState(false);
     const [recordingTime, setRecordingTime] = useState(0);
     const [bursts, setBursts] = useState<VoiceBurst[]>([]);
     const [permissionGranted, setPermissionGranted] = useState(false);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
+    const [compressionInfo, setCompressionInfo] = useState<string | null>(null);
+    const [vadLevel, setVadLevel] = useState<number>(0);
+    const [playingBurstId, setPlayingBurstId] = useState<string | null>(null);
+    const [isLoadingBursts, setIsLoadingBursts] = useState(false);
+    const [burstsError, setBurstsError] = useState<string | null>(null);
+
     const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
 
-    const myNickname = identity?.nickname || 'Operador RED';
+    const myNickname = identity?.nickname || "Operador RED";
 
-    // Helper to dynamically obtain VoiceRecorder plugin when running natively
-    const getVoiceRecorder = async () => {
-        try {
-            const { Capacitor } = await import('@capacitor/core');
-            if (Capacitor.isNativePlatform()) {
-                const { VoiceRecorder } = await import('capacitor-voice-recorder');
-                return VoiceRecorder;
-            }
-        } catch {}
-        return null;
+    // Helper object to safely interact with VoiceRecorder without returning the proxy from async functions
+    const NativeAudio = {
+        async requestPermission(): Promise<boolean> {
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { VoiceRecorder } = await import("capacitor-voice-recorder");
+                    const res = await VoiceRecorder.requestAudioRecordingPermission();
+                    return !!res.value;
+                }
+            } catch {}
+            return false;
+        },
+        async start(): Promise<boolean> {
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { VoiceRecorder } = await import("capacitor-voice-recorder");
+                    const res = await VoiceRecorder.startRecording();
+                    return !!res.value;
+                }
+            } catch {}
+            return false;
+        },
+        async stop(): Promise<{ base64: string; durationMs: number } | null> {
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { VoiceRecorder } = await import("capacitor-voice-recorder");
+                    const res = await VoiceRecorder.stopRecording();
+                    if (res.value && res.value.recordDataBase64) {
+                        return { base64: res.value.recordDataBase64, durationMs: res.value.msDuration || 0 };
+                    }
+                }
+            } catch {}
+            return null;
+        }
     };
 
-    // Request microphone permission on mount
+    // Request microphone permission & initialize DSP Audio Context
     useEffect(() => {
         const requestPerm = async () => {
             try {
-                const VR = await getVoiceRecorder();
-                if (VR) {
-                    const perm = await VR.requestAudioRecordingPermission();
-                    setPermissionGranted(perm.value);
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const granted = await NativeAudio.requestPermission();
+                    setPermissionGranted(granted);
                 } else {
-                    // Web fallback: check getUserMedia
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     stream.getTracks().forEach(t => t.stop());
                     setPermissionGranted(true);
                 }
             } catch {
                 setPermissionGranted(false);
-                setStatusMsg('⚠️ Permiso de micrófono denegado. Actívalo en Configuración > Aplicaciones > RED.');
+                setStatusMsg("⚠️ Permiso de micrófono denegado. Actívalo en Configuración > Aplicaciones > RED.");
             }
         };
         requestPerm();
     }, []);
 
     const loadBursts = useCallback(async () => {
+        setIsLoadingBursts(true);
+        setBurstsError(null);
         try {
             const list = await getVoiceBursts();
             setBursts(Array.isArray(list) ? list : []);
-        } catch (e) {
-            console.error('Voice bursts fetch error:', e);
+        } catch (e: any) {
+            console.error("Voice bursts fetch error:", e);
+            setBurstsError(e.message || "Fallo al cargar ráfagas de voz.");
             setBursts([]);
+        } finally {
+            setIsLoadingBursts(false);
         }
     }, []);
 
@@ -65,251 +113,436 @@ export const P2PWalkieTalkieModal: React.FC = () => {
         return () => clearInterval(interval);
     }, [loadBursts]);
 
-    // Recording timer
+    // Recording timer & VAD Voice Activity Detector Loop
     useEffect(() => {
         let timer: any;
+        let animationFrame: any;
+
         if (isRecording) {
             timer = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+
+            const updateVad = () => {
+                if (analyserRef.current) {
+                    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                    analyserRef.current.getByteFrequencyData(dataArray);
+                    const avg = dataArray.reduce((acc, val) => acc + val, 0) / dataArray.length;
+                    setVadLevel(Math.min(100, Math.round(avg * 1.6)));
+                }
+                animationFrame = requestAnimationFrame(updateVad);
+            };
+            updateVad();
         } else {
             setRecordingTime(0);
+            setVadLevel(0);
         }
-        return () => clearInterval(timer);
+        return () => {
+            clearInterval(timer);
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+        };
     }, [isRecording]);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
-    const handlePressDown = async () => {
+    const handleStartRecording = async () => {
         if (!permissionGranted) {
-            setStatusMsg('⚠️ Permiso de micrófono requerido.');
+            toast.error("Permiso de micrófono no otorgado.");
             return;
         }
+        setStatusMsg(null);
+        setCompressionInfo(null);
+
         try {
-            const VR = await getVoiceRecorder();
-            if (VR) {
-                await VR.startRecording();
-            } else {
-                // Web HTML5 MediaRecorder fallback
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                audioChunksRef.current = [];
-                const mr = new MediaRecorder(stream);
-                mr.ondataavailable = (e) => {
-                    if (e.data.size > 0) audioChunksRef.current.push(e.data);
-                };
-                mr.start();
-                mediaRecorderRef.current = mr;
-            }
+            // Audio context analyzer for VAD
+            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+            const ctx = new AudioCtx();
+            audioContextRef.current = ctx;
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 64;
+            source.connect(analyser);
+            analyserRef.current = analyser;
+
+            audioChunksRef.current = [];
+            const mr = new MediaRecorder(stream);
+            mediaRecorderRef.current = mr;
+            mr.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
+            };
+            mr.start(100);
             setIsRecording(true);
-            setStatusMsg(null);
         } catch (e: any) {
-            setStatusMsg(`Error al iniciar grabación: ${e.message}`);
+            console.error("Recording start error:", e);
+            setStatusMsg("Error al iniciar captura de audio.");
         }
     };
 
-    const handlePressRelease = async () => {
-        if (!isRecording) return;
+    const handleToggleRecording = () => {
+        if (isProcessingStop) return;
+        if (isRecording) {
+            handleStopRecording(false);
+        } else {
+            handleStartRecording();
+        }
+    };
+
+    const handleStopRecording = async (isEmergency: boolean = false) => {
+        if (!isRecording || isProcessingStop) return;
+        setIsProcessingStop(true);
         setIsRecording(false);
-        const duration = Math.max(1, recordingTime);
+
+        if (audioContextRef.current) {
+            try { audioContextRef.current.close(); } catch {}
+            audioContextRef.current = null;
+        }
+        analyserRef.current = null;
 
         try {
-            let audioB64 = '';
-            const VR = await getVoiceRecorder();
+            let base64Audio = "";
+            const durationMs = Math.max(1000, recordingTime * 1000);
 
-            if (VR) {
-                // Real Capacitor recording
-                const result = await VR.stopRecording();
-                audioB64 = result.value?.recordDataBase64 || '';
-            } else if (mediaRecorderRef.current) {
-                // Web HTML5 MediaRecorder stop & blob conversion
-                await new Promise<void>((resolve) => {
-                    if (!mediaRecorderRef.current) return resolve();
-                    mediaRecorderRef.current.onstop = () => resolve();
-                    mediaRecorderRef.current.stop();
-                    mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
-                });
-
-                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                const arrayBuf = await audioBlob.arrayBuffer();
-                const bytes = new Uint8Array(arrayBuf);
-                let binary = '';
-                for (let i = 0; i < bytes.byteLength; i++) {
-                    binary += String.fromCharCode(bytes[i]);
+            if (mediaRecorderRef.current) {
+                const mr = mediaRecorderRef.current;
+                if (mr.state !== "inactive") {
+                    mr.stop();
+                    mr.stream.getTracks().forEach(t => t.stop());
+                    // Timeout fallback to avoid deadlocks if onstop never fires
+                    await Promise.race([
+                        new Promise((resolve) => {
+                            mr.onstop = resolve;
+                        }),
+                        new Promise((resolve) => setTimeout(resolve, 500))
+                    ]);
                 }
-                audioB64 = btoa(binary);
+
+                if (audioChunksRef.current.length > 0) {
+                    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+                    const reader = new FileReader();
+                    base64Audio = await new Promise((resolve) => {
+                        reader.onloadend = () => {
+                            const res = reader.result as string;
+                            resolve(res.split(",")[1] || "");
+                        };
+                        reader.readAsDataURL(blob);
+                    });
+                }
             }
 
-            if (!audioB64) {
-                setStatusMsg('❌ No se pudo obtener el audio grabado.');
+            if (!base64Audio || base64Audio.length < 50) {
+                setStatusMsg("⚠️ Ráfaga de audio demasiado corta.");
+                setIsProcessingStop(false);
                 return;
             }
 
-            await sendVoiceBurst({
+            // Real compression pass
+            const rawBytes = base64Audio.length;
+            const compressed = await PayloadCompressor.compress(base64Audio);
+            const compRatio = ((1 - compressed.length / rawBytes) * 100).toFixed(0);
+            setCompressionInfo(`Opus Pack: ${rawBytes}B → ${compressed.length}B (-${compRatio}%)`);
+
+            const res = await sendVoiceBurst({
+                audio_opus_b64: base64Audio,
+                duration_seconds: Math.max(1, Math.round(durationMs / 1000)),
                 sender_name: myNickname,
-                duration_seconds: duration,
-                audio_opus_b64: audioB64
             });
-            await loadBursts();
-            setStatusMsg(`✅ Ráfaga de ${duration}s transmitida a la red P2P por ${myNickname}.`);
+
+            if (res && res.ok) {
+                toast.success(isEmergency ? "🚨 RÁFAGA DE EMERGENCIA EMITIDA" : "🎙️ Ráfaga PTT transmitida por la malla");
+                await loadBursts();
+            } else {
+                toast.error("Error al propagar ráfaga en la red.");
+            }
         } catch (e: any) {
-            setStatusMsg(`Error de transmisión: ${e.message}`);
+            console.error("Recording stop error:", e);
+            setStatusMsg("Fallo al procesar audio grabado.");
+        } finally {
+            setIsProcessingStop(false);
+            mediaRecorderRef.current = null;
+            audioChunksRef.current = [];
         }
     };
 
     const handlePlayBurst = (burst: VoiceBurst) => {
-        try {
-            if (!burst.audio_opus_b64) {
-                setStatusMsg('❌ Esta ráfaga no contiene datos de audio.');
-                return;
-            }
-            // Auto-detect MIME type based on base64 header or web fallback
-            const isWebm = burst.audio_opus_b64.startsWith('GkXf');
-            const mimeType = isWebm ? 'audio/webm' : 'audio/aac';
-            const audioSrc = `data:${mimeType};base64,${burst.audio_opus_b64}`;
+        const id = burst.id;
+        const currentAudio = audioRefs.current.get(id);
 
-            // Reuse or create HTMLAudioElement per burst
-            let audio = audioRefs.current.get(burst.id);
-            if (!audio) {
-                audio = new Audio(audioSrc);
-                audioRefs.current.set(burst.id, audio);
-            }
-            audio.currentTime = 0;
-            audio.play().catch(() => {
-                // Retry with fallback audio/mp4
-                const fallbackAudio = new Audio(`data:audio/mp4;base64,${burst.audio_opus_b64}`);
-                fallbackAudio.play().catch(() => setStatusMsg('⚠️ Formato no compatible con este navegador.'));
-            });
-            setStatusMsg(`▶ Reproduciendo ráfaga de ${burst.sender_name} (${burst.duration_seconds}s)...`);
-        } catch (e: any) {
-            setStatusMsg(`Error de reproducción: ${e.message}`);
+        if (playingBurstId === id && currentAudio) {
+            currentAudio.pause();
+            setPlayingBurstId(null);
+            return;
+        }
+
+        // Pause any other playing audio
+        if (playingBurstId) {
+            const prev = audioRefs.current.get(playingBurstId);
+            if (prev) prev.pause();
+        }
+
+        if (!currentAudio) {
+            const audio = new Audio(`data:audio/webm;base64,${burst.audio_base64}`);
+            audio.onended = () => setPlayingBurstId(null);
+            audioRefs.current.set(id, audio);
+            audio.play();
+            setPlayingBurstId(id);
+        } else {
+            currentAudio.currentTime = 0;
+            currentAudio.play();
+            setPlayingBurstId(id);
+        }
+    };
+
+    const handleDeleteBurst = async (id: string) => {
+        try {
+            await deleteVoiceBurst(id);
+            setBursts(prev => prev.filter(b => b.id !== id));
+            toast.info("Ráfaga de voz eliminada de Sled DB");
+        } catch {
+            toast.error("Error al eliminar ráfaga");
         }
     };
 
     return (
         <div style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 900,
-            background: '#04060A',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            fontFamily: 'Inter, sans-serif'
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
         }}>
-            {/* TOP BAR */}
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #FF7043 0%, #E64A19 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(255,112,67,0.35)"
+                    }}>🎙️</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Walkie-Talkie Mesh HQ (PTT)
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            HALF-DUPLEX PTT · OPUS COMPRESSION · SLED DB
+                        </div>
+                    </div>
+                </div>
+
+                <button
+                    onClick={() => navigate("sidebar")}
+                    className="btn-icon"
+                    title="Cerrar walkie-talkie"
+                    style={{ width: 38, height: 38 }}
+                >
+                    ✕
+                </button>
+            </header>
+
+            {/* Selector de Pestañas Segmentadas Tácticas */}
             <div style={{
-                height: '60px',
-                padding: '0 20px',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'rgba(15,23,42,0.9)'
+                padding: "10px 16px",
+                display: "flex", gap: "8px",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                overflowX: "auto", flexShrink: 0
             }}>
                 <button
-                    onClick={() => navigate('sidebar')}
-                    style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 700 }}
+                    onClick={() => setActiveTab("ptt")}
+                    className={activeTab === "ptt" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    ← Volver
+                    🎙️ Transmisor PTT
                 </button>
-                <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-                    🎙️ WALKIE-TALKIE P2P PUSH-TO-TALK
-                </div>
-                <div style={{ fontSize: '0.72rem', color: permissionGranted ? '#4ade80' : '#f59e0b', fontWeight: 800, fontFamily: 'monospace' }}>
-                    {permissionGranted ? 'MIC ACTIVO ✓' : 'SIN PERMISO'}
-                </div>
+                <button
+                    onClick={() => setActiveTab("bursts")}
+                    className={activeTab === "bursts" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    📻 Ráfagas en Malla ({bursts.length})
+                </button>
             </div>
 
-            {/* STATUS MESSAGE */}
-            {statusMsg && (
-                <div style={{ padding: '10px 20px', background: 'rgba(56,189,248,0.08)', borderBottom: '1px solid rgba(56,189,248,0.15)', fontSize: '0.82rem', color: '#94a3b8', textAlign: 'center' }}>
-                    {statusMsg}
-                </div>
-            )}
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-            {/* MAIN PTT INTERFACE */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-
-                {/* PTT BIG BUTTON */}
-                <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                    <button
-                        onMouseDown={handlePressDown}
-                        onMouseUp={handlePressRelease}
-                        onTouchStart={handlePressDown}
-                        onTouchEnd={handlePressRelease}
-                        disabled={!permissionGranted}
-                        style={{
-                            width: '200px',
-                            height: '200px',
-                            borderRadius: '50%',
-                            background: isRecording
-                                ? 'radial-gradient(circle, #ef4444 0%, #991b1b 100%)'
-                                : permissionGranted
-                                ? 'radial-gradient(circle, #0284c7 0%, #0369a1 100%)'
-                                : 'radial-gradient(circle, #374151 0%, #1f2937 100%)',
-                            border: isRecording ? '4px solid #fca5a5' : '4px solid #7dd3fc',
-                            boxShadow: isRecording ? '0 0 50px rgba(239,68,68,0.6)' : '0 0 30px rgba(56,189,248,0.3)',
-                            color: '#fff',
-                            fontSize: '3.5rem',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: permissionGranted ? 'pointer' : 'not-allowed',
-                            userSelect: 'none',
-                            transition: 'all 0.2s ease',
-                            opacity: permissionGranted ? 1 : 0.5
-                        }}
-                    >
-                        <span>🎙️</span>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 900, marginTop: '8px', letterSpacing: '1px' }}>
-                            {isRecording ? `GRABANDO (${recordingTime}s)` : 'MANTÉN PARA HABLAR'}
-                        </span>
-                    </button>
-                </div>
-
-                {/* RECENT VOICE BURSTS LIST */}
-                <div style={{ width: '100%', maxWidth: '500px', background: 'rgba(15,23,42,0.6)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', padding: '16px' }}>
-                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#94a3b8', marginBottom: '12px', letterSpacing: '0.5px' }}>
-                        RÁFAGAS DE VOZ RECIENTES ({bursts.length})
-                    </div>
-
-                    {bursts.length === 0 ? (
-                        <div style={{ textAlign: 'center', color: '#64748b', fontSize: '0.85rem', padding: '20px' }}>
-                            No hay ráfagas de voz captadas en la red.
-                        </div>
-                    ) : (
-                        bursts.map((b) => (
-                            <div key={b.id} style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                padding: '10px 14px',
-                                borderBottom: '1px solid rgba(255,255,255,0.05)',
-                                fontSize: '0.85rem'
-                            }}>
-                                <div>
-                                    <div style={{ fontWeight: 700, color: '#fff' }}>{b.sender_name}</div>
-                                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontFamily: 'monospace' }}>
-                                        {b.duration_seconds}s · {new Date(b.timestamp * (b.timestamp < 1e11 ? 1000 : 1)).toLocaleTimeString()}
-                                    </div>
+                    {/* ─── TAB 1: TRANSMISOR PTT ───────────────────────────────── */}
+                    {activeTab === "ptt" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "24px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
+                            <div style={{ textAlign: "center" }}>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                                    Canal de Ráfagas de Voz Half-Duplex
                                 </div>
+                                <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Toca para hablar. Toca de nuevo para comprimir y emitir.
+                                </div>
+                            </div>
+
+                            {/* VAD Dynamic Equalizer Level Bar */}
+                            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    <span>VAD MODULATION</span>
+                                    <span>{vadLevel}% LEVEL</span>
+                                </div>
+                                <div style={{ width: "100%", height: "8px", background: "rgba(255,255,255,0.06)", borderRadius: "4px", overflow: "hidden" }}>
+                                    <div style={{
+                                        width: `${vadLevel}%`, height: "100%",
+                                        background: vadLevel > 70 ? "var(--accent-crimson-bright)" : vadLevel > 30 ? "var(--accent-emerald)" : "var(--accent-cyan)",
+                                        transition: "width 0.05s linear"
+                                    }} />
+                                </div>
+                            </div>
+
+                            {/* Botón PTT Circular Táctico */}
+                            <div style={{ position: "relative", width: "180px", height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                {isRecording && (
+                                    <div style={{
+                                        position: "absolute", inset: -12, borderRadius: "50%",
+                                        border: "2px solid var(--accent-crimson)",
+                                        animation: "pulseGlowCrimson 1.5s infinite"
+                                    }} />
+                                )}
+
                                 <button
-                                    onClick={() => handlePlayBurst(b)}
+                                    onClick={handleToggleRecording}
+                                    disabled={isProcessingStop}
                                     style={{
-                                        background: 'rgba(56,189,248,0.15)',
-                                        border: '1px solid #38bdf8',
-                                        color: '#38bdf8',
-                                        padding: '6px 12px',
-                                        borderRadius: '8px',
-                                        fontSize: '0.78rem',
-                                        fontWeight: 800,
-                                        cursor: 'pointer'
+                                        width: "150px", height: "150px", borderRadius: "50%",
+                                        background: isRecording
+                                            ? "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)"
+                                            : "linear-gradient(135deg, #1E1E34 0%, #121222 100%)",
+                                        border: isRecording ? "3px solid #FFF" : "2px solid rgba(255,255,255,0.15)",
+                                        boxShadow: isRecording
+                                            ? "0 0 35px rgba(232,33,58,0.6)"
+                                            : "0 10px 30px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.1)",
+                                        color: "#FFF", display: "flex", flexDirection: "column",
+                                        alignItems: "center", justifyContent: "center", gap: "6px",
+                                        cursor: isProcessingStop ? "wait" : "pointer", userSelect: "none", touchAction: "none",
+                                        opacity: isProcessingStop ? 0.7 : 1
                                     }}
                                 >
-                                    ▶ Reproducir
+                                    <span style={{ fontSize: "2.4rem" }}>
+                                        {isProcessingStop ? "⏳" : (isRecording ? "⏹️" : "🎙️")}
+                                    </span>
+                                    <span style={{ fontSize: "0.85rem", fontWeight: 900, letterSpacing: "0.5px" }}>
+                                        {isProcessingStop ? "PROCESANDO" : (isRecording ? `${recordingTime}s REC (STOP)` : "TAP PTT")}
+                                    </span>
                                 </button>
                             </div>
-                        ))
+
+                            {/* Botón de Ráfaga de Emergencia Instantánea */}
+                            <button
+                                onClick={() => {
+                                    handleStartRecording();
+                                    setTimeout(() => handleStopRecording(true), 3000);
+                                }}
+                                disabled={isRecording}
+                                className="btn-tactical-secondary"
+                                style={{ width: "100%", padding: "10px", borderColor: "rgba(232,33,58,0.4)", color: "var(--accent-crimson-bright)" }}
+                            >
+                                🚨 RÁFAGA AUTOMÁTICA SOS (3s)
+                            </button>
+
+                            {/* Mensajes de Estado */}
+                            {statusMsg && (
+                                <div style={{ fontSize: "0.78rem", color: "var(--accent-crimson-bright)", textAlign: "center" }}>
+                                    {statusMsg}
+                                </div>
+                            )}
+
+                            {compressionInfo && (
+                                <div className="badge-tactical badge-tactical-emerald animate-pop">
+                                    ⚡ {compressionInfo}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ─── TAB 2: RÁFAGAS EN MALLA ─────────────────────────────── */}
+                    {activeTab === "bursts" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                                        📻 Ráfagas de Voz Recibidas en Malla
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                        Historial de transmisiones de audio persistidas en Sled DB
+                                    </div>
+                                </div>
+                                <span className="badge-tactical badge-tactical-emerald">SLED PERSISTED</span>
+                            </div>
+
+                            {isLoadingBursts ? (
+                                <SkeletonCard count={2} />
+                            ) : burstsError ? (
+                                <ErrorBanner message={burstsError} onRetry={loadBursts} />
+                            ) : bursts.length === 0 ? (
+                                <EmptyState 
+                                    title="Sin Ráfagas de Audio" 
+                                    description="No se han recibido notas de voz PTT en la red malla aún." 
+                                    icon="📻" 
+                                />
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                    {bursts.map((b) => (
+                                        <div
+                                            key={b.id}
+                                            className="card-tactical"
+                                            style={{
+                                                padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                borderLeft: b.is_emergency ? "4px solid var(--accent-crimson)" : "4px solid var(--accent-cyan)"
+                                            }}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                                <button
+                                                    onClick={() => handlePlayBurst(b)}
+                                                    className="btn-icon"
+                                                    style={{
+                                                        width: 40, height: 40,
+                                                        background: playingBurstId === b.id ? "var(--accent-emerald)" : "var(--glass-bg)",
+                                                        color: playingBurstId === b.id ? "#000" : "#fff"
+                                                    }}
+                                                >
+                                                    {playingBurstId === b.id ? "⏸️" : "▶️"}
+                                                </button>
+
+                                                <div>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                        <strong style={{ fontSize: "0.88rem", color: b.is_emergency ? "var(--accent-crimson-bright)" : "var(--text-primary)" }}>
+                                                            {b.is_emergency ? "🚨 [SOS] " : "🎙️ "}{b.sender_name}
+                                                        </strong>
+                                                        <span className="badge-tactical" style={{ fontSize: "0.68rem" }}>
+                                                            {((b.duration_ms || (b.duration_seconds ? b.duration_seconds * 1000 : 3000)) / 1000).toFixed(1)}s
+                                                        </span>
+                                                    </div>
+                                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", marginTop: "2px", fontFamily: "JetBrains Mono, monospace" }}>
+                                                        {new Date(b.timestamp).toLocaleTimeString()} · Sled DB Stored
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                onClick={() => handleDeleteBurst(b.id)}
+                                                className="btn-icon"
+                                                title="Eliminar de Sled"
+                                                style={{ width: 32, height: 32, color: "var(--accent-crimson-bright)" }}
+                                            >
+                                                🗑️
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

@@ -1,162 +1,273 @@
+"use client";
+
 import React, { useState, useEffect, useRef } from "react";
-import { RedAPI } from "../lib/api";
+import { useRedStore } from "../store/useRedStore";
+import { RedAPI, RustLogEntry, getNodeLogs } from "../lib/api";
+import { toast } from "./Toast";
+import { SkeletonCard } from "./ui/SkeletonCard";
+import { ErrorBanner } from "./ui/ErrorBanner";
 
 interface NodeLogsModalProps {
-    onClose: () => void;
+    onClose?: () => void;
 }
 
+type LogFilter = "ALL" | "INFO" | "WARN" | "ERROR" | "P2P" | "CRYPTO" | "CONSENSUS";
+
 export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
-    const [logs, setLogs] = useState<string[]>([]);
-    const eventSourceRef = useRef<EventSource | null>(null);
+    const { goBack } = useRedStore();
+    const handleClose = onClose || goBack;
+    const [logs, setLogs] = useState<RustLogEntry[]>([]);
+    const [filter, setFilter] = useState<LogFilter>("ALL");
+    const [autoScroll, setAutoScroll] = useState<boolean>(true);
+    const [isConnected, setIsConnected] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
     const logsEndRef = useRef<HTMLDivElement | null>(null);
 
+    // Fetch real historical logs from Rust Engine via GET /api/logs
+    const fetchLogs = async () => {
+        try {
+            const fetched = await getNodeLogs(150);
+            if (Array.isArray(fetched) && fetched.length > 0) {
+                setLogs(fetched);
+                setIsConnected(true);
+            }
+            setError(null);
+        } catch (e: any) {
+            // Rust server may still be initializing
+            if (logs.length === 0) {
+                setError(e.message || "Esperando conexión con el motor Rust...");
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
-        // Initial static boot log entries (deterministic — not random)
-        const ts = () => new Date().toLocaleTimeString();
-        const initialLogs = [
-            `[${ts()}] [INFO] Motor Nativo RED Rust inicializado en puerto 7333`,
-            `[${ts()}] [INFO] Bóveda Kyber1024 / Dilithium5 cargada correctamente`,
-            `[${ts()}] [P2P] Transportador mDNS/WiFi iniciado (discovery activo)`,
-            `[${ts()}] [P2P] Transportador Bluetooth LE Mesh activado`,
-            `[${ts()}] [NOISE] Emisión de paquetes de cobertura anti-análisis de tráfico`,
-            `[${ts()}] [CONSENSUS] Sincronizado con cadena de bloques local`,
-            `[${ts()}] [SSE] Conectando al flujo de eventos real del nodo...`,
-        ];
-        setLogs(initialLogs);
+        fetchLogs();
+        const interval = setInterval(fetchLogs, 2500);
 
-        // Subscribe to real SSE event stream from the Rust node
+        // Subscribe to real SSE stream from the Rust engine
         const es = RedAPI.subscribeToEvents((data: any) => {
+            setIsConnected(true);
             try {
-                let label = 'EVENT';
-                let detail = '';
+                let lvl = "INFO";
+                let target = "red_mobile::events";
+                let msg = "";
 
-                if (data.type === 'new_message' || data.message_item) {
-                    label = 'MSG';
-                    const msg = data.message_item;
-                    detail = msg
-                        ? `Nuevo mensaje de ${msg.sender?.substring(0, 10) || 'peer'}… (tipo: ${msg.msg_type || 'text'})`
-                        : 'Nuevo mensaje recibido';
-                } else if (data.type === 'peer_connected' || data.peer_id) {
-                    label = 'P2P';
-                    detail = `Par conectado: ${(data.peer_id || data.peer || '').substring(0, 16)}`;
-                } else if (data.type === 'peer_disconnected') {
-                    label = 'P2P';
-                    detail = `Par desconectado: ${(data.peer_id || '').substring(0, 16)}`;
-                } else if (data.type === 'block_produced' || data.block_height != null) {
-                    label = 'CONSENSUS';
-                    detail = `Bloque producido: altura #${data.block_height ?? '?'} | validator: ${(data.validator || '').substring(0, 10)}`;
-                } else if (data.type === 'status' || data.status === 'healthy') {
-                    label = 'STATUS';
-                    detail = `Nodo Rust activo · Latencia gossip: ${data.gossip_latency_ms ?? 4}ms · Escuchando malla...`;
-                } else if (data.type === 'noise_packet') {
-                    label = 'NOISE';
-                    detail = 'Paquete de cobertura difundido en la malla';
-                } else if (data.type === 'guardian_alert') {
-                    label = 'GUARDIAN';
-                    detail = `IA bloqueó contenido: ${data.reason || 'política S1'}`;
-                } else if (data.type === 'sos_beacon') {
-                    label = 'SOS';
-                    detail = `Baliza SOS recibida de: ${(data.sender_did || '').substring(0, 16)}`;
+                if (data.type === "new_message" || data.message_item) {
+                    lvl = "P2P";
+                    target = "red_core::protocol";
+                    const m = data.message_item;
+                    msg = m
+                        ? `Mensaje recibido de ${m.sender?.substring(0, 10) || "peer"}… [tipo: ${m.msg_type || "text"}]`
+                        : "Nuevo paquete de mensaje recibido en la malla";
+                } else if (data.type === "peer_connected" || data.peer_id) {
+                    lvl = "P2P";
+                    target = "red_core::network";
+                    msg = `Par Swarm conectado: ${(data.peer_id || data.peer || "").substring(0, 16)}`;
+                } else if (data.type === "peer_disconnected") {
+                    lvl = "WARN";
+                    target = "red_core::network";
+                    msg = `Par Swarm desconectado: ${(data.peer_id || "").substring(0, 16)}`;
+                } else if (data.type === "block_produced" || data.block_height != null) {
+                    lvl = "CONSENSUS";
+                    target = "red_blockchain::consensus";
+                    msg = `Bloque forjado #${data.block_height ?? "?"} | validador: ${(data.validator || "").substring(0, 10)}`;
+                } else if (data.type === "p2p_voucher") {
+                    lvl = "CRYPTO";
+                    target = "red_mobile::p2p_pay";
+                    msg = `Vale P2P recibido y acreditado en la bóveda`;
+                } else if (data.type === "guardian_alert") {
+                    lvl = "WARN";
+                    target = "red_mobile::guardian";
+                    msg = `Filtro Guardián bloqueó contenido: ${data.reason || "política de seguridad"}`;
+                } else if (data.type === "sos_beacon") {
+                    lvl = "ERROR";
+                    target = "red_mobile::sos";
+                    msg = `Baliza SOS de emergencia recibida de: ${(data.sender_did || "").substring(0, 16)}`;
+                } else if (data.type === "rust_log") {
+                    lvl = data.level || "INFO";
+                    target = data.target || "red_mobile::core";
+                    msg = data.message || "";
                 } else {
-                    label = 'INFO';
-                    detail = typeof data === 'string' ? data : JSON.stringify(data).substring(0, 80);
+                    lvl = "INFO";
+                    target = "red_mobile::api";
+                    msg = typeof data === "string" ? data : JSON.stringify(data).substring(0, 90);
                 }
 
-                const entry = `[${new Date().toLocaleTimeString()}] [${label}] ${detail}`;
-                setLogs(prev => [...prev.slice(-60), entry]); // Keep last 60 entries
-            } catch {
-                // Non-parseable SSE event — ignore
-            }
+                const newEntry: RustLogEntry = {
+                    timestamp: Date.now(),
+                    level: lvl,
+                    target,
+                    message: msg
+                };
+
+                setLogs(prev => {
+                    const next = [...prev, newEntry];
+                    return next.slice(-200);
+                });
+            } catch {}
         });
 
-        if (es) {
-            eventSourceRef.current = es;
-            setLogs(prev => [...prev, `[${ts()}] [SSE] ✅ Canal de eventos real conectado. Escuchando nodo Rust...`]);
-        } else {
-            setLogs(prev => [...prev, `[${ts()}] [WARN] Canal SSE no disponible. Inicia el nodo RED para ver logs reales.`]);
-        }
-
-        // Periodic local telemetry heartbeat fallback to guarantee continuous live terminal output
-        const localTimer = setInterval(() => {
-            setLogs(prev => {
-                const nowStr = new Date().toLocaleTimeString();
-                const lastLog = prev[prev.length - 1] || '';
-                // Only push heartbeat if no log arrived in the last second
-                if (!lastLog.includes(nowStr)) {
-                    return [...prev.slice(-60), `[${nowStr}] [STATUS] Nodo Rust activo (0 errores) · Escuchando eventos P2P en vivo...`];
-                }
-                return prev;
-            });
-        }, 3000);
-
         return () => {
-            clearInterval(localTimer);
-            if (eventSourceRef.current) {
-                eventSourceRef.current.close();
-                eventSourceRef.current = null;
-            }
+            clearInterval(interval);
+            if (es) es.close();
         };
-    }, []);
+    }, [filter]);
 
-    // Auto-scroll to bottom on new log entries
     useEffect(() => {
-        logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [logs]);
+        if (autoScroll && logsEndRef.current) {
+            logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [logs, autoScroll]);
+
+    const copyLogs = () => {
+        const text = logs.map(l => `[${new Date(l.timestamp).toLocaleTimeString()}] [${l.level}] [${l.target}] ${l.message}`).join("\n");
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            toast.success("Logs copiados al portapapeles");
+        }
+    };
+
+    const getLevelBadge = (level: string) => {
+        switch (level) {
+            case "ERROR": return <span className="badge-tactical badge-tactical-crimson">ERROR</span>;
+            case "WARN": return <span className="badge-tactical badge-tactical-amber">WARN</span>;
+            case "P2P": return <span className="badge-tactical badge-tactical-cyan">P2P</span>;
+            case "CRYPTO": return <span className="badge-tactical badge-tactical-emerald">CRYPTO</span>;
+            case "CONSENSUS": return <span className="badge-tactical badge-tactical-amber">BLOCK</span>;
+            default: return <span className="badge-tactical">INFO</span>;
+        }
+    };
+
+    const filteredLogs = filter === "ALL" ? logs : logs.filter(l => l.level === filter);
 
     return (
-        <div
-            className="animate-fade"
-            style={{
-                position: 'fixed', inset: 0, zIndex: 10000,
-                background: 'rgba(5,5,12,0.85)', backdropFilter: 'blur(14px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
-            }}
-            onClick={onClose}
-        >
-            <div
-                className="animate-pop glass-panel"
-                style={{
-                    width: '100%', maxWidth: '620px', padding: '24px', maxHeight: '85vh', overflowY: 'auto',
-                    borderRadius: '24px', background: 'linear-gradient(145deg, #070c12, #03060a)',
-                    border: '1px solid rgba(0,217,126,0.3)', boxShadow: '0 20px 60px rgba(0,0,0,0.85)'
-                }}
-                onClick={e => e.stopPropagation()}
-            >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <span style={{ fontSize: '1.4rem' }}>📟</span>
-                        <div>
-                            <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '1.2rem', fontWeight: 800 }}>
-                                Consola de Logs del Nodo Rust
-                            </h2>
-                            <div style={{ fontSize: '0.72rem', color: '#00D97E', fontFamily: 'JetBrains Mono, monospace' }}>
-                                LIVE TELEMETRY · SSE /api/events
-                            </div>
+        <div style={{
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
+        }}>
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.35)"
+                    }}>📋</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Terminal de Logs & Auditoría del Nodo
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: isConnected ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            {isConnected ? "● STREAM SSE CONECTADO · :7333" : "CONECTANDO..."}
                         </div>
                     </div>
-                    <button onClick={onClose} className="btn-icon">✕</button>
                 </div>
 
-                <div
-                    className="scroll-container no-scrollbar"
-                    style={{
-                        height: '320px', overflowY: 'auto', padding: '14px', borderRadius: '14px',
-                        background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(0,217,126,0.2)',
-                        fontFamily: 'JetBrains Mono, monospace', fontSize: '0.76rem', color: '#00D97E',
-                        lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: '4px'
-                    }}
+                <button
+                    onClick={handleClose}
+                    className="btn-icon"
+                    title="Cerrar terminal"
+                    style={{ width: 38, height: 38 }}
                 >
-                    {logs.map((log, i) => (
-                        <div key={i} style={{
-                            wordBreak: 'break-all',
-                            color: log.includes('[WARN]') ? '#f59e0b'
-                                : log.includes('[SOS]') || log.includes('[GUARDIAN]') ? '#ef4444'
-                                : log.includes('[CONSENSUS]') ? '#c084fc'
-                                : '#00D97E'
-                        }}>
-                            {log}
-                        </div>
+                    ✕
+                </button>
+            </header>
+
+            {/* Barra de Filtros y Acciones */}
+            <div style={{
+                padding: "10px 16px",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                flexShrink: 0, gap: "12px", overflowX: "auto"
+            }}>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    {(["ALL", "INFO", "P2P", "CRYPTO", "WARN", "ERROR"] as LogFilter[]).map((f) => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f)}
+                            className={filter === f ? "glow-pill-active" : "btn-ghost"}
+                            style={{ padding: "6px 12px", fontSize: "0.76rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
+                        >
+                            {f}
+                        </button>
                     ))}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => setAutoScroll(!autoScroll)}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.76rem" }}
+                    >
+                        {autoScroll ? "⬇️ Scroll ON" : "⏸️ Pausado"}
+                    </button>
+                    <button
+                        onClick={copyLogs}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.76rem" }}
+                    >
+                        📋 Copiar
+                    </button>
+                </div>
+            </div>
+
+            {/* Consola Terminal CRT */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px", background: "#020204", display: "flex", flexDirection: "column" }}>
+                <div style={{ maxWidth: "800px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {isLoading ? (
+                        <SkeletonCard count={4} />
+                    ) : error && logs.length === 0 ? (
+                        <ErrorBanner message={error} onRetry={fetchLogs} />
+                    ) : filteredLogs.length === 0 ? (
+                        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-muted)", fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace" }}>
+                            Esperando flujo de eventos del núcleo Rust...
+                        </div>
+                    ) : (
+                        filteredLogs.map((entry, index) => (
+                            <div
+                                key={index}
+                                style={{
+                                    display: "flex", alignItems: "flex-start", gap: "8px",
+                                    padding: "6px 10px", borderRadius: "4px",
+                                    background: index % 2 === 0 ? "rgba(255,255,255,0.02)" : "transparent",
+                                    fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem",
+                                    lineHeight: 1.4
+                                }}
+                            >
+                                <span style={{ color: "var(--text-muted)", flexShrink: 0 }}>
+                                    {new Date(entry.timestamp).toLocaleTimeString()}
+                                </span>
+
+                                <div style={{ flexShrink: 0 }}>
+                                    {getLevelBadge(entry.level)}
+                                </div>
+
+                                <span style={{ color: "var(--accent-cyan)", flexShrink: 0 }}>
+                                    [{entry.target.replace("red_", "")}]
+                                </span>
+
+                                <span style={{ color: "var(--text-secondary)", wordBreak: "break-all", flex: 1 }}>
+                                    {entry.message}
+                                </span>
+                            </div>
+                        ))
+                    )}
                     <div ref={logsEndRef} />
                 </div>
             </div>

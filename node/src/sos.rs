@@ -57,15 +57,18 @@ impl SosStore {
         }
     }
 
-    pub fn emit_sos(&self, sender_did: String, req: SosReportRequest) -> SosBeacon {
+    pub fn emit_sos(&self, identity: &red_core::identity::Identity, req: SosReportRequest) -> SosBeacon {
+        let sender_did = identity.identity_hash().to_hex();
         let id = format!(
             "sos_{}_{}",
             Utc::now().timestamp_millis(),
             &sender_did[..8.min(sender_did.len())]
         );
-        // Firma criptográfica auténtica HMAC / SHA-256 derivada del identificador de nodo y payload
-        let payload_to_sign = format!("{}:{}:{}:{}:{}", sender_did, req.lat, req.lon, Utc::now().timestamp(), req.note);
-        let crypto_sig = format!("sig_ed25519_{:x}", red_core::crypto::hashing::hash_sha256(payload_to_sign.as_bytes()));
+        let timestamp = Utc::now().timestamp();
+        
+        let payload = format!("{}{}{}{}{}", sender_did, req.lat, req.lon, req.battery_level, req.note);
+        let signature_bytes = identity.sign(payload.as_bytes());
+        let signature = hex::encode(signature_bytes);
 
         let beacon = SosBeacon {
             id: id.clone(),
@@ -74,11 +77,11 @@ impl SosStore {
             lat: req.lat,
             lon: req.lon,
             altitude: req.altitude,
-            timestamp: Utc::now().timestamp(),
+            timestamp,
             battery_level: req.battery_level,
             note: req.note,
             is_active: true,
-            signature: crypto_sig,
+            signature,
         };
 
         let mut map = self.beacons.write().unwrap();

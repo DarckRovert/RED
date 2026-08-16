@@ -3,12 +3,16 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { GuardianEngine } from "../lib/guardianEngine";
+import { LocalAIEngine } from "../lib/localAiEngine";
+import { RED_VERSION, RED_VERSION_NAME, RED_APK_NAME } from "../lib/version";
 
 interface RedShowcaseLandingProps {
-  onEnterApp: () => void;
+  onEnterApp?: () => void;
+  onEnterVault?: () => void;
 }
 
-export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingProps) {
+export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShowcaseLandingProps) {
+  const handleEnter = onEnterVault || onEnterApp || (() => {});
   const [activeTab, setActiveTab] = useState<'hero' | 'hivemind' | 'investors' | 'radar' | 'crypto' | 'terminal' | 'guardian' | 'features' | 'architecture' | 'faq'>('hero');
   const [quickAlias, setQuickAlias] = useState('');
   
@@ -45,8 +49,8 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
   const [guardianVerdict, setGuardianVerdict] = useState<{ status: 'idle' | 'allow' | 'block'; title: string; desc: string } | null>(null);
 
   const apkDownloadUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
-    ? '/RED/assets/red-v3.1.0-latest.apk'
-    : 'assets/red-v3.1.0-latest.apk';
+    ? `/RED/assets/${RED_APK_NAME}`
+    : `assets/${RED_APK_NAME}`;
 
   const heroBannerUrl = typeof window !== 'undefined' && window.location.pathname.includes('/RED')
     ? '/RED/assets/red_investor_hero_banner.png'
@@ -60,7 +64,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         localStorage.setItem("red_displayName", quickAlias.trim());
       }
     }
-    onEnterApp();
+    handleEnter();
   };
 
   const triggerRatchetSim = () => {
@@ -302,7 +306,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
           </div>
           <div>
             <div style={{ fontWeight: 800, fontSize: '19px', color: '#FFF', letterSpacing: '0.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              RED <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontFamily: 'monospace' }}>v3.1.0 Master</span>
+              RED <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '20px', background: 'rgba(232,33,58,0.15)', color: '#FF4D66', border: '1px solid rgba(232,33,58,0.3)', fontFamily: 'monospace' }}>v{RED_VERSION} Master</span>
             </div>
             <div style={{ fontSize: '10px', color: '#94A3B8', letterSpacing: '2px', textTransform: 'uppercase', fontFamily: 'monospace' }}>
               Plataforma Soberana P2P Off-Grid
@@ -336,7 +340,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={onEnterApp}
+            onClick={handleEnter}
             style={{
               padding: '10px 18px',
               fontSize: '13px',
@@ -352,7 +356,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
           </button>
           <a
             href={apkDownloadUrl}
-            download="red-v3.1.0-latest.apk"
+            download={RED_APK_NAME}
             style={{
               padding: '10px 18px',
               fontSize: '13px',
@@ -549,7 +553,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
               </div>
               <a
                 href={apkDownloadUrl}
-                download="red-v3.1.0-latest.apk"
+                download={RED_APK_NAME}
                 style={{
                   padding: '12px 24px',
                   fontSize: '14px',
@@ -562,7 +566,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
                   whiteSpace: 'nowrap',
                 }}
               >
-                📥 Descargar APK (v3.1.0)
+                📥 Descargar APK (v{RED_VERSION})
               </a>
             </div>
           </div>
@@ -630,7 +634,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
             {/* Action buttons */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
               <button
-                onClick={onEnterApp}
+                onClick={handleEnter}
                 style={{
                   padding: '14px 28px',
                   borderRadius: '12px',
@@ -966,15 +970,19 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
               />
 
               <button
-                onClick={() => {
+                onClick={async () => {
                   setIsSimulatingInference(true);
-                  setTimeout(() => {
+                  try {
+                    const prompt = hiveMindQuery.trim() || 'primeros auxilios en emergencias';
+                    const res = await LocalAIEngine.generateCopilotResponse(prompt);
                     const modelName = selectedModel === 'phi3' ? 'Phi-3 Mini (3.8B Q4)' : 'Gemma 2B Instruct (Q4_K_M)';
-                    const prompt = hiveMindQuery.trim() || 'primeros auxilios';
-                    const answer = `🧠 RESPUESTA DE INFERENCIA NATIVA RUST ARM64 (${modelName})\n\nProcesado localmente en chip ARM64 de 64 bits.\n\nConsulta: "${prompt}"\n\n[Inferencia nativa ejecutada en memoria del dispositivo. Modelo GGUF: ${modelName} — Latencia: 2ms]`;
+                    const answer = `🧠 RESPUESTA IA REAL (${modelName} / ${res.modelInfo})\n\n${res.answer}\n\n[Latencia de ejecución: ${res.executionTimeMs}ms | Categoría: ${res.topicCategory}]`;
                     setHiveMindResp(answer);
+                  } catch (e: any) {
+                    setHiveMindResp("Error al procesar inferencia local: " + (e?.message || "Motor no disponible"));
+                  } finally {
                     setIsSimulatingInference(false);
-                  }, 300);
+                  }
                 }}
                 style={{
                   width: '100%',
@@ -1085,7 +1093,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
         {activeTab === 'features' && (
           <div>
             <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Capacidades Tácticas de Producción</h2>
-            <p style={{ fontSize: '15px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>Resumen de las características criptográficas y de hardware del sistema RED v3.1.0.</p>
+            <p style={{ fontSize: '15px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>Resumen de las características criptográficas y de hardware del sistema RED v{RED_VERSION}.</p>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
               <div style={{ padding: '28px', borderRadius: '20px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -1141,7 +1149,7 @@ export default function RedShowcaseLanding({ onEnterApp }: RedShowcaseLandingPro
 
         {activeTab === 'architecture' && (
           <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v3.1.0</h2>
+            <h2 style={{ fontSize: '32px', fontWeight: 800, color: '#FFF', textAlign: 'center', marginBottom: '12px' }}>Arquitectura del Sistema RED v{RED_VERSION}</h2>
             <p style={{ fontSize: '14px', color: '#94A3B8', textAlign: 'center', marginBottom: '40px' }}>
               Flujo de procesamiento en tiempo real entre el Frontend SPA, Middleware Android Java JNI, Motor Rust NDK y Radios de Hardware Off-Grid.
             </p>

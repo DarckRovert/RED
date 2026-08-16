@@ -62,6 +62,11 @@ pub trait Transport: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Enforce blackout by dropping existing connections
+    async fn disconnect_wan_peers(&self) -> NetworkResult<()> {
+        Ok(())
+    }
+
     /// Disconnect from a peer
     async fn disconnect(&self, peer_id: &PeerId) -> NetworkResult<()>;
 
@@ -164,7 +169,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_placeholder_transport() {
-        let mut transport = PlaceholderTransport::new();
+        let transport = PlaceholderTransport::new();
         
         let result = transport.listen("127.0.0.1:7331".parse().unwrap()).await;
         assert!(result.is_ok());

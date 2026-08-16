@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { OffGridNavigationEngine, Landmark, Waypoint, TriangulatedPosition } from "../lib/OffGridNavigationEngine";
+import { toast } from "./Toast";
 
 export function OffGridCompassModal() {
     const { navigate } = useRedStore();
@@ -357,12 +358,12 @@ export function OffGridCompassModal() {
 
     const handleAddWaypoint = () => {
         if (!newWpName.trim()) {
-            alert("⚠️ Por favor ingresa un nombre para el waypoint.");
+            toast.warning("Ingresa un nombre para el waypoint");
             return;
         }
 
         if (!userCoords) {
-            alert("⚠️ Esperando señal GPS o ubicación fija para determinar la posición base del waypoint.");
+            toast.warning("Esperando señal GPS para determinar la posición base del waypoint");
             return;
         }
 
@@ -370,12 +371,12 @@ export function OffGridCompassModal() {
         const brg = parseFloat(newWpBearing);
 
         if (isNaN(dist) || dist <= 0) {
-            alert("⚠️ Por favor ingresa una distancia válida mayor a 0 metros.");
+            toast.warning("Ingresa una distancia válida mayor a 0 metros");
             return;
         }
 
         if (isNaN(brg) || brg < 0 || brg >= 360) {
-            alert("⚠️ Por favor ingresa un rumbo válido entre 0° y 360°.");
+            toast.warning("Ingresa un rumbo válido entre 0° y 360°");
             return;
         }
         
@@ -395,17 +396,19 @@ export function OffGridCompassModal() {
         setWaypoints(updated);
         try { localStorage.setItem("red_offgrid_waypoints", JSON.stringify(updated)); } catch {}
         setNewWpName("");
+        toast.success(`Waypoint "${wp.name}" añadido`);
     };
 
     const handleDeleteWaypoint = (id: string) => {
         const updated = waypoints.filter(w => w.id !== id);
         setWaypoints(updated);
         try { localStorage.setItem("red_offgrid_waypoints", JSON.stringify(updated)); } catch {}
+        toast.info("Waypoint eliminado");
     };
 
     const handleCalculateTriangulation = () => {
         if (landmark1.lat === 0 || landmark1.lon === 0 || landmark2.lat === 0 || landmark2.lon === 0) {
-            alert("⚠️ Por favor ingresa o selecciona las coordenadas reales del Punto 1 y Punto 2.");
+            toast.warning("Ingresa las coordenadas reales del Punto 1 y Punto 2");
             return;
         }
 
@@ -413,15 +416,16 @@ export function OffGridCompassModal() {
         const b2 = parseFloat(bearing2);
 
         if (isNaN(b1) || b1 < 0 || b1 >= 360 || isNaN(b2) || b2 < 0 || b2 >= 360) {
-            alert("⚠️ Por favor ingresa rumbos numéricos válidos entre 0° y 360° para ambos puntos.");
+            toast.warning("Ingresa rumbos numéricos válidos entre 0° y 360° para ambos puntos");
             return;
         }
 
         const res = OffGridNavigationEngine.calculateResection(landmark1, b1, landmark2, b2);
         if (res) {
             setTriangulatedPos(res);
+            toast.success("Triangulación calculada con éxito");
         } else {
-            alert("No se pudo calcular intersección: los rumbos no intersectan hacia adelante o son paralelos.");
+            toast.error("No se pudo calcular intersección: los rumbos no intersectan hacia adelante o son paralelos");
         }
     };
 
@@ -432,13 +436,14 @@ export function OffGridCompassModal() {
             setUtmString(OffGridNavigationEngine.gpsToUtm(coords.lat, coords.lon));
             setSolarAzimuth(OffGridNavigationEngine.calculateSolarAzimuth(coords.lat, coords.lon));
             try { localStorage.setItem("red_last_known_gps", JSON.stringify(coords)); } catch {}
-            alert(`✅ Ubicación fijada a la posición triangulada: Lat ${coords.lat} | Lon ${coords.lon}`);
+            toast.success(`Ubicación fijada a posición triangulada (${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)})`);
         }
     };
 
     return (
         <div style={{
-            position: 'fixed', inset: 0, zIndex: 999,
+            width: '100%', height: '100%',
+            position: 'relative',
             background: 'rgba(4,6,10,0.98)', color: '#fff',
             display: 'flex', flexDirection: 'column',
             padding: '14px 14px 90px 14px',

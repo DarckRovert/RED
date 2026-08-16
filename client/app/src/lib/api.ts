@@ -10,6 +10,9 @@ export interface IdentityResponse {
     short_id: string;
     nickname?: string;
     public_key?: string;
+    phone_number?: string;
+    display_name?: string;
+    [key: string]: any;
 }
 
 export interface StatusResponse {
@@ -26,7 +29,7 @@ export interface StatusResponse {
 export interface ConversationItem {
     id: string;
     peer: string;
-    last_message?: string;
+    last_message?: string | { timestamp?: number; msg_type?: string; content?: string; is_mine?: boolean; [key: string]: any; };
     last_timestamp?: number;
     unread_count?: number;
     is_group?: boolean;
@@ -48,6 +51,9 @@ export interface MessageItem {
     conversation_id?: string;
     /** Delivery status */
     status?: 'Pending' | 'Sent' | 'Delivered' | 'Failed';
+    read?: boolean;
+    delivered?: boolean;
+    [key: string]: any;
     /** Reply/quote metadata — set when this message is a reply to another */
     reply_to?: {
         id: string;
@@ -107,6 +113,30 @@ export interface ConsensusStatus {
 }
 
 class RedAPIClient {
+
+    async getP2PWallet(): Promise<any> { return fetchWithFallback('/api/p2p/wallet'); }
+    async createP2PVoucher(amount: any): Promise<any> { return fetchWithFallback('/api/p2p/voucher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount }) }); }
+    async redeemP2PVoucher(id: any): Promise<any> { return fetchWithFallback('/api/p2p/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); }
+    async getRfMetrics(): Promise<any> { return fetchWithFallback('/api/network/rf_metrics'); }
+    async triggerChannelHop(channel?: number): Promise<any> { return fetchWithFallback('/api/network/rf/channel_hop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel }) }); }
+    async setRfFecMode(mode: string): Promise<any> { return fetchWithFallback('/api/network/rf/fec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) }); }
+    async syncContactProfile(id: string): Promise<any> { return fetchWithFallback('/api/social/sync_profile', { method: 'POST', body: JSON.stringify({ id }) }); }
+    async getStegoCapsules(): Promise<any> { return fetchWithFallback('/api/stego/capsules'); }
+    async saveStegoCapsule(c: any): Promise<any> { return fetchWithFallback('/api/stego/capsules', { method: 'POST', body: JSON.stringify(c) }); }
+    async deleteStegoCapsule(id: string): Promise<any> { return fetchWithFallback('/api/stego/capsules/' + id, { method: 'DELETE' }); }
+    async getEmergencyBeacons(): Promise<any> { return fetchWithFallback('/api/emergency/beacons'); }
+    async cancelEmergencyBeacon(id: string): Promise<any> { return fetchWithFallback('/api/emergency/beacons/' + id + '/cancel', { method: 'POST' }); }
+    async broadcastEmergencyBeacon(b: any): Promise<any> { return fetchWithFallback('/api/emergency/beacons', { method: 'POST', body: JSON.stringify(b) }); }
+    async getSystemHealthAudit(): Promise<any> { return fetchWithFallback('/api/system/health'); }
+    async getTriageReports(): Promise<any> { return fetchWithFallback('/api/triage/reports'); }
+    async saveTriageReport(r: any): Promise<any> { return fetchWithFallback('/api/triage/reports', { method: 'POST', body: JSON.stringify(r) }); }
+    async deleteTriageReport(id: string): Promise<any> { return fetchWithFallback('/api/triage/reports/' + id, { method: 'DELETE' }); }
+
+    async getBlockchain(): Promise<any> { return fetchWithFallback('/api/blockchain/blocks'); }
+    async getConsensusStatus(): Promise<any> { return fetchWithFallback('/api/blockchain/consensus'); }
+    async pingDmsActivity(): Promise<any> { return fetchWithFallback('/api/dms/ping', { method: 'POST' }); }
+    async panicWipe(): Promise<any> { return fetchWithFallback('/api/dms/panic', { method: 'POST' }); }
+    async configureHardwareLoRa(config: any): Promise<any> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }); }
     private readonly baseURL = 'http://127.0.0.1:7333/api';
 
     private getFallbackURL() {
@@ -590,6 +620,9 @@ export interface GuardianStatus {
     model: string;
     stats: GuardianStats;
     authorities: string[];
+    enabled?: boolean;
+    total_evaluations?: number;
+    [key: string]: any;
 }
 
 // ─── v19.0: Funciones API AMBER ───────────────────────────────────────────────
@@ -1051,6 +1084,10 @@ export interface VoiceBurst {
     audio_opus_b64: string;
     timestamp: number;
     sample_rate: number;
+    is_emergency?: boolean;
+    audio_base64?: string;
+    duration_ms?: number;
+    [key: string]: any;
 }
 
 export interface CleanImageResponse {
@@ -1070,6 +1107,14 @@ export interface WeatherReport {
     condition_summary: string;
     is_disaster_alert: boolean;
     timestamp: number;
+    is_alert?: boolean;
+    cap_severity?: string;
+    cap_headline?: string;
+    summary?: string;
+    cap_instruction?: string;
+    wind_speed_kmh?: number;
+    cap_area_desc?: string;
+    [key: string]: any;
 }
 
 /** Enviar ráfaga de voz Walkie-Talkie Push-To-Talk */
@@ -1202,6 +1247,12 @@ export interface ProximityNode {
     distance_meters: number | null; // null = sin ranging (UWB/BLE) real
     transport: string;
     last_seen: number;
+    node_hash?: string;
+    peer_id?: string;
+    nickname?: string;
+    rssi?: number;
+    bearing_deg?: number;
+    [key: string]: any;
 }
 
 export interface EphemeralConfig {
@@ -1216,6 +1267,9 @@ export interface EcoMeshStatus {
     lora_tx_power_dbm: number;
     estimated_mesh_hours: number;
     eco_mode_enabled: boolean;
+    duty_cycle_mode?: string;
+    recommendation?: string;
+    [key: string]: any;
 }
 
 /** Obtener nodos por proximidad zero-touch (<5m) desde peers P2P conectados reales */
@@ -1371,11 +1425,14 @@ export interface SafeZone {
 }
 
 export interface ProximityFilterConfig {
-    cooldown_seconds: number;
-    rssi_threshold_dbm: number;
-    stealth_mode: 'silent' | 'vibrate' | 'discreet_sound';
-    digest_enabled: boolean;
-    safe_zones: SafeZone[];
+    cooldown_seconds?: number;
+    rssi_threshold_dbm?: number;
+    rssi_threshold?: number;
+    auto_wave_back?: boolean;
+    ignore_unknown?: boolean;
+    stealth_mode?: 'silent' | 'vibrate' | 'discreet_sound' | 'all' | 'contacts_only' | string;
+    digest_enabled?: boolean;
+    safe_zones?: SafeZone[];
 }
 
 export interface ProximityDigest {
@@ -1482,4 +1539,49 @@ export async function translateTextAI(text: string, targetLanguage: string): Pro
 }
 
 
+
+
+
+// --- Blackout Extensions ---
+export interface BlackoutStatusResponse { [key: string]: any; }
+export async function getBlackoutStatus(): Promise<any> { return fetchWithFallback('/api/blackout/status'); }
+export async function setBlackoutMode(mode: any): Promise<any> { return fetchWithFallback('/api/blackout/mode', { method: 'POST', body: JSON.stringify({ mode }) }); }
+
+// --- DMS Extensions ---
+export interface DmsStatusResponse { [key: string]: any; }
+export interface SaveDmsConfigRequest { [key: string]: any; }
+
+// --- NodeLogs Extensions ---
+export interface RustLogEntry { [key: string]: any; }
+export async function getNodeLogs(count?: number): Promise<any> { return fetchWithFallback('/api/logs?count=' + (count || 100)); }
+
+// --- Voice Extensions ---
+export async function deleteVoiceBurst(id: string): Promise<any> { return fetchWithFallback('/api/voice/bursts/' + id, { method: 'DELETE' }); }
+
+// --- Missing from old patch ---
+export interface P2PVoucher { id: string; amount: number; created_at: number; expires_at: number; timestamp?: any; voucher_id?: string; signature?: string; ok?: boolean; voucher?: any; new_balance?: number; error?: string; is_outgoing?: boolean; [key: string]: any; }
+export interface RfMetricsResponse { active_channel: number; frequency_mhz: number; noise_floor_dbm: number; fec_mode: string; packets_transmitted?: number; packets_received?: number; crc_errors?: number; current_channel_mhz?: number; total_hops_count?: number; [key: string]: any; }
+export interface SocialPost { id: string; author_hash: string; author_name: string; content: string; timestamp: number; reactions?: Record<string, string[]>; [key: string]: any; }
+export interface StegoCapsuleRecord { id: string; title: string; image_data_url?: string; has_password?: boolean; timestamp?: any; media_data?: string; [key: string]: any; }
+export interface EmergencyBeaconRecord { beacon_id: string; message: string; distress_type: string; active: boolean; timestamp?: any; latitude?: number; longitude?: number; is_mine?: boolean; custom_note?: string; sender_hash?: string; battery_pct?: number; [key: string]: any; }
+export interface SystemHealthResponse { os_target: string; uptime_seconds: number; benchmarks?: any[]; storage_benchmark?: any; crypto_benchmark?: any; async_runtime?: any; runtime_diagnostics?: any; network_telemetry?: any; [key: string]: any; }
+export interface TriageReportRecord { id?: string; victim_name?: string; category: string; triage_category?: string; report_id?: string; victim_label?: string; bpm?: number; spo2?: number; notes?: string; latitude?: number; longitude?: number; [key: string]: any; }
+export interface NativeBarometerResult { value: number | null; unit: string; available?: boolean; pressure_hpa?: number; [key: string]: any; }
+
+export async function getP2PWallet(): Promise<any> { return fetchWithFallback('/api/p2p/wallet'); }
+export async function createP2PVoucher(amount: any): Promise<any> { return fetchWithFallback('/api/p2p/voucher', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount }) }); }
+export async function redeemP2PVoucher(id: any): Promise<any> { return fetchWithFallback('/api/p2p/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }); }
+export async function getRfMetrics(): Promise<RfMetricsResponse> { return fetchWithFallback('/api/network/rf_metrics'); }
+export async function triggerChannelHop(channel?: number): Promise<any> { return fetchWithFallback('/api/network/rf/channel_hop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ channel }) }); }
+export async function setRfFecMode(mode: string): Promise<any> { return fetchWithFallback('/api/network/rf/fec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) }); }
+export async function broadcastShakePair(name?: string): Promise<any> { return fetchWithFallback('/api/proximity/shake_pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender_name: name }) }); }
+export async function createSocialPost(req: any): Promise<SocialPost> { return fetchWithFallback('/api/social/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) }); }
+export async function reactToPost(req: any): Promise<any> { return fetchWithFallback('/api/social/react', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) }); }
+export async function followUser(hash: string): Promise<any> { return fetchWithFallback('/api/social/follow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_hash: hash }) }); }
+export async function deleteSocialPost(id: string): Promise<any> { return fetchWithFallback('/api/social/posts/' + id, { method: 'DELETE' }); }
+
+export async function getNativeBarometerReading(): Promise<NativeBarometerResult> { return { value: null, unit: 'hPa', available: false }; }
+export async function getNativeThermometerReading(): Promise<any> { return { value: null, unit: 'C', available: false }; }
+export async function getNativeHygrometerReading(): Promise<any> { return { value: null, unit: '%', available: false }; }
+export async function getNativeCompassReading(): Promise<any> { return { azimuth: null, available: false }; }
 

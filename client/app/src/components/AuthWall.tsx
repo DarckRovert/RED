@@ -3,33 +3,32 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { CalculatorScreen } from "./CalculatorScreen";
-
+import { toast } from "./Toast";
 
 /**
- * Authentication Wall — RED Unified Lockscreen
+ * Authentication Wall — RED Unified Tactical Lockscreen
  * 
  * Modes:
- *  - "checking"   : Reading Keystore, showing nothing
- *  - "onboarding" : First time — user creates their master PIN
- *  - "unlock"     : Returning user — enter PIN or use biometrics
- *  - "profile"    : Post-first-login — user sets display name (once only)
+ *  - "checking"   : Reading Keystore, showing tactical loading state
+ *  - "onboarding" : First time — user creates their master PIN (at least 6 digits)
+ *  - "unlock"     : Returning user — enter PIN or use hardware biometrics
  */
 
 type AuthMode = "checking" | "onboarding" | "unlock";
 
 async function getSecurePin(key: string): Promise<string | null> {
     try {
-        if (typeof window !== 'undefined') {
-            const { Capacitor } = await import('@capacitor/core');
+        if (typeof window !== "undefined") {
+            const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
-                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
                 const res = await SecureStoragePlugin.get({ key }).catch(() => null);
                 if (res && res.value) return res.value;
             }
         }
     } catch {}
     try {
-        return typeof window !== 'undefined' ? localStorage.getItem(key) || null : null;
+        return typeof window !== "undefined" ? localStorage.getItem(key) || null : null;
     } catch {
         return null;
     }
@@ -37,16 +36,16 @@ async function getSecurePin(key: string): Promise<string | null> {
 
 async function setSecurePin(key: string, value: string): Promise<void> {
     try {
-        if (typeof window !== 'undefined') {
-            const { Capacitor } = await import('@capacitor/core');
+        if (typeof window !== "undefined") {
+            const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
-                const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
                 await SecureStoragePlugin.set({ key, value }).catch(() => null);
             }
         }
     } catch {}
     try {
-        if (typeof window !== 'undefined') localStorage.setItem(key, value);
+        if (typeof window !== "undefined") localStorage.setItem(key, value);
     } catch {}
 }
 
@@ -68,7 +67,6 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         const safetyTimer = setTimeout(() => {
             if (isMounted) {
-                console.warn("[AuthWall] Keystore/Biometrics init timed out, forcing PIN screen load");
                 setMode(prev => prev === "checking" ? "onboarding" : prev);
                 setIsLoaded(true);
             }
@@ -76,7 +74,9 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         const init = async () => {
             try {
-                setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
+                if (typeof window !== "undefined") {
+                    setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
+                }
 
                 const pinPromise = getSecurePin("master_pin");
                 const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 300));
@@ -91,9 +91,9 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                 }
 
                 try {
-                    const { Capacitor } = await import('@capacitor/core');
+                    const { Capacitor } = await import("@capacitor/core");
                     if (Capacitor.isNativePlatform()) {
-                        const { BiometricAuth } = await import('@aparajita/capacitor-biometric-auth');
+                        const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
                         const bioPromise = BiometricAuth.checkBiometry();
                         const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 300));
                         const info = await Promise.race([bioPromise, bioTimeout]);
@@ -107,7 +107,6 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                                 if (!isMounted) return;
                                 setMode("unlock");
                                 setIsLoaded(true);
-                                const panicPin = await getSecurePin("panic_pin");
                                 const decoyPin = await getSecurePin("decoy_pin");
                                 if (masterPin === decoyPin) {
                                     login(decoyPin);
@@ -116,7 +115,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                                 }
                                 return;
                             } catch {
-                                console.log("Biometric bypassed or failed, falling back to PIN");
+                                // Fallback to PIN
                             }
                         }
                     } else {
@@ -138,32 +137,31 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             isMounted = false;
             clearTimeout(safetyTimer);
         };
-    }, []);
+    }, [login]);
 
     const doLogin = useCallback(async (pwd: string) => {
         setLoading(true);
         setError("");
 
-        // Read security PINs from Keystore
         const panicPin = await getSecurePin("panic_pin");
         const decoyPin = await getSecurePin("decoy_pin");
 
         // 1. PANIC WIPE
         if (panicPin && pwd === panicPin) {
             try {
-                const { Capacitor, registerPlugin } = await import('@capacitor/core');
+                const { Capacitor, registerPlugin } = await import("@capacitor/core");
                 if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
                     await SecureStoragePlugin.clear().catch(() => {});
-                    const RedNode = registerPlugin<any>('RedNode');
+                    const RedNode = registerPlugin<any>("RedNode");
                     await RedNode.destroy().catch(() => {});
                 }
             } catch (e) { console.error("Wipe failed", e); }
-            if (typeof window !== 'undefined') {
+            if (typeof window !== "undefined") {
                 localStorage.clear();
                 sessionStorage.clear();
             }
-            alert("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
+            toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
             window.location.reload();
             return;
         }
@@ -175,262 +173,278 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // 3. REAL LOGIN — password is passed directly to Rust as the encryption key
+        // 3. REAL LOGIN
         const success = await login(pwd);
         if (!success) {
-            setError("Error al iniciar la bóveda. Intenta de nuevo.");
+            setError("PIN incorrecto. Intenta de nuevo.");
             setLoading(false);
+            setPin("");
         }
     }, [login]);
 
     const handleBiometricUnlock = async () => {
         try {
-            const { Capacitor } = await import('@capacitor/core');
+            const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
-                const { BiometricAuth } = await import('@aparajita/capacitor-biometric-auth');
-                await BiometricAuth.authenticate({ reason: "Desbloquear bóveda RED" });
+                const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
+                await BiometricAuth.authenticate({ reason: "Desbloquear Bóveda RED" });
                 const masterPin = await getSecurePin("master_pin");
                 if (masterPin) {
                     await doLogin(masterPin);
                 }
             }
-        } catch (e) {
-            setError("Biometría fallida. Usa tu PIN.");
+        } catch {
+            setError("Biometría no reconocida. Usa tu PIN maestro.");
         }
     };
 
-    // ── ONBOARDING FLOW ───────────────────────────────────────────────────────
-    const handleOnboardingSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // Digit press handler for the tactical keypad
+    const handleDigitPress = (digit: string) => {
+        if (loading) return;
+        setError("");
 
+        if (mode === "onboarding") {
+            if (step === "enter") {
+                if (pin.length < 8) setPin(prev => prev + digit);
+            } else {
+                if (confirmPin.length < 8) setConfirmPin(prev => prev + digit);
+            }
+        } else {
+            if (pin.length < 8) {
+                const nextPin = pin + digit;
+                setPin(nextPin);
+                if (nextPin.length >= 6) {
+                    // Auto-attempt login on reaching 6 digits
+                    doLogin(nextPin);
+                }
+            }
+        }
+    };
+
+    const handleBackspace = () => {
+        if (loading) return;
+        setError("");
+        if (mode === "onboarding") {
+            if (step === "enter") setPin(prev => prev.slice(0, -1));
+            else setConfirmPin(prev => prev.slice(0, -1));
+        } else {
+            setPin(prev => prev.slice(0, -1));
+        }
+    };
+
+    const handleOnboardingNext = async () => {
         if (step === "enter") {
             if (pin.length < 6) {
-                setError("El PIN debe tener al menos 6 dígitos.");
+                setError("El PIN maestro debe tener al menos 6 dígitos.");
                 return;
             }
             setError("");
             setStep("confirm");
-            return;
+        } else {
+            if (pin !== confirmPin) {
+                setError("Los PINs no coinciden. Inténtalo de nuevo.");
+                setConfirmPin("");
+                setStep("enter");
+                setPin("");
+                return;
+            }
+            setLoading(true);
+            await setSecurePin("master_pin", pin);
+            await doLogin(pin);
         }
-
-        // step === "confirm"
-        if (pin !== confirmPin) {
-            setError("Los PINs no coinciden. Inténtalo de nuevo.");
-            setConfirmPin("");
-            setStep("enter");
-            setPin("");
-            return;
-        }
-
-        // Save master PIN to Android Keystore
-        setLoading(true);
-        await setSecurePin("master_pin", pin);
-        await doLogin(pin);
     };
 
-    // ── UNLOCK FLOW ───────────────────────────────────────────────────────────
-    const handleUnlockSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    if (isAuthenticated) {
+        return <>{children}</>;
+    }
 
-        const masterPin = await getSecurePin("master_pin");
-        const panicPin = await getSecurePin("panic_pin");
-        const decoyPin = await getSecurePin("decoy_pin");
+    if (disguiseEnabled) {
+        return <CalculatorScreen onUnlock={async (typedPin: string) => {
+            const masterPin = await getSecurePin("master_pin");
+            const panicPin = await getSecurePin("panic_pin");
+            const decoyPin = await getSecurePin("decoy_pin");
 
-        // No PIN in Keystore — reset to onboarding (e.g. user cleared app data)
-        if (!masterPin) {
-            setMode("onboarding");
-            setStep("enter");
-            setPin("");
-            return;
-        }
+            if (panicPin && typedPin === panicPin) {
+                await doLogin(typedPin);
+                return;
+            }
+            if (decoyPin && typedPin === decoyPin) {
+                await doLogin(typedPin);
+                return;
+            }
+            if (masterPin && (typedPin === masterPin || typedPin.endsWith(masterPin))) {
+                await doLogin(masterPin);
+            }
+        }} />;
+    }
 
-        // Validate typed PIN against valid PINs (Master, Decoy, or Panic)
-        const isMaster = pin === masterPin;
-        const isDecoy = decoyPin ? pin === decoyPin : false;
-        const isPanic = panicPin ? pin === panicPin : false;
-
-        if (!isMaster && !isDecoy && !isPanic) {
-            setError("PIN incorrecto. Inténtalo de nuevo.");
-            setPin("");
-            return;
-        }
-
-        // Pass the verified PIN to doLogin
-        await doLogin(pin);
-    };
-
-    // ── RENDER ────────────────────────────────────────────────────────────────
     if (!isLoaded || mode === "checking") {
         return (
             <div style={{
-                background: 'var(--bg-deep)', height: '100dvh', width: '100%',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                width: "100%", height: "100dvh", background: "var(--bg-void)", color: "#fff", gap: "16px"
             }}>
                 <div style={{
-                    width: 44, height: 44, borderRadius: '14px', background: 'var(--primary)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.3rem', fontWeight: 900, color: 'white',
-                    animation: 'pulse-glow 1.5s ease-in-out infinite',
+                    width: 60, height: 60, borderRadius: "20px",
+                    background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "1.7rem", fontWeight: 900, color: "white",
+                    boxShadow: "0 0 35px rgba(232,33,58,0.5)"
                 }}>R</div>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", letterSpacing: "2px", fontFamily: "JetBrains Mono, monospace" }}>
+                    INICIALIZANDO BÓVEDA SEGURA…
+                </div>
             </div>
         );
     }
 
-    if (isAuthenticated) return <>{children}</>;
-
-    // If the calculator disguise is active and we're in unlock mode
-    if (disguiseEnabled && mode === "unlock") {
-        return (
-            <CalculatorScreen
-                onUnlock={async (typedPin: string) => {
-                    const calcPin = await getSecurePin("calc_pin");
-                    const masterPin = await getSecurePin("master_pin");
-                    const panicPin = await getSecurePin("panic_pin");
-                    const decoyPin = await getSecurePin("decoy_pin");
-
-                    if (calcPin && typedPin === calcPin) {
-                        if (masterPin) await doLogin(masterPin);
-                        return;
-                    }
-
-                    const isMaster = masterPin ? typedPin === masterPin : false;
-                    const isDecoy = decoyPin ? typedPin === decoyPin : false;
-                    const isPanic = panicPin ? typedPin === panicPin : false;
-
-                    if (isMaster || isDecoy || isPanic) {
-                        await doLogin(typedPin);
-                    }
-                }}
-            />
-        );
-    }
-
-    const isOnboarding = mode === "onboarding";
+    const currentDigits = mode === "onboarding" ? (step === "enter" ? pin : confirmPin) : pin;
 
     return (
         <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', height: '100dvh', width: '100%',
-            background: 'var(--bg-deep)', padding: '32px', boxSizing: 'border-box',
-            backgroundImage: 'radial-gradient(ellipse 80% 50% at 50% -5%, rgba(232,33,58,0.12) 0%, transparent 65%)',
+            position: "fixed", inset: 0, zIndex: 99999,
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            padding: "24px 20px", overflowY: "auto"
         }}>
+            <div style={{ maxWidth: "340px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
 
-            {/* Logo Section */}
-            <div style={{ marginBottom: '40px', textAlign: 'center' }} className="animate-enter">
-                <div style={{
-                    width: '84px', height: '84px',
-                    borderRadius: '26px',
-                    background: 'linear-gradient(145deg, var(--primary-bright), var(--primary))',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 22px auto',
-                    boxShadow: '0 0 0 1px rgba(232,33,58,0.3), 0 8px 40px var(--primary-glow)',
-                    position: 'relative',
-                    overflow: 'hidden'
-                }}>
+                {/* Insignia y Título */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                     <div style={{
-                        position: 'absolute', inset: 0, borderRadius: 'inherit',
-                        background: 'linear-gradient(145deg, rgba(255,255,255,0.2) 0%, transparent 60%)',
-                    }} />
-                    <span style={{ fontSize: '2.6rem', fontWeight: 900, color: 'white', letterSpacing: '-3px', lineHeight: 1, position: 'relative', zIndex: 2 }}>R</span>
+                        width: 54, height: 54, borderRadius: "18px",
+                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.5rem", fontWeight: 900, color: "white",
+                        boxShadow: "0 0 30px rgba(232,33,58,0.4)"
+                    }}>
+                        🛡️
+                    </div>
+
+                    <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: "0.5px" }}>
+                            {mode === "onboarding" ? "Crear PIN Maestro" : "Bóveda Criptográfica RED"}
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "3px" }}>
+                            {mode === "onboarding"
+                                ? (step === "enter" ? "Define tu clave de acceso (mínimo 6 dígitos)" : "Confirma tu PIN maestro")
+                                : "Ingresa tu PIN de seguridad"}
+                        </div>
+                    </div>
                 </div>
-                <h1 style={{ color: 'var(--text-primary)', fontSize: '2.4rem', fontWeight: 900, margin: '0 0 6px 0', letterSpacing: '10px', textShadow: '0 4px 20px rgba(0,0,0,0.8)' }}>RED</h1>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, letterSpacing: '4px', textTransform: 'uppercase' }}>
-                    {isOnboarding
-                        ? (step === "enter" ? "Crear Identidad" : "Confirmar acceso")
-                        : "Sistema táctico P2P"
-                    }
-                </p>
-            </div>
 
-            {/* Warning for onboarding */}
-            {isOnboarding && step === "enter" && (
-                <div style={{
-                    background: 'rgba(255,170,0,0.08)', border: '1px solid rgba(255,170,0,0.25)',
-                    borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: '24px',
-                    maxWidth: '320px', textAlign: 'center',
-                }} className="animate-fade">
-                    <p style={{ color: 'var(--warning)', fontSize: '0.8rem', margin: 0, lineHeight: 1.6 }}>
-                        ⚠️ Este PIN es la <strong>única llave</strong> de tu bóveda cifrada. No tiene recuperación.
-                    </p>
+                {/* Indicador de Dígitos (Puntos Neón) */}
+                <div style={{ display: "flex", gap: "12px", alignItems: "center", height: "24px" }}>
+                    {[0, 1, 2, 3, 4, 5].map((idx) => {
+                        const filled = currentDigits.length > idx;
+                        return (
+                            <div
+                                key={idx}
+                                style={{
+                                    width: filled ? "14px" : "10px",
+                                    height: filled ? "14px" : "10px",
+                                    borderRadius: "50%",
+                                    background: filled ? "var(--accent-crimson-bright)" : "rgba(255,255,255,0.15)",
+                                    boxShadow: filled ? "0 0 12px var(--accent-crimson)" : "none",
+                                    transition: "all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                                }}
+                            />
+                        );
+                    })}
                 </div>
-            )}
 
-            {/* PIN Form */}
-            <form
-                onSubmit={isOnboarding ? handleOnboardingSubmit : handleUnlockSubmit}
-                className="glass-panel-elevated animate-enter"
-                style={{
-                    width: '100%', maxWidth: '340px', display: 'flex', flexDirection: 'column',
-                    gap: '16px', padding: '28px', borderRadius: 'var(--radius-xl)',
-                    animationDelay: '120ms',
-                }}
-            >
-                <input
-                    type="password"
-                    inputMode="numeric"
-                    value={isOnboarding && step === "confirm" ? confirmPin : pin}
-                    onChange={(e) => {
-                        const val = e.target.value;
-                        if (isOnboarding && step === "confirm") setConfirmPin(val);
-                        else setPin(val);
-                        setError("");
-                    }}
-                    autoFocus
-                    placeholder={isOnboarding ? "Crear PIN" : "PIN"}
-                    disabled={loading}
-                    style={{
-                        width: '100%', padding: '18px 20px',
-                        background: 'rgba(0,0,0,0.4)',
-                        border: `1px solid ${error ? 'var(--danger)' : 'var(--glass-border)'}`,
-                        color: 'var(--text-primary)', borderRadius: 'var(--radius-md)',
-                        fontSize: '1.6rem', letterSpacing: '10px', textAlign: 'center',
-                        outline: 'none', transition: 'all var(--dur-fast)', boxSizing: 'border-box',
-                        boxShadow: error ? '0 0 0 3px rgba(232,33,58,0.2)' : 'none',
-                    }}
-                />
-
+                {/* Mensaje de Error */}
                 {error && (
-                    <p style={{ color: 'var(--danger)', textAlign: 'center', fontSize: '0.85rem', margin: 0 }}>
+                    <div className="animate-pop" style={{ fontSize: "0.78rem", color: "var(--accent-crimson-bright)", textAlign: "center", fontWeight: 700 }}>
                         {error}
-                    </p>
+                    </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    {/* Biometric button — only on unlock, not onboarding */}
-                    {!isOnboarding && biometryAvailable && (
+                {/* Teclado Numérico Táctico 3x4 */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px", width: "100%" }}>
+                    {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
                         <button
-                            type="button"
-                            onClick={handleBiometricUnlock}
+                            key={num}
+                            onClick={() => handleDigitPress(num)}
                             disabled={loading}
+                            className="card-tactical-interactive"
                             style={{
-                                padding: '16px', background: 'var(--bg-lifted)',
-                                border: '1px solid var(--solid-border)', borderRadius: '14px',
-                                color: 'var(--text-secondary)', fontSize: '1.4rem',
-                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                height: "64px", borderRadius: "18px",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.4rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
+                                color: "#fff", background: "rgba(255,255,255,0.03)",
+                                border: "1px solid rgba(255,255,255,0.08)"
                             }}
                         >
-                            ☝️
+                            {num}
                         </button>
+                    ))}
+
+                    {/* Botón Biométrica / Vacío */}
+                    {biometryAvailable && mode === "unlock" ? (
+                        <button
+                            onClick={handleBiometricUnlock}
+                            disabled={loading}
+                            className="card-tactical-interactive"
+                            style={{
+                                height: "64px", borderRadius: "18px",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.4rem", color: "var(--accent-cyan)",
+                                background: "rgba(0,229,255,0.06)", border: "1px solid rgba(0,229,255,0.2)"
+                            }}
+                            title="Desbloqueo Biométrico"
+                        >
+                            🖐️
+                        </button>
+                    ) : (
+                        <div />
                     )}
 
+                    {/* Botón 0 */}
                     <button
-                        type="submit"
-                        className="btn-primary"
-                        disabled={loading || (isOnboarding && step === "enter" && pin.length < 6) || (isOnboarding && step === "confirm" && confirmPin.length < 6) || (!isOnboarding && !pin)}
-                        style={{ flex: 1 }}
+                        onClick={() => handleDigitPress("0")}
+                        disabled={loading}
+                        className="card-tactical-interactive"
+                        style={{
+                            height: "64px", borderRadius: "18px",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: "1.4rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
+                            color: "#fff", background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.08)"
+                        }}
                     >
-                        {loading ? "INICIANDO..." : isOnboarding ? (step === "enter" ? "CONTINUAR →" : "CREAR BÓVEDA") : "DESCIFRAR NODO"}
+                        0
+                    </button>
+
+                    {/* Botón Backspace */}
+                    <button
+                        onClick={handleBackspace}
+                        disabled={loading}
+                        className="card-tactical-interactive"
+                        style={{
+                            height: "64px", borderRadius: "18px",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: "1.2rem", color: "var(--text-muted)",
+                            background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)"
+                        }}
+                        title="Borrar dígito"
+                    >
+                        ⌫
                     </button>
                 </div>
-            </form>
 
-            <p style={{
-                position: 'absolute', bottom: '20px',
-                color: 'var(--text-disabled)', fontSize: '0.68rem',
-                fontFamily: 'JetBrains Mono, monospace', letterSpacing: 1.5,
-            }}>
-                AES-256-GCM · Ed25519 · P2P
-            </p>
+                {/* Botón de Siguiente en Onboarding */}
+                {mode === "onboarding" && (
+                    <button
+                        onClick={handleOnboardingNext}
+                        disabled={loading || currentDigits.length < 6}
+                        className="btn-tactical-primary"
+                        style={{ width: "100%", padding: "14px", marginTop: "8px" }}
+                    >
+                        {loading ? "Derivando claves..." : (step === "enter" ? "Continuar ➔" : "Confirmar y Entrar")}
+                    </button>
+                )}
+            </div>
         </div>
     );
 }

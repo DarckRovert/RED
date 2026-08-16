@@ -35,6 +35,10 @@ subprojects {
                         targetSdkVersion rootProject.ext.targetSdkVersion
                     }
                 }
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_21
+                    targetCompatibility = JavaVersion.VERSION_21
+                }
             }
         }
     }
@@ -46,6 +50,7 @@ subprojects {
         }
     }
 }
+
 
 task clean(type: Delete) {
     delete rootProject.buildDir

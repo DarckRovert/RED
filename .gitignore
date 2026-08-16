@@ -75,5 +75,10 @@ check_results*.txt
 *_log.txt
 logcat_*.txt
 last_build.log
-screen.png
+screen*.png
+moto_*.png
 wasm-check-log.txt
+.tempmediaStorage/
+scratch/
+git_history*.txt
+implementation_plan.md

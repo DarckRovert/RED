@@ -89,6 +89,14 @@ pub enum MessageType {
         data: Vec<u8>,
         duration_ms: u32,
     },
+    /// Video message
+    Video {
+        data: Vec<u8>,
+        duration_ms: u32,
+        mime_type: String,
+        width: u32,
+        height: u32,
+    },
     /// Location
     Location {
         latitude: f64,
@@ -128,7 +136,97 @@ pub enum MessageType {
         expires_at: u64,
         content: Box<MessageType>,
     },
+    /// Social Feed P2P post (v25.0)
+    SocialPost(Vec<u8>),
+    /// Weather Barometric Off-grid report
+    WeatherReport(Vec<u8>),
+    /// Presence beacon — emitted periodically to signal that a node is online.
+    /// `last_seen` is Unix ms; `online` true = connected, false = graceful offline.
+    PresenceBeacon {
+        last_seen: u64,
+        online: bool,
+    },
+    /// Profile Sync Request (v31.0)
+    ProfileSyncRequest,
+    /// Profile Sync Response (v31.0)
+    ProfileSyncResponse {
+        avatar: Option<String>,
+        bio: Option<String>,
+    },
+    /// Sovereign P2P Offline Voucher & Payment (v32.0)
+    P2PVoucher(Vec<u8>),
+    /// Radio Frequency Hop Coordination Frame (v33.0)
+    ChannelHopCoordination {
+        target_channel: u8,
+        frequency_mhz: u32,
+        reason: String,
+        timestamp: u64,
+    },
+    /// Medical Triage & START Victim Report (v35.0)
+    MedicalTriageReport(Vec<u8>),
+    /// Tactical Emergency SOS Beacon (v36.0)
+    /// Tactical Emergency SOS Beacon (v36.0)
+    EmergencyBeacon {
+        beacon_id: String,
+        distress_type: String,
+        latitude: Option<f64>,
+        longitude: Option<f64>,
+        altitude: Option<f64>,
+        battery_level: Option<u8>,
+        message: String,
+        active: bool,
+        timestamp: u64,
+    },
+    /// WebRTC P2P Call Signaling (Offer, Answer, ICE Candidates, Hangup)
+    WebRTCSignal(String),
+    /// Contact Request handshake payload (sender_hash, sender_name, etc.)
+    ContactRequest(String),
+    /// Contact Response handshake payload
+    ContactResponse(String),
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MedicalTriagePayload {
+    pub id: String,
+    pub victim_label: String,
+    pub category: String,
+    pub bpm: Option<u32>,
+    pub spo2: Option<u32>,
+    pub can_walk: bool,
+    pub is_breathing: bool,
+    pub resp_rate: u32,
+    pub cap_refill_sec: f32,
+    pub can_follow_commands: bool,
+    pub notes: String,
+    pub evaluator_hash: crate::identity::IdentityHash,
+    pub evaluator_name: String,
+    pub timestamp: u64,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct P2PVoucherPayload {
+    pub id: String,
+    pub creator_hash: crate::identity::IdentityHash,
+    pub creator_name: String,
+    pub recipient: String,
+    pub amount: f64,
+    pub timestamp: u64,
+    pub verifying_key: [u8; 32],
+    pub signature: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SocialPostPayload {
+    pub id: String,
+    pub author_name: String,
+    pub content: String,
+    pub media_data: Option<String>,
+    pub timestamp: u64,
+    pub reply_to: Option<String>,
+}
+
 
 impl MessageType {
     /// Get the size of this message type in bytes
@@ -138,6 +236,7 @@ impl MessageType {
             MessageType::Image { data, .. } => data.len(),
             MessageType::File { data, .. } => data.len(),
             MessageType::Voice { data, .. } => data.len(),
+            MessageType::Video { data, .. } => data.len(),
             MessageType::Location { .. } => 24,
             MessageType::Contact { .. } => 64,
             MessageType::Reaction { .. } => 48,
@@ -147,13 +246,27 @@ impl MessageType {
             MessageType::GroupPayload(msg) => msg.ciphertext.len() + 68,
             MessageType::TimerUpdate { .. } => 4,
             MessageType::Ephemeral { content, .. } => 8 + content.size(),
+            MessageType::SocialPost(data) => data.len(),
+            MessageType::WeatherReport(data) => data.len(),
+            MessageType::PresenceBeacon { .. } => 9,
+            MessageType::ProfileSyncRequest => 1,
+            MessageType::ProfileSyncResponse { avatar, bio } => {
+                avatar.as_ref().map_or(0, |a| a.len()) + bio.as_ref().map_or(0, |b| b.len())
+            }
+            MessageType::P2PVoucher(data) => data.len(),
+            MessageType::ChannelHopCoordination { reason, .. } => 16 + reason.len(),
+            MessageType::MedicalTriageReport(data) => data.len(),
+            MessageType::EmergencyBeacon { beacon_id, distress_type, message, .. } => 32 + beacon_id.len() + distress_type.len() + message.len(),
+            MessageType::WebRTCSignal(signal) => signal.len(),
+            MessageType::ContactRequest(payload) => payload.len(),
+            MessageType::ContactResponse(payload) => payload.len(),
         }
     }
 
     /// Check if this is a control message (not user content)
     pub fn is_control(&self) -> bool {
         match self {
-            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } => true,
+            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } | MessageType::PresenceBeacon { .. } | MessageType::ChannelHopCoordination { .. } | MessageType::WebRTCSignal(_) | MessageType::ContactRequest(_) | MessageType::ContactResponse(_) => true,
             MessageType::Ephemeral { content, .. } => content.is_control(),
             _ => false,
         }

@@ -1,6 +1,6 @@
 [package]
 name = "red-core"
-version = "3.1.0"
+version = "31.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "Core library for RED - Decentralized Encrypted Network"
@@ -42,6 +42,7 @@ futures = "0.3"
 # P2P Networking
 libp2p = { version = "0.54", features = [
     "tcp",
+    "dns",
     "noise",
     "yamux",
     "gossipsub",
@@ -75,3 +76,4 @@ proptest = "1.4"
 [features]
 default = []
 test-utils = []
+

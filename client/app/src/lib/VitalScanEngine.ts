@@ -1,3 +1,5 @@
+import { registerPlugin, Capacitor } from '@capacitor/core';
+
 /**
  * VitalScanEngine.ts — RED Photoplethysmography (PPG) Heart Rate, SpO2 & START Triage Engine
  * 
@@ -117,7 +119,16 @@ export class VitalScanEngine {
                 }
             });
 
-            // Turn on camera torch/flash on Android WebViews using direct applyConstraints
+            // Turn on camera torch/flash on native Android using RedNode or WebRTC fallback
+            if (Capacitor.isNativePlatform()) {
+                try {
+                    const RedNode = registerPlugin<any>('RedNode');
+                    await RedNode.setTorch({ enabled: true });
+                } catch (err) {
+                    console.warn('[VitalScanEngine] Native torch failed:', err);
+                }
+            }
+
             const videoTrack = this.stream.getVideoTracks()[0];
             if (videoTrack) {
                 try {
@@ -225,6 +236,12 @@ export class VitalScanEngine {
         if (this.stream) {
             this.stream.getTracks().forEach(t => t.stop());
             this.stream = null;
+        }
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const RedNode = registerPlugin<any>('RedNode');
+                RedNode.setTorch({ enabled: false }).catch(() => {});
+            } catch {}
         }
         this.videoElement = null;
         this.canvasElement = null;

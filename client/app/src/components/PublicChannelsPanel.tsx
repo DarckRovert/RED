@@ -1,20 +1,21 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRedStore } from '../store/useRedStore';
-import { getChannelMessages, postChannelMessage, summarizeChannelAI, ChannelMessage } from '../lib/api';
+import React, { useState, useEffect, useRef } from "react";
+import { useRedStore } from "../store/useRedStore";
+import { getChannelMessages, postChannelMessage, summarizeChannelAI, ChannelMessage } from "../lib/api";
+import { toast } from "./Toast";
 
 export const PublicChannelsPanel: React.FC = () => {
-    const { navigate, identity } = useRedStore();
-    const [channelId, setChannelId] = useState('red-local-general');
-    const [channels, setChannels] = useState<string[]>(['red-local-general', 'red-emergency-lima']);
+    const { navigate, identity, goBack } = useRedStore();
+    const [channelId, setChannelId] = useState("red-local-general");
+    const [channels, setChannels] = useState<string[]>(["red-local-general", "red-emergency-lima", "red-logistica"]);
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
-    const [inputText, setInputText] = useState('');
+    const [inputText, setInputText] = useState("");
     const [loading, setLoading] = useState(false);
-    const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const [isSummarizing, setIsSummarizing] = useState(false);
     const feedRef = useRef<HTMLDivElement | null>(null);
 
-    const senderName = identity?.nickname || 'Operador Táctico';
+    const senderName = identity?.nickname || "Operador Táctico";
 
     const loadMessages = async () => {
         try {
@@ -23,9 +24,7 @@ export const PublicChannelsPanel: React.FC = () => {
             if (Array.isArray(data?.channels) && data.channels.length > 0) {
                 setChannels(data.channels);
             }
-            setErrorMsg(null);
-        } catch (e: any) {
-            console.error('Channel fetch error:', e);
+        } catch {
             setMessages([]);
         }
     };
@@ -36,7 +35,6 @@ export const PublicChannelsPanel: React.FC = () => {
         return () => clearInterval(interval);
     }, [channelId]);
 
-    // Auto-scroll feed on new messages
     useEffect(() => {
         if (feedRef.current) {
             feedRef.current.scrollTop = feedRef.current.scrollHeight;
@@ -48,190 +46,160 @@ export const PublicChannelsPanel: React.FC = () => {
         if (!inputText.trim()) return;
 
         setLoading(true);
-        setErrorMsg(null);
         try {
             await postChannelMessage({
                 channel_id: channelId,
                 sender_name: senderName,
                 content: inputText.trim()
             });
-            setInputText('');
+            setInputText("");
             await loadMessages();
-        } catch (err: any) {
-            setErrorMsg(err.message || 'Error al publicar en el canal');
+        } catch {
+            toast.error("Error al publicar en el canal");
         } finally {
             setLoading(false);
         }
     };
 
+    const handleSummarize = async () => {
+        if (messages.length === 0) return;
+        setIsSummarizing(true);
+        try {
+            const msgStrings = messages.map(m => `${m.sender_name}: ${m.content}`);
+            const summary = await summarizeChannelAI(channelId, msgStrings);
+            if (summary?.summary_bullets?.length > 0) {
+                toast.info(`🤖 Resumen IA:\n${summary.summary_bullets.join('\n')}`);
+            }
+        } catch {
+            toast.error("Error al resumir canal");
+        } finally {
+            setIsSummarizing(false);
+        }
+    };
+
     return (
         <div style={{
-            height: '100%',
-            width: '100%',
-            background: '#030712',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            fontFamily: 'Inter, sans-serif',
-            overflow: 'hidden'
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
         }}>
-            {/* TOP BAR */}
-            <div style={{
-                height: '60px',
-                padding: '0 20px',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'rgba(15,23,42,0.9)'
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
             }}>
-                <button
-                    onClick={() => navigate('sidebar')}
-                    style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#a855f7',
-                        fontSize: '1.1rem',
-                        cursor: 'pointer',
-                        fontWeight: 700
-                    }}
-                >
-                    ← Volver
-                </button>
-                <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-                    📻 CANALES DE DIFUSIÓN MESH
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.4)"
+                    }}>📻</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Canales Públicos & Frecuencias
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            OPEN MESH FREQUENCIES · BROADCAST CHAT
+                        </div>
+                    </div>
                 </div>
-                <button
-                    onClick={async () => {
-                        try {
-                            const res = await summarizeChannelAI(channelId, messages.map(m => m.content));
-                            alert(`🪄 RESUMEN IA DEL CANAL #${channelId}:\n\n${res.summary_bullets.join('\n')}`);
-                        } catch (e: any) {
-                            alert(`Error al generar resumen: ${e.message}`);
-                        }
-                    }}
-                    style={{
-                        background: 'rgba(192,132,252,0.15)',
-                        border: '1px solid #c084fc',
-                        color: '#c084fc',
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                    }}
-                >
-                    🪄 Resumen IA
-                </button>
-            </div>
 
-            {/* CHANNEL SELECTOR */}
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={handleSummarize}
+                        disabled={isSummarizing || messages.length === 0}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                    >
+                        {isSummarizing ? "..." : "🤖 Resumen"}
+                    </button>
+                    <button
+                        onClick={goBack}
+                        className="btn-icon"
+                        title="Cerrar panel"
+                        style={{ width: 38, height: 38 }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            </header>
+
+            {/* Selector de Canales Segmentados */}
             <div style={{
-                padding: '12px 20px',
-                background: 'rgba(255,255,255,0.02)',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                display: 'flex',
-                gap: '10px',
-                overflowX: 'auto'
+                padding: "10px 16px",
+                display: "flex", gap: "8px",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                overflowX: "auto", flexShrink: 0
             }}>
-                {channels.map((ch) => (
+                {channels.map(ch => (
                     <button
                         key={ch}
                         onClick={() => setChannelId(ch)}
-                        style={{
-                            padding: '6px 14px',
-                            borderRadius: '20px',
-                            border: '1px solid',
-                            borderColor: channelId === ch ? '#a855f7' : 'rgba(255,255,255,0.15)',
-                            background: channelId === ch ? 'rgba(168,85,247,0.2)' : 'transparent',
-                            color: channelId === ch ? '#c084fc' : '#94a3b8',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap'
-                        }}
+                        className={channelId === ch ? "glow-pill-active" : "btn-ghost"}
+                        style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                     >
-                        #{ch}
+                        #{ch.replace("red-", "")}
                     </button>
                 ))}
             </div>
 
-            {/* MESSAGES FEED */}
-            <div ref={feedRef} style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {errorMsg && (
-                    <div style={{ padding: '10px', background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', borderRadius: '8px', fontSize: '0.85rem' }}>
-                        ⛔ {errorMsg}
-                    </div>
-                )}
-
+            {/* Timeline de Mensajes */}
+            <div ref={feedRef} className="scroll-container" style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "10px" }}>
                 {messages.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: '#64748b', marginTop: '40px', fontSize: '0.9rem' }}>
-                        No hay boletines recientes en #{channelId}. ¡Sé el primero en emitir!
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-muted)", gap: "10px" }}>
+                        <span style={{ fontSize: "2rem" }}>📻</span>
+                        <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>Frecuencia Silenciosa</div>
+                        <div style={{ fontSize: "0.75rem" }}>Sé el primero en transmitir en el canal #{channelId}</div>
                     </div>
                 ) : (
-                    messages.map((m) => (
-                        <div key={m.id} style={{
-                            background: 'rgba(15,23,42,0.6)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: '12px',
-                            padding: '14px'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '0.78rem' }}>
-                                <span style={{ fontWeight: 800, color: '#a855f7' }}>{m.sender_name}</span>
-                                <span style={{ color: '#64748b', fontFamily: 'monospace' }}>
-                                    {new Date(m.timestamp * (m.timestamp < 1e11 ? 1000 : 1)).toLocaleTimeString()}
+                    messages.map((m, i) => (
+                        <div key={i} className="card-tactical animate-enter" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <strong style={{ fontSize: "0.88rem", color: "var(--accent-cyan)" }}>{m.sender_name}</strong>
+                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                             </div>
-                            <div style={{ color: '#e2e8f0', fontSize: '0.92rem', lineHeight: '1.4' }}>
+                            <div style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>
                                 {m.content}
-                            </div>
-                            <div style={{ marginTop: '8px', fontSize: '0.68rem', color: '#475569', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Hash: {m.hash.substring(0, 16)}...</span>
-                                <span style={{ color: '#00D97E' }}>✓ Guardian OK</span>
                             </div>
                         </div>
                     ))
                 )}
             </div>
 
-            {/* POST INPUT */}
-            <form onSubmit={handleSend} style={{
-                padding: '16px 20px',
-                background: 'rgba(15,23,42,0.95)',
-                borderTop: '1px solid rgba(255,255,255,0.1)',
-                display: 'flex',
-                gap: '10px'
-            }}>
+            {/* Input Bar */}
+            <form onSubmit={handleSend} style={{ padding: "12px 16px", borderTop: "1px solid var(--glass-border)", background: "rgba(10, 10, 20, 0.95)", display: "flex", gap: "8px" }}>
                 <input
-                    type="text"
                     value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={`Transmitir boletín en #${channelId} como ${senderName}...`}
-                    style={{
-                        flex: 1,
-                        background: 'rgba(0,0,0,0.5)',
-                        border: '1px solid rgba(255,255,255,0.15)',
-                        borderRadius: '10px',
-                        padding: '10px 14px',
-                        color: '#fff',
-                        fontSize: '0.9rem',
-                        outline: 'none'
+                    onChange={e => setInputText(e.target.value)}
+                    placeholder={`Transmitir en #${channelId}...`}
+                    style={{ 
+                        flex: 1, 
+                        fontSize: "0.90rem",
+                        background: "rgba(20, 20, 30, 0.8)",
+                        color: "var(--text-primary)",
+                        border: "1px solid var(--glass-border)",
+                        borderRadius: "var(--radius-md)",
+                        padding: "10px 14px",
+                        outline: "none"
                     }}
                 />
                 <button
                     type="submit"
-                    disabled={loading}
-                    style={{
-                        padding: '10px 20px',
-                        borderRadius: '10px',
-                        background: 'linear-gradient(135deg, #a855f7, #7e22ce)',
-                        border: 'none',
-                        color: '#fff',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                    }}
+                    disabled={loading || !inputText.trim()}
+                    className="btn-tactical-primary"
+                    style={{ padding: "10px 20px", fontSize: "0.88rem" }}
                 >
-                    {loading ? '...' : 'Emitir'}
+                    Enviar ➔
                 </button>
             </form>
         </div>

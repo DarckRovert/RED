@@ -1,18 +1,18 @@
-# 🏗️ Especificación Arquitectónica de RED v30.0.0
+# 🏗️ Especificación Arquitectónica de RED v31.0.0
 
-Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware, el motor de IA Neuronal ONNX WASM local y la arquitectura completa de los 28 módulos de interfaz táctica.
+Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware, los actuadores de hardware nativo (`CameraManager`), el motor de eventos SSE unificado y la arquitectura completa de los 35 módulos de interfaz táctica.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 1. [Visión General de Capas](#1-visión-general-de-capas)
-2. [Capa Nativa Android & Servicio de Fondo Java](#2-capa-nativa-android--servicio-de-fondo-java)
-3. [Motor Criptográfico Nativo en Rust (`red_core` y `red_mobile`)](#3-motor-criptográfico-nativo-en-rust-red_core-y-red_mobile)
+2. [Capa Nativa Android & Actuadores Hardware](#2-capa-nativa-android--servicio-de-fondo-java)
+3. [Motor Criptográfico Nativo en Rust (`red_core`, `red-blockchain` y `red_mobile`)](#3-motor-criptográfico-nativo-en-rust-red_core-y-red_mobile)
 4. [Capa de Red Mesh Multi-Radio (GATT, WiFi Direct, LoRa, SoundMesh)](#4-capa-de-red-mesh-multi-radio-gatt-wifi-direct-lora-soundmesh)
-5. [Motor de IA Neuronal Off-Grid ONNX WASM (`localAiEngine.ts`)](#5-motor-de-ia-neuronal-off-grid-onnx-wasm-localaienginets)
-6. [Desglose Arquitectónico de los 28 Módulos Tácticos](#6-desglose-arquitectónico-de-los-28-módulos-tácticos)
-7. [Capa de Almacenamiento & Cifrado en Disco](#7-capa-de-almacenamiento--cifrado-en-disco)
+5. [Arquitectura Real-Time SSE Unificada (Cero Polling)](#5-motor-de-ia-neuronal-off-grid-onnx-wasm-localaienginets)
+6. [Desglose Arquitectónico de los 35 Módulos Tácticos](#6-desglose-arquitectónico-de-los-28-módulos-tácticos)
+7. [Capa de Almacenamiento & Cifrado en Disco (Sled DB)](#7-capa-de-almacenamiento--cifrado-en-disco)
 8. [Manejo de Estado SPA & Navegación (Next.js / Zustand)](#8-manejo-de-estado-spa--navegación-nextjs--zustand)
 9. [Endpoints de la API Axum REST & SSE](#9-endpoints-de-la-api-axum-rest--sse)
 
@@ -24,14 +24,15 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 +-----------------------------------------------------------------------+
 |                    CAPA DE PRESENTACIÓN (FRONTEND)                    |
 |      Next.js 16 SPA (Turbopack) + React 19 + Zustand Store + CSS      |
-|           28 Módulos de Interfaz Táctica & Visualización UI           |
+|           35 Módulos de Interfaz Táctica & Visualización UI           |
 +-----------------------------------------------------------------------+
                                    │
               HTTP REST / SSE (http://127.0.0.1:7333/api)
                                    ▼
 +-----------------------------------------------------------------------+
 |                    CAPA NATIVA ANDROID (MIDDLEWARE)                   |
-|       RedNodeService.java (Foreground) + RedNodePlugin.java (JNI)      |
+|       RedNodeService.java (Foreground) + RedNodePlugin.java (JNI)     |
+|   Camera2 API (Flash LED Morse SOS) + Sensors (Barometer, Compass)    |
 |    GATT Server / BleTransport + Direct Native HTTP POST Mesh Inject   |
 +-----------------------------------------------------------------------+
                                    │
@@ -41,6 +42,7 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 |                      MOTOR NATIVO RUST (CORE)                         |
 |     red_mobile (Axum REST API + SSE) + red_core (Protocol Engine)    |
 |   Noise XK Handshake + Ed25519 Signatures + ChaCha20-Poly1305 E2E     |
+|     red-blockchain (Proof-of-Mesh UTXO) + Sled Embedded Storage       |
 +-----------------------------------------------------------------------+
                                    │
               TRANSPORTE MULTI-RADIO AD-HOC OFF-GRID

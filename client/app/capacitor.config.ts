@@ -15,6 +15,9 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
     SplashScreen: {
       launchAutoHide: true,
       launchShowDuration: 3000,

@@ -7,12 +7,62 @@ import { RedAPI } from "../lib/api";
 export function IncomingCallBanner() {
     const { incomingCall, setIncomingCall, navigate } = useRedStore();
 
+    // ── Tactical Web Audio Ringtone Chime ─────────────────────────────────────
+    React.useEffect(() => {
+        if (!incomingCall) return;
+
+        let audioCtx: AudioContext | null = null;
+        let isCancelled = false;
+        let intervalId: any = null;
+
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+                audioCtx = new AudioContextClass();
+                
+                const playChime = () => {
+                    if (isCancelled || !audioCtx || audioCtx.state === 'closed') return;
+                    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+
+                    const now = audioCtx.currentTime;
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+
+                    osc.type = "sine";
+                    osc.frequency.setValueAtTime(880, now); // A5
+                    osc.frequency.setValueAtTime(1174.66, now + 0.15); // D6
+                    osc.frequency.setValueAtTime(880, now + 0.3);
+
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+
+                    osc.start(now);
+                    osc.stop(now + 0.45);
+                };
+
+                playChime();
+                intervalId = setInterval(playChime, 2500);
+            }
+        } catch {}
+
+        return () => {
+            isCancelled = true;
+            if (intervalId) clearInterval(intervalId);
+            if (audioCtx && audioCtx.state !== 'closed') {
+                audioCtx.close().catch(() => {});
+            }
+        };
+    }, [incomingCall]);
+
     if (!incomingCall) return null;
 
     const handleAccept = () => {
         const callerId = incomingCall.callerHash;
         useRedStore.setState({ activeConversationId: callerId });
-        navigate('call', callerId);
+        navigate("call", callerId);
     };
 
     const handleReject = async () => {
@@ -26,78 +76,63 @@ export function IncomingCallBanner() {
 
     return (
         <div style={{
-            position: 'fixed',
-            top: 'calc(20px + var(--safe-top, 0px))',
-            left: '16px',
-            right: '16px',
-            margin: '0 auto',
-            maxWidth: 420,
+            position: "fixed",
+            top: "calc(16px + var(--safe-top, 0px))",
+            left: "16px",
+            right: "16px",
+            margin: "0 auto",
+            maxWidth: "460px",
             zIndex: 99999,
-            background: 'linear-gradient(135deg, rgba(15,15,26,0.98), rgba(8,8,16,0.98))',
-            backdropFilter: 'blur(20px)',
-            border: '2px solid var(--primary)',
-            borderRadius: 24,
-            padding: '16px 20px',
-            boxShadow: '0 12px 48px rgba(232,33,58,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            animation: 'slideDown 0.3s cubic-bezier(0,0,0.2,1)'
+            background: "linear-gradient(135deg, rgba(16,18,32,0.98), rgba(8,10,20,0.98))",
+            backdropFilter: "blur(20px)",
+            border: "1px solid var(--accent-crimson)",
+            borderRadius: "var(--radius-lg)",
+            padding: "14px 18px",
+            boxShadow: "0 12px 48px rgba(255,51,85,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            animation: "animate-enter 0.3s ease",
         }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{
-                    width: 48, height: 48, borderRadius: 24,
-                    background: 'linear-gradient(135deg, #E8213A, #C0152A)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '1.5rem', color: 'white',
-                    boxShadow: '0 0 20px rgba(232,33,58,0.6)',
-                    animation: 'pulse 1s infinite'
+                    width: 44, height: 44, borderRadius: "50%",
+                    background: "linear-gradient(135deg, #FF3355, #E8213A)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "1.3rem", color: "white",
+                    boxShadow: "0 0 16px rgba(255,51,85,0.6)",
+                    animation: "pulse 1s infinite"
                 }}>
                     📞
                 </div>
                 <div>
-                    <div style={{ color: 'white', fontWeight: 800, fontSize: '1rem' }}>
+                    <div style={{ color: "white", fontWeight: 800, fontSize: "0.95rem" }}>
                         {incomingCall.callerName}
                     </div>
-                    <div style={{ color: '#00D97E', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.5px' }}>
-                        Llamada Entrante P2P E2E…
+                    <div style={{ color: "var(--accent-emerald)", fontSize: "0.72rem", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
+                        LLAMADA P2P WEBRTC ENTRANTE…
                     </div>
                 </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: "flex", gap: "8px" }}>
                 <button
                     onClick={handleReject}
-                    style={{
-                        width: 40, height: 40, borderRadius: 20,
-                        background: 'rgba(232,33,58,0.2)', border: '1px solid #E8213A',
-                        color: '#E8213A', fontSize: '1.1rem', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
+                    className="btn-icon"
+                    style={{ width: 38, height: 38, background: "rgba(255,51,85,0.2)", border: "1px solid var(--accent-crimson)", color: "var(--accent-crimson)" }}
+                    title="Rechazar"
                 >
                     ✕
                 </button>
                 <button
                     onClick={handleAccept}
-                    style={{
-                        padding: '8px 16px', borderRadius: 20,
-                        background: 'linear-gradient(135deg, #00D97E, #00B368)',
-                        color: 'black', fontWeight: 800, fontSize: '0.85rem',
-                        border: 'none', cursor: 'pointer',
-                        boxShadow: '0 4px 14px rgba(0,217,126,0.4)'
-                    }}
+                    className="btn-tactical-primary"
+                    style={{ padding: "8px 16px", borderRadius: "var(--radius-full)", background: "linear-gradient(135deg, #00E676, #00B368)", color: "#000", fontWeight: 900, fontSize: "0.82rem" }}
                 >
                     Contestar
                 </button>
             </div>
-
-            <style jsx>{`
-                @keyframes slideDown {
-                    from { transform: translateY(-30px); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-            `}</style>
         </div>
     );
 }

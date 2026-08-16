@@ -3,328 +3,330 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
-import { RedDevice } from "../lib/mesh/bluetoothTransport";
-import { MeshPeer } from "../lib/mesh/meshRouter";
+import { meshRouter, MeshPeer } from "../lib/mesh/meshRouter";
 import { RedAPI } from "../lib/api";
-
-const TRANSPORT_COLOR: Record<string, string> = {
-    wifi:      '#00D97E',
-    ble:       '#3498db',
-    lorawan:   '#9b59b6',
-};
-const TRANSPORT_ICON: Record<string, string> = {
-    wifi:    '📶',
-    ble:     '🔵',
-    lorawan: '📻',
-};
+import { toast } from "./Toast";
 
 function RssiBar({ rssi }: { rssi?: number }) {
     if (!rssi) return null;
-    // -50 = excellent, -70 = good, -90 = weak
     const pct = Math.max(0, Math.min(100, ((rssi + 100) / 60) * 100));
-    const color = rssi > -65 ? '#00D97E' : rssi > -80 ? '#FFA726' : '#E8213A';
+    const color = rssi > -65 ? "var(--accent-emerald)" : rssi > -80 ? "var(--accent-amber)" : "var(--accent-crimson)";
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: 48, height: 4, borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '2px', transition: 'width 0.5s ease' }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: 44, height: 4, borderRadius: "2px", background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: "2px" }} />
             </div>
-            <span style={{ fontSize: '10px', color, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>{rssi}dBm</span>
+            <span style={{ fontSize: "10px", color, fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>{rssi}dBm</span>
         </div>
     );
 }
 
+interface UnifiedDevice {
+    id: string;              // Canonical hash or raw device ID
+    canonicalId: string;     // Resolved canonical identity_hash
+    name: string;
+    transports: string[];
+    rssi?: number;
+    isContact: boolean;
+    isOnline: boolean;
+    rawBleId?: string;
+}
+
 export default function NearbyDevicesPanel() {
-    const { navigate } = useRedStore();
-    const [bleDevices, setBleDevices] = useState<RedDevice[]>([]);
-    const [meshPeers, setMeshPeers] = useState<MeshPeer[]>([]);
+    const { navigate, goBack, contacts, identity } = useRedStore();
+    const [devices, setDevices] = useState<UnifiedDevice[]>([]);
     const [scanAngle, setScanAngle] = useState(0);
     const [connecting, setConnecting] = useState<string | null>(null);
-    const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+
+    const myHash = identity?.identity_hash || "";
+    const myNickname = (identity?.nickname || "").toLowerCase();
 
     useEffect(() => {
         const refresh = async () => {
-            setBleDevices([...localTransport.discoveredBluetoothPeers]);
+            const contactList = Array.isArray(contacts) ? contacts : [];
+            const unifiedMap = new Map<string, UnifiedDevice>();
+
+            // 1. Gather BLE scan results
+            const bleList = localTransport.discoveredBluetoothPeers || [];
+            for (const b of bleList) {
+                const rawId = b.id;
+                let name = (b.name || "").trim();
+                const lowerName = name.toLowerCase();
+
+                // Filter out non-RED third party devices & own reflection
+                if (lowerName.includes("[tv]") || lowerName.includes("samsung") || lowerName.includes("darckpc") || lowerName.includes("desktop-")) continue;
+                if (myNickname && (lowerName === myNickname || lowerName === `red-${myNickname}`)) continue;
+
+                const canonicalId = meshRouter.getCanonicalId(rawId) || rawId;
+                if (canonicalId === myHash) continue;
+
+                const matchingContact = contactList.find(c =>
+                    c.identity_hash === canonicalId ||
+                    (canonicalId.length >= 8 && c.identity_hash.startsWith(canonicalId.slice(0, 8))) ||
+                    (name && c.display_name.toLowerCase() === name.toLowerCase())
+                );
+
+                const finalName = matchingContact?.display_name || (name && name !== "Dispositivo RED" ? name : `Nodo ${canonicalId.slice(0, 6)}…`);
+                const isContact = !!matchingContact;
+
+                unifiedMap.set(canonicalId, {
+                    id: canonicalId,
+                    canonicalId,
+                    name: finalName,
+                    transports: ['ble'],
+                    rssi: b.rssi,
+                    isContact,
+                    isOnline: true,
+                    rawBleId: rawId,
+                });
+            }
+
+            // 2. Gather active Mesh / WiFi peers
+            const meshPeers = meshRouter.getPeerList();
+            for (const p of meshPeers) {
+                const canonicalId = p.canonicalId || meshRouter.getCanonicalId(p.id) || p.id;
+                if (canonicalId === myHash) continue;
+
+                const matchingContact = contactList.find(c =>
+                    c.identity_hash === canonicalId ||
+                    (canonicalId.length >= 8 && c.identity_hash.startsWith(canonicalId.slice(0, 8)))
+                );
+
+                const finalName = matchingContact?.display_name || p.name || `Nodo ${canonicalId.slice(0, 6)}…`;
+                const isContact = !!matchingContact;
+                const pTransports = p.transports || (p.transport ? [p.transport] : ['wifi']);
+
+                const existing = unifiedMap.get(canonicalId);
+                if (existing) {
+                    pTransports.forEach(t => {
+                        if (!existing.transports.includes(t)) existing.transports.push(t);
+                    });
+                    if (p.rssi != null && (existing.rssi == null || p.rssi > existing.rssi)) existing.rssi = p.rssi;
+                    if (isContact) {
+                        existing.isContact = true;
+                        existing.name = finalName;
+                    }
+                } else {
+                    unifiedMap.set(canonicalId, {
+                        id: canonicalId,
+                        canonicalId,
+                        name: finalName,
+                        transports: pTransports,
+                        rssi: p.rssi,
+                        isContact,
+                        isOnline: true,
+                    });
+                }
+            }
+
+            // 3. Gather Rust node API peers (WiFi Direct / libp2p)
             try {
                 const apiPeers = await RedAPI.getPeers().catch(() => []);
-                const localPeers = localTransport.allPeers;
-                const map = new Map<string, MeshPeer>();
-                for (const p of localPeers) {
-                    map.set(p.id, p);
-                }
                 for (const ap of apiPeers) {
-                    if (!map.has(ap.id)) {
-                        map.set(ap.id, {
-                            id: ap.id,
-                            transport: (ap.transport as any) || 'wifi',
-                            lastSeen: Date.now(),
+                    const canonicalId = meshRouter.getCanonicalId(ap.id) || ap.id;
+                    if (canonicalId === myHash) continue;
+
+                    const existing = unifiedMap.get(canonicalId);
+                    if (existing) {
+                        if (!existing.transports.includes('wifi')) existing.transports.push('wifi');
+                    } else {
+                        const matchingContact = contactList.find(c => c.identity_hash === canonicalId);
+                        unifiedMap.set(canonicalId, {
+                            id: canonicalId,
+                            canonicalId,
+                            name: matchingContact?.display_name || `Nodo ${canonicalId.slice(0, 6)}…`,
+                            transports: ['wifi'],
+                            isContact: !!matchingContact,
+                            isOnline: true,
                         });
                     }
                 }
-                setMeshPeers(Array.from(map.values()));
-            } catch {
-                setMeshPeers([...localTransport.allPeers]);
-            }
+            } catch {}
+
+            setDevices(Array.from(unifiedMap.values()));
         };
+
         refresh();
         const interval = setInterval(refresh, 2500);
         return () => clearInterval(interval);
-    }, []);
+    }, [contacts, identity]);
 
-    // Radar sweep animation
     useEffect(() => {
-        const t = setInterval(() => setScanAngle(a => (a + 3) % 360), 30);
+        const t = setInterval(() => setScanAngle(a => (a + 4) % 360), 30);
         return () => clearInterval(t);
     }, []);
 
-    const handleConnect = async (deviceId: string, deviceName?: string) => {
-        setConnecting(deviceId);
+    const handleConnect = async (dev: UnifiedDevice) => {
+        setConnecting(dev.id);
         try {
-            await localTransport.connectBluetooth(deviceId);
-            setConnectedIds(s => new Set(s).add(deviceId));
-            const store = useRedStore.getState();
-            await store.addContact(deviceId, deviceName || `Nodo RED (${deviceId.substring(0, 6)})`);
-            
-            // Send P2P Identity Handshake to both device ID and broadcast wildcard
-            const myIdentity = store.identity;
-            if (myIdentity?.identity_hash) {
-                const payloadStr = JSON.stringify({
-                    sender_hash: myIdentity.identity_hash,
-                    sender_name: myIdentity.nickname || 'Operador RED',
-                    sender_pk: myIdentity.public_key || null
-                });
-                RedAPI.sendMessage(deviceId, payloadStr, { msg_type: 'contact_request' }).catch(() => {});
-                RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadStr, { msg_type: 'contact_request' }).catch(() => {});
+            if (dev.rawBleId) {
+                await localTransport.connectBluetooth(dev.rawBleId);
             }
-
-            // Add peer directly to meshPeers list so it moves to active relay section
-            setMeshPeers(prev => {
-                if (prev.some(p => p.id === deviceId)) return prev;
-                return [...prev, { id: deviceId, transport: 'ble', lastSeen: Date.now(), rssi: -50 }];
-            });
-            const { toast } = await import("./Toast");
-            toast.success(`✅ Solicitud enviada a ${deviceName || 'Nodo RED'}`);
-        } catch (e) {
-            console.error("BLE connect failed:", e);
-            const { toast } = await import("./Toast");
-            toast.error(`❌ Error de conexión BLE`);
+            const store = useRedStore.getState();
+            await store.addContact(dev.canonicalId, dev.name);
+            toast.success(`✅ Enlace con ${dev.name} establecido`);
+        } catch {
+            toast.error("Error al conectar dispositivo");
         } finally {
             setConnecting(null);
         }
     };
 
-    const totalNodes = meshPeers.length + bleDevices.length;
+    const handleOpenChat = (dev: UnifiedDevice) => {
+        navigate("chat", dev.canonicalId);
+    };
 
     return (
         <div style={{
-            background: 'linear-gradient(135deg, rgba(8,8,16,0.98), rgba(13,13,22,0.98))',
-            borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
-            margin: '16px', overflow: 'hidden',
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
         }}>
-            {/* Panel header */}
-            <div style={{
-                padding: '16px 20px', borderBottom: '1px solid var(--solid-border)',
-                display: 'flex', alignItems: 'center', gap: '14px',
-                background: 'linear-gradient(90deg, rgba(232,33,58,0.05), transparent)',
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
             }}>
-                <button
-                    onClick={() => navigate('sidebar')}
-                    style={{ background: 'transparent', border: 'none', color: '#00D97E', fontSize: '1.1rem', cursor: 'pointer', fontWeight: 700 }}
-                >
-                    ← Volver
-                </button>
-
-                {/* Mini radar */}
-                <div style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <div style={{
-                        position: 'absolute', inset: 0, borderRadius: '50%',
-                        border: '1.5px solid rgba(0,217,126,0.2)',
-                    }} />
-                    <div style={{
-                        position: 'absolute', inset: 6, borderRadius: '50%',
-                        border: '1px solid rgba(0,217,126,0.12)',
-                    }} />
-                    {/* Sweep */}
-                    <div style={{
-                        position: 'absolute', inset: 0, borderRadius: '50%',
-                        background: `conic-gradient(transparent ${scanAngle - 60}deg, rgba(0,217,126,0.25) ${scanAngle - 20}deg, rgba(0,217,126,0.08) ${scanAngle}deg, transparent ${scanAngle + 5}deg)`,
-                    }} />
-                    {/* Center dot */}
-                    <div style={{
-                        position: 'absolute', top: '50%', left: '50%',
-                        width: 5, height: 5, marginTop: -2.5, marginLeft: -2.5,
-                        borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 6px var(--success)',
-                    }} />
-                    {/* Blips for each peer */}
-                    {meshPeers.slice(0, 4).map((_, i) => {
-                        const angle = (i * 90 + 30) * (Math.PI / 180);
-                        const r = 10 + (i % 2) * 5;
-                        return (
-                            <div key={i} style={{
-                                position: 'absolute', width: 3, height: 3, borderRadius: '50%',
-                                background: 'var(--success)', boxShadow: '0 0 4px var(--success)',
-                                top: `calc(50% + ${Math.sin(angle) * r}px - 1.5px)`,
-                                left: `calc(50% + ${Math.cos(angle) * r}px - 1.5px)`,
-                            }} />
-                        );
-                    })}
-                </div>
-
-                <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '0.2px' }}>
-                        RED MESH — NODOS CERCANOS
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--success)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--success)', display: 'inline-block', boxShadow: '0 0 4px var(--success)', animation: 'pulse-glow 2s infinite' }} />
-                        Escaneando · {totalNodes} nodo{totalNodes !== 1 ? 's' : ''} en rango
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.4)"
+                    }}>📡</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Radar de Dispositivos Cercanos
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            MULTI-TRANSPORT · BLE & WIFI DIRECT DISCOVERY
+                        </div>
                     </div>
                 </div>
 
-                {totalNodes > 0 && (
-                    <div style={{
-                        padding: '4px 10px', borderRadius: '20px',
-                        background: 'rgba(0,217,126,0.1)', border: '1px solid rgba(0,217,126,0.25)',
-                        color: 'var(--success)', fontSize: '0.72rem', fontWeight: 800,
-                        fontFamily: 'JetBrains Mono, monospace',
-                    }}>
-                        +{totalNodes}
-                    </div>
-                )}
-            </div>
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => navigate("proximity_settings")}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                    >
+                        ⚙️ Filtros
+                    </button>
+                    <button
+                        onClick={goBack}
+                        className="btn-icon"
+                        title="Cerrar radar"
+                        style={{ width: 38, height: 38 }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            </header>
 
-            {/* Content */}
-            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "20px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                {/* Active mesh peers */}
-                {meshPeers.length > 0 && (
-                    <div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                            Malla Activa — {meshPeers.length} Relay{meshPeers.length !== 1 ? 's' : ''}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {meshPeers.map(peer => {
-                                const color = TRANSPORT_COLOR[peer.transport] || '#888';
-                                return (
-                                    <div key={peer.id} className="mesh-peer-active" style={{
-                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                        padding: '12px 14px', borderRadius: 'var(--radius-md)',
-                                        background: `${color}08`,
-                                        border: `1px solid ${color}30`,
-                                        transition: 'all 0.3s ease',
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <div style={{
-                                                width: 36, height: 36, borderRadius: 'var(--radius-sm)',
-                                                background: `${color}15`, border: `1px solid ${color}30`,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontSize: '1.1rem',
-                                            }}>
-                                                {TRANSPORT_ICON[peer.transport] || '📡'}
-                                            </div>
-                                            <div>
-                                                <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)', fontFamily: 'JetBrains Mono, monospace' }}>
-                                                    {peer.id.slice(0, 18)}…
-                                                </div>
-                                                <div style={{ marginTop: '3px' }}>
-                                                    <RssiBar rssi={peer.rssi} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                                            <span style={{
-                                                fontSize: '10px', padding: '2px 8px', borderRadius: '6px',
-                                                background: `${color}18`, color, fontWeight: 800,
-                                                border: `1px solid ${color}30`,
-                                                fontFamily: 'JetBrains Mono, monospace', letterSpacing: '0.3px',
-                                            }}>
-                                                {peer.transport.toUpperCase()} RELAY
-                                            </span>
-                                            <span style={{ fontSize: '9px', color: 'var(--success)', fontWeight: 600 }}>✓ Enrutando</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* BLE discovered */}
-                {bleDevices.length > 0 && (
-                    <div>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                            Descubiertos por BLE — Sin conectar
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {bleDevices.map((dev, i) => {
-                                const isConnecting = connecting === dev.id;
-                                const isConnected = connectedIds.has(dev.id);
-                                return (
-                                    <div key={i} style={{
-                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                        padding: '12px 14px', borderRadius: 'var(--radius-md)',
-                                        background: 'var(--bg-deep)', border: '1px solid var(--solid-border)',
-                                    }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                            <div style={{
-                                                width: 36, height: 36, borderRadius: 'var(--radius-sm)',
-                                                background: 'rgba(52,152,219,0.1)', border: '1px solid rgba(52,152,219,0.25)',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
-                                            }}>🔵</div>
-                                            <div>
-                                                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
-                                                    {dev.name || 'Nodo RED'}
-                                                </div>
-                                                <div style={{ marginTop: '3px' }}>
-                                                    <RssiBar rssi={dev.rssi} />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={() => !isConnected && handleConnect(dev.id, dev.name)}
-                                            disabled={isConnecting}
-                                            className="btn-secondary"
-                                            style={{
-                                                padding: '7px 14px', fontSize: '0.75rem', fontWeight: 700,
-                                                background: isConnected ? 'rgba(0,217,126,0.12)' : undefined,
-                                                borderColor: isConnected ? 'rgba(0,217,126,0.3)' : undefined,
-                                                color: isConnected ? 'var(--success)' : undefined,
-                                                minWidth: 80, cursor: 'pointer',
-                                            }}
-                                        >
-                                            {isConnecting ? (
-                                                <div style={{ width: 12, height: 12, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
-                                            ) : isConnected ? '✓ Enlazado' : 'Conectar'}
-                                        </button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Empty state */}
-                {meshPeers.length === 0 && bleDevices.length === 0 && (
-                    <div style={{ padding: '28px 0', textAlign: 'center' }}>
-                        {/* Pulsing radar rings */}
-                        <div style={{ position: 'relative', width: 80, height: 80, margin: '0 auto 20px' }}>
-                            {[0, 1, 2].map(i => (
-                                <div key={i} style={{
-                                    position: 'absolute', inset: `${i * 10}px`,
-                                    borderRadius: '50%', border: '1px solid rgba(0,217,126,0.2)',
-                                    animation: `radarPing ${1.5 + i * 0.5}s ease-out infinite`,
-                                    animationDelay: `${i * 0.5}s`,
-                                }} />
-                            ))}
+                    {/* Radar Visual */}
+                    <div className="card-tactical animate-enter" style={{ padding: "24px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "14px" }}>
+                        <div style={{
+                            position: "relative", width: "180px", height: "180px",
+                            borderRadius: "50%", border: "2px solid rgba(0,229,255,0.3)",
+                            background: "radial-gradient(circle, rgba(0,229,255,0.06) 0%, rgba(8,8,16,0.9) 70%)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            overflow: "hidden"
+                        }}>
+                            <div style={{ position: "absolute", width: "120px", height: "120px", borderRadius: "50%", border: "1px dashed rgba(0,229,255,0.2)" }} />
+                            <div style={{ position: "absolute", width: "60px", height: "60px", borderRadius: "50%", border: "1px dashed rgba(0,229,255,0.2)" }} />
+                            
+                            {/* Sweeper beam */}
                             <div style={{
-                                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '1.8rem',
-                            }}>📡</div>
+                                position: "absolute", inset: 0,
+                                background: `conic-gradient(from ${scanAngle}deg at 50% 50%, rgba(0,229,255,0.4) 0deg, transparent 60deg, transparent 360deg)`
+                            }} />
+
+                            <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px #fff" }} />
                         </div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 600 }}>Escaneando el perímetro…</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '6px', lineHeight: 1.5 }}>
-                            Activa WiFi y Bluetooth<br/>Los nodos RED aparecerán aquí
+
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                            ESCANEANDO FRECUENCIAS BLUETOOTH LE & WIFI DIRECT
                         </div>
                     </div>
-                )}
+
+                    {/* Lista de Dispositivos Detectados */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span>DISPOSITIVOS EN RADIO ({devices.length})</span>
+                            <span style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                RESOLUCIÓN CANÓNICA ACTIVA
+                            </span>
+                        </div>
+
+                        {devices.length === 0 ? (
+                            <div className="empty-state-tactical">
+                                <div className="empty-state-icon">📡</div>
+                                <div className="empty-state-title">Buscando Nodos Cercanos...</div>
+                                <div className="empty-state-desc">
+                                    Los nodos RED con Bluetooth LE o WiFi activo aparecerán automáticamente.
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {devices.map(dev => (
+                                    <div key={dev.id} className="card-tactical" style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <div style={{ fontSize: "0.90rem", fontWeight: 800, color: dev.isContact ? "var(--accent-emerald)" : "#fff" }}>
+                                                    {dev.name}
+                                                </div>
+                                                <div style={{ display: "flex", gap: "4px" }}>
+                                                    {dev.transports.map(t => (
+                                                        <span key={t} className={`badge-tactical ${t === 'ble' ? 'badge-tactical-cyan' : t === 'wifi' ? 'badge-tactical-emerald' : 'badge-tactical-amber'}`} style={{ fontSize: "0.60rem", padding: "1px 5px" }}>
+                                                            {t.toUpperCase()}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <span style={{ fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)" }}>
+                                                    DID: {dev.canonicalId.slice(0, 16)}…
+                                                </span>
+                                                {dev.rssi != null && <RssiBar rssi={dev.rssi} />}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: "8px" }}>
+                                            {dev.isContact ? (
+                                                <button
+                                                    onClick={() => handleOpenChat(dev)}
+                                                    className="btn-tactical-primary"
+                                                    style={{ padding: "6px 14px", fontSize: "0.76rem", background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)", color: "#000" }}
+                                                >
+                                                    💬 Chat
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleConnect(dev)}
+                                                    disabled={connecting === dev.id}
+                                                    className="btn-tactical-primary"
+                                                    style={{ padding: "6px 14px", fontSize: "0.76rem" }}
+                                                >
+                                                    {connecting === dev.id ? "Enlazando..." : "+ Guardar"}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

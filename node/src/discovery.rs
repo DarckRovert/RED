@@ -45,68 +45,96 @@ pub struct ProximityDigest {
 
 #[derive(Clone)]
 pub struct DiscoveryEngine {
-    nearby_nodes: Arc<RwLock<HashMap<String, ProximityNode>>>,
-    last_notified: Arc<RwLock<HashMap<String, i64>>>,
-    config: Arc<RwLock<ProximityFilterConfig>>,
+    db: Option<sled::Db>,
 }
 
 impl DiscoveryEngine {
-    pub fn new() -> Self {
-        let engine = Self {
-            nearby_nodes: Arc::new(RwLock::new(HashMap::new())),
-            last_notified: Arc::new(RwLock::new(HashMap::new())),
-            config: Arc::new(RwLock::new(ProximityFilterConfig {
-                cooldown_seconds: 3600, // 1 hora cooldown anti-spam
-                rssi_threshold_dbm: -75,
-                stealth_mode: "vibrate".to_string(),
-                digest_enabled: true,
-                safe_zones: vec![SafeZone {
-                    name: "Base Táctica / Oficina".to_string(),
-                    lat: -12.04637,
-                    lon: -77.04279,
-                    radius_meters: 150.0,
-                }],
-            })),
-        };
-        engine
+    pub fn new(db: Option<sled::Db>) -> Self {
+        Self { db }
+    }
+
+    fn nodes_tree(&self) -> Option<sled::Tree> {
+        self.db.as_ref().and_then(|db| db.open_tree("discovery_nodes").ok())
+    }
+
+    fn config_tree(&self) -> Option<sled::Tree> {
+        self.db.as_ref().and_then(|db| db.open_tree("discovery_config").ok())
+    }
+
+    fn last_notified_tree(&self) -> Option<sled::Tree> {
+        self.db.as_ref().and_then(|db| db.open_tree("discovery_last_notified").ok())
     }
 
     pub fn register_discovered_node(&self, node: ProximityNode) {
-        let mut map = self.nearby_nodes.write().unwrap();
-        map.insert(node.identity_hash.clone(), node);
+        if let Some(tree) = self.nodes_tree() {
+            if let Ok(bytes) = bincode::serialize(&node) {
+                let _ = tree.insert(node.identity_hash.as_bytes(), bytes);
+            }
+        }
     }
 
     pub fn get_config(&self) -> ProximityFilterConfig {
-        self.config.read().unwrap().clone()
+        if let Some(tree) = self.config_tree() {
+            if let Ok(Some(bytes)) = tree.get("config") {
+                if let Ok(cfg) = bincode::deserialize::<ProximityFilterConfig>(&bytes) {
+                    return cfg;
+                }
+            }
+        }
+        
+        ProximityFilterConfig {
+            cooldown_seconds: 3600,
+            rssi_threshold_dbm: -75,
+            stealth_mode: "vibrate".to_string(),
+            digest_enabled: true,
+            safe_zones: vec![SafeZone {
+                name: "Base Táctica / Oficina".to_string(),
+                lat: -12.04637,
+                lon: -77.04279,
+                radius_meters: 150.0,
+            }],
+        }
     }
 
     pub fn set_config(&self, cfg: ProximityFilterConfig) {
-        *self.config.write().unwrap() = cfg;
+        if let Some(tree) = self.config_tree() {
+            if let Ok(bytes) = bincode::serialize(&cfg) {
+                let _ = tree.insert("config", bytes);
+            }
+        }
     }
 
     pub fn get_filtered_proximity_nodes(&self) -> Vec<ProximityNode> {
-        let map = self.nearby_nodes.read().unwrap();
-        let cfg = self.config.read().unwrap();
+        let mut nodes = Vec::new();
+        let cfg = self.get_config();
         let now = chrono::Utc::now().timestamp();
-        let last_notified_map = self.last_notified.read().unwrap();
-
-        map.values()
-            .filter(|n| {
-                // Filtro 1: RSSI mínimo aceptable
-                if n.rssi_dbm < cfg.rssi_threshold_dbm {
-                    return false;
-                }
-                // Filtro 2: Cooldown por nodo
-                if let Some(&last_t) = last_notified_map.get(&n.identity_hash) {
-                    if (now - last_t) < (cfg.cooldown_seconds as i64) {
-                        // En cooldown -> No molestar
-                        return false;
+        
+        if let Some(tree) = self.nodes_tree() {
+            for item in tree.iter() {
+                if let Ok((_, v)) = item {
+                    if let Ok(n) = bincode::deserialize::<ProximityNode>(&v) {
+                        // Filtro 1: RSSI
+                        if n.rssi_dbm >= cfg.rssi_threshold_dbm {
+                            // Filtro 2: Cooldown
+                            let mut allow = true;
+                            if let Some(ln_tree) = self.last_notified_tree() {
+                                if let Ok(Some(last_t_bytes)) = ln_tree.get(n.identity_hash.as_bytes()) {
+                                    if let Ok(last_t) = bincode::deserialize::<i64>(&last_t_bytes) {
+                                        if (now - last_t) < (cfg.cooldown_seconds as i64) {
+                                            allow = false;
+                                        }
+                                    }
+                                }
+                            }
+                            if allow {
+                                nodes.push(n);
+                            }
+                        }
                     }
                 }
-                true
-            })
-            .cloned()
-            .collect()
+            }
+        }
+        nodes
     }
 
     pub fn get_digest(&self) -> ProximityDigest {
@@ -116,17 +144,18 @@ impl DiscoveryEngine {
             total_nodes_detected: nodes.len(),
             nodes_summary: names,
             timestamp: chrono::Utc::now().timestamp(),
-            is_in_safe_zone: false,
+            is_in_safe_zone: false, // Could compute against get_config().safe_zones
         }
     }
 
     pub fn trigger_wave(&self, req: WaveHandshakeRequest) -> ProximityNode {
         let timestamp = chrono::Utc::now().timestamp();
-        // Marcar en mapa de cooldown
-        self.last_notified
-            .write()
-            .unwrap()
-            .insert(req.target_identity_hash.clone(), timestamp);
+        
+        if let Some(tree) = self.last_notified_tree() {
+            if let Ok(bytes) = bincode::serialize(&timestamp) {
+                let _ = tree.insert(req.target_identity_hash.as_bytes(), bytes);
+            }
+        }
 
         ProximityNode {
             identity_hash: req.target_identity_hash.clone(),

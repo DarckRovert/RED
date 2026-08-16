@@ -11,8 +11,21 @@ pub struct WeatherReport {
     pub pressure_hpa: f32,
     pub temperature_c: Option<f32>,
     pub humidity_percent: Option<f32>,
+    pub wind_speed_kmh: Option<f32>,
+    pub wind_direction_deg: Option<f32>,
     pub condition_summary: String,
     pub is_disaster_alert: bool,
+    // OASIS CAP v1.2 fields
+    pub cap_event: Option<String>,
+    pub cap_urgency: Option<String>,
+    pub cap_severity: Option<String>,
+    pub cap_certainty: Option<String>,
+    pub cap_headline: Option<String>,
+    pub cap_instruction: Option<String>,
+    pub cap_area_desc: Option<String>,
+    pub cap_expires_at: Option<i64>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
     pub timestamp: i64,
 }
 
@@ -22,8 +35,21 @@ pub struct PostWeatherReportRequest {
     pub pressure_hpa: f32,
     pub temperature_c: Option<f32>,
     pub humidity_percent: Option<f32>,
+    pub wind_speed_kmh: Option<f32>,
+    pub wind_direction_deg: Option<f32>,
     pub condition_summary: String,
     pub is_disaster_alert: bool,
+    // OASIS CAP v1.2 fields
+    pub cap_event: Option<String>,
+    pub cap_urgency: Option<String>,
+    pub cap_severity: Option<String>,
+    pub cap_certainty: Option<String>,
+    pub cap_headline: Option<String>,
+    pub cap_instruction: Option<String>,
+    pub cap_area_desc: Option<String>,
+    pub cap_expires_at: Option<i64>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
 }
 
 #[derive(Clone)]
@@ -53,13 +79,29 @@ impl WeatherStore {
             pressure_hpa: req.pressure_hpa,
             temperature_c: req.temperature_c,
             humidity_percent: req.humidity_percent,
+            wind_speed_kmh: req.wind_speed_kmh,
+            wind_direction_deg: req.wind_direction_deg,
             condition_summary: req.condition_summary,
             is_disaster_alert: req.is_disaster_alert,
+            cap_event: req.cap_event,
+            cap_urgency: req.cap_urgency,
+            cap_severity: req.cap_severity,
+            cap_certainty: req.cap_certainty,
+            cap_headline: req.cap_headline,
+            cap_instruction: req.cap_instruction,
+            cap_area_desc: req.cap_area_desc,
+            cap_expires_at: req.cap_expires_at,
+            latitude: req.latitude,
+            longitude: req.longitude,
             timestamp,
         };
 
         self.reports.write().unwrap().insert(id, report.clone());
         report
+    }
+
+    pub fn add_report_raw(&self, report: WeatherReport) {
+        self.reports.write().unwrap().insert(report.id.clone(), report);
     }
 
     pub fn list_reports(&self, limit: usize) -> Vec<WeatherReport> {

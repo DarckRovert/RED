@@ -1,12 +1,12 @@
 [package]
 name = "red_mobile"
-version = "3.1.0"
+version = "31.0.0"
 edition = "2021"
 publish = false
 
 [lib]
 name = "red_mobile"
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 jni = "0.21.1"
@@ -35,4 +35,10 @@ thiserror = "1.0"
 android_logger = "0.13"
 log = "0.4"
 local-ip-address = "0.6"
+
+# Inteligencia Artificial Nativa GGUF (Pure Rust)
+candle-core = "0.11.0"
+candle-nn = "0.11.0"
+candle-transformers = "0.11.0"
+tokenizers = "0.19.1"
 

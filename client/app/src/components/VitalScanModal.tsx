@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
-import { VitalScanEngine, PPGScanResult, StartTriageResult, TriageRecord } from "../lib/VitalScanEngine";
+import { VitalScanEngine, PPGScanResult, StartTriageResult } from "../lib/VitalScanEngine";
+import { RedAPI, TriageReportRecord } from "../lib/api";
+import { toast } from "./Toast";
+
+type MedicalTab = "ppg" | "triage" | "records" | "water";
 
 export function VitalScanModal() {
     const { navigate } = useRedStore();
+    const [activeTab, setActiveTab] = useState<MedicalTab>("ppg");
 
     // PPG Scanner States
     const [isScanning, setIsScanning] = useState(false);
@@ -26,27 +31,47 @@ export function VitalScanModal() {
     const [canFollowCommands, setCanFollowCommands] = useState(true);
     const [triageResult, setTriageResult] = useState<StartTriageResult | null>(null);
 
-    // Triage Records History
-    const [triageRecords, setTriageRecords] = useState<TriageRecord[]>([]);
+    // Triage Records History (From Rust Sled DB & Mesh Gossip)
+    const [triageRecords, setTriageRecords] = useState<TriageReportRecord[]>([]);
+    const [filterCategory, setFilterCategory] = useState<string>("ALL");
     const [victimLabelInput, setVictimLabelInput] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+
+    // Device GPS location
+    const [coords, setCoords] = useState<{ lat?: number; lon?: number }>({});
 
     // Water purification calculator states
     const [waterLiters, setWaterLiters] = useState("2");
     const [altitudeMeters, setAltitudeMeters] = useState("0");
     const [isTurbidWater, setIsTurbidWater] = useState(false);
 
-    useEffect(() => {
+    // ── 0. Carga de Reportes de Triaje desde Rust Sled DB ───────────────────────────
+    const loadTriageReports = useCallback(async () => {
         try {
-            const savedTriage = localStorage.getItem("red_triage_records");
-            if (savedTriage) setTriageRecords(JSON.parse(savedTriage));
-        } catch {}
+            const reports = await RedAPI.getTriageReports();
+            if (Array.isArray(reports)) {
+                setTriageRecords(reports);
+            }
+        } catch {
+            // fallback handled silently
+        }
+    }, []);
 
-        // Read real altitude from device GPS if available
-        if (navigator.geolocation) {
+    useEffect(() => {
+        loadTriageReports();
+
+        // Read real altitude and GPS from device
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
                     if (pos.coords.altitude !== null && pos.coords.altitude !== undefined) {
                         setAltitudeMeters(Math.round(pos.coords.altitude).toString());
+                    }
+                    if (pos.coords.latitude && pos.coords.longitude) {
+                        setCoords({
+                            lat: pos.coords.latitude,
+                            lon: pos.coords.longitude,
+                        });
                     }
                 },
                 () => {},
@@ -54,14 +79,12 @@ export function VitalScanModal() {
             );
         }
 
-        // Initial draw of static medical ECG grid on canvas
         drawMedicalGrid();
 
-        // Cleanup camera stream and Flash LED on unmount
         return () => {
             VitalScanEngine.stopPPGScan();
         };
-    }, []);
+    }, [loadTriageReports]);
 
     // Render ICU Patient Monitor Medical Grid (Rejilla Médica ECG)
     const drawMedicalGrid = () => {
@@ -73,11 +96,11 @@ export function VitalScanModal() {
         const w = canvas.width;
         const h = canvas.height;
 
-        ctx.fillStyle = "rgba(4, 10, 20, 0.95)";
+        ctx.fillStyle = "rgba(4, 6, 14, 0.98)";
         ctx.fillRect(0, 0, w, h);
 
         // Minor grid (every 8px)
-        ctx.strokeStyle = "rgba(0, 230, 118, 0.07)";
+        ctx.strokeStyle = "rgba(0, 230, 118, 0.06)";
         ctx.lineWidth = 0.5;
         for (let x = 0; x < w; x += 8) {
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
@@ -87,7 +110,7 @@ export function VitalScanModal() {
         }
 
         // Major grid (every 32px)
-        ctx.strokeStyle = "rgba(0, 230, 118, 0.18)";
+        ctx.strokeStyle = "rgba(0, 230, 118, 0.16)";
         ctx.lineWidth = 1;
         for (let x = 0; x < w; x += 32) {
             ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
@@ -96,45 +119,43 @@ export function VitalScanModal() {
             ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
         }
 
-        // Baseline zero line
+        // Baseline zero line (carmesi sutil)
         ctx.strokeStyle = "rgba(232, 33, 58, 0.35)";
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.2;
         ctx.beginPath();
         ctx.moveTo(0, h / 2);
         ctx.lineTo(w, h / 2);
         ctx.stroke();
     };
 
-    // Draw Real-time PPG Pulse Waveform on Canvas with Medical Grid & Automatic Gain Control
-    const drawWaveform = (waveSample: number) => {
-        waveBuffer.current.push(waveSample);
-        if (waveBuffer.current.length > 100) waveBuffer.current.shift();
-
+    // Draw live PPG waveform on canvas during scanning
+    const drawWaveform = (newSample: number) => {
         const canvas = waveCanvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        drawMedicalGrid();
-
         const w = canvas.width;
         const h = canvas.height;
-        const buf = waveBuffer.current;
 
-        // Calculate dynamic Automatic Gain Control (AGC) peak-to-peak amplitude
-        let maxVal = Math.max(...buf);
-        let minVal = Math.min(...buf);
-        const p2p = Math.max(0.1, maxVal - minVal);
-        const gain = (h * 0.35) / (p2p / 2); // Scale wave to occupy 70% of canvas height
+        waveBuffer.current.push(newSample);
+        if (waveBuffer.current.length > 120) {
+            waveBuffer.current.shift();
+        }
 
-        ctx.strokeStyle = "#FF1744";
+        drawMedicalGrid();
+
+        ctx.strokeStyle = "#00E676";
         ctx.lineWidth = 2.2;
-        ctx.shadowColor = "#FF1744";
-        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#00E676";
+        ctx.shadowBlur = 6;
         ctx.beginPath();
 
-        const step = w / (buf.length - 1);
-        buf.forEach((val, i) => {
+        const buffer = waveBuffer.current;
+        const step = w / (buffer.length - 1);
+        const gain = 2.6;
+
+        buffer.forEach((val, i) => {
             const x = i * step;
             const y = h / 2 - val * gain;
             if (i === 0) ctx.moveTo(x, y);
@@ -143,40 +164,29 @@ export function VitalScanModal() {
 
         ctx.stroke();
         ctx.shadowBlur = 0;
-
-        // Draw live sweep cursor
-        const currentX = (buf.length - 1) * step;
-        const currentY = h / 2 - buf[buf.length - 1] * gain;
-        ctx.fillStyle = "#00E676";
-        ctx.beginPath();
-        ctx.arc(currentX, currentY, 3.5, 0, Math.PI * 2);
-        ctx.fill();
     };
 
-    // Draw Full Post-Scan Captured PPG Signal Waveform with Detected Beat Markers (🔴)
+    // Draw final full processed ECG-style waveform on scan completion
     const drawResultWaveform = (result: PPGScanResult) => {
         const canvas = waveCanvasRef.current;
-        if (!canvas || !result.fullWaveform || result.fullWaveform.length === 0) return;
+        if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
-
-        drawMedicalGrid();
 
         const w = canvas.width;
         const h = canvas.height;
         const wave = result.fullWaveform;
+        if (!wave || wave.length < 2) return;
 
-        let maxVal = Math.max(...wave);
-        let minVal = Math.min(...wave);
-        const p2p = Math.max(0.1, maxVal - minVal);
-        const gain = (h * 0.35) / (p2p / 2);
+        drawMedicalGrid();
 
         ctx.strokeStyle = "#00E676";
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.4;
         ctx.shadowColor = "#00E676";
         ctx.shadowBlur = 8;
         ctx.beginPath();
 
+        const gain = 2.8;
         const step = w / (wave.length - 1);
         wave.forEach((val, i) => {
             const x = i * step;
@@ -188,20 +198,18 @@ export function VitalScanModal() {
         ctx.stroke();
         ctx.shadowBlur = 0;
 
-        // Render detected beat markers (🔴) at peak indices
+        // Render detected beat markers at peak indices
         if (result.peakIndices && result.peakIndices.length > 0) {
             result.peakIndices.forEach((peakIdx) => {
                 const px = peakIdx * step;
                 const py = h / 2 - wave[peakIdx] * gain;
 
-                // Red pulse aura
                 ctx.fillStyle = "rgba(232, 33, 58, 0.4)";
                 ctx.beginPath();
                 ctx.arc(px, py, 6, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Core beat dot
-                ctx.fillStyle = "#E8213A";
+                ctx.fillStyle = "#FF3355";
                 ctx.beginPath();
                 ctx.arc(px, py, 3, 0, Math.PI * 2);
                 ctx.fill();
@@ -231,7 +239,7 @@ export function VitalScanModal() {
 
         if (!ok) {
             setIsScanning(false);
-            alert("No se pudo acceder a la cámara o activar el destello LED. Verifica los permisos de cámara.");
+            toast.error("No se pudo acceder a la cámara o activar el destello LED.");
         }
     };
 
@@ -245,33 +253,55 @@ export function VitalScanModal() {
             canFollowCommands
         );
         setTriageResult(res);
+        toast.info(`Evaluación START completada: ${res.category} (${res.label})`);
     };
 
-    const handleSaveTriageRecord = () => {
+    const handleSaveTriageRecord = async () => {
         if (!triageResult) return;
+        setIsSaving(true);
         const label = victimLabelInput.trim() || `Víctima #${triageRecords.length + 1}`;
-        const record: TriageRecord = {
-            id: Date.now().toString(),
-            victimLabel: label,
-            category: triageResult.category,
-            bpm: (scanResult && scanResult.bpm > 0) ? scanResult.bpm : undefined,
-            spo2: (scanResult && scanResult.spo2 > 0) ? scanResult.spo2 : undefined,
-            timestamp: Date.now(),
-            notes: triageResult.label
-        };
 
-        const updated = [record, ...triageRecords];
-        setTriageRecords(updated);
-        try { localStorage.setItem("red_triage_records", JSON.stringify(updated)); } catch {}
-        setVictimLabelInput("");
-        alert(`✅ Víctima '${label}' clasificada como ${triageResult.category} y guardada en registro.`);
+        try {
+            const record = await RedAPI.saveTriageReport({
+                victim_label: label,
+                category: triageResult.category,
+                bpm: (scanResult && scanResult.bpm > 0) ? scanResult.bpm : undefined,
+                spo2: (scanResult && scanResult.spo2 > 0) ? scanResult.spo2 : undefined,
+                can_walk: canWalk,
+                is_breathing: isBreathing,
+                resp_rate: respRate,
+                cap_refill_sec: capRefillSec,
+                can_follow_commands: canFollowCommands,
+                notes: triageResult.label,
+                latitude: coords.lat,
+                longitude: coords.lon
+            });
+
+            setVictimLabelInput("");
+            await loadTriageReports();
+            toast.success(`🚨 Víctima '${record.victim_label}' [${record.category}] guardada en Sled y transmitida a la malla mesh.`);
+        } catch {
+            toast.error("Error al persistir reporte de triaje en Rust");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
-    const handleDeleteRecord = (id: string) => {
-        const updated = triageRecords.filter(r => r.id !== id);
-        setTriageRecords(updated);
-        try { localStorage.setItem("red_triage_records", JSON.stringify(updated)); } catch {}
+    const handleDeleteRecord = async (id: string) => {
+        try {
+            await RedAPI.deleteTriageReport(id);
+            await loadTriageReports();
+            toast.info("Registro médico eliminado de Sled DB");
+        } catch {
+            toast.error("Error al eliminar el reporte");
+        }
     };
+
+    const filteredRecords = triageRecords.filter(r => {
+        if (filterCategory === "ALL") return true;
+        const cat = String(r.category || r.triage_category || "").toUpperCase();
+        return cat.includes(filterCategory);
+    });
 
     const liters = Math.max(0.1, parseFloat(waterLiters) || 1);
     const alt = Math.max(0, parseFloat(altitudeMeters) || 0);
@@ -283,244 +313,531 @@ export function VitalScanModal() {
 
     return (
         <div style={{
-            position: 'fixed', inset: 0, zIndex: 999,
-            background: 'rgba(4,6,10,0.98)', color: '#fff',
-            display: 'flex', flexDirection: 'column',
-            padding: '14px 14px 90px 14px',
-            overflowY: 'auto', overflowX: 'hidden',
-            backdropFilter: 'blur(12px)', boxSizing: 'border-box'
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
         }}>
-            <div style={{ maxWidth: '640px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box' }}>
-                {/* Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ width: 38, height: 38, borderRadius: '12px', background: 'linear-gradient(135deg, #E8213A, #C0152A)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🫀</div>
-                        <div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Escáner Signos Vitales & Triaje START</div>
-                            <div style={{ fontSize: '0.7rem', color: '#E8213A' }}>Fotopletismografía por Cámara (PPG) & Asistencia Médica</div>
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(232,33,58,0.4)"
+                    }}>🫀</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Estación Médica & Triaje START
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            RUST SLED DB · GOSSIPSUB BROADCAST · GPS ENCRYPTED
                         </div>
                     </div>
-                    <button onClick={() => { VitalScanEngine.stopPPGScan(); navigate('sidebar'); }} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>✕ Cerrar</button>
                 </div>
 
-                {/* PPG Camera Pulse & Waveform Card */}
-                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(232,33,58,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}>
-                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#E8213A', marginBottom: '4px' }}>📸 Fotopletismografía Óptica (Pulso & SpO2)</div>
-                    <div style={{ fontSize: '0.72rem', color: '#AAA', textAlign: 'center', marginBottom: '14px' }}>
-                        Cubre el lente de la cámara principal y el Flash LED con la yema del dedo:
-                    </div>
+                <button
+                    onClick={() => navigate("sidebar")}
+                    className="btn-icon"
+                    title="Cerrar módulo"
+                    style={{ width: 38, height: 38 }}
+                >
+                    ✕
+                </button>
+            </header>
 
-                    <div style={{ width: 130, height: 130, borderRadius: '50%', border: `4px solid ${isScanning && !isFingerDetected ? '#FFB300' : '#E8213A'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(232,33,58,0.1)', boxShadow: isScanning ? '0 0 24px rgba(232,33,58,0.6)' : 'none', transition: 'all 0.3s' }}>
-                        {isScanning ? (
-                            <>
-                                <div style={{ fontSize: '1.8rem', animation: 'pulse 0.8s infinite' }}>❤️</div>
-                                <div style={{ fontSize: '0.82rem', fontWeight: 900, color: isFingerDetected ? '#E8213A' : '#FFB300', marginTop: 4 }}>
-                                    {isFingerDetected ? `${(scanProgress * 100).toFixed(0)}%` : '¡COLOCA EL DEDO!'}
+            {/* Selector de Pestañas Segmentadas Tácticas */}
+            <div style={{
+                padding: "10px 16px",
+                display: "flex", gap: "8px",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                overflowX: "auto", flexShrink: 0
+            }}>
+                <button
+                    onClick={() => setActiveTab("ppg")}
+                    className={activeTab === "ppg" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    🫀 Monitor PPG
+                </button>
+                <button
+                    onClick={() => setActiveTab("triage")}
+                    className={activeTab === "triage" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    🚑 Triaje START
+                </button>
+                <button
+                    onClick={() => setActiveTab("records")}
+                    className={activeTab === "records" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    📊 Víctimas ({triageRecords.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab("water")}
+                    className={activeTab === "water" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    💧 Agua & Altitud
+                </button>
+            </div>
+
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+
+                    {/* ─── TAB 1: MONITOR PPG ÓPTICO ────────────────────────────── */}
+                    {activeTab === "ppg" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                        📈 Osciloscopio Fotopletismográfico (PPG)
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                        Extracción óptica de pulso hemodinámico mediante sensor de cámara y flash
+                                    </div>
                                 </div>
-                            </>
-                        ) : scanResult && scanResult.bpm > 0 ? (
-                            <>
-                                <div style={{ fontSize: '2.2rem', fontWeight: 900, color: '#00E676', fontFamily: 'monospace', lineHeight: 1 }}>{scanResult.bpm}</div>
-                                <div style={{ fontSize: '0.68rem', color: '#AAA', fontWeight: 700 }}>BPM (Frecuencia)</div>
-                                <div style={{ fontSize: '0.85rem', color: '#38BDF8', fontWeight: 800, marginTop: 4 }}>{scanResult.spo2}% SpO2</div>
-                            </>
-                        ) : scanResult && scanResult.bpm === 0 ? (
-                            <div style={{ fontSize: '0.7rem', color: '#FFB300', textAlign: 'center', padding: '10px' }}>⚠️ Señal Débil / Repetir</div>
-                        ) : (
-                            <div style={{ fontSize: '2rem' }}>☝️</div>
-                        )}
-                    </div>
-
-                    {/* Real-Time & Post-Scan ECG/PPG Patient Monitor Graph Canvas */}
-                    <div style={{ width: '100%', marginTop: '14px', background: 'rgba(0,0,0,0.5)', borderRadius: '10px', padding: '8px', border: '1px solid rgba(0,230,118,0.2)', boxSizing: 'border-box' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                            <div style={{ fontSize: '0.68rem', color: '#00E676', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700 }}>
-                                {isScanning ? "📡 ONDA DE PULSO CAPILAR (PPG EN VIVO)" : scanResult && scanResult.bpm > 0 ? "📈 REGISTRO CARDIACO COMPLETO CON PICOS DETECTADOS (🔴)" : "📟 MONITOR CARDIACO PACIENTE — REJILLA ECG"}
+                                {isScanning && (
+                                    <span className="badge-tactical badge-tactical-amber" style={{ animation: "pulse 1s infinite" }}>
+                                        ● ESCANEANDO ({scanProgress}%)
+                                    </span>
+                                )}
                             </div>
-                            {scanResult && scanResult.peakIndices && scanResult.peakIndices.length > 0 && (
-                                <div style={{ fontSize: '0.66rem', color: '#E8213A', fontWeight: 800 }}>
-                                    {scanResult.peakIndices.length} latidos detectados
+
+                            {/* Osciloscopio Canvas HiDPI */}
+                            <div style={{
+                                position: "relative", width: "100%", height: "140px",
+                                borderRadius: "var(--radius-md)", overflow: "hidden",
+                                border: "1px solid rgba(0, 230, 118, 0.25)",
+                                boxShadow: "inset 0 0 20px rgba(0,0,0,0.8)"
+                            }}>
+                                <canvas ref={waveCanvasRef} width={640} height={140} style={{ width: "100%", height: "100%", display: "block" }} />
+
+                                {!isScanning && !scanResult && (
+                                    <div style={{
+                                        position: "absolute", inset: 0,
+                                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                                        background: "rgba(4, 6, 14, 0.75)", color: "var(--text-secondary)",
+                                        fontSize: "0.82rem", textAlign: "center", padding: "16px", gap: "6px"
+                                    }}>
+                                        <span style={{ fontSize: "1.4rem" }}>👆</span>
+                                        <span>Coloca suavemente la yema de tu dedo índice cubriendo completamente la lente de la cámara y el flash LED.</span>
+                                    </div>
+                                )}
+
+                                {isScanning && !isFingerDetected && (
+                                    <div style={{
+                                        position: "absolute", inset: 0,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        background: "rgba(232, 33, 58, 0.85)", color: "#fff",
+                                        fontSize: "0.85rem", fontWeight: 800, textAlign: "center", padding: "12px",
+                                        backdropFilter: "blur(6px)"
+                                    }}>
+                                        ⚠️ Contacto óptico débil: Cubre la cámara y el flash con la yema del dedo
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Barra de Progreso */}
+                            {isScanning && (
+                                <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.08)", borderRadius: "3px", overflow: "hidden" }}>
+                                    <div style={{
+                                        width: `${scanProgress}%`, height: "100%",
+                                        background: "linear-gradient(90deg, #FF3355, #00E676)",
+                                        transition: "width 0.1s linear"
+                                    }} />
+                                </div>
+                            )}
+
+                            {/* Métricas Resultantes */}
+                            {scanResult && (
+                                <div className="hud-grid animate-pop">
+                                    <div className="hud-metric">
+                                        <div className="hud-metric-label">Frecuencia Cardíaca</div>
+                                        <div className="hud-metric-val" style={{ color: "var(--accent-crimson-bright)" }}>
+                                            {scanResult.bpm > 0 ? `${scanResult.bpm} BPM` : "N/D"}
+                                        </div>
+                                    </div>
+                                    <div className="hud-metric">
+                                        <div className="hud-metric-label">Saturación Oxígeno</div>
+                                        <div className="hud-metric-val" style={{ color: "var(--accent-emerald)" }}>
+                                            {scanResult.spo2 > 0 ? `${scanResult.spo2}% SpO2` : "N/D"}
+                                        </div>
+                                    </div>
+                                    <div className="hud-metric">
+                                        <div className="hud-metric-label">Confianza de Señal</div>
+                                        <div className="hud-metric-val" style={{ color: "var(--accent-amber)" }}>
+                                            {scanResult.confidencePercent}%
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Botón de Inicio de Escaneo */}
+                            <button
+                                onClick={handleStartPPG}
+                                disabled={isScanning}
+                                className="btn-tactical-primary"
+                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
+                            >
+                                {isScanning ? `⏳ Analizando señal arterial... ${scanProgress}%` : "🫀 INICIAR ESCANEO ÓPTICO (CAM + FLASH)"}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ─── TAB 2: TRIAJE DE DESASTRE START ──────────────────────── */}
+                    {activeTab === "triage" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-amber)" }}>
+                                        🚑 Protocolo START (Simple Triage & Rapid Treatment)
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                        Algoritmo internacional de clasificación médica de emergencias masivas
+                                    </div>
+                                </div>
+                                <span className="badge-tactical badge-tactical-amber">ESTÁNDAR ISO</span>
+                            </div>
+
+                            {/* Flujo de Decisiones Clínicas */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                {/* Paso 1: Deambulación */}
+                                <div
+                                    onClick={() => setCanWalk(!canWalk)}
+                                    className="card-tactical-interactive"
+                                    style={{
+                                        padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                                        borderColor: canWalk ? "var(--accent-emerald)" : "var(--glass-border)"
+                                    }}
+                                >
+                                    <div>
+                                        <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>1. ¿La víctima puede caminar? (Ambulante)</div>
+                                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Pacientes que caminan reciben prioridad VERDE automáticamente</div>
+                                    </div>
+                                    <span style={{ fontSize: "1.3rem" }}>{canWalk ? "🟢 SÍ" : "⚪ NO"}</span>
+                                </div>
+
+                                {!canWalk && (
+                                    <>
+                                        {/* Paso 2: Respiración Espontánea */}
+                                        <div
+                                            onClick={() => setIsBreathing(!isBreathing)}
+                                            className="card-tactical-interactive"
+                                            style={{
+                                                padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                                                borderColor: isBreathing ? "var(--accent-emerald)" : "var(--accent-crimson)"
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>2. ¿Respira espontáneamente?</div>
+                                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Evaluación de presencia de flujo aéreo nasal/oral</div>
+                                            </div>
+                                            <span style={{ fontSize: "1.3rem" }}>{isBreathing ? "🟢 SÍ" : "🔴 NO"}</span>
+                                        </div>
+
+                                        {!isBreathing && (
+                                            <div
+                                                onClick={() => setBreathesAfterAirway(!breathesAfterAirway)}
+                                                className="card-tactical-interactive"
+                                                style={{
+                                                    padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                                                    background: "rgba(232,33,58,0.12)", borderColor: "rgba(232,33,58,0.4)"
+                                                }}
+                                            >
+                                                <div>
+                                                    <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--accent-crimson-bright)" }}>
+                                                        ¿Respira tras abrir vía aérea? (Frente-Mentón)
+                                                    </div>
+                                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Si NO respira tras maniobra posicional: ⚫ NEGRO (Fallecido)</div>
+                                                </div>
+                                                <span style={{ fontSize: "1.3rem" }}>{breathesAfterAirway ? "🟢 SÍ" : "⚫ NO"}</span>
+                                            </div>
+                                        )}
+
+                                        {isBreathing && (
+                                            <>
+                                                {/* Paso 3: Frecuencia Respiratoria */}
+                                                <div className="hud-metric" style={{ padding: "14px" }}>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                                        <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>3. Frecuencia Respiratoria:</span>
+                                                        <strong style={{
+                                                            fontFamily: "JetBrains Mono, monospace",
+                                                            color: (respRate < 10 || respRate > 30) ? "var(--accent-crimson-bright)" : "var(--accent-emerald)"
+                                                        }}>
+                                                            {respRate} resp/min {(respRate < 10 || respRate > 30) ? "(CRÍTICO >30 o <10)" : "(Normal)"}
+                                                        </strong>
+                                                    </div>
+                                                    <input
+                                                        type="range" min="0" max="45" value={respRate}
+                                                        onChange={e => setRespRate(Number(e.target.value))}
+                                                        style={{ width: "100%", accentColor: "var(--accent-amber)" }}
+                                                    />
+                                                </div>
+
+                                                {/* Paso 4: Relleno Capilar */}
+                                                <div className="hud-metric" style={{ padding: "14px" }}>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                                                        <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>4. Relleno Capilar / Pulso Radial:</span>
+                                                        <strong style={{
+                                                            fontFamily: "JetBrains Mono, monospace",
+                                                            color: capRefillSec > 2 ? "var(--accent-crimson-bright)" : "var(--accent-emerald)"
+                                                        }}>
+                                                            {capRefillSec}s {capRefillSec > 2 ? "(>2s Perfusión Pobre)" : "(Normal <2s)"}
+                                                        </strong>
+                                                    </div>
+                                                    <input
+                                                        type="range" min="0.5" max="4.0" step="0.5" value={capRefillSec}
+                                                        onChange={e => setCapRefillSec(Number(e.target.value))}
+                                                        style={{ width: "100%", accentColor: "var(--accent-amber)" }}
+                                                    />
+                                                </div>
+
+                                                {/* Paso 5: Estado Mental */}
+                                                <div
+                                                    onClick={() => setCanFollowCommands(!canFollowCommands)}
+                                                    className="card-tactical-interactive"
+                                                    style={{
+                                                        padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                                                        borderColor: canFollowCommands ? "var(--accent-emerald)" : "var(--accent-crimson)"
+                                                    }}
+                                                >
+                                                    <div>
+                                                        <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>5. Estado Mental: ¿Obedece órdenes sencillas?</div>
+                                                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>"Abra los ojos", "apriete mi mano"</div>
+                                                    </div>
+                                                    <span style={{ fontSize: "1.3rem" }}>{canFollowCommands ? "🟢 SÍ" : "🔴 NO"}</span>
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+
+                                <button
+                                    onClick={handleEvaluateTriage}
+                                    className="btn-tactical-primary"
+                                    style={{ width: "100%", padding: "12px", background: "linear-gradient(135deg, #FFB300 0%, #FF8F00 100%)", color: "#000", marginTop: "6px" }}
+                                >
+                                    📋 EVALUAR CLASIFICACIÓN DE TRIAJE
+                                </button>
+
+                                {/* Resultado START */}
+                                {triageResult && (
+                                    <div className="animate-pop" style={{
+                                        padding: "16px", borderRadius: "var(--radius-md)",
+                                        border: `2px solid ${triageResult.category === 'VERDE' ? '#00E676' : triageResult.category === 'AMARILLO' ? '#FFB300' : triageResult.category === 'ROJO' ? '#E8213A' : '#777'}`,
+                                        background: "rgba(0,0,0,0.65)", display: "flex", flexDirection: "column", gap: "10px"
+                                    }}>
+                                        <div style={{
+                                            fontSize: "1.05rem", fontWeight: 900,
+                                            color: triageResult.category === 'VERDE' ? '#00E676' : triageResult.category === 'AMARILLO' ? '#FFB300' : triageResult.category === 'ROJO' ? '#FF3355' : '#AAA',
+                                            display: "flex", alignItems: "center", gap: "8px"
+                                        }}>
+                                            <span>{triageResult.category === 'ROJO' ? '🔴' : triageResult.category === 'AMARILLO' ? '🟡' : triageResult.category === 'VERDE' ? '🟢' : '⚫'}</span>
+                                            <span>CATEGORÍA: {triageResult.category} — {triageResult.label}</span>
+                                        </div>
+                                        <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                                            {triageResult.actionRequired}
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                            <input
+                                                value={victimLabelInput}
+                                                onChange={e => setVictimLabelInput(e.target.value)}
+                                                placeholder="Etiqueta / Nombre de la víctima"
+                                                style={{ flex: 1, padding: "10px 14px", fontSize: "0.85rem" }}
+                                            />
+                                            <button
+                                                onClick={handleSaveTriageRecord}
+                                                disabled={isSaving}
+                                                className="btn-tactical-primary"
+                                                style={{ padding: "10px 18px", fontSize: "0.85rem", background: "linear-gradient(135deg, #00E676 0%, #00B359 100%)", color: "#000" }}
+                                            >
+                                                {isSaving ? "Guardando..." : "💾 Guardar"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ─── TAB 3: REGISTRO DE VÍCTIMAS EN SLED DB ────────────────── */}
+                    {activeTab === "records" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                                        📊 Base de Datos de Triaje Masivo (MCI)
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                        Persistencia local en disco Sled DB y sincronización Gossipsub Mesh
+                                    </div>
+                                </div>
+                                <span className="badge-tactical badge-tactical-emerald">SLED PERSISTED</span>
+                            </div>
+
+                            {/* Filtros de Categoría */}
+                            <div style={{ display: "flex", gap: "6px", overflowX: "auto" }}>
+                                {["ALL", "ROJO", "AMARILLO", "VERDE", "NEGRO"].map((cat) => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setFilterCategory(cat)}
+                                        style={{
+                                            padding: "4px 10px", borderRadius: "6px", fontSize: "0.74rem", fontWeight: 800,
+                                            border: filterCategory === cat ? "1px solid var(--accent-emerald)" : "1px solid var(--glass-border)",
+                                            background: filterCategory === cat ? "rgba(0,230,118,0.15)" : "transparent",
+                                            color: filterCategory === cat ? "var(--accent-emerald)" : "var(--text-secondary)",
+                                            cursor: "pointer"
+                                        }}
+                                    >
+                                        {cat === "ALL" ? `Todos (${triageRecords.length})` : cat}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Lista de Registros */}
+                            {filteredRecords.length === 0 ? (
+                                <div className="empty-state-tactical">
+                                    <div className="empty-state-icon">📋</div>
+                                    <div className="empty-state-title">Sin registros de triaje</div>
+                                    <div className="empty-state-desc">
+                                        No hay víctimas registradas en la categoría seleccionada en la base de datos Sled.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                    {filteredRecords.map((rec, i) => {
+                                        const cat = String(rec.category || rec.triage_category || "").toUpperCase();
+                                        const catColor = cat.includes("VERDE") ? "#00E676" : cat.includes("AMARILLO") ? "#FFB300" : cat.includes("ROJO") ? "#FF3355" : "#888";
+                                        const rid = rec.id || rec.report_id || `rec_${i}`;
+                                        return (
+                                            <div
+                                                key={rid}
+                                                className="card-tactical"
+                                                style={{
+                                                    padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                    borderLeft: `4px solid ${catColor}`
+                                                }}
+                                            >
+                                                <div>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                        <strong style={{ color: catColor, fontSize: "0.88rem" }}>[{cat}] {rec.victim_label || rec.victim_name}</strong>
+                                                        {rec.bpm && <span className="badge-tactical badge-tactical-crimson">{rec.bpm} BPM</span>}
+                                                        {rec.spo2 && <span className="badge-tactical badge-tactical-emerald">{rec.spo2}% SpO2</span>}
+                                                    </div>
+                                                    <div style={{ fontSize: "0.74rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                                        {rec.notes}
+                                                        {rec.latitude && rec.longitude && (
+                                                            <span style={{ marginLeft: "8px", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                                📍 GPS: {rec.latitude.toFixed(4)}, {rec.longitude.toFixed(4)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDeleteRecord(rid)}
+                                                    className="btn-icon"
+                                                    title="Eliminar de Sled"
+                                                    style={{ width: 34, height: 34, color: "var(--accent-crimson-bright)" }}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
-                        <canvas ref={waveCanvasRef} width={300} height={55} style={{ width: '100%', height: '55px', display: 'block', borderRadius: '6px' }} />
-                    </div>
-
-                    {isScanning && !isFingerDetected && (
-                        <div style={{ marginTop: '10px', fontSize: '0.74rem', color: '#FFB300', background: 'rgba(255,179,0,0.1)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,179,0,0.3)', textAlign: 'center' }}>
-                            ⚠️ Por favor cubre bien el lente de la cámara con el dedo para detectar el pulso capilar.
-                        </div>
                     )}
 
-                    {scanResult && scanResult.bpm === 0 && (
-                        <div style={{ marginTop: '10px', fontSize: '0.74rem', color: '#FFB300', background: 'rgba(255,179,0,0.1)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,179,0,0.3)', textAlign: 'center' }}>
-                            ⚠️ Señal óptica insuficiente. Mantén el dedo firme sobre la cámara sin presionar fuerte y enciende la luz ambiente si no hay Flash.
-                        </div>
-                    )}
-
-                    {isScanning && (
-                        <div style={{ width: '100%', height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, marginTop: 10, overflow: 'hidden' }}>
-                            <div style={{ width: `${scanProgress * 100}%`, height: '100%', background: '#E8213A', transition: 'width 0.1s linear' }} />
-                        </div>
-                    )}
-
-                    <button
-                        onClick={handleStartPPG}
-                        disabled={isScanning}
-                        style={{
-                            marginTop: '14px', width: '100%', padding: '12px',
-                            background: isScanning ? 'rgba(255,255,255,0.1)' : 'linear-gradient(90deg, #E8213A, #C0152A)',
-                            color: '#fff', border: 'none', borderRadius: '10px',
-                            fontWeight: 800, fontSize: '0.82rem', cursor: isScanning ? 'default' : 'pointer',
-                            boxShadow: isScanning ? 'none' : '0 4px 14px rgba(232,33,58,0.4)'
-                        }}
-                    >
-                        {isScanning ? "MEDICIÓN EN PROCESO..." : "⚡ ESCANEAR PULSO CARDIACO & SpO2 (12 SEG)"}
-                    </button>
-                </div>
-
-                {/* START Triage Assistant */}
-                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
-                    <div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#FFB300' }}>🩺 Clasificación de Triaje START (Desastres)</div>
-                        <div style={{ fontSize: '0.72rem', color: '#AAA', marginTop: '2px' }}>Algoritmo estandarizado para incidentes con múltiples víctimas:</div>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                            <input type="checkbox" checked={canWalk} onChange={e => setCanWalk(e.target.checked)} style={{ width: 16, height: 16 }} />
-                            <span>¿El paciente puede caminar solo?</span>
-                        </label>
-
-                        {!canWalk && (
-                            <>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                                    <input type="checkbox" checked={isBreathing} onChange={e => setIsBreathing(e.target.checked)} style={{ width: 16, height: 16 }} />
-                                    <span>¿El paciente está respirando espontáneamente?</span>
-                                </label>
-
-                                {!isBreathing && (
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(232,33,58,0.15)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(232,33,58,0.4)' }}>
-                                        <input type="checkbox" checked={breathesAfterAirway} onChange={e => setBreathesAfterAirway(e.target.checked)} style={{ width: 16, height: 16 }} />
-                                        <span style={{ color: '#FF8A80', fontWeight: 700 }}>¿Comienza a respirar tras abrir/reposicionar la vía aérea?</span>
-                                    </label>
-                                )}
-
-                                {isBreathing && (
-                                    <>
-                                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span>Frecuencia Respiratoria (RPM):</span>
-                                                <strong style={{ color: respRate > 30 || respRate < 10 ? '#E8213A' : '#00E676', fontSize: '0.9rem' }}>{respRate} RPM</strong>
-                                            </div>
-                                            <input type="range" min={5} max={45} value={respRate} onChange={e => setRespRate(parseInt(e.target.value))} style={{ width: '100%' }} />
-                                        </div>
-
-                                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span>Tiempo Llenado Capilar (Llenado Ungueal):</span>
-                                                <strong style={{ color: capRefillSec > 2 ? '#E8213A' : '#00E676', fontSize: '0.9rem' }}>{capRefillSec} seg</strong>
-                                            </div>
-                                            <input type="range" min={0.5} max={4} step={0.5} value={capRefillSec} onChange={e => setCapRefillSec(parseFloat(e.target.value))} style={{ width: '100%' }} />
-                                        </div>
-
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px' }}>
-                                            <input type="checkbox" checked={canFollowCommands} onChange={e => setCanFollowCommands(e.target.checked)} style={{ width: 16, height: 16 }} />
-                                            <span>¿Obedece órdenes sencillas (ej. apriete la mano)?</span>
-                                        </label>
-                                    </>
-                                )}
-                            </>
-                        )}
-
-                        <button onClick={handleEvaluateTriage} style={{ width: '100%', padding: '11px', background: '#FFB300', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 900, cursor: 'pointer', fontSize: '0.82rem', marginTop: '4px' }}>
-                            📋 EVALUAR CLASIFICACIÓN DE TRIAJE
-                        </button>
-
-                        {triageResult && (
-                            <div style={{
-                                marginTop: '6px', padding: '12px', borderRadius: '12px',
-                                border: `2px solid ${triageResult.category === 'VERDE' ? '#00E676' : triageResult.category === 'AMARILLO' ? '#FFB300' : triageResult.category === 'ROJO' ? '#E8213A' : '#777'}`,
-                                background: 'rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', gap: '8px'
-                            }}>
-                                <div style={{ fontSize: '0.92rem', fontWeight: 900, color: triageResult.category === 'VERDE' ? '#00E676' : triageResult.category === 'AMARILLO' ? '#FFB300' : triageResult.category === 'ROJO' ? '#E8213A' : '#AAA' }}>
-                                    Categoría: {triageResult.category} — {triageResult.label}
-                                </div>
-                                <div style={{ fontSize: '0.76rem', color: '#DDD', lineHeight: 1.4 }}>
-                                    {triageResult.actionRequired}
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                                    <input
-                                        value={victimLabelInput}
-                                        onChange={e => setVictimLabelInput(e.target.value)}
-                                        style={{ flex: 1, minWidth: 0, padding: '7px 10px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.78rem' }}
-                                        placeholder="Etiqueta / Nombre víctima (opcional)"
-                                    />
-                                    <button
-                                        onClick={handleSaveTriageRecord}
-                                        style={{ padding: '7px 12px', background: '#00E676', color: '#000', border: 'none', borderRadius: '6px', fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer' }}
-                                    >
-                                        💾 Guardar Registro
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Mass Casualty Incident (MCI) Triage Log Viewer */}
-                {triageRecords.length > 0 && (
-                    <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', boxSizing: 'border-box' }}>
-                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#FFF' }}>📊 Registro de Víctimas Triadas ({triageRecords.length})</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
-                            {triageRecords.map(rec => {
-                                const catColor = rec.category === 'VERDE' ? '#00E676' : rec.category === 'AMARILLO' ? '#FFB300' : rec.category === 'ROJO' ? '#E8213A' : '#888';
-                                return (
-                                    <div key={rec.id} style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', borderLeft: `4px solid ${catColor}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
-                                        <div>
-                                            <strong style={{ color: catColor }}>[{rec.category}] {rec.victimLabel}</strong>
-                                            <div style={{ fontSize: '0.7rem', color: '#AAA' }}>
-                                                {rec.notes} {rec.bpm ? `• ${rec.bpm} BPM` : ''} {rec.spo2 ? `• ${rec.spo2}% SpO2` : ''}
-                                            </div>
-                                        </div>
-                                        <button onClick={() => handleDeleteRecord(rec.id)} style={{ background: 'transparent', border: 'none', color: '#E8213A', cursor: 'pointer', fontSize: '0.9rem' }}>🗑️</button>
+                    {/* ─── TAB 4: CALCULADORA DE SUPERVIVENCIA H2O ──────────────── */}
+                    {activeTab === "water" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                        💧 Potabilización de Agua & Altitud Barométrica
                                     </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                )}
-
-                {/* Water Purification & Altitude Calculator */}
-                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box' }}>
-                    <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#38BDF8' }}>💧 Dosificación de Potabilización de Agua & Altitud Barométrica</div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.8rem' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <label style={{ display: 'block', color: '#AAA', marginBottom: '4px', fontSize: '0.74rem' }}>Volumen de Agua (Litros):</label>
-                                <input value={waterLiters} onChange={e => setWaterLiters(e.target.value)} style={{ width: '100%', padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Litros" />
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                        Cálculo estequiométrico de hipoclorito y tiempo de ebullición según altitud GPS
+                                    </div>
+                                </div>
+                                <span className="badge-tactical badge-tactical-cyan">BIO-SEGURIDAD</span>
                             </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <label style={{ display: 'block', color: '#AAA', marginBottom: '4px', fontSize: '0.74rem' }}>Altitud Estimada (Metros):</label>
-                                <input value={altitudeMeters} onChange={e => setAltitudeMeters(e.target.value)} style={{ width: '100%', padding: '8px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '6px', fontSize: '0.8rem', boxSizing: 'border-box' }} placeholder="Metros msnm" />
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <div>
+                                    <label style={{ display: "block", color: "var(--text-muted)", marginBottom: "4px", fontSize: "0.76rem", fontWeight: 700 }}>
+                                        Volumen de Agua (Litros):
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={waterLiters}
+                                        onChange={e => setWaterLiters(e.target.value)}
+                                        placeholder="Litros"
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ display: "block", color: "var(--text-muted)", marginBottom: "4px", fontSize: "0.76rem", fontWeight: 700 }}>
+                                        Altitud del Terreno (Metros msnm):
+                                    </label>
+                                    <input
+                                        type="number"
+                                        value={altitudeMeters}
+                                        onChange={e => setAltitudeMeters(e.target.value)}
+                                        placeholder="Metros"
+                                    />
+                                </div>
+                            </div>
+
+                            <div
+                                onClick={() => setIsTurbidWater(!isTurbidWater)}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    borderColor: isTurbidWater ? "var(--accent-amber)" : "var(--glass-border)"
+                                }}
+                            >
+                                <div>
+                                    <div style={{ fontWeight: 700, fontSize: "0.85rem" }}>¿Agua turbia, sucia o con sedimentos?</div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Duplica la dosis requerida de hipoclorito de sodio (cloro)</div>
+                                </div>
+                                <span style={{ fontSize: "1.2rem" }}>{isTurbidWater ? "⚠️ SÍ" : "⚪ NO"}</span>
+                            </div>
+
+                            {/* Resultados de Potabilización */}
+                            <div className="card-tactical" style={{ padding: "14px", borderLeft: "4px solid var(--accent-emerald)", background: "rgba(0, 230, 118, 0.08)" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-emerald)", marginBottom: "4px" }}>
+                                    🧪 Desinfección Química por Cloración
+                                </div>
+                                <div style={{ fontSize: "0.80rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                                    Agregar <strong>{dropsText}</strong> de hipoclorito de sodio sin aroma por cada {liters}L ({isTurbidWater ? 'dosis turbia reforzada' : 'dosis estándar'}). Tapar y reposar durante al menos <strong>30 minutos</strong> antes del consumo humano.
+                                </div>
+                            </div>
+
+                            <div className="card-tactical" style={{ padding: "14px", borderLeft: "4px solid var(--accent-amber)", background: "rgba(255, 179, 0, 0.08)" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-amber)", marginBottom: "4px" }}>
+                                    🔥 Esterilización Térmica por Ebullición
+                                </div>
+                                <div style={{ fontSize: "0.80rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                                    A <strong>{alt} metros</strong> de altitud, la presión atmosférica reduce el punto de ebullición a <strong>{boilingTempC}°C</strong>. Mantener hervido a borbotones continuos durante al menos <strong>{requiredBoilingMins} minuto(s)</strong> para destruir patógenos biológicos.
+                                </div>
                             </div>
                         </div>
-
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '6px' }}>
-                            <input type="checkbox" checked={isTurbidWater} onChange={e => setIsTurbidWater(e.target.checked)} style={{ width: 15, height: 15 }} />
-                            <span style={{ fontSize: '0.76rem' }}>¿El agua está turbia, sucia o con sedimentos? (Duplica cloro)</span>
-                        </label>
-
-                        <div style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#00E676', fontSize: '0.78rem' }}>
-                            🧪 <strong>Desinfección Química:</strong> Agregar <strong>{dropsText}</strong> de hipoclorito de sodio sin aroma por {liters}L ({isTurbidWater ? 'dosis turbia' : 'dosis estándar'}). Reposar tapado por 30 minutos antes de consumir.
-                        </div>
-
-                        <div style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', padding: '10px 12px', borderRadius: '8px', color: '#FFB300', fontSize: '0.78rem' }}>
-                            🔥 <strong>Punto de Ebullición:</strong> A {alt}m de altitud, el agua hierve a <strong>{boilingTempC}°C</strong>. Hervir a borbotones durante al menos <strong>{requiredBoilingMins} minuto(s) continuo(s)</strong> para esterilización biológica completa.
-                        </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

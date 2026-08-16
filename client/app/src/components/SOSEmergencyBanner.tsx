@@ -3,35 +3,37 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
+import { toast } from './Toast';
+import { ErrorBanner } from './ui/ErrorBanner';
 
 // NOTE: @capacitor/geolocation is imported dynamically inside getGpsCoords()
 // to guarantee it is always resolved before use, avoiding the race condition
 // where a module-level async import may not complete before the function fires.
 
 export const SOSEmergencyBanner: React.FC = () => {
-    const { navigate, identity, isAuthenticated, currentScreen } = useRedStore();
-    const [beacons, setBeacons] = useState<SosBeacon[]>([]);
+    const { navigate, identity, isAuthenticated, currentScreen, activeSosBeacons, setSosBeacons } = useRedStore();
+    const beacons = activeSosBeacons || [];
     const [isTriggering, setIsTriggering] = useState(false);
     const [noteText, setNoteText] = useState('Emergencia médica / Auxilio táctico');
     const [gpsStatus, setGpsStatus] = useState<'idle' | 'locating' | 'ok' | 'error'>('idle');
     const [gpsCoords, setGpsCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     const loadBeacons = useCallback(async () => {
         try {
             const list = await getActiveSos();
-            setBeacons(list);
-        } catch (e) {
+            setSosBeacons(list);
+            setLoadError(null);
+        } catch (e: any) {
             console.error('SOS fetch error:', e);
+            setLoadError(e.message || "Error al sincronizar balizas SOS");
         }
-    }, []);
+    }, [setSosBeacons]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
         loadBeacons();
-        // FIX 1.6: 3s is too aggressive for a polling model (battery drain).
-        // Increased to 15s. For sub-second latency, the SSE channel handles real-time events.
-        const interval = setInterval(loadBeacons, 15000);
-        return () => clearInterval(interval);
+        // Polling erradicado: Los eventos SSE 'sos_beacon' y 'sos_resolved' actualizan el store en tiempo real (<1ms).
     }, [loadBeacons, isAuthenticated]);
 
     // Open trigger modal automatically when user selects SOS from menu
@@ -144,13 +146,13 @@ export const SOSEmergencyBanner: React.FC = () => {
                 navigate('sidebar');
             }
             await loadBeacons();
-            alert(`🚨 ¡BALIZA SOS EMITIDA Y TRANSMITIDA!\n\n• Operador: ${identity?.nickname || 'Usuario RED'}\n• Mensaje: ${noteText}\n• Ubicación GPS: ${coords.lat !== 0 ? `${coords.lat}, ${coords.lon}` : 'Modo Radio (Sin GPS)'}\n• Batería: ${batteryLevel}%`);
+            toast.success(`🚨 ¡BALIZA SOS EMITIDA! Operador: ${identity?.nickname || 'RED'}`);
         } catch (e: any) {
             setIsTriggering(false);
             if (currentScreen === 'sos') {
                 navigate('sidebar');
             }
-            alert(`Error al emitir SOS: ${e.message}`);
+            toast.error(`Error al emitir SOS: ${e.message}`);
         }
     };
 
@@ -158,8 +160,9 @@ export const SOSEmergencyBanner: React.FC = () => {
         try {
             await resolveSos(id);
             await loadBeacons();
+            toast.info("Baliza SOS resuelta y archivada");
         } catch (e: any) {
-            alert(`Error al resolver SOS: ${e.message}`);
+            toast.error(`Error al resolver SOS: ${e.message}`);
         }
     };
 
@@ -167,7 +170,11 @@ export const SOSEmergencyBanner: React.FC = () => {
     return (
         <>
             {/* ACTIVE SOS BANNER */}
-            {(() => {
+            {loadError ? (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999 }}>
+                    <ErrorBanner message={loadError} onRetry={loadBeacons} />
+                </div>
+            ) : (() => {
                 const safeBeacons = Array.isArray(beacons) ? beacons : [];
                 if (safeBeacons.length === 0) return null;
                 const active = safeBeacons[0];

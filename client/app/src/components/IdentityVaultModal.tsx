@@ -1,10 +1,11 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRedStore } from '../store/useRedStore';
-import { ShamirSecretSharingEngine, SecretShare } from '../lib/ShamirSecretSharingEngine';
+import React, { useState, useEffect } from "react";
+import { useRedStore } from "../store/useRedStore";
+import { ShamirSecretSharingEngine, SecretShare } from "../lib/ShamirSecretSharingEngine";
+import { toast } from "./Toast";
 
-const STORAGE_KEY = 'red_identity_vault_v1';
+const STORAGE_KEY = "red_identity_vault_v1";
 
 interface VaultData {
     bloodType: string;
@@ -12,344 +13,445 @@ interface VaultData {
     emergencyContact: string;
 }
 
-// Instant synchronous localStorage read to guarantee 0ms screen block
-function loadLocalVault(): VaultData | null {
-    if (typeof window === 'undefined') return null;
-    try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw) as VaultData;
-    } catch {}
-    return null;
-}
-
-// Background Keystore plugin loader with strict safety timeout
-async function loadKeystoreVault(): Promise<VaultData | null> {
-    if (typeof window === 'undefined') return null;
-    try {
-        const m = await import('capacitor-secure-storage-plugin');
-        const plugin = m?.SecureStoragePlugin;
-        if (plugin) {
-            const res: any = await Promise.race([
-                plugin.get({ key: STORAGE_KEY }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 800))
-            ]).catch(() => null);
-            if (res && res.value) return JSON.parse(res.value) as VaultData;
-        }
-    } catch {}
-    return null;
-}
-
-async function saveVaultToStorage(data: VaultData): Promise<void> {
-    const serialized = JSON.stringify(data);
-    try {
-        localStorage.setItem(STORAGE_KEY, serialized);
-    } catch {}
-    try {
-        const m = await import('capacitor-secure-storage-plugin');
-        const plugin = m?.SecureStoragePlugin;
-        if (plugin) {
-            await plugin.set({ key: STORAGE_KEY, value: serialized }).catch(() => null);
-        }
-    } catch {}
-}
+type IdentityTab = "profile" | "shamir" | "medical";
 
 export const IdentityVaultModal: React.FC = () => {
-    const { navigate, identity } = useRedStore();
-    const [bloodType, setBloodType] = useState('');
-    const [allergies, setAllergies] = useState('');
-    const [emergencyContact, setEmergencyContact] = useState('');
-    const [qrCodeData, setQrCodeData] = useState<string | null>(null);
-    const [isSaved, setIsSaved] = useState(false);
-    const [syncing, setSyncing] = useState(false);
+    const { navigate, identity, setProfile } = useRedStore();
+    const [activeTab, setActiveTab] = useState<IdentityTab>("profile");
 
-    // SSS State
+    // Profile State
+    const [nickname, setNickname] = useState(identity?.nickname || "Operador RED");
+    const [bio, setBio] = useState("");
+    const [phoneNumber, setPhoneNumber] = useState(identity?.phone_number || "");
+    const [isProfileSaved, setIsProfileSaved] = useState(false);
+
+    // Emergency Vault State
+    const [bloodType, setBloodType] = useState("");
+    const [allergies, setAllergies] = useState("");
+    const [emergencyContact, setEmergencyContact] = useState("");
+    const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+
+    // Shamir Secret Sharing State
+    const [secretToSplit, setSecretToSplit] = useState("");
     const [sssShares, setSssShares] = useState<SecretShare[]>([]);
     const [reconstructedSecret, setReconstructedSecret] = useState<string | null>(null);
+    const [sharesToReconstruct, setSharesToReconstruct] = useState<string>("");
 
-    // Instant initial load on mount without blocking render
+    // Initial Load
     useEffect(() => {
-        let isMounted = true;
+        if (identity?.nickname) setNickname(identity.nickname);
+        if (identity?.phone_number) setPhoneNumber(identity.phone_number);
 
-        // Step 1: Instant load from localStorage
-        const initial = loadLocalVault();
-        if (initial) {
-            setBloodType(initial.bloodType || '');
-            setAllergies(initial.allergies || '');
-            setEmergencyContact(initial.emergencyContact || '');
-        }
+        if (typeof window !== "undefined") {
+            const savedBio = localStorage.getItem("user_bio");
+            if (savedBio) setBio(savedBio);
+            const savedPhone = localStorage.getItem("user_phone_number");
+            if (savedPhone) setPhoneNumber(savedPhone);
 
-        // Step 2: Background sync from Hardware Keystore
-        const syncKeystore = async () => {
-            setSyncing(true);
             try {
-                const ks = await loadKeystoreVault();
-                if (isMounted && ks) {
-                    if (ks.bloodType) setBloodType(ks.bloodType);
-                    if (ks.allergies) setAllergies(ks.allergies);
-                    if (ks.emergencyContact) setEmergencyContact(ks.emergencyContact);
+                const rawVault = localStorage.getItem(STORAGE_KEY);
+                if (rawVault) {
+                    const data = JSON.parse(rawVault) as VaultData;
+                    setBloodType(data.bloodType || "");
+                    setAllergies(data.allergies || "");
+                    setEmergencyContact(data.emergencyContact || "");
                 }
-            } catch (e) {
-                console.warn('Keystore background sync:', e);
-            } finally {
-                if (isMounted) setSyncing(false);
-            }
-        };
-        syncKeystore();
-
-        return () => { isMounted = false; };
-    }, []);
-
-    const handleSave = async () => {
-        try {
-            await saveVaultToStorage({ bloodType, allergies, emergencyContact });
-            setIsSaved(true);
-            setTimeout(() => setIsSaved(false), 2500);
-        } catch (e: any) {
-            alert(`Error al guardar: ${e.message}`);
+            } catch {}
         }
-    };
+    }, [identity]);
 
-    const generateOneTimeQr = async () => {
-        await handleSave();
-        const payload = JSON.stringify({
-            did: identity?.identity_hash || 'did:red:unknown',
-            pk: identity?.public_key || '',
-            blood: bloodType,
-            allergies,
-            contact: emergencyContact,
-            expires: Date.now() + 300000 // 5 min
-        });
-        const encoded = typeof window !== 'undefined' ? btoa(unescape(encodeURIComponent(payload))) : btoa(payload);
-        const qrText = `RED_ID_VAULT:${encoded}`;
-        try {
-            const QRCode = await import('qrcode');
-            const dataUrl = await QRCode.toDataURL(qrText, {
-                width: 200,
-                margin: 1,
-                color: { dark: '#00d97e', light: '#080810' }
+    const handleSaveProfile = () => {
+        if (!nickname.trim()) {
+            toast.error("El nickname no puede estar vacío");
+            return;
+        }
+
+        if (typeof window !== "undefined") {
+            localStorage.setItem("user_bio", bio);
+            localStorage.setItem("user_phone_number", phoneNumber);
+        }
+
+        if (setProfile) {
+            setProfile({
+                nickname: nickname.trim(),
+                phone_number: phoneNumber.trim() || undefined
             });
-            setQrCodeData(dataUrl);
-        } catch {
-            setQrCodeData(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrText)}&color=00d97e&bgcolor=080810`);
         }
+
+        setIsProfileSaved(true);
+        setTimeout(() => setIsProfileSaved(false), 2500);
+        toast.success("✅ Perfil de Operador actualizado");
     };
 
-    const handleGenerateSSS = () => {
-        let rawSecret = identity?.identity_hash || identity?.public_key;
-        if (!rawSecret) {
-            const buf = new Uint8Array(16);
-            if (typeof window !== 'undefined' && window.crypto) {
-                window.crypto.getRandomValues(buf);
-            }
-            rawSecret = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+    const handleSaveMedical = () => {
+        const data: VaultData = { bloodType, allergies, emergencyContact };
+        if (typeof window !== "undefined") {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         }
-        // Ensure secret is hex formatted 32-character string
-        let cleanHex = rawSecret.replace(/[^0-9a-fA-F]/g, '');
-        if (cleanHex.length < 32) {
-            cleanHex = cleanHex.padEnd(32, '0');
-        } else if (cleanHex.length > 32) {
-            cleanHex = cleanHex.substring(0, 32);
+
+        // Generate QR string for triage
+        const medString = `RED_MED:${bloodType || "ND"}:${allergies || "ND"}:${emergencyContact || "ND"}`;
+        import("qrcode").then(QRCode => {
+            QRCode.toDataURL(medString, { width: 220, margin: 1, color: { dark: "#00E676", light: "#04060A" } })
+                .then(url => setQrCodeData(url))
+                .catch(() => {});
+        }).catch(() => {});
+
+        toast.success("💾 Ficha médica de emergencia guardada");
+    };
+
+    const handleSplitSecret = () => {
+        if (!secretToSplit.trim()) {
+            toast.warning("Ingresa la clave o secreto que deseas fragmentar");
+            return;
         }
+
         try {
-            const shares = ShamirSecretSharingEngine.splitSecret(cleanHex, 3, 5);
+            const shares = ShamirSecretSharingEngine.splitSecret(secretToSplit.trim(), 5, 3);
             setSssShares(shares);
-            setReconstructedSecret(null);
-        } catch (e: any) {
-            alert("Error dividiendo la llave con SSS: " + e.message);
+            toast.success("🧬 Clave fragmentada en 5 partes (Umbral: 3 partes requeridas)");
+        } catch {
+            toast.error("Error al calcular fragmentos Shamir");
         }
     };
 
-    const handleTestReconstruct = () => {
-        if (sssShares.length < 3) return;
+    const handleReconstruct = () => {
         try {
-            // Reconstruct using any 3 shares (shares 0, 1, 2)
-            const reconstructed = ShamirSecretSharingEngine.combineShares(sssShares.slice(0, 3));
-            setReconstructedSecret(reconstructed);
-        } catch (e: any) {
-            alert("Error reconstruyendo la llave: " + e.message);
+            const rawLines = sharesToReconstruct.split("\n").map(l => l.trim()).filter(Boolean);
+            if (rawLines.length < 3) {
+                toast.warning("Se requieren al menos 3 fragmentos para reconstruir");
+                return;
+            }
+
+            const parsedShares: SecretShare[] = rawLines.map(line => {
+                const parts = line.split(":");
+                return {
+                    shareIndex: parseInt(parts[0], 10),
+                    shareHex: parts[1] || "",
+                    x: parseInt(parts[0], 10),
+                    yHex: parts[1] || "",
+                    threshold: 3,
+                    totalShares: 5
+                };
+            });
+
+            const recovered = ShamirSecretSharingEngine.reconstructSecret(parsedShares);
+            setReconstructedSecret(recovered);
+            toast.success("🔓 ¡Secreto reconstruido con éxito!");
+        } catch {
+            toast.error("Error al reconstruir el secreto. Verifica los fragmentos.");
         }
     };
+
+    const copyToClipboard = (text: string) => {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            toast.success("Copiado al portapapeles");
+        }
+    };
+
+    const did = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:sovereign_node";
 
     return (
         <div style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 900,
-            background: '#04060A',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            fontFamily: 'Inter, sans-serif'
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
         }}>
-            {/* TOP BAR */}
-            <div style={{
-                minHeight: '60px',
-                padding: '12px 16px',
-                borderBottom: '1px solid rgba(255,255,255,0.08)',
-                display: 'flex',
-                alignItems: 'center',
-                background: 'linear-gradient(180deg, rgba(15,23,42,0.98), rgba(8,12,22,0.98))',
-                flexShrink: 0,
-                gap: '12px'
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
             }}>
-                <button
-                    onClick={() => navigate('sidebar')}
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', color: '#00D97E', padding: '8px 12px', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}
-                >
-                    ← Volver
-                </button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: '0.98rem', color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        🪪 Bóveda de Identidad
-                    </div>
-                    <div style={{ fontSize: '0.65rem', color: '#00D97E', fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.5px' }}>
-                        HARDWARE KEYSTORE ENCRYPTED
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.35)"
+                    }}>🔐</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Bóveda de Identidad & Soberanía
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            ED25519 · NOISE PROTOCOL · SHAMIR SSS VAULT
+                        </div>
                     </div>
                 </div>
+
+                <button
+                    onClick={() => navigate("sidebar")}
+                    className="btn-icon"
+                    title="Cerrar bóveda"
+                    style={{ width: 38, height: 38 }}
+                >
+                    ✕
+                </button>
+            </header>
+
+            {/* Selector de Pestañas Segmentadas Tácticas */}
+            <div style={{
+                padding: "10px 16px",
+                display: "flex", gap: "8px",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                overflowX: "auto", flexShrink: 0
+            }}>
+                <button
+                    onClick={() => setActiveTab("profile")}
+                    className={activeTab === "profile" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    👤 Perfil Operador
+                </button>
+                <button
+                    onClick={() => setActiveTab("shamir")}
+                    className={activeTab === "shamir" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    🧬 Fragmentación Shamir
+                </button>
+                <button
+                    onClick={() => setActiveTab("medical")}
+                    className={activeTab === "medical" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    🚑 Ficha Médica
+                </button>
             </div>
 
-            {/* MAIN FORM */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{
-                    width: '100%',
-                    maxWidth: '440px',
-                    background: 'linear-gradient(145deg, rgba(15,23,42,0.85), rgba(8,12,22,0.95))',
-                    borderRadius: '20px',
-                    border: '1px solid rgba(0,217,126,0.3)',
-                    padding: '20px',
-                    boxShadow: '0 0 40px rgba(0,217,126,0.08)'
-                }}>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#00D97E', marginBottom: '6px', letterSpacing: '0.5px' }}>
-                        📋 Datos de Auxilio y Emergencia
-                    </div>
-                    <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '20px', lineHeight: '1.4' }}>
-                        Información guardada con cifrado por hardware en el Keystore seguro del dispositivo.
-                    </div>
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                    <div style={{ marginBottom: '14px' }}>
-                        <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>TIPO DE SANGRE</label>
-                        <input
-                            type="text"
-                            value={bloodType}
-                            placeholder="Ej: O+ (Positivo)"
-                            onChange={(e) => setBloodType(e.target.value)}
-                            style={{ width: '100%', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
-                        />
-                    </div>
+                    {/* ─── TAB 1: PERFIL DEL OPERADOR ──────────────────────────── */}
+                    {activeTab === "profile" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            {/* Tarjeta DID Soberana */}
+                            <div className="card-tactical" style={{ padding: "14px", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                                        Identificador Descentralizado (DID)
+                                    </div>
+                                    <div style={{ fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", fontWeight: 700, marginTop: "2px" }}>
+                                        {did.substring(0, 28)}…
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => copyToClipboard(did)}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "6px 12px", fontSize: "0.76rem" }}
+                                >
+                                    📋 Copiar
+                                </button>
+                            </div>
 
-                    <div style={{ marginBottom: '14px' }}>
-                        <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>ALERGIAS / CONDICIONES MÉDICAS</label>
-                        <input
-                            type="text"
-                            value={allergies}
-                            placeholder="Ej: Ninguna conocida"
-                            onChange={(e) => setAllergies(e.target.value)}
-                            style={{ width: '100%', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
-                        />
-                    </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    NICKNAME DEL OPERADOR:
+                                </label>
+                                <input
+                                    value={nickname}
+                                    onChange={e => setNickname(e.target.value)}
+                                    placeholder="Nombre de guerra o identificador"
+                                />
+                            </div>
 
-                    <div style={{ marginBottom: '20px' }}>
-                        <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '4px' }}>CONTACTO DE AUXILIO EN RED</label>
-                        <input
-                            type="text"
-                            value={emergencyContact}
-                            placeholder="Ej: +51 987 654 321"
-                            onChange={(e) => setEmergencyContact(e.target.value)}
-                            style={{ width: '100%', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px', color: '#fff', fontSize: '0.9rem', boxSizing: 'border-box' }}
-                        />
-                    </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    BIOGRAFÍA / ESPECIALIDAD TÁCTICA:
+                                </label>
+                                <textarea
+                                    value={bio}
+                                    onChange={e => setBio(e.target.value)}
+                                    rows={3}
+                                    placeholder="Operador de enlace P2P, médico de campo, etc."
+                                />
+                            </div>
 
-                    {/* SAVE BUTTON */}
-                    <button
-                        onClick={handleSave}
-                        style={{
-                            width: '100%',
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: isSaved ? 'linear-gradient(135deg, #059669, #047857)' : 'rgba(0,217,126,0.1)',
-                            border: `1px solid ${isSaved ? '#059669' : 'rgba(0,217,126,0.4)'}`,
-                            color: isSaved ? '#fff' : '#00D97E',
-                            fontWeight: 800,
-                            fontSize: '0.85rem',
-                            cursor: 'pointer',
-                            marginBottom: '12px',
-                            transition: 'all 0.3s ease'
-                        }}
-                    >
-                        {isSaved ? '✅ Guardado en Keystore Cifrado' : '💾 Guardar en Bóveda Segura'}
-                    </button>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    TELÉFONO DE ENLACE DE EMERGENCIA (OPCIONAL):
+                                </label>
+                                <input
+                                    value={phoneNumber}
+                                    onChange={e => setPhoneNumber(e.target.value)}
+                                    placeholder="+54 9 11 ..."
+                                />
+                            </div>
 
-                    <button
-                        onClick={generateOneTimeQr}
-                        style={{
-                            width: '100%',
-                            padding: '12px',
-                            borderRadius: '10px',
-                            background: 'linear-gradient(135deg, #00D97E, #059669)',
-                            border: 'none',
-                            color: '#000',
-                            fontWeight: 900,
-                            fontSize: '0.9rem',
-                            cursor: 'pointer'
-                        }}
-                    >
-                        📲 Generar QR de Verificación Temporal (5 min)
-                    </button>
+                            <button
+                                onClick={handleSaveProfile}
+                                className="btn-tactical-primary"
+                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
+                            >
+                                {isProfileSaved ? "✅ GUARDADO" : "💾 ACTUALIZAR PERFIL DE OPERADOR"}
+                            </button>
+                        </div>
+                    )}
 
-                    {qrCodeData && (
-                        <div style={{ marginTop: '20px', textAlign: 'center', background: '#000', padding: '16px', borderRadius: '16px', border: '1px solid #00D97E' }}>
-                            <img src={qrCodeData} alt="Código QR Temporal" style={{ width: '180px', height: '180px', borderRadius: '8px' }} />
-                            <div style={{ fontSize: '0.75rem', color: '#00D97E', marginTop: '10px', fontWeight: 800, fontFamily: 'monospace' }}>
-                                CÓDIGO QR CIFRADO TEMPORAL ACTIVO (5 MIN)
+                    {/* ─── TAB 2: SHAMIR SECRET SHARING ────────────────────────── */}
+                    {activeTab === "shamir" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                    🧬 Custodia Distribuida de Claves (Shamir's SSS)
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    Divide una clave secreta en 5 partes matemáticas. Se necesitan 3 partes cualesquiera para reconstruirla.
+                                </div>
+                            </div>
+
+                            {/* Creador de Fragmentos */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    CLAVE O FRASE SEMILLA A FRAGMENTAR:
+                                </label>
+                                <input
+                                    type="password"
+                                    value={secretToSplit}
+                                    onChange={e => setSecretToSplit(e.target.value)}
+                                    placeholder="Ingresa la clave privada o secreto..."
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleSplitSecret}
+                                className="btn-tactical-primary"
+                                style={{ width: "100%", padding: "12px", fontSize: "0.90rem", background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)", color: "#000" }}
+                            >
+                                ⚡ FRAGMENTAR CLAVE (3-DE-5)
+                            </button>
+
+                            {/* Lista de Fragmentos Generados */}
+                            {sssShares.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                    <div style={{ fontSize: "0.76rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                        Fragmentos Generados (Distribuye uno a cada custodio):
+                                    </div>
+                                    {sssShares.map((s, i) => (
+                                        <div
+                                            key={i}
+                                            className="card-tactical"
+                                            style={{ padding: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: "JetBrains Mono, monospace", fontSize: "0.75rem" }}
+                                        >
+                                            <span>Parte {s.x || s.shareIndex}: {(s.yHex || s.shareHex || "").substring(0, 20)}…</span>
+                                            <button
+                                                onClick={() => copyToClipboard(`${s.x || s.shareIndex}:${s.yHex || s.shareHex || ""}`)}
+                                                className="btn-tactical-secondary"
+                                                style={{ padding: "4px 8px", fontSize: "0.70rem" }}
+                                            >
+                                                📋 Copiar
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Reconstructor de Secreto */}
+                            <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>
+                                    🔓 Reconstruir Secreto (Pega al menos 3 fragmentos)
+                                </div>
+                                <textarea
+                                    value={sharesToReconstruct}
+                                    onChange={e => setSharesToReconstruct(e.target.value)}
+                                    rows={3}
+                                    placeholder="Pega un fragmento por línea (ej: 1:a9f0b2...)"
+                                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.78rem" }}
+                                />
+                                <button
+                                    onClick={handleReconstruct}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "10px", fontSize: "0.85rem" }}
+                                >
+                                    🔓 RECONSTRUIR SECRETO
+                                </button>
+
+                                {reconstructedSecret && (
+                                    <div className="card-tactical animate-pop" style={{ padding: "12px", background: "rgba(0,230,118,0.1)", borderColor: "var(--accent-emerald)" }}>
+                                        <div style={{ fontSize: "0.72rem", color: "var(--accent-emerald)", fontWeight: 700 }}>
+                                            SECRETO RECONSTRUIDO:
+                                        </div>
+                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", marginTop: "2px" }}>
+                                            {reconstructedSecret}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
 
-                    {/* SHAMIR SECRET SHARING (SSS 3-of-5) SECTION */}
-                    <div style={{ marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '16px' }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#38BDF8', marginBottom: '8px' }}>🧩 Fragmentación Secreta de Shamir (SSS 3-de-5)</div>
-                        <div style={{ fontSize: '0.75rem', color: '#AAA', marginBottom: '12px' }}>Dividir tu identidad en 5 fragmentos GF(2^8). Reconstruible con cualesquiera 3 fragmentos:</div>
-
-                        <button
-                            onClick={handleGenerateSSS}
-                            style={{
-                                width: '100%', padding: '10px', borderRadius: '8px',
-                                background: 'linear-gradient(135deg, #38BDF8, #0284C7)',
-                                border: 'none', color: '#000', fontWeight: 800, fontSize: '0.82rem', cursor: 'pointer'
-                            }}
-                        >
-                            ⚡ FRAGMENTAR IDENTIDAD SSS (3 DE 5)
-                        </button>
-
-                        {sssShares.length > 0 && (
-                            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                {sssShares.map((s) => (
-                                    <div key={s.shareIndex} style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(56,189,248,0.3)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.75rem' }}>
-                                        <div style={{ color: '#38BDF8', fontWeight: 800 }}>Fragmento {s.shareIndex}/5:</div>
-                                        <div style={{ fontFamily: 'monospace', color: '#fff', wordBreak: 'break-all' }}>{s.shareHex}</div>
-                                    </div>
-                                ))}
-
-                                <button
-                                    onClick={handleTestReconstruct}
-                                    style={{
-                                        marginTop: '8px', padding: '8px', borderRadius: '6px',
-                                        background: 'rgba(0,230,118,0.2)', border: '1px solid #00E676',
-                                        color: '#00E676', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer'
-                                    }}
-                                >
-                                    🔍 Probar Reconstrucción Lagrange (Fragmentos 1, 2 y 3)
-                                </button>
-
-                                {reconstructedSecret && (
-                                    <div style={{ background: 'rgba(0,230,118,0.15)', border: '1px solid #00E676', padding: '10px', borderRadius: '8px', marginTop: '6px', fontSize: '0.78rem' }}>
-                                        <div style={{ color: '#00E676', fontWeight: 800 }}>✅ Llave Reconstruida con Éxito:</div>
-                                        <div style={{ fontFamily: 'monospace', color: '#fff', wordBreak: 'break-all' }}>{reconstructedSecret}</div>
-                                    </div>
-                                )}
+                    {/* ─── TAB 3: FICHA MÉDICA DE EMERGENCIA ───────────────────── */}
+                    {activeTab === "medical" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-crimson-bright)" }}>
+                                    🚑 Ficha Médica para Rescate Offline
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    Datos vitales accesibles mediante código QR en caso de inconsciencia o rescate
+                                </div>
                             </div>
-                        )}
-                    </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    GRUPO SANGUÍNEO & FACTOR RH:
+                                </label>
+                                <input
+                                    value={bloodType}
+                                    onChange={e => setBloodType(e.target.value)}
+                                    placeholder="Ej: O+, A-, AB+..."
+                                />
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    ALERGIAS O CONDICIONES CRÍTICAS:
+                                </label>
+                                <input
+                                    value={allergies}
+                                    onChange={e => setAllergies(e.target.value)}
+                                    placeholder="Ej: Penicilina, Diabético, Asma..."
+                                />
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    CONTACTO DE EMERGENCIA / ICE:
+                                </label>
+                                <input
+                                    value={emergencyContact}
+                                    onChange={e => setEmergencyContact(e.target.value)}
+                                    placeholder="Nombre y teléfono de contacto familiar"
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleSaveMedical}
+                                className="btn-tactical-primary"
+                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)" }}
+                            >
+                                💾 GUARDAR & GENERAR QR MÉDICO
+                            </button>
+
+                            {qrCodeData && (
+                                <div className="card-tactical animate-pop" style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", background: "#04060A" }}>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                        QR de Triaje Médico Listo
+                                    </div>
+                                    <img src={qrCodeData} alt="QR Médico" style={{ width: "180px", height: "180px", display: "block", borderRadius: "8px" }} />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

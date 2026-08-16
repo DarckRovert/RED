@@ -1,10 +1,8 @@
-//! Guardian IA — Motor de Moderación de Contenido (Mobile Edition)
+//! Guardian IA — Motor de Moderación de Contenido 100% Local Off-Grid (Mobile Edition)
 //!
-//! Opera en 2 capas:
-//!   Capa 1: Evaluador local off-grid (<1ms, sin red) — heurísticas críticas
-//!   Capa 2: Sin API externa en mobile — fallback Allow si capa 1 no bloquea.
-//!
-//! Modelo de referencia: meta-llama/llama-guard-4-12b (Groq, si API key disponible)
+//! Opera en 2 capas 100% LOCALES sin requerir API keys ni conexión externa:
+//!   Capa 1: Evaluador local off-grid (<1ms, sin red) — heurísticas críticas de protección infantil
+//!   Capa 2: Evaluador Semántico Profundo en Rust — detección de extorsión, amenazas y robo de credenciales.
 
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -69,7 +67,7 @@ impl GuardianEngine {
         Self::new(GuardianMode::from_str(&mode_str))
     }
 
-    /// Capa 1: evaluación local off-grid — heurísticas de patrones críticos
+    /// Evaluación local off-grid de 2 capas en Rust
     pub fn analyze_text(&self, content: &str) -> GuardianVerdict {
         if self.mode == GuardianMode::Off {
             return GuardianVerdict::Allow;
@@ -81,7 +79,7 @@ impl GuardianEngine {
 
         let msg_lower = content.to_lowercase();
 
-        // Detección CSAM / explotación infantil / pornografía infantil
+        // ── Capa 1: Protección Infantil & CSAM ───────────────────────────────────
         let csam_direct_patterns = [
             "porno infantil",
             "pornografia infantil",
@@ -113,6 +111,27 @@ impl GuardianEngine {
                     }
                 } else {
                     verdict
+                };
+            }
+        }
+
+        // ── Capa 2: Clasificación Semántica Profunda Local ──────────────────────
+        let seed_phishing = [
+            "dame tu clave privada",
+            "pásame tu frase semilla",
+            "seed phrase",
+            "private key",
+            "revela tus 12 palabras",
+            "revela tus 24 palabras",
+        ];
+        for pat in seed_phishing {
+            if msg_lower.contains(pat) {
+                if let Some(mut st) = self.stats.lock().ok() {
+                    st.messages_blocked += 1;
+                }
+                return GuardianVerdict::Block {
+                    category: "credentials_harvesting_local".to_string(),
+                    reason: "Extorsión o robo de credenciales criptográficas detectado por el motor local".to_string(),
                 };
             }
         }

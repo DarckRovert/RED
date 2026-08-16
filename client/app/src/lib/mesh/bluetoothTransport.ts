@@ -6,6 +6,7 @@ const RED_BLE_NOTIFY_CHAR = "00002a6e-0000-1000-8000-00805f9b34fb"; // Client su
 
 export interface RedDevice {
     id: string;
+    deviceId?: string;
     name: string;
     rssi: number;
 }

@@ -268,6 +268,16 @@ impl Conversation {
         self.message_index.clear();
         self.unread_count = 0;
     }
+
+    /// Return the total number of messages stored in the conversation
+    pub fn message_count(&self) -> usize {
+        self.messages.len()
+    }
+
+    /// Returns true if the cryptographic ratchet is initialized
+    pub fn is_initialized(&self) -> bool {
+        self.ratchet.is_some()
+    }
 }
 
 #[cfg(test)]

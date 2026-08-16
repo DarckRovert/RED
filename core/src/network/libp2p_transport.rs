@@ -40,6 +40,10 @@ pub struct Libp2pTransport {
     connected_peers: Arc<Mutex<HashSet<Vec<u8>>>>,
     /// Root directory for persistent logs (telemetry)
     data_dir: Option<std::path::PathBuf>,
+    /// Blackout mode flag shared with Node
+    blackout_mode: Arc<std::sync::atomic::AtomicBool>,
+    /// Counter for blocked WAN connections shared with Node
+    blocked_wan_peers: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 enum TransportCommand {
@@ -51,6 +55,8 @@ enum TransportCommand {
     /// GAP-2 FIX: channel to await the real DHT result
     Resolve(crate::identity::IdentityHash, mpsc::Sender<NetworkResult<PeerId>>),
     GetKnownPeers(mpsc::Sender<Vec<crate::network::PeerInfo>>),
+    StartProviding,
+    DisconnectWanPeers,
 }
 
 /// TD-3 FIX: Robustly extract a SocketAddr from a libp2p Multiaddr.
@@ -72,7 +78,13 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 
 impl Libp2pTransport {
     /// Create a new libp2p transport
-    pub fn new(secret_key_bytes: [u8; 32], data_dir: Option<std::path::PathBuf>) -> NetworkResult<Self> {
+    pub fn new(
+        secret_key_bytes: [u8; 32], 
+        data_dir: Option<std::path::PathBuf>, 
+        bootstrap_nodes: Vec<Multiaddr>,
+        blackout_mode: Arc<std::sync::atomic::AtomicBool>,
+        blocked_wan_peers: Arc<std::sync::atomic::AtomicUsize>
+    ) -> NetworkResult<Self> {
         let local_key = libp2p::identity::Keypair::ed25519_from_bytes(secret_key_bytes.clone())
             .map_err(|e| NetworkError::TransportError(e.to_string()))?;
         let peer_id = local_key.public().to_peer_id();
@@ -81,14 +93,28 @@ impl Libp2pTransport {
             crate::network::append_log(dir, &format!("[libp2p] Initializing transport with PeerId: {}", peer_id));
         }
 
-        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+        #[cfg(not(target_os = "android"))]
+        let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
                 noise::Config::new,
                 yamux::Config::default,
             ).map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_relay_client(noise::Config::new, yamux::Config::default).map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_dns().map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_relay_client(noise::Config::new, yamux::Config::default).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+
+        #[cfg(target_os = "android")]
+        let mut swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
+            .with_tokio()
+            .with_tcp(
+                tcp::Config::default(),
+                noise::Config::new,
+                yamux::Config::default,
+            ).map_err(|e| NetworkError::TransportError(e.to_string()))?
+            .with_relay_client(noise::Config::new, yamux::Config::default).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+
+        let mut swarm = swarm_builder
             .with_behaviour(|key, relay_client| {
                 let gossipsub_config = gossipsub::ConfigBuilder::default()
                     .heartbeat_interval(Duration::from_secs(10))
@@ -97,7 +123,8 @@ impl Libp2pTransport {
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
                 let kad_store = kad::store::MemoryStore::new(key.public().to_peer_id());
-                let kademlia = kad::Behaviour::new(key.public().to_peer_id(), kad_store);
+                let mut kademlia = kad::Behaviour::new(key.public().to_peer_id(), kad_store);
+                kademlia.set_mode(Some(kad::Mode::Client));
                 let identify = identify::Behaviour::new(
                     identify::Config::new("/red/1.0.0".to_string(), key.public())
                         .with_agent_version(format!("RED-Node/{}", env!("CARGO_PKG_VERSION")))
@@ -134,6 +161,25 @@ impl Libp2pTransport {
             }).map_err(|e| NetworkError::TransportError(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
+
+        // Configure Kademlia and Dial Bootstraps
+        for addr in &bootstrap_nodes {
+            if let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = addr.iter().last() {
+                swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                if let Err(e) = swarm.dial(addr.clone()) {
+                    warn!("[libp2p] Failed to dial bootstrap node {}: {:?}", addr, e);
+                } else {
+                    info!("[libp2p] Dialed bootstrap node: {}", addr);
+                }
+            }
+        }
+        if !bootstrap_nodes.is_empty() {
+            if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
+                warn!("[libp2p] Failed to bootstrap Kademlia DHT: {:?}", e);
+            } else {
+                info!("[libp2p] Kademlia DHT bootstrap initiated");
+            }
+        }
 
         // Subscribe to messages topic and routing topic
         let topic = gossipsub::IdentTopic::new("red-messages");
@@ -196,10 +242,21 @@ impl Libp2pTransport {
             }
         });
 
+        let blackout_mode_loop = blackout_mode.clone();
+        let blocked_wan_peers_loop = blocked_wan_peers.clone();
+
         // Spawn the swarm event loop
         tokio::spawn(async move {
+            let mut pending_resolves: std::collections::HashMap<kad::QueryId, (PeerId, mpsc::Sender<NetworkResult<PeerId>>)> = std::collections::HashMap::new();
+            
+            // Heartbeat to keep provider record alive
+            let mut provider_interval = tokio::time::interval(Duration::from_secs(300));
+            
             loop {
                 tokio::select! {
+                    _ = provider_interval.tick() => {
+                        let _ = swarm.behaviour_mut().kademlia.start_providing(kad::RecordKey::new(&peer_id.to_bytes()));
+                    }
                     event = swarm.select_next_some() => {
                         match event {
                             SwarmEvent::Behaviour(RedBehaviourEvent::Identify(identify::Event::Received { peer_id, info, .. })) => {
@@ -247,17 +304,45 @@ impl Libp2pTransport {
                                 connected_clone.lock().unwrap().remove(&peer_id.to_bytes());
                                 known_peers_clone.lock().unwrap().retain(|p| p.id.as_bytes() != peer_id.to_bytes().as_slice());
                             }
+                            SwarmEvent::Behaviour(RedBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { id, result, .. })) => {
+                                match result {
+                                    kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { providers, .. })) => {
+                                        if let Some((target_peer_id, tx)) = pending_resolves.remove(&id) {
+                                            if let Ok(target_libp2p) = libp2p::PeerId::from_bytes(&target_peer_id.as_bytes()[..]) {
+                                                for provider in providers {
+                                                    if provider == target_libp2p {
+                                                        // Dial the provider so they get added to known_peers when connected
+                                                        let _ = swarm.dial(provider);
+                                                    }
+                                                }
+                                            }
+                                            let _ = tx.send(Ok(target_peer_id)).await;
+                                        }
+                                    }
+                                    kad::QueryResult::GetProviders(Err(_e)) => {
+                                        if let Some((_, tx)) = pending_resolves.remove(&id) {
+                                            let _ = tx.send(Err(NetworkError::RoutingFailed("Could not find provider on Kademlia DHT".to_string()))).await;
+                                        }
+                                    }
+                                    kad::QueryResult::StartProviding(Ok(kad::AddProviderOk { key })) => {
+                                        info!("[libp2p] Successfully announced presence to Kademlia DHT for {:?}", key);
+                                    }
+                                    kad::QueryResult::StartProviding(Err(e)) => {
+                                        warn!("[libp2p] Failed to announce presence to Kademlia DHT: {:?}", e);
+                                    }
+                                    _ => {}
+                                }
+                            }
                             SwarmEvent::Behaviour(RedBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                                 propagation_source: peer_id,
                                 message_id: _,
                                 message,
                             })) => {
                                 let peer_bytes = peer_id.to_bytes();
-                                let peer = if peer_bytes.len() == 32 {
-                                    PeerId::from_bytes(peer_bytes.try_into().unwrap())
-                                } else {
-                                    PeerId::from_bytes([0u8; 32]) // Fallback
-                                };
+                                let mut arr = [0u8; 32];
+                                let len = peer_bytes.len().min(32);
+                                arr[..len].copy_from_slice(&peer_bytes[..len]);
+                                let peer = PeerId::from_bytes(arr);
 
                                 // Topic-based routing
                                 if message.topic.as_str() == "red-handshake" {
@@ -323,7 +408,22 @@ impl Libp2pTransport {
                                 }
                             }
                             SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
-                                info!("[libp2p] Connection ESTABLISHED: peer {} via {:?}", peer_id, endpoint.get_remote_address());
+                                let remote_addr = endpoint.get_remote_address();
+                                if blackout_mode_loop.load(std::sync::atomic::Ordering::SeqCst) {
+                                    if let Some(socket_addr) = multiaddr_to_socketaddr(remote_addr) {
+                                        let is_wan = match socket_addr.ip() {
+                                            IpAddr::V4(ipv4) => !ipv4.is_private() && !ipv4.is_loopback() && !ipv4.is_link_local(),
+                                            IpAddr::V6(ipv6) => !ipv6.is_loopback(),
+                                        };
+                                        if is_wan {
+                                            let _ = swarm.disconnect_peer_id(peer_id);
+                                            blocked_wan_peers_loop.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                            info!("[libp2p] BLACKOUT: Dropped connection from WAN peer {}", peer_id);
+                                            continue;
+                                        }
+                                    }
+                                }
+                                info!("[libp2p] Connection ESTABLISHED: peer {} via {:?}", peer_id, remote_addr);
                                 if let Some(ref dir) = log_dir {
                                     crate::network::append_log(dir, &format!("[libp2p] CONNECTED to {}", peer_id));
                                 }
@@ -423,13 +523,29 @@ impl Libp2pTransport {
                                     }
                                 }
                                 TransportCommand::Resolve(hash, tx) => {
-                                    swarm.behaviour_mut().kademlia.get_record(kad::RecordKey::new(hash.as_bytes()));
                                     let peer_id = PeerId::from_bytes(*hash.as_bytes());
-                                    let _ = tx.send(Ok(peer_id)).await;
+                                    // To query Kademlia, we need libp2p::PeerId. 
+                                    // Our custom PeerId holds the raw bytes, so we can convert it:
+                                    if let Ok(libp2p_peer_id) = libp2p::PeerId::from_bytes(&peer_id.as_bytes()[..]) {
+                                        let query_id = swarm.behaviour_mut().kademlia.get_providers(kad::RecordKey::new(&libp2p_peer_id.to_bytes()));
+                                        pending_resolves.insert(query_id, (peer_id, tx));
+                                    } else {
+                                        let _ = tx.send(Err(NetworkError::RoutingFailed("Invalid peer ID for Kademlia".to_string()))).await;
+                                    }
+                                }
+                                TransportCommand::StartProviding => {
+                                    let _ = swarm.behaviour_mut().kademlia.start_providing(kad::RecordKey::new(&peer_id.to_bytes()));
                                 }
                                 TransportCommand::GetKnownPeers(tx) => {
                                     let peers = known_peers_clone.lock().unwrap().clone();
                                     let _ = tx.send(peers).await;
+                                }
+                                TransportCommand::DisconnectWanPeers => {
+                                    let peers: Vec<_> = swarm.connected_peers().copied().collect();
+                                    for p in peers {
+                                        let _ = swarm.disconnect_peer_id(p);
+                                    }
+                                    info!("[libp2p] BLACKOUT: Disconnected all active peers to enforce WAN drop. Local peers will auto-reconnect.");
                                 }
                             }
                         }
@@ -444,6 +560,8 @@ impl Libp2pTransport {
             known_peers,
             connected_peers: connected_peers_set,
             data_dir,
+            blackout_mode,
+            blocked_wan_peers,
         })
     }
 }
@@ -483,7 +601,12 @@ impl Transport for Libp2pTransport {
     }
 
     async fn connect_multiaddr(&self, addr: Multiaddr) -> NetworkResult<()> {
-        let _ = self.cmd_tx.send(TransportCommand::Connect(addr)).await;
+        self.cmd_tx.send(TransportCommand::Connect(addr)).await
+            .map_err(|e| NetworkError::TransportError(e.to_string()))
+    }
+
+    async fn disconnect_wan_peers(&self) -> NetworkResult<()> {
+        let _ = self.cmd_tx.send(TransportCommand::DisconnectWanPeers).await;
         Ok(())
     }
 

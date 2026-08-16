@@ -6,6 +6,17 @@
  * Fully unicode/emoji-safe bitwise byte-length header packing.
  */
 
+export interface StegoExtractResult {
+    success: boolean;
+    hidden_text?: string;
+    secretPayload?: string;
+    payloadText?: string;
+    payloadBytes?: number;
+    wasEncrypted?: boolean;
+    error?: string;
+    bytes_recovered?: number;
+}
+
 export class StegoEngine {
     private static HEADER_MAGIC = "REDSTEGO1";
 
@@ -125,5 +136,49 @@ export class StegoEngine {
             img.onerror = () => resolve(null);
             img.src = stegoImageDataUrl;
         });
+    }
+
+    public static async embedSecret(coverImage: string, payloadText: string, password?: string): Promise<{ success: boolean; stegoImageDataUrl?: string; payloadBytes?: number; error?: string }> {
+        try {
+            const dataUrl = await this.embedTextInImage(coverImage, payloadText);
+            return {
+                success: true,
+                stegoImageDataUrl: dataUrl,
+                payloadBytes: new TextEncoder().encode(payloadText).length
+            };
+        } catch (e: any) {
+            return {
+                success: false,
+                error: e.message || "Error al incrustar carga útil esteganográfica"
+            };
+        }
+    }
+
+    public static async extract(stegoImageDataUrl: string, password?: string): Promise<StegoExtractResult> {
+        try {
+            const text = await this.extractTextFromImage(stegoImageDataUrl);
+            if (text) {
+                return {
+                    success: true,
+                    hidden_text: text,
+                    secretPayload: text,
+                    payloadText: text,
+                    bytes_recovered: text.length
+                };
+            }
+            return {
+                success: false,
+                error: "No se detectó mensaje esteganográfico RED en los canales LSB"
+            };
+        } catch (e: any) {
+            return {
+                success: false,
+                error: e.message || "Fallo en extracción esteganográfica"
+            };
+        }
+    }
+
+    public static async extractSecret(stegoImageDataUrl: string, password?: string): Promise<StegoExtractResult> {
+        return this.extract(stegoImageDataUrl, password);
     }
 }

@@ -6,10 +6,13 @@ export interface LocalModelMetaData {
     description: string;
     parameterCount: string;
     fileSizeMb: number;
+    size_mb?: number;
+    quantization?: string;
     downloadUrl: string;
     fileName: string;
     recommendedMinRamMb: number;
     isDownloaded: boolean;
+    is_downloaded?: boolean;
     downloadProgress: number; // 0 - 100
     localPath?: string;
     downloadedBytes?: number;

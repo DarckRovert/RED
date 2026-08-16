@@ -16,7 +16,7 @@ const CryptoPanel           = dynamic(() => import("../components/CryptoPanel"),
 const GroupsPanel           = dynamic(() => import("../components/GroupsPanel"),           { ssr: false, loading: () => <AppLoader /> });
 const StatusView            = dynamic(() => import("../components/StatusView"),            { ssr: false, loading: () => <AppLoader /> });
 const BlockchainExplorer    = dynamic(() => import("../components/BlockchainExplorer"),    { ssr: false, loading: () => <AppLoader /> });
-const AuthWall              = dynamic(() => import("../components/AuthWall"),              { ssr: false, loading: () => <FullScreenLoader /> });
+const AuthWall              = dynamic(() => import("../components/AuthWall"),              { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const NodeMap               = dynamic(() => import("../components/NodeMap"),               { ssr: false, loading: () => <AppLoader /> });
 const NetworkPanel          = dynamic(() => import("../components/NetworkPanel"),          { ssr: false, loading: () => <AppLoader /> });
 const OnboardingProfile     = dynamic(() => import("../components/OnboardingProfile"),     { ssr: false, loading: () => <AppLoader /> });
@@ -25,6 +25,7 @@ const AmberAdminPanel       = dynamic(() => import("../components/AmberAdminPane
 const GuardianStatusPanel   = dynamic(() => import("../components/GuardianStatusPanel"),   { ssr: false, loading: () => <AppLoader /> });
 const P2PCompassModal       = dynamic(() => import("../components/P2PCompassModal").then(m => ({ default: m.P2PCompassModal })),       { ssr: false, loading: () => <AppLoader /> });
 const PublicChannelsPanel   = dynamic(() => import("../components/PublicChannelsPanel").then(m => ({ default: m.PublicChannelsPanel })),   { ssr: false, loading: () => <AppLoader /> });
+const SocialFeedPanel       = dynamic(() => import("../components/SocialFeedPanel").then(m => ({ default: m.SocialFeedPanel })),       { ssr: false, loading: () => <AppLoader /> });
 const P2PWalkieTalkieModal  = dynamic(() => import("../components/P2PWalkieTalkieModal").then(m => ({ default: m.P2PWalkieTalkieModal })),  { ssr: false, loading: () => <AppLoader /> });
 const WeatherAlertPanel     = dynamic(() => import("../components/WeatherAlertPanel").then(m => ({ default: m.WeatherAlertPanel })),     { ssr: false, loading: () => <AppLoader /> });
 const IdentityVaultModal    = dynamic(() => import("../components/IdentityVaultModal").then(m => ({ default: m.IdentityVaultModal })),    { ssr: false, loading: () => <AppLoader /> });
@@ -41,23 +42,28 @@ const VitalScanModal       = dynamic(() => import("../components/VitalScanModal"
 const SurvivalBeaconModal  = dynamic(() => import("../components/SurvivalBeaconModal").then(m => ({ default: m.SurvivalBeaconModal })),  { ssr: false, loading: () => <AppLoader /> });
 const RfSpectrumModal      = dynamic(() => import("../components/RfSpectrumModal").then(m => ({ default: m.RfSpectrumModal })),      { ssr: false, loading: () => <AppLoader /> });
 const StegoVaultModal      = dynamic(() => import("../components/StegoVaultModal").then(m => ({ default: m.StegoVaultModal })),      { ssr: false, loading: () => <AppLoader /> });
-const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenLoader /> });
+const ShakePairModal       = dynamic(() => import("../components/ShakePairModal").then(m => ({ default: m.ShakePairModal })),       { ssr: false, loading: () => <AppLoader /> });
+const RedP2PPayModal       = dynamic(() => import("../components/RedP2PPayModal").then(m => ({ default: m.RedP2PPayModal })),       { ssr: false, loading: () => <AppLoader /> });
+const BlackoutSimulatorModal = dynamic(() => import("../components/BlackoutSimulatorModal").then(m => ({ default: m.BlackoutSimulatorModal })), { ssr: false, loading: () => <AppLoader /> });
+const SystemHealthModal    = dynamic(() => import("../components/SystemHealthModal").then(m => ({ default: m.SystemHealthModal })),    { ssr: false, loading: () => <AppLoader /> });
+const NodeLogsModal        = dynamic(() => import("../components/NodeLogsModal").then(m => ({ default: m.NodeLogsModal })),        { ssr: false, loading: () => <AppLoader /> });
+const CalculatorScreen     = dynamic(() => import("../components/CalculatorScreen").then(m => ({ default: m.CalculatorScreen })),     { ssr: false, loading: () => <AppLoader /> });
+const SecurityReportModal  = dynamic(() => import("../components/SecurityReportModal").then(m => ({ default: m.SecurityReportModal })),  { ssr: false, loading: () => <AppLoader /> });
+const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreModal").then(m => ({ default: m.BackupRestoreModal })),   { ssr: false, loading: () => <AppLoader /> });
+const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
-// FIX 1.4: SOSEmergencyBanner must be a persistent overlay — mounted ONCE while authenticated,
-// regardless of which screen is active. It auto-activates via its own currentScreen subscription.
-const SOSEmergencyBanner    = dynamic(() => import("../components/SOSEmergencyBanner").then(m => ({ default: m.SOSEmergencyBanner })), { ssr: false, loading: () => null });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
 
-/* ── Spinners de carga ── */
 function AppLoader() {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      width: '100%', height: '100%', background: 'var(--bg-deep)',
-      color: 'var(--text-muted)', fontSize: '14px', gap: '10px',
+      display: "flex", alignItems: "center", justifyContent: "center",
+      width: "100%", height: "100%", background: "var(--bg-void)",
+      color: "var(--text-muted)", fontSize: "14px", gap: "10px",
+      fontFamily: "JetBrains Mono, monospace"
     }}>
-      <span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚙</span>
-      Cargando…
+      <span style={{ animation: "pulse 1s infinite" }}>⚙</span>
+      CARGANDO BÓVEDA TÁCTICA…
     </div>
   );
 }
@@ -65,29 +71,24 @@ function AppLoader() {
 function FullScreenTacticalLoader() {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      width: '100%', height: '100dvh', background: '#04060a', color: '#fff', gap: '16px',
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      width: "100%", height: "100dvh", background: "#020204", color: "#fff", gap: "16px",
     }}>
       <div style={{
-        width: 60, height: 60, borderRadius: '20px',
-        background: 'linear-gradient(145deg, #E8213A, #C0152A)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '1.7rem', fontWeight: 900, color: 'white',
-        boxShadow: '0 0 32px rgba(232,33,58,0.5)',
-        animation: 'pulse 1.2s ease-in-out infinite',
+        width: 64, height: 64, borderRadius: "20px",
+        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "1.8rem", fontWeight: 900, color: "white",
+        boxShadow: "0 0 32px rgba(255,51,85,0.5)",
+        animation: "pulse 1.2s ease-in-out infinite",
       }}>R</div>
-      <div style={{ fontSize: '12px', fontWeight: 700, color: '#888', letterSpacing: '2px' }}>
-        INICIALIZANDO BÓVEDA RED…
+      <div style={{ fontSize: "11px", fontWeight: 800, color: "var(--accent-cyan)", letterSpacing: "2px", fontFamily: "JetBrains Mono, monospace" }}>
+        INICIALIZANDO BÓVEDA RED MESH…
       </div>
     </div>
   );
 }
 
-function FullScreenLoader() {
-  return <FullScreenTacticalLoader />;
-}
-
-/* ── Error Boundary: atrapa cualquier crash de componente ── */
 interface EBState { hasError: boolean; error: Error | null; }
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBState> {
   constructor(props: { children: React.ReactNode }) {
@@ -98,27 +99,25 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
     return { hasError: true, error };
   }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[RED ErrorBoundary]', error, info.componentStack);
+    console.error("[RED ErrorBoundary]", error, info.componentStack);
   }
   render() {
     if (this.state.hasError) {
       return (
         <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          width: '100%', height: '100dvh', background: '#0a0a0f', color: '#fff',
-          padding: '24px', textAlign: 'center', gap: '16px',
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          width: "100%", height: "100dvh", background: "var(--bg-void)", color: "#fff",
+          padding: "24px", textAlign: "center", gap: "16px",
         }}>
-          <div style={{ fontSize: '48px' }}>🛡️</div>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#E8213A' }}>Error de Componente</div>
-          <div style={{ fontSize: '13px', color: '#888', maxWidth: '300px' }}>
-            {this.state.error?.message || 'Error desconocido'}
+          <div style={{ fontSize: "48px" }}>🛡️</div>
+          <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--accent-crimson)" }}>Recuperación de Fallo Táctico</div>
+          <div style={{ fontSize: "12px", color: "var(--text-muted)", maxWidth: "300px", fontFamily: "JetBrains Mono, monospace" }}>
+            {this.state.error?.message || "Error de renderizado capturado"}
           </div>
           <button
             onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
-            style={{
-              background: '#E8213A', color: '#fff', border: 'none', borderRadius: '12px',
-              padding: '12px 24px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-            }}
+            className="btn-tactical-primary"
+            style={{ padding: "10px 24px" }}
           >
             Reintentar
           </button>
@@ -129,29 +128,117 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
   }
 }
 
-/**
- * RED v18.3 Zenith Master SPA Router.
- * Lazy-loads all components with ssr:false to prevent hydration crashes.
- */
+function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => void }) {
+  const { identity } = useRedStore();
+  return (
+    <div style={{
+      flex: 1, height: "100%", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", padding: "40px 32px",
+      textAlign: "center", gap: "24px", overflowY: "auto"
+    }}>
+      <div style={{
+        width: 84, height: 84, borderRadius: "24px",
+        background: "linear-gradient(135deg, rgba(232,33,58,0.2) 0%, rgba(0,229,255,0.15) 100%)",
+        border: "1px solid var(--glass-border)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "2.8rem", boxShadow: "0 12px 40px rgba(0,0,0,0.5)"
+      }}>
+        🛡️
+      </div>
+
+      <div style={{ maxWidth: "480px" }}>
+        <h2 style={{ fontSize: "1.4rem", fontWeight: 900, color: "var(--text-primary)", letterSpacing: "0.2px" }}>
+          Centro de Comando Malla P2P
+        </h2>
+        <p style={{ fontSize: "0.84rem", color: "var(--text-muted)", marginTop: "8px", lineHeight: 1.5 }}>
+          Selecciona una conversación del panel lateral o lanza una herramienta táctica para operar fuera de red.
+        </p>
+      </div>
+
+      {/* Grid de Accesos Rápidos Tácticos para Tablet */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        gap: "14px", width: "100%", maxWidth: "600px", marginTop: "8px"
+      }}>
+        <div
+          onClick={() => onOpenTool("nodemap")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>🗺️</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Mapa GPS Táctico</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>Haversine Radio</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("radar")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>📡</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Radar BLE & QR</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>Swarm Discovery</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("canvas")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>🎨</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Pizarra Táctica</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-purple)", fontFamily: "JetBrains Mono, monospace" }}>Canvas Sync P2P</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("channels")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>📻</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Canales Mesh</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>Frecuencias Locales</span>
+        </div>
+      </div>
+
+      <div style={{
+        padding: "8px 16px", borderRadius: "10px",
+        background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)",
+        color: "var(--accent-emerald)", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace",
+        fontWeight: 700
+      }}>
+        ● NODO SOBERANO OPERACIONAL · {identity?.short_id || "OFFLINE"}
+      </div>
+    </div>
+  );
+}
+
 export default function AppRouter() {
-  const { currentScreen, nodeOnline, identity, navigate, goBack, activeLiveStreamId, liveStreams, openLiveStream } = useRedStore();
-  const activeLive = useMemo(() => Object.values(liveStreams || {}).find(s => s.is_active && s.broadcaster_hash !== identity?.identity_hash), [liveStreams, identity]);
+  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate } = useRedStore();
   const [mounted, setMounted] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
   const [showLanding, setShowLanding] = useState<boolean>(true);
 
   useEffect(() => {
     setMounted(true);
 
-    // Detección de plataforma: En navegadores web mostrar Landing Page por defecto; en nativo Android ir directo a la bóveda
+    const checkViewport = () => {
+      if (typeof window !== "undefined") {
+        setIsTablet(window.innerWidth >= 768);
+      }
+    };
+    checkViewport();
+    window.addEventListener("resize", checkViewport);
+
     const checkLanding = async () => {
       try {
-        const { Capacitor } = await import('@capacitor/core');
+        const { Capacitor } = await import("@capacitor/core");
         if (Capacitor.isNativePlatform()) {
           setShowLanding(false);
         } else {
           const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get('app') === 'true') {
+          if (urlParams.get("app") === "true") {
             setShowLanding(false);
           } else {
             setShowLanding(true);
@@ -162,13 +249,12 @@ export default function AppRouter() {
       }
     };
 
-    // Hardware Back Button — importado dinámicamente para evitar crash SSR
     const setupBackButton = async () => {
       try {
-        const { App: CapApp } = await import('@capacitor/app');
-        const backHandler = await CapApp.addListener('backButton', () => {
+        const { App: CapApp } = await import("@capacitor/app");
+        const backHandler = await CapApp.addListener("backButton", () => {
           const state = useRedStore.getState();
-          if (state.currentScreen !== 'sidebar') {
+          if (state.currentScreen !== "sidebar") {
             state.goBack();
           } else {
             CapApp.minimizeApp();
@@ -180,16 +266,15 @@ export default function AppRouter() {
       }
     };
 
-    // Check if profile was already created in Keystore or localStorage
     const checkProfile = async () => {
       try {
-        if (typeof window !== 'undefined' && localStorage.getItem("profile_created") === "true") {
+        if (typeof window !== "undefined" && localStorage.getItem("profile_created") === "true") {
           setNeedsProfile(false);
           return;
         }
-        const { Capacitor } = await import('@capacitor/core');
+        const { Capacitor } = await import("@capacitor/core");
         if (Capacitor.isNativePlatform()) {
-          const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+          const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
           const getPromise = SecureStoragePlugin.get({ key: "profile_created" }).catch(() => null);
           const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 350));
           const res = await Promise.race([getPromise, timeoutPromise]);
@@ -198,136 +283,150 @@ export default function AppRouter() {
             return;
           }
         }
-        const hasNick = typeof window !== 'undefined' && (localStorage.getItem("user_nickname") || localStorage.getItem("red_displayName"));
+        const hasNick = typeof window !== "undefined" && (localStorage.getItem("user_nickname") || localStorage.getItem("red_displayName"));
         setNeedsProfile(!hasNick);
       } catch {
         setNeedsProfile(false);
       }
     };
 
-    let cleanupFn: (() => void) | null = null;
-    setupBackButton().then(cleanup => { cleanupFn = cleanup; });
+    setupBackButton();
     checkLanding();
     checkProfile();
 
-    // ROOT-CAUSE SAFETY TIMEOUT: Force needsProfile to resolve within 500ms if plugins hang
-    const profileSafetyTimer = setTimeout(() => {
-      setNeedsProfile(prev => (prev === null ? false : prev));
-    }, 500);
-
     return () => {
-      cleanupFn?.();
-      clearTimeout(profileSafetyTimer);
+      window.removeEventListener("resize", checkViewport);
     };
   }, []);
 
-  // SSR Hydration Fix: No renderizar nada del lado del servidor si no está montado
   if (!mounted) return <FullScreenTacticalLoader />;
 
-  // RENDERIZADO INMEDIATO DE LA LANDING PAGE EN WEB — Sin depender del backend en Rust ni de needsProfile
   if (showLanding) {
     return (
-      <RedShowcaseLanding
-        onEnterApp={() => {
-          if (typeof window !== 'undefined') {
-            localStorage.setItem("enter_app_direct", "true");
-          }
-          setShowLanding(false);
-        }}
-      />
+      <ErrorBoundary>
+        <RedShowcaseLanding onEnterVault={() => setShowLanding(false)} />
+      </ErrorBoundary>
     );
   }
 
   if (needsProfile === null) return <FullScreenTacticalLoader />;
 
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'sidebar':         return <Sidebar />;
-      case 'chat':            return <ChatWindow />;
-      case 'call':            return <CallScreen />;
-      case 'settings':        return <SecurityPanel />;
-      case 'radar':
-      case 'contacts':        return <RadarWindow />;
-      case 'status':          return <StatusView />;
-      case 'crypto':          return <CryptoPanel />;
-      case 'broadcast':       return <BroadcastPanel />;
-      case 'nodemap':         return <NodeMap />;
-      case 'network':         return <NetworkPanel />;
-      case 'groupAdmin':      return <GroupsPanel />;
-      case 'dms':             return <DMSSettings />;
-      case 'explorer':        return <BlockchainExplorer />;
-      case 'amber':           return <AmberAdminPanel onClose={() => navigate('sidebar')} localNodeId={identity?.identity_hash || 'node-local'} />;
-      case 'guardian':        return <GuardianStatusPanel onClose={() => navigate('sidebar')} />;
-      case 'compass':         return <P2PCompassModal />;
-      case 'channels':        return <PublicChannelsPanel />;
-      case 'walkie':          return <P2PWalkieTalkieModal />;
-      case 'weather':         return <WeatherAlertPanel />;
-      case 'idVault':         return <IdentityVaultModal />;
-      case 'proximity':       return <ProximityWaveModal />;
-      case 'canvas':          return <LiveCanvasModal />;
-      case 'ecoMesh':         return <EcoMeshPanel />;
-      case 'proximitySettings': return <ProximitySettingsModal />;
-      case 'aiCopilot':       return <AICopilotModal />;
-      case 'nearby':          return <NearbyDevicesPanel />;
-      case 'liveStream':      return activeLiveStreamId
-                                ? <LiveStreamViewer streamId={activeLiveStreamId} onClose={() => navigate('sidebar')} />
-                                : <LiveStreamBroadcaster onClose={() => navigate('sidebar')} />;
-      case 'offGridCompass':  return <OffGridCompassModal />;
-      case 'vitalScan':       return <VitalScanModal />;
-      case 'survivalBeacon':  return <SurvivalBeaconModal />;
-      case 'rfSpectrum':      return <RfSpectrumModal />;
-      case 'stegoVault':      return <StegoVaultModal />;
-      case 'sos':             return <Sidebar />;
-      default:                return <Sidebar />;
-    }
-  };
+  if (needsProfile) {
+    return (
+      <ErrorBoundary>
+        <OnboardingProfile onComplete={() => setNeedsProfile(false)} />
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>
-      <ToastProvider>
-        <AuthWall>
-          {needsProfile ? (
-            <OnboardingProfile onDone={() => setNeedsProfile(false)} />
+      <ToastProvider />
+      <AuthWall>
+        <IncomingCallBanner />
+        <main className="app-main">
+          {currentScreen === "sidebar" && <StatusHeader />}
+          
+          {isTablet ? (
+            /* ── Master-Detail Tablet Layout (>= 768px) ── */
+            <div className="tablet-split-layout">
+              <div className="tablet-sidebar-pane">
+                <Sidebar />
+              </div>
+              <div className="tablet-workspace-pane">
+                {currentScreen === "chat" && <ChatWindow />}
+                {currentScreen === "sidebar" && <TacticalTabletWorkspace onOpenTool={(s) => navigate(s)} />}
+                {currentScreen === "explorer" && <BlockchainExplorer />}
+                {currentScreen === "socialFeed" && <SocialFeedPanel />}
+                {(currentScreen === "channels" || currentScreen === "publicChannels") && <PublicChannelsPanel />}
+                {currentScreen === "groups" && <GroupsPanel />}
+                {currentScreen === "nearby" && <NearbyDevicesPanel />}
+                {currentScreen === "security" && <SecurityPanel />}
+                {currentScreen === "status" && <StatusView />}
+                {currentScreen === "network" && <NetworkPanel />}
+                {currentScreen === "crypto" && <CryptoPanel />}
+                {currentScreen === "broadcast" && <BroadcastPanel />}
+                {currentScreen === "ecoMesh" && <EcoMeshPanel />}
+                {currentScreen === "dms" && <DMSSettings />}
+                {(currentScreen === "amber" || currentScreen === "amberAdmin") && <AmberAdminPanel onClose={goBack} />}
+                {currentScreen === "guardian" && <GuardianStatusPanel onClose={goBack} />}
+                {(currentScreen === "weather" || currentScreen === "weatherAlert") && <WeatherAlertPanel />}
+                {currentScreen === "p2pCompass" && <P2PCompassModal />}
+                {currentScreen === "walkie" && <P2PWalkieTalkieModal />}
+                {(currentScreen === "idVault" || currentScreen === "identityVault") && <IdentityVaultModal />}
+                {(currentScreen === "proximity" || currentScreen === "proximityWave") && <ProximityWaveModal />}
+                {(currentScreen === "canvas" || currentScreen === "liveCanvas") && <LiveCanvasModal />}
+                {(currentScreen === "proximitySettings" || currentScreen === "proximity_settings") && <ProximitySettingsModal />}
+                {(currentScreen === "aiCopilot" || currentScreen === "copilot") && <AICopilotModal />}
+                {currentScreen === "liveStream" && <LiveStreamBroadcaster onClose={goBack} />}
+                {currentScreen === "offGridCompass" && <OffGridCompassModal />}
+                {currentScreen === "vitalScan" && <VitalScanModal />}
+                {currentScreen === "survivalBeacon" && <SurvivalBeaconModal />}
+                {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
+                {currentScreen === "stegoVault" && <StegoVaultModal />}
+                {currentScreen === "shakePair" && <ShakePairModal />}
+                {(currentScreen === "p2pPay" || currentScreen === "redP2PPay") && <RedP2PPayModal />}
+                {currentScreen === "blackout" && <BlackoutSimulatorModal onClose={goBack} />}
+                {(currentScreen === "health" || currentScreen === "systemHealth") && <SystemHealthModal onClose={goBack} />}
+                {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
+                {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
+                {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
+                {currentScreen === "nodemap" && <NodeMap />}
+                {currentScreen === "radar" && <RadarWindow />}
+                {currentScreen === "call" && <CallScreen />}
+                {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
+                {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
+              </div>
+            </div>
           ) : (
-            <main style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-              {/* FIX 1.4: SOS overlay — always mounted while authenticated so banners are always visible */}
-              <SOSEmergencyBanner />
-              <IncomingCallBanner />
-              {/* Floating Active Live Stream Banner */}
-              {activeLive && currentScreen !== 'liveStream' && (
-                <div
-                  onClick={() => openLiveStream(activeLive.stream_id)}
-                  style={{
-                    position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)',
-                    zIndex: 9999, background: 'linear-gradient(135deg, #FF3B30 0%, #C0152A 100%)',
-                    color: 'white', padding: '10px 20px', borderRadius: 30,
-                    boxShadow: '0 8px 30px rgba(255,59,48,0.6)', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 10, border: '1px solid rgba(255,255,255,0.3)',
-                    backdropFilter: 'blur(10px)',
-                  }}
-                >
-                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: 'white', boxShadow: '0 0 10px white' }} />
-                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>🔴 LIVE TIKTOK: {activeLive.broadcaster_name}</span>
-                  <span style={{ background: 'rgba(255,255,255,0.25)', padding: '4px 10px', borderRadius: 14, fontSize: '0.75rem', fontWeight: 800 }}>UNIRSE AHORA 📺</span>
-                </div>
-              )}
-              {!nodeOnline && (
-                <div style={{ background: 'var(--danger)', color: 'white', textAlign: 'center', padding: '6px', fontSize: '12px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                   <span style={{ animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>⚙</span>
-                   Generando identidad PoW — espera unos segundos…
-                </div>
-              )}
-              <StatusHeader />
-              <ErrorBoundary>
-                <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-                  {renderScreen()}
-                </div>
-              </ErrorBoundary>
-            </main>
+            /* ── Single-Column Mobile Layout (< 768px) ── */
+            <>
+              {currentScreen === "sidebar" && <Sidebar />}
+              {currentScreen === "chat" && <ChatWindow />}
+              {currentScreen === "security" && <SecurityPanel />}
+              {currentScreen === "radar" && <RadarWindow />}
+              {currentScreen === "call" && <CallScreen />}
+              {currentScreen === "broadcast" && <BroadcastPanel />}
+              {currentScreen === "crypto" && <CryptoPanel />}
+              {currentScreen === "groups" && <GroupsPanel />}
+              {currentScreen === "status" && <StatusView />}
+              {currentScreen === "explorer" && <BlockchainExplorer />}
+              {currentScreen === "nodemap" && <NodeMap />}
+              {currentScreen === "network" && <NetworkPanel />}
+              {currentScreen === "dms" && <DMSSettings />}
+              {(currentScreen === "amber" || currentScreen === "amberAdmin") && <AmberAdminPanel onClose={goBack} />}
+              {currentScreen === "guardian" && <GuardianStatusPanel onClose={goBack} />}
+              {currentScreen === "p2pCompass" && <P2PCompassModal />}
+              {(currentScreen === "channels" || currentScreen === "publicChannels") && <PublicChannelsPanel />}
+              {currentScreen === "socialFeed" && <SocialFeedPanel />}
+              {currentScreen === "walkie" && <P2PWalkieTalkieModal />}
+              {(currentScreen === "weather" || currentScreen === "weatherAlert") && <WeatherAlertPanel />}
+              {(currentScreen === "idVault" || currentScreen === "identityVault") && <IdentityVaultModal />}
+              {(currentScreen === "proximity" || currentScreen === "proximityWave") && <ProximityWaveModal />}
+              {(currentScreen === "canvas" || currentScreen === "liveCanvas") && <LiveCanvasModal />}
+              {currentScreen === "ecoMesh" && <EcoMeshPanel />}
+              {(currentScreen === "proximitySettings" || currentScreen === "proximity_settings") && <ProximitySettingsModal />}
+              {(currentScreen === "aiCopilot" || currentScreen === "copilot") && <AICopilotModal />}
+              {currentScreen === "nearby" && <NearbyDevicesPanel />}
+              {currentScreen === "liveStream" && <LiveStreamBroadcaster onClose={goBack} />}
+              {currentScreen === "offGridCompass" && <OffGridCompassModal />}
+              {currentScreen === "vitalScan" && <VitalScanModal />}
+              {currentScreen === "survivalBeacon" && <SurvivalBeaconModal />}
+              {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
+              {currentScreen === "stegoVault" && <StegoVaultModal />}
+              {currentScreen === "shakePair" && <ShakePairModal />}
+              {(currentScreen === "p2pPay" || currentScreen === "redP2PPay") && <RedP2PPayModal />}
+              {currentScreen === "blackout" && <BlackoutSimulatorModal onClose={goBack} />}
+              {(currentScreen === "health" || currentScreen === "systemHealth") && <SystemHealthModal onClose={goBack} />}
+              {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
+              {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
+              {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
+              {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
+              {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
+            </>
           )}
-        </AuthWall>
-      </ToastProvider>
+        </main>
+      </AuthWall>
     </ErrorBoundary>
   );
 }
-

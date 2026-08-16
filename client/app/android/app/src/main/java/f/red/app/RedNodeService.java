@@ -112,24 +112,31 @@ public class RedNodeService extends Service {
 
             if (password == null || password.isEmpty() || password.equals("default_mobile_password")) {
                 Log.w(TAG, "Service restarted by OS without password. Waiting for UI plugin call to boot Rust.");
+            } else if (!RedNodePlugin.isNativeLoaded) {
+                // Motor nativo no cargó — registrar error y continuar en modo degradado
+                // La app sigue funcionando (UI visible) pero sin capacidades P2P reales.
+                Log.e(TAG, "🔴 DEGRADED MODE: libred_mobile.so not loaded. App will run without P2P engine.");
+                showEngineErrorNotification();
             } else {
                 final String finalDataDir = dataDir;
                 final String finalPassword = password;
-                
+
                 // Start the Rust Node in a background thread
                 new Thread(() -> {
                     try {
-                        Thread.sleep(100); // Reduced artificial delay
+                        Thread.sleep(100);
                         Log.i(TAG, "Starting Rust Node JNI call with UI password...");
                         RedNodePlugin.startNode(finalDataDir, finalPassword);
                         Log.i(TAG, "Rust Node JNI call returned successfully.");
+                    } catch (UnsatisfiedLinkError e) {
+                        // No crashear — la librería puede haberse cargado pero un símbolo falta
+                        Log.e(TAG, "🔴 UnsatisfiedLinkError calling startNode — degraded mode: " + e.getMessage());
+                        showEngineErrorNotification();
                     } catch (Exception e) {
                         Log.e(TAG, "Error starting Rust node: " + e.getMessage());
                         e.printStackTrace();
                     }
                 }).start();
-                
-                // Removed isNodeRunning = true; let Rust handle its own state concurrency
             }
 
             // Start GATT Server to receive incoming BLE P2P connections
@@ -141,6 +148,34 @@ public class RedNodeService extends Service {
 
         // START_STICKY ensures the OS tries to restart the background service if it kills it for memory
         return START_STICKY;
+    }
+
+    /**
+     * Muestra una notificación persistente cuando el motor Rust no pudo cargar.
+     * La app continúa en modo degradado (UI visible) en lugar de crashear.
+     */
+    private void showEngineErrorNotification() {
+        try {
+            android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            android.app.Notification.Builder builder;
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                builder = new android.app.Notification.Builder(this, CHANNEL_ID);
+            } else {
+                builder = new android.app.Notification.Builder(this);
+            }
+            builder.setSmallIcon(android.R.drawable.ic_dialog_alert)
+                   .setContentTitle("RED — Motor P2P no disponible")
+                   .setContentText("El motor nativo (libred_mobile.so) no pudo cargarse. La app funciona en modo degradado.")
+                   .setStyle(new android.app.Notification.BigTextStyle()
+                       .bigText("El motor nativo (libred_mobile.so) no pudo cargarse en este dispositivo. Funciones P2P, mensajería cifrada y blockchain no estarán disponibles. Reinstala la app o contacta soporte."))
+                   .setOngoing(false)
+                   .setPriority(android.app.Notification.PRIORITY_HIGH);
+            if (nm != null) {
+                nm.notify(99, builder.build());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to show engine error notification: " + e.getMessage());
+        }
     }
 
     /**
@@ -315,8 +350,6 @@ public class RedNodeService extends Service {
                 if (value != null && value.length > 0) {
                     // Forward bytes to Capacitor App via RedNodePlugin static event emitter
                     RedNodePlugin.emitBleMessage(value, device.getAddress());
-                    // Direct native HTTP POST injection to local Rust Axum node
-                    injectNativeMeshPayload(value);
                 }
             } else {
                 if (responseNeeded) {

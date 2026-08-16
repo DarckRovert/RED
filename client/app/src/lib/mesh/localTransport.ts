@@ -82,10 +82,18 @@ class LocalTransport {
     this.discoveredBluetoothPeers = [];
     try {
       await bluetoothTransport.scan((device) => {
-        if (!this.discoveredBluetoothPeers.find(d => d.id === device.id)) {
+        const existing = this.discoveredBluetoothPeers.find(d => 
+          d.id === device.id || 
+          (device.name && device.name !== 'Dispositivo RED' && d.name === device.name)
+        );
+        if (existing) {
+          existing.rssi = device.rssi;
+          existing.id = device.id;
+          meshRouter.addBlePeer(device.id, device.rssi, undefined, device.name);
+        } else {
           this.discoveredBluetoothPeers.push(device);
-          // Register newly found BLE device in the mesh router
-          meshRouter.addBlePeer(device.id, device.rssi);
+          // Register newly found BLE device in the mesh router with its advertised name
+          meshRouter.addBlePeer(device.id, device.rssi, undefined, device.name);
           console.log(`[LocalTransport] BLE peer discovered: ${device.name} (RSSI ${device.rssi})`);
         }
       }, 5000);
@@ -98,6 +106,8 @@ class LocalTransport {
   async connectBluetooth(deviceId: string) {
     await bluetoothTransport.connect(deviceId);
     meshRouter.addBlePeer(deviceId);
+    // Send immediate identity announce to bind deviceId <-> canonical identity
+    await meshRouter.sendIdentityAnnounce(deviceId, 'ble').catch(() => {});
   }
 
   // ─── WiFi Direct ─────────────────────────────────────────────────────────────
@@ -196,13 +206,14 @@ class LocalTransport {
     }
 
     const finalScore = Math.min(100, Math.round(score));
+    const trans = (target.transport || 'ble').toUpperCase();
     let rec = '';
-    if (finalScore >= 80) rec = `Enrutamiento Directo Óptimo vía ${target.transport.toUpperCase()} (Calidad ${finalScore}%)`;
-    else if (finalScore >= 50) rec = `Vía Estable. Transmitiendo por ${target.transport.toUpperCase()} (Calidad ${finalScore}%)`;
+    if (finalScore >= 80) rec = `Enrutamiento Directo Óptimo vía ${trans} (Calidad ${finalScore}%)`;
+    else if (finalScore >= 50) rec = `Vía Estable. Transmitiendo por ${trans} (Calidad ${finalScore}%)`;
     else rec = `Señal débil (${target.rssi || -85} dBm). Se recomienda activar modo Eco-Mesh.`;
 
     return {
-      optimalTransport: target.transport.toUpperCase(),
+      optimalTransport: trans,
       scorePct: finalScore,
       recommendation: rec
     };

@@ -1,5 +1,7 @@
+import { RED_VERSION } from "./version";
+
 /**
- * RED v30.0.0 — SNI Domain Fronting & Zero-Rating Bypass Engine
+ * RED v31.0.0 — SNI Domain Fronting & Zero-Rating Bypass Engine
  * 
  * Permite tunelizar tráfico de datos cifrados simulando el encabezado TLS SNI (Server Name Indication)
  * de portales cautivos de operadoras telefónicas exentos de cobro de datos (Zero-Rating Sites).
@@ -41,7 +43,7 @@ export class SniSpoofEngine {
     return {
       headers: {
         "Host": target.sniHost,
-        "X-RED-ZeroRating-Tunnel": "v30.0.0",
+        "X-RED-ZeroRating-Tunnel": `v${RED_VERSION}`,
         "Content-Type": "application/x-red-noise-frame",
         "User-Agent": "Mozilla/5.0 (Mobile; Android 14; RED Mesh Node)"
       },

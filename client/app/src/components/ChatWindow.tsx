@@ -7,12 +7,13 @@ import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
 import { toast } from "./Toast";
+import { meshRouter } from "../lib/mesh/meshRouter";
 
-/* ── Avatar helpers (same palette as Sidebar) ─────────────────────────────── */
+/* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
-    ['#E8213A','#C0152A'], ['#FF7043','#E64A19'], ['#FFA726','#F57C00'],
-    ['#26C6DA','#00ACC1'], ['#29B6F6','#0288D1'], ['#7E57C2','#5E35B1'],
-    ['#26A69A','#00897B'], ['#EC407A','#C2185B'],
+    ["#E8213A","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
+    ["#26C6DA","#00ACC1"], ["#29B6F6","#0288D1"], ["#7E57C2","#5E35B1"],
+    ["#26A69A","#00897B"], ["#EC407A","#C2185B"],
 ];
 function getAvIdx(s: string) {
     let h = 0;
@@ -24,1159 +25,618 @@ function avStyle(s: string) {
     return { background: `linear-gradient(135deg, ${a}, ${b})`, boxShadow: `0 2px 12px ${a}55` };
 }
 
-/* ── Date pill helper ──────────────────────────────────────────────────────── */
-function datePill(ts: number): string {
-    const d = new Date(ts * 1000), now = new Date();
-    const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
-    if (diff === 0) return 'Hoy';
-    if (diff === 1) return 'Ayer';
-    if (diff < 7)  return d.toLocaleDateString([], { weekday: 'long' });
-    return d.toLocaleDateString([], { day: '2-digit', month: 'long', year: 'numeric' });
-}
-function timeStr(ts: number) {
-    return new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-function sameDay(a: number, b: number) {
-    const da = new Date(a * 1000), db = new Date(b * 1000);
-    return da.getFullYear() === db.getFullYear() &&
-           da.getMonth() === db.getMonth() &&
-           da.getDate() === db.getDate();
-}
-
-/* ── Constants ────────────────────────────────────────────────────────────── */
-const REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '🔥'];
-const LONG_PRESS_MS = 620;
-
-/* ── Typing dots ──────────────────────────────────────────────────────────── */
-function TypingIndicator() {
-    return (
-        <div style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '10px 14px', background: 'var(--bubble-them)',
-            border: '1px solid var(--bubble-them-border)', borderRadius: '18px 18px 18px 4px',
-            width: 56, marginTop: 10,
-        }}>
-            {[0, 1, 2].map(i => (
-                <span key={i} className="typing-dot" style={{ animationDelay: `${i * 0.2}s` }} />
-            ))}
-        </div>
-    );
-}
-
-/* ── Voice waveform (For Input Recording Display) ─────────────────────────── */
-export function VoiceWave({ playing, color }: { playing: boolean; color: string }) {
-    const heights = [4, 8, 14, 10, 18, 12, 20, 14, 10, 8, 16, 12, 6, 14, 10, 8, 16, 12, 18, 10, 8, 14, 6, 10, 14];
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px', height: 24 }}>
-            {heights.map((h, i) => (
-                <div key={i} className={playing ? 'voice-bar' : ''} style={{
-                    width: 3, height: h, borderRadius: 2, background: color,
-                    opacity: playing ? 0.9 : 0.4,
-                    animationDelay: playing ? `${(i * 40) % 800}ms` : '0ms',
-                    transition: 'opacity 0.3s ease',
-                }} />
-            ))}
-        </div>
-    );
-}
-
-/* ── Main ChatWindow ───────────────────────────────────────────────────────── */
+/* ── Main ChatWindow Component ────────────────────────────────────────────── */
 export default function ChatWindow() {
     const {
         activeConversationId, conversations, contacts, groups, messages,
-        sendMessage, sendTyping, goBack, peerTyping, addContact,
+        sendMessage, sendTyping, goBack, navigate, peerTyping, addContact,
         deleteMessage, editMessage, clearConversation, starMessage, starredMessages,
-        identity,
+        identity, peerPresence, markAsRead,
     } = useRedStore();
 
-    const activeConv = conversations.find(c => c.id === activeConversationId);
-    const peerContact = contacts.find((c: any) => c.identity_hash === activeConv?.peer);
-    const peerName    = peerContact?.display_name || (activeConv?.peer ? `${activeConv.peer.substring(0, 12)}…` : 'Desconocido');
-    const peerHash    = activeConv?.peer || '';
-
-    /* ── State ─────────────────────────────────────────────────────────── */
-    const [inputText, setInputText]         = useState('');
-    const [inputFocused, setInputFocused]   = useState(false);
-    const [isRecording, setIsRecording]     = useState(false);
-    const [recordSec, setRecordSec]         = useState(0);
-    const [attachOpen, setAttachOpen]       = useState(false);
-    const [showPollModal, setShowPollModal] = useState(false);
-    const [pollQ, setPollQ]                 = useState('');
-    const [pollOpts, setPollOpts]           = useState(['', '']);
-    const [replyTo, setReplyTo]             = useState<MessageItem | null>(null);
-    const [pickerFor, setPickerFor]         = useState<string | null>(null);
-    const [pickerPos, setPickerPos]         = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-    const [chatMessages, setChatMessages]   = useState<MessageItem[]>([]);
-    const [swipingId, setSwipingId]         = useState<string | null>(null);
-    const [chatMenuOpen, setChatMenuOpen]   = useState(false);
-    const [clearingChat, setClearingChat]   = useState(false);
-    const [showProfile, setShowProfile]     = useState(false);
-
-    // ── NEW FEATURES ──
-    // A2: Delete
-    const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-    // A3: Edit
-    const [editingMsg, setEditingMsg]       = useState<MessageItem | null>(null);
-    const [editText, setEditText]           = useState('');
-    // A1: Forward
-    const [forwardMsg, setForwardMsg]       = useState<MessageItem | null>(null);
-    // B2: Search
-    const [searchOpen, setSearchOpen]       = useState(false);
-    const [searchQuery, setSearchQuery]     = useState('');
-    const [searchIdx, setSearchIdx]         = useState(0);
-    // B3: Pin
-    const [pinnedMsg, setPinnedMsg]         = useState<MessageItem | null>(null);
-    // Context menu (long-press)
-    const [ctxMenu, setCtxMenu]             = useState<{ msg: MessageItem; x: number; y: number } | null>(null);
-    // A6: File
-    const fileInputRef                      = useRef<HTMLInputElement>(null);
-    const [showSummaryModal, setShowSummaryModal] = useState(false);
-    const [summaryData, setSummaryData] = useState<{ total: number; senders: string[]; topWords: string[]; timespan: string } | null>(null);
-
-
-    /* ── Refs ── */
-    const endRef           = useRef<HTMLDivElement>(null);
-    const timerRef         = useRef<NodeJS.Timeout | null>(null);
-    const longPressRef     = useRef<NodeJS.Timeout | null>(null);
-    const inputRef         = useRef<HTMLInputElement>(null);
-    const searchInputRef   = useRef<HTMLInputElement>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef   = useRef<BlobPart[]>([]);
-    const recordSecRef     = useRef<number>(0);
-
-    /* Sync messages from store — filter out protocol entries (reaction, typing, live_*, contact_*) */
-    useEffect(() => {
-        setChatMessages(messages.filter(m => 
-            m.msg_type !== 'reaction' && 
-            m.msg_type !== 'typing' && 
-            m.msg_type !== 'contact_request' && 
-            m.msg_type !== 'contact_response' && 
-            m.msg_type !== 'webrtc_signal' &&
-            !m.msg_type?.startsWith('live_')
-        ));
-    }, [messages]);
-
-    /* Auto-scroll */
-    useEffect(() => {
-        endRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatMessages, peerTyping]);
-
-    /* Close pickers on outside tap */
-    useEffect(() => {
-        if (!pickerFor && !ctxMenu) return;
-        const handler = () => { setPickerFor(null); setCtxMenu(null); };
-        const t = setTimeout(() => document.addEventListener('pointerdown', handler, { once: true }), 10);
-        return () => { clearTimeout(t); document.removeEventListener('pointerdown', handler); };
-    }, [pickerFor, ctxMenu]);
-
-    /* Focus search on open */
-    useEffect(() => { if (searchOpen) searchInputRef.current?.focus(); }, [searchOpen]);
-
-
-    /* Derived search results — useMemo keeps hook order stable */
-    const searchResults = useMemo(() =>
-        searchQuery.trim()
-            ? chatMessages.filter(m =>
-                typeof m.content === 'string' &&
-                m.content.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-            : [],
-        [searchQuery, chatMessages]
+    const canonicalFromMesh = activeConversationId ? meshRouter.getCanonicalId(activeConversationId) : '';
+    const activeConv = conversations.find(c => c && (
+        c.id === activeConversationId || 
+        c.peer === activeConversationId || 
+        (canonicalFromMesh && (c.peer === canonicalFromMesh || c.id === canonicalFromMesh))
+    ));
+    
+    // Robust fallback to resolve peer hash even if conversation object is not yet indexed
+    const peerHash = activeConv?.peer || (
+        canonicalFromMesh && canonicalFromMesh.length === 64 ? canonicalFromMesh : (
+            activeConversationId?.includes('-') ? activeConversationId.split('-')[1] : (activeConversationId || '')
+        )
     );
+    const peerContact = contacts.find((c: any) => 
+        c.identity_hash === peerHash ||
+        (canonicalFromMesh && c.identity_hash === canonicalFromMesh) ||
+        (peerHash.length >= 8 && c.identity_hash.startsWith(peerHash)) ||
+        (c.identity_hash.length >= 8 && peerHash.startsWith(c.identity_hash))
+    );
+    // Full 64-character identity hash of peer for crypto & WebRTC signaling
+    const fullPeerHash = activeConv?.peer || peerContact?.identity_hash || (
+        canonicalFromMesh && canonicalFromMesh.length === 64 ? canonicalFromMesh : (
+            peerHash && peerHash.length === 64 ? peerHash : (
+                contacts.find((c: any) => peerHash && peerHash.length >= 8 && c.identity_hash.includes(peerHash))?.identity_hash || peerHash
+            )
+        )
+    );
+    const peerName = peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido");
 
-    /* FIX 4.2: Auto-scroll to the currently highlighted search result */
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [burnTimer, setBurnTimer] = useState<number | undefined>(undefined);
+    const [isSummarizing, setIsSummarizing] = useState(false);
+
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+    const convMessages = useMemo(() => {
+        const list = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
+        return [...list];
+    }, [messages, activeConversationId]);
+
+    const scrollToBottom = useCallback((smooth = true) => {
+        messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
+    }, []);
+
     useEffect(() => {
-        if (!searchResults.length) return;
-        const targetMsg = searchResults[searchIdx];
-        if (!targetMsg) return;
-        const el = document.querySelector<HTMLElement>(`[data-msgid="${targetMsg.id}"]`);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchIdx, searchResults]);
+        scrollToBottom(false);
+        // Mark conversation as read when opened
+        if (activeConversationId) markAsRead(activeConversationId);
+    }, [activeConversationId]);
 
-    /* ── Handlers ─────────────────────────────────────────────────────────── */
+    useEffect(() => {
+        scrollToBottom(true);
+    }, [convMessages.length]);
 
-    const handleSend = useCallback(() => {
-        const txt = inputText.trim();
-        if (!txt) return;
-        sendMessage(txt, replyTo ? {
-            reply_to: { id: replyTo.id, content: replyTo.content, sender: replyTo.sender, msg_type: replyTo.msg_type }
-        } : undefined);
-        setInputText('');
-        setReplyTo(null);
-    }, [inputText, replyTo, sendMessage]);
+    const [replyTo, setReplyTo] = useState<MessageItem | null>(null);
+    const mediaInputRef = useRef<HTMLInputElement | null>(null);
+    const [isRecording, setIsRecording] = useState(false);
+    const [recordSec, setRecordSec] = useState(0);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordTimerRef = useRef<any>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    // Voice preview state
+    const [voicePreviewBlob, setVoicePreviewBlob] = useState<Blob | null>(null);
+    const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+    const [voiceDurationSec, setVoiceDurationSec] = useState(0);
+    // Media preview state
+    const [mediaPreview, setMediaPreview] = useState<{ dataUrl: string; type: "image" | "video"; mimeType: string; caption: string } | null>(null);
+
+    const isOnline = peerPresence?.[peerHash] === 'online' || peerPresence?.[peerHash] === 'nearby';
+
+    const handleSendText = async (text: string, replyToId?: string) => {
+        if (!text.trim() || !peerHash) return;
+        try {
+            await sendMessage(text.trim(), { msg_type: "text", reply_to_id: replyToId || replyTo?.id });
+            setReplyTo(null);
+        } catch {
+            toast.error("Error al enviar mensaje");
+        }
+    };
+
+    const handleSendVoice = async (blob?: Blob) => {
+        if (!blob || !peerHash) return;
+        try {
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const b64 = reader.result as string;
+                await sendMessage(b64, { msg_type: "voice", duration_ms: recordSec * 1000 });
+            };
+            reader.readAsDataURL(blob);
+            toast.success("Nota de voz enviada");
+        } catch {
+            toast.error("Error al enviar nota de voz");
+        }
+    };
 
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            // Phase 2: Optimización Acústica (Voice Payloads P2P)
-            // Bajar el bitrate a 12000 bps para transmisión táctica por LoRa/BLE
-            const mediaRecorder = new MediaRecorder(stream, { audioBitsPerSecond: 12000 });
-            mediaRecorderRef.current = mediaRecorder;
             audioChunksRef.current = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-                if (e.data.size > 0) {
-                    audioChunksRef.current.push(e.data);
-                }
+            const mr = new MediaRecorder(stream);
+            mediaRecorderRef.current = mr;
+            mr.ondataavailable = (e) => {
+                if (e.data.size > 0) audioChunksRef.current.push(e.data);
             };
-
-            mediaRecorder.start();
+            mr.start(100);
             setIsRecording(true);
             setRecordSec(0);
-            recordSecRef.current = 0;
-            timerRef.current = setInterval(() => {
-                recordSecRef.current += 1;
-                setRecordSec(recordSecRef.current);
+            recordTimerRef.current = setInterval(() => {
+                setRecordSec(s => s + 1);
             }, 1000);
-        } catch (e) { console.error('Record start failed:', e); }
+        } catch (e) {
+            console.error("Error al iniciar grabación de audio:", e);
+            toast.error("Permiso de micrófono denegado");
+        }
     };
 
-    const stopRecording = () => {
-        if (timerRef.current) clearInterval(timerRef.current);
+    const stopRecording = async () => {
+        if (!isRecording) return;
         setIsRecording(false);
+        if (recordTimerRef.current) {
+            clearInterval(recordTimerRef.current);
+            recordTimerRef.current = null;
+        }
+        const mr = mediaRecorderRef.current;
+        if (mr && mr.state !== "inactive") {
+            mr.stop();
+            mr.stream.getTracks().forEach(t => t.stop());
+            await new Promise(resolve => { mr.onstop = resolve; });
+            const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+            if (blob.size > 100) {
+                // Show preview instead of sending directly
+                const url = URL.createObjectURL(blob);
+                setVoicePreviewBlob(blob);
+                setVoicePreviewUrl(url);
+                setVoiceDurationSec(recordSec);
+            }
+        }
+    };
+
+    const cancelVoicePreview = () => {
+        if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
+        setVoicePreviewBlob(null);
+        setVoicePreviewUrl(null);
+        setVoiceDurationSec(0);
+    };
+
+    const confirmVoiceSend = async () => {
+        if (!voicePreviewBlob) return;
+        const blob = voicePreviewBlob;
+        const dur = voiceDurationSec;
+        cancelVoicePreview();
         try {
-            if (mediaRecorderRef.current) {
-                mediaRecorderRef.current.onstop = () => {
-                    const finalSec = recordSecRef.current;
-                    const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-                    const reader = new FileReader();
-                    reader.readAsDataURL(blob);
-                    reader.onloadend = () => {
-                        const base64data = reader.result as string;
-                        const rawB64 = base64data.split(',')[1] || '';
-                        
-                        // FRAGMENTATION (JS CHUNKER)
-                        if (rawB64.length > 48000) {
-                            const chunks = mediaChunker.fragment(rawB64, 'audio/webm');
-                            chunks.forEach(c => {
-                                sendMessage(`[Fragment] Nota de voz [${c.chunkIndex}/${c.totalChunks}]`, {
-                                    msg_type: 'media_chunk',
-                                    media_data: JSON.stringify(c),
-                                    duration_ms: finalSec * 1000
-                                });
-                            });
+            const reader = new FileReader();
+            reader.onload = async () => {
+                const b64 = reader.result as string;
+                await sendMessage(b64, { msg_type: "voice", duration_ms: dur * 1000 });
+            };
+            reader.readAsDataURL(blob);
+            toast.success("Nota de voz enviada");
+        } catch { toast.error("Error al enviar nota de voz"); }
+    };
+
+    const compressImage = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    let width = img.width;
+                    let height = img.height;
+                    const maxDim = 1024;
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) {
+                            height = Math.round((height * maxDim) / width);
+                            width = maxDim;
                         } else {
-                            sendMessage('🎤 Nota de voz', {
-                                msg_type: 'voice',
-                                media_data: rawB64,
-                                mime_type: 'audio/webm',
-                                duration_ms: finalSec * 1000,
-                            });
+                            width = Math.round((width * maxDim) / height);
+                            height = maxDim;
                         }
-                    };
-
-                    // Liberar hardware
-                    mediaRecorderRef.current?.stream.getTracks().forEach(t => t.stop());
+                    }
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) {
+                        resolve(e.target?.result as string);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL("image/jpeg", 0.65));
                 };
-                mediaRecorderRef.current.stop();
-            }
-        } catch (e) { console.error('Record stop failed:', e); }
+                img.onerror = () => resolve(e.target?.result as string);
+                img.src = e.target?.result as string;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
     };
 
-    const handleCamera = async () => {
-        setAttachOpen(false);
-        try {
-            const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
-            const img = await Camera.getPhoto({ quality: 80, allowEditing: false, resultType: CameraResultType.Base64, source: CameraSource.Camera, width: 1280 });
-            if (img.base64String) {
-                const mime = `image/${img.format || 'jpeg'}`;
-                // Strip the 'data:mime;base64,' prefix if present — Rust expects raw base64
-                const rawB64 = img.base64String.replace(/^data:[^;]+;base64,/, '');
-                if (rawB64.length > 48000) {
-                     const chunks = mediaChunker.fragment(rawB64, mime);
-                     chunks.forEach(c => sendMessage(`[Fragment] Foto [${c.chunkIndex}/${c.totalChunks}]`, { msg_type: 'media_chunk', media_data: JSON.stringify(c) }));
-                } else {
-                     sendMessage('📷 Foto cifrada', { msg_type: 'image', media_data: rawB64, mime_type: mime });
-                }
-            }
-        } catch {}
+    const handleGallery = () => {
+        if (mediaInputRef.current) {
+            mediaInputRef.current.removeAttribute("capture");
+            mediaInputRef.current.accept = "image/*,video/*";
+            mediaInputRef.current.click();
+        }
     };
 
-    const handleGallery = async () => {
-        setAttachOpen(false);
+    const handleCamera = () => {
+        if (mediaInputRef.current) {
+            mediaInputRef.current.setAttribute("capture", "environment");
+            mediaInputRef.current.accept = "image/*";
+            mediaInputRef.current.click();
+        }
+    };
+
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !peerHash) return;
+        e.target.value = "";
+
         try {
-            const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
-            const img = await Camera.getPhoto({ quality: 80, allowEditing: false, resultType: CameraResultType.Base64, source: CameraSource.Photos, width: 1280 });
-            if (img.base64String) {
-                const mime = `image/${img.format || 'jpeg'}`;
-                // Strip the 'data:mime;base64,' prefix if present — Rust expects raw base64
-                const rawB64 = img.base64String.replace(/^data:[^;]+;base64,/, '');
-                if (rawB64.length > 48000) {
-                     const chunks = mediaChunker.fragment(rawB64, mime);
-                     chunks.forEach(c => sendMessage(`[Fragment] Imagen [${c.chunkIndex}/${c.totalChunks}]`, { msg_type: 'media_chunk', media_data: JSON.stringify(c) }));
-                } else {
-                     sendMessage('🖼️ Imagen cifrada', { msg_type: 'image', media_data: rawB64, mime_type: mime });
+            if (file.type.startsWith("video/")) {
+                if (file.size > 15 * 1024 * 1024) {
+                    toast.error("El video no puede superar 15 MB");
+                    return;
                 }
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    if (ev.target?.result) {
+                        // Show preview first
+                        setMediaPreview({ dataUrl: ev.target.result as string, type: "video", mimeType: file.type || "video/mp4", caption: "" });
+                    }
+                };
+                reader.readAsDataURL(file);
+            } else {
+                const compressedB64 = await compressImage(file);
+                // Show preview first
+                setMediaPreview({ dataUrl: compressedB64, type: "image", mimeType: "image/jpeg", caption: "" });
             }
-        } catch {}
+        } catch (err) {
+            console.error("Error al procesar archivo:", err);
+            toast.error("Error al enviar multimedia");
+        }
+    };
+
+    const confirmMediaSend = async () => {
+        if (!mediaPreview) return;
+        const { dataUrl, type, mimeType, caption } = mediaPreview;
+        setMediaPreview(null);
+        try {
+            await sendMessage(dataUrl, { msg_type: type, mime_type: mimeType });
+            if (caption.trim()) {
+                await sendMessage(caption.trim(), { msg_type: "text" });
+            }
+            toast.success(type === "video" ? "Video enviado" : "Foto enviada");
+        } catch {
+            toast.error("Error al enviar multimedia");
+        }
     };
 
     const handleLocation = async () => {
-        setAttachOpen(false);
+        if (!peerHash) return;
         try {
-            const { Geolocation } = await import('@capacitor/geolocation');
-            const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
-            sendMessage('📍 Ubicación GPS', { msg_type: 'location', latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy });
-        } catch (e) { console.error('Geolocation failed', e); }
-    };
-
-    const handlePollSend = () => {
-        const validOpts = pollOpts.filter(o => o.trim());
-        if (!pollQ.trim() || validOpts.length < 2) return;
-        sendMessage(`📊 ${pollQ}`, { msg_type: 'poll', poll_data: { question: pollQ, options: validOpts, votes: {} } });
-        setPollQ(''); setPollOpts(['', '']); setShowPollModal(false);
-    };
-
-    const handleReaction = (msgId: string, emoji: string) => {
-        setPickerFor(null);
-        // Update local state optimistically
-        setChatMessages(prev => prev.map(m => {
-            if (m.id !== msgId) return m;
-            const reactions = { ...(m.reactions || {}) };
-            const myId = 'me';
-            if (reactions[emoji]?.includes(myId)) {
-                reactions[emoji] = reactions[emoji].filter(id => id !== myId);
-                if (!reactions[emoji].length) delete reactions[emoji];
-            } else {
-                reactions[emoji] = [...(reactions[emoji] || []), myId];
+            if (typeof navigator !== "undefined" && "geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    async (pos) => {
+                        const lat = pos.coords.latitude.toFixed(6);
+                        const lon = pos.coords.longitude.toFixed(6);
+                        const locText = `📍 Ubicación Táctica: ${lat}, ${lon}\nhttps://maps.google.com/?q=${lat},${lon}`;
+                        await sendMessage(locText, { msg_type: "text" });
+                        toast.success("Ubicación GPS enviada");
+                    },
+                    () => {
+                        toast.error("No se pudo obtener la ubicación GPS");
+                    },
+                    { enableHighAccuracy: true, timeout: 5000 }
+                );
             }
-            return { ...m, reactions };
-        }));
-        sendMessage(`reaction:${emoji}:${msgId}`, { msg_type: 'reaction' });
+        } catch {
+            toast.error("Error al obtener ubicación");
+        }
     };
 
-    /* Long press → context menu (replaces inline reaction picker) */
-    const startLongPress = (e: React.TouchEvent | React.MouseEvent, msg: MessageItem) => {
-        longPressRef.current = setTimeout(() => {
-            const rect = (e.target as HTMLElement).closest('[data-msgid]')?.getBoundingClientRect();
-            if (rect) {
-                const y = Math.max(8, rect.top - 20);
-                const x = Math.min(Math.max(rect.left, 8), window.innerWidth - 220);
-                setCtxMenu({ msg, x, y });
-                // Also open emoji picker
-                setPickerPos({ top: y - 52, left: x });
-                setPickerFor(msg.id);
-            }
-        }, LONG_PRESS_MS);
-    };
-    const cancelLongPress = () => { if (longPressRef.current) clearTimeout(longPressRef.current); };
-
-    /* Touch swipe → reply */
-    const touchStartX = useRef(0);
-    const onTouchStart = (e: React.TouchEvent, msg: MessageItem) => {
-        touchStartX.current = e.touches[0].clientX;
-        startLongPress(e, msg);
-    };
-    const onTouchMove = (e: React.TouchEvent, msg: MessageItem) => {
-        cancelLongPress();
-        const dx = e.touches[0].clientX - touchStartX.current;
-        if (dx > 45 && !msg.is_mine) { setSwipingId(msg.id); setReplyTo(msg); }
-        if (dx < -45 && msg.is_mine) { setSwipingId(msg.id); setReplyTo(msg); }
-    };
-    const onTouchEnd = () => { cancelLongPress(); setTimeout(() => setSwipingId(null), 300); };
-
-    const handleClearHistory = async () => {
-        setChatMenuOpen(false);
-        if (!activeConversationId) return;
-        setClearingChat(true);
+    const handleReaction = async (msgId: string, emoji: string) => {
+        if (!peerHash) return;
         try {
-            setChatMessages([]);
-            await clearConversation();
+            await sendMessage(emoji, { msg_type: "reaction", reply_to_id: msgId });
+            toast.success(`Reacción ${emoji} enviada`);
+        } catch {
+            // handled
+        }
+    };
+
+    const handleVote = async (msgId: string, optIdx: number) => {
+        try {
+            await sendMessage(String(optIdx), { msg_type: "poll_vote", reply_to_id: msgId });
+            toast.success("Voto registrado");
+        } catch {
+            // handled
+        }
+    };
+
+    const handleLongPress = (e: any, msg: MessageItem) => {
+        if (msg.content && typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(msg.content);
+            toast.info("Mensaje copiado");
+        }
+    };
+
+    const handleSummarize = async () => {
+        if (convMessages.length === 0) return;
+        setIsSummarizing(true);
+        try {
+            const msgStrings = convMessages.map(m => `${m.sender.substring(0, 6)}: ${m.content}`);
+            const summary = await summarizeChannelAI(activeConversationId || 'chat', msgStrings);
+            if (summary?.summary_bullets?.length > 0) {
+                toast.info(`🤖 Resumen IA:\n${summary.summary_bullets.join('\n')}`);
+            }
+        } catch {
+            toast.error("Error al resumir conversación");
         } finally {
-            setClearingChat(false);
+            setIsSummarizing(false);
         }
     };
 
-    // ── A2: Delete message ────────────────────────────────────────────────────────
-    const handleDelete = async (msgId: string) => {
-        setDeleteConfirmId(null);
-        setCtxMenu(null);
-        await deleteMessage(msgId);
-    };
-
-    // ── A3: Start editing ──────────────────────────────────────────────────────
-    const startEdit = (msg: MessageItem) => {
-        setCtxMenu(null);
-        setEditingMsg(msg);
-        setEditText(msg.content);
-    };
-    const confirmEdit = async () => {
-        if (!editingMsg || !editText.trim()) return;
-        await editMessage(editingMsg.id, editText.trim());
-        setEditingMsg(null);
-        setEditText('');
-    };
-
-    // A1: Forward message
-    const handleForward = (targetHash: string) => {
-        if (!forwardMsg) return;
-        const originalConvId = activeConversationId;
-        // Temporarily set the target conversation, send, then restore
-        useRedStore.setState({ activeConversationId: targetHash });
-        const { sendMessage: send } = useRedStore.getState();
-        send(`↪ ${forwardMsg.content}`, { msg_type: forwardMsg.msg_type === 'text' ? 'text' : forwardMsg.msg_type });
-        // Restore original conversation so the user stays in the same chat
-        useRedStore.setState({ activeConversationId: originalConvId });
-        setForwardMsg(null);
-        toast.success('✅ Mensaje reenviado.');
-    };
-
-    // ── A4: Star ───────────────────────────────────────────────────────────────
-    const handleStar = (msg: MessageItem) => {
-        setCtxMenu(null);
-        starMessage(msg.id);
-    };
-
-    // ── A5: Share contact card ────────────────────────────────────────────────
-    const [showContactPicker, setShowContactPicker] = useState(false);
-    const handleShareContact = (c: any) => {
-        setShowContactPicker(false);
-        setAttachOpen(false);
-        sendMessage(`👤 ${c.display_name}`, {
-            msg_type: 'contact_card',
-            media_data: JSON.stringify({ display_name: c.display_name, identity_hash: c.identity_hash }),
-        });
-    };
-
-    // ── A6: Share file (document) ──────────────────────────────────────────────
-    const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 5 * 1024 * 1024) { alert('Archivo muy grande. Máximo 5 MB.'); return; }
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const b64 = (reader.result as string).split(',')[1] || '';
-            sendMessage(`📎 ${file.name}`, {
-                msg_type: 'file',
-                media_data: b64,
-                mime_type: file.type || 'application/octet-stream',
-                media_name: file.name,
-            });
-        };
-        reader.readAsDataURL(file);
-        setAttachOpen(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-
-    // ── B3: Pin ───────────────────────────────────────────────────────────────
-    const handlePin = (msg: MessageItem) => {
-        setCtxMenu(null);
-        setPinnedMsg(prev => prev?.id === msg.id ? null : msg);
-    };
-
-    // ── Long-press → context menu ───────────────────────────────────────────────
-
-    const handleSynthesizeChat = async () => {
-        if (chatMessages.length === 0) {
-            alert('Sin mensajes en este chat para sintetizar.');
-            return;
-        }
-        const sendersSet = new Set<string>();
-        chatMessages.forEach(m => {
-            if (m.sender) sendersSet.add(m.sender === identity?.identity_hash ? 'Tú' : peerName);
-        });
-
-        const rawMsgs = chatMessages.map(m => typeof m.content === 'string' ? m.content : '');
-        const aiSummary = await summarizeChannelAI(activeConversationId || 'current_chat', rawMsgs);
-
-        const firstTs = chatMessages[0]?.timestamp ? new Date(chatMessages[0].timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Inicio';
-        const lastTs = chatMessages[chatMessages.length - 1]?.timestamp ? new Date(chatMessages[chatMessages.length - 1].timestamp * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Ahora';
-
-        setSummaryData({
-            total: chatMessages.length,
-            senders: Array.from(sendersSet),
-            topWords: aiSummary.summary_bullets,
-            timespan: `${firstTs} ➔ ${lastTs}`
-        });
-        setShowSummaryModal(true);
-    };
-
-    /* Render ─────────────────────────────────────────────────────────────── */
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)', overflow: 'hidden', position: 'relative' }}>
+        <div style={{
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
+        }}>
+            <input
+                ref={mediaInputRef}
+                type="file"
+                style={{ display: "none" }}
+                onChange={handleFileSelected}
+            />
 
-            {/* ── Chat Summary Modal ────────────────────────────────────────── */}
-            {showSummaryModal && summaryData && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'rgba(3,7,18,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setShowSummaryModal(false)}>
-                    <div style={{ background: 'linear-gradient(145deg, #0f172a, #0b0f19)', border: '1px solid rgba(56,189,248,0.3)', borderRadius: 20, padding: 24, width: '100%', maxWidth: 420, boxShadow: '0 0 40px rgba(56,189,248,0.2)' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                            <div style={{ fontWeight: 800, color: '#38bdf8', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                🪄 Síntesis de Chat (IA Local)
-                            </div>
-                            <button onClick={() => setShowSummaryModal(false)} className="btn-icon">✕</button>
-                        </div>
-                        <div style={{ fontSize: '0.82rem', color: '#94a3b8', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
-                                <span style={{ color: '#fff', fontWeight: 700 }}>📊 Mensajes analizados:</span> {summaryData.total} mensajes
-                            </div>
-                            <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
-                                <span style={{ color: '#fff', fontWeight: 700 }}>👥 Participantes:</span> {summaryData.senders.join(', ')}
-                            </div>
-                            <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
-                                <span style={{ color: '#fff', fontWeight: 700 }}>⏰ Lapso de tiempo:</span> {summaryData.timespan}
-                            </div>
-                            {summaryData.topWords.length > 0 && (
-                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: 12, borderRadius: 10 }}>
-                                    <span style={{ color: '#38bdf8', fontWeight: 700 }}>🏷️ Temas clave detectados:</span>
-                                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                                        {summaryData.topWords.map((tw, idx) => (
-                                            <span key={idx} style={{ background: 'rgba(56,189,248,0.15)', color: '#7dd3fc', border: '1px solid rgba(56,189,248,0.3)', padding: '2px 8px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 700 }}>{tw}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <button onClick={() => setShowSummaryModal(false)} className="btn-primary" style={{ width: '100%', marginTop: 20, padding: 12 }}>
-                            Cerrar Síntesis
-                        </button>
-                    </div>
-                </div>
-            )}
-
-
-            {/* ── Context menu (long-press) ──────────────────────────────────── */}
-            {ctxMenu && (
-                <div
-                    style={{
-                        position: 'fixed', top: ctxMenu.y, left: ctxMenu.x,
-                        zIndex: 500, minWidth: 200,
-                        background: 'linear-gradient(145deg,rgba(15,15,28,0.99),rgba(8,8,18,0.99))',
-                        border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16,
-                        padding: '6px', boxShadow: '0 16px 48px rgba(0,0,0,0.8)',
-                        animation: 'var(--anim-pop)',
-                    }}
-                    onPointerDown={e => e.stopPropagation()}
-                >
-                    {[
-                        { icon: '↩️', label: 'Responder',  action: () => { setReplyTo(ctxMenu.msg); setCtxMenu(null); } },
-                        { icon: '➡️', label: 'Reenviar',   action: () => { setForwardMsg(ctxMenu.msg); setCtxMenu(null); } },
-                        ctxMenu.msg.is_mine ? { icon: '✏️', label: 'Editar',     action: () => startEdit(ctxMenu.msg) } : null,
-                        { icon: starredMessages.includes(ctxMenu.msg.id) ? '★' : '☆',
-                          label: starredMessages.includes(ctxMenu.msg.id) ? 'Quitar estrella' : 'Marcar estrella',
-                          action: () => handleStar(ctxMenu.msg) },
-                        { icon: '📌', label: pinnedMsg?.id === ctxMenu.msg.id ? 'Desfijar' : 'Fijar mensaje', action: () => handlePin(ctxMenu.msg) },
-                        ctxMenu.msg.is_mine ? { icon: '🗑️', label: 'Eliminar', danger: true, action: () => { setDeleteConfirmId(ctxMenu.msg.id); setCtxMenu(null); } } : null,
-                    ].filter(Boolean).map((item: any) => (
-                        <button
-                            key={item.label}
-                            onClick={item.action}
-                            style={{
-                                width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-                                padding: '11px 14px', background: 'transparent',
-                                color: item.danger ? '#FF4444' : 'var(--text-primary)',
-                                border: 'none', borderRadius: 10, fontSize: '0.9rem',
-                                fontWeight: 500, cursor: 'pointer', textAlign: 'left',
-                            }}
-                            onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
-                            onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                            <span style={{ width: 22, textAlign: 'center' }}>{item.icon}</span>
-                            {item.label}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Reaction picker */}
-            {pickerFor && (
-                <div className="reaction-picker" style={{ top: pickerPos.top, left: pickerPos.left }}
-                    onPointerDown={e => e.stopPropagation()}>
-                    {REACTIONS.map(em => (
-                        <button key={em} className="reaction-picker-emoji"
-                            onClick={() => handleReaction(pickerFor, em)}>
-                            {em}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Poll modal */}
-            {showPollModal && (
-                <div style={{ position: 'absolute', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
-                    onClick={() => setShowPollModal(false)}>
-                    <div style={{
-                        width: '100%', padding: '24px 20px', borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-                        background: 'linear-gradient(180deg, #13131e 0%, #0a0a12 100%)',
-                        border: '1px solid rgba(255,255,255,0.08)', borderBottom: 'none',
-                        animation: 'slideUp 0.25s var(--ease-spring) both',
-                    }} onClick={e => e.stopPropagation()}>
-                        <h3 style={{ fontWeight: 800, marginBottom: 20, fontSize: '1.1rem' }}>📊 Nueva Encuesta</h3>
-                        <input value={pollQ} onChange={e => setPollQ(e.target.value)}
-                            placeholder="Pregunta..." style={{
-                                width: '100%', padding: '12px 14px', background: 'var(--bg-lifted)',
-                                border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-md)',
-                                color: 'var(--text-primary)', fontSize: '0.95rem', outline: 'none', marginBottom: 12,
-                            }} />
-                        {pollOpts.map((opt, i) => (
-                            <input key={i} value={opt} onChange={e => {
-                                const n = [...pollOpts]; n[i] = e.target.value; setPollOpts(n);
-                            }} placeholder={`Opción ${i + 1}`} style={{
-                                width: '100%', padding: '11px 14px', background: 'var(--bg-lifted)',
-                                border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-md)',
-                                color: 'var(--text-primary)', fontSize: '0.88rem', outline: 'none', marginBottom: 8,
-                            }} />
-                        ))}
-                        {pollOpts.length < 5 && (
-                            <button onClick={() => setPollOpts([...pollOpts, ''])} style={{
-                                width: '100%', padding: 10, background: 'transparent', border: '1px dashed var(--glass-border)',
-                                borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', cursor: 'pointer', marginBottom: 16, fontSize: '0.85rem',
-                            }}>+ Añadir opción</button>
-                        )}
-                        <button onClick={handlePollSend} className="btn-primary" style={{ width: '100%', padding: 14, borderRadius: 'var(--radius-md)' }}>
-                            Publicar encuesta
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Delete confirm modal ───────────────────────────────────────────── */}
-            {deleteConfirmId && (
-                <div style={{ position:'absolute', inset:0, zIndex:600, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', padding: 24 }}
-                    onClick={() => setDeleteConfirmId(null)}>
-                    <div style={{ background:'linear-gradient(145deg,#0f0f1c,#0a0a14)', border:'1px solid rgba(255,255,255,0.12)',
-                        borderRadius: 24, padding: '28px 24px', width:'100%', maxWidth: 340, textAlign:'center' }}
-                        onClick={e => e.stopPropagation()}>
-                        <div style={{ fontSize: '2rem', marginBottom: 12 }}>🗑️</div>
-                        <div style={{ fontWeight: 800, fontSize: '1.1rem', marginBottom: 8 }}>Eliminar mensaje</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 24 }}>Esta acción no se puede deshacer.</div>
-                        <div style={{ display: 'flex', gap: 12 }}>
-                            <button onClick={() => setDeleteConfirmId(null)}
-                                style={{ flex: 1, padding: '13px', borderRadius: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
-                            <button onClick={() => handleDelete(deleteConfirmId)}
-                                style={{ flex: 1, padding: '13px', borderRadius: 14, background: 'linear-gradient(135deg,#E8213A,#FF3355)', border: 'none', color: 'white', fontWeight: 700, cursor: 'pointer' }}>Eliminar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Edit modal ─────────────────────────────────────────────────────── */}
-            {editingMsg && (
-                <div style={{ position:'absolute', inset:0, zIndex:600, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'flex-end' }}
-                    onClick={() => setEditingMsg(null)}>
-                    <div style={{ width:'100%', padding:'20px', background:'linear-gradient(180deg,#13131e,#0a0a12)', borderRadius:'24px 24px 0 0',
-                        border:'1px solid rgba(255,255,255,0.08)', borderBottom:'none' }}
-                        onClick={e => e.stopPropagation()}>
-                        <div style={{ fontWeight: 800, marginBottom: 12, display:'flex', alignItems:'center', gap:8 }}>
-                            <span>✏️</span> Editar mensaje
-                        </div>
-                        <textarea
-                            value={editText}
-                            onChange={e => setEditText(e.target.value)}
-                            autoFocus
-                            rows={3}
-                            style={{ width:'100%', resize:'none', padding:'12px 14px', background:'var(--bg-lifted)',
-                                border:'1px solid var(--glass-border)', borderRadius: 14,
-                                color:'var(--text-primary)', fontSize:'0.95rem', outline:'none',
-                                marginBottom: 14, boxSizing: 'border-box' }}
-                        />
-                        <div style={{ display:'flex', gap:12 }}>
-                            <button onClick={() => setEditingMsg(null)}
-                                style={{ flex:1, padding:'13px', borderRadius:14, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', color:'var(--text-secondary)', fontWeight:700, cursor:'pointer' }}>Cancelar</button>
-                            <button onClick={confirmEdit}
-                                style={{ flex:1, padding:'13px', borderRadius:14, background:'linear-gradient(135deg,#E8213A,#FF3355)', border:'none', color:'white', fontWeight:700, cursor:'pointer' }}>Guardar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Forward modal ─────────────────────────────────────────────────── */}
-            {forwardMsg && (
-                <div style={{ position:'absolute', inset:0, zIndex:600, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'flex-end' }}
-                    onClick={() => setForwardMsg(null)}>
-                    <div style={{ width:'100%', maxHeight:'70vh', padding:'20px', background:'linear-gradient(180deg,#13131e,#0a0a12)',
-                        borderRadius:'24px 24px 0 0', border:'1px solid rgba(255,255,255,0.08)', borderBottom:'none', overflowY:'auto' }}
-                        onClick={e => e.stopPropagation()}>
-                        <div style={{ fontWeight:800, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>➡️ Reenviar a…</div>
-                        {[...(Array.isArray(contacts) ? contacts : []).map((c:any) => ({ name: c.display_name, hash: c.identity_hash, isGroup: false })),
-                          ...(Array.isArray(groups) ? groups : []).map((g:any) => ({ name: g.name, hash: g.id, isGroup: true }))]
-                          .map(item => (
-                            <button key={item.hash} onClick={() => handleForward(item.hash)}
-                                style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(255,255,255,0.04)',
-                                    border:'1px solid rgba(255,255,255,0.07)', borderRadius:14, marginBottom:8,
-                                    color:'var(--text-primary)', cursor:'pointer', fontSize:'0.9rem', fontWeight:600 }}>
-                                <span style={{ fontSize:'1.1rem' }}>{item.isGroup ? '👥' : '👤'}</span>
-                                {item.name || item.hash.substring(0,12)}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── Contact picker ────────────────────────────────────────────────── */}
-            {showContactPicker && (
-                <div style={{ position:'absolute', inset:0, zIndex:600, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'flex-end' }}
-                    onClick={() => setShowContactPicker(false)}>
-                    <div style={{ width:'100%', maxHeight:'60vh', padding:'20px', background:'linear-gradient(180deg,#13131e,#0a0a12)',
-                        borderRadius:'24px 24px 0 0', border:'1px solid rgba(255,255,255,0.08)', borderBottom:'none', overflowY:'auto' }}
-                        onClick={e => e.stopPropagation()}>
-                        <div style={{ fontWeight:800, marginBottom:16 }}>👤 Compartir contacto</div>
-                        {contacts.length === 0 && <div style={{ color:'var(--text-muted)', textAlign:'center', padding:16 }}>No tienes contactos aún.</div>}
-                        {contacts.map((c:any) => (
-                            <button key={c.identity_hash} onClick={() => handleShareContact(c)}
-                                style={{ width:'100%', display:'flex', alignItems:'center', gap:12, padding:'12px 16px', background:'rgba(255,255,255,0.04)',
-                                    border:'1px solid rgba(255,255,255,0.07)', borderRadius:14, marginBottom:8,
-                                    color:'var(--text-primary)', cursor:'pointer', fontSize:'0.9rem', fontWeight:600 }}>
-                                👤 {c.display_name || c.identity_hash.substring(0,16)}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* ── File input (hidden) ─────────────────────────────────────────────── */}
-            <input ref={fileInputRef} type="file" accept="*/*" style={{ display:'none' }} onChange={handleFileInput} />
-
-            {/* ── Header ──────────────────────────────────────────────────────── */}
+            {/* Header Táctico E2E */}
             <header style={{
-                height: 'var(--header-h)', display: 'flex', alignItems: 'center', gap: '12px', padding: '0 14px',
-                background: 'linear-gradient(180deg, rgba(12,12,22,0.99) 0%, rgba(8,8,16,0.98) 100%)',
-                borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, zIndex: 10,
+                padding: "12px 16px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
             }}>
-                <button onClick={goBack} className="btn-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="15 18 9 12 15 6"/>
-                    </svg>
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        className="btn-icon"
+                        title="Volver a la lista"
+                        style={{ width: 36, height: 36 }}
+                    >
+                        ←
+                    </button>
 
-                {/* Avatar + info */}
-                <div onClick={() => {/* Contact info screen future */}} style={{ display: 'flex', alignItems: 'center', gap: '11px', flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                    <div style={{
-                        width: 42, height: 42, borderRadius: '50%', flexShrink: 0,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontWeight: 800, fontSize: '1.1rem', color: 'white',
-                        ...avStyle(peerHash || peerName),
-                    }}>
-                        {peerName.substring(0, 1).toUpperCase()}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '1.02rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                            {peerName}
+                    {/* Avatar del Interlocutor */}
+                    <div style={{ position: "relative" }}>
+                        <div style={{
+                            width: 38, height: 38, borderRadius: "50%",
+                            ...avStyle(peerHash || "RED"),
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontWeight: 900, color: "white", fontSize: "1rem"
+                        }}>
+                            {peerName[0]?.toUpperCase() || "🔴"}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-                            {/* FIX 1.10: Use peerTyping from store (driven by real SSE events),
-                                NOT typingPeer local state which was never updated. */}
-                            {peerTyping ? (
-                                <span style={{ fontSize: '0.7rem', color: 'var(--success)', fontWeight: 600, fontStyle: 'italic' }}>
-                                    escribiendo…
-                                </span>
-                            ) : (
-                                <>
-                                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--success)', display: 'inline-block', boxShadow: '0 0 5px var(--success)' }} />
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                        {peerHash ? `${peerHash.substring(0, 10)}…` : ''}
-                                    </span>
-                                    <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} />
-                                    <span style={{ fontSize: '0.69rem', color: '#00E676', fontWeight: 800, fontFamily: 'monospace' }}>🛡️ Kyber-1024 PQC</span>
-                                </>
-                            )}
+                        <div style={{
+                            position: "absolute", bottom: -1, right: -1,
+                            width: 10, height: 10, borderRadius: "50%",
+                            background: isOnline ? "var(--accent-emerald)" : "var(--text-muted)",
+                            border: "2px solid var(--bg-void)",
+                            boxShadow: isOnline ? "0 0 6px var(--accent-emerald)" : "none"
+                        }} />
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>{peerName}</span>
+                            <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.62rem", padding: "1px 6px" }}>NOISE E2E</span>
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: isOnline ? "var(--accent-emerald)" : "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                            {isOnline ? "● CONECTADO EN MALLA" : `DID: ${peerHash.substring(0, 10)}…`}
                         </div>
                     </div>
                 </div>
 
-                {/* ── Reciprocal Contact Request Banner ──────────────────────────── */}
-                {peerHash && !contacts.some((c: any) => c.identity_hash === peerHash) && (
-                    <div style={{
-                        padding: '8px 16px', background: 'linear-gradient(135deg, rgba(232,33,58,0.18), rgba(255,51,85,0.1))',
-                        borderBottom: '1px solid rgba(232,33,58,0.3)', display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between', gap: '12px', zIndex: 9, flexShrink: 0
-                    }}>
-                        <div style={{ fontSize: '0.82rem', color: 'white', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>🤝</span>
-                            <span>Este usuario no está en tus contactos.</span>
-                        </div>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    await addContact(peerHash, peerName || `Operador ${peerHash.substring(0, 6)}`);
-                                    toast.success("✅ Contacto guardado.");
-                                } catch {
-                                    toast.error("Error al guardar.");
-                                }
-                            }}
-                            style={{
-                                padding: '6px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, var(--primary), #C0152A)',
-                                border: 'none', color: 'white', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer',
-                                boxShadow: '0 2px 10px rgba(232,33,58,0.4)', flexShrink: 0
-                            }}
-                        >
-                            + Guardar Contacto
-                        </button>
-                    </div>
-                )}
-
-                {/* Header actions */}
-                <div style={{ display: 'flex', gap: '4px', flexShrink: 0, position: 'relative' }}>
-                    <button className="btn-icon" onClick={handleSynthesizeChat} title="Sintetizar Chat con IA Local" style={{ fontSize: '1rem' }}>
-                        🪄
-                    </button>
-                    {/* B2: Search toggle */}
-                    <button className="btn-icon" onClick={() => setSearchOpen(s => !s)} title="Buscar">
-
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                    </button>
-                    <button className="btn-icon" onClick={() => {
-                        const peerId = activeConv?.peer || activeConversationId;
-                        if (peerId) useRedStore.getState().navigate('call', peerId);
-                    }} title="Llamada">
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 10a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l1.27-.95a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                        </svg>
-                    </button>
-                    <button className="btn-icon" title="Más" onClick={() => setChatMenuOpen(m => !m)}>
-                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="5" r="1.2" fill="currentColor"/>
-                            <circle cx="12" cy="12" r="1.2" fill="currentColor"/>
-                            <circle cx="12" cy="19" r="1.2" fill="currentColor"/>
-                        </svg>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <button
+                        onClick={() => {
+                            const target = fullPeerHash || peerHash;
+                            navigate("call", target);
+                        }}
+                        className="btn-icon"
+                        title="Llamada WebRTC Cifrada"
+                        style={{ width: 36, height: 36, color: "var(--accent-emerald)" }}
+                    >
+                        📞
                     </button>
 
-                    {/* Context menu */}
-                    {chatMenuOpen && (
-                        <div
-                            style={{
-                                position: 'absolute', top: 44, right: 0,
-                                background: 'linear-gradient(145deg, rgba(15,15,28,0.99), rgba(8,8,18,0.99))',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                borderRadius: 'var(--radius-lg)', padding: '6px',
-                                zIndex: 200, minWidth: 200,
-                                boxShadow: '0 16px 48px rgba(0,0,0,0.7)',
-                                animation: 'var(--anim-pop)',
-                            }}
-                            onPointerDown={e => e.stopPropagation()}
-                        >
-                            {[
-                                { icon: '🔍', label: 'Buscar en chat',   danger: false, action: () => { setChatMenuOpen(false); setSearchOpen(true); } },
-                                { icon: '📌', label: pinnedMsg ? 'Ver mensaje fijado' : 'No hay fijados', danger: false, action: () => setChatMenuOpen(false) },
-                                { icon: '🗑️', label: clearingChat ? 'Limpiando...' : 'Limpiar historial', danger: true,  action: handleClearHistory },
-                                { icon: '👤', label: 'Ver perfil', danger: false, action: () => { setChatMenuOpen(false); setShowProfile(true); } },
-                            ].map(item => (
-                                <button
-                                    key={item.label}
-                                    onPointerUp={e => { e.preventDefault(); item.action(); }}
-                                    style={{
-                                        width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
-                                        padding: '11px 14px', background: 'transparent',
-                                        color: item.danger ? 'var(--danger)' : 'var(--text-primary)',
-                                        border: 'none', borderRadius: 'var(--radius-sm)',
-                                        fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer', textAlign: 'left',
-                                        transition: 'background 0.15s',
-                                    }}
-                                    onMouseOver={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                                    onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
-                                >
-                                    <span style={{ fontSize: '1.1rem', width: 24, textAlign: 'center' }}>{item.icon}</span>
-                                    {item.label}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                    <button
+                        onClick={handleSummarize}
+                        disabled={isSummarizing}
+                        className="btn-icon"
+                        title="Resumen IA del Canal"
+                        style={{ width: 36, height: 36, color: "var(--accent-cyan)" }}
+                    >
+                        {isSummarizing ? "..." : "🤖"}
+                    </button>
+
+                    <button
+                        onClick={() => navigate("walkie")}
+                        className="btn-icon"
+                        title="Walkie Talkie PTT"
+                        style={{ width: 36, height: 36, color: "var(--accent-amber)" }}
+                    >
+                        🎙️
+                    </button>
                 </div>
             </header>
 
-            {/* ── B2: Search bar ─────────────────────────────────────────────────────── */}
-            {searchOpen && (
-                <div style={{ flexShrink:0, padding:'8px 12px', background:'rgba(8,8,16,0.97)',
-                    borderBottom:'1px solid rgba(255,255,255,0.06)', display:'flex', gap:8, alignItems:'center' }}>
-                    <input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Buscar en la conversación…"
-                        value={searchQuery}
-                        onChange={e => { setSearchQuery(e.target.value); setSearchIdx(0); }}
-                        style={{ flex:1, background:'rgba(20,20,32,0.9)', border:'1px solid rgba(255,255,255,0.1)',
-                            borderRadius:20, padding:'8px 14px', color:'var(--text-primary)', fontSize:'0.9rem', outline:'none' }}
-                    />
-                    {searchResults.length > 0 && (
-                        <span style={{ fontSize:'0.75rem', color:'var(--text-muted)', whiteSpace:'nowrap' }}>
-                            {searchIdx + 1}/{searchResults.length}
-                        </span>
-                    )}
-                    {searchResults.length > 1 && (
-                        <>
-                            <button onClick={() => setSearchIdx(i => (i - 1 + searchResults.length) % searchResults.length)}
-                                style={{ background:'transparent', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1rem' }}>↑</button>
-                            <button onClick={() => setSearchIdx(i => (i + 1) % searchResults.length)}
-                                style={{ background:'transparent', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1rem' }}>↓</button>
-                        </>
-                    )}
-                    <button onClick={() => { setSearchOpen(false); setSearchQuery(''); }}
-                        style={{ background:'transparent', border:'none', color:'var(--text-muted)', cursor:'pointer', fontSize:'1.2rem' }}>×</button>
+            {/* Voice Preview Sheet */}
+            {voicePreviewUrl && (
+                <div style={{
+                    position: "absolute", inset: 0, zIndex: 50,
+                    background: "rgba(6,6,16,0.96)", backdropFilter: "blur(12px)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px"
+                }}>
+                    <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontFamily: "monospace" }}>Vista previa — Nota de voz</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", background: "rgba(20,22,40,0.9)", borderRadius: "40px", padding: "14px 22px", border: "1px solid var(--glass-border)" }}>
+                        <span style={{ fontSize: "1.4rem" }}>🎤</span>
+                        <audio src={voicePreviewUrl} controls style={{ width: "200px", accentColor: "var(--accent-cyan)" }} />
+                        <span style={{ fontSize: "0.78rem", fontFamily: "monospace", color: "var(--text-muted)" }}>{voiceDurationSec}s</span>
+                    </div>
+                    <div style={{ display: "flex", gap: "16px" }}>
+                        <button onClick={cancelVoicePreview} className="btn-tactical-secondary" style={{ padding: "10px 28px", borderRadius: "40px" }}>✕ Cancelar</button>
+                        <button onClick={confirmVoiceSend} className="btn-tactical-primary" style={{ padding: "10px 28px", borderRadius: "40px" }}>➤ Enviar</button>
+                    </div>
                 </div>
             )}
 
-            {/* ── B3: Pin banner ────────────────────────────────────────────────────── */}
-            {pinnedMsg && (
-                <div onClick={() => setPinnedMsg(null)} style={{ flexShrink:0, padding:'6px 14px',
-                    background:'rgba(232,33,58,0.08)', borderBottom:'1px solid rgba(232,33,58,0.15)',
-                    display:'flex', alignItems:'center', gap:8, cursor:'pointer' }}>
-                    <span style={{ fontSize:'0.9rem' }}>📌</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:'0.65rem', color:'var(--primary-bright)', fontWeight:700, letterSpacing:'1px' }}>MENSAJE FIJADO</div>
-                        <div style={{ fontSize:'0.82rem', color:'var(--text-secondary)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                            {pinnedMsg.content}
+            {/* Media Preview Sheet */}
+            {mediaPreview && (
+                <div style={{
+                    position: "absolute", inset: 0, zIndex: 50,
+                    background: "rgba(6,6,16,0.96)", backdropFilter: "blur(12px)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
+                    padding: "20px 0 0 0"
+                }}>
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%", padding: "0 16px 12px 16px" }}>
+                        <button onClick={() => setMediaPreview(null)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "1.3rem", cursor: "pointer" }}>✕</button>
+                        <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)" }}>{mediaPreview.type === "video" ? "Vista previa de video" : "Vista previa de foto"}</span>
+                        <button onClick={confirmMediaSend} style={{ background: "transparent", border: "none", color: "var(--accent-cyan)", fontSize: "0.9rem", fontWeight: 800, cursor: "pointer" }}>Enviar ➤</button>
+                    </div>
+                    {/* Preview */}
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", width: "100%", overflow: "hidden" }}>
+                        {mediaPreview.type === "image" ? (
+                            <img src={mediaPreview.dataUrl} alt="preview" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: "8px" }} />
+                        ) : (
+                            <video src={mediaPreview.dataUrl} controls muted autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: "8px" }} />
+                        )}
+                    </div>
+                    {/* Caption input */}
+                    <div style={{ width: "100%", padding: "12px 16px", background: "rgba(10,12,24,0.95)", borderTop: "1px solid var(--glass-border)" }}>
+                        <input
+                            type="text"
+                            value={mediaPreview.caption}
+                            onChange={e => setMediaPreview(p => p ? { ...p, caption: e.target.value } : p)}
+                            placeholder="Añadir un comentario…"
+                            style={{ width: "100%", padding: "10px 14px", background: "rgba(20,22,38,0.9)", border: "1px solid var(--glass-border)", borderRadius: "var(--radius-full)", color: "#fff", fontSize: "0.88rem", outline: "none", boxSizing: "border-box" }}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Lista de Mensajes con Scroll Suave */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                {convMessages.length === 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-muted)", gap: "10px" }}>
+                        <span style={{ fontSize: "2.4rem" }}>🔐</span>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>Canal Cifrado Noise Handshake</div>
+                        <div style={{ fontSize: "0.75rem", maxWidth: "260px", textAlign: "center", lineHeight: 1.4 }}>
+                            Los mensajes viajan cifrados de extremo a extremo y se guardan únicamente en la base local Sled DB.
                         </div>
                     </div>
-                    <span style={{ color:'var(--text-muted)', fontSize:'0.85rem' }}>×</span>
-                </div>
-            )}
+                ) : (
+                    convMessages.map((msg, index) => {
+                        const isMine = Boolean(
+                            msg.is_mine ||
+                            msg.sender === "me" ||
+                            (identity?.identity_hash && (
+                                msg.sender?.toLowerCase() === identity.identity_hash.toLowerCase() ||
+                                identity.identity_hash.toLowerCase().startsWith(msg.sender?.toLowerCase() || "_____") ||
+                                (msg.sender && msg.sender.toLowerCase().startsWith(identity.identity_hash.toLowerCase()))
+                            )) ||
+                            (identity?.short_id && msg.sender?.toLowerCase() === identity.short_id.toLowerCase())
+                        );
+                        const prevMsg = convMessages[index - 1];
+                        const nextMsg = convMessages[index + 1];
 
-            {/* ── Messages ────────────────────────────────────────────────────── */}
-            <div className="scroll-container" style={{
-                flex: 1, padding: '12px 12px calc(16px + var(--safe-bottom, 0px))',
-                display: 'flex', flexDirection: 'column',
-                backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(232,33,58,0.025) 0%, transparent 55%), radial-gradient(circle at 80% 10%, rgba(41,182,246,0.02) 0%, transparent 55%)',
-            }}>
-                {chatMessages.length === 0 && (
-                    <div style={{ margin: 'auto', textAlign: 'center', maxWidth: '78%' }} className="animate-fade">
+                        const prevIsMine = prevMsg ? Boolean(
+                            prevMsg.is_mine ||
+                            prevMsg.sender === "me" ||
+                            (identity?.identity_hash && (
+                                prevMsg.sender?.toLowerCase() === identity.identity_hash.toLowerCase() ||
+                                identity.identity_hash.toLowerCase().startsWith(prevMsg.sender?.toLowerCase() || "_____") ||
+                                (prevMsg.sender && prevMsg.sender.toLowerCase().startsWith(identity.identity_hash.toLowerCase()))
+                            )) ||
+                            (identity?.short_id && prevMsg.sender?.toLowerCase() === identity.short_id.toLowerCase())
+                        ) : null;
+
+                        const nextIsMine = nextMsg ? Boolean(
+                            nextMsg.is_mine ||
+                            nextMsg.sender === "me" ||
+                            (identity?.identity_hash && (
+                                nextMsg.sender?.toLowerCase() === identity.identity_hash.toLowerCase() ||
+                                identity.identity_hash.toLowerCase().startsWith(nextMsg.sender?.toLowerCase() || "_____") ||
+                                (nextMsg.sender && nextMsg.sender.toLowerCase().startsWith(identity.identity_hash.toLowerCase()))
+                            )) ||
+                            (identity?.short_id && nextMsg.sender?.toLowerCase() === identity.short_id.toLowerCase())
+                        ) : null;
+
+                        const isFirst = prevIsMine === null || prevIsMine !== isMine;
+                        const isLast  = nextIsMine === null || nextIsMine !== isMine;
+
+                        return (
+                            <MessageBubble
+                                key={msg.id || index}
+                                msg={msg}
+                                isMine={isMine}
+                                isFirst={isFirst}
+                                isLast={isLast}
+                                showDate={index === 0 || !prevMsg || Math.abs(msg.timestamp - prevMsg.timestamp) > 3600}
+                                peerName={peerName}
+                                starredMessages={starredMessages || []}
+                                searchQuery={searchQuery}
+                                isSearchHighlight={Boolean(searchQuery && msg.content?.toLowerCase().includes(searchQuery.toLowerCase()))}
+                                isSwiping={false}
+                                onTouchStart={() => {}}
+                                onTouchMove={() => {}}
+                                onTouchEnd={() => {}}
+                                onLongPress={(e) => handleLongPress(e, msg)}
+                                onCancelLongPress={() => {}}
+                                onReaction={handleReaction}
+                                onVote={handleVote}
+                            />
+                        );
+                    })
+                )}
+                {/* Typing Indicator */}
+                {peerTyping && (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", marginTop: "4px" }}>
                         <div style={{
-                            padding: '28px 24px', borderRadius: 'var(--radius-lg)',
-                            background: 'linear-gradient(135deg, rgba(15,15,28,0.96), rgba(10,10,20,0.98))',
-                            border: '1px solid rgba(232,33,58,0.12)',
-                            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+                            padding: "10px 16px", borderRadius: "16px 16px 16px 4px",
+                            background: "rgba(18, 18, 30, 0.95)", border: "1px solid var(--glass-border)",
+                            display: "flex", alignItems: "center", gap: "4px"
                         }}>
-                            <div style={{
-                                width: 68, height: 68, borderRadius: '50%', margin: '0 auto 16px',
-                                background: 'linear-gradient(135deg, rgba(232,33,58,0.2), rgba(200,20,45,0.1))',
-                                border: '1px solid rgba(232,33,58,0.2)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem',
-                            }}>🔐</div>
-                            <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '1rem', marginBottom: 6 }}>Canal P2P Activo</div>
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 16 }}>
-                                AES-256-GCM · Curve25519<br/>Sin servidores · Multi-hop mesh
-                            </div>
-                            {['E2E', 'Sin internet?', 'Multi-hop'].map(t => (
-                                <span key={t} style={{
-                                    display: 'inline-block', margin: '2px 4px', padding: '3px 10px', borderRadius: 20,
-                                    fontSize: '0.7rem', fontWeight: 700,
-                                    background: 'rgba(232,33,58,0.1)', color: 'var(--primary-bright)', border: '1px solid rgba(232,33,58,0.2)',
-                                }}>{t}</span>
+                            {[0, 1, 2].map(i => (
+                                <span key={i} style={{
+                                    width: 7, height: 7, borderRadius: "50%",
+                                    background: "var(--text-muted)",
+                                    display: "inline-block",
+                                    animation: `typing-dot 1.2s ease-in-out ${i * 0.2}s infinite`
+                                }} />
                             ))}
                         </div>
                     </div>
                 )}
-
-                {chatMessages.map((msg, index) => {
-                    const isMine = msg.is_mine;
-                    const prev = index > 0 ? chatMessages[index - 1] : null;
-                    const next = index < chatMessages.length - 1 ? chatMessages[index + 1] : null;
-                    const isFirst = !prev || prev.is_mine !== isMine;
-                    const isLast  = !next || next.is_mine !== isMine;
-                    const showDate = !prev || !sameDay(prev.timestamp, msg.timestamp);
-                    const isSwiping = swipingId === msg.id;
-                    const isSearchHighlight = searchQuery && searchResults[searchIdx]?.id === msg.id;
-
-                    return (
-                        <MessageBubble
-                            key={msg.id}
-                            msg={msg}
-                            isMine={isMine}
-                            isFirst={isFirst}
-                            isLast={isLast}
-                            showDate={showDate}
-                            peerName={peerName}
-                            starredMessages={starredMessages}
-                            searchQuery={searchQuery}
-                            isSearchHighlight={!!isSearchHighlight}
-                            isSwiping={isSwiping}
-                            onTouchStart={onTouchStart}
-                            onTouchMove={onTouchMove}
-                            onTouchEnd={onTouchEnd}
-                            onLongPress={startLongPress}
-                            onCancelLongPress={cancelLongPress}
-                            onReaction={handleReaction}
-                            onVote={(msgId, optIdx) => {
-                                setChatMessages(prevMsgs => prevMsgs.map(m => m.id !== msgId ? m : {
-                                    ...m, poll_data: m.poll_data ? {
-                                        ...m.poll_data,
-                                        votes: { ...m.poll_data.votes, me: String(optIdx) },
-                                    } : m.poll_data,
-                                }));
-                            }}
-                        />
-                    );
-                })}
-
-                {/* Typing indicator — driven by real SSE peerTyping from store */}
-                {peerTyping && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-start', marginTop: 4 }}>
-                        <TypingIndicator />
-                    </div>
-                )}
-
-                <div ref={endRef} style={{ height: 8 }} />
+                <div ref={messagesEndRef} />
             </div>
 
-            {/* ── Chat Input Controls Component ─────────────────────────────── */}
-            <ChatInput
-                inputText={inputText}
-                setInputText={setInputText}
-                handleSend={handleSend}
-                sendTyping={sendTyping}
-                attachOpen={attachOpen}
-                setAttachOpen={setAttachOpen}
-                replyTo={replyTo}
-                setReplyTo={setReplyTo}
-                peerName={peerName}
-                isRecording={isRecording}
-                recordSec={recordSec}
-                startRecording={startRecording}
-                stopRecording={stopRecording}
-                handleCamera={handleCamera}
-                handleGallery={handleGallery}
-                handleLocation={handleLocation}
-                setShowPollModal={setShowPollModal}
+            {/* Hidden Media Picker for Camera / Gallery / Video */}
+            <input
+                type="file"
+                ref={mediaInputRef}
+                style={{ display: "none" }}
+                onChange={handleFileSelected}
             />
 
-            {/* ── Profile Modal ────────────────────────────────────────────────── */}
-            {showProfile && (
-                <div style={{
-                    position: 'absolute', inset: 0, zIndex: 1000,
-                    background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px',
-                }} onClick={() => setShowProfile(false)}>
-                    <div 
-                        className="animate-pop"
-                        style={{
-                            width: '100%', maxWidth: '340px',
-                            background: 'linear-gradient(145deg, #0f0f1c, #0a0a14)',
-                            border: '1px solid rgba(255,255,255,0.12)',
-                            borderRadius: '28px', padding: '32px 24px',
-                            boxShadow: '0 24px 64px rgba(0,0,0,0.8)',
-                            textAlign: 'center',
-                        }}
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div style={{
-                            width: 80, height: 80, borderRadius: '50%', margin: '0 auto 20px',
-                            ...avStyle(activeConversationId || ''),
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '2rem', fontWeight: 800, color: 'white',
-                        }}>
-                            {peerName[0].toUpperCase()}
-                        </div>
-                        
-                        <h2 style={{ color: 'var(--text-primary)', margin: '0 0 4px', fontSize: '1.4rem', fontWeight: 900 }}>{peerName}</h2>
-                        {peerContact?.verified ? (
-                            <div style={{ color: '#2ecc71', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1.5px', marginBottom: '24px' }}>
-                                ☑️ CONTACTO VERIFICADO
-                            </div>
-                        ) : (
-                            <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '1.5px', marginBottom: '24px' }}>
-                                🔵 NO VERIFICADO
-                            </div>
-                        )}
-
-                        <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', marginBottom: '24px' }}>
-                            <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800, display: 'block', marginBottom: '8px' }}>
-                                Identity Hash (P2P Address)
-                            </label>
-                            <div style={{ 
-                                fontFamily: 'JetBrains Mono, monospace', fontSize: '0.82rem', 
-                                color: 'var(--text-primary)', wordBreak: 'break-all', lineHeight: 1.4,
-                                background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px'
-                            }}>
-                                {activeConversationId?.split('-')[1] || 'Unknown'}
-                            </div>
-                            <button 
-                                onClick={() => navigator.clipboard.writeText(activeConversationId?.split('-')[1] || '')}
-                                style={{
-                                    width: '100%', marginTop: '12px', padding: '8px', borderRadius: '8px',
-                                    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-                                    color: 'var(--text-secondary)', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer'
-                                }}
-                            >
-                                📋 Copiar Identidad
-                            </button>
-                        </div>
-
-                        {/* Safety numbers (fingerprint) section */}
-                        <div style={{ textAlign: 'left', background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.06)', marginBottom: '24px' }}>
-                            <label style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 800, display: 'block', marginBottom: '8px' }}>
-                                HUELLA DE SEGURIDAD (SAFETY NUMBER)
-                            </label>
-                            <div style={{ 
-                                fontFamily: 'JetBrains Mono, monospace', fontSize: '0.82rem', 
-                                color: 'var(--text-primary)', wordBreak: 'break-all', lineHeight: 1.4,
-                                background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px',
-                                textAlign: 'center', letterSpacing: '1px', fontWeight: 700
-                            }}>
-                                {(() => {
-                                    const combined = (identity?.identity_hash || '') + (peerContact?.identity_hash || '');
-                                    let h = 0;
-                                    for (let i = 0; i < combined.length; i++) h = (h * 31 + combined.charCodeAt(i)) >>> 0;
-                                    const s = String(h).padEnd(20, '9');
-                                    return `${s.slice(0, 5)} ${s.slice(5, 10)} ${s.slice(10, 15)} ${s.slice(15, 20)}`;
-                                })()}
-                            </div>
-                            <div style={{ fontSize: '0.66rem', color: 'var(--text-muted)', marginTop: 8, lineHeight: 1.3 }}>
-                                Compara este número con el de tu contacto para asegurar que la encriptación de extremo a extremo no ha sido vulnerada.
-                            </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
-                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700 }}>CIFRADO</div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--success)', fontWeight: 800 }}>AES-GCM</div>
-                            </div>
-                            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 700 }}>PROTOCOLO</div>
-                                <div style={{ fontSize: '0.85rem', color: 'var(--primary-bright)', fontWeight: 800 }}>Red v18.3 Zenith</div>
-                            </div>
-                        </div>
-
-                        {/* Security action controls */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-                            <button 
-                                onClick={async () => {
-                                    if (peerContact) {
-                                        await RedAPI.verifyContact(peerContact.identity_hash);
-                                        await useRedStore.getState().fetchData();
-                                    }
-                                }}
-                                style={{
-                                    padding: '11px', borderRadius: '12px', border: '1px solid rgba(232,33,58,0.3)',
-                                    background: peerContact?.verified ? 'rgba(232,33,58,0.08)' : 'rgba(232,33,58,0.25)',
-                                    color: 'var(--primary-bright)', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
-                                    transition: 'all 0.15s ease'
-                                }}
-                            >
-                                {peerContact?.verified ? '⚠️ Desverificar Contacto' : '☑️ Marcar como Verificado'}
-                            </button>
-                            <button 
-                                onClick={async () => {
-                                    if (peerContact) {
-                                        if (peerContact.blocked) {
-                                            await RedAPI.unblockContact(peerContact.identity_hash);
-                                        } else {
-                                            await RedAPI.blockContact(peerContact.identity_hash);
-                                        }
-                                        await useRedStore.getState().fetchData();
-                                    }
-                                }}
-                                style={{
-                                    padding: '11px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)',
-                                    background: peerContact?.blocked ? 'rgba(46,204,113,0.12)' : 'rgba(231,76,60,0.12)',
-                                    color: peerContact?.blocked ? '#2ecc71' : '#e74c3c', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
-                                    transition: 'all 0.15s ease'
-                                }}
-                            >
-                                {peerContact?.blocked ? '🔓 Desbloquear Contacto' : '🚫 Bloquear Contacto'}
-                            </button>
-                        </div>
-
-                        <button 
-                            className="btn-primary" 
-                            style={{ width: '100%', padding: '14px', borderRadius: '14px' }}
-                            onClick={() => setShowProfile(false)}
-                        >
-                            Cerrar
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* Input Bar Táctica */}
+            <div style={{ borderTop: "1px solid var(--glass-border)", background: "rgba(10, 10, 20, 0.95)", backdropFilter: "blur(20px)" }}>
+                <ChatInput
+                    onSendMessage={handleSendText}
+                    onSendVoice={handleSendVoice}
+                    replyTo={replyTo}
+                    setReplyTo={setReplyTo}
+                    handleCamera={handleCamera}
+                    handleGallery={handleGallery}
+                    handleLocation={handleLocation}
+                    peerHash={peerHash}
+                    peerName={peerName}
+                    burnTimer={burnTimer}
+                    isRecording={isRecording}
+                    recordSec={recordSec}
+                    startRecording={startRecording}
+                    stopRecording={stopRecording}
+                />
+            </div>
         </div>
     );
 }

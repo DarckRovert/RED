@@ -1,10 +1,11 @@
-# 🛡️ RED — Red Militar Criptográfica Off-Grid & P2P Mesh v30.0.0
+# 🛡️ RED — Red Militar Criptográfica Off-Grid & P2P Mesh v31.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet.
 
-[![Descargar APK Oficial RED v30.0.0](https://img.shields.io/badge/Descargar_APK_v30.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v30.0.0)
+[![Descargar APK Oficial RED v31.0.0](https://img.shields.io/badge/Descargar_APK_v31.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v31.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
-[![TypeScript Compiler](https://img.shields.io/badge/TypeScript-0_Errors-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
+[![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
+[![Rust Workspace](https://img.shields.io/badge/Rust_Cargo-0_Errors_Pass-DEA584?style=for-the-badge&logo=rust)](https://github.com/DarckRovert/RED)
 [![Android Gradle Build](https://img.shields.io/badge/Android_APK-BUILD_SUCCESSFUL-00E676?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED)
 
 ---
@@ -13,14 +14,14 @@
 
 1. [Visión General & Filosofía de Diseño](#-visión-general--filosofía-de-diseño)
 2. [Arquitectura del Sistema & Motores de Bajo Nivel](#-arquitectura-del-sistema--motores-de-bajo-nivel)
-3. [Catálogo Completo de los 28 Módulos Tácticos](#-catálogo-completo-de-los-28-módulos-tácticos)
-4. [Motor Criptográfico & Cifrado E2E](#-motor-criptográfico--cifrado-e2e)
-5. [Capa de Red Multi-Radio Off-Grid (Mesh Router & DTN)](#-capa-de-red-multi-radio-off-grid-mesh-router--dtn)
-6. [Inmunidad a VPNs & Seguridad Operativa (OPSEC)](#-inmunidad-a-vpns--seguridad-operativa-opsec)
-7. [Motor de IA Neuronal Local ONNX WASM](#-motor-de-ia-neuronal-local-onnx-wasm)
-8. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
-9. [Estructura del Proyecto](#-estructura-del-proyecto)
-10. [Índice de Documentación Técnica](#-índice-de-documentación-técnica)
+3. [Catálogo Completo de los 35 Módulos Tácticos](#-catálogo-completo-de-los-35-módulos-tácticos)
+4. [Actuadores Físicos & Sensores de Hardware](#-actuadores-físicos--sensores-de-hardware)
+5. [Arquitectura Real-Time SSE Unificada (Cero Polling)](#-arquitectura-real-time-sse-unificada-cero-polling)
+6. [Motor Criptográfico & Cifrado E2E](#-motor-criptográfico--cifrado-e2e)
+7. [Capa de Red Multi-Radio Off-Grid (Mesh Router & DTN)](#-capa-de-red-multi-radio-off-grid-mesh-router--dtn)
+8. [Inmunidad a VPNs & Seguridad Operativa (OPSEC)](#-inmunidad-a-vpns--seguridad-operativa-opsec)
+9. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
+10. [Estructura del Proyecto & Documentación Técnica](#-estructura-del-proyecto--documentación-técnica)
 
 ---
 
@@ -92,38 +93,70 @@ El proyecto está construido bajo una arquitectura de 3 capas de alto rendimient
 
 ---
 
-## 🛡️ Catálogo Completo de los 28 Módulos Tácticos
+## 🛡️ Catálogo Completo de los 35 Módulos Tácticos
 
 | # | Módulo | Archivos Principales | Descripción & Funcionalidad Real |
 |---|---|---|---|
-| **1** | **Radar Topográfico Off-Grid** | `OffGridCompassModal.tsx`, `OffGridCompassEngine.ts` | Brújula electromagnética con declinación magnética WMM2025, altímetro barométrico y coordenadas MGRS/UTM reales. |
-| **2** | **Escáner Signos Vitales PPG** | `VitalScanModal.tsx`, `VitalSignsScanEngine.ts` | Triaje fotopletismográfico (PPG) mediante análisis del pulso espectral de la cámara y linterna LED. |
-| **3** | **Baliza SOS & Módem SoundMesh** | `SurvivalBeaconModal.tsx`, `soundmesh.ts` | Emisión de baliza de emergencia P2P y módem acústico ultrasónico por ondas de audio BFSK de 18–20 kHz. |
-| **4** | **Copiloto IA Neuronal Offline** | `AICopilotModal.tsx`, `localAiEngine.ts` | Inferencia neuronal offline en dispositivo para consultas tácticas, traducción y resúmenes sin conexión. |
-| **5** | **Proximidad Zero-Touch & Radar Wave** | `ProximityWaveModal.tsx`, `ProximitySettingsModal.tsx` | Detección de presencia física por ultrasonido Doppler y radar Wave sin emparejamiento previo. |
-| **6** | **Pizarra Táctica P2P en Vivo** | `LiveCanvasModal.tsx` | Dibujo colaborativo de mapas y estrategias sincronizado en tiempo real entre nodos mesh. |
-| **7** | **Resiliencia de Batería Eco-Mesh** | `EcoMeshPanel.tsx` | Gestión dinámica del consumo energético adaptando los intervalos de beaconing según el nivel de batería. |
-| **8** | **Walkie-Talkie Mesh Push-To-Talk** | `P2PWalkieTalkieModal.tsx` | Transmisión de voz P2P en tiempo real con compresión de baja latencia para redes off-grid. |
-| **9** | **Alertas Tácticas AMBER Off-Grid** | `AmberAdminPanel.tsx`, `AmberAlertBanner.tsx` | Difusión prioritaria de emergencias comunitarias y personas desaparecidas cifrada en red malla. |
-| **10** | **Boletines Climáticos Off-Grid** | `WeatherAlertPanel.tsx` | Reportes meteorológicos barométricos y alertas de tempestad compartidas entre nodos. |
-| **11** | **Canales Públicos & Guardian IA** | `PublicChannelsPanel.tsx`, `guardianEngine.ts` | Canales temáticos abiertos con filtrado de spam y moderación autónoma por el motor Guardian IA. |
-| **12** | **Bóveda Criptográfica StegoVault** | `StegoVaultModal.tsx`, `StegoEngine.ts` | Esteganografía LSB y Matrix Encoding para ocultar mensajes cifrados dentro de fotografías. |
-| **13** | **Historias Tácticas Off-Grid** | `StoriesBar.tsx`, `StoryCreator.tsx`, `StoryViewer.tsx` | Publicaciones efímeras de foto y texto con expiración automática a las 24 horas. |
-| **14** | **Transmisión Video P2P en Vivo** | `LiveStreamBroadcaster.tsx`, `LiveStreamViewer.tsx` | Emisión y recepción de video en vivo de baja latencia entre nodos directos de la red. |
-| **15** | **Notas de Voz Cifradas** | `VoiceMessage.tsx` | Grabación y reproducción cross-platform de audio cifrado E2E a 12 Kbps. |
-| **16** | **Encuestas & Votaciones P2P** | `PollMessage.tsx` | Creación de votaciones tácticas con consenso y recuento de votos firmado criptográficamente. |
-| **17** | **Respaldo Cifrado AES-256-GCM** | `BackupRestoreModal.tsx` | Exportación e importación de bóvedas de mensajes y claves protegidas por contraseña PBKDF2. |
-| **18** | **Explorador Blockchain RED** | `BlockchainExplorer.tsx` | Registro distribuido e inmutable de transacciones, bloques y validadores de la red RED. |
-| **19** | **Espectro RF & Monitoreo SDR** | `RfSpectrumModal.tsx`, `RfSpectrumAnalyzerEngine.ts` | Análisis de interferencias en bandas de radiofrecuencia (Sub-GHz, 2.4GHz) y detección de jammers. |
-| **20** | **Mapa de Nodos & Telemetría P2P** | `NodeMap.tsx` | Visualización en mapa topográfico de la posición GPS y fuerza de señal (RSSI) de los pares mesh. |
-| **21** | **Hombre Muerto DMS & Purga** | `DMSSettings.tsx`, `useRedStore.ts` | Motor `evaluateLocalDMS` con purga automática de claves e historial ante inactividad del operador. |
-| **22** | **Identidad DID & Esquema SSS** | `IdentityVaultModal.tsx`, `ShamirSecretSharingEngine.ts` | Bóveda de auxilio en Keystore y fragmentación $GF(2^8)$ 3-de-5 con reconstrucción de Lagrange. |
-| **23** | **Protocolo Incógnito / Señuelo** | `AuthWall.tsx`, `SecurityPanel.tsx` | Autenticación multi-PIN: PIN Maestro (bóveda real), PIN Señuelo (`decoy_pin`) y PIN de Pánico (purga nativa). |
-| **24** | **Infraestructura Mesh Multi-Radio** | `meshRouter.ts`, `localTransport.ts`, `bluetoothTransport.ts` | Enrutador mesh Controlled Flood con deduplicación de 72h y failover BLE / WiFi Direct / LoRa / SoundMesh. |
-| **25** | **Llamadas Tácticas WebRTC E2E** | `CallScreen.tsx`, `IncomingCallBanner.tsx` | Videollamadas y llamadas de voz P2P con señalización SDP/ICE cifrada e interfaz PIP flotante. |
-| **26** | **Contactos & Grupos Cifrados** | `GroupsPanel.tsx`, `GroupAdminModal.tsx` | Administración de contactos soberanos y creación de grupos federados P2P con llaves `SenderKey`. |
-| **27** | **Mensajería E2EE en Tiempo Real** | `ChatWindow.tsx`, `MessageBubble.tsx` | Chat principal E2E con estados de entrega, citas, reacciones, fijado, edición y búsqueda global. |
-| **28** | **Centro de Control Táctico** | `StatusView.tsx`, `Sidebar.tsx`, `SecurityPanel.tsx` | Panel central de navegación, historias de 24h, diagnóstico del nodo y control Zero-Trust. |
+| **1** | **Canales Mesh Locales** | `PublicChannelsPanel.tsx`, `guardianEngine.ts` | Canales temáticos y de emergencia con moderación autónoma por Guardian IA. |
+| **2** | **RED Social Feed P2P** | `SocialFeedPanel.tsx` | Red social descentralizada y resistente a censura sobre GossipSub. |
+| **3** | **Difusión Privada (Broadcast)** | `BroadcastPanel.tsx` | Envío simultáneo cifrado punto a punto a múltiples contactos seleccionados. |
+| **4** | **Walkie-Talkie Mesh Push-To-Talk** | `P2PWalkieTalkieModal.tsx` | Transmisión de voz P2P en tiempo real con compresión y ráfagas nativas. |
+| **5** | **Canvas Táctico P2P en Vivo** | `LiveCanvasModal.tsx` | Pizarra vectorial colaborativa sincronizada en tiempo real entre operadores mesh. |
+| **6** | **Live Broadcast Stream** | `LiveStreamBroadcaster.tsx`, `LiveStreamViewer.tsx` | Emisión y recepción de video en vivo de baja latencia entre nodos directos de la red. |
+| **7** | **Shake & Pair (Acelerómetro)** | `ShakePairModal.tsx` | Emparejamiento instantáneo al sacudir el dispositivo (>15 m/s²) mediante pulso efímero. |
+| **8** | **Radar Topográfico GPS & UTM** | `OffGridCompassModal.tsx`, `OffGridNavigationEngine.ts` | Brújula electromagnética, declinación WMM2025, altímetro y coordenadas UTM/MGRS. |
+| **9** | **Mapa de Nodos P2P** | `NodeMap.tsx` | Mapa interactivo de nodos activos, telemetría GPS y enlaces de radio en tiempo real. |
+| **10** | **Radar Hardware BLE / WiFi** | `NearbyDevicesPanel.tsx` | Escaneo y telemetría de dispositivos Bluetooth Low Energy y WiFi en rango físico. |
+| **11** | **Analizador Espectro RF / EW** | `RfSpectrumModal.tsx` | Monitoreo de interferencias en bandas de radiofrecuencia y detección de jammers. |
+| **12** | **Ondas de Proximidad** | `ProximityWaveModal.tsx` | Detección de presencia táctica y balizas de proximidad por RSSI. |
+| **13** | **Clima & Barómetro CAP** | `WeatherAlertPanel.tsx` | Sensor barométrico de hardware (`TYPE_PRESSURE`) y alertas meteorológicas CAP en Rust. |
+| **14** | **Batería Eco-Mesh** | `EcoMeshPanel.tsx` | Adaptación dinámica del beaconing según el nivel de batería para supervivencia prolongada. |
+| **15** | **Topología de Red** | `NetworkPanel.tsx` | Estado del enjambre libp2p, tablas de enrutamiento Kademlia y estadísticas de tráfico. |
+| **16** | **Perfil & Bóveda DID** | `IdentityVaultModal.tsx` | Bóveda de identidad soberana `did:red:` con fragmentación Shamir $GF(2^8)$. |
+| **17** | **Pagos & Vouchers P2P** | `RedP2PPayModal.tsx` | Vouchers criptográficos fuera de línea con firmas Ed25519 y validación UTXO. |
+| **18** | **Bóveda Criptográfica PQC** | `CryptoPanel.tsx` | Cifrado Post-Cuántico Kyber-1024, X25519 y AES-256-GCM. |
+| **19** | **Explorador Blockchain RED** | `BlockchainExplorer.tsx` | Registro inmutable de transacciones, bloques y pruebas Proof-of-Mesh. |
+| **20** | **Bóveda Esteganográfica** | `StegoVaultModal.tsx`, `StegoEngine.ts` | Inyección de mensajes cifrados en los bits menos significativos (LSB) de imágenes. |
+| **21** | **Respaldos & Restauración** | `BackupRestoreModal.tsx` | Exportación e importación de bóvedas cifradas protegidas por PBKDF2. |
+| **22** | **Signos Vitales & Triaje START** | `VitalScanModal.tsx`, `VitalScanEngine.ts` | Monitor PPG por cámara + flash LED y clasificación médica internacional START. |
+| **23** | **Baliza SOS & Módem SoundMesh** | `SurvivalBeaconModal.tsx`, `SoundMeshEngine.ts` | Flash LED Morse SOS nativo, sirena acústica Web Audio y módem ultrasónico FSK. |
+| **24** | **Sistema Alerta AMBER** | `AmberAdminPanel.tsx`, `AmberAlertBanner.tsx` | Difusión prioritaria de personas desaparecidas y alertas comunitarias críticas. |
+| **25** | **Hombre Muerto DMS** | `DMSSettings.tsx` | Temporizador de inactividad que dispara purga de seguridad o mensajes de auxilio. |
+| **26** | **Simulador Apagón Blackout** | `BlackoutSimulatorModal.tsx` | Prueba de estrés que simula corte WAN/EMP desconectando enlaces de Internet. |
+| **27** | **Copiloto IA Offline** | `AICopilotModal.tsx` | Inferencia LLM neuronal local en dispositivo mediante Rust Candle / ONNX WASM. |
+| **28** | **Guardian IA (Firewall)** | `GuardianStatusPanel.tsx` | Firewall cognitivo autónomo para detección y neutralización de ataques en la malla. |
+| **29** | **Diagnóstico Salud Sistema** | `SystemHealthModal.tsx` | Inspección en tiempo real de memoria, hilos del nodo Rust y estado de la base de datos Sled. |
+| **30** | **Logs del Nodo Rust SSE** | `NodeLogsModal.tsx` | Transmisión en vivo de trazas de ejecución y eventos libp2p del nodo. |
+| **31** | **Calculadora Señuelo (Camuflaje)** | `CalculatorScreen.tsx` | Interfaz funcional de calculadora que oculta la plataforma militar ante coacción. |
+| **32** | **Reporte Auditoría Seguridad** | `SecurityReportModal.tsx` | Verificación de integridad criptográfica, firmas y políticas Zero-Trust. |
+| **33** | **Seguridad Zero-Trust** | `SecurityPanel.tsx` | Configuración de políticas de acceso, PINs señuelo y destrucción física de claves. |
+| **34** | **Llamadas Tácticas P2P** | `CallScreen.tsx`, `IncomingCallBanner.tsx` | Videollamadas y llamadas de voz directas con señalización cifrada. |
+| **35** | **Centro de Mensajería E2EE** | `ChatWindow.tsx`, `Sidebar.tsx` | Mensajería instantánea con Double Ratchet, notas de voz, adjuntos y confirmaciones. |
+
+---
+
+## ⚡ Actuadores Físicos & Sensores de Hardware
+
+RED se comunica directamente con los sensores y actuadores del dispositivo mediante la API nativa de Android (`RedNodePlugin.java`):
+
+1. **Flash LED Morse SOS de Alta Precisión:**
+   - Control a nivel de hardware mediante `android.hardware.camera2.CameraManager.setTorchMode(cameraId, enabled)`.
+   - Modulación automática del código Morse internacional SOS (`... --- ...`) en hilo nativo independiente del hilo de renderizado.
+2. **Escaneo Fotopletismográfico (PPG) & Triaje START:**
+   - Extracción de pulso hemodinámico iluminando los capilares del dedo con el flash LED y procesando los canales rojo/verde en `VitalScanEngine.ts`.
+   - Clasificación médica de víctimas según el protocolo START (Verde, Amarillo, Rojo, Negro).
+3. **Módem Acústico Ultrasónico SoundMesh:**
+   - Modulación BFSK en frecuencias inaudibles (18 kHz – 20 kHz) para transmisión de texto cuando el espectro de radiofrecuencia (RF) está interferido o bloqueado.
+4. **Sensores Meteorológicos & Barométricos:**
+   - Conexión a `Sensor.TYPE_PRESSURE`, `Sensor.TYPE_AMBIENT_TEMPERATURE` y `Sensor.TYPE_RELATIVE_HUMIDITY` para generación de boletines climáticos CAP off-grid.
+
+---
+
+## ⚡ Arquitectura Real-Time SSE Unificada (Cero Polling)
+
+Para maximizar la autonomía de batería en dispositivos tácticos sobre el terreno, RED erradica por completo los temporizadores de consulta periódica (`setInterval` polling):
+- El nodo Rust expone un stream nativo en `GET /api/events` sobre `tokio::sync::broadcast`.
+- El frontend en React se suscribe a través de `useRedStore` y actualiza reactivamente los componentes (`SOSEmergencyBanner`, `WeatherAlertPanel`, etc.) con latencia submilisegundo (<1ms).
 
 ---
 

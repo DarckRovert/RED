@@ -23,6 +23,7 @@ mod sanitizer;
 mod sos;
 mod voice;
 mod weather;
+mod social;
 
 use clap::{Parser, Subcommand};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -283,6 +284,18 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         Node::start_event_loop(node_event_loop).await;
     });
 
+    // Start DNS Tunnel (UDP 53, or fallback to 5353 if not root)
+    let dns_tunnel = crate::dns_tunnel::DnsTunnelServer::new("red.mesh", node.clone());
+    tokio::spawn(async move {
+        // En Linux, el puerto 53 requiere root. En desarrollo usamos 5353
+        let port = if std::env::var("RED_DNS_PORT").is_ok() {
+            std::env::var("RED_DNS_PORT").unwrap().parse().unwrap_or(5353)
+        } else {
+            5353
+        };
+        dns_tunnel.start(port).await;
+    });
+
     // ── HTTP REST API (port 7333, serves Web UI + REST endpoints) ──────────
     let http_node = node.clone();
     let http_msg_tx = msg_tx_api.clone();
@@ -293,17 +306,13 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         // Rate limiter: 200 req/min for localhost, 30 para remoto
         let limiter = RateLimiter::new(200, std::time::Duration::from_secs(60));
 
-        // v19.0: Inicializar Guardian IA desde env vars
-        let guardian_engine = guardian::GuardianEngine::from_env();
+        let ai_copilot = std::sync::Arc::new(ai_copilot::AICopilotEngine::new());
+        let guardian_engine = guardian::GuardianEngine::from_env(ai_copilot.clone());
         if guardian_engine.is_active() {
-            if guardian_engine.has_api_key() {
-                info!(
-                    "🛡️  Guardian IA activo: modelo=meta-llama/llama-guard-4-12b, modo={}",
-                    guardian_engine.get_mode_str()
-                );
-            } else {
-                warn!("🛡️  Guardian IA activo (sin GROQ_API_KEY) — solo pHash para imágenes");
-            }
+            info!(
+                "🛡️  Guardian IA activo (100% Local Off-Grid Engine: RED-Guardian-Nano-v3, modo={})",
+                guardian_engine.get_mode_str()
+            );
         } else {
             warn!("⚠️  Guardian IA APAGADO (GUARDIAN_MODE=off)");
         }
@@ -332,24 +341,21 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             }
         };
 
-        let sos_store = std::sync::Arc::new(sos::SosStore::new(Some(
-            data_dir_amber.join("sled_db").into(),
-        )));
-        let channel_store = std::sync::Arc::new(channels::ChannelStore::new(Some(
-            data_dir_amber.join("sled_db").into(),
-        )));
+        let shared_sled = std::sync::Arc::new(sled::open(data_dir_amber.join("sled_db")).unwrap());
+
+        let sos_store = std::sync::Arc::new(sos::SosStore::new(Some(shared_sled.clone())));
+        let channel_store = std::sync::Arc::new(channels::ChannelStore::new(Some(shared_sled.clone())));
         let chunker = std::sync::Arc::new(chunker::ChunkerEngine::new());
         let voice_store = std::sync::Arc::new(voice::VoiceStore::new());
-        let weather_store = std::sync::Arc::new(weather::WeatherStore::new());
-        let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new());
+
+        let discovery = std::sync::Arc::new(discovery::DiscoveryEngine::new(Some((*shared_sled).clone())));
         let ephemeral = std::sync::Arc::new(ephemeral::EphemeralPurgeEngine::new());
-        let battery = std::sync::Arc::new(battery::BatteryOptimizer::new());
-        let ai_copilot = std::sync::Arc::new(ai_copilot::AICopilotEngine::new());
+        let battery = std::sync::Arc::new(battery::BatteryOptimizer::new(Some((*shared_sled).clone())));
         let ai_summarizer = std::sync::Arc::new(ai_summarizer::AISummarizerEngine::new());
         let ai_translator = std::sync::Arc::new(ai_translator::AITranslatorEngine::new());
 
         let state = ApiState {
-            node: http_node,
+            node: http_node.clone(),
             chain: chain_api,
             consensus: consensus_api,
             msg_tx: http_msg_tx,
@@ -361,14 +367,116 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             channel_store,
             chunker,
             voice_store,
-            weather_store,
+            weather_store: std::sync::Arc::new(weather::WeatherStore::new(Some((*shared_sled).clone()))),
             discovery,
             ephemeral,
             battery,
             ai_copilot,
             ai_summarizer,
             ai_translator,
+            social_store: std::sync::Arc::new(social::SocialStore::new(Some(shared_sled.clone()))),
         };
+
+        let my_identity_hash = {
+            let n = state.node.lock().await;
+            n.identity_hash().to_hex()
+        };
+
+        let mut msg_rx = state.msg_tx.subscribe();
+        let social_store_clone = state.social_store.clone();
+        let weather_store_clone = state.weather_store.clone();
+        let state_for_loop = state.clone();
+        tokio::spawn(async move {
+            while let Ok(msg) = msg_rx.recv().await {
+                if let red_core::protocol::MessageType::SocialPost(payload) = &msg.content {
+                    if let Ok(post) = serde_json::from_slice::<social::SocialPost>(payload) {
+                        // FIX: Remove 'is_following' restriction to allow global mesh discovery
+                        social_store_clone.insert_post(post);
+                    }
+                } else if let red_core::protocol::MessageType::WeatherReport(payload) = &msg.content {
+                    if let Ok(report) = serde_json::from_slice::<weather::WeatherReport>(payload) {
+                        weather_store_clone.add_report_raw(report);
+                    }
+                } else if let red_core::protocol::MessageType::Text(text) = &msg.content {
+                    // Escaneo asíncrono con Guardian IA para no congelar el event loop
+                    let state_async = state_for_loop.clone();
+                    let sender = msg.sender.clone();
+                    let recipient = msg.recipient.clone();
+                    let msg_id = msg.id.clone();
+                    let text_clone = text.clone();
+                    
+                    tokio::spawn(async move {
+                        let verdict = state_async.guardian.analyze_text(&text_clone).await;
+                        if let guardian::GuardianVerdict::Block { reason, .. } = verdict {
+                            // Find conversation ID and obfuscate
+                            let mut n = state_async.node.lock().await;
+                            let conv_id = red_core::protocol::ConversationId::from_participants(&sender, &recipient);
+                            // Se asume 1 a 1 por ahora, o el frontend lo verá igual si mutamos.
+                            let new_content = format!("[Bloqueado por Guardian IA: {}]", reason);
+                            let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content).await;
+                            
+                            // Re-emitir evento para que la UI re-renderice
+                            let mut dummy_msg = msg.clone();
+                            dummy_msg.content = red_core::protocol::MessageType::Text(format!("[Bloqueado por Guardian IA: {}]", reason));
+                            let _ = state_async.msg_tx.send(dummy_msg);
+                        }
+                    });
+                } else if let red_core::protocol::MessageType::ReadReceipt { ref message_ids } = msg.content {
+                    // ── ReadReceipt entrante: actualizar status → Read en la BD ────────
+                    let state_async = state_for_loop.clone();
+                    let message_ids_clone = message_ids.clone();
+                    let sender_clone = msg.sender.clone();
+                    tokio::spawn(async move {
+                        let n = state_async.node.lock().await;
+                        let _ = n.mark_messages_read_by_peer(&sender_clone, &message_ids_clone).await;
+                    });
+                    // SSE handler re-emite como evento `read_receipt` al frontend
+                } else if let red_core::protocol::MessageType::PresenceBeacon { .. } = msg.content {
+                    // PresenceBeacon entrante: SSE handler ya lo emite como evento `presence`
+                }
+            }
+        });
+
+        // ── Presence Beacon Task: emitir Online cada 60s a peers conocidos ──
+        {
+            let state_beacon = state.clone();
+            let my_hash_for_beacon = my_identity_hash.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                loop {
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    if let Ok(my_hash) = red_core::identity::IdentityHash::from_hex(&my_hash_for_beacon) {
+                        let peers = {
+                            let n = state_beacon.node.lock().await;
+                            n.list_peers().await.unwrap_or_default()
+                        };
+                        for peer in peers {
+                            // Use the identity_hash if known; skip anonymous peers
+                            if let Some(peer_hash) = peer.identity_hash {
+                                let beacon = red_core::protocol::Message {
+                                    id: red_core::protocol::MessageId::generate(),
+                                    sender: my_hash.clone(),
+                                    recipient: peer_hash,
+                                    content: red_core::protocol::MessageType::PresenceBeacon {
+                                        last_seen: now_ms,
+                                        online: true,
+                                    },
+                                    timestamp: now_ms,
+                                    reply_to: None,
+                                    status: red_core::protocol::MessageStatus::Sent,
+                                    edited: false,
+                                };
+                                let _ = state_beacon.msg_tx.send(beacon);
+                            }
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                }
+            });
+        }
 
         // Print API token to logs for the user to use
         if let Ok(pwd) = std::env::var("RED_PASSWORD") {

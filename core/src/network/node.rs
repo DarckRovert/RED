@@ -45,6 +45,16 @@ pub struct Node {
     is_running: bool,
     /// Total packets sent by this node
     pub packets_sent: std::sync::atomic::AtomicU64,
+    /// Blackout mode flag (WAN isolated, local epidemic routing only)
+    pub blackout_mode: Arc<std::sync::atomic::AtomicBool>,
+    /// Counter for blocked WAN connections during blackout
+    pub blocked_wan_peers: Arc<std::sync::atomic::AtomicUsize>,
+    /// Current active radio channel (1..14 or LoRa/BLE channel ID)
+    pub rf_current_channel: std::sync::atomic::AtomicU8,
+    /// Forward Error Correction (FEC) rate: 1 for Rate 1/2 (Normal), 2 for Rate 1/4 (Anti-Jamming)
+    pub rf_fec_rate: std::sync::atomic::AtomicU8,
+    /// Count of channel hops coordinated
+    pub rf_hops_count: std::sync::atomic::AtomicU32,
 }
 
 impl Node {
@@ -57,7 +67,16 @@ impl Node {
         let onion_router = OnionRouter::new(config.onion_path_length);
         
         let signing_key_bytes = identity.signing_key_bytes();
-        let transport = Arc::new(Libp2pTransport::new(signing_key_bytes, config.data_dir.clone())?);
+        let blackout_mode = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let blocked_wan_peers = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+
+        let transport = Arc::new(Libp2pTransport::new(
+            signing_key_bytes, 
+            config.data_dir.clone(), 
+            config.bootstrap_nodes.clone(),
+            blackout_mode.clone(),
+            blocked_wan_peers.clone()
+        )?);
 
         // BUG-FIX: Previously only .0 (sender) was stored, discarding the receiver
         // silently. Now both ends are stored so the Axum API can consume outbound payloads.
@@ -76,7 +95,62 @@ impl Node {
             lora_bridge: None,
             is_running: false,
             packets_sent: std::sync::atomic::AtomicU64::new(0),
+            blackout_mode,
+            blocked_wan_peers,
+            rf_current_channel: std::sync::atomic::AtomicU8::new(1),
+            rf_fec_rate: std::sync::atomic::AtomicU8::new(1),
+            rf_hops_count: std::sync::atomic::AtomicU32::new(0),
         })
+    }
+
+    /// Get current RF state: (current_channel, fec_rate, hops_count)
+    pub fn get_rf_state(&self) -> (u8, u8, u32) {
+        (
+            self.rf_current_channel.load(std::sync::atomic::Ordering::SeqCst),
+            self.rf_fec_rate.load(std::sync::atomic::Ordering::SeqCst),
+            self.rf_hops_count.load(std::sync::atomic::Ordering::SeqCst),
+        )
+    }
+
+    /// Set active RF channel
+    pub fn set_rf_channel(&self, channel: u8) {
+        self.rf_current_channel.store(channel, std::sync::atomic::Ordering::SeqCst);
+        self.rf_hops_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Set Forward Error Correction rate (1 = 1/2 standard, 2 = 1/4 Anti-Jamming)
+    pub fn set_fec_rate(&self, rate: u8) {
+        self.rf_fec_rate.store(rate, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Check if blackout mode is active
+    pub fn is_blackout_mode(&self) -> bool {
+        self.blackout_mode.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Set blackout mode (enable or disable WAN isolation)
+    pub fn set_blackout_mode(&self, enabled: bool) {
+        self.blackout_mode.store(enabled, std::sync::atomic::Ordering::SeqCst);
+        if !enabled {
+            self.blocked_wan_peers.store(0, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Enforce blackout by dropping existing WAN connections
+    pub async fn enforce_blackout(&self) {
+        if self.is_blackout_mode() {
+            let _ = self.transport.disconnect_wan_peers().await;
+        }
+    }
+
+    /// Get blocked WAN peers count
+    pub fn get_blocked_wan_peers(&self) -> usize {
+        self.blocked_wan_peers.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Increment blocked WAN peers count
+    pub fn increment_blocked_wan(&self) {
+        self.blocked_wan_peers.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     /// Set burner mode (RAM-Only flag)
@@ -292,7 +366,7 @@ impl Node {
             debug!("Starting RED identity handshake loop (10s interval)");
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                let mut n = node_ref_handshake.lock().await;
+                let n = node_ref_handshake.lock().await;
                 let hash_hex = n.identity.identity_hash().to_hex();
                 let pk_hex = hex::encode(n.identity.public_key().as_bytes());
                 let dummy_peer = crate::network::PeerId::from_bytes([0; 32]);
@@ -483,13 +557,15 @@ impl Node {
         // Gossip messages are currently expected to be encrypted OnionPackets
         if let Ok(packet) = bincode::deserialize::<crate::network::routing::OnionPacket>(&data) {
             self.handle_onion_packet(_sender, packet).await;
+        } else if let Ok(msg) = bincode::deserialize::<Message>(&data) {
+            self.handle_incoming_message(msg).await;
         } else {
-            error!("Failed to deserialize gossip message as OnionPacket");
+            error!("Failed to deserialize gossip message as OnionPacket or Message");
         }
     }
 
     /// Process a final incoming message
-    async fn handle_incoming_message(&mut self, mut message: Message) {
+    pub async fn handle_incoming_message(&mut self, mut message: Message) {
         let my_hash = self.identity.identity_hash().clone();
 
         // Drop messages from blocked senders (Security blocklist check)
@@ -507,10 +583,26 @@ impl Node {
         // messages. Discard messages not addressed to us (unless we are the sender,
         // which is handled by the outbound save path). This prevents ghost messages
         // appearing in the wrong conversation on the wrong device.
-        if message.recipient != my_hash && message.sender != my_hash {
+        let is_public = matches!(
+            message.content,
+            MessageType::SocialPost(_)
+                | MessageType::WeatherReport(_)
+                | MessageType::P2PVoucher(_)
+                | MessageType::ChannelHopCoordination { .. }
+                | MessageType::MedicalTriageReport(_)
+                | MessageType::EmergencyBeacon { .. }
+        );
+        if message.recipient != my_hash && message.sender != my_hash && !is_public {
             trace!("Discarding gossipsub message not addressed to us: {} -> {}",
                 message.sender.short(), message.recipient.short());
             return;
+        }
+
+        // Handle ChannelHopCoordination (v33.0 Electronic Countermeasures)
+        if let MessageType::ChannelHopCoordination { target_channel, frequency_mhz, ref reason, .. } = message.content {
+            self.rf_current_channel.store(target_channel, std::sync::atomic::Ordering::SeqCst);
+            self.rf_hops_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            info!("Synchronized mesh channel hop to #{} ({} MHz) - Reason: {}", target_channel, frequency_mhz, reason);
         }
 
         info!("Received message: {} -> {}", message.sender.short(), message.recipient.short());
@@ -537,13 +629,162 @@ impl Node {
             }
         }
 
+        // Handle ProfileSyncRequest
+        if let MessageType::ProfileSyncRequest = &message.content {
+            let (my_hash, profile_opt) = {
+                let s = self.storage.lock().await;
+                (self.identity.identity_hash().clone(), s.get_profile())
+            };
+            
+            if let Some(profile) = profile_opt {
+                let avatar_str = profile.avatar.and_then(|a| String::from_utf8(a).ok());
+                let resp = MessageType::ProfileSyncResponse {
+                    avatar: avatar_str,
+                    bio: profile.status,
+                };
+                
+                let out_msg = Message {
+                    id: crate::protocol::MessageId::generate(),
+                    sender: my_hash.clone(),
+                    recipient: message.sender.clone(),
+                    content: resp,
+                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
+                    reply_to: None,
+                    status: crate::protocol::MessageStatus::Sent,
+                    edited: false,
+                };
+                
+                let _ = self.send_message(message.sender.clone(), out_msg).await;
+            }
+        }
+
         // Save to storage
         {
             let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
 
-            // Add message to conversation
-            if let Err(e) = s.add_message(message.clone()) {
-                error!("Failed to save incoming message: {:?}", e);
+            // Handle ProfileSyncResponse
+            if let MessageType::ProfileSyncResponse { avatar, bio } = &message.content {
+                if let Some(mut contact) = s.get_contact(&message.sender) {
+                    contact.avatar = avatar.clone();
+                    contact.bio = bio.clone();
+                    contact.last_sync = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    let _ = s.add_contact(contact);
+                    info!("Updated contact profile for {}", message.sender.short());
+                }
+            }
+
+            // Handle SocialPost
+            if let MessageType::SocialPost(data) = &message.content {
+                if let Ok(payload) = serde_json::from_slice::<crate::protocol::SocialPostPayload>(data) {
+                    // Convert SocialPostPayload to storage::SocialPost
+                    let post = crate::storage::SocialPost {
+                        id: payload.id,
+                        author_hash: message.sender.clone(),
+                        author_name: payload.author_name,
+                        content: payload.content,
+                        media_data: payload.media_data,
+                        timestamp: payload.timestamp,
+                        reply_to: payload.reply_to,
+                        signature: String::new(),
+                        reactions: std::collections::HashMap::new(),
+                    };
+                    let _ = s.store_social_post(&post);
+                    info!("Stored new social post from {}", message.sender.short());
+                }
+            }
+
+            // Handle P2PVoucher (v32.0 Sovereign Payments)
+            if let MessageType::P2PVoucher(data) = &message.content {
+                if let Ok(payload) = serde_json::from_slice::<crate::protocol::P2PVoucherPayload>(data) {
+                    if s.get_p2p_voucher(&payload.id).is_none() {
+                        let voucher_record = crate::storage::P2PVoucherRecord {
+                            id: payload.id.clone(),
+                            creator_hash: payload.creator_hash,
+                            creator_name: payload.creator_name,
+                            recipient: payload.recipient,
+                            amount: payload.amount,
+                            timestamp: payload.timestamp,
+                            signature: payload.signature,
+                            is_outgoing: false,
+                            redeemed: true,
+                        };
+                        let _ = s.store_p2p_voucher(&voucher_record);
+                        if let Ok(mut wallet) = s.get_p2p_wallet() {
+                            wallet.balance += payload.amount;
+                            wallet.total_received += payload.amount;
+                            let _ = s.save_p2p_wallet(&wallet);
+                            info!("Credited incoming P2P voucher {} ({} RED credits)", payload.id, payload.amount);
+                        }
+                    }
+                }
+            }
+
+            // Handle MedicalTriageReport (v35.0 Disaster Triage & Vital Signs Telemetry)
+            if let MessageType::MedicalTriageReport(data) = &message.content {
+                if let Ok(payload) = serde_json::from_slice::<crate::protocol::MedicalTriagePayload>(data) {
+                    let record = crate::storage::TriageReportRecord {
+                        id: payload.id.clone(),
+                        victim_label: payload.victim_label.clone(),
+                        category: payload.category.clone(),
+                        bpm: payload.bpm,
+                        spo2: payload.spo2,
+                        notes: payload.notes.clone(),
+                        evaluator_hash: payload.evaluator_hash,
+                        evaluator_name: payload.evaluator_name.clone(),
+                        timestamp: payload.timestamp,
+                        latitude: payload.latitude,
+                        longitude: payload.longitude,
+                        synced_mesh: true,
+                    };
+                    let _ = s.store_triage_report(&record);
+                    info!("🚨 Stored incoming Medical Triage Report: {} ({}) evaluated by {}", payload.victim_label, payload.category, payload.evaluator_name);
+                }
+            }
+
+            // Handle EmergencyBeacon (v36.0 Tactical SOS Mesh Broadcast)
+            if let MessageType::EmergencyBeacon { ref beacon_id, ref distress_type, latitude, longitude, altitude, battery_level, message: ref msg_text, active, timestamp } = message.content {
+                let record = crate::storage::EmergencyBeaconRecord {
+                    beacon_id: beacon_id.clone(),
+                    sender_hash: message.sender.clone(),
+                    sender_name: format!("Nodo {}", message.sender.short()),
+                    distress_type: distress_type.clone(),
+                    latitude,
+                    longitude,
+                    altitude,
+                    battery_level,
+                    message: msg_text.clone(),
+                    active,
+                    timestamp,
+                    is_mine: false,
+                };
+                if active {
+                    let _ = s.store_emergency_beacon(&record);
+                    info!("🚨 SOS ACTIVO RECIBIDO DE {}: [{}] {}", message.sender.short(), distress_type, msg_text);
+                } else {
+                    let _ = s.remove_emergency_beacon(beacon_id);
+                    info!("🟢 SOS CANCELADO POR {}: Beacon #{}", message.sender.short(), beacon_id);
+                }
+            }
+
+            // Add message to conversation (Skip if it's purely a SocialPost, P2PVoucher, ProfileSync, ChannelHopCoordination, MedicalTriageReport, EmergencyBeacon, WebRTCSignal, or Contact handshake so we don't clutter the DMs)
+            let is_hidden = matches!(
+                message.content,
+                MessageType::SocialPost(_)
+                    | MessageType::WeatherReport(_)
+                    | MessageType::P2PVoucher(_)
+                    | MessageType::ProfileSyncRequest
+                    | MessageType::ProfileSyncResponse { .. }
+                    | MessageType::ChannelHopCoordination { .. }
+                    | MessageType::MedicalTriageReport(_)
+                    | MessageType::EmergencyBeacon { .. }
+                    | MessageType::WebRTCSignal(_)
+                    | MessageType::ContactRequest(_)
+                    | MessageType::ContactResponse(_)
+            );
+            if !is_hidden {
+                if let Err(e) = s.add_message(message.clone()) {
+                    error!("Failed to save incoming message: {:?}", e);
+                }
             }
 
             // Special handling for TimerUpdate to persist the setting
@@ -560,6 +801,10 @@ impl Node {
         if let Some(tx) = &self.msg_notifier {
             let _ = tx.send(message);
         }
+    }
+
+    pub fn get_storage(&self) -> std::sync::Arc<tokio::sync::Mutex<crate::storage::Storage>> {
+        self.storage.clone()
     }
 
     /// Stop the node
@@ -698,11 +943,13 @@ impl Node {
 
         if available_peers.len() >= 3 {
             // ── FULL ONION ROUTING PATH ──
-            // Resolve recipient IdentityHash to PeerId (via DHT or known_peers)
-            let peer_id = self.transport.resolve(recipient).await?;
-            
-            let destination = available_peers.into_iter()
-                .find(|p| p.identity_hash.as_ref() == Some(recipient))
+            let peer_id = tokio::time::timeout(std::time::Duration::from_secs(5), self.transport.resolve(recipient))
+                .await
+                .unwrap_or(Err(NetworkError::RoutingFailed("Timeout resolving peer".to_string())))?;
+
+            let updated_peers = self.transport.known_peers();
+            let destination = updated_peers.into_iter()
+                .find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id)
                 .unwrap_or_else(|| {
                     let pub_key = contact_pub_key
                         .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
@@ -714,13 +961,9 @@ impl Node {
                         identity_hash: Some(recipient.clone()),
                         protocol_version: 1,
                         user_agent: "red-node".to_string(),
-                        addresses: vec!["127.0.0.1:7331".parse().unwrap()],
+                        addresses: vec!["127.0.0.1:0".parse().unwrap()],
                     }
                 });
-
-            if destination.addresses.is_empty() {
-                return Err(NetworkError::RoutingFailed("Destination has no known addresses".to_string()));
-            }
 
             let all_peers = self.transport.known_peers();
             let route = self.onion_router.select_route(&all_peers, &destination)?;
@@ -758,22 +1001,33 @@ impl Node {
                 s.get_contact(recipient).map(|c| c.public_key)
             };
 
-            let destination = available_peers.into_iter()
-                .find(|p| p.identity_hash.as_ref() == Some(recipient))
-                .unwrap_or_else(|| {
-                    let pub_key = contact_pub_key
-                        .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
-                        .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
+            let mut destination_opt = available_peers.into_iter()
+                .find(|p| p.identity_hash.as_ref() == Some(recipient));
 
-                    crate::network::PeerInfo {
-                        id: PeerId::from_bytes([0u8; 32]),
-                        public_key: pub_key,
-                        identity_hash: Some(recipient.clone()),
-                        protocol_version: 1,
-                        user_agent: "red-node".to_string(),
-                        addresses: vec![],
-                    }
-                });
+            if destination_opt.is_none() {
+                // GAP FIX: If peer is not in local mesh, ask Kademlia to find their IP on the WAN.
+                // We wait up to 5 seconds. If found, Kademlia will punch through NAT and connect.
+                if let Ok(Ok(peer_id)) = tokio::time::timeout(std::time::Duration::from_secs(5), self.transport.resolve(recipient)).await {
+                    let updated_peers = self.transport.known_peers();
+                    destination_opt = updated_peers.into_iter().find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id);
+                }
+            }
+
+            let destination = destination_opt.unwrap_or_else(|| {
+                let proper_peer_id = PeerId::from_bytes(*recipient.as_bytes());
+                let pub_key = contact_pub_key
+                    .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                    .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
+
+                crate::network::PeerInfo {
+                    id: proper_peer_id,
+                    public_key: pub_key,
+                    identity_hash: Some(recipient.clone()),
+                    protocol_version: 1,
+                    user_agent: "red-node".to_string(),
+                    addresses: vec![],
+                }
+            });
 
             let shared_secret = self.identity.key_exchange(&destination.public_key);
             let single_hop_route = crate::network::routing::Route {
@@ -794,14 +1048,34 @@ impl Node {
 
                 // Publish for internal Libp2p mesh (if any)
                 use crate::network::transport::TransportMessage;
-                let dummy_peer = PeerId::from_bytes([0u8; 32]);
-                let _ = self.transport.send(&dummy_peer, TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }).await;
-                info!("Direct encrypted 1-hop Onion message dispatched (direct mode)");
+                let proper_peer = destination.id.clone();
+                let _ = self.transport.send(&proper_peer, TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }).await;
+                info!("Direct encrypted 1-hop Onion message dispatched (direct/WAN mode)");
             } else {
                 return Err(NetworkError::TransportError("Failed to encrypt 1-hop OnionPacket for offline mesh mode".to_string()));
             }
         }
 
+        Ok(())
+    }
+
+    /// Broadcast an unencrypted public message to all peers (for Social Feed, SOS, Channels)
+    pub async fn broadcast_public_message(&mut self, message: Message) -> NetworkResult<()> {
+        let payload = bincode::serialize(&message).unwrap_or_default();
+        
+        // Push to local frontend outbound channel (Bluetooth / WiFi Direct Mesh)
+        if let Some(tx) = &self.outbound_payload_tx {
+            let _ = tx.send(payload.clone());
+        }
+
+        // Publish to internal Libp2p gossipsub mesh
+        use crate::network::transport::TransportMessage;
+        let connected_peers = self.transport.connected_peers();
+        for peer_id in connected_peers {
+            let _ = self.transport.send(&peer_id, TransportMessage::Data { payload: payload.clone() }).await;
+        }
+        info!("Public unencrypted message broadcasted");
+        
         Ok(())
     }
 
@@ -813,6 +1087,22 @@ impl Node {
     /// Get node identity hash
     pub fn identity_hash(&self) -> &IdentityHash {
         self.identity.identity_hash()
+    }
+
+    /// Get the underlying identity
+    pub fn identity(&self) -> &Identity {
+        &self.identity
+    }
+
+    /// Rotate node identity (triggers DH renegotiation)
+    pub fn rotate_identity(&mut self) -> NetworkResult<()> {
+        if let Ok(new_identity) = self.identity.rotate() {
+            tracing::info!("Rotating node identity from {} to {}", self.identity.identity_hash().to_hex(), new_identity.identity_hash().to_hex());
+            self.identity = new_identity;
+            Ok(())
+        } else {
+            Err(NetworkError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "Failed to rotate identity")))
+        }
     }
 
     /// Get node public key for key exchange
@@ -839,6 +1129,17 @@ impl Node {
     pub async fn mark_conversation_read_in_storage(&self, id: &ConversationId) -> crate::storage::StorageResult<()> {
         let mut s = self.storage.lock().await;
         s.mark_conversation_read(id)
+    }
+
+    /// Update MessageStatus::Read for a list of message IDs received in a ReadReceipt.
+    /// `_peer_hash` identifies who sent the receipt (available for filtering if needed).
+    pub async fn mark_messages_read_by_peer(
+        &self,
+        _peer_hash: &IdentityHash,
+        message_ids: &[crate::protocol::MessageId],
+    ) -> crate::storage::StorageResult<()> {
+        let mut s = self.storage.lock().await;
+        s.mark_messages_as_read_by_ids(message_ids)
     }
 
     /// Create a new group

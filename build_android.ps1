@@ -85,35 +85,54 @@ npm run build
 Write-Header "Step 2: Synchronizing with Capacitor Android"
 npx cap sync android
 
-# --- Step 3: Rust Backend Build (JNI) ---
+# --- Step 3: Rust Backend Build (JNI) --- ALWAYS recompile (cargo is incremental)
 
 Write-Header "Step 3: Compiling Rust Core (aarch64-linux-android)"
 Set-Location $BACKEND_PATH
 
-$ExistingSo = "$JNI_LIBS_ROOT\arm64-v8a\libred_mobile.so"
-if (Test-Path $ExistingSo) {
-    Write-Host "[SKIP] libred_mobile.so already present in jniLibs." -ForegroundColor Yellow
-    Write-Host "       Rust recompilation requires Visual Studio Build Tools (link.exe)." -ForegroundColor DarkGray
-    Write-Host "       Using existing binary for this build. Run 'cargo ndk' manually after installing VS Build Tools." -ForegroundColor DarkGray
-} else {
-    Write-Host "Running cargo-ndk build..." -ForegroundColor Gray
-    cargo ndk -t aarch64-linux-android build --release
+$NDK_DIR = "$env:USERPROFILE\AppData\Local\Android\Sdk\ndk"
+$NDK_VER = (Get-ChildItem $NDK_DIR -Directory | Sort-Object Name -Descending | Select-Object -First 1).Name
+$NDK_BASE = "$NDK_DIR\$NDK_VER\toolchains\llvm\prebuilt\windows-x86_64"
 
-    # --- Step 4: JNI Artifact Distribution ---
-    Write-Header "Step 4: Distributing Binary Artifacts"
-    $SourceSo = "$RED_ROOT\target\aarch64-linux-android\release\libred_mobile.so"
-    $DestDir = "$JNI_LIBS_ROOT\arm64-v8a"
+# Pass NDK sysroot libs path so the linker finds libc++_static.a
+$env:LIBRARY_PATH = "$NDK_BASE\sysroot\usr\lib\aarch64-linux-android"
+$env:CXXFLAGS = "-stdlib=libc++"
 
-    if (-not (Test-Path $SourceSo)) {
-        Write-Host "Critical Failure: libred_mobile.so not found at $SourceSo" -ForegroundColor Red
-        exit 1
-    }
-    if (-not (Test-Path $DestDir)) {
-        New-Item -ItemType Directory -Force -Path $DestDir | Out-Null
-    }
-    Copy-Item -Path $SourceSo -Destination "$DestDir\libred_mobile.so" -Force
-    Write-Host "Success: JNI motor injected into Android project." -ForegroundColor Green
+Write-Host "Running cargo-ndk build (--release, static C++ STL)..." -ForegroundColor Gray
+cargo ndk -t aarch64-linux-android -o "$JNI_LIBS_ROOT" build --release
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[FATAL] cargo ndk failed. Aborting build." -ForegroundColor Red
+    exit 1
 }
+
+# --- Step 4: Verify and distribute artifacts ---
+Write-Header "Step 4: Verifying & Distributing Binary Artifacts"
+
+$DestDir = "$JNI_LIBS_ROOT\arm64-v8a"
+$BuiltSo  = "$DestDir\libred_mobile.so"
+
+if (-not (Test-Path $BuiltSo)) {
+    Write-Host "[FATAL] libred_mobile.so not found in jniLibs after build." -ForegroundColor Red
+    exit 1
+}
+
+# Safety net: copy libc++_shared.so in case static linking was incomplete
+$LibCppShared = "$NDK_BASE\sysroot\usr\lib\aarch64-linux-android\libc++_shared.so"
+if (Test-Path $LibCppShared) {
+    Copy-Item -Path $LibCppShared -Destination "$DestDir\libc++_shared.so" -Force
+    Write-Host "[OK] libc++_shared.so copied to jniLibs as safety net." -ForegroundColor Green
+}
+
+# Verify the .so no longer depends on dynamic libc++ (it should now be self-contained)
+$ReadElf = "$NDK_BASE\bin\llvm-readelf.exe"
+if (Test-Path $ReadElf) {
+    $needed = & $ReadElf -d $BuiltSo | Select-String "NEEDED"
+    Write-Host "`n[INFO] libred_mobile.so runtime dependencies:" -ForegroundColor Cyan
+    $needed | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
+}
+
+Write-Host "`n[OK] Rust motor injected into Android project." -ForegroundColor Green
 
 # --- Step 5: Compile Production APK ---
 
@@ -128,19 +147,59 @@ if (Test-Path "gradlew.bat") {
         Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
         
-        Write-Host "Copying APK to assets/red-v3.1.0-latest.apk..." -ForegroundColor Gray
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v3.1.0-latest.apk" -Force -ErrorAction SilentlyContinue
+        Write-Host "Copying APK to assets/red-v31.0.0-latest.apk..." -ForegroundColor Gray
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v31.0.0-latest.apk" -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
+        exit 1
     }
 } else {
     Write-Host "Error: gradlew.bat not found in $ANDROID_PATH" -ForegroundColor Red
+    exit 1
+}
+
+# --- Step 6: Auto-install to connected device ---
+
+Write-Header "Step 6: Auto-Install to Connected Android Device"
+Set-Location $RED_ROOT
+
+$AdbPath = "$env:USERPROFILE\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+if (Test-Path $AdbPath) {
+    $devices = & $AdbPath devices | Select-String "\tdevice$"
+    if ($devices.Count -gt 0) {
+        $deviceId = ($devices[0].Line -split "\t")[0].Trim()
+        Write-Host "Detected device: $deviceId - installing APK..." -ForegroundColor Cyan
+        & $AdbPath -s $deviceId install -r $ApkPath
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "[OK] APK installed on device $deviceId" -ForegroundColor Green
+            Write-Host "Restarting RED on device to apply new assets..." -ForegroundColor Cyan
+            & $AdbPath -s $deviceId shell am force-stop f.red.app
+            Start-Sleep -Milliseconds 500
+            & $AdbPath -s $deviceId shell am start -n f.red.app/.MainActivity
+            
+            # Verify the native library loaded on device using logcat
+            Write-Host "Streaming logcat (5s) to verify native library load..." -ForegroundColor Gray
+            $job = Start-Job {
+                param($adb, $dev)
+                & $adb -s $dev logcat -s RedNodePlugin:E RedNodePlugin:I -T 1 2>&1
+            } -ArgumentList $AdbPath, $deviceId
+            Start-Sleep 5
+            Stop-Job $job
+            Receive-Job $job | Select-String "red_mobile|FAILED|loaded"
+            Remove-Job $job
+        } else {
+            Write-Host "[!] adb install failed. Transfer APK manually." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "[INFO] No device connected via USB. APK ready at: $ApkPath" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "[INFO] adb not found. APK ready at: $ApkPath" -ForegroundColor Yellow
 }
 
 # --- Finish ---
 
 Set-Location $RED_ROOT
 Write-Header "BUILD COMPLETE - RED is ready"
-Write-Host "PRO-TIP: Your production APK is ready to deploy!" -ForegroundColor Green
-Write-Host "You can find it at: $ApkPath" -ForegroundColor Yellow
+Write-Host "APK: $ApkPath" -ForegroundColor Green
 Write-Host ""

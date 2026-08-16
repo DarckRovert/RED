@@ -3,13 +3,31 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { ErrorBanner } from "./ui/ErrorBanner";
 
 export default function CallScreen() {
-    const { identity, activeConversationId, conversations, goBack, incomingCall, setIncomingCall, activeCallSignal } = useRedStore();
-    const activeConv = conversations.find(c => c.id === activeConversationId);
+    const { identity, activeConversationId, conversations, contacts, goBack, incomingCall, setIncomingCall, activeCallSignal } = useRedStore();
+    const activeConv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
     
-    // Peer identity hash for signaling
-    const peerHash = activeConv ? activeConv.peer : (activeConversationId?.includes('-') ? activeConversationId.split('-')[1] : activeConversationId);
+    // 1. Resolve full 64-character peer DID hash
+    const rawPeer = activeConv?.peer || incomingCall?.callerHash || (
+        activeConversationId && activeConversationId.length === 64 ? activeConversationId : (
+            activeConversationId?.includes("-") ? activeConversationId.split("-")[1] : activeConversationId
+        )
+    ) || "";
+
+    const peerContact = contacts.find((c: any) => 
+        c.identity_hash === rawPeer ||
+        (rawPeer.length >= 8 && c.identity_hash?.startsWith(rawPeer)) ||
+        (rawPeer.length >= 8 && rawPeer.startsWith(c.identity_hash?.substring(0, 8))) ||
+        (rawPeer.length >= 8 && c.identity_hash?.includes(rawPeer))
+    );
+
+    const peerHash = peerContact?.identity_hash || (rawPeer.length === 64 ? rawPeer : (
+        conversations.find(c => c.peer && (c.peer === rawPeer || c.peer.startsWith(rawPeer) || rawPeer.startsWith(c.peer.substring(0, 8))))?.peer || rawPeer
+    ));
+
+    const peerDisplayName = incomingCall?.callerName || peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 10)}...` : "Desconocido");
 
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -18,44 +36,112 @@ export default function CallScreen() {
     const [callActive, setCallActive] = useState(false);
     const [micMuted, setMicMuted] = useState(false);
     const [camMuted, setCamMuted] = useState(false);
+    const [callDuration, setCallDuration] = useState(0);
     
     const peerRef = useRef<RTCPeerConnection | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
+    const remoteStreamRef = useRef<MediaStream | null>(null);
+    const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
-    // 1. Initialize WebRTC Call
+    // Call Duration Counter
+    useEffect(() => {
+        let timer: any = null;
+        if (callActive) {
+            timer = setInterval(() => {
+                setCallDuration(d => d + 1);
+            }, 1000);
+        }
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [callActive]);
+
+    const formatDuration = (seconds: number) => {
+        const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+        const s = (seconds % 60).toString().padStart(2, "0");
+        return `${m}:${s}`;
+    };
+
+    // 1. Initialize WebRTC Call Session
     useEffect(() => {
         if (!identity || !peerHash) return;
         let isSubscribed = true;
 
         const initCall = async () => {
-            setStatus("Solicitando cámara y micrófono...");
+            setStatus("Solicitando permisos de cámara y micrófono...");
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                if (!isSubscribed) return;
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+                    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+                });
+                if (!isSubscribed) {
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
                 
                 localStreamRef.current = stream;
-                if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+                if (localVideoRef.current) {
+                    localVideoRef.current.srcObject = stream;
+                    localVideoRef.current.muted = true;
+                    localVideoRef.current.playsInline = true;
+                    localVideoRef.current.play().catch(() => {});
+                }
                 
                 // STUN servers for local LAN + WAN Traversal
                 const pc = new RTCPeerConnection({
                     iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' },
-                        { urls: 'stun:stun2.l.google.com:19302' }
-                    ]
+                        { urls: "stun:stun.l.google.com:19302" },
+                        { urls: "stun:stun1.l.google.com:19302" },
+                        { urls: "stun:stun2.l.google.com:19302" }
+                    ],
+                    iceCandidatePoolSize: 10
                 });
                 peerRef.current = pc;
 
                 // Add local tracks to WebRTC session
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
+                // Handle connection state transitions
+                pc.oniceconnectionstatechange = () => {
+                    console.log('[WebRTC] ICE State:', pc.iceConnectionState);
+                    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                        setStatus("CONECTADO (E2E DTLS-SRTP)");
+                        setCallActive(true);
+                    } else if (pc.iceConnectionState === 'failed') {
+                        setStatus("Error de conexión (ICE Failed)");
+                    } else if (pc.iceConnectionState === 'disconnected') {
+                        setStatus("Reconectando canal P2P...");
+                    }
+                };
+
+                pc.onconnectionstatechange = () => {
+                    console.log('[WebRTC] Connection State:', pc.connectionState);
+                    if (pc.connectionState === 'connected') {
+                        setStatus("CONECTADO (E2E DTLS-SRTP)");
+                        setCallActive(true);
+                    }
+                };
+
                 // Handle incoming remote media stream
                 pc.ontrack = (event) => {
-                    if (remoteVideoRef.current) {
-                        remoteVideoRef.current.srcObject = event.streams[0];
-                        setCallActive(true);
-                        setStatus("CONECTADO (E2E ENCRIPTADO)");
+                    console.log('[WebRTC] Remote track received:', event.track.kind, event.streams);
+                    let streamToPlay: MediaStream;
+                    if (event.streams && event.streams[0]) {
+                        streamToPlay = event.streams[0];
+                    } else {
+                        if (!remoteStreamRef.current) {
+                            remoteStreamRef.current = new MediaStream();
+                        }
+                        remoteStreamRef.current.addTrack(event.track);
+                        streamToPlay = remoteStreamRef.current;
                     }
+                    if (remoteVideoRef.current) {
+                        remoteVideoRef.current.srcObject = streamToPlay;
+                        remoteVideoRef.current.playsInline = true;
+                        remoteVideoRef.current.play().catch(e => console.warn('[WebRTC] Remote play error:', e));
+                    }
+                    setCallActive(true);
+                    setStatus("CONECTADO (E2E DTLS-SRTP)");
                 };
 
                 // Send ICE candidates via P2P signaling
@@ -67,10 +153,20 @@ export default function CallScreen() {
                     }
                 };
 
-                // CALLEE MODE: If answering an incoming call offer
+                // CALLEE MODE: Answering an incoming call offer
                 if (incomingCall && incomingCall.offer) {
                     setStatus("Conectando con interlocutor...");
                     await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+                    
+                    // Flush any early received ICE candidates
+                    if (pendingCandidatesRef.current.length > 0) {
+                        console.log(`[WebRTC] Callee applying ${pendingCandidatesRef.current.length} queued ICE candidates`);
+                        for (const cand of pendingCandidatesRef.current) {
+                            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                        }
+                        pendingCandidatesRef.current = [];
+                    }
+
                     const answer = await pc.createAnswer();
                     await pc.setLocalDescription(answer);
 
@@ -86,7 +182,7 @@ export default function CallScreen() {
                     await RedAPI.sendMessage(peerHash, JSON.stringify({ offer }), { msg_type: "webrtc_signal" });
                 }
 
-            } catch (err) {
+            } catch (err: any) {
                 setStatus("Error: Permiso de cámara/micrófono denegado");
                 console.error("[CallScreen] Media Error:", err);
             }
@@ -100,22 +196,44 @@ export default function CallScreen() {
         };
     }, [peerHash]);
 
-    // 2. React to Incoming Signals from Store Subscription
+    // 2. React to Incoming Signals from Store Subscription (Answer, ICE candidates, Hangup)
     useEffect(() => {
         if (!activeCallSignal || !peerRef.current) return;
-        const { senderHash, signal } = activeCallSignal;
+        const { signal } = activeCallSignal;
 
         const handleSignal = async () => {
             const pc = peerRef.current;
             if (!pc) return;
 
             try {
+                // Remote Answer received
                 if (signal.answer && pc.signalingState !== "stable") {
                     await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
                     setStatus("Conexión E2E Establecida");
-                } else if (signal.candidate) {
-                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
-                } else if (signal.hangup) {
+                    setCallActive(true);
+
+                    // Flush any pending candidates queued before remoteDescription was set
+                    if (pendingCandidatesRef.current.length > 0) {
+                        console.log(`[WebRTC] Caller applying ${pendingCandidatesRef.current.length} queued ICE candidates`);
+                        for (const cand of pendingCandidatesRef.current) {
+                            await pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                        }
+                        pendingCandidatesRef.current = [];
+                    }
+                } 
+                // Remote ICE Candidate received
+                else if (signal.candidate) {
+                    if (pc.remoteDescription && pc.remoteDescription.type) {
+                        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch((e) => {
+                            console.warn('[WebRTC] addIceCandidate failed:', e);
+                        });
+                    } else {
+                        console.log('[WebRTC] Queueing early ICE candidate');
+                        pendingCandidatesRef.current.push(signal.candidate);
+                    }
+                } 
+                // Remote Hangup signal received
+                else if (signal.hangup) {
                     setStatus("Llamada Finalizada");
                     setTimeout(endCallInternal, 500);
                 }
@@ -139,6 +257,11 @@ export default function CallScreen() {
             localStreamRef.current.getTracks().forEach(t => t.stop());
             localStreamRef.current = null;
         }
+        if (remoteStreamRef.current) {
+            remoteStreamRef.current.getTracks().forEach(t => t.stop());
+            remoteStreamRef.current = null;
+        }
+        pendingCandidatesRef.current = [];
     };
 
     const handleUserEndCall = () => {
@@ -167,72 +290,185 @@ export default function CallScreen() {
     };
 
     return (
-        <div style={{ position: 'relative', width: '100%', height: '100%', background: '#000', overflow: 'hidden' }}>
-            
+        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "var(--bg-void)", overflow: "hidden" }}>
+            <style>{`
+                @keyframes sonar-ring {
+                    0% { transform: scale(1); opacity: 0.6; }
+                    100% { transform: scale(2.4); opacity: 0; }
+                }
+                @keyframes sonar-pulse {
+                    0%, 100% { box-shadow: 0 0 0 0 rgba(232,33,58,0.5); }
+                    50% { box-shadow: 0 0 0 20px rgba(232,33,58,0); }
+                }
+            `}</style>
+
             {/* Remote Video (Full Screen) */}
-            <video 
-                ref={remoteVideoRef} 
-                autoPlay 
-                playsInline 
-                style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: callActive ? 1 : 0, transition: 'opacity 0.5s' }} 
-            />
-            
-            {/* Local Video (Floating PIP) */}
-            <video 
-                ref={localVideoRef} 
-                autoPlay 
-                playsInline 
-                muted
-                style={{ 
-                    position: 'absolute', top: 'calc(40px + var(--safe-top, 0px))', right: '20px', width: '120px', height: '160px', 
-                    borderRadius: '16px', objectFit: 'cover', border: '2px solid rgba(255,255,255,0.25)',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.6)', zIndex: 10,
-                    transform: 'scaleX(-1)'
-                }} 
+            <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                style={{
+                    position: "absolute", inset: 0,
+                    width: "100%", height: "100%",
+                    objectFit: "cover",
+                    opacity: callActive ? 1 : 0,
+                    transition: "opacity 0.5s", zIndex: 1,
+                    backgroundColor: "#05050c"
+                }}
             />
 
-            {/* Status Overlay — shown while ringing / connecting */}
+            {/* Local Video (Floating PIP) */}
+            <video
+                ref={localVideoRef}
+                autoPlay playsInline muted
+                style={{
+                    position: "absolute", top: "calc(40px + var(--safe-top, 0px))", right: "16px",
+                    width: "110px", height: "150px",
+                    borderRadius: "16px", objectFit: "cover",
+                    border: "2px solid rgba(0,229,255,0.4)",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.8)", zIndex: 10,
+                    transform: "scaleX(-1)"
+                }}
+            />
+
+            {/* Calling / Connecting Overlay */}
             {!callActive && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#080810', zIndex: 5 }}>
-                    <div style={{ width: '110px', height: '110px', borderRadius: '55px', background: 'rgba(232,33,58,0.15)', border: '2px solid #E8213A', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '28px', boxShadow: '0 0 48px rgba(232,33,58,0.4)', animation: 'pulse 1.5s infinite' }}>
-                        <span style={{ fontSize: '3rem', fontWeight: 800, color: 'white' }}>{peerHash?.substring(0,1).toUpperCase() || 'P'}</span>
-                    </div>
-                    <h2 style={{ color: 'white', fontSize: '1.4rem', marginBottom: '12px', fontWeight: 800 }}>{activeConv?.peer || `Nodo ${peerHash?.substring(0, 10)}`}</h2>
-                    <p style={{ color: '#94a3b8', letterSpacing: '1px', fontSize: '0.82rem', fontWeight: 700 }}>{status.toUpperCase()}</p>
+                <div style={{
+                    position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    background: "linear-gradient(180deg, #06060f 0%, #0d0d1a 100%)", zIndex: 5,
+                    padding: "20px"
+                }}>
+                    {status.startsWith("Error") ? (
+                        <div style={{ width: "100%", maxWidth: "400px" }}>
+                            <ErrorBanner message={status} />
+                        </div>
+                    ) : (
+                        <>
+                            {/* Sonar Animation */}
+                            <div style={{ position: "relative", width: "120px", height: "120px", marginBottom: "32px" }}>
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} style={{
+                                        position: "absolute", inset: 0, borderRadius: "50%",
+                                        border: "2px solid rgba(232,33,58,0.4)",
+                                        animation: `sonar-ring 2s ease-out ${i * 0.5}s infinite`
+                                    }} />
+                                ))}
+                                <div style={{
+                                    position: "absolute", inset: "10px", borderRadius: "50%",
+                                    background: "linear-gradient(135deg, rgba(232,33,58,0.2) 0%, rgba(200,10,40,0.3) 100%)",
+                                    border: "2px solid var(--accent-crimson)",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    animation: "sonar-pulse 2s ease-in-out infinite"
+                                }}>
+                                    <span style={{ fontSize: "2.4rem", fontWeight: 900, color: "white" }}>
+                                        {peerDisplayName.charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                            </div>
+                            <h2 style={{ color: "#fff", fontSize: "1.4rem", fontWeight: 900, marginBottom: "10px", letterSpacing: "0.3px", textAlign: "center" }}>
+                                {peerDisplayName}
+                            </h2>
+                            <p style={{
+                                color: "var(--accent-cyan)", fontSize: "0.80rem",
+                                fontFamily: "JetBrains Mono, monospace", fontWeight: 700,
+                                letterSpacing: "2px", animation: "pulse 1.5s ease-in-out infinite",
+                                textAlign: "center"
+                            }}>
+                                {status.toUpperCase()}
+                            </p>
+                        </>
+                    )}
                 </div>
             )}
 
-            {/* Top Bar — E2E Badge */}
-            <div style={{ position: 'absolute', top: 'calc(16px + var(--safe-top, 0px))', left: '16px', zIndex: 20, display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.7)', padding: '8px 16px', borderRadius: '20px', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.15)' }}>
-                <span style={{ color: '#00D97E', fontSize: '0.8rem', fontWeight: 800, letterSpacing: '1px' }}>🔒 E2E WEBRTC CIFRADO</span>
+            {/* Top Bar — E2E Badge & Duration */}
+            <div style={{
+                position: "absolute", top: "calc(16px + var(--safe-top, 0px))", left: "16px",
+                zIndex: 20, display: "flex", alignItems: "center", gap: "8px",
+                background: "rgba(10,10,20,0.85)", padding: "8px 16px",
+                borderRadius: "var(--radius-full)", backdropFilter: "blur(16px)",
+                border: "1px solid var(--glass-border)"
+            }}>
+                <span style={{ color: "var(--accent-emerald)", fontSize: "0.75rem", fontWeight: 800, letterSpacing: "0.5px" }}>🔒 E2E DTLS-SRTP</span>
+                {callActive && (
+                    <span style={{ color: "var(--accent-emerald)", fontSize: "0.80rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                        · {formatDuration(callDuration)}
+                    </span>
+                )}
             </div>
 
             {/* Floating Control Bar */}
-            <div style={{ 
-                position: 'absolute', bottom: 'calc(40px + var(--safe-bottom, 0px))', left: '50%', transform: 'translateX(-50%)', 
-                display: 'flex', gap: '20px', alignItems: 'center',
-                background: 'rgba(10,15,28,0.9)', 
-                padding: '16px 36px', borderRadius: '40px', backdropFilter: 'blur(24px)',
-                boxShadow: '0 12px 48px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.12)', zIndex: 20
+            <div style={{
+                position: "absolute", bottom: "calc(36px + var(--safe-bottom, 0px))", left: "50%",
+                transform: "translateX(-50%)",
+                display: "flex", gap: "20px", alignItems: "center",
+                background: "rgba(10,14,24,0.92)",
+                padding: "16px 32px", borderRadius: "var(--radius-full)",
+                backdropFilter: "blur(24px)",
+                boxShadow: "0 12px 48px rgba(0,0,0,0.85)",
+                border: "1px solid var(--glass-border)", zIndex: 20
             }}>
-                <button 
-                    onClick={toggleMic}
-                    style={{ width: '56px', height: '56px', borderRadius: '28px', background: micMuted ? 'rgba(232,33,58,0.3)' : 'rgba(255,255,255,0.12)', color: 'white', fontSize: '1.4rem', border: `1px solid ${micMuted ? '#E8213A' : 'rgba(255,255,255,0.2)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                    {micMuted ? '🔇' : '🎤'}
-                </button>
-                <button 
-                    onClick={handleUserEndCall}
-                    style={{ width: '68px', height: '68px', borderRadius: '34px', background: '#E8213A', color: 'white', fontSize: '1.8rem', border: 'none', boxShadow: '0 8px 24px rgba(232,33,58,0.5)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                    📞
-                </button>
-                <button 
-                    onClick={toggleCam}
-                    style={{ width: '56px', height: '56px', borderRadius: '28px', background: camMuted ? 'rgba(232,33,58,0.3)' : 'rgba(255,255,255,0.12)', color: 'white', fontSize: '1.4rem', border: `1px solid ${camMuted ? '#E8213A' : 'rgba(255,255,255,0.2)'}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                >
-                    {camMuted ? '🚫' : '📹'}
-                </button>
+                {/* Mute button */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                    <button
+                        onClick={toggleMic}
+                        style={{
+                            width: "56px", height: "56px", borderRadius: "50%",
+                            background: micMuted ? "rgba(255,51,85,0.85)" : "rgba(255,255,255,0.1)",
+                            color: "white", fontSize: "1.4rem",
+                            border: `2px solid ${micMuted ? "var(--accent-crimson)" : "rgba(255,255,255,0.2)"}`,
+                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s",
+                            boxShadow: micMuted ? "0 4px 16px rgba(255,51,85,0.4)" : "none"
+                        }}
+                    >
+                        {micMuted ? "🔇" : "🎤"}
+                    </button>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>
+                        {micMuted ? "Muteado" : "Mic"}
+                    </span>
+                </div>
+
+                {/* Hang up — center, large */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                    <button
+                        onClick={handleUserEndCall}
+                        style={{
+                            width: "72px", height: "72px", borderRadius: "50%",
+                            background: "linear-gradient(135deg, #FF3355 0%, #C0152A 100%)",
+                            color: "white", fontSize: "1.8rem",
+                            border: "none",
+                            boxShadow: "0 8px 28px rgba(232,33,58,0.6)",
+                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                            transform: "rotate(135deg)"
+                        }}
+                    >
+                        📞
+                    </button>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>Colgar</span>
+                </div>
+
+                {/* Camera button */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+                    <button
+                        onClick={toggleCam}
+                        style={{
+                            width: "56px", height: "56px", borderRadius: "50%",
+                            background: camMuted ? "rgba(255,51,85,0.85)" : "rgba(255,255,255,0.1)",
+                            color: "white", fontSize: "1.4rem",
+                            border: `2px solid ${camMuted ? "var(--accent-crimson)" : "rgba(255,255,255,0.2)"}`,
+                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                            transition: "all 0.2s",
+                            boxShadow: camMuted ? "0 4px 16px rgba(255,51,85,0.4)" : "none"
+                        }}
+                    >
+                        {camMuted ? "🚫" : "📹"}
+                    </button>
+                    <span style={{ fontSize: "0.62rem", color: "rgba(255,255,255,0.5)", fontWeight: 600 }}>
+                        {camMuted ? "Sin cámara" : "Cámara"}
+                    </span>
+                </div>
             </div>
         </div>
     );

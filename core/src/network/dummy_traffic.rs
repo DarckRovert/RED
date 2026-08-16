@@ -275,6 +275,9 @@ pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate
             verified: false,
             blocked: false,
             notes: None,
+            avatar: None,
+            bio: None,
+            last_sync: 0,
         };
         let _ = storage.add_contact(contact);
 

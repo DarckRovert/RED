@@ -1,20 +1,45 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRedStore } from '../store/useRedStore';
-import { getProximityNodes, triggerWaveHandshake, ProximityNode } from '../lib/api';
+import React, { useState, useEffect } from "react";
+import { useRedStore } from "../store/useRedStore";
+import { getProximityNodes, triggerWaveHandshake, ProximityNode, getDiscoveryConfig } from "../lib/api";
+import { toast } from "./Toast";
 
 export const ProximityWaveModal: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, goBack, addContact } = useRedStore();
     const [nodes, setNodes] = useState<ProximityNode[]>([]);
     const [wavingId, setWavingId] = useState<string | null>(null);
+    const [config, setConfig] = useState<any>(null);
+
+    useEffect(() => {
+        getDiscoveryConfig().then(setConfig).catch(() => {});
+    }, []);
 
     const loadProximity = async () => {
         try {
             const list = await getProximityNodes();
-            setNodes(Array.isArray(list) ? list : []);
-        } catch (e) {
-            console.error('Proximity error:', e);
+            let finalNodes = Array.isArray(list) ? list : [];
+            
+            // Apply Proximity Filters locally
+            if (config) {
+                if (config.stealth_mode === "contacts_only") {
+                    const storeContacts = useRedStore.getState().contacts || [];
+                    finalNodes = finalNodes.filter(n => {
+                        const hash = n.identity_hash || n.node_hash;
+                        return storeContacts.some((c: any) => c.identity_hash === hash || hash?.startsWith(c.identity_hash));
+                    });
+                }
+                if (config.rssi_threshold != null) {
+                    finalNodes = finalNodes.filter(n => {
+                        const realRssi = n.rssi ?? n.rssi_dbm;
+                        if (realRssi == null) return true; // Don't filter out TCP/store nodes lacking real RSSI
+                        return realRssi >= config.rssi_threshold!;
+                    });
+                }
+            }
+
+            setNodes(finalNodes);
+        } catch {
             setNodes([]);
         }
     };
@@ -23,16 +48,18 @@ export const ProximityWaveModal: React.FC = () => {
         loadProximity();
         const interval = setInterval(loadProximity, 3000);
         return () => clearInterval(interval);
-    }, []);
+    }, [config]);
 
-    const handleWave = async (targetHash: string) => {
+    const handleWave = async (node: ProximityNode) => {
+        const targetHash = node.identity_hash || node.node_hash || "node";
         setWavingId(targetHash);
         try {
             await triggerWaveHandshake(targetHash);
-            alert('👋 ¡Saludo P2P enviado! Conexión cifrada E2E establecida en proximidad zero-touch.');
-            navigate('chat', targetHash);
+            await addContact(targetHash, node.nickname || node.display_name || targetHash.substring(0, 8));
+            toast.success("👋 ¡Saludo P2P enviado! Enlace cifrado establecido.");
+            navigate("chat", targetHash);
         } catch (e: any) {
-            alert(`Error al saludar: ${e.message}`);
+            toast.error(`Error al saludar: ${e.message}`);
         } finally {
             setWavingId(null);
         }
@@ -40,113 +67,99 @@ export const ProximityWaveModal: React.FC = () => {
 
     return (
         <div style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 900,
-            background: '#04060A',
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            fontFamily: 'Inter, sans-serif'
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
         }}>
-            {/* TOP BAR */}
-            <div style={{
-                height: '60px',
-                padding: '0 20px',
-                borderBottom: '1px solid rgba(255,255,255,0.1)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: 'rgba(15,23,42,0.9)'
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
             }}>
-                <button
-                    onClick={() => navigate('sidebar')}
-                    style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: '#f43f5e',
-                        fontSize: '1.1rem',
-                        cursor: 'pointer',
-                        fontWeight: 700
-                    }}
-                >
-                    ← Volver
-                </button>
-                <div style={{ fontWeight: 800, fontSize: '1rem' }}>
-                    👋 PROXIMIDAD ZERO-TOUCH P2P
-                </div>
-                <button
-                    onClick={() => navigate('proximitySettings')}
-                    style={{
-                        background: 'rgba(244,63,94,0.15)',
-                        border: '1px solid #f43f5e',
-                        color: '#f43f5e',
-                        padding: '6px 12px',
-                        borderRadius: '8px',
-                        fontSize: '0.78rem',
-                        fontWeight: 800,
-                        cursor: 'pointer'
-                    }}
-                >
-                    ⚙️ Filtro Anti-Spam
-                </button>
-            </div>
-
-            {/* MAIN NODES LIST */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{
-                    width: '100%',
-                    maxWidth: '540px',
-                    background: 'rgba(15,23,42,0.6)',
-                    borderRadius: '16px',
-                    border: '1px solid rgba(244,63,94,0.3)',
-                    padding: '20px'
-                }}>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#f43f5e', marginBottom: '16px', letterSpacing: '0.5px' }}>
-                        DISPOSITIVOS DETECTADOS EN PROXIMIDAD INMEDIATA
-                    </div>
-
-                    {nodes.length === 0 ? (
-                        <div style={{ textAlign: 'center', color: '#64748b', padding: '30px', fontSize: '0.9rem' }}>
-                            Buscando dispositivos cercanos... Mantente a menos de 5 metros de otro usuario RED.
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.4)"
+                    }}>👋</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Proximidad Zero-Touch P2P
                         </div>
-                    ) : (
-                        nodes.map((n) => (
-                            <div key={n.identity_hash} style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                background: 'rgba(0,0,0,0.4)',
-                                border: '1px solid rgba(255,255,255,0.08)',
-                                borderRadius: '12px',
-                                padding: '14px',
-                                marginBottom: '12px'
-                            }}>
-                                <div>
-                                    <div style={{ fontWeight: 800, color: '#fff', fontSize: '0.95rem' }}>{n.display_name}</div>
-                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontFamily: 'monospace', marginTop: '2px' }}>
-                                        Distancia: {n.distance_meters !== null ? `~${n.distance_meters}m` : '—'} | RSSI: {n.rssi_dbm !== null ? `${n.rssi_dbm} dBm` : '—'} ({n.transport})
-                                    </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            BLE PROXIMITY WAVE · INSTANT HANDSHAKE
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => navigate("proximity_settings")}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                    >
+                        ⚙️ Filtros
+                    </button>
+                    <button
+                        onClick={goBack}
+                        className="btn-icon"
+                        style={{ width: 38, height: 38 }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            </header>
+
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "20px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>NODOS DETECTADOS POR PROXIMIDAD ({nodes.length})</div>
+
+                        {nodes.length === 0 ? (
+                            <div className="empty-state-tactical">
+                                <div className="empty-state-icon">📡</div>
+                                <div className="empty-state-title">Escaneando Proximidad...</div>
+                                <div className="empty-state-desc">
+                                    Acércate a otro operador RED para intercambiar credenciales de forma táctica.
                                 </div>
-                                <button
-                                    onClick={() => handleWave(n.identity_hash)}
-                                    disabled={wavingId === n.identity_hash}
-                                    style={{
-                                        background: 'linear-gradient(135deg, #f43f5e, #e11d48)',
-                                        border: 'none',
-                                        color: '#fff',
-                                        padding: '10px 18px',
-                                        borderRadius: '10px',
-                                        fontWeight: 800,
-                                        fontSize: '0.85rem',
-                                        cursor: 'pointer'
-                                    }}
-                                >
-                                    {wavingId === n.identity_hash ? '...' : '👋 Saludar P2P'}
-                                </button>
                             </div>
-                        ))
-                    )}
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {nodes.map(n => {
+                                    const hash = n.node_hash || n.identity_hash || "node";
+                                    return (
+                                        <div key={hash} className="card-tactical" style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <div>
+                                                <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>{n.nickname || n.display_name || hash.substring(0, 8)}</div>
+                                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {n.distance_meters ? `~${n.distance_meters.toFixed(1)}m de distancia` : "Proximidad Inmediata"}
+                                                    {(n.rssi != null || n.rssi_dbm != null) ? ` · ${n.rssi ?? n.rssi_dbm} dBm` : " · [Sin lectura de antena]"}
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                onClick={() => handleWave(n)}
+                                                disabled={wavingId === hash}
+                                                className="btn-tactical-primary"
+                                                style={{ padding: "8px 16px", fontSize: "0.80rem" }}
+                                            >
+                                                {wavingId === hash ? "Enlazando..." : "Saludar 👋"}
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

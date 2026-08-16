@@ -9,7 +9,7 @@ mod message;
 mod conversation;
 pub mod group;
 
-pub use message::{Message, MessageId, MessageType, MessageStatus};
+pub use message::{Message, MessageType, MessageId, MessageStatus, SocialPostPayload, P2PVoucherPayload, MedicalTriagePayload};
 pub use conversation::{Conversation, ConversationId};
 pub use group::{Group, GroupId, GroupMember, GroupMessage, MemberRole, GroupError};
 
@@ -45,5 +45,5 @@ pub type ProtocolResult<T> = Result<T, ProtocolError>;
 /// Protocol version
 pub const PROTOCOL_VERSION: u32 = 1;
 
-/// Maximum message size (64 KB)
-pub const MAX_MESSAGE_SIZE: usize = 65536;
+/// Maximum message size (2 MB for multimedia, compressed photos, voice notes & video clips)
+pub const MAX_MESSAGE_SIZE: usize = 2 * 1024 * 1024;

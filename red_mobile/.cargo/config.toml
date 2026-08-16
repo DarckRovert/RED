@@ -1,7 +1,14 @@
-[target.aarch64-linux-android]
-linker = "C:\\Users\\darck\\AppData\\Local\\Android\\Sdk\\ndk\\29.0.14206865\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\aarch64-linux-android35-clang.cmd"
-ar = "C:\\Users\\darck\\AppData\\Local\\Android\\Sdk\\ndk\\29.0.14206865\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\llvm-ar.exe"
+# RED Mobile — Android Build Configuration
+# Fuerza enlace estático de libc++ STL para que libred_mobile.so
+# sea completamente autónomo (no requiere libc++_shared.so en el APK).
 
-[target.armv7-linux-androideabi]
-linker = "C:\\Users\\darck\\AppData\\Local\\Android\\Sdk\\ndk\\29.0.14206865\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\armv7a-linux-androideabi35-clang.cmd"
-ar = "C:\\Users\\darck\\AppData\\Local\\Android\\Sdk\\ndk\\29.0.14206865\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\llvm-ar.exe"
+[target.aarch64-linux-android]
+rustflags = [
+    # Enlace estático de C++ STL — elimina la dependencia de libc++_shared.so
+    "-C", "link-arg=-static-libstdc++",
+    # Incluir libc++_static.a y libc++abi.a del NDK
+    "-C", "link-arg=-lc++_static",
+    "-C", "link-arg=-lc++abi",
+    # Garantiza que libc++_shared NO se enlace dinámicamente
+    "-C", "link-arg=-Wl,--exclude-libs,libc++_shared.so",
+]

@@ -1,23 +1,16 @@
+"use client";
+
 import React, { useState } from "react";
 import { toast } from "../Toast";
 
 interface ImageViewerModalProps {
     src: string;
     alt?: string;
-    onClose: () => void;
+    onClose?: () => void;
 }
 
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, onClose }) => {
     const [zoom, setZoom] = useState(1);
-
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(src);
-            toast.success("✅ Enlace/Base64 copiado.");
-        } catch {
-            toast.error("❌ No se pudo copiar.");
-        }
-    };
 
     const handleDownload = () => {
         const a = document.createElement("a");
@@ -26,76 +19,63 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        toast.success("📥 Imagen guardada.");
+        toast.success("📥 Imagen guardada en almacenamiento local");
     };
 
     return (
-        <div 
-            className="animate-fade"
+        <div
             style={{
-                position: 'fixed', inset: 0, zIndex: 10000,
-                background: 'rgba(5,5,12,0.95)', backdropFilter: 'blur(16px)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                userSelect: 'none',
+                position: "fixed", inset: 0, zIndex: 10000,
+                background: "rgba(3,3,8,0.96)", backdropFilter: "blur(20px)",
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                userSelect: "none",
             }}
             onClick={onClose}
         >
             {/* Header controls */}
-            <div 
+            <div
                 style={{
-                    position: 'absolute', top: 16, right: 16, display: 'flex', gap: '10px', zIndex: 10001
+                    position: "absolute", top: 16, right: 16, display: "flex", gap: "10px", zIndex: 10001
                 }}
                 onClick={e => e.stopPropagation()}
             >
                 <button
                     onClick={() => setZoom(z => (z === 1 ? 1.8 : 1))}
-                    style={{
-                        padding: '8px 14px', borderRadius: '12px',
-                        background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
-                        color: 'white', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
-                        backdropFilter: 'blur(8px)',
-                    }}
+                    className="btn-tactical-secondary"
+                    style={{ padding: "8px 14px", fontSize: "0.78rem" }}
                 >
-                    {zoom === 1 ? '🔍 Zoom 1.8x' : '🔎 Zoom 1x'}
+                    {zoom === 1 ? "🔍 Zoom 1.8x" : "🔎 Zoom 1x"}
                 </button>
                 <button
                     onClick={handleDownload}
-                    style={{
-                        padding: '8px 14px', borderRadius: '12px',
-                        background: 'rgba(0,217,126,0.15)', border: '1px solid rgba(0,217,126,0.3)',
-                        color: '#00D97E', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer',
-                        backdropFilter: 'blur(8px)',
-                    }}
+                    className="btn-tactical-primary"
+                    style={{ padding: "8px 14px", fontSize: "0.78rem" }}
                 >
                     📥 Guardar
                 </button>
                 <button
                     onClick={onClose}
-                    style={{
-                        padding: '8px 14px', borderRadius: '12px',
-                        background: 'rgba(232,33,58,0.2)', border: '1px solid rgba(232,33,58,0.4)',
-                        color: '#ff4444', fontWeight: 800, fontSize: '0.9rem', cursor: 'pointer',
-                        backdropFilter: 'blur(8px)',
-                    }}
+                    className="btn-icon"
+                    style={{ width: 36, height: 36 }}
                 >
                     ✕
                 </button>
             </div>
 
             {/* Main Image */}
-            <div 
+            <div
                 style={{
-                    maxWidth: '92vw', maxHeight: '82vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'transform 0.25s var(--ease-spring)', transform: `scale(${zoom})`,
+                    maxWidth: "92vw", maxHeight: "82vh", display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "transform 0.25s ease", transform: `scale(${zoom})`,
                 }}
                 onClick={e => e.stopPropagation()}
             >
-                <img 
-                    src={src} 
-                    alt={alt || "Adjunto HD"} 
+                <img
+                    src={src}
+                    alt={alt || "Adjunto Táctico HD"}
                     style={{
-                        maxWidth: '100%', maxHeight: '82vh', objectFit: 'contain', borderRadius: '16px',
-                        boxShadow: '0 20px 60px rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)'
+                        maxWidth: "100%", maxHeight: "82vh", objectFit: "contain", borderRadius: "16px",
+                        boxShadow: "0 20px 60px rgba(0,0,0,0.9)", border: "1px solid var(--glass-border)"
                     }}
                 />
             </div>

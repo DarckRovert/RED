@@ -7,632 +7,316 @@ import { BlackoutSimulatorModal } from "./BlackoutSimulatorModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
 import { DnsTunnelEngine } from "../lib/dnsTunnelEngine";
 import { SniSpoofEngine } from "../lib/sniSpoofEngine";
+import { toast } from "./Toast";
 
 export default function NetworkPanel() {
     const { goBack, status, connectPeer } = useRedStore();
-    const [localIp, setLocalIp] = useState('…');
+    const [localIp, setLocalIp] = useState("…");
     const [loraEnabled, setLoraEnabled] = useState(false);
-    const [loraPort, setLoraPort] = useState('/dev/ttyUSB0');
-    const [loraBaud, setLoraBaud] = useState('115200');
-    const [saved, setSaved] = useState(false);
-    const [copied, setCopied] = useState(false);
-    // Real peer counts keyed by transport type from /api/peers
+    const [loraPort, setLoraPort] = useState("/dev/ttyUSB0");
+    const [loraBaud, setLoraBaud] = useState("115200");
     const [peersByTransport, setPeersByTransport] = useState<Record<string, number>>({ wifi: 0, ble: 0, lorawan: 0, tcp: 0, quic: 0 });
-    const [lanLatencyMs, setLanLatencyMs] = useState<number>(4);
-    const [bleLatencyMs, setBleLatencyMs] = useState<number>(18);
-    const [qrDataUrl, setQrDataUrl] = useState<string>('');
-
+    
     // AI Coverage Diagnostic States
     const [aiNetworkDiag, setAiNetworkDiag] = useState<string | null>(null);
     const [diagLoading, setDiagLoading] = useState(false);
 
     // Manual connection states
-    const [manualAddress, setManualAddress] = useState('');
+    const [manualAddress, setManualAddress] = useState("");
     const [connectingManual, setConnectingManual] = useState(false);
-    const [connectStatus, setConnectStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [blackoutModalOpen, setBlackoutModalOpen] = useState(false);
 
     // Covert Channel Dynamic Tunnel States
-    const [dnsStats, setDnsStats] = useState(DnsTunnelEngine.getStats());
-    const [sniStats, setSniStats] = useState(SniSpoofEngine.getStats());
     const [tunnelTesting, setTunnelTesting] = useState(false);
     const [testResult, setTestResult] = useState<string | null>(null);
 
     const handleTestTunnel = async () => {
         setTunnelTesting(true);
         setTestResult(null);
-        const testPayload = "6d079229_NOISE_XK_TEST_PACKET_V30";
-        const queries = DnsTunnelEngine.packPayloadIntoDnsQuery(testPayload);
-        const res = await DnsTunnelEngine.transmitDnsQuery(queries[0]);
-        const sniRes = await SniSpoofEngine.transmitSniBypass(testPayload);
-        setDnsStats(DnsTunnelEngine.getStats());
-        setSniStats(SniSpoofEngine.getStats());
-        setTestResult(`✅ Trama DNS Base32 enviada en ${res.latencyMs}ms (${res.responseTxt}) | Fronting SNI: ${sniRes.provider}`);
-        setTunnelTesting(false);
+        try {
+            const testPayload = "6d079229_NOISE_XK_TEST_PACKET_V30";
+            const queries = DnsTunnelEngine.packPayloadIntoDnsQuery(testPayload);
+            const res = await DnsTunnelEngine.transmitDnsQuery(queries[0]);
+            const sniRes = await SniSpoofEngine.transmitSniBypass(testPayload);
+            
+            if (res.success || sniRes.success) {
+                setTestResult(`✅ Trama Base32 enviada | DNS: ${res.latencyMs}ms | SNI Fronting: ${sniRes.latencyMs}ms`);
+                toast.success("Prueba de canal encubierto exitosa");
+            } else {
+                setTestResult(`❌ Fallo de Túnel: DoH bloqueado | SNI: ${sniRes.reason || "Bloqueado"}`);
+                toast.error("Canales encubiertos bloqueados");
+            }
+        } catch {
+            setTestResult("⚠️ Error crítico al simular canal encubierto");
+        } finally {
+            setTunnelTesting(false);
+        }
     };
 
     const handleConnectManual = async () => {
-        if (!manualAddress.trim()) return;
+        if (!manualAddress.trim()) {
+            toast.warning("Ingresa la dirección Multiaddr del par");
+            return;
+        }
         setConnectingManual(true);
-        setConnectStatus('idle');
         try {
             const ok = await connectPeer(manualAddress.trim());
             if (ok) {
-                setConnectStatus('success');
-                setManualAddress('');
+                toast.success("✅ Conectado al par con éxito");
+                setManualAddress("");
             } else {
-                setConnectStatus('error');
+                toast.error("No se pudo conectar al par");
             }
         } catch {
-            setConnectStatus('error');
+            toast.error("Error de conexión");
         } finally {
             setConnectingManual(false);
-            setTimeout(() => setConnectStatus('idle'), 4000);
         }
     };
 
     useEffect(() => {
-        setLoraEnabled(localStorage.getItem('red_lora_enabled') === 'true');
-        setLoraPort(localStorage.getItem('red_lora_port') || '/dev/ttyUSB0');
-        setLoraBaud(localStorage.getItem('red_lora_baud') || '115200');
+        setLoraEnabled(typeof window !== "undefined" && localStorage.getItem("red_lora_enabled") === "true");
+        setLoraPort((typeof window !== "undefined" && localStorage.getItem("red_lora_port")) || "/dev/ttyUSB0");
+        setLoraBaud((typeof window !== "undefined" && localStorage.getItem("red_lora_baud")) || "115200");
 
-        // Fetch REAL local IP from Rust node or via WebRTC ICE trick
         const fetchIp = async () => {
             try {
-                const res = await fetch('http://127.0.0.1:7333/api/network/ip', { signal: AbortSignal.timeout(2000) });
-                if (res.ok) { const d = await res.json(); setLocalIp(d.local_ip || d.ip || '127.0.0.1'); return; }
+                const res = await fetch("http://127.0.0.1:7333/api/network/ip", { signal: AbortSignal.timeout(2000) });
+                if (res.ok) { const d = await res.json(); setLocalIp(d.local_ip || d.ip || "127.0.0.1"); return; }
             } catch {}
-            // WebRTC ICE fallback — works offline, gets real LAN IP
-            try {
-                const pc = new RTCPeerConnection({ iceServers: [] });
-                pc.createDataChannel('');
-                pc.createOffer().then(o => pc.setLocalDescription(o));
-                pc.onicecandidate = e => {
-                    if (!e.candidate) return;
-                    const match = e.candidate.candidate.match(/([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})/);
-                    if (match && !match[1].startsWith('127.')) { setLocalIp(match[1]); pc.close(); }
-                };
-                setTimeout(() => pc.close(), 3000);
-            } catch { setLocalIp('127.0.0.1'); }
+            setLocalIp("No Disponible (Offline)");
         };
         fetchIp();
 
-        // Pull REAL peer transport breakdown & RTT latency from /api/peers every 3s
-        const refreshPeers = async () => {
+        const updateTransportMetrics = async () => {
             try {
                 const peers = await RedAPI.getPeers();
                 const counts: Record<string, number> = { wifi: 0, ble: 0, lorawan: 0, tcp: 0, quic: 0 };
-                let totalLanLat = 0, lanCount = 0;
-                let totalBleLat = 0, bleCount = 0;
-
                 for (const p of peers) {
-                    const t = (p.transport || '').toLowerCase();
-                    const lat = p.latency_ms || status?.gossip_latency_ms || 4;
-                    if (t === 'wifi_direct' || t === 'websocket' || t === 'quic' || t === 'tcp') {
-                        if (t === 'wifi_direct' || t === 'websocket') counts.wifi++;
-                        if (t === 'quic') counts.quic++;
-                        if (t === 'tcp') counts.tcp++;
-                        totalLanLat += lat;
-                        lanCount++;
-                    } else if (t === 'ble') {
-                        counts.ble++;
-                        totalBleLat += lat;
-                        bleCount++;
-                    } else if (t === 'lorawan' || t === 'lora') {
-                        counts.lorawan++;
-                    }
+                    const t = (p.transport || "").toLowerCase();
+                    if (t === "wifi_direct" || t === "websocket") counts.wifi++;
+                    else if (t === "ble") counts.ble++;
+                    else if (t === "lorawan" || t === "lora") counts.lorawan++;
+                    else if (t === "tcp") counts.tcp++;
+                    else if (t === "quic") counts.quic++;
                 }
                 setPeersByTransport(counts);
-                setLanLatencyMs(lanCount > 0 ? Math.round(totalLanLat / lanCount) : (status?.gossip_latency_ms || 4));
-                setBleLatencyMs(bleCount > 0 ? Math.round(totalBleLat / bleCount) : 18);
-            } catch {
-                setLanLatencyMs(status?.gossip_latency_ms || 4);
-                setBleLatencyMs(18);
-            }
+            } catch {}
         };
-        refreshPeers();
-        const t = setInterval(refreshPeers, 3000);
-        return () => clearInterval(t);
-    }, [status?.gossip_latency_ms]);
+        updateTransportMetrics();
+        const interval = setInterval(updateTransportMetrics, 3000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleSaveLora = async () => {
+        if (typeof window !== "undefined") {
+            localStorage.setItem("red_lora_enabled", loraEnabled ? "true" : "false");
+            localStorage.setItem("red_lora_port", loraPort);
+            localStorage.setItem("red_lora_baud", loraBaud);
+        }
+        try {
+            await RedAPI.configureHardwareLoRa({ enabled: loraEnabled, port: loraPort, baud: loraBaud });
+            toast.success("⚙️ Configuración LoRa aplicada en el Hardware");
+        } catch (e: any) {
+            toast.error("⚠️ Configurado localmente, pero el nodo físico no respondió.");
+        }
+    };
 
     const handleRunAiDiag = async () => {
         setDiagLoading(true);
         setAiNetworkDiag(null);
         try {
-            const wifiCount = peersByTransport.wifi + peersByTransport.quic;
-            const bleCount = peersByTransport.ble;
-            const totalPeers = wifiCount + bleCount;
-
-            let diagSummary = "";
-            if (totalPeers === 0 && !loraEnabled) {
-                diagSummary = "Modo Autónomo (Standalone): Tu dispositivo opera de forma aislada. Alcance limitado al radio local del teléfono. Activa el puente LoRaWAN o acerca dispositivos BLE/WiFi vecinos para extender la malla hasta 10km.";
-            } else {
-                const prompt = `Contexto: Red Mesh con ${wifiCount} nodos WiFi, ${bleCount} nodos BLE, LoRaWAN ${loraEnabled ? 'activo' : 'inactivo'}.
-Instrucción: Evalúa en 2 oraciones en español el alcance de la red.
-Respuesta: Con esta topología, la cobertura de la red es`;
-                const res = await LocalAIEngine.generateCopilotResponse(prompt);
-                let text = res.answer
-                    .replace(/🤖 COPILOTO IA NEURONAL REAL \(LaMini-Flan-T5 ONNX WASM\)\n\n/g, '')
-                    .replace(/📚 \[Fundamento RAG Táctico:.*\]/g, '')
-                    .replace(/Pregunta:.*?\?/g, '')
-                    .trim();
-
-                // Sanitize T5 loops or fallback cleanly
-                if (text.length < 15 || text.includes('Requires a') || text.includes('el diagnóstico es el diagnóstico')) {
-                    diagSummary = `Red Mesh activa con ${totalPeers} nodo(s) de pares (${wifiCount} WiFi/QUIC, ${bleCount} BLE). ${loraEnabled ? 'Puente LoRaWAN listo (cobertura extendida hasta 10km).' : 'Puente LoRaWAN desactivado (alcance local ~50m).'}`;
-                } else {
-                    diagSummary = text.startsWith('Con esta topología') ? text : `Con esta topología, la cobertura de la red es: ${text}`;
-                }
-            }
-            setAiNetworkDiag(diagSummary);
+            const prompt = `Evalúa la topología de red P2P. Nodos activos por transporte: ${peersByTransport.ble} BLE, ${peersByTransport.wifi} WiFi/WS, ${peersByTransport.lorawan} LoRaWAN, ${peersByTransport.tcp} TCP, ${peersByTransport.quic} QUIC.`;
+            const res = await LocalAIEngine.generateCopilotResponse(prompt);
+            setAiNetworkDiag(res.answer || "El modelo no generó una respuesta válida.");
         } catch (e: any) {
-            setAiNetworkDiag(`⚠️ Error en diagnóstico ONNX: ${e.message}`);
+            setAiNetworkDiag(`⚠️ Error del motor de IA Local: ${e.message || "LLM inaccesible. Verifique que el servicio llama.cpp esté corriendo en el puerto 8080."}`);
+            toast.error("No se pudo contactar a la IA local");
         } finally {
             setDiagLoading(false);
         }
     };
 
-    const toggleLora = () => {
-        const next = !loraEnabled;
-        setLoraEnabled(next);
-        localStorage.setItem("red_lora_enabled", next.toString());
-    };
-
-    const saveLoraConfig = () => {
-        localStorage.setItem("red_lora_port", loraPort);
-        localStorage.setItem("red_lora_baud", loraBaud);
-        // Also send to Rust backend so serial bridge can hot-reload config
-        RedAPI.req('/settings/lora', {
-            method: 'POST',
-            body: JSON.stringify({ port: loraPort, baud: parseInt(loraBaud, 10) })
-        }).catch(() => {/* non-fatal if node offline */});
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-    };
-
-    const apkUrl = `http://${localIp}:7331/api/mesh/apk`;
-
-    const copyUrl = () => {
-        navigator.clipboard.writeText(apkUrl).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        });
-    };
-
-    useEffect(() => {
-        if (!apkUrl.includes('…')) {
-            import('qrcode').then(QRCode => {
-                QRCode.toDataURL(apkUrl, {
-                    width: 400, margin: 1, color: { dark: '#111111', light: '#ffffff' }
-                }).then(setQrDataUrl);
-            });
-        }
-    }, [apkUrl]);
-
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)' }}>
-
-            {/* Header */}
-            <header className="glass-panel" style={{
-                padding: '0 20px',
-                height: 'var(--header-h)',
-                display: 'flex', alignItems: 'center', gap: '16px',
-                borderRadius: '0 0 var(--radius-lg) var(--radius-lg)',
-                borderTop: 'none', zIndex: 10, flexShrink: 0,
-                background: 'linear-gradient(180deg, rgba(15,15,24,0.98) 0%, rgba(8,8,16,0.98) 100%)',
+        <div style={{
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
+        }}>
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
             }}>
-                <button onClick={goBack} className="btn-icon">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="15 18 9 12 15 6"/>
-                    </svg>
-                </button>
-                <div>
-                    <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Red & Emisión</h2>
-                    <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)', letterSpacing: '0.3px' }}>Distribución Mesh · LoRaWAN Bridge</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.4)"
+                    }}>🌐</div>
+                    <div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Ingeniería de Redes & Transportes
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            SWARM TOPOLOGY · LORA SERIAL · COVERT CHANNELS
+                        </div>
+                    </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => setBlackoutModalOpen(true)}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                    >
+                        ⚡ Apagón
+                    </button>
+                    <button
+                        onClick={goBack}
+                        className="btn-icon"
+                        title="Cerrar panel"
+                        style={{ width: 38, height: 38 }}
+                    >
+                        ✕
+                    </button>
                 </div>
             </header>
 
-            <div className="scroll-container no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '20px 16px calc(80px + var(--safe-bottom, 0px)) 16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                {/* Transport Status Row — real counts from /api/peers */}
-                <div style={{ display: 'flex', gap: '10px' }}>
-                    {[
-                        { label: 'WiFi/QUIC', icon: '📶', color: '#00D97E', count: peersByTransport.wifi + peersByTransport.quic },
-                        { label: 'BLE',       icon: '🔵', color: '#3498db', count: peersByTransport.ble },
-                        { label: 'LoRa',      icon: '📻', color: '#9b59b6', count: loraEnabled ? peersByTransport.lorawan : -1 },
-                    ].map(t => {
-                        const active = t.count > 0 || (t.label === 'LoRa' && loraEnabled && t.count >= 0);
-                        return (
-                        <div key={t.label} style={{
-                            flex: 1, padding: '12px 10px', borderRadius: 'var(--radius-md)',
-                            background: active ? `${t.color}10` : 'var(--bg-lifted)',
-                            border: `1px solid ${active ? t.color + '35' : 'var(--solid-border)'}`,
-                            textAlign: 'center', transition: 'all 0.3s ease',
-                        }}>
-                            <div style={{ fontSize: '1.3rem', marginBottom: '4px' }}>{t.icon}</div>
-                            <div style={{ fontSize: '10px', fontWeight: 700, color: active ? t.color : 'var(--text-muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
-                                {t.label}
-                            </div>
-                            {t.count > 0 && <div style={{ fontSize: '9px', color: t.color, fontWeight: 800, marginTop: 2 }}>{t.count} nodo{t.count !== 1 ? 's' : ''}</div>}
-                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: active ? t.color : 'var(--text-muted)', margin: '6px auto 0', boxShadow: active ? `0 0 6px ${t.color}` : 'none', transition: 'all 0.3s ease' }} />
-                        </div>
-                        );
-                    })}
-                </div>
-
-                {/* Covert Channel: DNS Tunneling & SNI Zero-Rating Bypass */}
-                    <div style={{
-                        background: 'linear-gradient(135deg, rgba(15,23,42,0.98), rgba(8,8,16,0.98))',
-                        borderRadius: 'var(--radius-lg)', border: '1px solid rgba(56,189,248,0.3)',
-                        overflow: 'hidden', margin: '10px 0'
-                    }}>
-                        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{
-                                width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-                                background: 'linear-gradient(135deg, #0EA5E9, #0284C7)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                boxShadow: '0 4px 16px rgba(14,165,233,0.4)',
-                                fontSize: '1.1rem', color: '#FFF'
-                            }}>📡</div>
-                            <div>
-                                <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Canal Encubierto (DNS / SNI Bypass)</div>
-                                <div style={{ fontSize: '0.73rem', color: '#38BDF8', marginTop: '2px' }}>Evasión de Saldo Celular ($0 Costo) • Puerto UDP 53 / DoH</div>
-                            </div>
-                        </div>
-                        <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', color: '#CBD5E1' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Proveedor DNS DoH:</span>
-                                <strong style={{ color: '#00E676' }}>{dnsStats.activeProvider}</strong>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Estado de Evasión SNI:</span>
-                                <strong style={{ color: '#38BDF8' }}>100% ACTIVO ({sniStats.currentHostFront})</strong>
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Latencia de Tunelización:</span>
-                                <strong style={{ color: '#FFF' }}>{dnsStats.lastResponseTimeMs} ms (UDP 53 Base32) • Paquetes: {dnsStats.packetsSent}</strong>
-                            </div>
-
-                            {testResult && (
-                                <div style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(0,230,118,0.15)', border: '1px solid rgba(0,230,118,0.4)', color: '#00E676', fontSize: '11px', fontWeight: 600 }}>
-                                    {testResult}
-                                </div>
-                            )}
-
-                            <button
-                                onClick={handleTestTunnel}
-                                disabled={tunnelTesting}
-                                style={{
-                                    marginTop: '6px',
-                                    padding: '10px 16px',
-                                    borderRadius: '10px',
-                                    background: 'linear-gradient(90deg, #0EA5E9 0%, #0284C7 100%)',
-                                    color: '#FFF',
-                                    fontWeight: 700,
-                                    fontSize: '12px',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    boxShadow: '0 4px 14px rgba(14,165,233,0.3)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '8px',
-                                }}
-                            >
-                                {tunnelTesting ? "📡 PROBANDO TRAMA BASE32..." : "⚡ PROBAR TUNELIZACIÓN EN VIVO (UDP 53 / DoH)"}
-                            </button>
-                        </div>
-                    </div>
-
-                {/* Mesh APK Distributor */}
-                <div style={{
-                    background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
-                    borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
-                    overflow: 'hidden',
-                }}>
-                    {/* Card header */}
-                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{
-                            width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-                            background: 'linear-gradient(135deg, var(--primary), #FF3355)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 4px 16px rgba(232,33,58,0.4)',
-                            fontSize: '1.1rem',
-                        }}>🔗</div>
+                    {/* Tarjeta de Dirección IP Local */}
+                    <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                            <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Distribuidor Mesh (APK)</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>Comparte RED sin internet — vía WiFi local</div>
-                        </div>
-                    </div>
-
-                    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                        {/* QR Code visual (Real) */}
-                        <div style={{
-                            background: 'white', padding: '12px', borderRadius: 'var(--radius-md)',
-                            position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 8px 32px rgba(0,0,0,0.5)', minWidth: 200, minHeight: 200
-                        }}>
-                            {qrDataUrl ? (
-                                <img src={qrDataUrl} alt="APK QR Code" style={{ width: 180, height: 180, display: 'block', borderRadius: 4 }} />
-                            ) : (
-                                <div style={{ color: '#888', fontSize: '0.85rem' }}>Generando QR...</div>
-                            )}
-
-                            {/* Center R badge */}
-                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <div style={{
-                                    background: 'var(--primary)', width: 40, height: 40, borderRadius: '50%',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    color: 'white', fontWeight: 900, fontSize: '1.1rem',
-                                    boxShadow: '0 0 12px rgba(232,33,58,0.6)',
-                                    border: '3px solid white',
-                                }}>R</div>
+                            <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>DIRECCIÓN IP DE NODO (LAN/MESH)</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                {localIp}
                             </div>
                         </div>
-
-                        {/* APK URL */}
-                        <div style={{
-                            width: '100%', background: 'var(--bg-deep)', borderRadius: 'var(--radius-md)',
-                            border: '1px solid var(--solid-border)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '12px 16px', gap: '12px',
-                        }}>
-                            <code style={{ color: 'var(--primary-bright)', fontSize: '0.85rem', letterSpacing: '0.5px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {apkUrl}
-                            </code>
-                            <button
-                                onClick={copyUrl}
-                                style={{
-                                    flexShrink: 0, padding: '6px 14px', borderRadius: 'var(--radius-sm)',
-                                    background: copied ? 'rgba(0,217,126,0.15)' : 'var(--primary-subtle)',
-                                    border: `1px solid ${copied ? 'var(--success)' : 'var(--glass-border-active)'}`,
-                                    color: copied ? 'var(--success)' : 'var(--primary-bright)',
-                                    fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
-                                    transition: 'all 0.2s ease',
-                                }}
-                            >
-                                {copied ? '✓ Copiado' : 'Copiar'}
-                            </button>
-                        </div>
+                        <span className="badge-tactical badge-tactical-emerald">PUERTO 7333</span>
                     </div>
-                </div>
 
-                {/* Conexión Manual P2P (WAN / Internet / 4G / 5G / LAN) */}
-                <div style={{
-                    background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
-                    borderRadius: 'var(--radius-lg)', border: '1px solid var(--solid-border)',
-                    overflow: 'hidden',
-                }}>
-                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{
-                            width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-                            background: 'linear-gradient(135deg, #00D97E, #26A69A)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: '0 4px 16px rgba(0,217,126,0.3)',
-                            fontSize: '1.1rem',
-                        }}>🌐</div>
-                        <div>
-                            <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Conexión Larga Distancia (WAN / 4G / 5G / Internet)</div>
-                            <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>Conéctate a nodos remotos en otras redes mediante IP pública, Dominio o Relay</div>
-                        </div>
-                    </div>
-                    <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <span><strong>Formatos Soportados (WAN & LAN):</strong></span>
-                            <code style={{ color: 'var(--primary-bright)', fontSize: '0.72rem' }}>/dns4/nodo.midominio.com/tcp/7331 (Dominio WAN)</code>
-                            <code style={{ color: '#00D97E', fontSize: '0.72rem' }}>/ip4/200.x.x.x/tcp/7331 (IP Pública 4G/5G/Fibra)</code>
-                            <code style={{ color: '#3498db', fontSize: '0.72rem' }}>/ip4/192.168.1.50/tcp/7331 (WiFi Local)</code>
-                        </div>
+                    {/* Conectar a Par Manualmente */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>Conectar Manualmente a Nodo P2P</div>
                         <input
-                            type="text"
-                            placeholder="Ej. /dns4/nodo.redapp.org/tcp/7331 o /ip4/201.55.12.8/tcp/7331"
                             value={manualAddress}
                             onChange={e => setManualAddress(e.target.value)}
-                            style={{
-                                padding: '12px 14px', background: 'rgba(0,0,0,0.5)',
-                                border: '1px solid var(--solid-border)',
-                                borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
-                                fontSize: '0.85rem', outline: 'none', fontFamily: 'JetBrains Mono, monospace',
-                            }}
+                            placeholder="Multiaddr (ej: /ip4/192.168.1.50/tcp/7333/p2p/...)"
+                            style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem" }}
                         />
                         <button
                             onClick={handleConnectManual}
-                            disabled={!manualAddress.trim() || connectingManual}
-                            style={{
-                                width: '100%', padding: '12px', borderRadius: 'var(--radius-md)',
-                                background: connectStatus === 'success' ? 'rgba(0,217,126,0.15)' : (connectStatus === 'error' ? 'rgba(232,33,58,0.15)' : 'var(--primary-subtle)'),
-                                border: `1px solid ${connectStatus === 'success' ? 'var(--success)' : (connectStatus === 'error' ? 'var(--danger)' : 'var(--glass-border-active)')}`,
-                                color: connectStatus === 'success' ? 'var(--success)' : (connectStatus === 'error' ? 'var(--danger)' : 'var(--primary-bright)'),
-                                fontWeight: 700, fontSize: '0.9rem', cursor: manualAddress.trim() ? 'pointer' : 'not-allowed',
-                                transition: 'all 0.3s ease',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
-                            }}
+                            disabled={connectingManual || !manualAddress.trim()}
+                            className="btn-tactical-primary"
+                            style={{ padding: "12px", fontSize: "0.88rem" }}
                         >
-                            {connectingManual ? (
-                                <div style={{ width: 14, height: 14, borderRadius: '50%', border: '2px solid currentColor', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
-                            ) : connectStatus === 'success' ? (
-                                '✓ Conexión WAN Iniciada'
-                            ) : connectStatus === 'error' ? (
-                                '✗ Error al Conectar (Verifica IP/Dominio)'
-                            ) : (
-                                'Conectar por Internet / WAN'
-                            )}
+                            {connectingManual ? "Estableciendo enlace..." : "⚡ CONECTAR AL PAR"}
                         </button>
                     </div>
-                </div>
 
-                {/* LoRaWAN Bridge */}
-                <div style={{
-                    background: 'linear-gradient(135deg, rgba(13,13,22,0.98), rgba(8,8,16,0.98))',
-                    borderRadius: 'var(--radius-lg)', border: `1px solid ${loraEnabled ? 'rgba(155,89,182,0.35)' : 'var(--solid-border)'}`,
-                    overflow: 'hidden',
-                    transition: 'border-color 0.3s ease',
-                    boxShadow: loraEnabled ? '0 0 20px rgba(155,89,182,0.10)' : 'none',
-                }}>
-                    <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{
-                                width: 40, height: 40, borderRadius: 'var(--radius-sm)',
-                                background: loraEnabled ? 'linear-gradient(135deg, #6c3483, #9b59b6)' : 'var(--bg-lifted)',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '1.2rem', transition: 'all 0.3s ease',
-                                boxShadow: loraEnabled ? '0 4px 16px rgba(155,89,182,0.4)' : 'none',
-                            }}>📻</div>
-                            <div>
-                                <div style={{ fontWeight: 800, color: 'var(--text-primary)', fontSize: '0.98rem' }}>Puente LoRaWAN P2P</div>
-                                <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', marginTop: '2px' }}>Antena RF por USB-C Serial · hasta 10km</div>
+                    {/* Banco de Pruebas de Canales Encubiertos */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div>
+                            <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                🕶️ Canales Encubiertos Anti-Censura (DNS & SNI)
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                Permite enrutar paquetes Noise cifrados camuflados como consultas DNS estándar o SNI Fronting.
                             </div>
                         </div>
-                        {/* Premium toggle */}
-                        <div
-                            onClick={toggleLora}
-                            style={{
-                                width: 52, height: 28, borderRadius: '14px', cursor: 'pointer',
-                                background: loraEnabled ? 'linear-gradient(135deg, #6c3483, #9b59b6)' : 'var(--bg-lifted)',
-                                border: `1px solid ${loraEnabled ? 'rgba(155,89,182,0.5)' : 'var(--solid-border)'}`,
-                                position: 'relative', transition: 'all 0.3s ease',
-                                boxShadow: loraEnabled ? '0 0 12px rgba(155,89,182,0.3)' : 'none',
-                                flexShrink: 0,
-                            }}
+
+                        <button
+                            onClick={handleTestTunnel}
+                            disabled={tunnelTesting}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "10px", fontSize: "0.82rem" }}
                         >
-                            <div style={{
-                                position: 'absolute', top: 3, width: 22, height: 22, borderRadius: '50%',
-                                background: 'white',
-                                left: loraEnabled ? 27 : 3,
-                                transition: 'left 0.3s ease',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
-                            }} />
-                        </div>
+                            {tunnelTesting ? "Transmitiendo paquetes de prueba..." : "⚡ PROBAR TÚNEL DNS / SNI"}
+                        </button>
+
+                        {testResult && (
+                            <div className="card-tactical animate-pop" style={{ padding: "12px", background: "rgba(0,229,255,0.06)", borderColor: "var(--accent-cyan)" }}>
+                                <div style={{ fontSize: "0.78rem", color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>{testResult}</div>
+                            </div>
+                        )}
                     </div>
 
-                    <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            {[
-                                { label: 'Puerto Módulo', value: loraPort, setter: setLoraPort, placeholder: '/dev/ttyUSB0' },
-                                { label: 'Baud Rate', value: loraBaud, setter: setLoraBaud, placeholder: '115200' },
-                            ].map(f => (
-                                <div key={f.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.3px', textTransform: 'uppercase' }}>{f.label}</label>
+                    {/* Configuración de Hardware LoRa Serial */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                                <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>Módulo Hardware LoRaWAN Serial</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Conexión a transceptor SX1262/SX1276 por USB OTG</div>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={loraEnabled}
+                                onChange={e => setLoraEnabled(e.target.checked)}
+                                style={{ width: "20px", height: "20px", accentColor: "var(--accent-purple, #B388FF)" }}
+                            />
+                        </div>
+
+                        {loraEnabled && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "6px" }}>
+                                <div style={{ display: "flex", gap: "8px" }}>
                                     <input
-                                        type="text"
-                                        value={f.value}
-                                        onChange={e => f.setter(e.target.value)}
-                                        disabled={!loraEnabled}
-                                        placeholder={f.placeholder}
-                                        style={{
-                                            padding: '10px 14px', background: loraEnabled ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)',
-                                            border: `1px solid ${loraEnabled ? 'rgba(155,89,182,0.3)' : 'var(--solid-border)'}`,
-                                            borderRadius: 'var(--radius-sm)', color: loraEnabled ? 'var(--text-primary)' : 'var(--text-disabled)',
-                                            fontSize: '0.85rem', outline: 'none', fontFamily: 'JetBrains Mono, monospace',
-                                            transition: 'all 0.3s ease',
-                                        }}
+                                        value={loraPort}
+                                        onChange={e => setLoraPort(e.target.value)}
+                                        placeholder="Puerto (ej: /dev/ttyUSB0)"
+                                        style={{ flex: 2, fontSize: "0.82rem" }}
+                                    />
+                                    <input
+                                        value={loraBaud}
+                                        onChange={e => setLoraBaud(e.target.value)}
+                                        placeholder="Baud (115200)"
+                                        style={{ flex: 1, fontSize: "0.82rem" }}
                                     />
                                 </div>
-                            ))}
-                        </div>
+                                <button
+                                    onClick={handleSaveLora}
+                                    className="btn-tactical-primary"
+                                    style={{ padding: "10px", fontSize: "0.82rem", background: "linear-gradient(135deg, #7C4DFF 0%, #5E35B1 100%)" }}
+                                >
+                                    💾 Guardar Parámetros LoRa
+                                </button>
+                            </div>
+                        )}
+                    </div>
 
+                    {/* Diagnóstico con IA Local */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                         <button
-                            onClick={saveLoraConfig}
-                            disabled={!loraEnabled}
-                            style={{
-                                width: '100%', padding: '12px', borderRadius: 'var(--radius-md)',
-                                background: saved ? 'rgba(0,217,126,0.15)' : (loraEnabled ? 'rgba(155,89,182,0.15)' : 'var(--bg-lifted)'),
-                                border: `1px solid ${saved ? 'var(--success)' : (loraEnabled ? 'rgba(155,89,182,0.4)' : 'var(--solid-border)')}`,
-                                color: saved ? 'var(--success)' : (loraEnabled ? '#9b59b6' : 'var(--text-disabled)'),
-                                fontWeight: 700, fontSize: '0.9rem', cursor: loraEnabled ? 'pointer' : 'not-allowed',
-                                transition: 'all 0.3s ease',
-                            }}
+                            onClick={handleRunAiDiag}
+                            disabled={diagLoading}
+                            className="btn-tactical-secondary"
+                            style={{ width: "100%", padding: "12px", fontSize: "0.85rem" }}
                         >
-                            {saved ? '✓ Configuración Guardada' : 'Aplicar Configuración LoRa'}
+                            {diagLoading ? "Auditando topología de malla..." : "🤖 EVALUAR TOPOLOGÍA DE RED (IA LOCAL)"}
                         </button>
+
+                        {aiNetworkDiag && (
+                            <div className="card-tactical animate-pop" style={{ padding: "14px", background: "rgba(0,229,255,0.06)", borderColor: "var(--accent-cyan)" }}>
+                                <div style={{ fontSize: "0.85rem", color: "#fff", lineHeight: 1.4 }}>
+                                    {aiNetworkDiag}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
-
-                {/* Real-time Mesh Latency RTT Telemetry Card & AI Coverage Diagnostic */}
-                <div style={{
-                    borderRadius: 'var(--radius-lg)', border: '1px solid rgba(41,182,246,0.25)',
-                    overflow: 'hidden', background: 'linear-gradient(135deg, rgba(10,20,35,0.95), rgba(5,10,18,0.98))',
-                    padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#29B6F6' }}>Telemetría de Latencia Mesh (RTT)</div>
-                        <button
-                            onClick={() => setBlackoutModalOpen(true)}
-                            style={{
-                                padding: '6px 12px', borderRadius: '10px',
-                                background: 'rgba(232,33,58,0.15)', border: '1px solid rgba(232,33,58,0.3)',
-                                color: 'var(--primary-bright)', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer'
-                            }}
-                        >
-                            Simular Apagón 📡
-                        </button>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>LATENCIA RTT LAN</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 900, color: lanLatencyMs <= 20 ? '#00D97E' : '#FFA726', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
-                                {lanLatencyMs} ms
-                            </div>
-                        </div>
-                        <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>LATENCIA BLE MESH</div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 900, color: bleLatencyMs <= 50 ? '#29B6F6' : '#FFA726', fontFamily: 'JetBrains Mono, monospace', marginTop: 2 }}>
-                                {bleLatencyMs} ms
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* AI Coverage Diagnostic Button & Card */}
-                    <button
-                        onClick={handleRunAiDiag}
-                        disabled={diagLoading}
-                        style={{
-                            width: '100%', padding: '10px 14px', borderRadius: '12px',
-                            background: 'linear-gradient(135deg, rgba(41,182,246,0.2), rgba(155,89,182,0.2))',
-                            border: '1px solid rgba(41,182,246,0.4)', color: '#fff',
-                            fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                            marginTop: '4px'
-                        }}
-                    >
-                        {diagLoading ? '⏳ Diagnosticando Red ONNX...' : '🤖 Diagnóstico IA de Cobertura y Malla'}
-                    </button>
-
-                    {aiNetworkDiag && (
-                        <div style={{
-                            padding: '14px 16px', borderRadius: '14px',
-                            background: 'linear-gradient(135deg, rgba(41,182,246,0.15), rgba(15,23,42,0.9))',
-                            border: '1px solid rgba(41,182,246,0.4)', backdropFilter: 'blur(12px)',
-                            marginTop: '4px'
-                        }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#29B6F6', textTransform: 'uppercase' }}>
-                                    🤖 EVALUACIÓN DE COBERTURA (LaMini-Flan-T5 ONNX)
-                                </span>
-                                <button onClick={() => setAiNetworkDiag(null)} style={{ background: 'transparent', border: 'none', color: '#aaa', fontSize: '0.9rem', cursor: 'pointer' }}>✕</button>
-                            </div>
-                            <div style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', lineHeight: 1.5, color: '#e2e8f0' }}>
-                                {aiNetworkDiag}
-                            </div>
-                        </div>
-                    )}
-                </div>
-
             </div>
 
-            {/* Blackout Simulator Modal */}
-            {blackoutModalOpen && (
-                <BlackoutSimulatorModal onClose={() => setBlackoutModalOpen(false)} />
-            )}
-
-            <style>{`
-                @keyframes scanLine {
-                    0%   { top: 12px; opacity: 0; }
-                    10%  { opacity: 1; }
-                    90%  { opacity: 1; }
-                    100% { top: calc(100% - 14px); opacity: 0; }
-                }
-            `}</style>
+            {/* Modal de Apagón */}
+            {blackoutModalOpen && <BlackoutSimulatorModal onClose={() => setBlackoutModalOpen(false)} />}
         </div>
     );
 }

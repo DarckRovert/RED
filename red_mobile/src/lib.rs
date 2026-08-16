@@ -39,6 +39,23 @@ const BOOTSTRAP_NODES: &[&str] = &[
 
 static ONCE: std::sync::Once = std::sync::Once::new();
 static NODE_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static GLOBAL_API_STATE: std::sync::OnceLock<Arc<tokio::sync::Mutex<Option<api::ApiState>>>> = std::sync::OnceLock::new();
+
+#[no_mangle]
+pub extern "system" fn Java_f_red_app_RedNodePlugin_updateBatteryStatus(
+    _env: JNIEnv,
+    _class: JClass,
+    level: jni::sys::jint,
+) {
+    if let Some(state_arc) = GLOBAL_API_STATE.get() {
+        if let Ok(s) = state_arc.try_lock() {
+            if let Some(ref api_state) = *s {
+                api_state.battery_optimizer.update_battery(level as u8);
+                tracing::info!("JNI updated battery to {}%", level);
+            }
+        }
+    }
+}
 
 #[no_mangle]
 pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
@@ -142,6 +159,22 @@ fn append_log(data_dir: &std::path::Path, msg: &str) {
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         let _ = f.write_all(line.as_bytes());
     }
+
+    let level = if msg.contains("FATAL") || msg.contains("ERROR") || msg.contains("crashed") {
+        "ERROR"
+    } else if msg.contains("WARN") || msg.contains("panic") {
+        "WARN"
+    } else if msg.contains("P2P") || msg.contains("mDNS") || msg.contains("BLE") || msg.contains("Swarm") {
+        "P2P"
+    } else if msg.contains("storage") || msg.contains("key") || msg.contains("identity") || msg.contains("PoW") {
+        "CRYPTO"
+    } else if msg.contains("consensus") || msg.contains("blockchain") {
+        "CONSENSUS"
+    } else {
+        "INFO"
+    };
+
+    api::record_log_sync(level, "red_mobile::boot", msg);
 }
 
 async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::Result<()> {
@@ -169,6 +202,8 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     // ──────────────────────────────────────────────────────────────────────────
     let (msg_tx, _) = tokio::sync::broadcast::channel(100);
     let api_state = Arc::new(Mutex::new(None));
+    let _ = GLOBAL_API_STATE.set(api_state.clone());
+    
     let api_state_clone = api_state.clone();
     let msg_tx_clone = msg_tx.clone();
     let api_log_dir = data_dir.clone();
@@ -298,10 +333,28 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
             ai_translator: Arc::new(ai_translator::AITranslatorEngine::new()),
             amber_store: amber::AmberStore::new(),
             guardian_engine: Arc::new(guardian::GuardianEngine::from_env()),
+            logs: api::get_or_init_global_logs(),
         });
     }
 
     append_log(&data_dir, "=== NODE FULLY INITIALIZED — API SERVING LIVE DATA ===");
+
+    // Background Mesh Message Dispatcher (for Weather Reports, CAP alerts, etc.)
+    let mut mesh_rx = msg_tx.subscribe();
+    let api_state_mesh = api_state.clone();
+    tokio::spawn(async move {
+        while let Ok(msg) = mesh_rx.recv().await {
+            if let red_core::protocol::MessageType::WeatherReport(payload) = &msg.content {
+                if let Ok(report) = serde_json::from_slice::<crate::weather::WeatherReport>(payload) {
+                    let state_guard = api_state_mesh.lock().await;
+                    if let Some(state) = state_guard.as_ref() {
+                        state.weather_store.add_report_raw(report);
+                        info!("Received & stored incoming mesh Weather Report/CAP Alert");
+                    }
+                }
+            }
+        }
+    });
 
     // Start P2P event loop
     let node_loop = node_arc.clone();

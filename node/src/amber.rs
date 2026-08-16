@@ -168,7 +168,7 @@ impl AmberStore {
     pub fn open(data_dir: &std::path::Path) -> Result<Self, sled::Error> {
         let db_path = data_dir.join("amber_alerts.sled");
         let db = sled::open(&db_path)?;
-        let (alert_tx, _) = broadcast::channel(64);
+        let (alert_tx, _) = broadcast::channel(1024);
         info!("AmberStore abierto en: {:?}", db_path);
         Ok(AmberStore { db, alert_tx })
     }

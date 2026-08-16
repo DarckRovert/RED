@@ -3,22 +3,25 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
+import { meshRouter } from "../lib/mesh/meshRouter";
 import { toast } from "./Toast";
+
+type RadarTab = "qr" | "radar" | "manual";
 
 export default function RadarWindow() {
     const { goBack, identity, addContact, navigate } = useRedStore();
+    const [activeTab, setActiveTab] = useState<RadarTab>("qr");
     const [scanning, setScanning] = useState(false);
-    const [scannedResult, setScannedResult] = useState<string | null>(null);
     const [nearbyPeers, setNearbyPeers] = useState<any[]>([]);
-    
+
     // Manual Entry State
-    const [manualHash, setManualHash] = useState('');
-    const [manualName, setManualName] = useState('');
+    const [manualHash, setManualHash] = useState("");
+    const [manualName, setManualName] = useState("");
     const [isAdding, setIsAdding] = useState(false);
-    const [addingStatus, setAddingStatus] = useState(''); // e.g. 'Verificando nodo...'
-    
+    const [addingStatus, setAddingStatus] = useState("");
+
     // QR Code State
-    const [qrDataUrl, setQrDataUrl] = useState<string>('');
+    const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
     // QR Generation Hook
     useEffect(() => {
@@ -26,29 +29,30 @@ export default function RadarWindow() {
             const qrText = identity.public_key 
                 ? `did:red:${identity.identity_hash}:${identity.public_key}` 
                 : identity.identity_hash;
-            import('qrcode').then(QRCode => {
+            import("qrcode").then(QRCode => {
                 QRCode.toDataURL(qrText, {
-                    width: 400,
+                    width: 320,
                     margin: 1,
-                    color: { dark: '#f01e1e', light: '#00000000' }
+                    color: { dark: "#00E676", light: "#04060A" }
                 }).then(setQrDataUrl);
             });
         }
     }, [identity]);
 
-    // The Radar now consumes peers from the centralized localTransport
-    // instead of running its own redundant BLE scan.
+    // Live BLE Peer discovery with canonical resolution
     useEffect(() => {
         const updatePeers = () => {
-            // Filter only BLE peers for the specific "RED NEARBY" section
-            const blePeers = localTransport.allPeers
-                .filter((p: any) => p.transport === 'ble')
-                .map((p: any) => ({
-                    id: p.id,
-                    name: `RED-${p.id.substring(0, 8)}`,
-                    rssi: p.rssi || -100
-                }));
-            setNearbyPeers(blePeers);
+            const peers = localTransport.allPeers
+                .filter((p: any) => p.transport === "ble" || p.transports?.includes('ble'))
+                .map((p: any) => {
+                    const canonical = p.canonicalId || meshRouter.getCanonicalId(p.id) || p.id;
+                    return {
+                        id: canonical,
+                        name: p.name || `RED-${canonical.substring(0, 8)}`,
+                        rssi: p.rssi || -85
+                    };
+                });
+            setNearbyPeers(peers);
         };
 
         const interval = setInterval(updatePeers, 2000);
@@ -63,60 +67,66 @@ export default function RadarWindow() {
 
     const startScan = async () => {
         try {
-            const { Capacitor, registerPlugin } = await import('@capacitor/core');
+            const { Capacitor } = await import("@capacitor/core");
             if (!Capacitor.isNativePlatform()) {
-                toast.info("La cámara QR requiere un dispositivo físico.");
+                toast.info("La cámara QR requiere un dispositivo físico Android.");
                 return;
             }
 
-            const BarcodeScanner = registerPlugin<any>('BarcodeScanner');
+            const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
             
-            // Check Camera permission
-            await BarcodeScanner.checkPermission({ force: true });
+            // Check & request runtime permissions explicitly
+            const status = await BarcodeScanner.checkPermission({ force: true });
+            if (status.denied) {
+                toast.error("Permiso de cámara denegado. Actívalo en la configuración.");
+                return;
+            }
+            if (!status.granted) {
+                toast.warning("Permiso de cámara no concedido.");
+                return;
+            }
 
-            // Hide UI background to show camera view
-            BarcodeScanner.hideBackground();
-            document.body.style.background = "transparent";
+            // Hide native webview background & apply global transparency
+            await BarcodeScanner.hideBackground();
+            document.body.classList.add("scanner-active");
             setScanning(true);
 
-            const result = await BarcodeScanner.startScan(); // start scanning and wait for a result
+            const result = await BarcodeScanner.startScan();
 
-            // if the result has content
             if (result.hasContent) {
                 const raw = result.content.trim();
-                if (raw.startsWith('RED_ID_VAULT:')) {
+                if (raw.startsWith("RED_ID_VAULT:")) {
                     try {
-                        const encoded = raw.split(':')[1];
+                        const encoded = raw.split(":")[1];
                         const decoded = JSON.parse(atob(encoded));
-                        const cleanHash = decoded.did || '';
+                        const cleanHash = decoded.did || "";
                         const pubKey = decoded.pk || null;
                         if (cleanHash) {
                             await addContact(cleanHash, "Bóveda Escaneada", pubKey);
                             toast.success("¡Identidad y clave guardadas con éxito!");
-                            navigate('chat', cleanHash);
+                            navigate("chat", cleanHash);
                         }
-                    } catch (e) {
+                    } catch {
                         toast.error("Bóveda QR Inválida");
                     }
-                } else if (raw.startsWith('did:red:')) {
+                } else if (raw.startsWith("did:red:")) {
                     try {
-                        const parts = raw.split(':');
+                        const parts = raw.split(":");
                         const cleanHash = parts[2];
                         const pubKey = parts[3] || null;
                         await addContact(cleanHash, "Par Escaneado", pubKey);
-                        toast.success("¡Contacto y clave pública guardados con éxito!");
-                        navigate('chat', cleanHash);
+                        toast.success("¡Contacto y clave pública guardados!");
+                        navigate("chat", cleanHash);
                     } catch (addErr) {
                         const msg = addErr instanceof Error ? addErr.message : String(addErr);
                         toast.error(`Error al añadir: ${msg}`);
                     }
                 } else {
                     const cleanHash = raw;
-                    setScannedResult(cleanHash);
                     try {
                         await addContact(cleanHash, "Par Escaneado");
                         toast.success("¡Contacto añadido con éxito!");
-                        navigate('chat', cleanHash);
+                        navigate("chat", cleanHash);
                     } catch (addErr) {
                         const msg = addErr instanceof Error ? addErr.message : String(addErr);
                         toast.error(`Error al añadir: ${msg}`);
@@ -124,7 +134,8 @@ export default function RadarWindow() {
                 }
             }
         } catch (e) {
-            console.error("Camera permissions or Scanner error", e);
+            console.error("[Scanner]", e);
+            toast.error("Error al inicializar cámara");
         } finally {
             stopScan();
         }
@@ -132,230 +143,339 @@ export default function RadarWindow() {
 
     const stopScan = async () => {
         setScanning(false);
-        document.body.style.background = "";
+        document.body.classList.remove("scanner-active");
         try {
-            const { Capacitor, registerPlugin } = await import('@capacitor/core');
+            const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
-                const BarcodeScanner = registerPlugin<any>('BarcodeScanner');
-                BarcodeScanner.showBackground();
-                BarcodeScanner.stopScan();
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                await BarcodeScanner.showBackground();
+                await BarcodeScanner.stopScan();
             }
-        } catch (e) {}
+        } catch {}
+    };
+
+    const copyToClipboard = (text: string) => {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            toast.success("Copiado al portapapeles");
+        }
     };
 
     if (scanning) {
         return (
-            <div style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', background: 'transparent' }}>
-                <div style={{ padding: '32px 16px', background: 'rgba(0,0,0,0.8)', color: 'white' }}>
-                    <button onClick={stopScan} className="btn-primary" style={{ padding: '8px 16px', borderRadius: 8 }}>Cancelar</button>
-                    <p style={{ textAlign: 'center', marginTop: 16 }}>Apunta al código QR de otro par RED</p>
+            <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: "transparent" }}>
+                <div style={{ padding: "32px 16px", background: "rgba(0,0,0,0.85)", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <button onClick={stopScan} className="btn-tactical-secondary" style={{ padding: "8px 16px" }}>✕ Cancelar</button>
+                    <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Apunta al código QR del par</span>
                 </div>
-                <div style={{ flex: 1 }}>
-                    {/* Camera view visible here through transparent body */}
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <div style={{ 
-                        margin: 'auto', width: '250px', height: '250px', 
-                        border: '4px solid var(--primary)', borderRadius: '16px',
-                        boxShadow: '0 0 0 4000px rgba(0,0,0,0.6)',
-                        marginTop: '10vh'
+                        width: "250px", height: "250px", 
+                        border: "3px solid var(--accent-emerald)", borderRadius: "20px",
+                        boxShadow: "0 0 0 4000px rgba(0,0,0,0.65)",
+                        animation: "pulseGlowEmerald 1.5s infinite"
                     }} />
                 </div>
             </div>
         );
     }
 
+    const myDid = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:local_node";
+
+    if (scanning) {
+        return (
+            <div className="scanner-viewfinder-overlay">
+                <div style={{
+                    padding: "12px 20px",
+                    borderRadius: "14px",
+                    background: "rgba(4,6,10,0.85)",
+                    border: "1px solid var(--accent-cyan)",
+                    color: "var(--accent-cyan)",
+                    fontWeight: 800,
+                    fontSize: "0.92rem",
+                    letterSpacing: "0.5px",
+                    textAlign: "center",
+                    boxShadow: "0 4px 20px rgba(0,229,255,0.3)"
+                }}>
+                    📷 APUNTA AL CÓDIGO QR DE UN NODO RED
+                </div>
+
+                <div className="scanner-target-box">
+                    <div className="scanner-laser-line" />
+                </div>
+
+                <button
+                    onClick={stopScan}
+                    className="btn-tactical-primary"
+                    style={{
+                        padding: "14px 32px",
+                        fontSize: "0.95rem",
+                        boxShadow: "0 4px 25px rgba(232,33,58,0.5)"
+                    }}
+                >
+                    ✕ Cancelar Escaneo
+                </button>
+            </div>
+        );
+    }
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', background: 'var(--bg-deep)' }}>
-            
-            <header className="glass-panel" style={{ padding: '20px', borderBottom: '1px solid var(--solid-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: '0 0 24px 24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <button onClick={goBack} style={{ background: 'transparent', color: 'var(--text-primary)', border: 'none', fontSize: '1.4rem', cursor: 'pointer', padding: '8px' }}>←</button>
+        <div style={{
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
+        }}>
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,230,118,0.35)"
+                    }}>📡</div>
                     <div>
-                        <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '1.3rem', fontWeight: 800, letterSpacing: '1px' }}>RADAR P2P</h2>
-                        <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.75rem', letterSpacing: '2px' }}>GESTIÓN DE IDENTIDADES</p>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Radar de Nodos & Reconocimiento P2P
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            SWARM DISCOVERY · ED25519 QR INTEROPERABLE
+                        </div>
                     </div>
                 </div>
-                <button onClick={() => useRedStore.getState().navigate('nodemap')} style={{ background: 'var(--primary-subtle)', color: 'var(--primary)', padding: '8px 16px', borderRadius: '20px', fontWeight: 700, fontSize: '0.85rem', border: '1px solid var(--solid-border-active)', cursor: 'pointer' }}>
-                    🌍 Mapa P2P
-                </button>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => navigate("nodemap")}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                    >
+                        🗺️ Mapa
+                    </button>
+                    <button
+                        onClick={goBack}
+                        className="btn-icon"
+                        title="Cerrar radar"
+                        style={{ width: 38, height: 38 }}
+                    >
+                        ✕
+                    </button>
+                </div>
             </header>
 
-            <div className="scroll-container" style={{ flex: 1, padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                
-                {/* Add Contact (Scanner) */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '28px', borderRadius: '24px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <button 
-                        onClick={startScan}
-                        style={{ 
-                            width: 88, height: 88, borderRadius: 44, background: 'linear-gradient(135deg, #E8213A, #C0152A)', 
-                            color: 'white', fontSize: '2.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            margin: '0 auto 20px auto', boxShadow: '0 8px 32px rgba(232,33,58,0.4)',
-                            border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer', transition: 'transform 0.3s var(--ease-spring)',
-                        }}
-                        onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                        onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                        📷
-                    </button>
-                    <h3 style={{ margin: '0 0 8px 0', color: 'white', fontSize: '1.2rem', fontWeight: 800 }}>Escaneo Rápido</h3>
-                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0, lineHeight: 1.5 }}>Añade identidades apuntando con la cámara.</p>
-                </div>
+            {/* Selector de Pestañas Segmentadas Tácticas */}
+            <div style={{
+                padding: "10px 16px",
+                display: "flex", gap: "8px",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                overflowX: "auto", flexShrink: 0
+            }}>
+                <button
+                    onClick={() => setActiveTab("qr")}
+                    className={activeTab === "qr" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    📷 Mi Tarjeta QR
+                </button>
+                <button
+                    onClick={() => setActiveTab("radar")}
+                    className={activeTab === "radar" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    📡 Radar BLE ({nearbyPeers.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab("manual")}
+                    className={activeTab === "manual" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    ➕ Agregar Contacto
+                </button>
+            </div>
 
-                {/* Manual Entry Fallback */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <h3 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 700 }}>Entrada Manual de ID</h3>
-                    <input 
-                        type="text" 
-                        placeholder="Hash de Identidad (64 hex chars)" 
-                        value={manualHash}
-                        onChange={e => setManualHash(e.target.value)}
-                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', padding: '14px 16px', borderRadius: '12px', color: 'white', fontFamily: 'monospace', fontSize: '0.9rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
-                    />
-                    <input 
-                        type="text" 
-                        placeholder="Alias del contacto" 
-                        value={manualName}
-                        onChange={e => setManualName(e.target.value)}
-                        style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', padding: '14px 16px', borderRadius: '12px', color: 'white', fontSize: '1rem', outline: 'none', width: '100%', boxSizing: 'border-box' }}
-                    />
-                    <button 
-                        disabled={!manualHash || isAdding}
-                        onClick={async () => {
-                            setIsAdding(true);
-                            setAddingStatus('Añadiendo...');
-                            const hashToSent = manualHash.trim();
-                            const nameToSend = manualName ? manualName.trim() : "Nuevo Par";
-                            try {
-                                const powTimer = setTimeout(() => setAddingStatus('Verificando nodo PoW…'), 1000);
-                                await addContact(hashToSent, nameToSend);
-                                clearTimeout(powTimer);
-                                toast.success("✅ Contacto añadido correctamente.");
-                                navigate('chat', hashToSent);
-                            } catch (err) {
-                                const msg = err instanceof Error ? err.message : String(err);
-                                toast.error(`❌ ${msg}`);
-                            } finally {
-                                setIsAdding(false);
-                                setAddingStatus('');
-                            }
-                        }}
-                        className="btn-primary" 
-                        style={{ borderRadius: '14px', background: 'linear-gradient(135deg, #E8213A, #C0152A)', opacity: manualHash ? 1 : 0.5, border: 'none', color: 'white', padding: '14px' }}
-                    >
-                        {isAdding ? addingStatus || 'Añadiendo...' : 'Añadir Contacto'}
-                    </button>
-                </div>
+            {/* Contenido Principal con Scroll Seguro */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                {/* My Identity / Display QR */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,20,30,0.85), rgba(15,15,24,0.95))', backdropFilter: 'blur(16px)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
-                    <h3 style={{ margin: '0 0 20px 0', color: 'white', fontSize: '1.1rem', fontWeight: 700 }}>Mi Tarjeta de Identidad</h3>
-                    
-                    <div style={{ 
-                        background: 'white', padding: '12px', borderRadius: '16px', display: 'inline-block',
-                        boxShadow: '0 0 32px rgba(232,33,58,0.3)', marginBottom: '16px'
-                    }}>
-                        {qrDataUrl ? (
-                            <img src={qrDataUrl} alt="My QR Code" style={{ width: 200, height: 200, display: 'block' }} />
-                        ) : (
-                            <div style={{ width: 200, height: 200, background: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', borderRadius: '8px' }}>Generando...</div>
-                        )}
-                    </div>
-
-                    <div style={{ 
-                        background: 'rgba(0,0,0,0.5)', padding: '12px 16px', borderRadius: '12px', 
-                        fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--primary-bright)',
-                        wordBreak: 'break-all', border: '1px solid rgba(232,33,58,0.25)',
-                        letterSpacing: '1px', lineHeight: 1.6
-                    }}>
-                        {identity?.identity_hash}
-                    </div>
-                </div>
-
-                {/* Radar BLE (Nearby Nodes) */}
-                <div style={{ background: 'linear-gradient(135deg, rgba(20,40,60,0.85), rgba(10,20,30,0.95))', backdropFilter: 'blur(16px)', padding: '24px', borderRadius: '24px', border: '1px solid rgba(41,182,246,0.2)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <h3 style={{ margin: 0, color: 'white', fontSize: '1.1rem', fontWeight: 700 }}>RED NEARBY (BLE)</h3>
-                        <div className="pulsing-dot" style={{ width: 12, height: 12, borderRadius: 6, background: '#00D97E' }} />
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', margin: '0 0 16px 0' }}>Escaneando nodos en Bluetooth Low Energy...</p>
-                    
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {nearbyPeers.length === 0 ? (
-                            <div style={{ textAlign: 'center', padding: '20px', border: '1px dashed rgba(255,255,255,0.1)', borderRadius: 12, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                                0 Pares Detectados
-                            </div>
-                        ) : (
-                            nearbyPeers.map(peer => (
-                                <div key={peer.id} style={{
-                                    display: 'flex', alignItems: 'center', gap: '10px',
-                                    background: 'rgba(0,0,0,0.4)', padding: '12px 14px', borderRadius: '12px',
-                                    border: '1px solid rgba(255,255,255,0.08)',
-                                }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ color: 'white', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            {peer.name}
-                                            <span style={{
-                                                fontSize: '0.62rem', padding: '1px 5px', borderRadius: '4px',
-                                                background: peer.rssi > -65 ? 'rgba(0,217,126,0.15)' : peer.rssi > -80 ? 'rgba(255,167,38,0.15)' : 'rgba(232,33,58,0.15)',
-                                                color: peer.rssi > -65 ? '#00D97E' : peer.rssi > -80 ? '#FFA726' : '#ff4444',
-                                                border: `1px solid ${peer.rssi > -65 ? 'rgba(0,217,126,0.3)' : peer.rssi > -80 ? 'rgba(255,167,38,0.3)' : 'rgba(232,33,58,0.3)'}`,
-                                                fontWeight: 800
-                                            }}>
-                                                {peer.rssi > -65 ? '⚡ EXCELENTE' : peer.rssi > -80 ? '📶 BUENA' : '📡 DÉBIL'}
-                                            </span>
-                                        </div>
-                                        <div style={{
-                                            color: 'var(--text-muted)',
-                                            fontFamily: 'JetBrains Mono, monospace', fontSize: '0.72rem', marginTop: 2,
-                                        }}>
-                                            {peer.rssi} dBm · Proximidad BLE Mesh
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                const peerTarget = peer.id || peer.name.replace('RED-', '');
-                                                const { localTransport } = await import('../lib/mesh/localTransport');
-                                                await localTransport.connectBluetooth(peerTarget).catch(() => {});
-
-                                                const store = useRedStore.getState();
-                                                await store.addContact(peerTarget, peer.name);
-
-                                                const myIdentity = store.identity;
-                                                if (myIdentity?.identity_hash) {
-                                                    const payloadStr = JSON.stringify({
-                                                        sender_hash: myIdentity.identity_hash,
-                                                        sender_name: myIdentity.nickname || 'Operador RED',
-                                                        sender_pk: myIdentity.public_key || null
-                                                    });
-                                                    const { RedAPI } = await import('../lib/api');
-                                                    RedAPI.sendMessage(peerTarget, payloadStr, { msg_type: 'contact_request' }).catch(() => {});
-                                                    RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadStr, { msg_type: 'contact_request' }).catch(() => {});
-                                                }
-
-                                                toast.success(`🤝 Invitación enviada a ${peer.name}`);
-                                                navigate('chat', peerTarget);
-                                            } catch (e) {
-                                                const msg = e instanceof Error ? e.message : String(e);
-                                                toast.error(`❌ ${msg}`);
-                                            }
-                                        }}
-                                        style={{
-                                            padding: '7px 14px', borderRadius: 10, flexShrink: 0,
-                                            background: 'linear-gradient(135deg, rgba(41,182,246,0.2), rgba(0,217,126,0.15))',
-                                            border: '1px solid rgba(41,182,246,0.35)',
-                                            color: '#29B6F6', fontSize: '0.78rem', fontWeight: 800,
-                                            cursor: 'pointer', whiteSpace: 'nowrap',
-                                            boxShadow: '0 2px 8px rgba(41,182,246,0.2)'
-                                        }}
-                                    >
-                                        🤝 Invitar
-                                    </button>
+                    {/* ─── TAB 1: MI TARJETA QR ───────────────────────────────── */}
+                    {activeTab === "qr" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "24px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px" }}>
+                            <div style={{ textAlign: "center" }}>
+                                <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "var(--text-primary)" }}>
+                                    {identity?.nickname || "Operador RED"}
                                 </div>
-                            ))
-                        )}
-                    </div>
-                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                                    {identity?.short_id || "OFF-GRID NODE"}
+                                </div>
+                            </div>
 
+                            {/* Contenedor QR de Alto Contraste */}
+                            <div style={{
+                                padding: "16px", background: "#04060A", borderRadius: "18px",
+                                border: "2px solid rgba(0,230,118,0.35)", boxShadow: "0 0 35px rgba(0,230,118,0.15)"
+                            }}>
+                                {qrDataUrl ? (
+                                    <img src={qrDataUrl} alt="Mi QR RED" style={{ width: "240px", height: "240px", display: "block", borderRadius: "8px" }} />
+                                ) : (
+                                    <div style={{ width: "240px", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                                        Generando QR...
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* DID y Botón de Copiar */}
+                            <div style={{ width: "100%", display: "flex", gap: "8px" }}>
+                                <input
+                                    readOnly
+                                    value={myDid}
+                                    style={{ flex: 1, fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace", background: "rgba(0,0,0,0.5)" }}
+                                />
+                                <button
+                                    onClick={() => copyToClipboard(myDid)}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "8px 14px", fontSize: "0.78rem" }}
+                                >
+                                    📋 Copiar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ─── TAB 2: RADAR BLE CERCANO ───────────────────────────── */}
+                    {activeTab === "radar" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            {/* Radar Animado */}
+                            <div style={{ position: "relative", width: "220px", height: "220px", margin: "0 auto", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,230,118,0.08) 0%, rgba(4,6,10,0.95) 70%)", border: "2px solid rgba(0,230,118,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                <div style={{ position: "absolute", width: "100%", height: "1px", background: "rgba(0,230,118,0.2)" }} />
+                                <div style={{ position: "absolute", width: "1px", height: "100%", background: "rgba(0,230,118,0.2)" }} />
+                                <div style={{ position: "absolute", width: "140px", height: "140px", borderRadius: "50%", border: "1px dashed rgba(0,230,118,0.2)" }} />
+                                <div style={{ position: "absolute", width: "70px", height: "70px", borderRadius: "50%", border: "1px dashed rgba(0,230,118,0.25)" }} />
+
+                                {/* Haz Giratorio del Radar */}
+                                <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "conic-gradient(from 0deg, rgba(0,230,118,0.3) 0deg, transparent 60deg)", animation: "spin 3s linear infinite" }} />
+
+                                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--accent-emerald)", boxShadow: "0 0 14px var(--accent-emerald)", zIndex: 5 }} />
+                            </div>
+
+                            {/* Lista de Nodos Detectados */}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>Nodos BLE Detectados ({nearbyPeers.length})</div>
+                                <span className="badge-tactical badge-tactical-emerald">SWARM ACTIVE</span>
+                            </div>
+
+                            {nearbyPeers.length === 0 ? (
+                                <div className="empty-state-tactical">
+                                    <div className="empty-state-icon">📡</div>
+                                    <div className="empty-state-title">Escaneando Espectro Cercano...</div>
+                                    <div className="empty-state-desc">
+                                        Buscando balizas Bluetooth Low Energy de otros teléfonos RED.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                    {nearbyPeers.map((p) => (
+                                        <div
+                                            key={p.id}
+                                            className="card-tactical"
+                                            style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "4px solid var(--accent-emerald)" }}
+                                        >
+                                            <div>
+                                                <strong style={{ fontSize: "0.90rem", color: "var(--text-primary)" }}>{p.name}</strong>
+                                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    DID: {p.id.substring(0, 16)}…
+                                                </div>
+                                            </div>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                <span className="badge-tactical badge-tactical-emerald">{p.rssi} dBm</span>
+                                                <button
+                                                    onClick={() => {
+                                                        const targetId = meshRouter.getCanonicalId(p.id) || p.id;
+                                                        addContact(targetId, p.name);
+                                                        toast.success(`Añadido ${p.name}`);
+                                                        navigate("chat", targetId);
+                                                    }}
+                                                    className="btn-tactical-secondary"
+                                                    style={{ padding: "6px 12px", fontSize: "0.76rem" }}
+                                                >
+                                                    + Añadir
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ─── TAB 3: AGREGAR MANUAL & ESCÁNER ────────────────────── */}
+                    {activeTab === "manual" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            {/* Botón de Cámara */}
+                            <button
+                                onClick={startScan}
+                                className="card-tactical-interactive"
+                                style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", borderColor: "var(--accent-emerald)", background: "rgba(0,230,118,0.06)" }}
+                            >
+                                <span style={{ fontSize: "2.4rem" }}>📷</span>
+                                <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-emerald)" }}>ABRIR ESCÁNER QR DE CÁMARA</span>
+                                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>Apunta al código QR de otro par para agregarlo al instante</span>
+                            </button>
+
+                            {/* Entrada Manual de ID */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>O ingresa el identificador manualmente:</div>
+
+                                <input
+                                    value={manualHash}
+                                    onChange={e => setManualHash(e.target.value)}
+                                    placeholder="Hash SHA-256 (64 hex) o did:red:..."
+                                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem" }}
+                                />
+
+                                <input
+                                    value={manualName}
+                                    onChange={e => setManualName(e.target.value)}
+                                    placeholder="Alias o nombre para el contacto"
+                                />
+
+                                <button
+                                    disabled={!manualHash.trim() || isAdding}
+                                    onClick={async () => {
+                                        setIsAdding(true);
+                                        setAddingStatus("Verificando nodo...");
+                                        const hashToSent = manualHash.trim();
+                                        const nameToSend = manualName.trim() || "Nuevo Par";
+                                        try {
+                                            await addContact(hashToSent, nameToSend);
+                                            toast.success("✅ Contacto añadido correctamente.");
+                                            navigate("chat", hashToSent);
+                                        } catch (err) {
+                                            const msg = err instanceof Error ? err.message : String(err);
+                                            toast.error(`❌ ${msg}`);
+                                        } finally {
+                                            setIsAdding(false);
+                                            setAddingStatus("");
+                                        }
+                                    }}
+                                    className="btn-tactical-primary"
+                                    style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
+                                >
+                                    {isAdding ? addingStatus || "Añadiendo..." : "➕ AÑADIR A LA LISTA DE CONTACTOS"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

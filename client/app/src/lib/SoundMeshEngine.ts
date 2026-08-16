@@ -9,6 +9,8 @@
 export interface SoundMeshPacket {
     senderId: string;
     payloadHex: string;
+    rawText?: string;
+    payload?: string;
     timestamp: number;
     rssiDb: number;
 }
@@ -39,6 +41,10 @@ export class SoundMeshEngine {
     /**
      * Transmits a text or hex payload as ultrasonic FSK audio tones
      */
+    public static async transmit(payload: string): Promise<boolean> {
+        return this.transmitPayload(payload);
+    }
+
     public static async transmitPayload(payload: string): Promise<boolean> {
         try {
             const ctx = this.getAudioContext();

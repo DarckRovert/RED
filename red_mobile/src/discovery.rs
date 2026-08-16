@@ -13,6 +13,13 @@ pub struct ProximityNode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterBleDeviceRequest {
+    pub identity_hash: String,
+    pub rssi_dbm: i32,
+    pub distance_meters: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WaveHandshakeRequest {
     pub target_identity_hash: String,
     pub greeting_message: Option<String>,
@@ -68,36 +75,15 @@ impl DiscoveryEngine {
                 }],
             })),
         };
-        engine.seed_demo_nodes();
         engine
     }
 
-    fn seed_demo_nodes(&self) {
+    pub fn report_node(&self, node: ProximityNode) {
         let mut map = self.nearby_nodes.write().unwrap();
-        let now = chrono::Utc::now().timestamp();
-        map.insert(
-            "node_nearby_alice".to_string(),
-            ProximityNode {
-                identity_hash: "3f7a8291c4e2".to_string(),
-                display_name: "Alice (BLE Proximity)".to_string(),
-                rssi_dbm: -58,
-                distance_meters: 2.4,
-                transport: "BLE".to_string(),
-                last_seen: now,
-            },
-        );
-        map.insert(
-            "node_nearby_bob".to_string(),
-            ProximityNode {
-                identity_hash: "9b12c3e4a5f6".to_string(),
-                display_name: "Bob (WiFi Direct)".to_string(),
-                rssi_dbm: -64,
-                distance_meters: 4.1,
-                transport: "WiFi-Direct".to_string(),
-                last_seen: now,
-            },
-        );
+        map.insert(node.identity_hash.clone(), node);
     }
+
+
 
     pub fn get_config(&self) -> ProximityFilterConfig {
         self.config.read().unwrap().clone()
@@ -138,6 +124,19 @@ impl DiscoveryEngine {
             timestamp: chrono::Utc::now().timestamp(),
             is_in_safe_zone: false,
         }
+    }
+
+    pub fn register_ble_device(&self, identity_hash: String, rssi_dbm: i32, distance_meters: f32) {
+        let timestamp = chrono::Utc::now().timestamp();
+        let node = ProximityNode {
+            identity_hash: identity_hash.clone(),
+            display_name: format!("Nodo {}", &identity_hash[..6.min(identity_hash.len())]),
+            rssi_dbm,
+            distance_meters,
+            transport: "BLE".to_string(),
+            last_seen: timestamp,
+        };
+        self.nearby_nodes.write().unwrap().insert(identity_hash, node);
     }
 
     pub fn trigger_wave(&self, req: WaveHandshakeRequest) -> ProximityNode {

@@ -8,8 +8,8 @@ android {
         applicationId "f.red.app"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode 3100
-        versionName "3.1.0"
+        versionCode 31000
+        versionName "31.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
 
@@ -58,3 +58,4 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+

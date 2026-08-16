@@ -8,21 +8,27 @@ use std::os::raw::c_char;
 use crate::identity::Identity;
 use crate::protocol::Message;
 
+use std::sync::OnceLock;
+
+static FFI_IDENTITY: OnceLock<Identity> = OnceLock::new();
+
 /// Create a new identity and return its hex hash.
 /// Caller is responsible for freeing the string using `red_free_string`.
 /// Returns NULL on failure.
 #[no_mangle]
 pub extern "C" fn red_identity_create() -> *mut c_char {
-    if let Ok(identity) = Identity::generate() {
-        let hash = identity.identity_hash().to_hex();
-        if let Ok(cs) = CString::new(hash) {
-            return cs.into_raw();
-        }
+    let identity = FFI_IDENTITY.get_or_init(|| {
+        Identity::generate().unwrap()
+    });
+    
+    let hash = identity.identity_hash().to_hex();
+    if let Ok(cs) = CString::new(hash) {
+        return cs.into_raw();
     }
     std::ptr::null_mut()
 }
 
-/// Get the hex identity hash of the current node (placeholder — returns new identity for PoC).
+/// Get the hex identity hash of the current node.
 /// Caller must free the returned string with `red_free_string`.
 #[no_mangle]
 pub extern "C" fn red_identity_hash() -> *mut c_char {

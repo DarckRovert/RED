@@ -3,39 +3,38 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { toast } from "./Toast";
 
-const FRAME_INTERVAL_MS = 500;  // 2 fps (optimized for BLE mesh radio bandwidth)
-const FRAME_QUALITY   = 0.35;   // JPEG quality (35% = ~3-5KB per frame)
-const FRAME_WIDTH     = 240;
-const FRAME_HEIGHT    = 320;
+const FRAME_INTERVAL_MS = 500;
+const FRAME_QUALITY = 0.35;
+const FRAME_WIDTH = 240;
+const FRAME_HEIGHT = 320;
 
-export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
-    const { contacts, identity, isStreaming, streamId: activeStreamId } = useRedStore();
+export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
+    const { contacts, identity } = useRedStore();
 
-    const videoRef  = useRef<HTMLVideoElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const frameSeqRef = useRef(0);
 
-    const [streamId]     = useState(() => `live-${Date.now()}-${identity?.identity_hash ? identity.identity_hash.slice(0, 6) : 'local'}`);
-    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-    const [isLive, setIsLive]       = useState(false);
-    const [camReady, setCamReady]   = useState(false);
-    const [camError, setCamError]   = useState<string | null>(null);
-    const [elapsed, setElapsed]     = useState(0);
+    const [streamId] = useState(() => `live-${Date.now()}-${identity?.identity_hash ? identity.identity_hash.slice(0, 6) : "local"}`);
+    const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+    const [isLive, setIsLive] = useState(false);
+    const [camReady, setCamReady] = useState(false);
+    const [camError, setCamError] = useState<string | null>(null);
+    const [elapsed, setElapsed] = useState(0);
     const [framesSent, setFramesSent] = useState(0);
-    const [comments, setComments]   = useState<{ sender: string; text: string }[]>([]);
+    const [comments, setComments] = useState<{ sender: string; text: string }[]>([]);
     const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    // Sync incoming comments from store
     const liveStreams = useRedStore(s => s.liveStreams);
     useEffect(() => {
         const stream = liveStreams[streamId];
         if (stream) setComments(stream.comments.slice(-20));
     }, [liveStreams, streamId]);
 
-    /* ── Camera init ─────────────────────────────────────────────── */
     useEffect(() => {
         let cancelled = false;
         navigator.mediaDevices.getUserMedia({
@@ -54,7 +53,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
             setCamReady(true);
             setCamError(null);
         }).catch(err => {
-            if (!cancelled) setCamError(err.message || 'Cámara no disponible');
+            if (!cancelled) setCamError(err.message || "Cámara no disponible");
         });
 
         return () => {
@@ -64,7 +63,24 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
         };
     }, [facingMode]);
 
-    /* ── Start / Stop broadcasting ───────────────────────────────── */
+    const captureAndSendFrame = useCallback(async () => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!video || !canvas || video.readyState < 2) return;
+
+        canvas.width = FRAME_WIDTH;
+        canvas.height = FRAME_HEIGHT;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        ctx.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        const dataUrl = canvas.toDataURL("image/jpeg", FRAME_QUALITY);
+        const seq = frameSeqRef.current++;
+
+        await RedAPI.sendLiveFrame(contacts, streamId, dataUrl, seq).catch(() => {});
+        setFramesSent(s => s + 1);
+    }, [contacts, streamId]);
+
     const startLive = useCallback(async () => {
         if (!camReady || isLive) return;
         setIsLive(true);
@@ -72,17 +88,15 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
         setFramesSent(0);
         setElapsed(0);
 
-        // Announce to all contacts
         await RedAPI.sendLiveAnnounce(contacts, streamId).catch(console.error);
 
-        // Register our own stream locally so we can receive comments
         useRedStore.setState(s => ({
             liveStreams: {
                 ...s.liveStreams,
                 [streamId]: {
                     stream_id: streamId,
-                    broadcaster_hash: identity?.identity_hash || '',
-                    broadcaster_name: identity?.nickname || identity?.short_id || 'Yo',
+                    broadcaster_hash: identity?.identity_hash || "",
+                    broadcaster_name: identity?.nickname || identity?.short_id || "Yo",
                     started_at: Date.now(),
                     is_active: true,
                     frames: [],
@@ -94,211 +108,158 @@ export function LiveStreamBroadcaster({ onClose }: { onClose: () => void }) {
             streamId,
         }));
 
-        // Elapsed counter
         elapsedRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
-
-        // Frame capture loop
-        frameIntervalRef.current = setInterval(async () => {
-            const video  = videoRef.current;
-            const canvas = canvasRef.current;
-            if (!video || !canvas || video.readyState < 2) return;
-
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            canvas.width  = FRAME_WIDTH;
-            canvas.height = FRAME_HEIGHT;
-            ctx.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-
-            canvas.toBlob(async blob => {
-                if (!blob) return;
-                const reader = new FileReader();
-                reader.onloadend = async () => {
-                    const b64 = (reader.result as string).split(',')[1];
-                    if (!b64) return;
-                    const seq = frameSeqRef.current++;
-                    setFramesSent(seq + 1);
-                    await RedAPI.sendLiveFrame(contacts, streamId, b64, seq).catch(() => {});
-                };
-                reader.readAsDataURL(blob);
-            }, 'image/jpeg', FRAME_QUALITY);
-        }, FRAME_INTERVAL_MS);
-    }, [camReady, isLive, contacts, streamId, identity]);
+        frameIntervalRef.current = setInterval(captureAndSendFrame, FRAME_INTERVAL_MS);
+        toast.info("🔴 Transmisión iniciada en la malla P2P");
+    }, [camReady, isLive, contacts, streamId, identity, captureAndSendFrame]);
 
     const stopLive = useCallback(async () => {
         if (!isLive) return;
         setIsLive(false);
 
-        if (frameIntervalRef.current) { clearInterval(frameIntervalRef.current); frameIntervalRef.current = null; }
-        if (elapsedRef.current)       { clearInterval(elapsedRef.current);       elapsedRef.current = null; }
+        if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+        if (elapsedRef.current) clearInterval(elapsedRef.current);
 
         await RedAPI.sendLiveEnd(contacts, streamId).catch(console.error);
 
         useRedStore.setState(s => ({
-            isStreaming: false,
-            streamId: null,
             liveStreams: {
                 ...s.liveStreams,
-                [streamId]: { ...s.liveStreams[streamId], is_active: false },
+                [streamId]: {
+                    ...(s.liveStreams[streamId] || {}),
+                    is_active: false,
+                },
             },
+            isStreaming: false,
+            streamId: null,
         }));
+        toast.info("Transmisión finalizada");
+    }, [isLive, contacts, streamId]);
 
-        setTimeout(onClose, 800);
-    }, [isLive, contacts, streamId, onClose]);
+    const handleClose = () => {
+        if (isLive) stopLive();
+        onClose?.();
+    };
 
-    /* ── Cleanup on unmount ──────────────────────────────────────── */
-    useEffect(() => () => {
-        if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-        if (elapsedRef.current)       clearInterval(elapsedRef.current);
-        streamRef.current?.getTracks().forEach(t => t.stop());
-    }, []);
-
-    const formatElapsed = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    const formatElapsed = (s: number) => {
+        const m = Math.floor(s / 60);
+        const sec = s % 60;
+        return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    };
 
     return (
         <div style={{
-            position: 'absolute', inset: 0, zIndex: 300,
-            background: '#000', color: 'white', display: 'flex', flexDirection: 'column',
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "#000", color: "white",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden",
         }}>
-            {/* Camera preview */}
-            <div style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#0a0a0f' }}>
+            {/* Video Canvas Container */}
+            <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
                 <video
                     ref={videoRef}
-                    muted
+                    autoPlay
                     playsInline
+                    muted
                     style={{
-                        width: '100%', height: '100%', objectFit: 'cover',
-                        transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+                        width: "100%", height: "100%", objectFit: "cover",
+                        transform: facingMode === "user" ? "scaleX(-1)" : "none"
                     }}
                 />
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
+                <canvas ref={canvasRef} style={{ display: "none" }} />
 
-                {/* LIVE badge */}
-                {isLive && (
-                    <div style={{
-                        position: 'absolute', top: 16, left: 16,
-                        background: '#FF3B30', color: 'white',
-                        padding: '4px 12px', borderRadius: 8,
-                        fontWeight: 900, fontSize: '0.78rem', letterSpacing: '1px',
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        boxShadow: '0 0 20px rgba(255,59,48,0.5)',
-                    }}>
-                        <span style={{
-                            width: 8, height: 8, borderRadius: '50%', background: 'white',
-                            animation: 'live-blink 1s ease-in-out infinite',
-                            display: 'inline-block',
-                        }} />
-                        LIVE · {formatElapsed(elapsed)}
-                    </div>
-                )}
-
-                {/* Camera Flip Button */}
-                <button
-                    onClick={() => setFacingMode(f => f === 'user' ? 'environment' : 'user')}
-                    style={{
-                        position: 'absolute', top: 16, right: 64,
-                        background: 'rgba(0,0,0,0.55)', border: 'none', color: 'white',
-                        borderRadius: '50%', width: 40, height: 40,
-                        fontSize: '1.1rem', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                    title="Cambiar Cámara"
-                >🔄</button>
-
-                {/* Close button */}
-                <button
-                    onClick={isLive ? stopLive : onClose}
-                    style={{
-                        position: 'absolute', top: 16, right: 16,
-                        background: 'rgba(0,0,0,0.55)', border: 'none', color: 'white',
-                        borderRadius: '50%', width: 40, height: 40,
-                        fontSize: '1.1rem', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}
-                >✕</button>
-
-                {/* Stats overlay */}
-                {isLive && (
-                    <div style={{
-                        position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-                        background: 'rgba(0,0,0,0.6)', padding: '4px 12px', borderRadius: 20,
-                        fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)',
-                    }}>
-                        📡 {contacts.length} contacto{contacts.length !== 1 ? 's' : ''} · {framesSent} frames
-                    </div>
-                )}
-
-                {/* Camera error */}
                 {camError && (
-                    <div style={{
-                        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', flexDirection: 'column', gap: 12,
-                        background: 'rgba(0,0,0,0.85)', padding: 24, textAlign: 'center',
-                    }}>
-                        <span style={{ fontSize: '2.5rem' }}>📷</span>
-                        <span style={{ color: '#FF6B6B', fontWeight: 700 }}>Cámara no disponible</span>
-                        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>{camError}</span>
-                    </div>
-                )}
-
-                {/* Live comments feed */}
-                {isLive && comments.length > 0 && (
-                    <div style={{
-                        position: 'absolute', bottom: 100, left: 16, right: 16,
-                        display: 'flex', flexDirection: 'column', gap: 6,
-                        maxHeight: 180, overflowY: 'auto',
-                        maskImage: 'linear-gradient(to bottom, transparent, black 20%)',
-                    }}>
-                        {comments.map((c, i) => (
-                            <div key={i} style={{
-                                background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)',
-                                padding: '6px 12px', borderRadius: 12,
-                                fontSize: '0.82rem', alignSelf: 'flex-start', maxWidth: '85%',
-                            }}>
-                                <span style={{ fontWeight: 700, color: '#FF6B35', marginRight: 6 }}>{c.sender}:</span>
-                                <span>{c.text}</span>
-                            </div>
-                        ))}
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", textAlign: "center" }}>
+                        <div style={{ color: "var(--accent-crimson-bright)", fontWeight: 800 }}>⚠️ {camError}</div>
                     </div>
                 )}
             </div>
 
-            {/* Controls */}
+            {/* Top HUD Controls */}
             <div style={{
-                padding: '20px 24px 28px',
-                background: 'rgba(10,10,15,0.95)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderTop: '1px solid rgba(255,255,255,0.06)',
+                position: "absolute", top: 0, left: 0, right: 0,
+                padding: "calc(16px + var(--safe-top, 0px)) 16px 16px 16px",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                background: "linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%)",
+                zIndex: 10
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{
+                        padding: "4px 10px", borderRadius: "var(--radius-full)",
+                        background: isLive ? "var(--accent-crimson)" : "rgba(255,255,255,0.2)",
+                        color: "#fff", fontSize: "0.74rem", fontWeight: 900,
+                        display: "flex", alignItems: "center", gap: "6px"
+                    }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff", animation: isLive ? "pulse 1s infinite" : "none" }} />
+                        {isLive ? `EN VIVO · ${formatElapsed(elapsed)}` : "VISTA PREVIA"}
+                    </div>
+
+                    {isLive && (
+                        <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.5)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace" }}>
+                            {framesSent} fps
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                        onClick={() => setFacingMode(f => f === "user" ? "environment" : "user")}
+                        className="btn-icon"
+                        style={{ background: "rgba(0,0,0,0.5)", width: 38, height: 38 }}
+                        title="Girar cámara"
+                    >
+                        🔄
+                    </button>
+
+                    <button
+                        onClick={handleClose}
+                        className="btn-icon"
+                        style={{ background: "rgba(0,0,0,0.5)", width: 38, height: 38 }}
+                        title="Cerrar"
+                    >
+                        ✕
+                    </button>
+                </div>
+            </div>
+
+            {/* Live Comments Overlay */}
+            <div style={{
+                position: "absolute", bottom: "100px", left: "16px", right: "16px",
+                maxHeight: "160px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px",
+                pointerEvents: "none", zIndex: 10
+            }}>
+                {comments.map((c, i) => (
+                    <div key={i} style={{ padding: "6px 12px", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(8px)", borderRadius: "12px", fontSize: "0.80rem", color: "#fff", maxWidth: "80%" }}>
+                        <strong style={{ color: "var(--accent-cyan)" }}>{c.sender}: </strong>
+                        {c.text}
+                    </div>
+                ))}
+            </div>
+
+            {/* Bottom Action Bar */}
+            <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0,
+                padding: "20px 16px calc(24px + var(--safe-bottom, 0px)) 16px",
+                display: "flex", justifyContent: "center", alignItems: "center",
+                background: "linear-gradient(0deg, rgba(0,0,0,0.85) 0%, transparent 100%)",
+                zIndex: 10
             }}>
                 {!isLive ? (
                     <button
                         onClick={startLive}
                         disabled={!camReady}
-                        style={{
-                            background: camReady
-                                ? 'linear-gradient(135deg, #FF3B30, #FF6B35)'
-                                : 'rgba(255,255,255,0.1)',
-                            color: 'white', border: 'none',
-                            padding: '14px 40px', borderRadius: 30,
-                            fontWeight: 900, fontSize: '1rem', letterSpacing: '0.5px',
-                            cursor: camReady ? 'pointer' : 'not-allowed',
-                            boxShadow: camReady ? '0 4px 20px rgba(255,59,48,0.4)' : 'none',
-                            opacity: camReady ? 1 : 0.5,
-                        }}
+                        className="btn-tactical-primary"
+                        style={{ padding: "14px 28px", fontSize: "1rem", borderRadius: "var(--radius-full)", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)", boxShadow: "0 4px 20px rgba(255,51,85,0.4)" }}
                     >
-                        🔴 TRANSMITIR EN VIVO
+                        🔴 INICIAR TRANSMISIÓN EN VIVO
                     </button>
                 ) : (
                     <button
                         onClick={stopLive}
-                        style={{
-                            background: 'rgba(255,255,255,0.15)',
-                            color: '#FF3B30', border: '1px solid #FF3B30',
-                            padding: '14px 40px', borderRadius: 30,
-                            fontWeight: 900, fontSize: '1rem', letterSpacing: '0.5px',
-                            cursor: 'pointer',
-                        }}
+                        className="btn-tactical-primary"
+                        style={{ padding: "14px 28px", fontSize: "1rem", borderRadius: "var(--radius-full)", background: "#333" }}
                     >
-                        ⏹️ FINALIZAR TRANSMISIÓN
+                        ⏹️ FINALIZAR DIRECTO
                     </button>
                 )}
             </div>

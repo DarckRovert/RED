@@ -1,15 +1,16 @@
-# RED API Reference (v30.0.0 Sovereign Master)
+# RED API Reference (v31.0.0 Sovereign Master)
 
 ## Overview
 
 RED provides a secure, decentralized messaging API with core modules across Rust native (`core`, `red_mobile`) and JavaScript client (`useRedStore`, `RedAPI`):
 
 - **Identity**: Sovereign identity management with DID (`did:red:<hash>:<pk>`)
-- **Crypto**: Cryptographic primitives (Noise XK, ChaCha20-Poly1305, Ed25519, X25519)
+- **Crypto**: Cryptographic primitives (Noise XK, ChaCha20-Poly1305, Ed25519, X25519, Kyber-1024)
 - **Protocol**: Protocol Ω envelope with Controlled Flood routing
-- **Network**: P2P networking with BLE GATT Server, WiFi Direct, and LoRa Radio
-- **Axum Local Server (`127.0.0.1:7333`)**: HTTP REST API and SSE Event streams
-- **Storage**: Encrypted local SQLite storage
+- **Network**: P2P networking with BLE GATT Server, WiFi Direct, LoRa Radio and SoundMesh
+- **Axum Local Server (`127.0.0.1:7333`)**: HTTP REST API and Real-Time SSE Event streams (`/api/events`)
+- **Native Hardware Actuators**: Android Camera2 API Torch, Morse SOS thread, environmental sensors and zero-trust wipe
+- **Storage**: Encrypted local Sled embedded key-value database
 
 ---
 
@@ -711,20 +712,55 @@ The local node exposes an HTTP REST API on `http://localhost:7333` for UI commun
   }
   ```
 
-#### 4. Get Eco-Mesh Battery Resilience Status
-* **Endpoint:** `GET /api/battery/status`
-* **Response:**
+---
+
+### v31.0 Real-Time Unified SSE & Native Hardware Actuators API
+
+#### 1. Real-Time Unified Event Stream (SSE)
+* **Endpoint:** `GET /api/events`
+* **Protocol:** Server-Sent Events (`text/event-stream`)
+* **Event Types Dispatched:**
+  - `connected`: Handshake event with local node status and server timestamp.
+  - `message`: Incoming E2E encrypted message or packet from peer.
+  - `emergency_beacon`: SOS beacon broadcast across the mesh.
+  - `weather_report`: Real-time CAP weather bulletin from barometric nodes.
+  - `node_log`: Real-time diagnostic and libp2p log stream.
+* **Format:**
   ```json
   {
-    "battery_status": {
-      "battery_level": 85,
-      "ble_scan_interval_ms": 2500,
-      "lora_tx_power_dbm": 14,
-      "estimated_mesh_hours": 48.5,
-      "eco_mode_enabled": true
+    "event_type": "emergency_beacon",
+    "timestamp": 1775123456,
+    "payload": {
+      "beacon_id": "sos_8b91a2",
+      "sender_hash": "3f7a8291c4e2",
+      "distress_type": "SOS_GENERAL",
+      "lat": 19.4326,
+      "lon": -99.1332,
+      "battery_level": 82
     }
   }
   ```
+
+#### 2. Native Hardware Actuators API (`RedNodePlugin`)
+Available on Android via `@capacitor/core` (`registerPlugin('RedNode')`):
+
+* **`toggleMorseSosTorch({ active: boolean })`**:
+  - Spawns/terminates a dedicated background thread modulating the rear camera Flash LED (`CameraManager.setTorchMode`) in international Morse code (`... --- ...`).
+* **`setTorch({ enabled: boolean })`**:
+  - Turns on/off continuous rear camera LED torch (used by `VitalScanEngine.ts` for PPG vital sign measurements).
+* **`isTorchAvailable()`**:
+  - Queries `CameraCharacteristics.FLASH_INFO_AVAILABLE` on the device's rear camera.
+* **`getBarometerSensor()`**:
+  - Returns current atmospheric pressure in hPa from `Sensor.TYPE_PRESSURE`.
+* **`getThermometerSensor()`**:
+  - Returns ambient temperature in °C from `Sensor.TYPE_AMBIENT_TEMPERATURE`.
+* **`getHygrometerSensor()`**:
+  - Returns relative humidity % from `Sensor.TYPE_RELATIVE_HUMIDITY`.
+* **`getCompassSensor()`**:
+  - Returns absolute azimuth angle from `Sensor.TYPE_ROTATION_VECTOR`.
+* **`destroy()`**:
+  - Immediately purges Sled database trees, private keys from Android Keystore and halts the native background service.
+
 
 
 

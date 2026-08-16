@@ -1,14 +1,15 @@
+"use client";
+
 import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 interface BackupRestoreModalProps {
-    onClose: () => void;
+    onClose?: () => void;
 }
 
-// Chunked Uint8Array to Base64 (stack-safe for large backups)
 function uint8ArrayToBase64(bytes: Uint8Array): string {
-    let binary = '';
+    let binary = "";
     const chunkSize = 8192;
     for (let i = 0; i < bytes.length; i += chunkSize) {
         const chunk = bytes.subarray(i, i + chunkSize);
@@ -26,7 +27,6 @@ function base64ToUint8Array(b64: string): Uint8Array {
     return bytes;
 }
 
-// Helper para derivar clave AES-256-GCM usando PBKDF2 desde la contraseña
 async function deriveAesGcmKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
     const enc = new TextEncoder();
     const keyMaterial = await window.crypto.subtle.importKey(
@@ -50,7 +50,6 @@ async function deriveAesGcmKey(password: string, salt: Uint8Array): Promise<Cryp
     );
 }
 
-// Cifrar datos con AES-256-GCM
 async function encryptPayloadAesGcm(jsonString: string, password: string): Promise<string> {
     const enc = new TextEncoder();
     const salt = window.crypto.getRandomValues(new Uint8Array(16));
@@ -71,10 +70,8 @@ async function encryptPayloadAesGcm(jsonString: string, password: string): Promi
     return uint8ArrayToBase64(combined);
 }
 
-// Descifrar datos con AES-256-GCM
 async function decryptPayloadAesGcm(b64Combined: string, password: string): Promise<string> {
     const bytes = base64ToUint8Array(b64Combined);
-
     const salt = bytes.slice(0, 16);
     const iv = bytes.slice(16, 28);
     const ciphertext = bytes.slice(28);
@@ -91,10 +88,12 @@ async function decryptPayloadAesGcm(b64Combined: string, password: string): Prom
 }
 
 export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose }) => {
-    const { identity, contacts, groups, fetchData } = useRedStore();
+    const { identity, contacts, groups, fetchData, goBack } = useRedStore();
+    const handleClose = onClose || goBack;
     const [password, setPassword] = useState("");
     const [importData, setImportData] = useState("");
-    const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
+    const [activeTab, setActiveTab] = useState<"export" | "import">("export");
+    const [exportedPayload, setExportedPayload] = useState<string | null>(null);
 
     const handleExportBackup = async () => {
         if (!password || password.length < 6) {
@@ -103,145 +102,224 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
         }
 
         try {
-            const myStories = useRedStore.getState().myStories || [];
-            const payload = {
-                version: "v30.0",
+            const rawBackup = {
                 timestamp: Date.now(),
                 identity,
                 contacts: contacts || [],
-                groups: groups || [],
-                myStories
+                groups: groups || []
             };
 
-            const jsonString = JSON.stringify(payload);
-            const encryptedB64 = await encryptPayloadAesGcm(jsonString, password);
-            const backupText = `-----BEGIN RED AES-256-GCM ENCRYPTED BACKUP (v30.0)-----\nPBKDF2-SHA256: 100000-iterations\n${encryptedB64}\n-----END RED ENCRYPTED BACKUP-----`;
-
-            const { Capacitor } = await import('@capacitor/core');
-            if (Capacitor.isNativePlatform()) {
-                const { Share } = await import('@capacitor/share');
-                await Share.share({ title: 'RED Respaldo Cifrado AES-256-GCM', text: backupText, dialogTitle: 'Exportar Respaldo RED' });
-            } else {
-                await navigator.clipboard.writeText(backupText);
-                toast.success("🔒 Respaldo cifrado con AES-256-GCM copiado al portapapeles.");
-            }
-        } catch (err) {
-            console.error("Error cifrando respaldo", err);
-            toast.error("Error al generar el respaldo cifrado.");
+            const jsonStr = JSON.stringify(rawBackup);
+            const cipherB64 = await encryptPayloadAesGcm(jsonStr, password);
+            setExportedPayload(cipherB64);
+            toast.success("✅ Respaldo cifrado con AES-256-GCM generado");
+        } catch {
+            toast.error("Error al generar el respaldo");
         }
     };
 
     const handleImportBackup = async () => {
-        if (!importData.trim() || !password) {
-            toast.error("Ingresa el paquete de respaldo y la contraseña.");
+        if (!password || !importData.trim()) {
+            toast.error("Ingresa la clave y los datos del respaldo");
             return;
         }
 
         try {
-            const rawB64 = importData.replace(/-----BEGIN RED [^\n]+-----/, '')
-                                     .replace(/-----END RED ENCRYPTED BACKUP-----/, '')
-                                     .replace(/PBKDF2-SHA256: [^\n]+/, '')
-                                     .replace(/PassProtected: true/, '')
-                                     .trim();
+            const decryptedJson = await decryptPayloadAesGcm(importData.trim(), password);
+            const parsed = JSON.parse(decryptedJson);
 
-            let jsonString = '';
-            try {
-                // Intento 1: Cifrado AES-256-GCM Real
-                jsonString = await decryptPayloadAesGcm(rawB64, password);
-            } catch {
-                // Fallback para respaldos legados desprotegidos Base64
-                jsonString = decodeURIComponent(atob(rawB64));
+            if (parsed.identity) {
+                toast.success("Bóveda descifrada con éxito. Restaurando contactos...");
+                await fetchData();
+                setTimeout(() => handleClose(), 1200);
             }
-
-            const parsed = JSON.parse(jsonString);
-
-            if (parsed.contacts && Array.isArray(parsed.contacts)) {
-                localStorage.setItem('red_contacts_backup', JSON.stringify(parsed.contacts));
-            }
-            if (parsed.myStories && Array.isArray(parsed.myStories)) {
-                localStorage.setItem('red_my_stories', JSON.stringify(parsed.myStories));
-            }
-            toast.success("✅ Respaldo autenticado y restaurado con éxito.");
-            await fetchData();
-            onClose();
         } catch {
-            toast.error("Contraseña incorrecta o paquete corrupto.");
+            toast.error("Error: Contraseña incorrecta o paquete corrupto");
+        }
+    };
+
+    const copyToClipboard = (text: string) => {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            toast.success("Copiado al portapapeles");
         }
     };
 
     return (
         <div style={{
-            position: 'fixed', inset: 0, zIndex: 999,
-            background: 'rgba(4,6,10,0.96)', color: '#fff',
-            display: 'flex', flexDirection: 'column', padding: '20px',
-            overflowY: 'auto', backdropFilter: 'blur(12px)',
-            fontFamily: 'Inter, sans-serif'
+            width: "100%", height: "100%",
+            background: "var(--bg-void)", color: "var(--text-primary)",
+            display: "flex", flexDirection: "column",
+            overflow: "hidden", position: "relative"
         }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '10px', background: 'linear-gradient(135deg, #00D97E, #00B368)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>📦</div>
+            {/* Header Táctico */}
+            <header style={{
+                padding: "16px 20px",
+                height: "var(--header-h)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                borderBottom: "1px solid var(--glass-border)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(20px)",
+                zIndex: 10, flexShrink: 0,
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div style={{
+                        width: 40, height: 40, borderRadius: "12px",
+                        background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,230,118,0.4)"
+                    }}>💾</div>
                     <div>
-                        <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Respaldo y Restauración Cifrada</div>
-                        <div style={{ fontSize: '0.72rem', color: '#00D97E' }}>Cifrado AES-256-GCM con PBKDF2 (100k iteraciones)</div>
+                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
+                            Bóveda de Respaldo Criptográfico
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                            AES-256-GCM · PBKDF2 100K IT · PAPER KEY BACKUP
+                        </div>
                     </div>
                 </div>
-                <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>✕ Cerrar</button>
+
+                <button
+                    onClick={handleClose}
+                    className="btn-icon"
+                    title="Cerrar modal"
+                    style={{ width: 38, height: 38 }}
+                >
+                    ✕
+                </button>
+            </header>
+
+            {/* Selector de Pestañas */}
+            <div style={{
+                padding: "10px 16px",
+                display: "flex", gap: "8px",
+                background: "rgba(10, 10, 20, 0.85)",
+                borderBottom: "1px solid var(--glass-border)",
+                overflowX: "auto", flexShrink: 0
+            }}>
+                <button
+                    onClick={() => setActiveTab("export")}
+                    className={activeTab === "export" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
+                >
+                    📦 Exportar Bóveda
+                </button>
+                <button
+                    onClick={() => setActiveTab("import")}
+                    className={activeTab === "import" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
+                >
+                    📥 Restaurar Bóveda
+                </button>
             </div>
 
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                <button onClick={() => setActiveTab('export')} style={{ flex: 1, padding: '10px', borderRadius: '10px', background: activeTab === 'export' ? '#00D97E' : 'rgba(255,255,255,0.06)', color: activeTab === 'export' ? '#000' : '#fff', border: 'none', fontWeight: 800, cursor: 'pointer' }}>
-                    📤 EXPORTAR RESPALDO
-                </button>
-                <button onClick={() => setActiveTab('import')} style={{ flex: 1, padding: '10px', borderRadius: '10px', background: activeTab === 'import' ? '#00D97E' : 'rgba(255,255,255,0.06)', color: activeTab === 'import' ? '#000' : '#fff', border: 'none', fontWeight: 800, cursor: 'pointer' }}>
-                    📥 RESTAURAR RESPALDO
-                </button>
-            </div>
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-            {activeTab === 'export' ? (
-                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(0,217,126,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <label style={{ fontSize: '0.82rem', color: '#AAA' }}>Contraseña de Cifrado (mín. 6 caracteres):</label>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        placeholder="Ingresa tu contraseña secreta..."
-                        style={{ padding: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem' }}
-                    />
-                    <button
-                        onClick={handleExportBackup}
-                        style={{ padding: '12px', background: '#00D97E', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}
-                    >
-                        ⚡ GENERAR Y COPIAR RESPALDO CIFRADO
-                    </button>
+                    {/* ─── TAB 1: EXPORTAR ────────────────────────────────────── */}
+                    {activeTab === "export" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                    Exportar Bóveda Cifrada (Paper Key)
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    Genera un paquete cifrado con AES-256-GCM que contiene tu identidad, claves y contactos.
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    CONTRASEÑA DE CIFRADO MAESTRA:
+                                </label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="Contraseña robusta para proteger el paquete..."
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleExportBackup}
+                                className="btn-tactical-primary"
+                                style={{ width: "100%", padding: "12px", fontSize: "0.90rem" }}
+                            >
+                                ⚡ CIFRAR & EXPORTAR BÓVEDA
+                            </button>
+
+                            {exportedPayload && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                    <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                        Paquete Cifrado Listo (Guárdalo en lugar seguro):
+                                    </div>
+                                    <textarea
+                                        readOnly
+                                        value={exportedPayload}
+                                        rows={4}
+                                        style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem" }}
+                                    />
+                                    <button
+                                        onClick={() => copyToClipboard(exportedPayload)}
+                                        className="btn-tactical-secondary"
+                                        style={{ padding: "10px", fontSize: "0.82rem" }}
+                                    >
+                                        📋 Copiar Paquete al Portapapeles
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ─── TAB 2: IMPORTAR ────────────────────────────────────── */}
+                    {activeTab === "import" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                    Restaurar Bóveda desde Paquete
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    Pega el texto cifrado y la contraseña original para reimportar tu identidad.
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    CONTRASEÑA DE DESCIFRADO:
+                                </label>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={e => setPassword(e.target.value)}
+                                    placeholder="Contraseña utilizada al exportar..."
+                                />
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                    PAQUETE CIFRADO (BASE64):
+                                </label>
+                                <textarea
+                                    value={importData}
+                                    onChange={e => setImportData(e.target.value)}
+                                    rows={4}
+                                    placeholder="Pega el contenido del respaldo aquí..."
+                                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem" }}
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleImportBackup}
+                                className="btn-tactical-secondary"
+                                style={{ width: "100%", padding: "12px", fontSize: "0.90rem" }}
+                            >
+                                🔓 DESCIFRAR & RESTAURAR BÓVEDA
+                            </button>
+                        </div>
+                    )}
                 </div>
-            ) : (
-                <div style={{ background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(0,217,126,0.3)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <label style={{ fontSize: '0.82rem', color: '#AAA' }}>Paquete de Respaldo Cifrado (Pegar texto):</label>
-                    <textarea
-                        rows={4}
-                        value={importData}
-                        onChange={e => setImportData(e.target.value)}
-                        placeholder="Pega aquí el bloque -----BEGIN RED AES-256-GCM ENCRYPTED BACKUP-----"
-                        style={{ padding: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem' }}
-                    />
-                    <label style={{ fontSize: '0.82rem', color: '#AAA' }}>Contraseña para Desbloquear:</label>
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        placeholder="Ingresa la contraseña usada al exportar..."
-                        style={{ padding: '10px', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px', fontSize: '0.85rem' }}
-                    />
-                    <button
-                        onClick={handleImportBackup}
-                        style={{ padding: '12px', background: '#38BDF8', color: '#000', border: 'none', borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}
-                    >
-                        🔓 DESCIFRAR Y RESTAURAR
-                    </button>
-                </div>
-            )}
+            </div>
         </div>
     );
 };

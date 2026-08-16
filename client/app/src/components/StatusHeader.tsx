@@ -10,26 +10,24 @@ export default function StatusHeader() {
     const [loraActive, setLoraActive] = useState(false);
 
     useEffect(() => {
-        setLoraActive(localStorage.getItem("red_lora_enabled") === "true");
+        setLoraActive(typeof window !== "undefined" && localStorage.getItem("red_lora_enabled") === "true");
         if (!nodeOnline) return;
         const refresh = async () => {
             try {
                 const peers = await RedAPI.getPeers();
                 let wifi = 0, ble = 0, lora = 0, total = 0;
                 for (const p of peers) {
-                    const t = (p.transport || '').toLowerCase();
-                    if (t === 'wifi_direct' || t === 'websocket' || t === 'quic') wifi++;
-                    else if (t === 'ble') ble++;
-                    else if (t === 'lorawan' || t === 'lora') lora++;
+                    const t = (p.transport || "").toLowerCase();
+                    if (t === "wifi_direct" || t === "websocket" || t === "quic") wifi++;
+                    else if (t === "ble") ble++;
+                    else if (t === "lorawan" || t === "lora") lora++;
                     total++;
                 }
                 setMeshCounts({ wifi, ble, lora, total });
-            } catch {
-                // Fallback: if node unreachable, keep zeroes
-            }
+            } catch {}
         };
         refresh();
-        const timer = setInterval(refresh, 5000);
+        const timer = setInterval(refresh, 4000);
         return () => clearInterval(timer);
     }, [nodeOnline]);
 
@@ -42,43 +40,35 @@ export default function StatusHeader() {
     })();
 
     const networkColor: Record<string, string> = {
-        LORA:       '#9b59b6',
-        WIFI:       '#00D97E',
-        BLE:        '#3498db',
-        'P2P MESH': '#FF7043',
-        STANDALONE: 'var(--primary)',
-    };
-
-    const networkIcon: Record<string, string> = {
-        LORA:       '📻',
-        WIFI:       '📶',
-        BLE:        '🔵',
-        'P2P MESH': '⚡',
-        STANDALONE: '🛡️',
+        LORA:       "var(--accent-purple, #B388FF)",
+        WIFI:       "var(--accent-emerald)",
+        BLE:        "var(--accent-cyan)",
+        "P2P MESH": "var(--accent-amber)",
+        STANDALONE: "var(--accent-crimson)",
     };
 
     const isOffline = !nodeOnline;
-    const hasMesh = meshCounts.total > 0;
-    const color = networkColor[activeNetwork];
+    const color = networkColor[activeNetwork] || "var(--accent-cyan)";
 
     if (isOffline) {
         return (
             <div style={{
-                width: '100%',
-                background: 'linear-gradient(90deg, rgba(232,33,58,0.95), rgba(200,20,45,0.9))',
-                color: 'white',
-                textAlign: 'center',
-                padding: 'calc(4px + var(--safe-top, 0px)) 8px 4px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                zIndex: 5,
-                letterSpacing: '0.5px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px'
+                width: "100%",
+                background: "linear-gradient(90deg, #FF3355, #E8213A)",
+                color: "white",
+                textAlign: "center",
+                padding: "calc(4px + var(--safe-top, 0px)) 8px 4px 8px",
+                fontSize: "11px",
+                fontWeight: 800,
+                zIndex: 50,
+                letterSpacing: "0.5px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                flexShrink: 0
             }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'white', display: 'inline-block', animation: 'pulse-glow 1s infinite' }} />
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "white", display: "inline-block", animation: "pulse 1s infinite" }} />
                 NODO CRIPTOGRÁFICO INACCESIBLE
             </div>
         );
@@ -86,147 +76,53 @@ export default function StatusHeader() {
 
     return (
         <div style={{
-            width: '100%',
-            background: hasMesh
-                ? `linear-gradient(90deg, rgba(8,8,16,0.98) 0%, rgba(${meshCounts.wifi > 0 ? '0,40,20' : meshCounts.ble > 0 ? '10,25,45' : '30,0,40'},0.98) 100%)`
-                : 'var(--bg-lifted)',
-            borderBottom: `1px solid ${hasMesh ? color + '30' : 'var(--solid-border)'}`,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: 'calc(2px + var(--safe-top, 0px)) 14px 2px 14px',
-            fontFamily: 'JetBrains Mono, monospace',
-            color: 'var(--text-secondary)',
-            zIndex: 5,
-            minHeight: '28px',
-            transition: 'all 0.4s ease',
-            position: 'relative',
-            overflow: 'hidden',
+            width: "100%",
+            background: "linear-gradient(180deg, rgba(8,8,16,0.98) 0%, rgba(12,12,22,0.95) 100%)",
+            borderBottom: "1px solid var(--glass-border)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "calc(3px + var(--safe-top, 0px)) 10px 3px 10px",
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: "0.70rem",
+            color: "var(--text-secondary)",
+            zIndex: 50,
+            backdropFilter: "blur(16px)",
+            flexShrink: 0,
+            gap: "6px"
         }}>
-            {/* Animated background shimmer when mesh is active */}
-            {hasMesh && (
-                <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: `linear-gradient(90deg, transparent 0%, ${color}08 50%, transparent 100%)`,
-                    backgroundSize: '200% 100%',
-                    animation: 'shimmer 3s linear infinite',
-                    pointerEvents: 'none',
+            {/* Left: Active Transport Pill */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexShrink: 1 }}>
+                <span style={{
+                    width: 7, height: 7, borderRadius: "50%",
+                    background: color, boxShadow: `0 0 8px ${color}`,
+                    display: "inline-block", flexShrink: 0
                 }} />
-            )}
-
-            {/* LEFT: Network type + mesh breakdown */}
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', position: 'relative' }}>
-                {/* Animated status dot with radar pings */}
-                <div style={{ position: 'relative', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {/* The pings are absolutely positioned within this 14x14 container */}
-                    {hasMesh && (
-                        <>
-                            <div className="radar-ping" style={{ width: '100%', height: '100%', top: 0, left: 0, borderColor: color }} />
-                            <div className="radar-ping" style={{ width: '100%', height: '100%', top: 0, left: 0, borderColor: color, animationDelay: '0.7s' }} />
-                        </>
-                    )}
-                    {/* Core dot in center */}
-                    <div style={{
-                        width: 7, height: 7, borderRadius: '50%',
-                        background: hasMesh ? color : 'var(--text-muted)',
-                        boxShadow: hasMesh ? `0 0 6px ${color}` : 'none',
-                        transition: 'all 0.4s ease',
-                        position: 'relative', zIndex: 1,
-                    }} />
-                </div>
-
-                {/* Network label */}
-                <span style={{ color, fontSize: '10px', fontWeight: 700, letterSpacing: '0.5px' }}>
-                    {networkIcon[activeNetwork]} {activeNetwork}
+                <span style={{ color: "#fff", fontWeight: 800, letterSpacing: "0.3px", whiteSpace: "nowrap" }}>
+                    {activeNetwork}
                 </span>
-
-                {/* Mesh peer breakdown — WiFi / BLE / LoRa badges */}
-                {hasMesh ? (
-                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        {meshCounts.wifi > 0  && <span className="mesh-badge mesh-badge-wifi">{meshCounts.wifi}📶</span>}
-                        {meshCounts.ble  > 0  && <span className="mesh-badge mesh-badge-ble">{meshCounts.ble}🔵</span>}
-                        {meshCounts.lora > 0  && <span className="mesh-badge mesh-badge-lora">{meshCounts.lora}📻</span>}
-                        {/* Flowing data dots when relaying */}
-                        <span style={{ position: 'relative', width: 32, height: 7, display: 'inline-flex', alignItems: 'center', overflow: 'hidden' }}>
-                            <span className="data-dot" />
-                            <span className="data-dot" />
-                            <span className="data-dot" />
-                        </span>
-                        <span style={{ color: 'var(--success)', fontSize: '10px', fontWeight: 600 }}>
-                            {meshCounts.total} {meshCounts.total === 1 ? 'nodo' : 'nodos'}
-                        </span>
-                    </div>
-                ) : (
-                    <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>
-                        NODOS: {status?.peer_count ?? 0}
-                    </span>
-                )}
+                <span style={{ color: "var(--text-muted)", fontSize: "0.66rem", whiteSpace: "nowrap" }}>
+                    ({meshCounts.total})
+                </span>
             </div>
 
-            {/* RIGHT: Crypto status + identity short + version + settings */}
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative' }}>
-                <span style={{ color: 'var(--success)', fontSize: '10px', opacity: 0.9, letterSpacing: '0.2px' }}>
-                    🔐 E2E
-                </span>
-                {identity && (
-                    <span style={{
-                        fontSize: '9px',
-                        color: 'var(--text-muted)',
-                        fontFamily: 'JetBrains Mono, monospace',
-                        letterSpacing: '0.3px',
-                    }}>
-                        {identity.short_id}
-                    </span>
-                )}
-                {/* ── Chat Button — direct access to main chat ── */}
+            {/* Right: Quick Telemetry & Shortcuts */}
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: "4px", fontSize: "0.66rem" }}>
+                    {meshCounts.wifi > 0 && <span style={{ color: "var(--accent-emerald)" }}>WIFI:{meshCounts.wifi}</span>}
+                    {meshCounts.ble > 0 && <span style={{ color: "var(--accent-cyan)" }}>BLE:{meshCounts.ble}</span>}
+                    {meshCounts.lora > 0 && <span style={{ color: "var(--accent-purple, #B388FF)" }}>LORA:{meshCounts.lora}</span>}
+                </div>
+
                 <button
-                    id="chat-btn-header"
-                    onClick={() => navigate('sidebar')}
-                    title="Ir al Chat Principal"
+                    onClick={() => navigate("nodemap")}
                     style={{
-                        background: 'rgba(232,33,58,0.2)',
-                        border: '1px solid rgba(232,33,58,0.4)',
-                        borderRadius: '6px',
-                        color: 'white',
-                        padding: '3px 8px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        transition: 'all 0.15s ease',
-                        flexShrink: 0,
-                        gap: '4px',
+                        background: "rgba(255,255,255,0.06)", border: "1px solid var(--glass-border)",
+                        borderRadius: "var(--radius-full)", padding: "1px 7px", color: "var(--accent-cyan)",
+                        fontSize: "0.66rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap"
                     }}
                 >
-                    💬 Chat
-                </button>
-                {/* ── Settings Button — always visible ── */}
-                <button
-                    id="settings-btn-header"
-                    onClick={() => navigate('settings')}
-                    title="Configuración y Seguridad"
-                    style={{
-                        background: 'rgba(255,255,255,0.06)',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        borderRadius: '6px',
-                        color: 'var(--text-secondary)',
-                        width: 24,
-                        height: 24,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        transition: 'all 0.15s ease',
-                        flexShrink: 0,
-                    }}
-                    onMouseOver={e => { e.currentTarget.style.background = 'rgba(232,33,58,0.2)'; e.currentTarget.style.borderColor = 'rgba(232,33,58,0.4)'; }}
-                    onMouseOut={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
-                >
-                    ⚙️
+                    🗺️ MAPA
                 </button>
             </div>
         </div>

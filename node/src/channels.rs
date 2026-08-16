@@ -61,7 +61,7 @@ impl ChannelStore {
             "{}:{}:{}:{}",
             req.channel_id, sender_did, req.content, timestamp
         );
-        let hash = format!("{:x}", blake3::hash(hash_input.as_bytes()));
+        let hash = blake3::hash(hash_input.as_bytes()).to_hex().to_string();
         let id = format!("msg_{}", &hash[..12]);
 
         let msg = ChannelMessage {

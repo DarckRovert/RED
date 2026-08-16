@@ -1,6 +1,6 @@
 [package]
 name = "red-blockchain"
-version = "0.1.0"
+version = "31.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "Blockchain for RED identity management"
@@ -39,3 +39,4 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+

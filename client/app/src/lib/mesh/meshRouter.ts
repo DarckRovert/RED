@@ -34,13 +34,25 @@ const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000; // 72 hours
 const MAX_DEDUP_CACHE = 50_000;
 
 export interface MeshPeer {
-  id: string;          // Short node ID or BLE device ID
-  transport: 'wifi' | 'ble' | 'lora';
-  lastSeen: number;    // Unix ms
+  id: string;          // Canonical node ID or hardware device ID
+  canonicalId?: string; // Resolved canonical identity hash (64-char hex)
+  name?: string;
+  publicKey?: string;
+  transport?: 'wifi' | 'ble' | 'lora' | string;
+  transports?: ('wifi' | 'ble' | 'lora')[];
+  lastSeen?: number;   // Unix ms
   rssi?: number;       // Signal strength (BLE only)
+  lat?: number;
+  lng?: number;
 }
 
 export type MeshMessageHandler = (packet: MeshPacket) => void;
+
+interface PendingIdentityQuery {
+  resolve: (info: { identity_hash: string; display_name: string; public_key?: string }) => void;
+  reject: (err: any) => void;
+  timer: any;
+}
 
 class MeshRouter {
   private myIdentityHash: string = '';
@@ -49,8 +61,14 @@ class MeshRouter {
   /** Nonces of recently seen packets — prevents relay loops */
   private seenNonces: Map<string, number> = new Map(); // nonce → timestamp
 
-  /** Known peers across all transports */
+  /** Known peers across all transports (keyed by canonical ID or hardware ID) */
   public peers: Map<string, MeshPeer> = new Map();
+
+  /** Maps raw hardware device IDs (BLE MAC, WebRTC client IDs) to 64-char canonical identity_hash */
+  public deviceToCanonicalMap: Map<string, string> = new Map();
+
+  /** Pending identity query promises keyed by hardware device ID or sender hash */
+  private pendingIdentityQueries: Map<string, PendingIdentityQuery[]> = new Map();
 
   /** Listeners for packets addressed to THIS node */
   private localDeliveryHandlers: MeshMessageHandler[] = [];
@@ -71,13 +89,13 @@ class MeshRouter {
     // Receive from BLE
     bluetoothTransport.onMessage(({ from, payload }) => {
       this.updatePeer(from, 'ble');
-      this.handleRawPacket(payload); // fire-and-forget; handles its own errors
+      this.handleRawPacket(payload, from, 'ble');
     });
 
     // Receive from WiFi Direct DataChannel
     this.wifi.onMessage(({ from, payload }) => {
       this.updatePeer(from, 'wifi');
-      this.handleRawPacket(payload); // fire-and-forget; handles its own errors
+      this.handleRawPacket(payload, from, 'wifi');
     });
 
     console.log('[MeshRouter] Initialized — identity:', myIdentityHash.slice(0, 12));
@@ -101,6 +119,244 @@ class MeshRouter {
     setInterval(() => this.flushPendingQueue(), 10_000);
   }
 
+  // ─── Canonical Identity Lookup & Handshake ───────────────────────────────────
+
+  /**
+   * Returns the 64-character canonical identity_hash associated with any
+   * hardware ID (BLE MAC, UUID, WiFi peer ID) or returns the original ID
+   * if already canonical.
+   */
+  getCanonicalId(id: string): string {
+    if (!id) return '';
+    const clean = id.trim();
+    if (this.deviceToCanonicalMap.has(clean)) {
+      return this.deviceToCanonicalMap.get(clean)!;
+    }
+    const peer = this.peers.get(clean);
+    if (peer?.canonicalId && peer.canonicalId.length === 64) {
+      return peer.canonicalId;
+    }
+    if (clean.length === 64 && /^[0-9a-fA-F]+$/.test(clean)) {
+      return clean.toLowerCase();
+    }
+    return clean;
+  }
+
+  /**
+   * Finds a peer record by hardware ID, canonical ID, or reverse lookup.
+   */
+  getPeerByAnyId(id: string): MeshPeer | undefined {
+    if (!id) return undefined;
+    const clean = id.trim();
+    if (this.peers.has(clean)) return this.peers.get(clean);
+    const canonical = this.getCanonicalId(clean);
+    if (canonical && this.peers.has(canonical)) return this.peers.get(canonical);
+    for (const p of this.peers.values()) {
+      if (p.id === clean || p.canonicalId === clean || p.canonicalId === canonical) return p;
+    }
+    return undefined;
+  }
+
+  /**
+   * Binds a hardware device ID (e.g. BLE MAC) to a canonical 64-hex identity_hash.
+   */
+  bindDeviceToCanonical(deviceId: string, canonicalId: string, displayName?: string, publicKey?: string) {
+    if (!deviceId || !canonicalId) return;
+    const cleanDevice = deviceId.trim();
+    const cleanCanonical = canonicalId.trim();
+
+    this.deviceToCanonicalMap.set(cleanDevice, cleanCanonical);
+
+    // Migrate any temporary peer record under deviceId to canonicalId
+    const tempPeer = this.peers.get(cleanDevice);
+    if (tempPeer && cleanDevice !== cleanCanonical) {
+      this.peers.delete(cleanDevice);
+      this.updatePeer(
+        cleanCanonical,
+        (tempPeer.transport as any) || 'ble',
+        tempPeer.rssi,
+        cleanCanonical,
+        displayName || tempPeer.name,
+        publicKey || tempPeer.publicKey
+      );
+    } else if (displayName || publicKey) {
+      const existing = this.peers.get(cleanCanonical);
+      if (existing) {
+        if (displayName) existing.name = displayName;
+        if (publicKey) existing.publicKey = publicKey;
+        this.peers.set(cleanCanonical, existing);
+      }
+    }
+
+    // Resolve any awaiting query promises
+    this.notifyPendingIdentityQueries(cleanDevice, cleanCanonical, displayName, publicKey);
+    this.notifyPendingIdentityQueries(cleanCanonical, cleanCanonical, displayName, publicKey);
+  }
+
+  private notifyPendingIdentityQueries(key: string, identityHash: string, displayName?: string, publicKey?: string) {
+    const list = this.pendingIdentityQueries.get(key);
+    if (list && list.length > 0) {
+      this.pendingIdentityQueries.delete(key);
+      for (const q of list) {
+        clearTimeout(q.timer);
+        q.resolve({
+          identity_hash: identityHash,
+          display_name: displayName || `Operador ${identityHash.slice(0, 6)}`,
+          public_key: publicKey,
+        });
+      }
+    }
+  }
+
+  /**
+   * Queries the canonical identity of an active peer over the link if not yet resolved.
+   */
+  async queryIdentity(deviceId: string, transport?: 'ble' | 'wifi'): Promise<{ identity_hash: string; display_name: string; public_key?: string } | null> {
+    const canonical = this.getCanonicalId(deviceId);
+    if (canonical && canonical.length === 64 && canonical !== deviceId) {
+      const peer = this.getPeerByAnyId(canonical);
+      return {
+        identity_hash: canonical,
+        display_name: peer?.name || `Operador ${canonical.slice(0, 6)}`,
+        public_key: peer?.publicKey,
+      };
+    }
+
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        const remaining = (this.pendingIdentityQueries.get(deviceId) || []).filter(q => q.timer !== timer);
+        if (remaining.length > 0) this.pendingIdentityQueries.set(deviceId, remaining);
+        else this.pendingIdentityQueries.delete(deviceId);
+        resolve(null);
+      }, 3000);
+
+      const entry: PendingIdentityQuery = { resolve, reject: () => resolve(null), timer };
+      const current = this.pendingIdentityQueries.get(deviceId) || [];
+      current.push(entry);
+      this.pendingIdentityQueries.set(deviceId, current);
+
+      // Send IDENTITY_REQUEST packet over transport
+      this.sendIdentityRequest(deviceId, transport).catch(() => {});
+    });
+  }
+
+  /**
+   * Broadcasts or sends an IDENTITY_ANNOUNCE packet to a target peer or across all transports.
+   */
+  async sendIdentityAnnounce(targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
+    try {
+      if (!this.myIdentityHash) return;
+      let displayName = 'Operador RED';
+      let pubKey = '';
+      let shortId = this.myIdentityHash.slice(0, 8);
+
+      if (typeof window !== 'undefined') {
+        displayName = localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname') || 'Operador RED';
+        pubKey = localStorage.getItem('red_public_key') || this.myIdentityHash;
+        shortId = localStorage.getItem('red_short_id') || this.myIdentityHash.slice(0, 8);
+      }
+
+      const payloadObj = {
+        type: 'IDENTITY_ANNOUNCE',
+        payload: {
+          identity_hash: this.myIdentityHash,
+          display_name: displayName,
+          public_key: pubKey,
+          short_id: shortId,
+          timestamp: Date.now(),
+        }
+      };
+
+      const rawPayload = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(
+        this.myIdentityHash,
+        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        rawPayload
+      );
+      const encoded = encode(packet);
+
+      if (targetDeviceId && transport) {
+        await this.sendToPeer(targetDeviceId, transport, encoded);
+      } else {
+        await this.broadcast(encoded);
+      }
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to send identity announce:', e);
+    }
+  }
+
+  /**
+   * Sends an IDENTITY_RESPONSE packet directly to a peer that announced or requested identity.
+   */
+  async sendIdentityResponse(recipientHash: string, targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
+    try {
+      if (!this.myIdentityHash) return;
+      let displayName = 'Operador RED';
+      let pubKey = '';
+      let shortId = this.myIdentityHash.slice(0, 8);
+
+      if (typeof window !== 'undefined') {
+        displayName = localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname') || 'Operador RED';
+        pubKey = localStorage.getItem('red_public_key') || this.myIdentityHash;
+        shortId = localStorage.getItem('red_short_id') || this.myIdentityHash.slice(0, 8);
+      }
+
+      const payloadObj = {
+        type: 'IDENTITY_RESPONSE',
+        payload: {
+          identity_hash: this.myIdentityHash,
+          display_name: displayName,
+          public_key: pubKey,
+          short_id: shortId,
+          timestamp: Date.now(),
+        }
+      };
+
+      const rawPayload = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(this.myIdentityHash, recipientHash, rawPayload);
+      const encoded = encode(packet);
+
+      if (targetDeviceId && transport) {
+        await this.sendToPeer(targetDeviceId, transport, encoded);
+      } else {
+        await this.forwardPacket(packet, null);
+      }
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to send identity response:', e);
+    }
+  }
+
+  /**
+   * Sends an IDENTITY_REQUEST query packet to a peer.
+   */
+  private async sendIdentityRequest(targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
+    try {
+      if (!this.myIdentityHash) return;
+      const payloadObj = {
+        type: 'IDENTITY_REQUEST',
+        payload: {
+          requester_hash: this.myIdentityHash,
+          timestamp: Date.now(),
+        }
+      };
+      const rawPayload = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(
+        this.myIdentityHash,
+        targetDeviceId && targetDeviceId.length === 64 ? targetDeviceId : 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        rawPayload
+      );
+      const encoded = encode(packet);
+
+      if (targetDeviceId && transport) {
+        await this.sendToPeer(targetDeviceId, transport, encoded);
+      } else {
+        await this.broadcast(encoded);
+      }
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to send identity request:', e);
+    }
+  }
+
   // ─── Sending ────────────────────────────────────────────────────────────────
 
   /**
@@ -109,7 +365,8 @@ class MeshRouter {
    * and will be delivered as soon as any peer connects that can relay it.
    */
   async send(recipientHash: string, payload: Uint8Array): Promise<'sent' | 'queued' | 'failed'> {
-    const packet = createPacket(this.myIdentityHash, recipientHash, payload);
+    const canonicalRecipient = this.getCanonicalId(recipientHash);
+    const packet = createPacket(this.myIdentityHash, canonicalRecipient, payload);
     return this.forwardPacket(packet, null);
   }
 
@@ -121,7 +378,7 @@ class MeshRouter {
     let sent = 0;
     for (const [peerId, peer] of this.peers) {
       if (peerId === exceptPeer) continue;
-      const ok = await this.sendToPeer(peerId, peer.transport, payload);
+      const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', payload);
       if (ok) sent++;
     }
     return sent;
@@ -129,7 +386,7 @@ class MeshRouter {
 
   // ─── Receiving & Relaying ───────────────────────────────────────────────────
 
-  private async handleRawPacket(raw: Uint8Array) {
+  private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
     const packet = decode(raw);
     if (!packet) {
       console.warn('[MeshRouter] Received malformed packet, ignoring');
@@ -142,15 +399,74 @@ class MeshRouter {
     }
     this.markSeen(packet.nonce);
 
-    // Check if packet is intended for THIS node (exact hash, short prefix, broadcast, or handshake)
+    // Bind packet sender to transport ID if provided
+    if (packet.sender && packet.sender.length === 64) {
+      if (fromTransportId) {
+        this.bindDeviceToCanonical(fromTransportId, packet.sender);
+      }
+      this.updatePeer(packet.sender, transportType || 'ble', undefined, packet.sender);
+    }
+
+    // Check if packet is intended for THIS node or is a control/handshake signal
     let isHandshakeMsg = false;
+    let isLocationMsg = false;
+
     try {
       const payloadStr = new TextDecoder().decode(packet.payload);
-      isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('sender_hash');
+
+      // Identity Handshake protocol handling
+      if (payloadStr.startsWith('{') && (payloadStr.includes('IDENTITY_ANNOUNCE') || payloadStr.includes('IDENTITY_RESPONSE') || payloadStr.includes('IDENTITY_REQUEST'))) {
+        const parsed = JSON.parse(payloadStr);
+
+        if (parsed.type === 'IDENTITY_ANNOUNCE' || parsed.type === 'IDENTITY_RESPONSE') {
+          const idData = parsed.payload;
+          if (idData?.identity_hash) {
+            const peerHash = idData.identity_hash;
+            const peerName = idData.display_name || `Operador ${peerHash.slice(0, 6)}`;
+            const peerPk = idData.public_key;
+
+            if (fromTransportId) {
+              this.bindDeviceToCanonical(fromTransportId, peerHash, peerName, peerPk);
+            }
+            this.bindDeviceToCanonical(packet.sender, peerHash, peerName, peerPk);
+            this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk);
+
+            // If it was an announcement (and from another node), auto-respond so they bind us too
+            if (parsed.type === 'IDENTITY_ANNOUNCE' && peerHash !== this.myIdentityHash) {
+              this.sendIdentityResponse(peerHash, fromTransportId, transportType).catch(() => {});
+            }
+          }
+          return; // Handshake packet processed completely
+        }
+
+        if (parsed.type === 'IDENTITY_REQUEST') {
+          const reqSender = parsed.payload?.requester_hash || packet.sender;
+          if (reqSender && reqSender !== this.myIdentityHash) {
+            this.sendIdentityResponse(reqSender, fromTransportId, transportType).catch(() => {});
+          }
+          return;
+        }
+      }
+
+      isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('shake_pair_');
+      if (payloadStr.startsWith('{"type":"NODE_LOCATION_UPDATE"')) {
+        isLocationMsg = true;
+        const data = JSON.parse(payloadStr);
+        if (data.payload && typeof data.payload.lat === 'number' && typeof data.payload.lng === 'number') {
+          const peerId = data.payload.nodeId || packet.sender;
+          const canonical = this.getCanonicalId(peerId);
+          const peer = this.peers.get(canonical) || this.peers.get(peerId);
+          if (peer) {
+            peer.lat = data.payload.lat;
+            peer.lng = data.payload.lng;
+          }
+        }
+      }
     } catch {}
 
     const isForMe =
       isHandshakeMsg ||
+      isLocationMsg ||
       packet.recipient === this.myIdentityHash ||
       packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
       packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000' ||
@@ -168,7 +484,6 @@ class MeshRouter {
       if (forwarded) {
         console.log(`[MeshRouter] Relaying packet → ${packet.recipient.slice(0, 8)} (TTL ${forwarded.ttl})`);
         const encoded = encode(forwarded);
-        // await ensures back-pressure: if all peers are busy we don't flood the queue
         await this.broadcast(encoded);
       } else {
         console.log('[MeshRouter] Packet TTL exhausted — dropped');
@@ -196,7 +511,7 @@ class MeshRouter {
 
     let anySent = false;
     for (const [peerId, peer] of peersToSend) {
-      const ok = await this.sendToPeer(peerId, peer.transport, encoded);
+      const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
       if (ok) anySent = true;
     }
 
@@ -215,7 +530,6 @@ class MeshRouter {
       if (transport === 'ble') {
         return await bluetoothTransport.send(peerId, payload);
       }
-      // LoRa: route via Rust serial bridge
       if (transport === 'lora') {
         return await this.sendViaLoRa(payload);
       }
@@ -226,8 +540,6 @@ class MeshRouter {
   }
 
   private async sendViaLoRa(payload: Uint8Array): Promise<boolean> {
-    // LoRa packets are routed through the Rust lora_bridge via the REST API
-    // The Rust node will serialize and write to the serial port
     try {
       const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
       await RedAPI.injectMeshPayload(hex, true);
@@ -239,10 +551,6 @@ class MeshRouter {
 
   // ─── Rust Node Integration ───────────────────────────────────────────────────
 
-  /**
-   * Inject a received mesh packet into the local Rust node for decryption
-   * and delivery to the user.
-   */
   private async deliverToRustNode(packet: MeshPacket) {
     const hex = Array.from(packet.payload)
       .map(b => b.toString(16).padStart(2, '0')).join('');
@@ -267,7 +575,6 @@ class MeshRouter {
     for (const { packet } of toRetry) {
       const result = await this.forwardPacket(packet, null);
       if (result === 'queued') {
-        // Put back in queue
         this.pendingQueue.push({ packet, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
       }
       retried++;
@@ -280,43 +587,107 @@ class MeshRouter {
 
   // ─── Peer Management ─────────────────────────────────────────────────────────
 
-  addWifiPeer(peerId: string) {
-    this.updatePeer(peerId, 'wifi');
+  addWifiPeer(peerId: string, canonicalId?: string, name?: string) {
+    this.updatePeer(peerId, 'wifi', undefined, canonicalId, name);
     this.flushPendingQueue();
   }
 
-  addBlePeer(deviceId: string, rssi?: number) {
-    this.updatePeer(deviceId, 'ble', rssi);
+  addBlePeer(deviceId: string, rssi?: number, canonicalId?: string, name?: string) {
+    this.updatePeer(deviceId, 'ble', rssi, canonicalId, name);
     this.flushPendingQueue();
   }
 
-  addLoraPeer(peerId: string) {
-    this.updatePeer(peerId, 'lora');
+  addLoraPeer(peerId: string, canonicalId?: string, name?: string) {
+    this.updatePeer(peerId, 'lora', undefined, canonicalId, name);
     this.flushPendingQueue();
   }
 
   removePeer(peerId: string) {
     this.peers.delete(peerId);
+    const canonical = this.deviceToCanonicalMap.get(peerId);
+    if (canonical) this.peers.delete(canonical);
   }
 
-  private updatePeer(id: string, transport: 'wifi' | 'ble' | 'lora', rssi?: number) {
-    const existing = this.peers.get(id);
-    // Upgrade transport if better one found
-    const priority = { wifi: 3, ble: 2, lora: 1 };
-    const newPriority = priority[transport];
-    const existingPriority = existing ? priority[existing.transport] : 0;
+  private updatePeer(
+    id: string,
+    transport: 'wifi' | 'ble' | 'lora',
+    rssi?: number,
+    canonicalId?: string,
+    name?: string,
+    publicKey?: string
+  ) {
+    let resolvedCanonical = canonicalId || this.deviceToCanonicalMap.get(id);
 
-    this.peers.set(id, {
-      id,
-      transport: newPriority > existingPriority ? transport : (existing?.transport ?? transport),
+    // If no explicit canonical ID, check if a peer with the same unique name already exists
+    if (!resolvedCanonical && name && name !== 'Dispositivo RED' && !name.startsWith('Nodo ') && !name.startsWith('RED-')) {
+      for (const [k, p] of this.peers.entries()) {
+        if (p.name === name) {
+          resolvedCanonical = k;
+          this.deviceToCanonicalMap.set(id, k);
+          break;
+        }
+      }
+    }
+    if (!resolvedCanonical) {
+      resolvedCanonical = id;
+    }
+
+    const existing = this.peers.get(resolvedCanonical) || this.peers.get(id);
+
+    const existingTransports = new Set<string>(existing?.transports || (existing?.transport ? [existing.transport] : []));
+    existingTransports.add(transport);
+
+    // Upgrade transport if better one found
+    const priority: Record<string, number> = { wifi: 3, ble: 2, lora: 1 };
+    const newPriority = priority[transport] || 0;
+    const existingPriority = (existing && existing.transport) ? (priority[existing.transport] || 0) : 0;
+
+    const updated: MeshPeer = {
+      id: resolvedCanonical,
+      canonicalId: resolvedCanonical,
+      name: name || existing?.name,
+      publicKey: publicKey || existing?.publicKey,
+      transport: newPriority >= existingPriority ? transport : (existing?.transport ?? transport),
+      transports: Array.from(existingTransports) as any,
       lastSeen: Date.now(),
-      rssi,
-    });
+      rssi: rssi != null ? rssi : existing?.rssi,
+      lat: existing?.lat,
+      lng: existing?.lng,
+    };
+
+    if (id !== resolvedCanonical && this.peers.has(id)) {
+      this.peers.delete(id);
+    }
+    this.peers.set(resolvedCanonical, updated);
   }
 
   getPeerList(): MeshPeer[] {
     return Array.from(this.peers.values())
-      .sort((a, b) => b.lastSeen - a.lastSeen);
+      .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+  }
+
+  async broadcastDiscovery(): Promise<void> {
+    try {
+      const { broadcastShakePair } = await import('../api');
+      await broadcastShakePair();
+    } catch {}
+  }
+
+  async broadcastLocation(lat: number, lng: number, altitude?: number, accuracy?: number): Promise<void> {
+    try {
+      const payload = new TextEncoder().encode(JSON.stringify({
+        type: 'NODE_LOCATION_UPDATE',
+        payload: {
+          nodeId: this.myIdentityHash,
+          lat,
+          lng,
+          altitude,
+          accuracy,
+          timestamp: Date.now()
+        }
+      }));
+      await this.broadcast(payload);
+    } catch {}
   }
 
   get peerCount(): number {
@@ -344,7 +715,6 @@ class MeshRouter {
   private markSeen(nonce: string) {
     this.seenNonces.set(nonce, Date.now());
     if (this.seenNonces.size > MAX_DEDUP_CACHE) {
-      // Evict oldest entries
       const oldest = Array.from(this.seenNonces.entries())
         .sort(([, a], [, b]) => a - b)
         .slice(0, 1000)

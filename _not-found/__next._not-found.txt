@@ -1,4 +1,4 @@
 1:"$Sreact.fragment"
-2:I[39756,["/RED/_next/static/chunks/98f687a8c8c00008.js","/RED/_next/static/chunks/c7f2eb7dbf9aa5ca.js","/RED/_next/static/chunks/2f236954d6a65e12.js","/RED/_next/static/chunks/91087eb1af73f3ed.js"],"default"]
-3:I[37457,["/RED/_next/static/chunks/98f687a8c8c00008.js","/RED/_next/static/chunks/c7f2eb7dbf9aa5ca.js","/RED/_next/static/chunks/2f236954d6a65e12.js","/RED/_next/static/chunks/91087eb1af73f3ed.js"],"default"]
-0:{"buildId":"Pzm4_MRmtkTD1C-ETGoG3","rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"loading":null,"isPartial":false}
+2:I[39756,["/RED/_next/static/chunks/f63ac8f74f68e6fd.js","/RED/_next/static/chunks/5cf06d999c85d978.js","/RED/_next/static/chunks/1476fa62d9315572.js","/RED/_next/static/chunks/442970047d841843.js"],"default"]
+3:I[37457,["/RED/_next/static/chunks/f63ac8f74f68e6fd.js","/RED/_next/static/chunks/5cf06d999c85d978.js","/RED/_next/static/chunks/1476fa62d9315572.js","/RED/_next/static/chunks/442970047d841843.js"],"default"]
+0:{"buildId":"0x9eWMaeDDquoESgzhuPl","rsc":["$","$1","c",{"children":[null,["$","$L2",null,{"parallelRouterKey":"children","template":["$","$L3",null,{}]}]]}],"loading":null,"isPartial":false}

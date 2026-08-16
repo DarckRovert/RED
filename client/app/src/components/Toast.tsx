@@ -28,10 +28,10 @@ const ICONS: Record<ToastType, string> = {
 };
 
 const COLORS: Record<ToastType, string> = {
-    success: "#27ae60",
-    error: "#e74c3c",
-    warning: "#f39c12",
-    info: "#3498db",
+    success: "var(--accent-emerald)",
+    error: "var(--accent-crimson)",
+    warning: "var(--accent-amber)",
+    info: "var(--accent-cyan)",
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
@@ -43,24 +43,25 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
     return (
         <div
             onClick={onDismiss}
+            className="animate-enter"
             style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "12px",
-                background: "#1a2535",
+                background: "rgba(16, 18, 32, 0.96)",
+                backdropFilter: "blur(20px)",
                 border: `1px solid ${COLORS[toast.type]}`,
                 borderLeft: `4px solid ${COLORS[toast.type]}`,
-                borderRadius: "12px",
-                padding: "14px 16px",
+                borderRadius: "var(--radius-md)",
+                padding: "12px 16px",
                 cursor: "pointer",
-                boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-                animation: "slideInDown 0.3s ease",
-                maxWidth: "320px",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.8)",
+                maxWidth: "340px",
                 width: "100%",
             }}
         >
-            <span style={{ fontSize: "1.2rem" }}>{ICONS[toast.type]}</span>
-            <span style={{ color: "#fff", fontSize: "0.95rem", fontWeight: 500, flex: 1 }}>
+            <span style={{ fontSize: "1.1rem" }}>{ICONS[toast.type]}</span>
+            <span style={{ color: "#fff", fontSize: "0.85rem", fontWeight: 600, flex: 1 }}>
                 {toast.message}
             </span>
         </div>
@@ -69,7 +70,6 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
 
 let _showToast: ((message: string, type?: ToastType) => void) | null = null;
 
-/** Global helper — call from anywhere: toast.success("Contacto añadido") */
 export const toast = {
     success: (msg: string) => _showToast?.(msg, "success"),
     error: (msg: string) => _showToast?.(msg, "error"),
@@ -77,7 +77,7 @@ export const toast = {
     info: (msg: string) => _showToast?.(msg, "info"),
 };
 
-export function ToastProvider({ children }: { children: React.ReactNode }) {
+export function ToastProvider({ children }: { children?: React.ReactNode }) {
     const [toasts, setToasts] = useState<Toast[]>([]);
 
     const showToast = useCallback((message: string, type: ToastType = "info") => {
@@ -89,7 +89,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
 
-    // Register global helper
     useEffect(() => {
         _showToast = showToast;
         return () => { _showToast = null; };
@@ -98,20 +97,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     return (
         <ToastContext.Provider value={{ showToast }}>
             {children}
-            <div style={{
-                position: "fixed",
-                top: "16px",
-                left: "50%",
-                transform: "translateX(-50%)",
-                zIndex: 99999,
-                display: "flex",
-                flexDirection: "column",
-                gap: "10px",
-                alignItems: "center",
-                pointerEvents: "none",
-            }}>
+            <div
+                style={{
+                    position: "fixed",
+                    top: "calc(16px + var(--safe-top, 0px))",
+                    right: "16px",
+                    zIndex: 999999,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    pointerEvents: "none",
+                }}
+            >
                 {toasts.map(t => (
-                    <div key={t.id} style={{ pointerEvents: "all" }}>
+                    <div key={t.id} style={{ pointerEvents: "auto" }}>
                         <ToastItem toast={t} onDismiss={() => dismiss(t.id)} />
                     </div>
                 ))}

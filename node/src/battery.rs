@@ -12,28 +12,37 @@ pub struct EcoMeshStatus {
 
 #[derive(Clone)]
 pub struct BatteryOptimizer {
-    status: Arc<RwLock<EcoMeshStatus>>,
+    db: Option<sled::Db>,
 }
 
 impl BatteryOptimizer {
-    pub fn new() -> Self {
-        Self {
-            status: Arc::new(RwLock::new(EcoMeshStatus {
-                battery_level: 85,
-                ble_scan_interval_ms: 2500,
-                lora_tx_power_dbm: 14,
-                estimated_mesh_hours: 48.5,
-                eco_mode_enabled: true,
-            })),
-        }
+    pub fn new(db: Option<sled::Db>) -> Self {
+        Self { db }
+    }
+
+    fn tree(&self) -> Option<sled::Tree> {
+        self.db.as_ref().and_then(|db| db.open_tree("battery_status").ok())
     }
 
     pub fn get_status(&self) -> EcoMeshStatus {
-        self.status.read().unwrap().clone()
+        if let Some(tree) = self.tree() {
+            if let Ok(Some(bytes)) = tree.get("status") {
+                if let Ok(status) = bincode::deserialize::<EcoMeshStatus>(&bytes) {
+                    return status;
+                }
+            }
+        }
+        EcoMeshStatus {
+            battery_level: 100, // Starts at 100% until frontend pushes real value
+            ble_scan_interval_ms: 2500,
+            lora_tx_power_dbm: 14,
+            estimated_mesh_hours: 120.0,
+            eco_mode_enabled: false,
+        }
     }
 
     pub fn update_battery(&self, level: u8) -> EcoMeshStatus {
-        let mut st = self.status.write().unwrap();
+        let mut st = self.get_status();
         st.battery_level = level;
 
         if level <= 20 {
@@ -53,6 +62,12 @@ impl BatteryOptimizer {
             st.eco_mode_enabled = false;
         }
 
-        st.clone()
+        if let Some(tree) = self.tree() {
+            if let Ok(bytes) = bincode::serialize(&st) {
+                let _ = tree.insert("status", bytes);
+            }
+        }
+
+        st
     }
 }
