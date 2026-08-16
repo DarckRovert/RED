@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { GuardianEngine } from "../lib/guardianEngine";
 import { LocalAIEngine } from "../lib/localAiEngine";
+import { EmergencyGlossaryEngine, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
 import { RED_VERSION, RED_VERSION_NAME, RED_APK_NAME } from "../lib/version";
 
 interface RedShowcaseLandingProps {
@@ -122,21 +123,29 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
     setTermOutput(prev => [...prev, response]);
   };
 
-  const testGuardian = (text: string) => {
+  const testGuardian = async (text: string) => {
     if (!text.trim()) return;
-    const evalRes = GuardianEngine.evaluateText(text);
-
-    if (!evalRes.allowed) {
+    try {
+      const evalRes = await GuardianEngine.evaluateTextAsync(text);
+      if (!evalRes.allowed) {
+        setGuardianVerdict({
+          status: 'block',
+          title: '⛔ BLOQUEADO — GUARDIAN LOCAL ONNX S4',
+          desc: `${evalRes.reason || evalRes.feedback} [Categoría: ${evalRes.category?.toUpperCase() || 'HOSTIL'} | Score: ${evalRes.toxicity_score}% | Latencia: ${evalRes.executionTimeMs}ms]`
+        });
+      } else {
+        setGuardianVerdict({
+          status: 'allow',
+          title: '✅ PERMITIDO — GUARDIAN LOCAL (OFF-GRID)',
+          desc: `Contenido verificado sin anomalías en ${evalRes.executionTimeMs}ms (toxic-bert ONNX). Procede al cifrado Double Ratchet E2E.`
+        });
+      }
+    } catch {
+      const evalRes = GuardianEngine.evaluateText(text);
       setGuardianVerdict({
-        status: 'block',
-        title: '⛔ BLOQUEADO — GUARDIAN LOCAL ONNX S4',
-        desc: evalRes.reason || 'El motor Guardian interceptó este contenido tóxico antes de cifrar.'
-      });
-    } else {
-      setGuardianVerdict({
-        status: 'allow',
-        title: '✅ PERMITIDO — GUARDIAN LOCAL (OFF-GRID)',
-        desc: `Contenido verificado por motor en ${evalRes.executionTimeMs}ms. Procede al cifrado Double Ratchet E2E.`
+        status: evalRes.allowed ? 'allow' : 'block',
+        title: evalRes.allowed ? '✅ PERMITIDO — GUARDIAN LOCAL (OFF-GRID)' : '⛔ BLOQUEADO — GUARDIAN LOCAL ONNX S4',
+        desc: evalRes.reason || evalRes.feedback
       });
     }
   };
@@ -908,8 +917,26 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
                 ))}
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                {['Torniquete', 'Hemorragia', 'Evacuación', 'Refugio', 'Sismo'].map(t => (
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                {[
+                  'Torniquete',
+                  'Hemorragia',
+                  'Reanimación Cardiopulmonar (RCP)',
+                  'Triage de Emergencia (START)',
+                  'Fractura Ósea',
+                  'Quemadura',
+                  'Hipotermia',
+                  'Evacuación',
+                  'Sismo / Terremoto',
+                  'Derrumbe / Estructura Colapsada',
+                  'Inundación / Riada',
+                  'Agua Potable',
+                  'Baliza de Auxilio / SOS',
+                  'Amenaza QBRN (Química / Biológica / Nuclear)',
+                  'Mordedura de Serpiente Venenosa',
+                  'Control de Emisiones RF (EMCON)',
+                  'Interruptor del Hombre Muerto (DMS)'
+                ].map(t => (
                   <button
                     key={t}
                     onClick={() => setGlossaryTerm(t)}
@@ -928,18 +955,35 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
                 ))}
               </div>
 
-              <div style={{ padding: '16px', borderRadius: '14px', background: 'rgba(3,3,6,0.8)', border: '1px solid rgba(232,33,58,0.2)', fontFamily: 'monospace', fontSize: '13px', color: '#00E676', lineHeight: 1.6 }}>
-                <div>📖 [TRADUCCIÓN TÁCTICA DETERMINISTA — {selectedLanguage.toUpperCase()}]</div>
-                <div style={{ color: '#FFF', marginTop: '6px', fontWeight: 700 }}>
-                  • Término Seleccionado: {glossaryTerm}
-                </div>
-                <div style={{ color: '#94A3B8', marginTop: '4px' }}>
-                  • Definición Táctica: Dispositivo o procedimiento de emergencia off-grid verificado sin alucinaciones.
-                </div>
-                <div style={{ color: '#38BDF8', marginTop: '4px' }}>
-                  • Traducción Destino ({selectedLanguage.toUpperCase()}): {selectedLanguage === 'en' ? (glossaryTerm === 'Torniquete' ? 'Tourniquet' : glossaryTerm === 'Hemorragia' ? 'Hemorrhage' : 'Evacuation') : selectedLanguage === 'qu' ? (glossaryTerm === 'Torniquete' ? "Hichi k'iri watana" : "Yawar hich'akuy") : glossaryTerm}
-                </div>
-              </div>
+              {(() => {
+                const transRes = EmergencyGlossaryEngine.translate(glossaryTerm, selectedLanguage);
+                return (
+                  <div style={{ padding: '18px', borderRadius: '14px', background: 'rgba(3,3,6,0.85)', border: '1px solid rgba(232,33,58,0.25)', fontFamily: 'monospace', fontSize: '13px', color: '#00E676', lineHeight: 1.6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontWeight: 800 }}>📖 [TRADUCCIÓN TÁCTICA DETERMINISTA — {selectedLanguage.toUpperCase()}]</span>
+                      <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px', background: 'rgba(56,189,248,0.15)', color: '#38BDF8' }}>
+                        CATEGORÍA: {transRes.category.toUpperCase()}
+                      </span>
+                    </div>
+                    <div style={{ color: '#FFF', marginTop: '6px', fontWeight: 700, fontSize: '15px' }}>
+                      • Traducción Destino ({selectedLanguage.toUpperCase()}): <span style={{ color: '#38BDF8' }}>{transRes.targetTerm}</span>
+                    </div>
+                    {transRes.entry?.phoneticQu && selectedLanguage === 'qu' && (
+                      <div style={{ color: '#FCD34D', marginTop: '4px' }}>
+                        • Guía Fonética Quechua: {transRes.entry.phoneticQu}
+                      </div>
+                    )}
+                    <div style={{ color: '#94A3B8', marginTop: '6px' }}>
+                      • Definición Operativa: {transRes.definitionEs}
+                    </div>
+                    {transRes.entry && (
+                      <div style={{ color: '#64748B', marginTop: '8px', fontSize: '11px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '6px' }}>
+                        Referencias Cruzadas: ES ({transRes.entry.termEs}) | EN ({transRes.entry.termEn}) | PT ({transRes.entry.termPt}) | FR ({transRes.entry.termFr}) | DE ({transRes.entry.termDe}) | QUE ({transRes.entry.termQu})
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Interactive Model Inferencia Simulator */}

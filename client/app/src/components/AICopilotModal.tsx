@@ -203,6 +203,13 @@ export const AICopilotModal: React.FC = () => {
                             🏥 Triage START
                         </button>
                         <button
+                            onClick={() => handleSend("¿Cómo controlar una hemorragia arterial y aplicar un torniquete táctico?")}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                        >
+                            🩸 Torniquete & Sangrado
+                        </button>
+                        <button
                             onClick={() => handleSend("¿Cómo purificar agua de fuentes dudosas usando métodos improvisados?")}
                             className="btn-tactical-secondary"
                             style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
@@ -210,11 +217,39 @@ export const AICopilotModal: React.FC = () => {
                             💧 Purificar Agua
                         </button>
                         <button
+                            onClick={() => handleSend("¿Qué hacer si quedo atrapado bajo escombros en un terremoto?")}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                        >
+                            🏢 Sismo & Colapso
+                        </button>
+                        <button
+                            onClick={() => handleSend("¿Cómo actuar ante una fuga de gas tóxico o incidente químico QBRN?")}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                        >
+                            ☣️ Amenaza QBRN
+                        </button>
+                        <button
+                            onClick={() => handleSend("¿Cuál es el protocolo de primeros auxilios ante una mordedura de serpiente?")}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                        >
+                            🐍 Mordedura Serpiente
+                        </button>
+                        <button
                             onClick={() => handleSend("¿Qué técnicas tácticas existen para evadir detección de radiofrecuencia (RF)?")}
                             className="btn-tactical-secondary"
                             style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
                         >
                             📡 Evasión RF
+                        </button>
+                        <button
+                            onClick={() => handleSend("¿Cuáles son las secuencias y tiempos para emitir una baliza Morse SOS óptica o acústica?")}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "6px 12px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
+                        >
+                            🚨 Señales SOS
                         </button>
                         <button
                             onClick={handleSummarizeChannel}

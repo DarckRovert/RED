@@ -21,6 +21,8 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
     const [testText, setTestText] = useState("");
     const [testResult, setTestResult] = useState<GuardianEvaluation | null>(null);
 
+    const [isEvaluating, setIsEvaluating] = useState(false);
+
     const fetchStatus = useCallback(async () => {
         setIsLoading(true);
         setError(null);
@@ -35,7 +37,6 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                 total_evaluations: localStats.messages_analyzed + localStats.images_analyzed,
                 blocked_count: localStats.messages_blocked + localStats.images_blocked
             } as unknown as GuardianStatus);
-            // We do not set a hard error here because local fallback is expected, but we can set a warning.
             toast.warning("Modo desconectado. Usando motor Guardián local.");
         } finally {
             setIsLoading(false);
@@ -48,12 +49,28 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
 
     const handleRunTest = async () => {
         if (!testText.trim()) return;
+        setIsEvaluating(true);
         try {
-            const res = await GuardianEngine.evaluateText(testText.trim());
+            const res = await GuardianEngine.evaluateTextAsync(testText.trim());
             setTestResult(res);
-            toast.info(res.is_clean ? "✅ Contenido Aprobado por el Guardián" : "⚠️ Contenido detectado como no seguro");
+            const localStats = GuardianEngine.getStats();
+            setStatus(prev => ({
+                ...(prev || {}),
+                enabled: true,
+                mode: prev?.mode || "strict",
+                total_evaluations: localStats.messages_analyzed + localStats.images_analyzed,
+                blocked_count: localStats.messages_blocked + localStats.images_blocked
+            } as unknown as GuardianStatus));
+
+            if (res.allowed) {
+                toast.info("✅ Contenido Aprobado por el Guardián");
+            } else {
+                toast.warning("⛔ Contenido Bloqueado por el Guardián");
+            }
         } catch {
             toast.error("Error al evaluar texto con el Guardián");
+        } finally {
+            setIsEvaluating(false);
         }
     };
 
@@ -124,9 +141,9 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                             </div>
 
                             <div className="card-tactical" style={{ padding: "14px", textAlign: "center" }}>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>EVALUACIONES</div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>EVALUACIONES REALES</div>
                                 <div style={{ fontSize: "1rem", fontWeight: 900, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
-                                    {status?.total_evaluations ?? 142}
+                                    {status?.total_evaluations ?? (GuardianEngine.getStats().messages_analyzed + GuardianEngine.getStats().images_analyzed)}
                                 </div>
                             </div>
                         </div>
@@ -135,42 +152,47 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                     {/* Banco de Pruebas de Evaluación de Contenido */}
                     <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
                         <div>
-                            <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Banco de Pruebas del Firewall Guardián</div>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Banco de Pruebas del Firewall Guardián S4</div>
                             <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                Evalúa en tiempo real cadenas de texto contra el modelo forense local.
+                                Evalúa en tiempo real cadenas de texto contra el clasificador semántico toxic-bert y de-ofuscador local.
                             </div>
                         </div>
 
                         <textarea
                             value={testText}
                             onChange={e => setTestText(e.target.value)}
-                            placeholder="Escribe un texto para poner a prueba el filtro..."
+                            placeholder="Escribe un texto para poner a prueba el filtro (ej: amenazas, spam, o texto normal)..."
                             rows={3}
                             style={{ fontSize: "0.90rem" }}
                         />
 
                         <button
                             onClick={handleRunTest}
-                            disabled={!testText.trim()}
+                            disabled={!testText.trim() || isEvaluating}
                             className="btn-tactical-primary"
-                            style={{ padding: "12px", fontSize: "0.88rem" }}
+                            style={{ padding: "12px", fontSize: "0.88rem", opacity: isEvaluating ? 0.7 : 1 }}
                         >
-                            🛡️ EVALUAR CON GUARDIÁN IA
+                            {isEvaluating ? '⚙️ Analizando con Red Neuronal toxic-bert...' : '🛡️ EVALUAR CON GUARDIÁN IA'}
                         </button>
 
                         {testResult && (
-                            <div className="card-tactical animate-pop" style={{ padding: "14px", background: testResult.is_clean ? "rgba(0,230,118,0.06)" : "rgba(255,51,85,0.06)", borderColor: testResult.is_clean ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
+                            <div className="card-tactical animate-pop" style={{ padding: "14px", background: testResult.allowed ? "rgba(0,230,118,0.06)" : "rgba(255,51,85,0.06)", borderColor: testResult.allowed ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <strong style={{ fontSize: "0.88rem", color: testResult.is_clean ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
-                                        {testResult.is_clean ? "✅ CONTENIDO SEGURO" : "⚠️ DETECCIÓN DE ANOMALÍA"}
+                                    <strong style={{ fontSize: "0.88rem", color: testResult.allowed ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
+                                        {testResult.allowed ? "✅ CONTENIDO SEGURO" : "⛔ CONTENIDO INTERCEPTADO"}
                                     </strong>
                                     <span style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)" }}>
-                                        Score: {testResult.toxicity_score || 0}
+                                        Latencia: {testResult.executionTimeMs}ms | Score: {testResult.toxicity_score || 0}%
                                     </span>
                                 </div>
-                                <div style={{ fontSize: "0.80rem", color: "var(--text-secondary)", marginTop: "4px" }}>
-                                    {testResult.feedback || (testResult.is_clean ? "No se detectaron patrones hostiles." : "El texto contiene lenguaje bloqueado por el protocolo.")}
+                                <div style={{ fontSize: "0.80rem", color: "var(--text-secondary)", marginTop: "6px" }}>
+                                    {testResult.feedback || testResult.reason || (testResult.allowed ? "No se detectaron patrones hostiles." : "El texto contiene lenguaje bloqueado por el protocolo.")}
                                 </div>
+                                {testResult.category && (
+                                    <div style={{ marginTop: "6px", fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace", color: testResult.allowed ? "var(--accent-emerald)" : "var(--accent-crimson)" }}>
+                                        Categoría detectada: {testResult.category.toUpperCase()} | Confianza: {Math.round(testResult.confidence * 100)}%
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

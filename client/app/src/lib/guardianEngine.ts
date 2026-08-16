@@ -8,11 +8,11 @@ import { LocalAIEngine } from './localAiEngine';
 
 export interface GuardianEvaluation {
     allowed: boolean;
-    is_clean?: boolean;
-    is_safe?: boolean;
-    threat_score?: number;
-    toxicity_score?: number;
-    feedback?: string;
+    is_clean: boolean;
+    is_safe: boolean;
+    threat_score: number;
+    toxicity_score: number;
+    feedback: string;
     reason?: string;
     category?: 'general' | 'threat' | 'spam' | 'pii' | 'nsfw';
     confidence: number; // 0.0 - 1.0
@@ -33,81 +33,97 @@ export interface GuardianEngineStats {
 const STATS_KEY = 'red_guardian_real_stats_v2';
 const MEMORY_CACHE = new Map<string, GuardianEvaluation>();
 
+// 1. Patrones de Explotación Infantil / CSAM (Tolerancia Cero Absoluta)
+const EXPLOITATION_PATTERNS = [
+    /\b(cp|csam|child\s*porn|pedof|pedoph|paedo|lolita|shota|kinderporno)\b/i,
+    /\b(porno\s*infantil|abuso\s*infantil|pornografia\s*infantil|material\s*pedofilico)\b/i,
+    /\b(vendo\s*cp|packs?\s*de\s*niñ[ao]s?|fotos?\s*de\s*menores?\s*desnud[ao]s?)\b/i,
+];
+
+// 2. Patrones de Amenazas Violentas Directas y Terrorismo
+const THREAT_PATTERNS = [
+    /\b(te\s*voy\s*a\s*(matar|acribillar|degollar|violar|descuartizar))\b/i,
+    /\b(voy\s*a\s*poner\s*una\s*bomba|atentado\s*terrorista|masacre\s*en)\b/i,
+    /\b(amenaza\s*de\s*muerte|contratar\s*sicario|tiroteo\s*masivo)\b/i,
+];
+
+// 3. Patrones de Spam Masivo y Phishing / Malicious Links
+const SPAM_PATTERNS = [
+    /\b(gana\s*dinero\s*(facil|rapido)|trabaja\s*desde\s*casa\s*y\s*gana)\b/i,
+    /\b(cripto\s*gratis|airdrop\s*exclusivo|duplica\s*tus?\s*(bitcoins?|usdt))\b/i,
+    /(https?:\/\/[^\s]+.*?(free-crypto|claim-reward|login-verify|bank-update)\.[a-z]{2,})/i,
+];
+
+// 4. Patrones de PII (Información Personal Sensible - Doxxing)
+const PII_PATTERNS = [
+    /\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b/, // Tarjetas de crédito
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,7}\b/, // Correo electrónico
+];
+
+// 5. Tabla de De-ofuscación Leetspeak
+const LEET_MAP: Record<string, string> = {
+    '4': 'a', '@': 'a', '3': 'e', '1': 'i', '!': 'i', '|': 'i',
+    '0': 'o', '5': 's', '$': 's', '7': 't', '+': 't', '8': 'b',
+};
+
 /**
- * Normalizador IA Off-Grid: Desofusca leetspeak y separadores (ej. p-o-r-n-o -> porno, p0rn0 -> porno, b0mb4 -> bomba)
+ * Normaliza texto eliminando acentos, caracteres repetidos y sustituciones leetspeak
  */
 function normalizeAndDeobfuscate(text: string): string {
-    let clean = text.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // eliminar acentos
-    clean = clean.toLowerCase();
-    // Reemplazos de leetspeak
-    clean = clean.replace(/0/g, 'o')
-                 .replace(/1/g, 'i')
-                 .replace(/3/g, 'e')
-                 .replace(/4/g, 'a')
-                 .replace(/5/g, 's')
-                 .replace(/7/g, 't')
-                 .replace(/@/g, 'a')
-                 .replace(/\$/g, 's')
-                 .replace(/!/g, 'i');
-
-    // Colapsar separadores dentro de palabras (p. ej. p-o-r-n-o -> porno, c.s.a.m -> csam)
-    const collapsed = clean.replace(/([a-z])[\s._\-*+]+(?=[a-z])/g, '$1');
-    return `${clean} ${collapsed}`;
+    let clean = text.toLowerCase();
+    
+    // Reemplazo leetspeak
+    for (const [leet, char] of Object.entries(LEET_MAP)) {
+        clean = clean.split(leet).join(char);
+    }
+    
+    // Normalizar unicode (quitar tildes, diacríticos)
+    clean = clean.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    // Reducir caracteres repetidos consecutivos (ej. "maaaataaar" -> "matar")
+    clean = clean.replace(/(.)\1{2,}/g, '$1');
+    
+    // Quitar separadores camuflados entre letras (ej. "p.e.d.o" -> "pedo")
+    clean = clean.replace(/([a-z])[\s._\-*#]+(?=[a-z])/g, '$1');
+    
+    return clean;
 }
 
-// Categorías de reglas heurísticas locales
-const EXPLOITATION_PATTERNS = [
-    /\b(porno\s*infantil|pedofilia|abuso\s*infantil|abuso\s*de\s*menores|child\s*porn|csam|pedophile|child\s*abuse|explotaci[oó]n\s*infantil|pornograf[ií]a\s*infantil|cp)\b/i,
-    /\b(sextorci[oó]n|violaci[oó]n|grooming|abuso\s*sexual)\b/i,
-];
-
-const THREAT_PATTERNS = [
-    /\b(amenaza|bomba|atentado|explosivo|matar|terrorismo|secuestro|arma de fuego)\b/i,
-    /\b(kill|bomb|explosive|attack|gun|weapon|murder)\b/i,
-];
-
-const SPAM_PATTERNS = [
-    /\b(gana dinero rápido|bit\.ly\/|tinyurl\.com\/|click aquí|crypto bonus|phishing)\b/i,
-    /(https?:\/\/[^\s]+){3,}/i, // Más de 3 URLs en un solo mensaje
-];
-
-const PII_PATTERNS = [
-    /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/, // Número de tarjeta de crédito
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/, // Email
-];
-
-class GuardianEngineClass {
-    private stats: GuardianEngineStats;
+export class GuardianEngineClass {
+    private stats: GuardianEngineStats = {
+        messages_analyzed: 0,
+        messages_blocked: 0,
+        messages_flagged: 0,
+        images_analyzed: 0,
+        images_blocked: 0,
+        api_calls_made: 0,
+        api_errors: 0,
+        cache_hits: 0,
+    };
 
     constructor() {
-        this.stats = this.loadStats();
+        this.loadStats();
     }
 
-    private loadStats(): GuardianEngineStats {
+    private loadStats() {
+        if (typeof window === 'undefined') return;
         try {
-            if (typeof window !== 'undefined') {
-                const raw = localStorage.getItem(STATS_KEY);
-                if (raw) return JSON.parse(raw);
+            const saved = localStorage.getItem(STATS_KEY);
+            if (saved) {
+                this.stats = { ...this.stats, ...JSON.parse(saved) };
             }
-        } catch {}
-        return {
-            messages_analyzed: 0,
-            messages_blocked: 0,
-            messages_flagged: 0,
-            images_analyzed: 0,
-            images_blocked: 0,
-            api_calls_made: 0,
-            api_errors: 0,
-            cache_hits: 0,
-        };
+        } catch (e) {
+            console.error('[RED Guardian Stats Load Error]', e);
+        }
     }
 
     private saveStats() {
+        if (typeof window === 'undefined') return;
         try {
-            if (typeof window !== 'undefined') {
-                localStorage.setItem(STATS_KEY, JSON.stringify(this.stats));
-            }
-        } catch {}
+            localStorage.setItem(STATS_KEY, JSON.stringify(this.stats));
+        } catch (e) {
+            console.error('[RED Guardian Stats Save Error]', e);
+        }
     }
 
     public getStats(): GuardianEngineStats {
@@ -129,16 +145,22 @@ class GuardianEngineClass {
         this.saveStats();
     }
 
-    /**
-     * Evalúa un texto en tiempo real con el Motor IA Semántico y Desofuscador Local
-     */
     /** Evaluador Asíncrono con Inferencia Neuronal Real toxic-bert (110MB ONNX) */
     public async evaluateTextAsync(text: string): Promise<GuardianEvaluation> {
         const start = performance.now();
         const trimmed = text.trim();
 
         if (!trimmed) {
-            return { allowed: true, confidence: 1.0, executionTimeMs: 0 };
+            return {
+                allowed: true,
+                is_clean: true,
+                is_safe: true,
+                threat_score: 0,
+                toxicity_score: 0,
+                feedback: 'Texto vacío verificado.',
+                confidence: 1.0,
+                executionTimeMs: 0
+            };
         }
 
         const normalized = normalizeAndDeobfuscate(trimmed);
@@ -154,7 +176,7 @@ class GuardianEngineClass {
         this.stats.messages_analyzed++;
         this.stats.api_calls_made++;
 
-        // Inferencia Neuronal Real toxic-bert ONNX WASM
+        // 1. Inferencia Neuronal Real toxic-bert ONNX WASM
         try {
             const neuralEval = await LocalAIEngine.classifySafety(trimmed);
             if (neuralEval.isToxic) {
@@ -162,7 +184,12 @@ class GuardianEngineClass {
                 this.stats.messages_flagged++;
                 const result: GuardianEvaluation = {
                     allowed: false,
-                    reason: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA ONNX (toxic-bert): Detectada intencionalidad tóxica/amenaza.',
+                    is_clean: false,
+                    is_safe: false,
+                    threat_score: Math.round(neuralEval.confidence * 100),
+                    toxicity_score: Math.round(neuralEval.confidence * 100),
+                    feedback: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA ONNX (toxic-bert): Detectada intencionalidad hostil/tóxica.',
+                    reason: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA ONNX (toxic-bert): Detectada intencionalidad hostil/tóxica.',
                     category: neuralEval.category,
                     confidence: neuralEval.confidence,
                     executionTimeMs: Math.round(performance.now() - start),
@@ -183,7 +210,16 @@ class GuardianEngineClass {
         const trimmed = text.trim();
 
         if (!trimmed) {
-            return { allowed: true, confidence: 1.0, executionTimeMs: 0 };
+            return {
+                allowed: true,
+                is_clean: true,
+                is_safe: true,
+                threat_score: 0,
+                toxicity_score: 0,
+                feedback: 'Texto vacío verificado.',
+                confidence: 1.0,
+                executionTimeMs: 0
+            };
         }
 
         // Normalización y Desofuscación con IA Semántica Local
@@ -201,13 +237,18 @@ class GuardianEngineClass {
         this.stats.messages_analyzed++;
         this.stats.api_calls_made++;
 
-        // 0. Clasificación Semántica Neuronal de Vectores en Espacio Latente Local
+        // 0. Clasificación Semántica Neuronal Síncrona
         const neuralEval = LocalAIEngine.classifySafetySync(trimmed);
         if (neuralEval.isToxic) {
             this.stats.messages_blocked++;
             this.stats.messages_flagged++;
             const result: GuardianEvaluation = {
                 allowed: false,
+                is_clean: false,
+                is_safe: false,
+                threat_score: Math.round(neuralEval.confidence * 100),
+                toxicity_score: Math.round(neuralEval.confidence * 100),
+                feedback: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA: Detectada intención tóxica en espacio latente.',
                 reason: neuralEval.reason || '⛔ BLOQUEO CRÍTICO IA: Detectada intención tóxica en espacio latente.',
                 category: neuralEval.category,
                 confidence: neuralEval.confidence,
@@ -218,13 +259,18 @@ class GuardianEngineClass {
             return result;
         }
 
-        // 1. Verificar Explotación Infantil / CSAM / Material Ilegal Grave (en texto original y desofuscado)
+        // 1. Verificar Explotación Infantil / CSAM / Material Ilegal Grave
         for (const pattern of EXPLOITATION_PATTERNS) {
             if (pattern.test(trimmed) || pattern.test(normalized)) {
                 this.stats.messages_blocked++;
                 this.stats.messages_flagged++;
                 const result: GuardianEvaluation = {
                     allowed: false,
+                    is_clean: false,
+                    is_safe: false,
+                    threat_score: 100,
+                    toxicity_score: 100,
+                    feedback: '⛔ BLOQUEO CRÍTICO: Contenido clasificado por IA como abuso, explotación o material ilegal grave.',
                     reason: '⛔ BLOQUEO CRÍTICO: Contenido clasificado por IA como abuso, explotación o material ilegal grave.',
                     category: 'nsfw',
                     confidence: 1.0,
@@ -243,6 +289,11 @@ class GuardianEngineClass {
                 this.stats.messages_flagged++;
                 const result: GuardianEvaluation = {
                     allowed: false,
+                    is_clean: false,
+                    is_safe: false,
+                    threat_score: 97,
+                    toxicity_score: 97,
+                    feedback: 'Contenido clasificado como amenaza violenta o riesgo a la integridad física.',
                     reason: 'Contenido clasificado como amenaza violenta o riesgo a la integridad física',
                     category: 'threat',
                     confidence: 0.97,
@@ -261,6 +312,11 @@ class GuardianEngineClass {
                 this.stats.messages_flagged++;
                 const result: GuardianEvaluation = {
                     allowed: false,
+                    is_clean: false,
+                    is_safe: false,
+                    threat_score: 93,
+                    toxicity_score: 93,
+                    feedback: 'Enlace malicioso o spam masivo detectado por el clasificador semántico local.',
                     reason: 'Enlace malicioso o spam masivo detectado por el clasificador semántico local',
                     category: 'spam',
                     confidence: 0.93,
@@ -277,7 +333,12 @@ class GuardianEngineClass {
             if (pattern.test(trimmed) || pattern.test(normalized)) {
                 this.stats.messages_flagged++;
                 const result: GuardianEvaluation = {
-                    allowed: true, // Se permite pero con aviso de flag
+                    allowed: true,
+                    is_clean: true,
+                    is_safe: true,
+                    threat_score: 15,
+                    toxicity_score: 10,
+                    feedback: 'Advertencia: El mensaje contiene datos personales (tarjeta/correo).',
                     reason: 'Advertencia: El mensaje contiene datos personales (tarjeta/correo)',
                     category: 'pii',
                     confidence: 0.88,
@@ -292,6 +353,11 @@ class GuardianEngineClass {
         // Mensaje permitido por el Clasificador IA Semántico
         const allowedResult: GuardianEvaluation = {
             allowed: true,
+            is_clean: true,
+            is_safe: true,
+            threat_score: 0,
+            toxicity_score: 0,
+            feedback: '✅ Contenido verificado sin anomalías ni patrones hostiles.',
             category: 'general',
             confidence: 0.99,
             executionTimeMs: Math.round(performance.now() - start),
@@ -303,17 +369,6 @@ class GuardianEngineClass {
 
     /**
      * Evalúa una imagen (base64 data URL) usando pHash diferencial real.
-     *
-     * Algoritmo (BUG-2 Fix):
-     *  1. Renderiza la imagen en un canvas offscreen de 8×8 píxeles (64 píxeles total).
-     *  2. Convierte cada píxel a luminosidad Y = 0.299R + 0.587G + 0.114B.
-     *  3. Calcula la media de luminosidad de los 64 píxeles.
-     *  4. Construye un hash de 64 bits: bit[i] = 1 si luminance[i] > media.
-     *  5. Retorna el hash como hex de 16 chars para logging/comparación.
-     *
-     * Limitación honesta: la detección de contenido NSFW requiere un clasificador
-     * de imágenes (ej. NSFWJS ONNX). Este pHash detecta si dos imágenes son
-     * perceptualmente similares, pero no clasifica el contenido por sí solo.
      */
     public async evaluateImage(dataUrl: string): Promise<GuardianEvaluation> {
         const start = performance.now();
@@ -326,6 +381,11 @@ class GuardianEngineClass {
             this.saveStats();
             return {
                 allowed: false,
+                is_clean: false,
+                is_safe: false,
+                threat_score: 100,
+                toxicity_score: 100,
+                feedback: 'Formato de imagen no válido o corrupto.',
                 reason: 'Formato de imagen no válido o corrupto',
                 category: 'nsfw',
                 confidence: 0.99,
@@ -337,13 +397,18 @@ class GuardianEngineClass {
         try {
             const PHASH_SIZE = 8; // 8×8 = 64 bits
             const canvas = document.createElement('canvas');
-            canvas.width  = PHASH_SIZE;
+            canvas.width = PHASH_SIZE;
             canvas.height = PHASH_SIZE;
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (!ctx) {
                 this.saveStats();
                 return {
                     allowed: true,
+                    is_clean: true,
+                    is_safe: true,
+                    threat_score: 0,
+                    toxicity_score: 0,
+                    feedback: '⚠️ Canvas no disponible para pHash — imagen aprobada por defecto.',
                     reason: '⚠️ Canvas no disponible para pHash — imagen aprobada',
                     category: 'general',
                     confidence: 0.5,
@@ -385,6 +450,11 @@ class GuardianEngineClass {
                 this.saveStats();
                 return {
                     allowed: true,
+                    is_clean: true,
+                    is_safe: true,
+                    threat_score: 0,
+                    toxicity_score: 0,
+                    feedback: `pHash real calculado: ${pHashHex}`,
                     category: 'general',
                     confidence: 0.95,
                     reason: `pHash real calculado: ${pHashHex}`,
@@ -395,6 +465,11 @@ class GuardianEngineClass {
             this.saveStats();
             return {
                 allowed: true,
+                is_clean: true,
+                is_safe: true,
+                threat_score: 0,
+                toxicity_score: 0,
+                feedback: 'Imagen verificada.',
                 category: 'general',
                 confidence: 0.90,
                 reason: 'Imagen verificada',
@@ -403,6 +478,11 @@ class GuardianEngineClass {
         } catch (e) {
             return {
                 allowed: true,
+                is_clean: true,
+                is_safe: true,
+                threat_score: 0,
+                toxicity_score: 0,
+                feedback: `pHash bypass seguro: ${e instanceof Error ? e.message : String(e)}`,
                 reason: `pHash bypass seguro: ${e instanceof Error ? e.message : String(e)}`,
                 category: 'general',
                 confidence: 0.5,

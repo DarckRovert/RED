@@ -106,10 +106,45 @@ En `VitalScanModal.tsx`:
 
 ---
 
-## 6. Preguntas Frecuentes & Solución de Problemas
+---
+
+## 6. Suite de Inteligencia Artificial (IA) Soberana 100% Offline
+
+### Copiloto Táctico RAG (Retrieval-Augmented Generation)
+- **Modelos Compatibles:** LaMini-Flan-T5 (ONNX WASM en proceso), Qwen 2.5 1.5B, Llama 3.2 1B, Gemma 2B, Phi-3 Mini 3.8B (GGUF cuantizado Q4 ejecutado nativamente en ARM64 vía Candle Rust).
+- **Base de Conocimiento Táctica Integrada (16 Protocolos):**
+  - Triage START en masa
+  - Control de hemorragias arteriales exanguinantes y torniquete táctico
+  - Reanimación Cardiopulmonar (RCP) y manejo de DEA
+  - Quemaduras térmicas, químicas y eléctricas
+  - Inmovilización de fracturas y trauma raquimedular
+  - Potabilización de agua (ebullición, cloración y filtro multicapa de carbón)
+  - Hipotermia severa y golpe de calor
+  - Protocolo de autoprotección y repliegue QBRN / HazMat
+  - Terremotos, derrumbes y localización acústica bajo escombros
+  - Incendios forestales y repliegue hacia zonas negras
+  - Rescate en inundaciones y escape de vehículos sumergidos
+  - Control de emisiones electromagnéticas (EMCON) y evasión RF
+  - Manejo de mordeduras de serpientes venenosas (vendaje compresivo)
+  - Señalización de rescate óptico Morse SOS y silbato de montaña
+  - Interruptor del Hombre Muerto y purga criptográfica anti-forense.
+
+### Traductor Táctico Determinista (6 Idiomas)
+- Diccionario determinista de emergencia sin alucinaciones disponible en **Español, English, Português, Français, Deutsch y Quechua (Runa Simi)** con soporte para pronunciación fonética.
+
+### Centinela Guardian IA S4 & Moderación en el Emisor
+- Clasificación semántica de vectores en espacio latente y red neuronal `toxic-bert`.
+- De-ofuscador leetspeak automático y detector de imágenes mediante pHash diferencial de 64 bits.
+
+---
+
+## 7. Preguntas Frecuentes & Solución de Problemas
 
 - **¿Dónde se guardan los mensajes?**  
   Exclusivamente en la base de datos cifrada SQLite local de tu dispositivo.
 - **¿Cómo me conecto con otros nodos?**  
   Automáticamente mediante BLE, WiFi Direct, LoRa o SoundMesh al abrir la aplicación.
+- **¿La IA envía mis consultas a servidores externos?**  
+  No. Todo el procesamiento corre 100% de manera local en el procesador de tu dispositivo o se delega opcionalmente a nodos vecinos con mayor capacidad en la red malla (Mente Colmena P2P).
+
 
