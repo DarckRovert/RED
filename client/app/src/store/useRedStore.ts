@@ -748,7 +748,32 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 };
                 connectOutboundSSE();
 
-                localTransport.init(identity.identity_hash).catch(e =>
+                localTransport.init(identity.identity_hash).then(() => {
+                    meshRouter.onLocalDelivery((packet) => {
+                        try {
+                            const payloadStr = new TextDecoder().decode(packet.payload);
+                            let parsed: any;
+                            try {
+                                parsed = JSON.parse(payloadStr);
+                            } catch {
+                                parsed = {
+                                    id: 'msg_' + Date.now(),
+                                    content: payloadStr,
+                                    sender: packet.sender,
+                                    timestamp: packet.timestamp / 1000,
+                                    is_mine: false,
+                                    msg_type: 'text'
+                                };
+                            }
+                            if (parsed) {
+                                if (!parsed.sender) parsed.sender = packet.sender;
+                                get().addIncomingMessage(parsed);
+                            }
+                        } catch (deliveryErr) {
+                            console.warn('[RED Native] Error handling mesh packet delivery:', deliveryErr);
+                        }
+                    });
+                }).catch(e =>
                     console.warn('[RED] Mesh init failed (non-critical):', e)
                 );
 

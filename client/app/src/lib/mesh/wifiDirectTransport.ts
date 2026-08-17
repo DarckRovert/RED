@@ -1,9 +1,9 @@
 /**
  * RED WebRTC & Blind Relay Mesh Transport
  * 
- * Manages peer-to-peer WebRTC DataChannels with STUN NAT traversal
- * and zero-knowledge blind WebSocket relay fallback for global 
- * interoperability between Web (PC) and Mobile (Android) devices.
+ * Manages peer-to-peer WebRTC DataChannels with multi-cluster STUN/TURN NAT traversal,
+ * dynamic candidate pool signaling, seamless ICE restart across network switches (4G/5G <-> WiFi),
+ * and zero-knowledge blind WebSocket relay fallback for global interoperability.
  */
 
 export class WifiDirectTransport {
@@ -16,6 +16,8 @@ export class WifiDirectTransport {
     public onlinePeers: Set<string> = new Set();
     private isConnecting = false;
     private reconnectTimer: any = null;
+    private currentCandidateIndex = 0;
+    private activeSignalingUrl: string = '';
 
     private static readonly ICE_SERVERS: RTCIceServer[] = [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -23,34 +25,55 @@ export class WifiDirectTransport {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:turn.matrix.org:3478' },
+        { urls: 'stun:stun.services.mozilla.com:3478' },
     ];
 
     constructor(myId: string) {
         this.myId = myId;
     }
 
-    public getSignalingUrl(): string {
-        if (typeof window === 'undefined') return 'ws://localhost:3001';
-        
+    /**
+     * Resolves an ordered list of candidate signaling/relay endpoints.
+     */
+    public getSignalingCandidates(): string[] {
+        const candidates: string[] = [];
+
+        if (typeof window === 'undefined') {
+            return ['ws://localhost:3001', 'ws://127.0.0.1:3001'];
+        }
+
         // 1. User-customized signaling URL in localStorage
         const custom = localStorage.getItem('red_signaling_url');
-        if (custom && custom.trim()) return custom.trim();
+        if (custom && custom.trim()) {
+            candidates.push(custom.trim());
+        }
 
         // 2. Environment variable
         if (process.env.NEXT_PUBLIC_SIGNALING_URL) {
-            return process.env.NEXT_PUBLIC_SIGNALING_URL;
+            candidates.push(process.env.NEXT_PUBLIC_SIGNALING_URL.trim());
         }
 
-        // 3. Fallback based on window location
+        // 3. Fallback based on window location (LAN / local deployments)
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const hostname = window.location.hostname;
-        
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-            return 'ws://localhost:3001';
+
+        if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.endsWith('.github.io')) {
+            candidates.push(`${proto}//${hostname}:3001`);
         }
 
-        // For GitHub Pages / production deployments, default to public secure relay or local port 3001
-        return `${proto}//${hostname}:3001`;
+        // 4. Local loopback candidates (for dev servers or local testbed)
+        candidates.push('ws://localhost:3001');
+        candidates.push('ws://127.0.0.1:3001');
+
+        // Remove duplicates while preserving order
+        return Array.from(new Set(candidates));
+    }
+
+    public getSignalingUrl(): string {
+        const list = this.getSignalingCandidates();
+        return list[this.currentCandidateIndex % list.length] || 'ws://localhost:3001';
     }
 
     async connectToLocalSignaling(): Promise<void> {
@@ -59,14 +82,49 @@ export class WifiDirectTransport {
             return;
         }
 
-        return new Promise<void>((resolve) => {
-            try {
-                const url = this.getSignalingUrl();
-                console.log(`[WebRtcTransport] Connecting to Signaling Relay at ${url}...`);
-                this.ws = new WebSocket(url);
+        const candidates = this.getSignalingCandidates();
+        if (candidates.length === 0) return;
 
-                this.ws.onopen = () => {
-                    console.log(`[WebRtcTransport] Connected to Signaling Relay. Registering DID ${this.myId.slice(0, 8)}...`);
+        return new Promise<void>((resolve) => {
+            const tryCandidate = (index: number) => {
+                if (index >= candidates.length) {
+                    // Exhausted all candidates in this pass; schedule reconnect pass
+                    this.currentCandidateIndex = 0;
+                    this.scheduleReconnect();
+                    resolve();
+                    return;
+                }
+
+                const url = candidates[index];
+                this.activeSignalingUrl = url;
+                console.log(`[WebRtcTransport] Attempting signaling connection to candidate [${index + 1}/${candidates.length}]: ${url}...`);
+
+                let connected = false;
+                let socket: WebSocket;
+
+                try {
+                    socket = new WebSocket(url);
+                } catch (err) {
+                    console.warn(`[WebRtcTransport] Cannot construct WebSocket for ${url}:`, err);
+                    tryCandidate(index + 1);
+                    return;
+                }
+
+                this.ws = socket;
+
+                // Timeout candidate connection attempt after 4 seconds
+                const connectTimeout = setTimeout(() => {
+                    if (!connected && socket.readyState !== WebSocket.OPEN) {
+                        try { socket.close(); } catch {}
+                        tryCandidate(index + 1);
+                    }
+                }, 4000);
+
+                socket.onopen = () => {
+                    connected = true;
+                    clearTimeout(connectTimeout);
+                    this.currentCandidateIndex = index;
+                    console.log(`[WebRtcTransport] ✅ Connected to Signaling Relay at ${url}. Registering DID ${this.myId.slice(0, 8)}...`);
                     this.sendWs({
                         type: 'register',
                         peerId: this.myId,
@@ -75,7 +133,7 @@ export class WifiDirectTransport {
                     resolve();
                 };
 
-                this.ws.onmessage = async (event) => {
+                socket.onmessage = async (event) => {
                     try {
                         const data = JSON.parse(event.data);
                         await this.handleSignalingMessage(data);
@@ -84,33 +142,82 @@ export class WifiDirectTransport {
                     }
                 };
 
-                this.ws.onclose = () => {
-                    console.log('[WebRtcTransport] Signaling WebSocket closed. Reconnecting in 5s...');
-                    this.scheduleReconnect();
+                socket.onclose = () => {
+                    clearTimeout(connectTimeout);
+                    if (connected) {
+                        console.log(`[WebRtcTransport] Active signaling WebSocket closed (${url}). Reconnecting in 4s...`);
+                        this.scheduleReconnect();
+                    } else {
+                        tryCandidate(index + 1);
+                    }
                 };
 
-                this.ws.onerror = (e) => {
-                    console.warn('[WebRtcTransport] Signaling WebSocket error (will retry):', e);
-                    resolve(); // Resolve promise so caller doesn't block
+                socket.onerror = (e) => {
+                    clearTimeout(connectTimeout);
+                    if (!connected) {
+                        tryCandidate(index + 1);
+                    }
                 };
-            } catch (err) {
-                console.warn('[WebRtcTransport] Failed to initialize signaling:', err);
-                resolve();
-            }
+            };
+
+            tryCandidate(this.currentCandidateIndex);
         });
+    }
+
+    /**
+     * Proactively reconnects signaling and triggers ICE restarts across all active WebRTC peers.
+     * Called whenever network transitions occur (e.g. WiFi -> 4G/5G or Offline -> Online).
+     */
+    public async reconnect(forceIceRestart = true): Promise<void> {
+        console.log('[WebRtcTransport] Network transition detected — executing proactive transport refresh');
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+        // 1. Refresh WebSocket Signaling Connection
+        if (this.ws) {
+            try { this.ws.close(); } catch {}
+            this.ws = null;
+        }
+        await this.connectToLocalSignaling();
+
+        // 2. Perform WebRTC ICE Restart on all existing PeerConnections
+        if (forceIceRestart) {
+            for (const [peerId, pc] of this.peerConnections) {
+                try {
+                    if (pc.signalingState !== 'closed') {
+                        console.log(`[WebRtcTransport] Triggering ICE restart for peer ${peerId.slice(0, 8)}`);
+                        if (typeof pc.restartIce === 'function') {
+                            pc.restartIce();
+                        }
+                        const offer = await pc.createOffer({ iceRestart: true });
+                        await pc.setLocalDescription(offer);
+                        this.sendWs({
+                            type: 'offer',
+                            targetPeerId: peerId,
+                            sdp: offer,
+                        });
+                    }
+                } catch (err) {
+                    console.warn(`[WebRtcTransport] ICE restart failed for peer ${peerId.slice(0, 8)}:`, err);
+                }
+            }
+        }
     }
 
     private scheduleReconnect() {
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
         this.reconnectTimer = setTimeout(() => {
             this.connectToLocalSignaling().catch(() => {});
-        }, 5000);
+        }, 4000);
     }
 
     private sendWs(msg: any) {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             this.ws.send(JSON.stringify(msg));
         }
+    }
+
+    public get isConnected(): boolean {
+        return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
     }
 
     // ─── Signaling Message Dispatcher ──────────────────────────────────────────
@@ -198,7 +305,7 @@ export class WifiDirectTransport {
 
     private getOrCreatePeerConnection(peerId: string): RTCPeerConnection {
         let pc = this.peerConnections.get(peerId);
-        if (pc) return pc;
+        if (pc && pc.signalingState !== 'closed') return pc;
 
         pc = new RTCPeerConnection({
             iceServers: WifiDirectTransport.ICE_SERVERS,
@@ -268,13 +375,13 @@ export class WifiDirectTransport {
         this.dataChannels.set(peerId, channel);
     }
 
-    public async createOffer(peerId: string): Promise<void> {
+    public async createOffer(peerId: string, iceRestart = false): Promise<void> {
         try {
             const pc = this.getOrCreatePeerConnection(peerId);
             const channel = pc.createDataChannel('red-mesh-data', { ordered: true });
             this.setupDataChannel(peerId, channel);
 
-            const offer = await pc.createOffer();
+            const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
             await pc.setLocalDescription(offer);
 
             this.sendWs({
@@ -317,7 +424,7 @@ export class WifiDirectTransport {
     private async handleAnswer(peerId: string, sdp: RTCSessionDescriptionInit) {
         try {
             const pc = this.peerConnections.get(peerId);
-            if (pc) {
+            if (pc && pc.signalingState !== 'closed') {
                 await pc.setRemoteDescription(new RTCSessionDescription(sdp));
                 const pending = this.pendingCandidates.get(peerId);
                 if (pending && pending.length > 0) {

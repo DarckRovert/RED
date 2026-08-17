@@ -155,7 +155,6 @@ class LocalTransport {
    * Used for legacy compatibility.
    */
   async send(peerId: string, payload: Uint8Array): Promise<'wifi' | 'bluetooth' | 'failed'> {
-    // Legacy compatibility — try direct send via the peer's known transport
     const peer = meshRouter.peers.get(peerId);
     if (peer?.transport === 'wifi') {
       const wifi = (meshRouter as any).wifi as WifiDirectTransport | null;
@@ -181,27 +180,43 @@ class LocalTransport {
     return meshRouter.peerCount;
   }
 
-  /** Peers by transport type */
-  get peerCounts(): { wifi: number; ble: number; lora: number; total: number } {
+  /** Peers by transport type & gateway metrics */
+  get peerCounts(): { wifi: number; ble: number; lora: number; gateways: number; pendingDtn: number; hasInternet: boolean; total: number } {
     return {
       wifi: meshRouter.wifiPeerCount,
       ble: meshRouter.blePeerCount,
       lora: meshRouter.loraPeerCount,
+      gateways: meshRouter.gatewayCount,
+      pendingDtn: meshRouter.pendingDtnCount,
+      hasInternet: meshRouter.hasInternetAccess,
       total: meshRouter.peerCount,
     };
   }
 
   /**
-
    * AI Smart Routing: Calculates link quality score (0-100%) and optimal transport route.
    */
   calculateOptimalRoute(peerHash?: string): { optimalTransport: string; scorePct: number; recommendation: string } {
     const peers = this.allPeers;
     if (peers.length === 0) {
+      if (meshRouter.hasInternetAccess) {
+        return {
+          optimalTransport: 'WAN Relay Global',
+          scorePct: 95,
+          recommendation: 'Nodo con salida a Internet activa. Enrutamiento directo vía WAN Relay & WebRTC STUN.'
+        };
+      }
+      if (meshRouter.gatewayCount > 0) {
+        return {
+          optimalTransport: 'Pasarela Malla (Bridge)',
+          scorePct: 85,
+          recommendation: `Enrutamiento asistido a través de ${meshRouter.gatewayCount} nodo(s) Pasarela con salida a Internet.`
+        };
+      }
       return {
-        optimalTransport: 'Loopback / Store & Forward',
+        optimalTransport: 'Store & Forward DTN',
         scorePct: 100,
-        recommendation: 'Sin nodos en rango. Los mensajes se guardarán en cola DTN hasta reconexión P2P.'
+        recommendation: 'Sin nodos en rango directo. Los mensajes se guardan en la cola persistente DTN.'
       };
     }
 
@@ -226,7 +241,7 @@ class LocalTransport {
     let rec = '';
     if (finalScore >= 80) rec = `Enrutamiento Directo Óptimo vía ${trans} (Calidad ${finalScore}%)`;
     else if (finalScore >= 50) rec = `Vía Estable. Transmitiendo por ${trans} (Calidad ${finalScore}%)`;
-    else rec = `Señal débil (${target.rssi || -85} dBm). Se recomienda activar modo Eco-Mesh.`;
+    else rec = `Señal débil (${target.rssi || -85} dBm). Se recomienda modo Eco-Mesh.`;
 
     return {
       optimalTransport: trans,
@@ -235,6 +250,5 @@ class LocalTransport {
     };
   }
 }
-
 
 export const localTransport = new LocalTransport();

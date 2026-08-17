@@ -76,15 +76,28 @@ En situaciones de emergencia o denegación de red, las aplicaciones tradicionale
 
 ---
 
-## 🌐 Conectividad Global & Red Malla Descentralizada
+## 🌐 Conectividad Global, Resiliencia Celular 4G/5G & Pasarela Malla Autónoma
 
-RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 3 niveles:
+RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 4 niveles con tolerancia absoluta a fallos de infraestructura:
 
-1. **WebRTC P2P DataChannels & STUN NAT Traversal**: Comunicación directa de alta velocidad y baja latencia entre clientes Web (navegador en PC / GitHub Pages) y aplicaciones móviles Android a través de canales binarios directos (`red-mesh-data`) negociados mediante múltiples servidores STUN de Google (`stun.l.google.com:19302`).
-2. **Relé Ciego Cifrado Zero-Knowledge (`mesh-relay`)**: En entornos con CGNAT simétrico estricto donde el canal WebRTC directo es bloqueado por cortafuegos corporativos o de operadores móviles, los paquetes de malla cifrados de extremo a extremo con AES-256-GCM se transportan a través del servidor de señalización de forma completamente ciega (sin que el relé conozca el contenido ni las claves).
-3. **DHT Kademlia & Nodos Semilla Mundiales**: Al detectar conectividad a internet, el nodo nativo Rust se conecta a los bootstrap peers oficiales de libp2p/IPFS (`/dnsaddr/bootstrap.libp2p.io/...`), permitiendo comunicación directa punto a punto entre usuarios a escala global.
-4. **Traspaso de NAT y Circuit Relay v2**: Auto-descubrimiento y evasión de CGNAT y cortafuegos mediante paquetes UDP/QUIC y relays cifrados E2E con Noise Protocol.
-5. **Store-and-Forward ("Mulas de Datos")**: Los nodos en zonas sin red acumulan mensajes cifrados localmente. Cualquier nodo que se desplace a una zona con cobertura actúa como pasarela y retransmite automáticamente la cola a la red mundial.
+1. **Observador de Transición de Red & Auto-Reconexión (`NetworkWatcher`)**:
+   - Detección unificada en tiempo real de cambios de interfaz (WiFi doméstico $\leftrightarrow$ Datos Móviles 4G/5G $\leftrightarrow$ Zonas sin señal).
+   - Verificación continua de conectividad WAN mediante sondeo activo (heartbeat probes) para certificar acceso real a internet sin bloqueos de portal cautivo.
+
+2. **WebRTC P2P DataChannels, STUN Global & `iceRestart` (`WifiDirectTransport`)**:
+   - **Re-negociación ICE en caliente**: Al alternar entre redes celulares y WiFi, el motor ejecuta `pc.restartIce()` de forma inmediata, manteniendo vivos los túneles P2P directos (`red-mesh-data`) sin caída de sesión.
+   - **Matriz de Señalización Multi-Pool**: Rotación automática entre servidores de señalización primarios, secundarios y de respaldo en cascada.
+   - **Relé Ciego Cifrado Zero-Knowledge (`mesh-relay`)**: Enrutamiento directo y seguro de paquetes cifrados AES-256-GCM a través de la red de señalización cuando ambos dispositivos se encuentran detrás de CGNAT simétrico estricto.
+
+3. **Cola Persistente DTN (Store-and-Forward) & ACKs Criptográficos (`DtnStorage`)**:
+   - **Persistencia en Disco Soberana**: Los paquetes no entregados por ausencia momentánea de ruta se almacenan en disco (`red_dtn_pending_queue_v1`) con retención de hasta 7 días y reintentos con retroceso exponencial (*exponential backoff*).
+   - **Protocolo `DELIVERY_ACK`**: Confirmación criptográfica de extremo a extremo firmada por el destinatario que purga el paquete de la cola y actualiza el estado a `Delivered` (doble check) en ambos nodos.
+
+4. **Protocolo de Pasarela Autónoma (Autonomous Mesh-to-Internet Gateway / Edge Bridge)**:
+   - **Puente Malla $\to$ Internet**: Si un grupo de nodos se encuentra aislado sin internet comunicándose únicamente por BLE o WiFi Direct, cualquier nodo del grupo que cuente con datos móviles (4G/5G o satelital) se autoproclama Pasarela (`is_gateway: true`).
+   - **Enrutamiento Asistido Multi-Salto**: Los nodos sin internet delegan el uplink de paquetes externos a la pasarela vecina, uniendo clústeres físicos desconectados con nodos en cualquier parte del mundo.
+
+5. **DHT Kademlia & Nodos Semilla Mundiales**: Al detectar conectividad a internet, el nodo nativo Rust se conecta a los bootstrap peers oficiales de libp2p/IPFS (`/dnsaddr/bootstrap.libp2p.io/...`), permitiendo comunicación directa punto a punto entre usuarios a escala global.
 6. **Túneles Encubiertos Anti-Censura**:
    - **Túnel DNS (`DnsTunnelEngine`)**: Transporta paquetes Base32 en consultas DNS-over-HTTPS (DoH) hacia 1.1.1.1 / 8.8.8.8.
    - **SNI Fronting (`SniSpoofEngine`)**: Oculta el tráfico en cabeceras TLS hacia redes de distribución de contenido.

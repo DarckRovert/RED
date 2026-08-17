@@ -11,15 +11,18 @@
  *   2. Bluetooth LE (GATT)              — ~1 Mbps, ~100ms latency
  *   3. LoRa radio (via serial bridge)   — ~50 Kbps, ~500ms latency
  *
- * Routing algorithm: Controlled Flood (CF)
+ * Routing algorithm: Controlled Flood (CF) & Autonomous Gateway Bridge
  *   - Every packet has a TTL (starts at 20 hops)
- *   - Each relay decrements TTL; drops packet at TTL=0
  *   - Deduplication via 72h seen-nonce window prevents loops
- *   - No routing tables required — works in fully dynamic topologies
+ *   - Persistent DTN Store-and-Forward queue across app reboots/offline states
+ *   - Cryptographic Delivery Acknowledgments (DELIVERY_ACK)
+ *   - Autonomous Mesh-to-Internet Gateway (Edge Bridge Routing)
  */
 
 import { bluetoothTransport } from './bluetoothTransport';
 import { WifiDirectTransport } from './wifiDirectTransport';
+import { networkWatcher, NetworkState } from './networkWatcher';
+import { dtnStorage } from './dtnStorage';
 import {
   MeshPacket,
   createPacket,
@@ -44,6 +47,9 @@ export interface MeshPeer {
   rssi?: number;       // Signal strength (BLE only)
   lat?: number;
   lng?: number;
+  isGateway?: boolean;
+  hasInternet?: boolean;
+  gatewayMetric?: number;
 }
 
 export type MeshMessageHandler = (packet: MeshPacket) => void;
@@ -56,13 +62,17 @@ interface PendingIdentityQuery {
 
 class MeshRouter {
   private myIdentityHash: string = '';
-  private wifi: WifiDirectTransport | null = null;
+  public wifi: WifiDirectTransport | null = null;
+  public hasInternetAccess = false;
 
   /** Nonces of recently seen packets — prevents relay loops */
   private seenNonces: Map<string, number> = new Map(); // nonce → timestamp
 
   /** Known peers across all transports (keyed by canonical ID or hardware ID) */
   public peers: Map<string, MeshPeer> = new Map();
+
+  /** Discovered active Gateway nodes with Internet uplink access */
+  public activeGateways: Map<string, MeshPeer> = new Map();
 
   /** Maps raw hardware device IDs (BLE MAC, WebRTC client IDs) to 64-char canonical identity_hash */
   public deviceToCanonicalMap: Map<string, string> = new Map();
@@ -73,10 +83,8 @@ class MeshRouter {
   /** Listeners for packets addressed to THIS node */
   private localDeliveryHandlers: MeshMessageHandler[] = [];
 
-  /** Offline store-and-forward queue: packets waiting for a route */
-  private pendingQueue: Array<{ packet: MeshPacket; expiresAt: number }> = [];
-
   private initialized = false;
+  private unsubscribeNetwork: (() => void) | null = null;
 
   // ─── Initialization ─────────────────────────────────────────────────────────
 
@@ -92,10 +100,18 @@ class MeshRouter {
       this.handleRawPacket(payload, from, 'ble');
     });
 
-    // Receive from WiFi Direct DataChannel
+    // Receive from WiFi Direct DataChannel / WebSocket Relay
     this.wifi.onMessage(({ from, payload }) => {
       this.updatePeer(from, 'wifi');
       this.handleRawPacket(payload, from, 'wifi');
+    });
+
+    // Initialize Network Watcher for automatic transitions (WiFi <-> 4G/5G <-> Offline)
+    networkWatcher.init();
+    this.hasInternetAccess = networkWatcher.hasInternet;
+
+    this.unsubscribeNetwork = networkWatcher.onChange((state: NetworkState) => {
+      this.handleNetworkChange(state);
     });
 
     console.log('[MeshRouter] Initialized — identity:', myIdentityHash.slice(0, 12));
@@ -104,7 +120,7 @@ class MeshRouter {
   async start() {
     if (!this.wifi) return;
 
-    // Connect to local WebRTC signaling
+    // Connect to local WebRTC signaling & global relays
     try {
       await this.wifi.connectToLocalSignaling();
       console.log('[MeshRouter] WiFi signaling connected');
@@ -115,8 +131,31 @@ class MeshRouter {
     // Schedule dedup cache purge every 5 minutes
     setInterval(() => this.purgeDedup(), 5 * 60 * 1000);
 
-    // Retry pending queue every 10 seconds
-    setInterval(() => this.flushPendingQueue(), 10_000);
+    // Retry persistent DTN pending queue every 8 seconds
+    setInterval(() => this.flushPendingQueue(), 8000);
+
+    // Initial DTN flush on boot
+    setTimeout(() => this.flushPendingQueue(), 2000);
+  }
+
+  private handleNetworkChange(state: NetworkState) {
+    const previousInternet = this.hasInternetAccess;
+    this.hasInternetAccess = state.hasInternetAccess;
+
+    console.log(`[MeshRouter] Network state updated: online=${state.connected}, type=${state.connectionType}, internet=${state.hasInternetAccess}`);
+
+    if (state.connected) {
+      // Proactively refresh signaling and trigger ICE restarts for 4G/5G transitions
+      this.wifi?.reconnect(true).catch(() => {});
+
+      // Flush persistent offline DTN queue upon network restoration
+      this.flushPendingQueue().catch(() => {});
+
+      // Announce updated gateway capability to local mesh peers
+      if (previousInternet !== state.hasInternetAccess) {
+        this.sendIdentityAnnounce().catch(() => {});
+      }
+    }
   }
 
   // ─── Canonical Identity Lookup & Handshake ───────────────────────────────────
@@ -177,7 +216,9 @@ class MeshRouter {
         tempPeer.rssi,
         cleanCanonical,
         displayName || tempPeer.name,
-        publicKey || tempPeer.publicKey
+        publicKey || tempPeer.publicKey,
+        tempPeer.isGateway,
+        tempPeer.hasInternet
       );
     } else if (displayName || publicKey) {
       const existing = this.peers.get(cleanCanonical);
@@ -241,7 +282,7 @@ class MeshRouter {
   }
 
   /**
-   * Broadcasts or sends an IDENTITY_ANNOUNCE packet to a target peer or across all transports.
+   * Broadcasts or sends an IDENTITY_ANNOUNCE packet with Gateway capability metrics.
    */
   async sendIdentityAnnounce(targetDeviceId?: string, transport?: 'ble' | 'wifi' | 'lora'): Promise<void> {
     try {
@@ -264,6 +305,12 @@ class MeshRouter {
           public_key: pubKey,
           short_id: shortId,
           timestamp: Date.now(),
+          capabilities: {
+            is_gateway: this.hasInternetAccess,
+            has_internet: this.hasInternetAccess,
+            gateway_metric: this.hasInternetAccess ? 100 : 0,
+            version: '31.1.0'
+          }
         }
       };
 
@@ -309,6 +356,12 @@ class MeshRouter {
           public_key: pubKey,
           short_id: shortId,
           timestamp: Date.now(),
+          capabilities: {
+            is_gateway: this.hasInternetAccess,
+            has_internet: this.hasInternetAccess,
+            gateway_metric: this.hasInternetAccess ? 100 : 0,
+            version: '31.1.0'
+          }
         }
       };
 
@@ -357,12 +410,39 @@ class MeshRouter {
     }
   }
 
+  // ─── Cryptographic Delivery Acknowledgments (DELIVERY_ACK) ──────────────────
+
+  /**
+   * Emits a signed DELIVERY_ACK confirming reception of a message packet.
+   */
+  public async sendDeliveryAck(recipientSenderHash: string, originalNonce: string, messageId?: string): Promise<void> {
+    try {
+      if (!this.myIdentityHash || !recipientSenderHash || recipientSenderHash === this.myIdentityHash) return;
+
+      const payloadObj = {
+        type: 'DELIVERY_ACK',
+        payload: {
+          nonce: originalNonce,
+          message_id: messageId,
+          recipient: this.myIdentityHash,
+          timestamp: Date.now(),
+        }
+      };
+
+      const rawPayload = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(this.myIdentityHash, recipientSenderHash, rawPayload);
+      console.log(`[MeshRouter] Emitting DELIVERY_ACK for packet ${originalNonce.slice(0, 8)} to ${recipientSenderHash.slice(0, 8)}`);
+      await this.forwardPacket(packet, null);
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to emit DELIVERY_ACK:', e);
+    }
+  }
+
   // ─── Sending ────────────────────────────────────────────────────────────────
 
   /**
    * Send a payload to a specific recipient identity hash.
-   * If no direct path exists, the packet enters the store-and-forward queue
-   * and will be delivered as soon as any peer connects that can relay it.
+   * If no immediate route exists, the packet enters the persistent DTN queue.
    */
   async send(recipientHash: string, payload: Uint8Array): Promise<'sent' | 'queued' | 'failed'> {
     const canonicalRecipient = this.getCanonicalId(recipientHash);
@@ -372,7 +452,6 @@ class MeshRouter {
 
   /**
    * Broadcast a raw payload to ALL connected peers (mesh flood).
-   * Used internally for relay; also exposed for the Rust node to inject mesh traffic.
    */
   async broadcast(payload: Uint8Array, exceptPeer?: string): Promise<number> {
     let sent = 0;
@@ -407,14 +486,54 @@ class MeshRouter {
       this.updatePeer(packet.sender, transportType || 'ble', undefined, packet.sender);
     }
 
-    // Check if packet is intended for THIS node or is a control/handshake signal
     let isHandshakeMsg = false;
     let isLocationMsg = false;
+    let isDeliveryAck = false;
+    let ackNonce: string | null = null;
+    let ackMessageId: string | null = null;
 
     try {
       const payloadStr = new TextDecoder().decode(packet.payload);
 
-      // Identity Handshake protocol handling
+      // 1. DELIVERY_ACK Handling
+      if (payloadStr.startsWith('{') && payloadStr.includes('DELIVERY_ACK')) {
+        const parsed = JSON.parse(payloadStr);
+        if (parsed.type === 'DELIVERY_ACK' && parsed.payload) {
+          isDeliveryAck = true;
+          ackNonce = parsed.payload.nonce;
+          ackMessageId = parsed.payload.message_id;
+
+          if (ackNonce) {
+            dtnStorage.remove(ackNonce);
+            console.log(`[MeshRouter] Received DELIVERY_ACK for nonce ${ackNonce.slice(0, 8)} — cleared from DTN storage`);
+          }
+
+          // Update local conversation store message status to 'Delivered'
+          if (typeof window !== 'undefined' && (ackMessageId || ackNonce)) {
+            try {
+              const peerKey = packet.sender;
+              const convKey = `red_web_messages_${peerKey}`;
+              const rawMsgs = localStorage.getItem(convKey);
+              if (rawMsgs) {
+                const msgs = JSON.parse(rawMsgs);
+                let updated = false;
+                for (const m of msgs) {
+                  if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
+                    m.status = 'Delivered';
+                    updated = true;
+                  }
+                }
+                if (updated) {
+                  localStorage.setItem(convKey, JSON.stringify(msgs));
+                }
+              }
+            } catch {}
+          }
+          return;
+        }
+      }
+
+      // 2. Identity Handshake Protocol Handling
       if (payloadStr.startsWith('{') && (payloadStr.includes('IDENTITY_ANNOUNCE') || payloadStr.includes('IDENTITY_RESPONSE') || payloadStr.includes('IDENTITY_REQUEST'))) {
         const parsed = JSON.parse(payloadStr);
 
@@ -424,19 +543,21 @@ class MeshRouter {
             const peerHash = idData.identity_hash;
             const peerName = idData.display_name || `Operador ${peerHash.slice(0, 6)}`;
             const peerPk = idData.public_key;
+            const isGateway = !!(idData.capabilities?.is_gateway || idData.is_gateway);
+            const hasInternet = !!(idData.capabilities?.has_internet || idData.has_internet);
 
             if (fromTransportId) {
               this.bindDeviceToCanonical(fromTransportId, peerHash, peerName, peerPk);
             }
             this.bindDeviceToCanonical(packet.sender, peerHash, peerName, peerPk);
-            this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk);
+            this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk, isGateway, hasInternet);
 
-            // If it was an announcement (and from another node), auto-respond so they bind us too
+            // Auto-respond to new announcements so neighbor binds us symmetrically
             if (parsed.type === 'IDENTITY_ANNOUNCE' && peerHash !== this.myIdentityHash) {
               this.sendIdentityResponse(peerHash, fromTransportId, transportType).catch(() => {});
             }
           }
-          return; // Handshake packet processed completely
+          return;
         }
 
         if (parsed.type === 'IDENTITY_REQUEST') {
@@ -448,6 +569,7 @@ class MeshRouter {
         }
       }
 
+      // 3. Contact & Location Signals
       isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('shake_pair_');
       if (payloadStr.startsWith('{"type":"NODE_LOCATION_UPDATE"')) {
         isLocationMsg = true;
@@ -478,13 +600,26 @@ class MeshRouter {
       console.log(`[MeshRouter] Packet delivered locally from ${packet.sender.slice(0, 8)}`);
       this.deliverToRustNode(packet);
       this.localDeliveryHandlers.forEach(h => h(packet));
+
+      // Emit DELIVERY_ACK to sender (unless broadcast packet)
+      if (packet.sender && packet.sender !== this.myIdentityHash && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+        this.sendDeliveryAck(packet.sender, packet.nonce).catch(() => {});
+      }
     } else {
       // ── RELAY: packet is for someone else — forward it ──
+      // If we are a Gateway with internet and the packet is addressed to a remote DID, uplink it!
       const forwarded = relay(packet);
       if (forwarded) {
         console.log(`[MeshRouter] Relaying packet → ${packet.recipient.slice(0, 8)} (TTL ${forwarded.ttl})`);
         const encoded = encode(forwarded);
-        await this.broadcast(encoded);
+
+        // Broadcast to local mesh peers
+        await this.broadcast(encoded, fromTransportId);
+
+        // If we have internet, also bridge/uplink the packet over WAN WebRTC/Relay to the remote world
+        if (this.hasInternetAccess && this.wifi) {
+          this.wifi.send(packet.recipient, encoded).catch(() => {});
+        }
       } else {
         console.log('[MeshRouter] Packet TTL exhausted — dropped');
       }
@@ -501,25 +636,36 @@ class MeshRouter {
 
     let anySent = false;
 
-    // 1. If recipient is a direct peer or in local peers, send to them
+    // 1. Direct local peers (BLE / WiFi LAN / LoRa)
     for (const [peerId, peer] of peersToSend) {
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
       if (ok) anySent = true;
     }
 
-    // 2. If not delivered to any local peer, attempt direct dispatch to recipient via WiFi / WebRTC / Relay
-    if (!anySent && this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+    // 2. Direct Internet Uplink (if this node has active Internet)
+    if (!anySent && this.hasInternetAccess && this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
       const ok = await this.wifi.send(packet.recipient, encoded);
       if (ok) anySent = true;
     }
 
+    // 3. Autonomous Mesh-to-Internet Gateway Delegation (Edge Bridge Routing)
+    // If we have NO internet, but a nearby local BLE/WiFi peer is an active Gateway:
+    if (!anySent && !this.hasInternetAccess && this.activeGateways.size > 0) {
+      for (const [gwId, gwPeer] of this.activeGateways.entries()) {
+        if (gwId === exceptPeer) continue;
+        console.log(`[MeshRouter] Delegating uplink packet to local Gateway ${gwId.slice(0, 8)} via ${gwPeer.transport || 'ble'}`);
+        const ok = await this.sendToPeer(gwId, (gwPeer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
+        if (ok) {
+          anySent = true;
+          break;
+        }
+      }
+    }
+
     if (!anySent) {
-      // No reachable routes — queue for later
-      this.pendingQueue.push({
-        packet,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24h TTL
-      });
-      console.log(`[MeshRouter] No direct peer reached — queued packet for ${packet.recipient.slice(0, 8)}`);
+      // Enqueue in persistent DTN store-and-forward storage
+      dtnStorage.enqueue(packet);
+      console.log(`[MeshRouter] No reachable route — saved in persistent DTN queue for ${packet.recipient.slice(0, 8)}`);
       return 'queued';
     }
 
@@ -569,39 +715,42 @@ class MeshRouter {
     }
   }
 
-  // ─── Store-and-Forward Queue ─────────────────────────────────────────────────
+  // ─── DTN Store-and-Forward Queue Flusher ──────────────────────────────────────
 
-  private async flushPendingQueue() {
-    if (this.pendingQueue.length === 0) return;
-    if (this.peers.size === 0) return;
+  public async flushPendingQueue() {
+    const items = dtnStorage.getItemsToRetry();
+    if (items.length === 0) return;
 
-    const now = Date.now();
-    const toRetry = this.pendingQueue.filter(p => p.expiresAt > now);
-    this.pendingQueue = [];
-
-    let retried = 0;
-    for (const { packet } of toRetry) {
+    let flushed = 0;
+    for (const item of items) {
+      const packet = dtnStorage.toMeshPacket(item);
       const result = await this.forwardPacket(packet, null);
-      if (result === 'queued') {
-        this.pendingQueue.push({ packet, expiresAt: Date.now() + 24 * 60 * 60 * 1000 });
+
+      if (result === 'sent') {
+        dtnStorage.markAttempt(item.id, true);
+        flushed++;
+      } else {
+        dtnStorage.markAttempt(item.id, false);
       }
-      retried++;
     }
 
-    if (retried > 0) {
-      console.log(`[MeshRouter] Flushed ${retried} queued packets`);
+    if (flushed > 0) {
+      console.log(`[MeshRouter] ✅ Flushed and delivered ${flushed} DTN packets from persistent storage`);
     }
+
+    // Periodically purge dead expired packets (>7 days)
+    dtnStorage.purgeExpired();
   }
 
   // ─── Peer Management ─────────────────────────────────────────────────────────
 
-  addWifiPeer(peerId: string, canonicalId?: string, name?: string) {
-    this.updatePeer(peerId, 'wifi', undefined, canonicalId, name);
+  addWifiPeer(peerId: string, canonicalId?: string, name?: string, isGateway = false, hasInternet = false) {
+    this.updatePeer(peerId, 'wifi', undefined, canonicalId, name, undefined, isGateway, hasInternet);
     this.flushPendingQueue();
   }
 
-  addBlePeer(deviceId: string, rssi?: number, canonicalId?: string, name?: string) {
-    this.updatePeer(deviceId, 'ble', rssi, canonicalId, name);
+  addBlePeer(deviceId: string, rssi?: number, canonicalId?: string, name?: string, isGateway = false, hasInternet = false) {
+    this.updatePeer(deviceId, 'ble', rssi, canonicalId, name, undefined, isGateway, hasInternet);
     this.flushPendingQueue();
   }
 
@@ -612,8 +761,12 @@ class MeshRouter {
 
   removePeer(peerId: string) {
     this.peers.delete(peerId);
+    this.activeGateways.delete(peerId);
     const canonical = this.deviceToCanonicalMap.get(peerId);
-    if (canonical) this.peers.delete(canonical);
+    if (canonical) {
+      this.peers.delete(canonical);
+      this.activeGateways.delete(canonical);
+    }
   }
 
   private updatePeer(
@@ -622,7 +775,9 @@ class MeshRouter {
     rssi?: number,
     canonicalId?: string,
     name?: string,
-    publicKey?: string
+    publicKey?: string,
+    isGateway?: boolean,
+    hasInternet?: boolean
   ) {
     let resolvedCanonical = canonicalId || this.deviceToCanonicalMap.get(id);
 
@@ -650,6 +805,9 @@ class MeshRouter {
     const newPriority = priority[transport] || 0;
     const existingPriority = (existing && existing.transport) ? (priority[existing.transport] || 0) : 0;
 
+    const finalIsGateway = isGateway !== undefined ? isGateway : (existing?.isGateway ?? false);
+    const finalHasInternet = hasInternet !== undefined ? hasInternet : (existing?.hasInternet ?? false);
+
     const updated: MeshPeer = {
       id: resolvedCanonical,
       canonicalId: resolvedCanonical,
@@ -661,12 +819,22 @@ class MeshRouter {
       rssi: rssi != null ? rssi : existing?.rssi,
       lat: existing?.lat,
       lng: existing?.lng,
+      isGateway: finalIsGateway,
+      hasInternet: finalHasInternet,
+      gatewayMetric: finalHasInternet ? 100 : 0,
     };
 
     if (id !== resolvedCanonical && this.peers.has(id)) {
       this.peers.delete(id);
     }
     this.peers.set(resolvedCanonical, updated);
+
+    // Track active gateways
+    if (finalIsGateway || finalHasInternet) {
+      this.activeGateways.set(resolvedCanonical, updated);
+    } else {
+      this.activeGateways.delete(resolvedCanonical);
+    }
   }
 
   getPeerList(): MeshPeer[] {
@@ -712,6 +880,14 @@ class MeshRouter {
 
   get loraPeerCount(): number {
     return Array.from(this.peers.values()).filter(p => p.transport === 'lora').length;
+  }
+
+  get gatewayCount(): number {
+    return this.activeGateways.size;
+  }
+
+  get pendingDtnCount(): number {
+    return dtnStorage.count;
   }
 
   // ─── Deduplication ────────────────────────────────────────────────────────────

@@ -5,6 +5,33 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [31.1.0-hybrid-mesh] - 2026-08-17
+
+### Añadido y Refactorizado — RED v31.1.0 Hybrid 4G/5G, Persistent DTN & Autonomous Mesh Gateway Release
+
+**Observador de Estado de Red & Ciclo de Vida (`networkWatcher.ts`)**
+- **Detección Unificada Multi-Plataforma:** Monitoriza en tiempo real transiciones entre interfaces (WiFi doméstico $\leftrightarrow$ Datos Móviles 4G/5G $\leftrightarrow$ Offline) integrando eventos del navegador, `Network Information API` y el ciclo de vida de `@capacitor/app`.
+- **Sondeo WAN Activo:** Verificación activa de salida real a internet mediante endpoints ultraligeros con timeout de 3.5s para certificar conectividad global y activar el rol de Pasarela.
+
+**WebRTC DataChannels con `iceRestart` y Matriz de Señalización Redundante (`wifiDirectTransport.ts`)**
+- **Soporte de `iceRestart` en Caliente:** Al conmutar de red (ej. de WiFi a 4G/5G), invoca automáticamente `pc.restartIce()` y renegocia las ofertas SDP sobre las conexiones existentes sin pérdida de sesión.
+- **Matriz de Señalización con Rotación y Fallback:** Pool dinámico de endpoints de señalización y túnel *Blind WebSocket Relay* cifrado de respaldo.
+- **Pool STUN de Alta Disponibilidad:** Servidores STUN distribuidos de Google, Cloudflare, Matrix y Mozilla.
+
+**Cola Persistente DTN (Store-and-Forward) & ACKs Criptográficos (`dtnStorage.ts` & `meshRouter.ts`)**
+- **Almacenamiento en Disco Tolerante a Reinicios:** Almacén persistente `red_dtn_pending_queue_v1` con retención soberana de hasta 7 días y reintentos con retroceso exponencial (*exponential backoff*).
+- **Protocolo `DELIVERY_ACK`:** Emisión automática de confirmaciones de entrega firmadas por el nodo de destino, purgando el paquete de la cola DTN y actualizando el estado a `Delivered` (doble check) en la interfaz de usuario.
+
+**Protocolo de Pasarela Autónoma (Autonomous Mesh-to-Internet Gateway / Edge Bridge)**
+- **Anuncio de Capacidad de Pasarela:** Los nodos con salida a internet anuncian `is_gateway: true` y `has_internet: true` en su trama de saludo `IDENTITY_ANNOUNCE`.
+- **Enrutamiento Asistido Multi-Salto:** Los nodos en clústeres locales aislados (vía BLE o WiFi Direct) delegan el uplink a la pasarela vecina más cercana para transmitir mensajes hacia la red global (WAN Relay / WebRTC), uniendo clústeres físicos distantes a nivel mundial.
+
+**Despliegue y Verificación en Banco Real Multi-Dispositivo**
+- **Despliegue Limpio y Verificado:** Desinstalación de versiones anteriores e instalación limpia en **Moto G22 (`ZT322B386P`)** y **Redmi Note 14 (`6dife65ls485fega`)**.
+- **Monitorización Logcat Activa:** Validación de mDNS, gossipsub, libp2p y enlace de mensajes en vivo sobre interfaces celulares y WiFi concurrentes.
+
+---
+
 ## [31.0.0-sovereign-master] - 2026-08-16
 
 ### Añadido y Refactorizado — RED v31.0.0 Real-Time SSE, DSP Vocoder, PQC & Hardware Resilience Release
