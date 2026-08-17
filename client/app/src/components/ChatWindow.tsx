@@ -8,6 +8,8 @@ import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
 import { toast } from "./Toast";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { SettingsManager } from "../lib/settingsManager";
 
 /* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
@@ -31,7 +33,7 @@ export default function ChatWindow() {
         activeConversationId, conversations, contacts, groups, messages,
         sendMessage, sendTyping, goBack, navigate, peerTyping, addContact,
         deleteMessage, editMessage, clearConversation, starMessage, starredMessages,
-        identity, peerPresence, markAsRead,
+        identity, peerPresence, markAsRead, preferences,
     } = useRedStore();
 
     const canonicalFromMesh = activeConversationId ? meshRouter.getCanonicalId(activeConversationId) : '';
@@ -110,6 +112,7 @@ export default function ChatWindow() {
         if (!text.trim() || !peerHash) return;
         try {
             await sendMessage(text.trim(), { msg_type: "text", reply_to_id: replyToId || replyTo?.id });
+            TacticalAudioEngine.playMessageSent();
             setReplyTo(null);
         } catch {
             toast.error("Error al enviar mensaje");
@@ -192,6 +195,7 @@ export default function ChatWindow() {
             reader.onload = async () => {
                 const b64 = reader.result as string;
                 await sendMessage(b64, { msg_type: "voice", duration_ms: dur * 1000 });
+                TacticalAudioEngine.playMessageSent();
             };
             reader.readAsDataURL(blob);
             toast.success("Nota de voz enviada");
@@ -200,6 +204,7 @@ export default function ChatWindow() {
 
     const compressImage = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
+            const compConfig = SettingsManager.getImageCompressionConfig(preferences?.imageCompression);
             const reader = new FileReader();
             reader.onload = (e) => {
                 const img = new Image();
@@ -207,7 +212,7 @@ export default function ChatWindow() {
                     const canvas = document.createElement("canvas");
                     let width = img.width;
                     let height = img.height;
-                    const maxDim = 1024;
+                    const maxDim = compConfig.maxDim;
                     if (width > maxDim || height > maxDim) {
                         if (width > height) {
                             height = Math.round((height * maxDim) / width);
@@ -225,7 +230,7 @@ export default function ChatWindow() {
                         return;
                     }
                     ctx.drawImage(img, 0, 0, width, height);
-                    resolve(canvas.toDataURL("image/jpeg", 0.65));
+                    resolve(canvas.toDataURL("image/jpeg", compConfig.qualityFactor));
                 };
                 img.onerror = () => resolve(e.target?.result as string);
                 img.src = e.target?.result as string;
@@ -287,6 +292,7 @@ export default function ChatWindow() {
         setMediaPreview(null);
         try {
             await sendMessage(dataUrl, { msg_type: type, mime_type: mimeType });
+            TacticalAudioEngine.playMessageSent();
             if (caption.trim()) {
                 await sendMessage(caption.trim(), { msg_type: "text" });
             }
@@ -362,12 +368,7 @@ export default function ChatWindow() {
     };
 
     return (
-        <div style={{
-            width: "100%", height: "100%",
-            background: "var(--bg-void)", color: "var(--text-primary)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden", position: "relative"
-        }}>
+        <div className="modal-screen-container">
             <input
                 ref={mediaInputRef}
                 type="file"
@@ -376,9 +377,8 @@ export default function ChatWindow() {
             />
 
             {/* Header Táctico E2E */}
-            <header style={{
+            <header className="safe-header" style={{
                 padding: "12px 16px",
-                height: "var(--header-h)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 borderBottom: "1px solid var(--glass-border)",
                 background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",

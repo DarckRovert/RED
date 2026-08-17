@@ -1,67 +1,52 @@
-# 🔴 RED — Guía de Inicio (v30.0.0 "Sovereign Master Edition")
+# 🔴 RED — Guía de Inicio Rápido (v31.0.0 "Sovereign Master Edition")
 
-RED es un sistema de mensajería soberana, descentralizada y cifrada end-to-end que ahora cuenta con una interfaz sólida estilo WhatsApp/Telegram y capacidades de hardware directo (BLE/WiFi Mesh).
+RED es el sistema de comunicaciones tácticas, descentralizadas y cifradas de grado militar más avanzado del mundo, diseñado para operar tanto en redes globales descentralizadas como en aislamiento total fuera de línea (Off-Grid).
 
-## Instalación
+---
 
-### Requisitos
-- [Rust Toolchain](https://rustup.rs/) (para el Core P2P)
-- [Node.js v20+](https://nodejs.org/) (para la interfaz Solid UI)
-- [Android Studio](https://developer.android.com/studio) (opcional, para compilar el .APK nativo)
+## 🛠️ Requisitos del Sistema
 
+- **Node.js**: v20+
+- **Rust Toolchain**: 1.80+ y Cargo
+- **Android SDK**: 35 con OpenJDK 21
+
+---
+
+## 🚀 Inicio Rápido
+
+### 1. Compilación Web y de Nodo Rust
 ```bash
-# Instalar dependencias del frontend
+# Instalar dependencias del cliente
 cd client/app
 npm install
 
-# Compilar el core Rust de escritorio
-cd ../..
-cargo build --release
-
-# O COMPILAR TODO PARA ANDROID AUTOMÁTICAMENTE:
-./build_android.ps1
+# Compilación de producción estricta
+npm run build
 ```
 
-## Uso Rápido
-
-### 1. Inicializar y Arrancar (Modo Desarrollo)
+### 2. Sincronización y Compilación Android
 ```bash
-# Terminal 1: Iniciar el Frontend Solid UI
-cd client/app
-npm run dev
+# Sincronizar assets con Capacitor
+npx cap sync android
 
-# Terminal 2: Iniciar el Nodo P2P local (vía Rust)
-./target/release/red-node start
+# Compilar APK con Gradle
+cd android
+./gradlew assembleDebug
 ```
 
-### 2. Acceso a la Interfaz
-- **Navegador:** Abre `http://localhost:3000` (Frontend) -> Asegúrate de que el Nodo Rust esté en `7333`.
-- **Móvil (Recomendado):** Sigue los pasos en `docs/DEPLOYMENT.md` para empaquetar con Capacitor 8 y disfrutar de las funciones de hardware real.
-
-### 3. Generación de Identidad
-1. Al abrir la app, pulsa en **"Empezar"**.
-2. Tu dispositivo generará una identidad **DID** única.
-3. **CRÍTICO:** Copia y guarda tu **Identity Hash**. RED no tiene "recuperación de contraseña" por correo; si pierdes este código, pierdes tu cuenta.
-
-## Características de la v18.3.0
-- **Solid UI:** Interfaz premium, rápida y minimalista sin stuns externos para WebRTC.
-- **NodeMap + LoRa:** Mapa 3D de nodos con hardware radio bridge para largo alcance real P2P.
-- **RED Nearby:** Radar de contactos por Bluetooth BLE sin necesidad de internet.
-- **Mesh Storage:** Los mensajes se reenvían entre nodos cercanos automáticamente (Store-and-Forward).
-- **Anti-Forense:** Bloqueo de capturas y PIN de pánico integrados.
-
----
-
-## Comandos Tácticos (CLI)
-
+### 3. Instalación en Dispositivos
 ```bash
-# Ver salud del nodo local
-./target/release/red status --stats
-
-# Forzar descubrimiento BLE
-./target/release/red scan --nearby
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ---
 
-**RED** — Soberanía tecnológica para el siglo XXI.
+## 🔑 Primeros Pasos en la Aplicación
+
+1. **Creación de PIN Maestro**: Al abrir la app, establece tu PIN seguro de 6 dígitos.
+2. **Generación de Identidad Soberana**: El motor Rust genera localmente tu `did:red:<identity_hash>`.
+3. **Selección de Canales**: Accede a canales locales o chatea punto a punto mediante la red de malla.
+4. **Comunicaciones Tácticas**:
+   - **Walkie-Talkie HQ**: Activa el códec Vocoder (1.6–3.2 kbps) para hablar con bajísimo consumo de ancho de banda.
+   - **Batería Eco-Mesh**: Deja que el gobernador cinemático optimice la batería de tu dispositivo (hasta 48h).
+   - **Conectividad Global**: Al conectarte a internet, el nodo se enlaza automáticamente a los bootstrap peers de libp2p.

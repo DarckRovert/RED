@@ -50,6 +50,8 @@ const NodeLogsModal        = dynamic(() => import("../components/NodeLogsModal")
 const CalculatorScreen     = dynamic(() => import("../components/CalculatorScreen").then(m => ({ default: m.CalculatorScreen })),     { ssr: false, loading: () => <AppLoader /> });
 const SecurityReportModal  = dynamic(() => import("../components/SecurityReportModal").then(m => ({ default: m.SecurityReportModal })),  { ssr: false, loading: () => <AppLoader /> });
 const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreModal").then(m => ({ default: m.BackupRestoreModal })),   { ssr: false, loading: () => <AppLoader /> });
+const SettingsModal        = dynamic(() => import("../components/SettingsModal").then(m => ({ default: m.SettingsModal })),        { ssr: false, loading: () => <AppLoader /> });
+const UpdateModal          = dynamic(() => import("../components/UpdateModal").then(m => ({ default: m.UpdateModal })),          { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
@@ -199,6 +201,26 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Canales Mesh</span>
           <span style={{ fontSize: "0.70rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>Frecuencias Locales</span>
         </div>
+
+        <div
+          onClick={() => onOpenTool("settings")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>⚙️</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Ajustes & Temas</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>UI Customization</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("updater")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>🚀</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Actualizador OTA</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>In-App Installer</span>
+        </div>
       </div>
 
       <div style={{
@@ -324,8 +346,14 @@ export default function AppRouter() {
       <ToastProvider />
       <AuthWall>
         <IncomingCallBanner />
+        {activeLiveStreamId && (
+          <LiveStreamViewer
+            streamId={activeLiveStreamId}
+            onClose={() => useRedStore.getState().closeLiveStream()}
+          />
+        )}
         <main className="app-main">
-          {currentScreen === "sidebar" && <StatusHeader />}
+          {isTablet ? <StatusHeader /> : (currentScreen === "sidebar" && <StatusHeader />)}
           
           {isTablet ? (
             /* ── Master-Detail Tablet Layout (>= 768px) ── */
@@ -371,6 +399,8 @@ export default function AppRouter() {
                 {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
                 {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
                 {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
+                {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
+                {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
                 {currentScreen === "nodemap" && <NodeMap />}
                 {currentScreen === "radar" && <RadarWindow />}
                 {currentScreen === "call" && <CallScreen />}
@@ -422,6 +452,8 @@ export default function AppRouter() {
               {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
               {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
               {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
+              {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
+              {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
               {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
             </>
           )}

@@ -8,7 +8,7 @@ import { toast } from "./Toast";
 export const PublicChannelsPanel: React.FC = () => {
     const { navigate, identity, goBack } = useRedStore();
     const [channelId, setChannelId] = useState("red-local-general");
-    const [channels, setChannels] = useState<string[]>(["red-local-general", "red-emergency-lima", "red-logistica"]);
+    const [channels, setChannels] = useState<string[]>(["red-local-general", "emergencias-tacticas", "anuncios-comunitarios"]);
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
     const [inputText, setInputText] = useState("");
     const [loading, setLoading] = useState(false);

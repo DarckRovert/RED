@@ -1,16 +1,12 @@
 /**
- * PqcCryptoEngine.ts — RED Post-Quantum Hybrid Cryptography Engine (NIST ML-KEM-768 / Kyber)
+ * PqcCryptoEngine.ts — RED Post-Quantum Hybrid Cryptography Engine (NIST ML-KEM-768 / Kyber + ECDH)
  *
- * Implements a hybrid Key Encapsulation Mechanism (KEM) combining X25519 (Diffie-Hellman)
- * with Kyber-768 (ML-KEM-768 lattice-based encryption over ring R_q = Z_q[X]/(X^256 + 1)).
- * Protects against "Harvest Now, Decrypt Later" quantum attacks.
- *
- * v2.0 Fix (BUG-1):
- *  - sha256Hex() now uses window.crypto.subtle.digest('SHA-256') — 256-bit real output.
- *  - generateHybridKeyPair() derives ECDH public key mathematically from private key
- *    using SubtleCrypto ECDH P-256 (not independently random bytes).
- *  - encapsulateSharedSecret / decapsulateSharedSecret are now async.
+ * Implements a dual-hybrid Key Encapsulation Mechanism (KEM) combining classical ECDH P-256
+ * with NIST FIPS 203 ML-KEM-768 (Kyber-768) lattice-based encryption over ring R_q = Z_q[X]/(X^256 + 1).
+ * Protects against both classical and quantum "Harvest Now, Decrypt Later" adversaries.
  */
+
+import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 
 export interface HybridKeyPair {
     x25519PublicKeyHex: string;
@@ -25,113 +21,157 @@ export interface EncapsulatedSecret {
 }
 
 export class PqcCryptoEngine {
-    private static N = 256;
-    private static Q = 3329;
+    private static CT_KEM_LEN = 1088; // NIST FIPS 203 ML-KEM-768 ciphertext length
 
     /**
-     * Generates a hybrid post-quantum key pair.
-     * X25519 side: uses SubtleCrypto ECDH P-256 so the public key is
-     * mathematically derived from the private key (not independently random).
-     * Kyber768 side: seeds are cryptographically random.
+     * Generates a hybrid post-quantum key pair:
+     * - Classical ECDH P-256 key pair (65B raw public, 138B pkcs8 private)
+     * - ML-KEM-768 key pair with authentic NTT polynomial arithmetic (1184B public, 2400B secret)
      */
     public static async generateHybridKeyPair(): Promise<HybridKeyPair> {
-        // ECDH P-256: proper mathematical derivation of public key from private key
-        const ecdhKeyPair = await crypto.subtle.generateKey(
+        const cryptoSubtle = this.getCryptoSubtle();
+
+        // 1. Classical ECDH P-256 key generation
+        const ecdhKeyPair = await cryptoSubtle.generateKey(
             { name: 'ECDH', namedCurve: 'P-256' },
             true,
             ['deriveKey', 'deriveBits']
         );
 
-        const privateKeyJwk = await crypto.subtle.exportKey('jwk', ecdhKeyPair.privateKey);
-        const publicKeyJwk  = await crypto.subtle.exportKey('jwk', ecdhKeyPair.publicKey);
+        const rawPub = await cryptoSubtle.exportKey('raw', ecdhKeyPair.publicKey);
+        const pkcs8Priv = await cryptoSubtle.exportKey('pkcs8', ecdhKeyPair.privateKey);
 
-        // Encode JWK to hex for storage
-        const privHex = this.bytesToHex(new TextEncoder().encode(JSON.stringify(privateKeyJwk)));
-        const pubHex  = this.bytesToHex(new TextEncoder().encode(JSON.stringify(publicKeyJwk)));
-
-        // Kyber768: cryptographically random seeds
-        const kyberPrivSeed = crypto.getRandomValues(new Uint8Array(64));
-        const kyberPubSeed  = crypto.getRandomValues(new Uint8Array(64));
+        // 2. Authentic NIST FIPS 203 ML-KEM-768 key generation
+        const mlKemKeys = ml_kem768.keygen();
 
         return {
-            x25519PublicKeyHex:  pubHex,
-            x25519PrivateKeyHex: privHex,
-            kyberPublicKeyHex:   this.bytesToHex(kyberPubSeed),
-            kyberPrivateKeyHex:  this.bytesToHex(kyberPrivSeed),
+            x25519PublicKeyHex:  this.bytesToHex(new Uint8Array(rawPub)),
+            x25519PrivateKeyHex: this.bytesToHex(new Uint8Array(pkcs8Priv)),
+            kyberPublicKeyHex:   this.bytesToHex(mlKemKeys.publicKey),
+            kyberPrivateKeyHex:  this.bytesToHex(mlKemKeys.secretKey),
         };
     }
 
     /**
-     * Encapsulates a shared secret using Kyber768 + X25519 public key.
-     * Produces a 256-bit shared secret via real SHA-256 KDF.
+     * Encapsulates a shared secret using recipient's ML-KEM-768 public key (1184 bytes) and ECDH public key (65 bytes).
+     * Produces an authentic combined ciphertext (1088B ML-KEM + 65B Ephemeral ECDH = 1153B)
+     * and derives a 256-bit hybrid shared secret via SHA-256 KDF(ss_kem || ss_ecdh).
      */
     public static async encapsulateSharedSecret(
         peerKyberPubHex: string,
-        peerX25519PubHex: string
+        peerEcdhPubHex: string
     ): Promise<EncapsulatedSecret> {
-        const entropy      = crypto.getRandomValues(new Uint8Array(32));
-        const peerPubBytes = this.hexToBytes(peerKyberPubHex);
+        const cryptoSubtle = this.getCryptoSubtle();
+        const peerKyberPubBytes = this.hexToBytes(peerKyberPubHex);
+        const peerEcdhPubBytes = this.hexToBytes(peerEcdhPubHex);
 
-        // Kyber ciphertext placeholder (full NTT requires mlkem WASM)
-        const ciphertext = new Uint8Array(1088);
-        for (let i = 0; i < 1088; i++) {
-            ciphertext[i] = (peerPubBytes[i % peerPubBytes.length] ^ entropy[i % 32]) & 0xFF;
-        }
+        // 1. Authentic ML-KEM-768 Encapsulation
+        const { cipherText: ctKem, sharedSecret: ssKem } = ml_kem768.encapsulate(peerKyberPubBytes);
 
-        // KDF: SHA-256(entropy || peerX25519PubBytes) — REAL 256-bit output
-        const x25519PubBytes = this.hexToBytes(peerX25519PubHex);
-        const kdfInput = new Uint8Array(entropy.length + x25519PubBytes.length);
-        kdfInput.set(entropy, 0);
-        kdfInput.set(x25519PubBytes, entropy.length);
+        // 2. Ephemeral ECDH P-256 Key Exchange
+        const ephemKeyPair = await cryptoSubtle.generateKey(
+            { name: 'ECDH', namedCurve: 'P-256' },
+            true,
+            ['deriveBits']
+        );
+        const ephemPubRaw = await cryptoSubtle.exportKey('raw', ephemKeyPair.publicKey);
+        const peerEcdhKey = await cryptoSubtle.importKey(
+            'raw',
+            peerEcdhPubBytes as ArrayBufferView<ArrayBuffer>,
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            []
+        );
+        const ssEcdhBuffer = await cryptoSubtle.deriveBits(
+            { name: 'ECDH', public: peerEcdhKey },
+            ephemKeyPair.privateKey,
+            256
+        );
+        const ssEcdh = new Uint8Array(ssEcdhBuffer);
 
+        // 3. Combined Ciphertext: ctKem (1088 bytes) + ephemPubRaw (65 bytes) = 1153 bytes
+        const combinedCt = new Uint8Array(ctKem.length + ephemPubRaw.byteLength);
+        combinedCt.set(ctKem, 0);
+        combinedCt.set(new Uint8Array(ephemPubRaw), ctKem.length);
+
+        // 4. Hybrid KDF: SHA-256(ssKem || ssEcdh)
+        const kdfInput = new Uint8Array(ssKem.length + ssEcdh.length);
+        kdfInput.set(ssKem, 0);
+        kdfInput.set(ssEcdh, ssKem.length);
         const finalSecretHex = await this.sha256Hex(kdfInput);
 
         return {
-            ciphertextHex:   this.bytesToHex(ciphertext),
+            ciphertextHex:   this.bytesToHex(combinedCt),
             sharedSecretHex: finalSecretHex,
         };
     }
 
     /**
-     * Decapsulates the shared secret using recipient's private keys.
+     * Decapsulates the shared secret using recipient's ML-KEM-768 secret key (2400 bytes) and ECDH private key.
      */
     public static async decapsulateSharedSecret(
         ciphertextHex: string,
         kyberPrivHex:  string,
-        x25519PrivHex: string
+        ecdhPrivHex:   string
     ): Promise<string> {
-        const ct   = this.hexToBytes(ciphertextHex);
-        const priv = this.hexToBytes(kyberPrivHex);
+        const cryptoSubtle = this.getCryptoSubtle();
+        const combinedCt = this.hexToBytes(ciphertextHex);
+        const kyberPrivBytes = this.hexToBytes(kyberPrivHex);
+        const ecdhPrivBytes = this.hexToBytes(ecdhPrivHex);
 
-        const recoveredEntropy = new Uint8Array(32);
-        for (let i = 0; i < 32; i++) {
-            recoveredEntropy[i] = ct[i] ^ priv[i % priv.length];
-        }
+        const ctKem = combinedCt.slice(0, this.CT_KEM_LEN);
+        const ephemPubBytes = combinedCt.slice(this.CT_KEM_LEN);
 
-        const x25519PrivBytes = this.hexToBytes(x25519PrivHex);
-        const kdfInput = new Uint8Array(recoveredEntropy.length + x25519PrivBytes.length);
-        kdfInput.set(recoveredEntropy, 0);
-        kdfInput.set(x25519PrivBytes, recoveredEntropy.length);
+        // 1. Authentic ML-KEM-768 Decapsulation
+        const ssKem = ml_kem768.decapsulate(ctKem, kyberPrivBytes);
+
+        // 2. ECDH Decapsulation
+        const ephemPubKey = await cryptoSubtle.importKey(
+            'raw',
+            ephemPubBytes as ArrayBufferView<ArrayBuffer>,
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            []
+        );
+        const myPrivKey = await cryptoSubtle.importKey(
+            'pkcs8',
+            ecdhPrivBytes as ArrayBufferView<ArrayBuffer>,
+            { name: 'ECDH', namedCurve: 'P-256' },
+            false,
+            ['deriveBits']
+        );
+        const ssEcdhBuffer = await cryptoSubtle.deriveBits(
+            { name: 'ECDH', public: ephemPubKey },
+            myPrivKey,
+            256
+        );
+        const ssEcdh = new Uint8Array(ssEcdhBuffer);
+
+        // 3. Hybrid KDF: SHA-256(ssKem || ssEcdh)
+        const kdfInput = new Uint8Array(ssKem.length + ssEcdh.length);
+        kdfInput.set(ssKem, 0);
+        kdfInput.set(ssEcdh, ssKem.length);
 
         return this.sha256Hex(kdfInput);
     }
 
-    /**
-     * Real SHA-256 via WebCrypto SubtleCrypto.
-     * Returns a 64-character hex string (256 bits).
-     * Throws if SubtleCrypto is unavailable (non-secure origin).
-     */
-    private static async sha256Hex(data: Uint8Array): Promise<string> {
-        if (typeof window === 'undefined' || !window.crypto?.subtle) {
-            throw new Error(
-                '[PqcCryptoEngine] window.crypto.subtle unavailable. ' +
-                'This engine requires a secure origin (HTTPS or Capacitor).'
-            );
+    private static getCryptoSubtle(): SubtleCrypto {
+        if (typeof window !== 'undefined' && window.crypto?.subtle) {
+            return window.crypto.subtle;
         }
-        // TypeScript 5.x strict: Uint8Array<ArrayBufferLike> is not assignable to BufferSource
-        // because ArrayBufferLike includes SharedArrayBuffer. Extract a clean ArrayBuffer slice.
+        if (typeof globalThis !== 'undefined' && globalThis.crypto?.subtle) {
+            return globalThis.crypto.subtle;
+        }
+        throw new Error(
+            '[PqcCryptoEngine] crypto.subtle unavailable. ' +
+            'This engine requires a secure origin (HTTPS or Capacitor).'
+        );
+    }
+
+    private static async sha256Hex(data: Uint8Array): Promise<string> {
+        const cryptoSubtle = this.getCryptoSubtle();
         const buf: ArrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-        const hashBuffer = await window.crypto.subtle.digest('SHA-256', buf);
+        const hashBuffer = await cryptoSubtle.digest('SHA-256', buf);
         const hashArray  = Array.from(new Uint8Array(hashBuffer));
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
@@ -143,10 +183,11 @@ export class PqcCryptoEngine {
     private static hexToBytes(hex: string): Uint8Array {
         const bytes = new Uint8Array(Math.ceil(hex.length / 2));
         for (let i = 0; i < bytes.length; i++) {
-            bytes[i] = parseInt(hex.substr(i * 2, 2), 16) || 0;
+            bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16) || 0;
         }
         return bytes;
     }
 }
+
 
 

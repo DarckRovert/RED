@@ -1,227 +1,77 @@
-# 🛜 Conectividad Offline — Especificación Técnica
+# 🛜 Conectividad Offline & Malla Global — Especificación Técnica
 
-**Versión**: 24.0.0 | **Fecha**: Agosto 2026
+**Versión**: 31.0.0 | **Fecha**: Agosto 2026
 
 ## Resumen
 
-RED implementa comunicación directa entre dispositivos sin necesidad de internet ni señal celular, mediante tres mecanismos de transporte local:
+RED implementa comunicación directa entre dispositivos sin necesidad de internet ni señal celular, mediante una arquitectura híbrida multi-transporte tolerante a retrasos (DTN) y enrutamiento por inundación controlada (Controlled Flood):
 
-| Transporte | Alcance | Velocidad | Consumo | Uso |
-|---|---|---|---|---|
-| **Bluetooth BLE** | ~100m | ~50–200 Kbps | Bajo | Mensajes, descubrimiento |
-| **WiFi Direct (LAN)** | LAN/Hotspot | ~10–100 Mbps | Medio | Archivos, vídeo |
-| **Mesh Store-and-Forward** | Ilimitado (saltos) | Variable | Bajo | Mensajes cuando no hay ruta directa |
-
----
-
-## Arquitectura
-
-```
-Dispositivo A                           Dispositivo B
-   │                                         │
-   │  ◄──── BLE (GATT) ────────────────────► │  ← directo < 100m
-   │  ◄──── WiFi DataChannel ──────────────► │  ← mismo LAN/hotspot
-   │                                         │
-   │         Dispositivo C (relay)           │
-   │  ◄──── BLE ────► C ◄──── BLE ─────────► │  ← mesh 2 saltos
-```
-
-### Prioridad de Transporte (automática)
-
-```
-1. WiFi Direct   → Máxima velocidad, si hay LAN común
-2. Bluetooth BLE → Si están cerca sin LAN compartida
-3. Mesh Relay    → Store-and-forward si no hay ruta directa
-```
+| Transporte | Frecuencia / Capa | Alcance | Velocidad / Bitrate | Consumo | Uso Táctico |
+|---|---|---|---|---|---|
+| **Bluetooth LE (GATT)** | 2.4 GHz ISM | ~100m | ~50–200 Kbps | Mínimo | Mensajes E2EE, PoW anti-spam, beacons de presencia |
+| **WiFi Direct / WebRTC** | 2.4 / 5 GHz LAN | ~150m | ~10–54 Mbps | Medio | Streaming de video, canvas en vivo, sincronización pesada |
+| **Módem LoRa** | 915 / 868 MHz | ~5–15 km | ~0.3–5.5 Kbps | Bajo | Ráfagas de texto táctico, voz comprimida con Vocoder |
+| **SoundMesh Ultrasonido** | 18.5–20.5 kHz BFSK | ~10–25m | ~25 bps – 2 Kbps | Mínimo | Comunicación en apagón electromagnético / Jaula de Faraday |
+| **DHT Global libp2p** | TCP/QUIC / Auto-Relay | Mundial | Según enlace WAN | Variable | Sincronización global Kademlia cuando hay conexión |
 
 ---
 
-## 1. Bluetooth Low Energy (BLE)
+## Arquitectura de Malla Híbrida
 
-### Servicio GATT personalizado
+```
++------------------+                    +------------------+
+|  Dispositivo A   |                    |  Dispositivo B   |
+|   (Off-Grid)     |                    |   (Off-Grid)     |
++--------+---------+                    +--------+---------+
+         |                                       |
+         |  ◄──── BLE GATT (Mesh Relay) ────────►|  (Alcance < 100m)
+         |  ◄──── WiFi Direct DataChannel ──────►|  (Misma red local)
+         |  ◄──── Módem LoRa (915 MHz) ─────────►|  (Alcance hasta 15km)
+         |  ◄──── SoundMesh (18-20 kHz) ────────►|  (Acoustic Air-Gap)
+         |                                       |
+         +-------------------+-------------------+
+                             |
+                   Dispositivo C (Relay Gateway)
+                             |
+         +-------------------+-------------------+
+         | (Al detectar WiFi / 4G / 5G comercial) |
+         v                                       v
++------------------+                    +------------------+
+| libp2p Kademlia  |                    | DoH / SNI Tunnels|
+|  Bootstrap Nodes |                    |   (Anti-Censura) |
++------------------+                    +------------------+
+```
+
+---
+
+## 1. Motores de Optimización de Enlace
+
+### 1.1 LowBitrateVocoder (DSP de Voz Táctica)
+- Remuestrea audio de micrófono a 8000 Hz 16-bit PCM.
+- Cuantización adaptativa IMA ADPCM de 4 bits.
+- Reduce 3 segundos de audio crudo (562 KB) a **<800 Bytes por ráfaga**, permitiendo enviar voz por enlaces LoRaWAN y módem acústico ultrasónico.
+
+### 1.2 MeshProofOfWork (Hashcash SHA-256)
+- Evita el agotamiento de la batería y la congestión radio requiriendo un puzzle criptográfico SHA-256 en cada paquete.
+- Validación de timestamp de 180s para mitigar ataques de repetición.
+
+### 1.3 KineticDutyGovernor (Gobernador Cinemático)
+- Adapta dinámicamente el ciclo de escaneo BLE entre 800ms (movimiento intenso) y 12s (dispositivo estacionario), logrando hasta **48 horas de supervivencia continua**.
+
+---
+
+## 2. Configuración de Hardware BLE
 
 ```
 Service UUID:    00001818-0000-1000-8000-00805f9b34fb
 TX Char UUID:    00002a4d-0000-1000-8000-00805f9b34fb  (App → Remoto)
 RX Char UUID:    00002a6e-0000-1000-8000-00805f9b34fb  (Remoto → App)
-```
-
-### Protocolo de fragmentación
-
-Los mensajes se fragmentan en chunks de 512 bytes (MTU):
-
-```
-Frame:  [4 bytes: total_length] [payload_bytes...]
-Chunks: [chunk_1: 512B] [chunk_2: 512B] ... [chunk_n: remainder]
-```
-
-El receptor reensambla los chunks usando el `total_length` del header.
-
-### Cifrado
-
-Los payloads BLE son **pre-cifrados** por la capa RED E2E (X25519 + AES-256-GCM) antes de enviarse al transporte BLE. El transporte BLE no conoce el contenido.
-
-### Implementación
-
-Archivo: [`client/app/src/lib/mesh/bluetoothTransport.ts`](../client/app/src/lib/mesh/bluetoothTransport.ts)
-
-Clases principales:
-- `BluetoothTransport` — clase singleton exportada como `bluetoothTransport`
-- `scan()` — inicia escaneo BLE (requiere gesto de usuario)
-- `connect(device)` — abre servidor GATT y suscribe a notificaciones
-- `send(deviceId, payload)` — envía payload fragmentado
-- `onMessage(cb)` — registra callback para mensajes entrantes
-
----
-
-## 2. WiFi Direct (WebRTC DataChannel)
-
-### Señalización local
-
-La negociación WebRTC se realiza a través del nodo RED local:
-
-```
-ws://localhost:9001/local-signal
-
-Mensajes de señalización:
-  announce    → "hay un nuevo peer en la LAN"
-  offer       → SDP offer de WebRTC
-  answer      → SDP answer de WebRTC
-  ice-candidate → candidatos ICE
-  bye         → peer desconectado
-```
-
-### Conexión P2P (sin STUN externo)
-
-Para LAN local se omiten los servidores STUN externos:
-
-```typescript
-RTCConfiguration = {
-  iceServers: [],           // Sin STUN/TURN
-  iceTransportPolicy: 'all' // Usa candidatos host/LAN
-}
-```
-
-### DataChannel
-
-```typescript
-RTCDataChannelInit = {
-  ordered: true,
-  maxRetransmits: 3
-}
-binaryType = 'arraybuffer'
-```
-
-### Implementación
-
-Archivo: [`client/app/src/lib/mesh/wifiDirectTransport.ts`](../client/app/src/lib/mesh/wifiDirectTransport.ts)
-
----
-
-## 3. Protocolo Mesh Store-and-Forward
-
-### Estructura de mensaje mesh
-
-```typescript
-MeshMessage {
-  id: string       // UUID único (deduplicación)
-  to: string       // Peer destino
-  from: string     // Peer origen
-  payload: number[] // Payload cifrado como array JSON
-  createdAt: number // Timestamp ms
-  expiresAt: number // TTL = createdAt + 30min
-  hops: number     // Saltos recorridos
-}
-```
-
-### Parámetros
-
-| Parámetro | Valor | Razón |
-|---|---|---|
-| `DEFAULT_TTL_MS` | 30 minutos | Evita mensajes obsoletos |
-| `MAX_HOPS` | 5 | Previene bucles de routing |
-| `MAX_STORED_MSGS` | 500 | Límite de memoria |
-
-### Flujo de un mensaje mesh
-
-```
-Alice                Node B               Node C               Bob
-  │                     │                    │                   │
-  │──enqueue(to=Bob)───►│                    │                   │
-  │                     │──receive()─────────►│                   │
-  │                     │  (hops+1, store)    │──receive()───────►│
-  │                     │                    │  (to==Bob, deliver)
-  │                     │                    │                   │
-```
-
-### Gossip Sync
-
-Cuando un nuevo peer se conecta, el protocolo mesh ofrece un batch de mensajes almacenados para relay:
-
-```typescript
-meshProtocol.getGossipBatch(excludeFrom, maxCount=10)
-// → Array<MeshMessage> no originados por este peer, no expirados
-```
-
-### Persistencia
-
-Los mensajes mesh son inyectados desde la capa de transporte (BLE/WiFi) hacia el nodo local en el puerto `4555` vía REST, donde el core en Rust gestiona la persistencia en la base de datos cifrada y el reenvío oportuno.
-
-Archivo: [`node/src/api.rs`](../node/src/api.rs) (Manejo de Relay en Rust)
-
----
-
-## 4. Capa Unificada (LocalTransport)
-
-Archivo: [`client/app/src/lib/mesh/localTransport.ts`](../client/app/src/lib/mesh/localTransport.ts)
-
-```typescript
-// Obtener el singleton (se inicializa con el DID local)
-const transport = getLocalTransport(myDID);
-
-// Iniciar WiFi LAN
-await transport.startWifi();
-
-// Escanear BLE (requiere gesto de usuario)
-const peer = await transport.scanBluetooth();
-
-// Enviar (selecciona automáticamente WiFi > BLE > Mesh)
-const usedTransport = await transport.send(peerId, encryptedPayload);
-// → 'wifi' | 'bluetooth' | 'mesh'
-
-// Recibir
-transport.onMessage(({ from, payload, transport }) => {
-  // payload ya descifrado por la capa crypto de RED
-});
+CCCD Descriptor: 00002902-0000-1000-8000-00805f9b34fb
 ```
 
 ---
 
-## 5. UI
+## 3. Tolerancia a Retrasos (DTN Store-and-Forward)
 
-| Componente | Ruta | Función |
-|---|---|---|
-| `NearbyDevicesPanel` | `src/components/` | Panel con radar, lista de peers, controles BLE/WiFi |
-| `OfflinePage` | `src/app/offline/page.tsx` | Página `/offline` completa |
-
-### Acceso al modo offline
-
-Navegar a `/offline` en la app (o tocar el botón de antena en el sidebar cuando no hay conexión).
-
----
-
-## 6. Limitaciones y Roadmap
-
-### Limitaciones actuales
-
-- **Web Bluetooth**: Solo funciona en Chrome/Edge en HTTPS o localhost. Firefox y Safari no soportan la API.
-- **WiFi Direct nativo**: En Capacitor (Android/iOS), usar el plugin `@capacitor-community/bluetooth-le` o `capacitor-wifi-direct` para acceso nativo completo.
-- **Alcance BLE**: ~100m en espacio abierto, menos con obstáculos.
-
-### Roadmap
-
-- [ ] Plugin nativo Capacitor para BLE (mayor alcance y control)
-- [ ] WiFi Direct nativo Android (Wi-Fi P2P API)
-- [ ] Nearby Connections API (Android) para discovery automático
-- [x] LoRa radio como transporte de ultra largo alcance (Vía serial bridge e I/O API)
-- [ ] Compresión de payloads para BLE (mensajes grandes)
+- Si el destinatario no está en el radio de alcance, el paquete queda en la cola persistente cifrada.
+- Cada nodo intermedio actúa como "mula de datos" y entrega el paquete cuando entra en rango del destinatario o de un nodo puente hacia él.

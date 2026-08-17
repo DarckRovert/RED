@@ -117,8 +117,16 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         }
     };
 
-    const handleResolve = async (alertId: string) => {
-        if (!confirm("¿Confirmar que la víctima fue localizada y la alerta está resuelta?")) return;
+    const [confirmAlertId, setConfirmAlertId] = useState<string | null>(null);
+
+    const handleResolve = (alertId: string) => {
+        setConfirmAlertId(alertId);
+    };
+
+    const confirmResolveExecution = async () => {
+        if (!confirmAlertId) return;
+        const alertId = confirmAlertId;
+        setConfirmAlertId(null);
         try {
             await resolveAmberAlert(alertId, {
                 authority_node_id: nodeId,
@@ -329,6 +337,60 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                     )}
                 </div>
             </div>
+
+            {/* Tactical Confirmation Modal */}
+            {confirmAlertId && (
+                <div style={{
+                    position: "fixed",
+                    inset: 0,
+                    zIndex: 10000,
+                    background: "rgba(0,0,0,0.8)",
+                    backdropFilter: "blur(8px)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "20px"
+                }}>
+                    <div className="card-tactical animate-pop" style={{
+                        maxWidth: "420px",
+                        width: "100%",
+                        padding: "24px",
+                        background: "linear-gradient(180deg, rgba(20,24,36,0.98) 0%, rgba(10,12,20,0.99) 100%)",
+                        border: "1px solid var(--accent-emerald)",
+                        borderRadius: "16px",
+                        boxShadow: "0 10px 40px rgba(0,0,0,0.8)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "16px"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ fontSize: "1.5rem" }}>✅</span>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#fff" }}>
+                                Confirmar Resolución SAR
+                            </div>
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                            ¿Confirmas que la víctima ha sido localizada y la alerta AMBER debe cerrarse en toda la malla P2P?
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "8px" }}>
+                            <button
+                                onClick={() => setConfirmAlertId(null)}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "10px", fontSize: "0.82rem" }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={confirmResolveExecution}
+                                className="btn-tactical-primary"
+                                style={{ padding: "10px", fontSize: "0.82rem", background: "var(--accent-emerald)" }}
+                            >
+                                Sí, Marcar Resuelta
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

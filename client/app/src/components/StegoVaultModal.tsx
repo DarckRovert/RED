@@ -44,8 +44,11 @@ export function StegoVaultModal() {
     }, []);
 
     useEffect(() => {
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues 
+            ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase() 
+            : (Date.now() % 10000).toString();
         setPayloadText(`INFORME_OPERACIONAL_${operatorName.toUpperCase()}_${Date.now()}`);
-        setCapsuleTitle(`Cápsula Táctica #${Math.floor(Math.random() * 9000 + 1000)}`);
+        setCapsuleTitle(`Cápsula Táctica #${randSuffix}`);
         loadVault();
     }, [operatorName, loadVault]);
 

@@ -8,11 +8,21 @@ import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
+import androidx.core.content.FileProvider;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @CapacitorPlugin(name = "RedNode")
 public class RedNodePlugin extends Plugin {
@@ -507,6 +517,206 @@ public class RedNodePlugin extends Plugin {
         ret.put("active", true);
         ret.put("success", true);
         call.resolve(ret);
+    }
+
+    private static final ExecutorService downloadExecutor = Executors.newSingleThreadExecutor();
+
+    /** Verifica si la aplicación tiene permiso para instalar paquetes desconocidos (Android 8.0+) */
+    @PluginMethod
+    public void canRequestPackageInstalls(PluginCall call) {
+        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ret.put("granted", getContext().getPackageManager().canRequestPackageInstalls());
+        } else {
+            ret.put("granted", true);
+        }
+        call.resolve(ret);
+    }
+
+    /** Abre la pantalla del sistema Android para otorgar permiso de instalación de paquetes a RED */
+    @PluginMethod
+    public void openInstallPermissionSettings(PluginCall call) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getContext().startActivity(intent);
+                call.resolve();
+            } else {
+                call.resolve();
+            }
+        } catch (Exception e) {
+            call.reject("Could not open install permission settings: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Descarga de APK en streaming nativo de alta eficiencia directamente al almacenamiento caché.
+     * Cero uso de Base64 ni saturación del heap de V8 JS.
+     * Emite eventos 'apkDownloadProgress' con bytes recibidos, total, porcentaje y velocidad en KB/s.
+     */
+    @PluginMethod
+    public void downloadApk(PluginCall call) {
+        String urlString = call.getString("url");
+        if (urlString == null || urlString.isEmpty()) {
+            call.reject("URL is required");
+            return;
+        }
+        String fileName = call.getString("fileName", "red_update.apk");
+
+        downloadExecutor.execute(() -> {
+            InputStream in = null;
+            FileOutputStream out = null;
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(urlString);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(30000);
+                conn.setRequestProperty("User-Agent", "RED-Mobile-Updater");
+
+                int responseCode = conn.getResponseCode();
+                // Manejo de redirecciones 301, 302, 307, 308 (GitHub Releases -> AWS S3 CDN)
+                if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP || responseCode == 307 || responseCode == 308) {
+                    String newUrl = conn.getHeaderField("Location");
+                    conn.disconnect();
+                    url = new URL(newUrl);
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(30000);
+                    conn.setRequestProperty("User-Agent", "RED-Mobile-Updater");
+                    responseCode = conn.getResponseCode();
+                }
+
+                if (responseCode != HttpURLConnection.HTTP_OK) {
+                    throw new Exception("HTTP server responded with status: " + responseCode);
+                }
+
+                long totalBytes = conn.getContentLengthLong();
+                File cacheDir = getContext().getCacheDir();
+                File targetFile = new File(cacheDir, fileName);
+                if (targetFile.exists()) {
+                    targetFile.delete();
+                }
+
+                in = conn.getInputStream();
+                out = new FileOutputStream(targetFile);
+
+                byte[] buffer = new byte[16384];
+                long receivedBytes = 0;
+                int bytesRead;
+                long startTime = System.currentTimeMillis();
+                long lastProgressTime = 0;
+
+                while ((bytesRead = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, bytesRead);
+                    receivedBytes += bytesRead;
+
+                    long now = System.currentTimeMillis();
+                    if (now - lastProgressTime > 150 || (totalBytes > 0 && receivedBytes == totalBytes)) {
+                        lastProgressTime = now;
+                        double elapsedSec = Math.max(0.1, (now - startTime) / 1000.0);
+                        double speedKbps = (receivedBytes / 1024.0) / elapsedSec;
+                        float progress = totalBytes > 0 ? (float) receivedBytes / (float) totalBytes : 0f;
+
+                        com.getcapacitor.JSObject prog = new com.getcapacitor.JSObject();
+                        prog.put("progress", progress);
+                        prog.put("receivedBytes", receivedBytes);
+                        prog.put("totalBytes", totalBytes);
+                        prog.put("speedKbps", speedKbps);
+                        prog.put("done", false);
+                        notifyListeners("apkDownloadProgress", prog);
+                    }
+                }
+
+                out.flush();
+
+                com.getcapacitor.JSObject doneProg = new com.getcapacitor.JSObject();
+                doneProg.put("progress", 1.0);
+                doneProg.put("receivedBytes", receivedBytes);
+                doneProg.put("totalBytes", totalBytes > 0 ? totalBytes : receivedBytes);
+                doneProg.put("speedKbps", 0);
+                doneProg.put("done", true);
+                doneProg.put("filePath", targetFile.getAbsolutePath());
+                notifyListeners("apkDownloadProgress", doneProg);
+
+                com.getcapacitor.JSObject result = new com.getcapacitor.JSObject();
+                result.put("success", true);
+                result.put("filePath", targetFile.getAbsolutePath());
+                result.put("totalBytes", receivedBytes);
+                call.resolve(result);
+
+            } catch (Exception e) {
+                android.util.Log.e("RedNodePlugin", "APK Download error: " + e.getMessage(), e);
+                com.getcapacitor.JSObject errProg = new com.getcapacitor.JSObject();
+                errProg.put("error", e.getMessage());
+                notifyListeners("apkDownloadProgress", errProg);
+                call.reject("Download failed: " + e.getMessage());
+            } finally {
+                try { if (in != null) in.close(); } catch (Exception ignored) {}
+                try { if (out != null) out.close(); } catch (Exception ignored) {}
+                if (conn != null) conn.disconnect();
+            }
+        });
+    }
+
+    /**
+     * Inicia la instalación del APK nativo mediante FileProvider e Intent(ACTION_VIEW).
+     */
+    @PluginMethod
+    public void installApk(PluginCall call) {
+        String filePath = call.getString("filePath");
+        File file;
+        if (filePath == null || filePath.isEmpty()) {
+            file = new File(getContext().getCacheDir(), "red_update.apk");
+        } else {
+            file = new File(filePath);
+        }
+
+        if (!file.exists() || file.length() == 0) {
+            call.reject("APK file does not exist or is empty at " + file.getAbsolutePath());
+            return;
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!getContext().getPackageManager().canRequestPackageInstalls()) {
+                    Intent permIntent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getContext().getPackageName()));
+                    permIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    getContext().startActivity(permIntent);
+
+                    com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                    ret.put("promptedPermission", true);
+                    call.resolve(ret);
+                    return;
+                }
+            }
+
+            Uri apkUri;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                apkUri = FileProvider.getUriForFile(
+                    getContext(),
+                    getContext().getPackageName() + ".fileprovider",
+                    file
+                );
+            } else {
+                apkUri = Uri.fromFile(file);
+            }
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            getContext().startActivity(intent);
+
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            android.util.Log.e("RedNodePlugin", "Failed to trigger APK install: " + e.getMessage(), e);
+            call.reject("Failed to trigger installer: " + e.getMessage());
+        }
     }
 
     // SEC-FIX C-3: Panic wipe plugin method — triggered by AuthWall panic PIN.

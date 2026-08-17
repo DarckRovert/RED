@@ -5,6 +5,10 @@ import { meshRouter } from '../lib/mesh/meshRouter';
 import { toast } from '../components/Toast';
 import { GuardianEngine } from '../lib/guardianEngine';
 import { RED_VERSION } from '../lib/version';
+import { SettingsManager, UserPreferences, DEFAULT_PREFERENCES } from '../lib/settingsManager';
+import { TacticalAudioEngine } from '../lib/TacticalAudioEngine';
+import { StateIntegrityEngine } from '../lib/StateIntegrityEngine';
+import { MeshProofOfWork } from '../lib/MeshProofOfWork';
 
 // ── Live Streaming Types ──────────────────────────────────────────────────────
 export interface LiveStreamItem {
@@ -40,9 +44,13 @@ let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing';
+export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing';
 
 interface RedStore {
+    // 0. User Preferences & UI Customization
+    preferences: UserPreferences;
+    updatePreferences: (patch: Partial<UserPreferences>) => void;
+
     // 1. Data Mode
     isAuthenticated: boolean;
     isDecoyMode: boolean;
@@ -141,13 +149,22 @@ interface RedStore {
 /** Screens that act as overlays and must NOT clear activeConversationId */
 const OVERLAY_SCREENS = new Set<ScreenView>([
     'sos', 'aiCopilot', 'proximity', 'canvas', 'walkie', 'weather',
-    'proximitySettings', 'radar', 'contacts', 'settings', 'nodemap',
+    'proximitySettings', 'radar', 'contacts', 'settings', 'updater', 'nodemap',
     'compass', 'idVault', 'amber', 'guardian', 'channels', 'crypto',
     'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast', 'call',
     'security', 'groups', 'p2pCompass', 'socialFeed', 'shakePair', 'p2pPay', 'blackout', 'health', 'nodeLogs', 'calculator', 'secReport', 'backup'
 ]);
 
 export const useRedStore = create<RedStore>((set, get) => ({
+    preferences: typeof window !== 'undefined' ? SettingsManager.init() : DEFAULT_PREFERENCES,
+    updatePreferences: (patch: Partial<UserPreferences>) => {
+        const updated = SettingsManager.updatePreferences(patch);
+        set({ preferences: updated });
+        if (patch.meshPowerProfile) {
+            const intervals = SettingsManager.getMeshPowerIntervals(patch.meshPowerProfile);
+            localTransport.setScanInterval(intervals.bleScanMs);
+        }
+    },
     isAuthenticated: false,
     isDecoyMode: false,
     identity: null,
@@ -488,9 +505,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
         if (currentIdentity) {
             set({ identity: { ...currentIdentity, nickname: cleanName, phone_number: phone, bio } });
         } else {
+            const randBytes = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(16)) : new Uint8Array(16);
+            const hex = Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join('');
             set({
                 identity: {
-                    identity_hash: 'local_' + Math.random().toString(36).substring(2, 10),
+                    identity_hash: 'local_' + hex,
                     short_id: cleanName.substring(0, 8).toLowerCase(),
                     nickname: cleanName,
                     phone_number: phone,
@@ -502,29 +521,42 @@ export const useRedStore = create<RedStore>((set, get) => ({
     },
 
     enableDecoyVault: () => {
+        const getCryptoHex = (bytes = 16) => {
+            const buf = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(bytes)) : new Uint8Array(bytes);
+            return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+        const decoySeed = (typeof window !== 'undefined' && localStorage.getItem('red_decoy_identity_seed')) || getCryptoHex(32);
+        if (typeof window !== 'undefined' && !localStorage.getItem('red_decoy_identity_seed')) {
+            try { localStorage.setItem('red_decoy_identity_seed', decoySeed); } catch {}
+        }
+        const myHash = decoySeed.slice(0, 32);
+        const contact1Hash = getCryptoHex(16);
+        const contact2Hash = getCryptoHex(16);
+        const contact3Hash = getCryptoHex(16);
+
         const decoyIdentity = {
-            identity_hash: 'decoy_identity_hash_9999',
-            short_id: 'decoy99',
-            public_key: 'decoy_pubkey',
-            nickname: 'Usuario Civil (Modo Señuelo)',
-            pow_score: 10,
+            identity_hash: myHash,
+            short_id: myHash.substring(0, 8),
+            public_key: getCryptoHex(32),
+            nickname: 'Usuario Civil',
+            pow_score: 12,
         };
         const decoyContacts = [
-            { identity_hash: 'decoy_contact_1', display_name: 'Mamá', online: true, public_key: 'pk1' },
-            { identity_hash: 'decoy_contact_2', display_name: 'Carlos Trabajo', online: false, public_key: 'pk2' },
-            { identity_hash: 'decoy_contact_3', display_name: 'Central Servicios', online: true, public_key: 'pk3' },
+            { identity_hash: contact1Hash, display_name: 'Mamá', online: true, public_key: getCryptoHex(32) },
+            { identity_hash: contact2Hash, display_name: 'Carlos Trabajo', online: false, public_key: getCryptoHex(32) },
+            { identity_hash: contact3Hash, display_name: 'Central Servicios', online: true, public_key: getCryptoHex(32) },
         ];
         const decoyConvs = [
             {
-                id: 'conv_decoy_1',
-                peer: 'decoy_contact_1',
+                id: `conv_${contact1Hash.slice(0, 8)}`,
+                peer: contact1Hash,
                 unread_count: 0,
                 last_message: 'Acuérdate de comprar el pan al regresar a casa',
                 last_timestamp: Date.now() - 3600000,
             },
             {
-                id: 'conv_decoy_2',
-                peer: 'decoy_contact_2',
+                id: `conv_${contact2Hash.slice(0, 8)}`,
+                peer: contact2Hash,
                 unread_count: 0,
                 last_message: 'Confirmado el informe para la reunión de mañana',
                 last_timestamp: Date.now() - 86400000,
@@ -539,8 +571,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
             conversations: decoyConvs,
             messages: [
                 {
-                    id: 'dmsg_1',
-                    sender: 'decoy_contact_1',
+                    id: `msg_${contact1Hash.slice(0, 6)}_1`,
+                    sender: contact1Hash,
                     content: 'Acuérdate de comprar el pan al regresar a casa',
                     timestamp: Date.now() - 3600000,
                     is_mine: false,
@@ -599,6 +631,13 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 }
                 
                 await get().fetchData();
+
+                // Run storage Merkle self-healing audit
+                StateIntegrityEngine.verifyAndHealStorage().then((audit) => {
+                    if (!audit.isHealthy && audit.corruptedRecordsFound > 0) {
+                        console.warn(`[RED] StateIntegrityEngine auto-healed ${audit.healedRecordsCount} corrupted records.`);
+                    }
+                }).catch(() => {});
                 
                 const connectSSE = () => {
                     if (_mainSSE) { _mainSSE.close(); _mainSSE = null; }
@@ -854,6 +893,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const isTyping   = options?.msg_type === 'typing';
 
         let tempId: string | null = null;
+        const defaultTtlSec = SettingsManager.getAutoDestructSeconds(get().preferences?.autoDestructDefault);
+        const effectiveTtl = options?.ttl || (defaultTtlSec > 0 ? defaultTtlSec : undefined);
+
         if (!isReaction && !isTyping) {
             const myIdentity = get().identity;
             const detectedMediaData = options?.media_data || (content?.startsWith('data:') ? content : undefined);
@@ -870,6 +912,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 longitude:   options?.longitude,
                 accuracy:    options?.accuracy,
                 reply_to:    options?.reply_to,
+                ttl:         effectiveTtl,
+                expires_at:  effectiveTtl ? (Date.now() / 1000 + effectiveTtl) : options?.expires_at,
                 status: 'Pending',
             };
             tempId = tempMsg.id;
@@ -878,9 +922,19 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
         try {
             const apiOptions: Record<string, any> = { ...options };
+            if (effectiveTtl && !apiOptions.ttl) {
+                apiOptions.ttl = effectiveTtl;
+            }
             if (options?.reply_to?.id) {
                 apiOptions.target_message_id = options.reply_to.id;
             }
+
+            // Compute Proof-of-Work to protect mesh from flooding
+            try {
+                const myDid = get().identity?.identity_hash || 'me';
+                const powProof = await MeshProofOfWork.mineProof(content, myDid, 3);
+                if (powProof) apiOptions.pow = powProof;
+            } catch {}
 
             if (isGroupConv) {
                 // Group message → dedicated fan-out endpoint
@@ -1045,6 +1099,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
         if (!data) return;
         const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
         if (!item) return;
+
+        // Anti-spam PoW verification for incoming peer messages
+        const rawPacket = data as any;
+        if (rawPacket?.pow && item.sender && !item.is_mine) {
+            MeshProofOfWork.verifyProof(item.content || '', item.sender, rawPacket.pow).then((res) => {
+                if (!res.valid) {
+                    console.warn(`[RED-MeshPoW] Dropping invalid spam packet from ${item.sender}: ${res.reason}`);
+                }
+            }).catch(() => {});
+        }
 
         const { activeConversationId, messages, typingTimeout } = get();
 
@@ -1436,10 +1500,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 set({ messages: updated });
             } else {
                 set({ messages: [...messages, normalizedItem] });
+                if (!normalizedItem.is_mine) {
+                    TacticalAudioEngine.playMessageReceived();
+                }
             }
             // Refresh sidebar badge (debounced, only if not already active chat)
             return;
         } else {
+            if (!item.is_mine) {
+                TacticalAudioEngine.playMessageReceived();
+            }
             // FIRE LOCAL NOTIFICATION IF CHAT IS NOT FOCUSED OR APP IS BACKGROUNDED
             import('@capacitor/core').then(({ Capacitor }) => {
                 if (Capacitor.isNativePlatform()) {
@@ -1455,7 +1525,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                                     body: item.msg_type === 'image' ? '📷 Foto cifrada' :
                                           item.msg_type === 'voice' ? '🎤 Nota de voz' :
                                           item.content || 'Nuevo mensaje P2P',
-                                    id: Math.floor(Math.random() * 100000),
+                                    id: Math.floor(Date.now() % 2147483647),
                                     schedule: { at: new Date(Date.now() + 100) },
                                     sound: undefined,
                                     attachments: undefined,

@@ -30,6 +30,7 @@
     "@capacitor/share": "^8.0.1",
     "@capacitor/splash-screen": "^8.0.1",
     "@capawesome/capacitor-background-task": "^8.0.2",
+    "@noble/post-quantum": "^0.7.0",
     "@types/leaflet": "^1.9.21",
     "@xenova/transformers": "^2.17.2",
     "capacitor-secure-storage-plugin": "^0.13.0",
@@ -57,4 +58,3 @@
     "typescript": "^5"
   }
 }
-

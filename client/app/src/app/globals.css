@@ -695,11 +695,28 @@ textarea:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 2px; }
 
-/* ─── Safe Area Utilities ─────────────────────────────────────────────────────── */
+/* ─── Safe Area Utilities & Universal Header System ───────────────────────── */
 .pt-safe { padding-top: var(--safe-top); }
 .pb-safe { padding-bottom: var(--safe-bottom); }
 .pl-safe { padding-left: var(--safe-left); }
 .pr-safe { padding-right: var(--safe-right); }
+
+.safe-header {
+  padding-top: calc(12px + var(--safe-top, 0px)) !important;
+  min-height: calc(var(--header-h) + var(--safe-top, 0px)) !important;
+  height: auto !important;
+}
+
+.modal-screen-container {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
 
 /* ─── Mesh Badges ────────────────────────────────────────────────────────────── */
 .mesh-badge {
@@ -945,4 +962,94 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   0% { top: 5%; opacity: 0.8; }
   50% { top: 90%; opacity: 1; }
   100% { top: 5%; opacity: 0.8; }
+}
+
+/* ─── Tactical Button System & Interactive States ───────────────────────────── */
+.btn-tactical-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-bright) 100%);
+  color: #FFFFFF;
+  border: 1px solid var(--glass-highlight);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  transition: transform var(--dur-micro) var(--ease-spring), box-shadow var(--dur-fast) ease, opacity var(--dur-fast) ease;
+  box-shadow: 0 4px 18px var(--primary-glow);
+}
+
+.btn-tactical-primary:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 8px var(--primary-glow);
+}
+
+.btn-tactical-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-tactical-secondary {
+  background: var(--glass-bg-light);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 700;
+  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-micro) var(--ease-spring);
+}
+
+.btn-tactical-secondary:hover {
+  background: var(--bg-lifted);
+  border-color: var(--glass-border-light);
+}
+
+.btn-tactical-secondary:active {
+  transform: scale(0.97);
+}
+
+.btn-tactical-pill {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-weight: 700;
+  transition: all var(--dur-fast) ease;
+}
+
+.btn-tactical-pill.active {
+  background: var(--primary);
+  color: #FFFFFF;
+  border-color: var(--primary-bright);
+  box-shadow: 0 0 14px var(--primary-glow);
+}
+
+.btn-icon {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--dur-fast) ease;
+}
+
+.btn-icon:hover {
+  background: var(--bg-lifted);
+  border-color: var(--glass-border-light);
+}
+
+.btn-icon:active {
+  transform: scale(0.92);
+}
+
+/* Reduced Motion Mode */
+.reduced-motion *,
+.reduced-motion *::before,
+.reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }

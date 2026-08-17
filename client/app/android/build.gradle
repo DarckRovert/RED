@@ -6,7 +6,6 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // Usamos la 8.2.2 que es muy estable para SDK 34
         classpath 'com.android.tools.build:gradle:8.2.2'
         classpath 'com.google.gms:google-services:4.4.2'
     }
@@ -19,6 +18,9 @@ allprojects {
         google()
         mavenCentral()
         maven { url "https://plugins.gradle.org/m2/" }
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs += ["--release", "21"]
     }
 }
 
@@ -43,14 +45,11 @@ subprojects {
         }
     }
     
-    // Permitiendo que las dependencias se resuelvan de forma natural para SDK 35
     configurations.all {
         resolutionStrategy {
-            // Se eliminan los force de versiones antiguas (1.12.x) que chocan con SDK 35
         }
     }
 }
-
 
 task clean(type: Delete) {
     delete rootProject.buildDir

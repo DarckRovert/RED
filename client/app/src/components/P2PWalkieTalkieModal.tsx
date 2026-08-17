@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { sendVoiceBurst, getVoiceBursts, deleteVoiceBurst, VoiceBurst } from "../lib/api";
 import { PayloadCompressor } from "../lib/PayloadCompressor";
+import { LowBitrateVocoder } from "../lib/LowBitrateVocoder";
+import { SoundMeshEngine } from "../lib/SoundMeshEngine";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
@@ -25,10 +27,13 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     const [playingBurstId, setPlayingBurstId] = useState<string | null>(null);
     const [isLoadingBursts, setIsLoadingBursts] = useState(false);
     const [burstsError, setBurstsError] = useState<string | null>(null);
+    const [useTacticalVocoder, setUseTacticalVocoder] = useState<boolean>(true);
+    const [acousticBroadcast, setAcousticBroadcast] = useState<boolean>(false);
 
     const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
+    const activeAudioBufferNodeRef = useRef<AudioBufferSourceNode | null>(null);
 
     const myNickname = identity?.nickname || "Operador RED";
 
@@ -235,14 +240,44 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 return;
             }
 
-            // Real compression pass
-            const rawBytes = base64Audio.length;
-            const compressed = await PayloadCompressor.compress(base64Audio);
-            const compRatio = ((1 - compressed.length / rawBytes) * 100).toFixed(0);
-            setCompressionInfo(`Opus Pack: ${rawBytes}B → ${compressed.length}B (-${compRatio}%)`);
+            let finalPayload = base64Audio;
+
+            if (useTacticalVocoder) {
+                try {
+                    // Decode WebM into PCM AudioBuffer and compress with LowBitrateVocoder
+                    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+                    const dCtx = new AudioCtx();
+                    const binStr = atob(base64Audio);
+                    const bytes = new Uint8Array(binStr.length);
+                    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+                    const decodedBuffer = await dCtx.decodeAudioData(bytes.buffer);
+                    const voc = LowBitrateVocoder.compressAudioBuffer(decodedBuffer);
+                    dCtx.close().catch(() => {});
+
+                    finalPayload = `VOX:${voc.base64}`;
+                    setCompressionInfo(`Vocoder 8kHz IMA-ADPCM: ${base64Audio.length}B → ${voc.compressedSizeBytes}B (-${voc.compressionRatioPercent}%)`);
+
+                    if (acousticBroadcast) {
+                        toast.info("🔊 Transmitiendo ráfaga acústica ultrasónica...");
+                        SoundMeshEngine.transmitVocoderVoiceBurst(voc.base64).catch(() => {});
+                    }
+                } catch (err) {
+                    console.warn("Vocoder DSP fallback to WebM:", err);
+                    const rawBytes = base64Audio.length;
+                    const compressed = await PayloadCompressor.compress(base64Audio);
+                    const compRatio = ((1 - compressed.length / rawBytes) * 100).toFixed(0);
+                    setCompressionInfo(`Opus Pack: ${rawBytes}B → ${compressed.length}B (-${compRatio}%)`);
+                    finalPayload = base64Audio;
+                }
+            } else {
+                const rawBytes = base64Audio.length;
+                const compressed = await PayloadCompressor.compress(base64Audio);
+                const compRatio = ((1 - compressed.length / rawBytes) * 100).toFixed(0);
+                setCompressionInfo(`Opus Pack: ${rawBytes}B → ${compressed.length}B (-${compRatio}%)`);
+            }
 
             const res = await sendVoiceBurst({
-                audio_opus_b64: base64Audio,
+                audio_opus_b64: finalPayload,
                 duration_seconds: Math.max(1, Math.round(durationMs / 1000)),
                 sender_name: myNickname,
             });
@@ -263,24 +298,62 @@ export const P2PWalkieTalkieModal: React.FC = () => {
         }
     };
 
-    const handlePlayBurst = (burst: VoiceBurst) => {
+    const handlePlayBurst = async (burst: VoiceBurst) => {
         const id = burst.id;
+
+        // Stop active AudioBufferSourceNode if running
+        if (activeAudioBufferNodeRef.current) {
+            try { activeAudioBufferNodeRef.current.stop(); } catch {}
+            activeAudioBufferNodeRef.current = null;
+        }
+
         const currentAudio = audioRefs.current.get(id);
 
-        if (playingBurstId === id && currentAudio) {
-            currentAudio.pause();
+        if (playingBurstId === id) {
+            if (currentAudio) currentAudio.pause();
             setPlayingBurstId(null);
             return;
         }
 
-        // Pause any other playing audio
+        // Pause any other playing HTMLAudioElement
         if (playingBurstId) {
             const prev = audioRefs.current.get(playingBurstId);
             if (prev) prev.pause();
         }
 
+        const audioData = burst.audio_base64 || "";
+        if (!audioData) {
+            toast.error("Ráfaga sin datos de audio disponibles");
+            return;
+        }
+
+        // Check if Vocoder compressed audio
+        if (audioData.startsWith("VOX:")) {
+            try {
+                const vocoderBase64 = audioData.slice(4);
+                const bytes = LowBitrateVocoder.base64ToBytes(vocoderBase64);
+                const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+                const ctx = new AudioCtx();
+                const audioBuffer = LowBitrateVocoder.createAudioBufferFromEncoded(ctx, bytes);
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(ctx.destination);
+                source.onended = () => {
+                    setPlayingBurstId(null);
+                    ctx.close().catch(() => {});
+                };
+                activeAudioBufferNodeRef.current = source;
+                source.start(0);
+                setPlayingBurstId(id);
+                return;
+            } catch (e) {
+                console.error("Vocoder playback error:", e);
+                toast.error("Error al sintetizar audio de Vocoder");
+            }
+        }
+
         if (!currentAudio) {
-            const audio = new Audio(`data:audio/webm;base64,${burst.audio_base64}`);
+            const audio = new Audio(`data:audio/webm;base64,${audioData}`);
             audio.onended = () => setPlayingBurstId(null);
             audioRefs.current.set(id, audio);
             audio.play();
@@ -436,6 +509,57 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                                         {isProcessingStop ? "PROCESANDO" : (isRecording ? `${recordingTime}s REC (STOP)` : "TAP PTT")}
                                     </span>
                                 </button>
+                            </div>
+
+                            {/* Selector de Códec Táctico y Módem Acústico */}
+                            <div style={{
+                                width: "100%", padding: "12px 14px", borderRadius: "12px",
+                                background: "rgba(255,255,255,0.03)", border: "1px solid var(--glass-border)",
+                                display: "flex", flexDirection: "column", gap: "10px"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                            🎙️ Modo Códec: {useTacticalVocoder ? "Vocoder Militar 8kHz IMA-ADPCM" : "Estándar Opus/WebM"}
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                            {useTacticalVocoder ? "1.6–3.2 kbps · Optimizado para LoRaWAN y Módem Acústico (<800B)" : "32–64 kbps · Mayor fidelidad para redes Wi-Fi/Ethernet"}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setUseTacticalVocoder(!useTacticalVocoder)}
+                                        className="btn-ghost"
+                                        style={{
+                                            padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700,
+                                            border: useTacticalVocoder ? "1px solid var(--accent-emerald)" : "1px solid var(--glass-border)",
+                                            color: useTacticalVocoder ? "var(--accent-emerald)" : "var(--text-muted)"
+                                        }}
+                                    >
+                                        {useTacticalVocoder ? "ACTIVO" : "OFF"}
+                                    </button>
+                                </div>
+
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                            🔊 Emisión Acústica Ultrasónica SoundMesh
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                            Emite el tono FSK (18.5kHz-20.5kHz) por el altavoz físico
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setAcousticBroadcast(!acousticBroadcast)}
+                                        className="btn-ghost"
+                                        style={{
+                                            padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700,
+                                            border: acousticBroadcast ? "1px solid var(--accent-cyan)" : "1px solid var(--glass-border)",
+                                            color: acousticBroadcast ? "var(--accent-cyan)" : "var(--text-muted)"
+                                        }}
+                                    >
+                                        {acousticBroadcast ? "ON" : "OFF"}
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Botón de Ráfaga de Emergencia Instantánea */}

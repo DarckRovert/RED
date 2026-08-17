@@ -57,9 +57,10 @@ export default function CryptoPanel() {
         try {
             const prompt = `Evalúa en 2 oraciones la salud criptográfica y conectividad del nodo con balance ${vault?.balance ?? 0} RED y ${status?.peer_count ?? 0} pares conectados.`;
             const res = await LocalAIEngine.generateCopilotResponse(prompt);
-            setAiCryptoAudit(res.answer || "Nodo criptográfico en estado óptimo. Sincronización PoW activa.");
-        } catch {
-            setAiCryptoAudit("Bóveda criptográfica y libro mayor en sincronía. Conexiones P2P estables.");
+            setAiCryptoAudit(res.answer || "El modelo no generó un dictamen criptográfico válido.");
+        } catch (e: any) {
+            setAiCryptoAudit(`⚠️ Motor de IA Local no disponible: ${e.message || "Modelos ONNX no cargados"}.`);
+            toast.error("IA Local no disponible");
         } finally {
             setAuditLoading(false);
         }

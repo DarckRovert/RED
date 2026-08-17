@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
 import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { GlobalSearchModal } from "./GlobalSearchModal";
@@ -137,6 +137,8 @@ export default function Sidebar() {
         {
             title: "⚙️ Herramientas, Sistema & Camuflaje",
             items: [
+                { icon: "⚙️", label: "Ajustes & Personalización", action: "settings" },
+                { icon: "🚀", label: "Actualizador de Software (OTA)", action: "updater" },
                 { icon: "📊", label: "Diagnóstico Salud Sistema", action: "health" },
                 { icon: "📋", label: "Logs del Nodo Rust SSE", action: "nodeLogs" },
                 { icon: "🧮", label: "Calculadora Señuelo", action: "calculator" },
@@ -146,79 +148,155 @@ export default function Sidebar() {
         }
     ];
 
+    const [drawerSearch, setDrawerSearch] = useState("");
+    const filteredMenuCategories = useMemo(() => {
+        if (!drawerSearch.trim()) return menuCategories;
+        const q = drawerSearch.toLowerCase();
+        return menuCategories.map(cat => ({
+            ...cat,
+            items: cat.items.filter(i => i.label.toLowerCase().includes(q))
+        })).filter(cat => cat.items.length > 0);
+    }, [drawerSearch]);
+
     const totalModules = menuCategories.reduce((acc, cat) => acc + cat.items.length, 0);
 
     return (
         <aside style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "var(--bg-void)", position: "relative", overflow: "hidden" }}>
 
-            {/* Context Drawer Menu */}
+            {/* Tactical Slide-Over Command Drawer */}
             {menuOpen && (
                 <div
-                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(12px)" }}
+                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", display: "flex", justifyContent: "flex-end" }}
                     onClick={() => setMenuOpen(false)}
                 >
                     <div
-                        className="card-tactical animate-enter"
+                        className="animate-enter"
                         style={{
-                            position: "absolute", top: "calc(64px + var(--safe-top, 0px))", right: 12, width: 300,
-                            maxHeight: "calc(100vh - 100px)", overflowY: "auto",
-                            borderRadius: "var(--radius-lg)", padding: "14px",
-                            boxShadow: "0 16px 48px rgba(0,0,0,0.9)"
+                            width: "100%", maxWidth: "360px", height: "100%",
+                            background: "linear-gradient(180deg, rgba(14, 16, 28, 0.98) 0%, rgba(6, 8, 16, 0.99) 100%)",
+                            borderLeft: "1px solid var(--glass-border)",
+                            boxShadow: "-12px 0 40px rgba(0,0,0,0.85)",
+                            display: "flex", flexDirection: "column",
+                            paddingTop: "var(--safe-top, 0px)",
+                            paddingBottom: "var(--safe-bottom, 0px)",
+                            overflow: "hidden"
                         }}
                         onClick={e => e.stopPropagation()}
                     >
-                        <div style={{ padding: "4px 8px 10px", borderBottom: "1px solid var(--glass-border)", marginBottom: "10px" }}>
-                            <div style={{ fontSize: "0.72rem", color: "var(--accent-emerald)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 900, fontFamily: "JetBrains Mono, monospace" }}>
-                                🛡️ Módulos Tácticos RED ({totalModules})
+                        {/* Drawer Header */}
+                        <div style={{ padding: "16px 20px 12px 20px", borderBottom: "1px solid var(--glass-border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span style={{ fontSize: "1.4rem" }}>🛡️</span>
+                                <div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>Centro de Control RED</div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                                        {totalModules} MÓDULOS ACTIVOS
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setMenuOpen(false)}
+                                className="btn-icon"
+                                style={{ width: 34, height: 34, fontSize: "0.9rem" }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Drawer Search Filter */}
+                        <div style={{ padding: "12px 16px 8px 16px", flexShrink: 0 }}>
+                            <div style={{
+                                display: "flex", alignItems: "center", gap: "8px",
+                                background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)",
+                                borderRadius: "var(--radius-md)", padding: "8px 12px"
+                            }}>
+                                <span style={{ fontSize: "0.85rem", opacity: 0.6 }}>🔍</span>
+                                <input
+                                    type="text"
+                                    value={drawerSearch}
+                                    onChange={e => setDrawerSearch(e.target.value)}
+                                    placeholder="Buscar módulo o herramienta..."
+                                    style={{
+                                        flex: 1, background: "transparent", border: "none", outline: "none",
+                                        color: "var(--text-primary)", fontSize: "0.82rem"
+                                    }}
+                                />
+                                {drawerSearch && (
+                                    <button onClick={() => setDrawerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>✕</button>
+                                )}
                             </div>
                         </div>
-                        {menuCategories.map(cat => (
-                            <div key={cat.title} style={{ marginBottom: "12px" }}>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 800, padding: "4px 8px", marginBottom: "4px", background: "rgba(255,255,255,0.03)", borderRadius: "4px" }}>
-                                    {cat.title}
+
+                        {/* Modules Scrollable Area */}
+                        <div className="scroll-container" style={{ flex: 1, padding: "8px 16px 16px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                            {filteredMenuCategories.map((cat: { title: string; items: Array<{ icon: string; label: string; action: string }> }) => (
+                                <div key={cat.title} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                    <div style={{
+                                        fontSize: "0.68rem", color: "var(--accent-emerald)", textTransform: "uppercase",
+                                        fontWeight: 900, padding: "4px 8px", background: "rgba(0,230,118,0.06)",
+                                        borderRadius: "6px", fontFamily: "JetBrains Mono, monospace",
+                                        display: "flex", justifyContent: "space-between", alignItems: "center"
+                                    }}>
+                                        <span>{cat.title}</span>
+                                        <span style={{ opacity: 0.7 }}>{cat.items.length}</span>
+                                    </div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "4px" }}>
+                                        {cat.items.map((item: { icon: string; label: string; action: string }) => (
+                                            <button
+                                                key={item.action}
+                                                onClick={e => { e.preventDefault(); navigate(item.action as ScreenView); setMenuOpen(false); }}
+                                                className="card-tactical-interactive"
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "12px",
+                                                    padding: "10px 12px", background: "rgba(18, 20, 36, 0.6)",
+                                                    border: "1px solid rgba(255,255,255,0.06)", borderRadius: "var(--radius-sm)",
+                                                    fontSize: "0.84rem", fontWeight: 700, textAlign: "left"
+                                                }}
+                                            >
+                                                <span style={{ fontSize: "1.1rem", width: 24, textAlign: "center" }}>{item.icon}</span>
+                                                <span style={{ flex: 1, color: "var(--text-primary)" }}>{item.label}</span>
+                                                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", opacity: 0.5 }}>›</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                {cat.items.map(item => (
-                                    <button
-                                        key={item.action}
-                                        onClick={e => { e.preventDefault(); navigate(item.action as ScreenView); setMenuOpen(false); }}
-                                        style={{
-                                            width: "100%", display: "flex", alignItems: "center", gap: "10px",
-                                            padding: "8px 10px", background: "transparent", color: "var(--text-primary)",
-                                            border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer",
-                                            fontSize: "0.85rem", fontWeight: 600, textAlign: "left"
-                                        }}
-                                    >
-                                        <span style={{ fontSize: "1rem", width: 22, textAlign: "center" }}>{item.icon}</span>
-                                        {item.label}
-                                    </button>
-                                ))}
+                            ))}
+                        </div>
+
+                        {/* Drawer Footer */}
+                        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--glass-border)", background: "rgba(10,12,22,0.9)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                <button
+                                    onClick={() => { setMenuOpen(false); navigate("settings"); }}
+                                    className="btn-tactical-secondary"
+                                    style={{
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                                        padding: "10px 8px", fontSize: "0.76rem", fontWeight: 800
+                                    }}
+                                >
+                                    <span>⚙️</span> Ajustes
+                                </button>
+                                <button
+                                    onClick={() => { setMenuOpen(false); navigate("updater"); }}
+                                    className="btn-tactical-primary"
+                                    style={{
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                                        padding: "10px 8px", fontSize: "0.76rem", fontWeight: 900
+                                    }}
+                                >
+                                    <span>🚀</span> Actualizador
+                                </button>
                             </div>
-                        ))}
-                        <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid var(--glass-border)", display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <a
-                                href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                    width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                    padding: "8px 12px", background: "linear-gradient(90deg, #E8213A 0%, #990014 100%)",
-                                    color: "#FFF", borderRadius: "var(--radius-sm)", textDecoration: "none",
-                                    fontSize: "0.78rem", fontWeight: 800, textAlign: "center",
-                                    boxShadow: "0 4px 12px rgba(232,33,58,0.3)"
-                                }}
-                            >
-                                <span>📥</span> Descargar APK Android (v{RED_VERSION})
-                            </a>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>RED v{RED_VERSION}</span>
-                                <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>SOVEREIGN MASTER</span>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px" }}>
+                                <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>v{RED_VERSION}</span>
+                                <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>● LIBP2P MESH</span>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Header Táctico */}
+            {/* Header Táctico Principal */}
             <header style={{
                 padding: "0 16px",
                 height: "var(--header-h)",
@@ -228,34 +306,35 @@ export default function Sidebar() {
                 backdropFilter: "blur(20px)",
                 zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }} onClick={() => navigate("idVault")}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }} onClick={() => navigate("idVault")}>
                     <div style={{
-                        width: 36, height: 36, borderRadius: "50%",
+                        width: 38, height: 38, borderRadius: "50%",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontWeight: 900, color: "#fff", fontSize: "1rem", cursor: "pointer",
+                        fontWeight: 900, color: "#fff", fontSize: "1rem",
                         border: "2px solid var(--glass-border)",
                         ...avatarStyle(identity?.identity_hash || "me")
                     }}>
                         {(identity?.short_id || "O").charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff" }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px" }}>
                             {identity?.nickname || "Operador RED"}
                         </div>
-                        <div style={{ fontSize: "0.65rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {nodeOnline ? "● MALLA ACTIVA (P2P)" : "○ DESCONECTADO"}
+                        <div style={{ fontSize: "0.68rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px" }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", display: "inline-block", boxShadow: nodeOnline ? "0 0 6px var(--accent-emerald)" : "none" }} />
+                            {nodeOnline ? "MALLA ACTIVA" : "OFFLINE"}
                         </div>
                     </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 36, height: 36 }} title="Búsqueda global">
+                    <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 38, height: 38 }} title="Búsqueda global">
                         🔍
                     </button>
-                    <button onClick={() => navigate("radar")} className="btn-icon" style={{ width: 36, height: 36 }} title="Radar de pares">
+                    <button onClick={() => navigate("radar")} className="btn-icon" style={{ width: 38, height: 38 }} title="Radar de pares">
                         📡
                     </button>
-                    <button onClick={() => setMenuOpen(m => !m)} className="btn-icon" style={{ width: 36, height: 36 }} title="Menú de herramientas">
+                    <button onClick={() => setMenuOpen(m => !m)} className="btn-icon" style={{ width: 38, height: 38 }} title="Centro de control">
                         ☰
                     </button>
                 </div>
@@ -268,54 +347,62 @@ export default function Sidebar() {
                 onLiveStream={id => setStoryModal({ type: "live", id })}
             />
 
-            {/* Barra de Búsqueda Integrada Táctica */}
-            <div style={{ padding: "8px 12px 4px 12px", background: "rgba(8,10,20,0.95)" }}>
+            {/* Barra de Segmented Control & Búsqueda Integrada */}
+            <div style={{ padding: "10px 14px 6px 14px", background: "rgba(8,10,20,0.95)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {/* Segmented Switcher */}
+                <div style={{
+                    display: "flex", background: "rgba(20,22,38,0.85)", borderRadius: "var(--radius-full)",
+                    padding: "3px", border: "1px solid var(--glass-border)"
+                }}>
+                    <button
+                        onClick={() => setActiveTab("chats")}
+                        style={{
+                            flex: 1, padding: "8px 12px", background: activeTab === "chats" ? "var(--accent-crimson)" : "transparent",
+                            color: activeTab === "chats" ? "#FFF" : "var(--text-secondary)",
+                            border: "none", borderRadius: "var(--radius-full)",
+                            fontWeight: 800, fontSize: "0.80rem", letterSpacing: "0.4px",
+                            cursor: "pointer", transition: "all 0.2s ease",
+                            boxShadow: activeTab === "chats" ? "0 2px 10px rgba(232,33,58,0.4)" : "none"
+                        }}
+                    >
+                        CHATS ({filteredConvs.length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("contacts")}
+                        style={{
+                            flex: 1, padding: "8px 12px", background: activeTab === "contacts" ? "var(--accent-crimson)" : "transparent",
+                            color: activeTab === "contacts" ? "#FFF" : "var(--text-secondary)",
+                            border: "none", borderRadius: "var(--radius-full)",
+                            fontWeight: 800, fontSize: "0.80rem", letterSpacing: "0.4px",
+                            cursor: "pointer", transition: "all 0.2s ease",
+                            boxShadow: activeTab === "contacts" ? "0 2px 10px rgba(232,33,58,0.4)" : "none"
+                        }}
+                    >
+                        CONTACTOS ({filteredContacts.length})
+                    </button>
+                </div>
+
+                {/* Search Bar Input */}
                 <div style={{
                     display: "flex", alignItems: "center", gap: "8px",
                     background: "rgba(255,255,255,0.04)", border: "1px solid var(--glass-border)",
-                    borderRadius: "var(--radius-md)", padding: "6px 12px"
+                    borderRadius: "var(--radius-md)", padding: "7px 12px"
                 }}>
-                    <span style={{ fontSize: "0.85rem", opacity: 0.6 }}>🔍</span>
+                    <span style={{ fontSize: "0.85rem", opacity: 0.5 }}>🔍</span>
                     <input
                         type="text"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Filtrar chats y contactos..."
+                        placeholder="Filtrar mensajes o identificadores..."
                         style={{
                             flex: 1, background: "transparent", border: "none", outline: "none",
-                            color: "var(--text-primary)", fontSize: "0.82rem"
+                            color: "var(--text-primary)", fontSize: "0.84rem"
                         }}
                     />
                     {searchQuery && (
                         <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}>✕</button>
                     )}
                 </div>
-            </div>
-
-            {/* Tabs: Chats vs Contactos */}
-            <div style={{ display: "flex", borderBottom: "1px solid var(--glass-border)", background: "rgba(8,10,20,0.9)", flexShrink: 0 }}>
-                <button
-                    onClick={() => setActiveTab("chats")}
-                    style={{
-                        flex: 1, padding: "12px", background: "transparent", border: "none",
-                        color: activeTab === "chats" ? "var(--accent-cyan)" : "var(--text-muted)",
-                        fontWeight: 800, fontSize: "0.85rem",
-                        borderBottom: activeTab === "chats" ? "2px solid var(--accent-cyan)" : "2px solid transparent"
-                    }}
-                >
-                    CHATS CIFRADOS ({filteredConvs.length})
-                </button>
-                <button
-                    onClick={() => setActiveTab("contacts")}
-                    style={{
-                        flex: 1, padding: "12px", background: "transparent", border: "none",
-                        color: activeTab === "contacts" ? "var(--accent-cyan)" : "var(--text-muted)",
-                        fontWeight: 800, fontSize: "0.85rem",
-                        borderBottom: activeTab === "contacts" ? "2px solid var(--accent-cyan)" : "2px solid transparent"
-                    }}
-                >
-                    CONTACTOS ({filteredContacts.length})
-                </button>
             </div>
 
             {/* Main List */}

@@ -69,13 +69,29 @@ class LocalTransport {
     console.log('[LocalTransport] Mesh layer initialized for identity:', myIdentityHash.slice(0, 12));
   }
 
+  private bleScanIntervalTimer: ReturnType<typeof setInterval> | null = null;
+  private bleScanIntervalMs: number = 6000;
+
   // ─── BLE ─────────────────────────────────────────────────────────────────────
+
+  public setScanInterval(ms: number) {
+    if (this.bleScanIntervalMs === ms && this.bleScanIntervalTimer) return;
+    this.bleScanIntervalMs = ms;
+    if (this.bleScanIntervalTimer) {
+      clearInterval(this.bleScanIntervalTimer);
+      this.bleScanIntervalTimer = null;
+    }
+    if (this.isStarted) {
+      this.bleScanIntervalTimer = setInterval(() => this.performBleScan(), this.bleScanIntervalMs);
+    }
+  }
 
   private startBleScanLoop() {
     // Initial scan
     this.performBleScan();
-    // Rescan every 15s — BLE devices come and go
-    setInterval(() => this.performBleScan(), 15_000);
+    // Dynamic rescan based on power profile
+    if (this.bleScanIntervalTimer) clearInterval(this.bleScanIntervalTimer);
+    this.bleScanIntervalTimer = setInterval(() => this.performBleScan(), this.bleScanIntervalMs);
   }
 
   private async performBleScan() {

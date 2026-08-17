@@ -102,9 +102,11 @@ export default function NodeMap() {
 
         const handleRealCoords = (coords: any, timestamp?: number) => {
             if (!mounted || !coords) return;
+            const newLat = coords.latitude;
+            const newLng = coords.longitude;
             setGpsData({
-                lat: coords.latitude,
-                lng: coords.longitude,
+                lat: newLat,
+                lng: newLng,
                 accuracy: coords.accuracy ?? undefined,
                 altitude: coords.altitude ?? undefined,
                 speed: coords.speed ?? undefined,
@@ -112,6 +114,12 @@ export default function NodeMap() {
                 timestamp: timestamp || Date.now()
             });
             setRealGPS(true);
+
+            if (leafletMapRef.current && !realGPS) {
+                try {
+                    leafletMapRef.current.setView([newLat, newLng], 17);
+                } catch {}
+            }
 
             // Retransmitir coordenadas reales a los demás nodos de la malla
             meshRouter.broadcastLocation(coords.latitude, coords.longitude, coords.altitude ?? undefined, coords.accuracy ?? undefined);

@@ -99,9 +99,17 @@ export class SoundMeshEngine {
 
             return true;
         } catch (e) {
-            console.error('[SoundMeshEngine] Transmit error:', e);
+            console.error('[SoundMesh] Transmission failed', e);
             return false;
         }
+    }
+
+    /**
+     * Transmits a LowBitrateVocoder compressed audio packet via ultrasonic modem
+     */
+    public static async transmitVocoderVoiceBurst(vocoderBase64: string): Promise<boolean> {
+        // Prefix with 'VOX:' for acoustic routing
+        return this.transmitPayload(`VOX:${vocoderBase64}`);
     }
 
     /**

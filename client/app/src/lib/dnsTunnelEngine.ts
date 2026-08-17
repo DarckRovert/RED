@@ -98,7 +98,8 @@ export class DnsTunnelEngine {
     // Fragmentar en etiquetas DNS de máximo 48 caracteres para seguridad
     const CHUNK_SIZE = 48;
     const chunks: string[] = [];
-    const sessionId = Math.floor(Math.random() * 9000 + 1000).toString(36);
+    const rand = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint16Array(1))[0] : (Date.now() & 0xffff);
+    const sessionId = (1000 + (rand % 9000)).toString(36);
 
     for (let i = 0; i < b32.length; i += CHUNK_SIZE) {
       chunks.push(b32.slice(i, i + CHUNK_SIZE));

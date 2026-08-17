@@ -30,7 +30,30 @@ export interface GuardianEngineStats {
     cache_hits: number;
 }
 
+export interface GuardianAuditLogEntry {
+    id: string;
+    timestamp: number;
+    textSample: string;
+    category: 'general' | 'threat' | 'spam' | 'pii' | 'nsfw';
+    action: 'ALLOWED' | 'BLOCKED' | 'FLAGGED';
+    threatScore: number;
+    confidence: number;
+    reason: string;
+    executionTimeMs: number;
+}
+
+export interface GuardianConfig {
+    mode: 'permissive' | 'standard' | 'strict';
+    filterPii: boolean;
+    filterThreats: boolean;
+    filterSpam: boolean;
+    filterNsfw: boolean;
+    deobfuscateLeet: boolean;
+}
+
 const STATS_KEY = 'red_guardian_real_stats_v2';
+const CONFIG_KEY = 'red_guardian_config_v2';
+const AUDIT_LOG_KEY = 'red_guardian_audit_log_v2';
 const MEMORY_CACHE = new Map<string, GuardianEvaluation>();
 
 // 1. Patrones de Explotación Infantil / CSAM (Tolerancia Cero Absoluta)
@@ -101,33 +124,114 @@ export class GuardianEngineClass {
         cache_hits: 0,
     };
 
+    private config: GuardianConfig = {
+        mode: 'strict',
+        filterPii: true,
+        filterThreats: true,
+        filterSpam: true,
+        filterNsfw: true,
+        deobfuscateLeet: true,
+    };
+
+    private auditLog: GuardianAuditLogEntry[] = [];
+
     constructor() {
-        this.loadStats();
+        this.loadState();
     }
 
-    private loadStats() {
+    private loadState() {
         if (typeof window === 'undefined') return;
         try {
-            const saved = localStorage.getItem(STATS_KEY);
-            if (saved) {
-                this.stats = { ...this.stats, ...JSON.parse(saved) };
-            }
+            const savedStats = localStorage.getItem(STATS_KEY);
+            if (savedStats) this.stats = { ...this.stats, ...JSON.parse(savedStats) };
+
+            const savedConfig = localStorage.getItem(CONFIG_KEY);
+            if (savedConfig) this.config = { ...this.config, ...JSON.parse(savedConfig) };
+
+            const savedLogs = localStorage.getItem(AUDIT_LOG_KEY);
+            if (savedLogs) this.auditLog = JSON.parse(savedLogs);
         } catch (e) {
-            console.error('[RED Guardian Stats Load Error]', e);
+            console.error('[RED Guardian Load Error]', e);
         }
     }
 
-    private saveStats() {
+    private saveState() {
         if (typeof window === 'undefined') return;
         try {
             localStorage.setItem(STATS_KEY, JSON.stringify(this.stats));
+            localStorage.setItem(CONFIG_KEY, JSON.stringify(this.config));
+            localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(this.auditLog.slice(0, 100)));
         } catch (e) {
-            console.error('[RED Guardian Stats Save Error]', e);
+            console.error('[RED Guardian Save Error]', e);
         }
     }
 
     public getStats(): GuardianEngineStats {
         return { ...this.stats };
+    }
+
+    public getConfig(): GuardianConfig {
+        return { ...this.config };
+    }
+
+    public updateConfig(partial: Partial<GuardianConfig>) {
+        this.config = { ...this.config, ...partial };
+        this.saveState();
+    }
+
+    public getAuditLog(): GuardianAuditLogEntry[] {
+        return [...this.auditLog];
+    }
+
+    public clearAuditLog() {
+        this.auditLog = [];
+        this.saveState();
+    }
+
+    public addAuditLog(entry: Omit<GuardianAuditLogEntry, 'id' | 'timestamp'>) {
+        const fullEntry: GuardianAuditLogEntry = {
+            id: 'log_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+            timestamp: Date.now(),
+            ...entry,
+        };
+        this.auditLog.unshift(fullEntry);
+        if (this.auditLog.length > 100) {
+            this.auditLog = this.auditLog.slice(0, 100);
+        }
+        this.saveState();
+    }
+
+    public exportAuditLogText(): string {
+        const timestamp = new Date().toISOString();
+        let report = `=======================================================\n`;
+        report += `    PROYECTO RED - INFORME AUDITORÍA FORENSE GUARDIÁN IA\n`;
+        report += `=======================================================\n`;
+        report += `Fecha de Exportación: ${timestamp}\n`;
+        report += `Modo Operativo: ${this.config.mode.toUpperCase()}\n`;
+        report += `Mensajes Analizados: ${this.stats.messages_analyzed}\n`;
+        report += `Mensajes Bloqueados: ${this.stats.messages_blocked}\n`;
+        report += `Mensajes Marcados: ${this.stats.messages_flagged}\n`;
+        report += `Imágenes Analizadas: ${this.stats.images_analyzed}\n`;
+        report += `Imágenes Bloqueadas: ${this.stats.images_blocked}\n`;
+        report += `Tasa de Intercepción: ${this.stats.messages_analyzed > 0 ? ((this.stats.messages_blocked / this.stats.messages_analyzed) * 100).toFixed(1) : '0.0'}%\n`;
+        report += `=======================================================\n`;
+        report += `REGISTRO DE INTERCEPCIONES Y EVALUACIONES (Últimos ${this.auditLog.length}):\n`;
+        report += `-------------------------------------------------------\n`;
+
+        if (this.auditLog.length === 0) {
+            report += `(Sin registros de intercepción en el búfer)\n`;
+        } else {
+            this.auditLog.forEach((log, idx) => {
+                const dateStr = new Date(log.timestamp).toLocaleTimeString();
+                report += `[${idx + 1}] [${dateStr}] ACCIÓN: ${log.action} | CAT: ${log.category.toUpperCase()} | SCORE: ${log.threatScore}%\n`;
+                report += `    Texto Muestra: "${log.textSample}"\n`;
+                report += `    Motivo Forense: ${log.reason}\n`;
+                report += `    Latencia: ${log.executionTimeMs}ms | Confianza: ${(log.confidence * 100).toFixed(0)}%\n\n`;
+            });
+        }
+        report += `=======================================================\n`;
+        report += `FIN DEL REPORTE FORENSE ZERO-TRUST · RED GUARDIAN S4\n`;
+        return report;
     }
 
     public resetStats() {
@@ -142,7 +246,7 @@ export class GuardianEngineClass {
             cache_hits: 0,
         };
         MEMORY_CACHE.clear();
-        this.saveStats();
+        this.saveState();
     }
 
     /** Evaluador Asíncrono con Inferencia Neuronal Real toxic-bert (110MB ONNX) */
@@ -163,12 +267,12 @@ export class GuardianEngineClass {
             };
         }
 
-        const normalized = normalizeAndDeobfuscate(trimmed);
+        const normalized = this.config.deobfuscateLeet ? normalizeAndDeobfuscate(trimmed) : trimmed.toLowerCase();
 
         if (MEMORY_CACHE.has(normalized)) {
             this.stats.cache_hits++;
             this.stats.api_calls_made++;
-            this.saveStats();
+            this.saveState();
             const cached = MEMORY_CACHE.get(normalized)!;
             return { ...cached, executionTimeMs: Math.round(performance.now() - start) };
         }
@@ -179,7 +283,7 @@ export class GuardianEngineClass {
         // 1. Inferencia Neuronal Real toxic-bert ONNX WASM
         try {
             const neuralEval = await LocalAIEngine.classifySafety(trimmed);
-            if (neuralEval.isToxic) {
+            if (neuralEval.isToxic && (this.config.mode !== 'permissive')) {
                 this.stats.messages_blocked++;
                 this.stats.messages_flagged++;
                 const result: GuardianEvaluation = {
@@ -195,7 +299,16 @@ export class GuardianEngineClass {
                     executionTimeMs: Math.round(performance.now() - start),
                 };
                 MEMORY_CACHE.set(normalized, result);
-                this.saveStats();
+                this.addAuditLog({
+                    textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
+                    category: neuralEval.category || 'threat',
+                    action: 'BLOCKED',
+                    threatScore: result.threat_score,
+                    confidence: result.confidence,
+                    reason: result.reason || 'Bloqueo semántico por clasificador ONNX',
+                    executionTimeMs: result.executionTimeMs,
+                });
+                this.saveState();
                 return result;
             }
         } catch (e) {
@@ -223,13 +336,13 @@ export class GuardianEngineClass {
         }
 
         // Normalización y Desofuscación con IA Semántica Local
-        const normalized = normalizeAndDeobfuscate(trimmed);
+        const normalized = this.config.deobfuscateLeet ? normalizeAndDeobfuscate(trimmed) : trimmed.toLowerCase();
 
         // Check memory cache
         if (MEMORY_CACHE.has(normalized)) {
             this.stats.cache_hits++;
             this.stats.api_calls_made++;
-            this.saveStats();
+            this.saveState();
             const cached = MEMORY_CACHE.get(normalized)!;
             return { ...cached, executionTimeMs: Math.round(performance.now() - start) };
         }
@@ -239,7 +352,7 @@ export class GuardianEngineClass {
 
         // 0. Clasificación Semántica Neuronal Síncrona
         const neuralEval = LocalAIEngine.classifySafetySync(trimmed);
-        if (neuralEval.isToxic) {
+        if (neuralEval.isToxic && (this.config.mode !== 'permissive')) {
             this.stats.messages_blocked++;
             this.stats.messages_flagged++;
             const result: GuardianEvaluation = {
@@ -255,98 +368,161 @@ export class GuardianEngineClass {
                 executionTimeMs: Math.round(performance.now() - start),
             };
             MEMORY_CACHE.set(normalized, result);
-            this.saveStats();
+            this.addAuditLog({
+                textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
+                category: neuralEval.category || 'threat',
+                action: 'BLOCKED',
+                threatScore: result.threat_score,
+                confidence: result.confidence,
+                reason: result.reason || 'Bloqueo semántico sincrónico',
+                executionTimeMs: result.executionTimeMs,
+            });
+            this.saveState();
             return result;
         }
 
         // 1. Verificar Explotación Infantil / CSAM / Material Ilegal Grave
-        for (const pattern of EXPLOITATION_PATTERNS) {
-            if (pattern.test(trimmed) || pattern.test(normalized)) {
-                this.stats.messages_blocked++;
-                this.stats.messages_flagged++;
-                const result: GuardianEvaluation = {
-                    allowed: false,
-                    is_clean: false,
-                    is_safe: false,
-                    threat_score: 100,
-                    toxicity_score: 100,
-                    feedback: '⛔ BLOQUEO CRÍTICO: Contenido clasificado por IA como abuso, explotación o material ilegal grave.',
-                    reason: '⛔ BLOQUEO CRÍTICO: Contenido clasificado por IA como abuso, explotación o material ilegal grave.',
-                    category: 'nsfw',
-                    confidence: 1.0,
-                    executionTimeMs: Math.round(performance.now() - start),
-                };
-                MEMORY_CACHE.set(normalized, result);
-                this.saveStats();
-                return result;
+        if (this.config.filterNsfw) {
+            for (const pattern of EXPLOITATION_PATTERNS) {
+                if (pattern.test(trimmed) || pattern.test(normalized)) {
+                    this.stats.messages_blocked++;
+                    this.stats.messages_flagged++;
+                    const result: GuardianEvaluation = {
+                        allowed: false,
+                        is_clean: false,
+                        is_safe: false,
+                        threat_score: 100,
+                        toxicity_score: 100,
+                        feedback: '⛔ BLOQUEO CRÍTICO: Contenido clasificado por IA como abuso, explotación o material ilegal grave.',
+                        reason: '⛔ BLOQUEO CRÍTICO: Contenido clasificado por IA como abuso, explotación o material ilegal grave.',
+                        category: 'nsfw',
+                        confidence: 1.0,
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                    MEMORY_CACHE.set(normalized, result);
+                    this.addAuditLog({
+                        textSample: '[CONTENIDO_ILEGAL_CENSURADO]',
+                        category: 'nsfw',
+                        action: 'BLOCKED',
+                        threatScore: 100,
+                        confidence: 1.0,
+                        reason: 'Violación crítica de tolerancia cero (CSAM/Explotación)',
+                        executionTimeMs: result.executionTimeMs,
+                    });
+                    this.saveState();
+                    return result;
+                }
             }
         }
 
         // 2. Verificar Amenazas Violentas
-        for (const pattern of THREAT_PATTERNS) {
-            if (pattern.test(trimmed) || pattern.test(normalized)) {
-                this.stats.messages_blocked++;
-                this.stats.messages_flagged++;
-                const result: GuardianEvaluation = {
-                    allowed: false,
-                    is_clean: false,
-                    is_safe: false,
-                    threat_score: 97,
-                    toxicity_score: 97,
-                    feedback: 'Contenido clasificado como amenaza violenta o riesgo a la integridad física.',
-                    reason: 'Contenido clasificado como amenaza violenta o riesgo a la integridad física',
-                    category: 'threat',
-                    confidence: 0.97,
-                    executionTimeMs: Math.round(performance.now() - start),
-                };
-                MEMORY_CACHE.set(normalized, result);
-                this.saveStats();
-                return result;
+        if (this.config.filterThreats) {
+            for (const pattern of THREAT_PATTERNS) {
+                if (pattern.test(trimmed) || pattern.test(normalized)) {
+                    const isBlocked = this.config.mode !== 'permissive';
+                    if (isBlocked) {
+                        this.stats.messages_blocked++;
+                    }
+                    this.stats.messages_flagged++;
+                    const result: GuardianEvaluation = {
+                        allowed: !isBlocked,
+                        is_clean: false,
+                        is_safe: false,
+                        threat_score: 97,
+                        toxicity_score: 97,
+                        feedback: isBlocked ? '⛔ BLOQUEADO: Contenido clasificado como amenaza violenta o riesgo a la integridad física.' : '⚠️ ALERTA: Amenaza violenta detectada (Modo Permisivo).',
+                        reason: 'Contenido clasificado como amenaza violenta o riesgo a la integridad física',
+                        category: 'threat',
+                        confidence: 0.97,
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                    MEMORY_CACHE.set(normalized, result);
+                    this.addAuditLog({
+                        textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
+                        category: 'threat',
+                        action: isBlocked ? 'BLOCKED' : 'FLAGGED',
+                        threatScore: 97,
+                        confidence: 0.97,
+                        reason: 'Amenaza violenta directa detectada',
+                        executionTimeMs: result.executionTimeMs,
+                    });
+                    this.saveState();
+                    return result;
+                }
             }
         }
 
         // 3. Verificar Spam o Malicious Links
-        for (const pattern of SPAM_PATTERNS) {
-            if (pattern.test(trimmed) || pattern.test(normalized)) {
-                this.stats.messages_blocked++;
-                this.stats.messages_flagged++;
-                const result: GuardianEvaluation = {
-                    allowed: false,
-                    is_clean: false,
-                    is_safe: false,
-                    threat_score: 93,
-                    toxicity_score: 93,
-                    feedback: 'Enlace malicioso o spam masivo detectado por el clasificador semántico local.',
-                    reason: 'Enlace malicioso o spam masivo detectado por el clasificador semántico local',
-                    category: 'spam',
-                    confidence: 0.93,
-                    executionTimeMs: Math.round(performance.now() - start),
-                };
-                MEMORY_CACHE.set(normalized, result);
-                this.saveStats();
-                return result;
+        if (this.config.filterSpam) {
+            for (const pattern of SPAM_PATTERNS) {
+                if (pattern.test(trimmed) || pattern.test(normalized)) {
+                    const isBlocked = this.config.mode !== 'permissive';
+                    if (isBlocked) {
+                        this.stats.messages_blocked++;
+                    }
+                    this.stats.messages_flagged++;
+                    const result: GuardianEvaluation = {
+                        allowed: !isBlocked,
+                        is_clean: false,
+                        is_safe: false,
+                        threat_score: 93,
+                        toxicity_score: 93,
+                        feedback: isBlocked ? '⛔ BLOQUEADO: Enlace malicioso o spam masivo detectado por el clasificador semántico.' : '⚠️ ALERTA: Enlace sospechoso detectado (Modo Permisivo).',
+                        reason: 'Enlace malicioso o spam masivo detectado por el clasificador semántico local',
+                        category: 'spam',
+                        confidence: 0.93,
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                    MEMORY_CACHE.set(normalized, result);
+                    this.addAuditLog({
+                        textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
+                        category: 'spam',
+                        action: isBlocked ? 'BLOCKED' : 'FLAGGED',
+                        threatScore: 93,
+                        confidence: 0.93,
+                        reason: 'Patrón de spam o enlace malicioso phishing',
+                        executionTimeMs: result.executionTimeMs,
+                    });
+                    this.saveState();
+                    return result;
+                }
             }
         }
 
-        // 4. Verificar PII (Información Personal Sensible)
-        for (const pattern of PII_PATTERNS) {
-            if (pattern.test(trimmed) || pattern.test(normalized)) {
-                this.stats.messages_flagged++;
-                const result: GuardianEvaluation = {
-                    allowed: true,
-                    is_clean: true,
-                    is_safe: true,
-                    threat_score: 15,
-                    toxicity_score: 10,
-                    feedback: 'Advertencia: El mensaje contiene datos personales (tarjeta/correo).',
-                    reason: 'Advertencia: El mensaje contiene datos personales (tarjeta/correo)',
-                    category: 'pii',
-                    confidence: 0.88,
-                    executionTimeMs: Math.round(performance.now() - start),
-                };
-                MEMORY_CACHE.set(normalized, result);
-                this.saveStats();
-                return result;
+        // 4. Verificar PII (Información Personal Sensible - Doxxing)
+        if (this.config.filterPii) {
+            for (const pattern of PII_PATTERNS) {
+                if (pattern.test(trimmed) || pattern.test(normalized)) {
+                    const isBlocked = this.config.mode === 'strict';
+                    if (isBlocked) {
+                        this.stats.messages_blocked++;
+                    }
+                    this.stats.messages_flagged++;
+                    const result: GuardianEvaluation = {
+                        allowed: !isBlocked,
+                        is_clean: false,
+                        is_safe: !isBlocked,
+                        threat_score: isBlocked ? 85 : 25,
+                        toxicity_score: 10,
+                        feedback: isBlocked ? '⛔ BLOQUEADO ZERO-LEAKAGE: Detección de datos sensibles (tarjeta de crédito / email / PII).' : '⚠️ Advertencia: El mensaje contiene datos personales (tarjeta/correo).',
+                        reason: 'Detección de datos sensibles (tarjeta de crédito / email / PII)',
+                        category: 'pii',
+                        confidence: 0.92,
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                    MEMORY_CACHE.set(normalized, result);
+                    this.addAuditLog({
+                        textSample: '[DATOS_PII_OFUSCADOS_****]',
+                        category: 'pii',
+                        action: isBlocked ? 'BLOCKED' : 'FLAGGED',
+                        threatScore: result.threat_score,
+                        confidence: 0.92,
+                        reason: isBlocked ? 'Bloqueo Zero-Leakage: filtración de tarjeta o credencial' : 'Doxxing / PII advertido',
+                        executionTimeMs: result.executionTimeMs,
+                    });
+                    this.saveState();
+                    return result;
+                }
             }
         }
 
@@ -363,7 +539,16 @@ export class GuardianEngineClass {
             executionTimeMs: Math.round(performance.now() - start),
         };
         MEMORY_CACHE.set(normalized, allowedResult);
-        this.saveStats();
+        this.addAuditLog({
+            textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
+            category: 'general',
+            action: 'ALLOWED',
+            threatScore: 0,
+            confidence: 0.99,
+            reason: 'Texto limpio y verificado',
+            executionTimeMs: allowedResult.executionTimeMs,
+        });
+        this.saveState();
         return allowedResult;
     }
 
@@ -378,8 +563,7 @@ export class GuardianEngineClass {
         // Validación de formato
         if (!dataUrl || (!dataUrl.startsWith('data:image/') && !dataUrl.startsWith('blob:') && dataUrl.length < 50)) {
             this.stats.images_blocked++;
-            this.saveStats();
-            return {
+            const result: GuardianEvaluation = {
                 allowed: false,
                 is_clean: false,
                 is_safe: false,
@@ -391,6 +575,17 @@ export class GuardianEngineClass {
                 confidence: 0.99,
                 executionTimeMs: Math.round(performance.now() - start),
             };
+            this.addAuditLog({
+                textSample: '[IMAGEN_CORRUPTA_O_INVALIDA]',
+                category: 'nsfw',
+                action: 'BLOCKED',
+                threatScore: 100,
+                confidence: 0.99,
+                reason: 'Formato de imagen no válido o corrupto',
+                executionTimeMs: result.executionTimeMs,
+            });
+            this.saveState();
+            return result;
         }
 
         // pHash diferencial real via canvas offscreen
@@ -401,7 +596,7 @@ export class GuardianEngineClass {
             canvas.height = PHASH_SIZE;
             const ctx = canvas.getContext('2d', { willReadFrequently: true });
             if (!ctx) {
-                this.saveStats();
+                this.saveState();
                 return {
                     allowed: true,
                     is_clean: true,
@@ -447,8 +642,7 @@ export class GuardianEngineClass {
                     }
                 }
                 const pHashHex = pHashBits.toString(16).padStart(16, '0');
-                this.saveStats();
-                return {
+                const result: GuardianEvaluation = {
                     allowed: true,
                     is_clean: true,
                     is_safe: true,
@@ -460,10 +654,20 @@ export class GuardianEngineClass {
                     reason: `pHash real calculado: ${pHashHex}`,
                     executionTimeMs: Math.round(performance.now() - start),
                 };
+                this.addAuditLog({
+                    textSample: `[IMAGEN_pHash:${pHashHex}]`,
+                    category: 'general',
+                    action: 'ALLOWED',
+                    threatScore: 0,
+                    confidence: 0.95,
+                    reason: `pHash diferencial verificado: ${pHashHex}`,
+                    executionTimeMs: result.executionTimeMs,
+                });
+                this.saveState();
+                return result;
             }
 
-            this.saveStats();
-            return {
+            const defaultResult: GuardianEvaluation = {
                 allowed: true,
                 is_clean: true,
                 is_safe: true,
@@ -475,6 +679,17 @@ export class GuardianEngineClass {
                 reason: 'Imagen verificada',
                 executionTimeMs: Math.round(performance.now() - start),
             };
+            this.addAuditLog({
+                textSample: '[IMAGEN_VERIFICADA]',
+                category: 'general',
+                action: 'ALLOWED',
+                threatScore: 0,
+                confidence: 0.90,
+                reason: 'Imagen verificada',
+                executionTimeMs: defaultResult.executionTimeMs,
+            });
+            this.saveState();
+            return defaultResult;
         } catch (e) {
             return {
                 allowed: true,

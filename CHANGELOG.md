@@ -7,25 +7,33 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [31.0.0-sovereign-master] - 2026-08-16
 
-### Añadido y Refactorizado — RED v31.0.0 Real-Time SSE, Native Hardware Actuators & Clean Build Release
+### Añadido y Refactorizado — RED v31.0.0 Real-Time SSE, DSP Vocoder, PQC & Hardware Resilience Release
+
+**Motor de Voz Táctica de Ultra-Bajo Ancho de Banda (`LowBitrateVocoder.ts`)**
+- **Compresión Extrema (-97.9%):** Remuestreo en tiempo real a 8000 Hz 16-bit PCM, filtrado vocal pasabanda, pre-énfasis y cuantización adaptativa IMA ADPCM de 4 bits con empaquetado de nibbles.
+- **Ráfagas de Voz para LoRa y SoundMesh:** Reduce 3 segundos de audio crudo (562.5 KB) a ~11 KB de streaming continuo y <800 Bytes por ráfaga táctica, permitiendo enviar notas de voz por enlaces LoRaWAN (0.3–5.5 kbps) y Módem Acústico Ultrasónico (18.5–20.5 kHz).
+- **Integración:** Conectado directamente en `P2PWalkieTalkieModal.tsx` con conmutador táctico y sintetizador directo de `AudioBuffer` mediante Web Audio API.
+
+**Motor de Prueba de Trabajo Criptográfica Anti-Spam (`MeshProofOfWork.ts`)**
+- **Blindaje Anti-DDoS sin Servidores Centrales:** Algoritmo Hashcash basado en SHA-256 con dificultad dinámica, sellado temporal y ventana de tolerancia anti-repetición (180s).
+- **Integración en Despacho y Recepción:** Minado automático en `sendMessage` y verificación en `addIncomingMessage` dentro de `useRedStore.ts`.
+
+**Gobernador Cinemático Adaptativo de Batería (`KineticDutyGovernor.ts`)**
+- **Análisis de Aceleración RMS en Tiempo Real:** Detecta estados estáticos vs en movimiento mediante telemetría del acelerómetro y batería de hardware.
+- **Perfiles de Malla:** Conmutación automática entre `SURVIVAL_SENTRY` (12s, ~48h de autonomía), `BALANCED_PATROL` (4s), `HIGH_PERFORMANCE` (1.5s) y `SHAKE_BOOST` (800ms disparado por sacudida física). Integrado en `EcoMeshPanel.tsx`.
+
+**Verificador de Integridad Merkle & Self-Healing Local (`StateIntegrityEngine.ts`)**
+- **Resiliencia ante Cortes Abruptos de Energía:** Generación de árbol Merkle SHA-256 sobre los almacenes locales críticos y autorreparación automática con cuarentena de registros corruptos en el arranque de la app.
+
+**Criptografía Post-Cuántica (PQC) & Híbrida (`PqcCryptoEngine.ts`)**
+- **ML-KEM-768 (FIPS 203):** Encapsulamiento de claves basado en retículos resistente a computación cuántica combinado con ECDH P-256 mediante HKDF-SHA256.
 
 **Control de Hardware Nativo: Flash LED Morse SOS & Antorcha (`RedNodePlugin.java` & `SurvivalBeaconModal.tsx`)**
-- **Causa Raíz Solucionada:** Eliminado el fallo de compatibilidad de WebRTC en WebView de Android que reportaba *"Tu dispositivo no soporta control de antorcha (Torch)"*.
-- **API `CameraManager` Nativa:** Implementado `setTorchMode(cameraId, enabled)` en `RedNodePlugin.java` para control directo del LED Flash de la cámara trasera (ID `0`).
-- **Pulsos Morse SOS de Precisión Militar:** Implementado `toggleMorseSosTorch` en un hilo nativo de Android independiente del UI thread para emitir la secuencia Morse internacional de auxilio (`... --- ...`):
-  - Letra `S` (`...`): 3 pulsos cortos de 150ms ON / 150ms OFF.
-  - Letra `O` (`---`): 3 pulsos largos de 450ms ON / 150ms OFF.
-  - Pausas entre letras de 300ms y pausas entre ciclos SOS de 1200ms.
-- **Integración en Triaje START & Escaneo PPG (`VitalScanEngine.ts`):** Activación nativa del Flash LED para iluminación capilar continua durante el escaneo de signos vitales (BPM, SpO2%).
+- **API `CameraManager` Nativa:** `setTorchMode` para control del Flash LED de la cámara trasera con pulsos Morse militares SOS (`... --- ...`) en hilo nativo independiente.
 
-**Arquitectura Real-Time SSE Unificada & Cero Polling (`useRedStore.ts`, `SOSEmergencyBanner.tsx`, `WeatherAlertPanel.tsx`)**
-- **Eliminación de Polling Ineficiente:** Eliminados los intervalos de consulta HTTP periódica para preservar la batería en escenarios de supervivencia prolongada.
-- **Canal Reactivo `GET /api/events`:** Recepción instantánea (<1ms) de eventos de socorro SOS, boletines meteorológicos CAP, transacciones blockchain y mensajes de la malla.
-
-**Calidad de Código, Compilación Estricta y Despliegue en Dispositivo**
-- **TypeScript Estricto:** Eliminación de directivas `@ts-nocheck` en todos los componentes del cliente, logrando `0` errores en `tsc --noEmit`.
-- **Rust Core & JNI:** Workspace `cargo test --workspace --no-run` verificado con `0` errores.
-- **Clean Install en Moto G22 (`ZT322B386P`):** Despliegue limpio del APK y carga verificada de la librería nativa `libred_mobile.so`.
+**Compilación y Despliegue Limpio Multi-Dispositivo**
+- **JDK 21 JBR Oficial:** Configuración de OpenJDK 21 y Gradle para compatibilidad total con Android SDK 35.
+- **Despliegue Verificado:** Desinstalación e instalación limpia exitosa en **Moto G22 (`ZT322B386P`)** y **Tablet Lenovo Tab M9 (`HA2CHKZ2`)**.
 
 ## [30.0.0-p2p-master] - 2026-08-07
 

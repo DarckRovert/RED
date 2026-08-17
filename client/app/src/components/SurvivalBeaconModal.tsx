@@ -299,18 +299,13 @@ export function SurvivalBeaconModal() {
     };
 
     return (
-        <div style={{
-            width: "100%", height: "100%",
+        <div className="modal-screen-container" style={{
             background: screenFlashActive ? screenColor : "var(--bg-void)",
-            color: "var(--text-primary)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden", position: "relative",
             transition: screenFlashActive ? "background 0.15s ease" : "none"
         }}>
             {/* Header Táctico */}
-            <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
+            <header className="safe-header" style={{
+                padding: "12px 20px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 borderBottom: "1px solid var(--glass-border)",
                 background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
