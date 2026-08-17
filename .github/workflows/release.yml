@@ -32,7 +32,7 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: client/app
-        run: npm ci
+        run: npm install --legacy-peer-deps
 
       - name: Build Next.js Static Export
         working-directory: client/app
