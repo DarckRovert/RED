@@ -27,6 +27,7 @@ export class MqttRelayTransport {
   private signalingListeners: ((msg: any) => void)[] = [];
   private pingInterval: any = null;
   public isConnected = false;
+  private seenMqttHashes: Set<string> = new Set();
 
   private static readonly BROKER_POOL: string[] = [
     'wss://broker.emqx.io:8084/mqtt',
@@ -341,6 +342,20 @@ export class MqttRelayTransport {
 
   private routeIncomingMqttMessage(topic: string, payload: Uint8Array) {
     try {
+      // Deduplicate identical MQTT payloads delivered across multiple topic subscriptions
+      let hash = '';
+      const sampleLen = Math.min(payload.length, 32);
+      for (let i = 0; i < sampleLen; i++) {
+        hash += payload[i].toString(16).padStart(2, '0');
+      }
+      hash += '_' + payload.length;
+      if (this.seenMqttHashes.has(hash)) return;
+      this.seenMqttHashes.add(hash);
+      if (this.seenMqttHashes.size > 500) {
+        const first = this.seenMqttHashes.values().next().value;
+        if (first) this.seenMqttHashes.delete(first);
+      }
+
       const payloadStr = new TextDecoder().decode(payload);
 
       // A) Signaling message (SDP / ICE / Handshake)
