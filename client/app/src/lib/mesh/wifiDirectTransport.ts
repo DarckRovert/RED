@@ -1,10 +1,4 @@
-/**
- * RED WebRTC & Blind Relay Mesh Transport
- * 
- * Manages peer-to-peer WebRTC DataChannels with multi-cluster STUN/TURN NAT traversal,
- * dynamic candidate pool signaling, seamless ICE restart across network switches (4G/5G <-> WiFi),
- * and zero-knowledge blind WebSocket relay fallback for global interoperability.
- */
+import { mqttRelay, MqttRelayTransport } from './mqttRelayTransport';
 
 export class WifiDirectTransport {
     private ws: WebSocket | null = null;
@@ -32,6 +26,17 @@ export class WifiDirectTransport {
 
     constructor(myId: string) {
         this.myId = myId;
+        mqttRelay.updateIdentity(myId);
+
+        // Attach MQTT Blind Relay message listeners
+        mqttRelay.onMessage(({ from, payload }) => {
+            this.notifyMessageListeners(from, payload);
+        });
+
+        // Attach MQTT WebRTC signaling listeners
+        mqttRelay.onSignaling((sigMsg) => {
+            this.handleSignalingMessage(sigMsg);
+        });
     }
 
     /**
@@ -82,6 +87,10 @@ export class WifiDirectTransport {
 
     async connectToLocalSignaling(): Promise<void> {
         if (typeof window === 'undefined') return;
+
+        // Ensure global MQTT Blind Relay connects concurrently
+        mqttRelay.connect().catch(e => console.warn('[WebRtcTransport] MQTT connect error:', e));
+
         if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
             return;
         }
@@ -259,49 +268,55 @@ export class WifiDirectTransport {
                 break;
             }
 
-            case 'peer-left': {
-                if (msg.peerId) {
-                    this.onlinePeers.delete(msg.peerId);
-                    this.cleanupPeer(msg.peerId);
-                }
-                break;
-            }
-
-            case 'offer': {
-                if (sender && msg.sdp) {
+            case 'offer':
+                if (msg.sdp && sender) {
                     await this.handleOffer(sender, msg.sdp);
                 }
                 break;
-            }
-
-            case 'answer': {
-                if (sender && msg.sdp) {
+            case 'answer':
+                if (msg.sdp && sender) {
                     await this.handleAnswer(sender, msg.sdp);
                 }
                 break;
-            }
-
-            case 'ice-candidate': {
-                if (sender && msg.candidate) {
+            case 'ice-candidate':
+                if (msg.candidate && sender) {
                     await this.handleIceCandidate(sender, msg.candidate);
                 }
                 break;
-            }
-
+            case 'peer-joined':
+                if (sender) {
+                    this.onlinePeers.add(sender);
+                    if (this.myId && sender && this.myId > sender) {
+                        this.createOffer(sender).catch(() => {});
+                    }
+                }
+                break;
+            case 'peer-left':
+                if (sender) {
+                    this.onlinePeers.delete(sender);
+                    this.cleanupPeer(sender);
+                }
+                break;
+            case 'room-joined':
+                if (Array.isArray(msg.peers)) {
+                    for (const p of msg.peers) {
+                        if (p && p !== this.myId) {
+                            this.onlinePeers.add(p);
+                            if (this.myId && this.myId > p) {
+                                this.createOffer(p).catch(() => {});
+                            }
+                        }
+                    }
+                }
+                break;
             case 'mesh-relay': {
-                // Blind Encrypted Relay Fallback Packet
-                if (msg.payload || msg.payloadHex) {
-                    const fromPeer = msg.fromPeer || sender || 'relay_peer';
-                    this.onlinePeers.add(fromPeer);
-                    
+                const fromPeer = msg.fromPeer || sender;
+                const payloadHex = msg.payloadHex;
+                if (fromPeer && payloadHex && typeof payloadHex === 'string') {
+                    const match = payloadHex.match(/.{1,2}/g);
                     let payloadBytes: Uint8Array;
-                    if (msg.payloadHex) {
-                        const hex = msg.payloadHex;
-                        payloadBytes = new Uint8Array(hex.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []);
-                    } else if (Array.isArray(msg.payload)) {
-                        payloadBytes = new Uint8Array(msg.payload);
-                    } else if (typeof msg.payload === 'string') {
-                        payloadBytes = new TextEncoder().encode(msg.payload);
+                    if (match) {
+                        payloadBytes = new Uint8Array(match.map((byte: string) => parseInt(byte, 16)));
                     } else {
                         return;
                     }
@@ -494,15 +509,17 @@ export class WifiDirectTransport {
 
     /**
      * Sends a binary packet to the target peer.
-     * Uses direct WebRTC DataChannel if open; otherwise falls back to Encrypted Blind WebSocket Relay.
+     * Uses direct WebRTC DataChannel if open; otherwise falls back to Encrypted Blind MQTT & WebSocket Relays.
      */
     async send(peerId: string, payload: Uint8Array): Promise<boolean> {
+        let sent = false;
+
         // 1. Direct WebRTC DataChannel (P2P High Speed)
         const channel = this.dataChannels.get(peerId);
         if (channel && channel.readyState === 'open') {
             try {
                 channel.send(payload.buffer as ArrayBuffer);
-                return true;
+                sent = true;
             } catch (err) {
                 console.warn(`[WebRtcTransport] DataChannel send failed for ${peerId.slice(0, 8)}, falling back to relay:`, err);
             }
@@ -513,7 +530,11 @@ export class WifiDirectTransport {
             this.createOffer(peerId).catch(() => {});
         }
 
-        // 2. Encrypted Blind WebSocket Relay Fallback (Zero-Knowledge)
+        // 2. High-Availability Global MQTT Blind Relay
+        const mqttSent = mqttRelay.sendPacket(peerId, payload);
+        if (mqttSent) sent = true;
+
+        // 3. Encrypted Blind WebSocket Relay Fallback (Zero-Knowledge)
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
                 const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -522,13 +543,13 @@ export class WifiDirectTransport {
                     targetPeerId: peerId,
                     payloadHex: hex,
                 });
-                return true;
+                sent = true;
             } catch (err) {
                 console.warn(`[WebRtcTransport] Blind relay failed for ${peerId.slice(0, 8)}:`, err);
             }
         }
 
-        return false;
+        return sent;
     }
 
     onMessage(callback: (msg: { from: string; payload: Uint8Array }) => void) {

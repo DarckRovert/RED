@@ -636,14 +636,15 @@ class MeshRouter {
 
     let anySent = false;
 
-    // 1. Direct local peers (BLE / WiFi LAN / LoRa)
+    // 1. Direct local mesh peers (BLE / WiFi LAN / LoRa)
     for (const [peerId, peer] of peersToSend) {
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
       if (ok) anySent = true;
     }
 
-    // 2. Direct Internet Uplink (if this node has active Internet)
-    if (!anySent && this.hasInternetAccess && this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+    // 2. Global WAN / WebRTC / MQTT Blind Relay Transport
+    // Always attempt direct delivery over global transport for unicast packets
+    if (this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
       const ok = await this.wifi.send(packet.recipient, encoded);
       if (ok) anySent = true;
     }
