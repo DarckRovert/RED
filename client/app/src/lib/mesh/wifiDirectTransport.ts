@@ -361,11 +361,13 @@ export class WifiDirectTransport {
 
         pc.onicecandidate = (event) => {
             if (event.candidate) {
-                this.sendWs({
+                const icePayload = {
                     type: 'ice-candidate',
                     targetPeerId: peerId,
                     candidate: event.candidate,
-                });
+                };
+                this.sendWs(icePayload);
+                mqttRelay.sendSignaling(peerId, icePayload);
             }
         };
 
@@ -422,12 +424,15 @@ export class WifiDirectTransport {
         this.dataChannels.set(peerId, channel);
     }
 
+    private isMakingOffer: Map<string, boolean> = new Map();
+
     private isPolite(peerId: string): boolean {
         return (this.myId || '') < (peerId || '');
     }
 
     public async createOffer(peerId: string, iceRestart = false): Promise<void> {
         try {
+            this.isMakingOffer.set(peerId, true);
             const pc = this.getOrCreatePeerConnection(peerId);
             if (!this.dataChannels.has(peerId) || this.dataChannels.get(peerId)?.readyState === 'closed') {
                 const channel = pc.createDataChannel('red-mesh-data', { ordered: true });
@@ -447,13 +452,15 @@ export class WifiDirectTransport {
             mqttRelay.sendSignaling(peerId, sigPayload);
         } catch (err) {
             console.warn(`[WebRtcTransport] Failed to create offer for ${peerId.slice(0, 8)}:`, err);
+        } finally {
+            this.isMakingOffer.set(peerId, false);
         }
     }
 
     private async handleOffer(peerId: string, sdp: RTCSessionDescriptionInit) {
         try {
             const pc = this.getOrCreatePeerConnection(peerId);
-            const isOfferCollision = pc.signalingState !== 'stable';
+            const isOfferCollision = Boolean(this.isMakingOffer.get(peerId)) || pc.signalingState !== 'stable';
             
             if (isOfferCollision && !this.isPolite(peerId)) {
                 console.log(`[WebRtcTransport] Glare detected with ${peerId.slice(0, 8)} — impolite node stands ground`);
