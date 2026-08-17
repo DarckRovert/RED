@@ -206,7 +206,7 @@ class RedAPIClient {
     }
 
     // ── Local Web Storage Helpers for Pure Browser / Off-Grid Web Mode ───────
-    private getWebStore<T>(key: string, defaultVal: T): T {
+    public getWebStore<T>(key: string, defaultVal: T): T {
         if (typeof window === 'undefined') return defaultVal;
         try {
             const raw = localStorage.getItem(key);
@@ -216,7 +216,7 @@ class RedAPIClient {
         }
     }
 
-    private setWebStore<T>(key: string, val: T): void {
+    public setWebStore<T>(key: string, val: T): void {
         if (typeof window === 'undefined') return;
         try {
             localStorage.setItem(key, JSON.stringify(val));

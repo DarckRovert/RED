@@ -55,7 +55,11 @@ export class WifiDirectTransport {
             candidates.push(process.env.NEXT_PUBLIC_SIGNALING_URL.trim());
         }
 
-        // 3. Fallback based on window location (LAN / local deployments)
+        // 3. High-availability public WebRTC signaling and mesh relays
+        candidates.push('wss://red-signaling.onrender.com');
+        candidates.push('wss://signaling.yjs.dev');
+
+        // 4. Dynamic host / LAN candidates
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const hostname = window.location.hostname;
 
@@ -63,7 +67,7 @@ export class WifiDirectTransport {
             candidates.push(`${proto}//${hostname}:3001`);
         }
 
-        // 4. Local loopback candidates (for dev servers or local testbed)
+        // 5. Local loopback candidates (for dev servers or local testbed)
         candidates.push('ws://localhost:3001');
         candidates.push('ws://127.0.0.1:3001');
 
@@ -233,6 +237,10 @@ export class WifiDirectTransport {
                     for (const peerId of msg.onlinePeers) {
                         if (peerId && peerId !== this.myId) {
                             this.onlinePeers.add(peerId);
+                            // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
+                            if (this.myId > peerId && !this.peerConnections.has(peerId)) {
+                                this.createOffer(peerId).catch(() => {});
+                            }
                         }
                     }
                 }
@@ -243,6 +251,10 @@ export class WifiDirectTransport {
                 if (msg.peerId && msg.peerId !== this.myId) {
                     this.onlinePeers.add(msg.peerId);
                     console.log(`[WebRtcTransport] Remote peer discovered on mesh: ${msg.peerId.slice(0, 8)}`);
+                    // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
+                    if (this.myId > msg.peerId && !this.peerConnections.has(msg.peerId)) {
+                        this.createOffer(msg.peerId).catch(() => {});
+                    }
                 }
                 break;
             }

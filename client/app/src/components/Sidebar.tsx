@@ -42,7 +42,8 @@ function formatTime(ts?: number): string {
 export default function Sidebar() {
     const { 
         identity, conversations: rawConvs, contacts: rawConts, groups: rawGrps, nodeOnline, navigate, fetchData,
-        pinnedChatIds: rawPinned, archivedChatIds: rawArchived, togglePinChat, toggleArchiveChat, peerStories
+        pinnedChatIds: rawPinned, archivedChatIds: rawArchived, togglePinChat, toggleArchiveChat, peerStories,
+        addContact
     } = useRedStore();
 
     const conversations = Array.isArray(rawConvs) ? rawConvs : [];
@@ -69,6 +70,10 @@ export default function Sidebar() {
     const [searchQuery, setSearchQuery] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+    const [addContactOpen, setAddContactOpen] = useState(false);
+    const [newContactInput, setNewContactInput] = useState("");
+    const [newContactAlias, setNewContactAlias] = useState("");
+    const [isSubmittingContact, setIsSubmittingContact] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
 
@@ -327,7 +332,10 @@ export default function Sidebar() {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-crimson)" }} title="Agregar nuevo contacto">
+                        ➕
+                    </button>
                     <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 38, height: 38 }} title="Búsqueda global">
                         🔍
                     </button>
@@ -473,41 +481,145 @@ export default function Sidebar() {
                         })
                     )
                 ) : (
-                    filteredContacts.length === 0 ? (
-                        <div className="empty-state-tactical">
-                            <div className="empty-state-icon">👥</div>
-                            <div className="empty-state-title">Sin Contactos Guardados</div>
-                            <div className="empty-state-desc">Tus pares verificados aparecerán en esta libreta soberana.</div>
-                        </div>
-                    ) : (
-                        filteredContacts.map(ct => (
-                            <div
-                                key={ct.identity_hash}
-                                onClick={() => navigate("chat", ct.identity_hash)}
-                                className="card-tactical-interactive"
-                                style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px" }}
-                            >
-                                <div style={{
-                                    width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: "1.1rem", fontWeight: 800, color: "#fff",
-                                    ...avatarStyle(ct.identity_hash)
-                                }}>
-                                    {(ct.display_name || "O").charAt(0).toUpperCase()}
-                                </div>
-                                <div style={{ flex: 1, overflow: "hidden" }}>
-                                    <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff" }}>
-                                        {ct.display_name || ct.identity_hash.substring(0, 8)}
-                                    </div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                        {ct.identity_hash.substring(0, 16)}…
-                                    </div>
-                                </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <button
+                            onClick={() => setAddContactOpen(true)}
+                            className="btn-tactical-primary"
+                            style={{
+                                width: "100%", padding: "10px 12px", fontSize: "0.82rem", fontWeight: 800,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                borderRadius: "var(--radius-md)"
+                            }}
+                        >
+                            <span>➕</span> AGREGAR NUEVO CONTACTO P2P
+                        </button>
+                        {filteredContacts.length === 0 ? (
+                            <div className="empty-state-tactical">
+                                <div className="empty-state-icon">👥</div>
+                                <div className="empty-state-title">Sin Contactos Guardados</div>
+                                <div className="empty-state-desc">Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E.</div>
                             </div>
-                        ))
-                    )
+                        ) : (
+                            filteredContacts.map(ct => (
+                                <div
+                                    key={ct.identity_hash}
+                                    onClick={() => navigate("chat", ct.identity_hash)}
+                                    className="card-tactical-interactive"
+                                    style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px" }}
+                                >
+                                    <div style={{
+                                        width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: "1.1rem", fontWeight: 800, color: "#fff",
+                                        ...avatarStyle(ct.identity_hash)
+                                    }}>
+                                        {(ct.display_name || "O").charAt(0).toUpperCase()}
+                                    </div>
+                                    <div style={{ flex: 1, overflow: "hidden" }}>
+                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff" }}>
+                                            {ct.display_name || ct.identity_hash.substring(0, 8)}
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            {ct.identity_hash.substring(0, 16)}…
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 )}
             </div>
+
+            {/* Modal para Agregar Contacto */}
+            {addContactOpen && (
+                <div 
+                    style={{
+                        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+                        background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)",
+                        zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
+                        padding: "16px"
+                    }}
+                    onClick={() => setAddContactOpen(false)}
+                >
+                    <div 
+                        className="card-tactical animate-enter"
+                        style={{
+                            maxWidth: "460px", width: "100%", padding: "24px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            border: "1px solid var(--glass-border)", background: "rgba(12,14,24,0.98)"
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff" }}>
+                                ➕ Agregar Contacto / Nuevo Chat
+                            </div>
+                            <button onClick={() => setAddContactOpen(false)} className="btn-icon" style={{ width: 32, height: 32 }}>✕</button>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                            Pega el DID Soberano, Hash (64 hex) o Identificador de tu contacto (Web, Móvil o Nodo Malla).
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div>
+                                <label style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-secondary)", marginBottom: "4px", display: "block", letterSpacing: "0.5px" }}>
+                                    IDENTIFICADOR / DID / HASH
+                                </label>
+                                <input
+                                    value={newContactInput}
+                                    onChange={e => setNewContactInput(e.target.value)}
+                                    placeholder="Ej: did:red:af10... o red_a1b2c3d4"
+                                    style={{ width: "100%", fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem", padding: "10px 12px" }}
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-secondary)", marginBottom: "4px", display: "block", letterSpacing: "0.5px" }}>
+                                    ALIAS / NOMBRE TÁCTICO
+                                </label>
+                                <input
+                                    value={newContactAlias}
+                                    onChange={e => setNewContactAlias(e.target.value)}
+                                    placeholder="Ej: Alfa-1 Web, Operador Base..."
+                                    style={{ width: "100%", fontSize: "0.85rem", padding: "10px 12px" }}
+                                />
+                            </div>
+                            <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                                <button
+                                    onClick={() => setAddContactOpen(false)}
+                                    className="btn-tactical-secondary"
+                                    style={{ flex: 1, padding: "12px", fontSize: "0.85rem" }}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    disabled={!newContactInput.trim() || isSubmittingContact}
+                                    onClick={async () => {
+                                        const input = newContactInput.trim();
+                                        const alias = newContactAlias.trim();
+                                        setIsSubmittingContact(true);
+                                        try {
+                                            await addContact(input, alias);
+                                            setAddContactOpen(false);
+                                            setNewContactInput("");
+                                            setNewContactAlias("");
+                                            toast.success("✅ Contacto añadido. Iniciando chat P2P...");
+                                            navigate("chat", input);
+                                        } catch (err: any) {
+                                            toast.error(`❌ Error: ${err?.message || err}`);
+                                        } finally {
+                                            setIsSubmittingContact(false);
+                                        }
+                                    }}
+                                    className="btn-tactical-primary"
+                                    style={{ flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900 }}
+                                >
+                                    {isSubmittingContact ? "Conectando..." : "⚡ CREAR CHAT"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Global Search Modal */}
             {globalSearchOpen && <GlobalSearchModal onClose={() => setGlobalSearchOpen(false)} />}

@@ -1004,7 +1004,24 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 await RedAPI.sendMessage(peerHash, content, apiOptions);
             }
 
-            // Upgrade status Pending → Sent after Rust API confirms delivery to node
+            // Direct P2P Mesh Dispatch over WebRTC / Blind Relay / BLE
+            try {
+                const myDid = get().identity?.identity_hash || 'me';
+                const payloadStr = JSON.stringify({
+                    id: tempId || ('msg_' + Date.now()),
+                    content,
+                    sender: myDid,
+                    msg_type: options?.msg_type || 'text',
+                    timestamp: Date.now() / 1000,
+                    ...apiOptions
+                });
+                const payloadBytes = new TextEncoder().encode(payloadStr);
+                await meshRouter.send(peerHash, payloadBytes);
+            } catch (meshErr) {
+                console.warn('[useRedStore.sendMessage] Direct mesh dispatch:', meshErr);
+            }
+
+            // Upgrade status Pending → Sent after API confirms delivery
             if (tempId) {
                 set({ messages: get().messages.map(m =>
                     m.id === tempId ? { ...m, status: 'Sent' as const } : m
@@ -1669,12 +1686,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
     addContact: async (identity_hash: string, display_name: string, public_key?: string | null) => {
         const inputStr = identity_hash.trim();
-        let cleanName = display_name.trim();
+        let cleanName = display_name ? display_name.trim() : '';
 
         let cleanHash = inputStr;
         let pubKey: string | null = public_key ?? null;
 
-        // If no explicit pk was provided, try to parse did:red:<hash>:<pk> or <hash>:<pk> format
+        // 1. Parse did:red:<hash>:<pk> or did:red:<hash> or <hash>:<pk> or red_<shortId>
         if (!pubKey) {
             if (inputStr.startsWith("did:red:")) {
                 const parts = inputStr.split(":");
@@ -1686,16 +1703,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 }
             } else if (inputStr.includes(":")) {
                 const parts = inputStr.split(":");
-                if (parts.length >= 2 && parts[0].length >= 32) {
+                if (parts.length >= 2 && parts[0].length >= 16) {
                     cleanHash = parts[0];
                     pubKey = parts[1];
                 }
             }
         }
 
-        // 1. Resolve canonical hash from meshRouter if input is a hardware device ID (BLE MAC / UUID)
+        // 2. Resolve canonical hash from meshRouter if input is a hardware device ID (BLE MAC / UUID)
         const canonicalFromMesh = meshRouter.getCanonicalId(cleanHash);
-        if (canonicalFromMesh && canonicalFromMesh !== cleanHash && canonicalFromMesh.length === 64) {
+        if (canonicalFromMesh && canonicalFromMesh !== cleanHash && canonicalFromMesh.length >= 16) {
             cleanHash = canonicalFromMesh;
             const peerInfo = meshRouter.getPeerByAnyId(cleanHash);
             if (peerInfo?.publicKey && !pubKey) {
@@ -1703,83 +1720,69 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }
         }
 
-        // 2. If cleanHash is still not 64 hex characters, query active link via mesh handshake
-        if (cleanHash.length !== 64) {
-            try {
-                const queried = await meshRouter.queryIdentity(cleanHash);
-                if (queried?.identity_hash && queried.identity_hash.length === 64) {
-                    cleanHash = queried.identity_hash;
-                    pubKey = pubKey || queried.public_key || null;
-                    if (!cleanName || cleanName.startsWith('Nodo RED') || cleanName.startsWith('Dispositivo')) {
-                        cleanName = queried.display_name || cleanName;
-                    }
-                }
-            } catch {}
+        if (!cleanName || cleanName === "Nuevo Par" || cleanName === "Operador RED") {
+            cleanName = `Nodo ${cleanHash.slice(0, 8)}`;
         }
 
-        const MAX_RETRIES = 10;
-        const RETRY_DELAY_MS = 2000;
+        const localContact = {
+            identity_hash: cleanHash,
+            display_name: cleanName,
+            public_key: pubKey
+        };
 
-        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                await RedAPI.addContact(cleanHash, cleanName, pubKey);
-
-                // Clean up any old duplicate non-canonical contacts that shared this name or hardware ID
-                const currentContacts = get().contacts || [];
-                const cleansed = currentContacts.filter(c => 
-                    c.identity_hash !== inputStr && 
-                    !(c.identity_hash.includes(':') && c.identity_hash.length < 32)
-                );
-                if (cleansed.length !== currentContacts.length) {
-                    set({ contacts: cleansed });
-                }
-
-                // Send background contact request to peer so they automatically add us back!
-                const myIdentity = get().identity;
-                const myName = myIdentity?.nickname || 'Operador RED';
-                if (myIdentity?.identity_hash) {
-                    RedAPI.sendMessage(cleanHash, JSON.stringify({
-                        sender_hash: myIdentity.identity_hash,
-                        sender_name: myName,
-                        sender_pk: myIdentity.public_key || null
-                    }), { msg_type: 'contact_request' }).catch(() => {});
-                }
-                await get().fetchData();
-                return true;
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                const isInitializing =
-                    msg.includes('503') ||
-                    msg.toLowerCase().includes('initializing') ||
-                    msg.toLowerCase().includes('pow');
-                if (isInitializing && attempt < MAX_RETRIES) {
-                    await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
-                    continue;
-                }
-                // Handle fallback to local contacts store
-                console.log(`[addContact] Peer ${cleanHash} registering in local P2P store`);
-                const existingContacts = get().contacts || [];
-                if (!existingContacts.some(c => c.identity_hash === cleanHash || c.display_name === cleanName)) {
-                    const localContact = {
-                        identity_hash: cleanHash,
-                        display_name: cleanName,
-                        public_key: pubKey
-                    };
-                    set({ contacts: [...existingContacts, localContact] });
-                }
-                const myIdentity = get().identity;
-                const myName = myIdentity?.nickname || 'Operador RED';
-                if (myIdentity?.identity_hash) {
-                    RedAPI.sendMessage(cleanHash, JSON.stringify({
-                        sender_hash: myIdentity.identity_hash,
-                        sender_name: myName,
-                        sender_pk: myIdentity.public_key || null
-                    }), { msg_type: 'contact_request' }).catch(() => {});
-                }
-                return true;
-            }
+        // 3. Immediately update UI state with zero lag
+        const currentContacts = get().contacts || [];
+        const existingIdx = currentContacts.findIndex(c => 
+            c.identity_hash === cleanHash || 
+            (cleanHash.length >= 16 && c.identity_hash?.startsWith(cleanHash.slice(0, 16)))
+        );
+        let updatedContacts = [...currentContacts];
+        if (existingIdx >= 0) {
+            updatedContacts[existingIdx] = { ...updatedContacts[existingIdx], ...localContact };
+        } else {
+            updatedContacts.push(localContact);
         }
-        return false;
+
+        // 4. Ensure conversation entry exists in active chat list
+        const currentConvs = get().conversations || [];
+        let updatedConvs = [...currentConvs];
+        if (!updatedConvs.some(c => c.id === cleanHash || c.peer === cleanHash)) {
+            updatedConvs.unshift({
+                id: cleanHash,
+                peer: cleanHash,
+                last_message: 'Contacto agregado. Chat P2P cifrado listo.',
+                last_timestamp: Date.now() / 1000,
+                unread_count: 0
+            });
+        }
+
+        set({ contacts: updatedContacts, conversations: updatedConvs });
+
+        // Save in localStorage WebStore for persistence across refreshes
+        RedAPI.setWebStore('red_web_contacts', updatedContacts);
+        RedAPI.setWebStore('red_web_conversations', updatedConvs);
+
+        // 5. Proactively announce identity & initiate WebRTC P2P link over meshRouter
+        meshRouter.sendIdentityAnnounce(cleanHash).catch(() => {});
+
+        try {
+            await RedAPI.addContact(cleanHash, cleanName, pubKey);
+        } catch (err) {
+            console.log(`[addContact] Local P2P contact registered: ${cleanHash.slice(0, 8)}`);
+        }
+
+        // 6. Send background contact request to peer so they automatically add us back!
+        const myIdentity = get().identity;
+        const myName = myIdentity?.nickname || 'Operador RED';
+        if (myIdentity?.identity_hash) {
+            RedAPI.sendMessage(cleanHash, JSON.stringify({
+                sender_hash: myIdentity.identity_hash,
+                sender_name: myName,
+                sender_pk: myIdentity.public_key || null
+            }), { msg_type: 'contact_request' }).catch(() => {});
+        }
+
+        return true;
     },
 
     // ── A2: Delete message ────────────────────────────────────────────────────
