@@ -469,6 +469,41 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     nodeOnline: true,
                     isAuthenticated: true
                 });
+
+                // Initialize Global WebRTC P2P Mesh & Blind Relay
+                localTransport.init(localHash).catch(e =>
+                    console.warn('[RED Web] Mesh init failed:', e)
+                );
+
+                // Load initial data (conversations, contacts from web storage)
+                await get().fetchData();
+
+                // Wire meshRouter local packet delivery
+                meshRouter.onLocalDelivery((packet) => {
+                    try {
+                        const payloadStr = new TextDecoder().decode(packet.payload);
+                        let parsed: any;
+                        try {
+                            parsed = JSON.parse(payloadStr);
+                        } catch {
+                            parsed = {
+                                id: 'msg_' + Date.now(),
+                                content: payloadStr,
+                                sender: packet.sender,
+                                timestamp: packet.timestamp / 1000,
+                                is_mine: false,
+                                msg_type: 'text'
+                            };
+                        }
+                        if (parsed) {
+                            if (!parsed.sender) parsed.sender = packet.sender;
+                            get().addIncomingMessage(parsed);
+                        }
+                    } catch (deliveryErr) {
+                        console.warn('[RED Web] Error handling mesh packet delivery:', deliveryErr);
+                    }
+                });
+
                 return true;
             }
         } catch (e) {
@@ -1504,9 +1539,71 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     TacticalAudioEngine.playMessageReceived();
                 }
             }
+
+            // Persist message in Web local storage for pure browser mode
+            if (typeof window !== 'undefined' && item.sender) {
+                try {
+                    const convId = item.conversation_id || item.sender;
+                    const convKey = `red_web_messages_${convId}`;
+                    const rawMsgs = localStorage.getItem(convKey);
+                    const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
+                    if (!list.some(m => m.id === item.id)) {
+                        list.push(normalizedItem);
+                        localStorage.setItem(convKey, JSON.stringify(list));
+                    }
+
+                    const rawConvs = localStorage.getItem('red_web_conversations');
+                    const convs: ConversationItem[] = rawConvs ? JSON.parse(rawConvs) : [];
+                    const idx = convs.findIndex(c => c.id === convId || c.peer === convId);
+                    const convObj: ConversationItem = {
+                        id: convId,
+                        peer: item.sender,
+                        last_message: item.content || 'Mensaje P2P',
+                        last_timestamp: item.timestamp || Date.now() / 1000,
+                        unread_count: 0
+                    };
+                    if (idx >= 0) {
+                        convs[idx] = { ...convs[idx], ...convObj };
+                    } else {
+                        convs.unshift(convObj);
+                    }
+                    localStorage.setItem('red_web_conversations', JSON.stringify(convs));
+                } catch {}
+            }
+
             // Refresh sidebar badge (debounced, only if not already active chat)
             return;
         } else {
+            // Persist message in Web local storage for pure browser mode
+            if (typeof window !== 'undefined' && item.sender) {
+                try {
+                    const convId = item.conversation_id || item.sender;
+                    const convKey = `red_web_messages_${convId}`;
+                    const rawMsgs = localStorage.getItem(convKey);
+                    const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
+                    if (!list.some(m => m.id === item.id)) {
+                        list.push(item as MessageItem);
+                        localStorage.setItem(convKey, JSON.stringify(list));
+                    }
+
+                    const rawConvs = localStorage.getItem('red_web_conversations');
+                    const convs: ConversationItem[] = rawConvs ? JSON.parse(rawConvs) : [];
+                    const idx = convs.findIndex(c => c.id === convId || c.peer === convId);
+                    const convObj: ConversationItem = {
+                        id: convId,
+                        peer: item.sender,
+                        last_message: item.content || 'Mensaje P2P',
+                        last_timestamp: item.timestamp || Date.now() / 1000,
+                        unread_count: (convs[idx]?.unread_count || 0) + 1
+                    };
+                    if (idx >= 0) {
+                        convs[idx] = { ...convs[idx], ...convObj };
+                    } else {
+                        convs.unshift(convObj);
+                    }
+                    localStorage.setItem('red_web_conversations', JSON.stringify(convs));
+                } catch {}
+            }
             if (!item.is_mine) {
                 TacticalAudioEngine.playMessageReceived();
             }

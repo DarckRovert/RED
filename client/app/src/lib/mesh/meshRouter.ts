@@ -499,23 +499,31 @@ class MeshRouter {
     const peersToSend = Array.from(this.peers.entries())
       .filter(([id]) => id !== exceptPeer);
 
-    if (peersToSend.length === 0) {
-      // No peers connected — queue for later
-      this.pendingQueue.push({
-        packet,
-        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24h TTL
-      });
-      console.log(`[MeshRouter] No peers — queued packet for ${packet.recipient.slice(0, 8)}`);
-      return 'queued';
-    }
-
     let anySent = false;
+
+    // 1. If recipient is a direct peer or in local peers, send to them
     for (const [peerId, peer] of peersToSend) {
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
       if (ok) anySent = true;
     }
 
-    return anySent ? 'sent' : 'failed';
+    // 2. If not delivered to any local peer, attempt direct dispatch to recipient via WiFi / WebRTC / Relay
+    if (!anySent && this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+      const ok = await this.wifi.send(packet.recipient, encoded);
+      if (ok) anySent = true;
+    }
+
+    if (!anySent) {
+      // No reachable routes — queue for later
+      this.pendingQueue.push({
+        packet,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24h TTL
+      });
+      console.log(`[MeshRouter] No direct peer reached — queued packet for ${packet.recipient.slice(0, 8)}`);
+      return 'queued';
+    }
+
+    return 'sent';
   }
 
   private async sendToPeer(

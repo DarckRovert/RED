@@ -532,33 +532,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                         </div>
 
-                        {/* Calidad de Compresión de Fotos */}
+                        {/* Servidor de Señalización & Relé Global WebRTC */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div>
-                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Compresión de Multimedia en Malla</div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Servidor de Señalización & Relé Global (WebRTC)</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Comprime fotos antes de transmitirlas para minimizar tiempo de transferencia P2P.
+                                    URL del servidor de relé ciego y señalización para comunicación Web a Móvil a través de Internet (STUN / CGNAT Traversal).
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
-                                {(["low", "medium", "high"] as ImageCompressionQuality[]).map((q) => {
-                                    const labels = { low: "Alta Res (Lento)", medium: "Balanceada", high: "Máx Ahorro" };
-                                    const isSelected = preferences.imageCompression === q;
-                                    return (
-                                        <button
-                                            key={q}
-                                            onClick={() => {
-                                                SettingsManager.triggerHaptic("light");
-                                                updatePreferences({ imageCompression: q });
-                                            }}
-                                            className={`btn-tactical-pill ${isSelected ? "active" : ""}`}
-                                            style={{ padding: "10px 6px", fontSize: "0.74rem" }}
-                                        >
-                                            {labels[q]}
-                                        </button>
-                                    );
-                                })}
+                            <div style={{ display: "flex", gap: "8px" }}>
+                                <input
+                                    type="text"
+                                    placeholder="wss://darckrovert.github.io:3001 ó ws://localhost:3001"
+                                    value={preferences.signalingServerUrl || ""}
+                                    onChange={(e) => updatePreferences({ signalingServerUrl: e.target.value })}
+                                    style={{
+                                        flex: 1,
+                                        padding: "8px 12px",
+                                        background: "rgba(0,0,0,0.4)",
+                                        border: "1px solid var(--glass-border)",
+                                        borderRadius: "6px",
+                                        color: "#fff",
+                                        fontSize: "0.78rem",
+                                        fontFamily: "monospace"
+                                    }}
+                                />
+                                <button
+                                    onClick={() => {
+                                        SettingsManager.triggerHaptic("light");
+                                        toast.success("🌐 Servidor de señalización actualizado.");
+                                    }}
+                                    className="btn-tactical-pill active"
+                                    style={{ padding: "8px 14px", fontSize: "0.75rem", whiteSpace: "nowrap" }}
+                                >
+                                    Guardar
+                                </button>
                             </div>
                         </div>
                     </div>

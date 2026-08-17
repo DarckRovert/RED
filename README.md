@@ -78,12 +78,14 @@ En situaciones de emergencia o denegación de red, las aplicaciones tradicionale
 
 ## 🌐 Conectividad Global & Red Malla Descentralizada
 
-RED implementa una arquitectura híbrida **Offline-to-Global Gateway**:
+RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 3 niveles:
 
-1. **DHT Kademlia & Nodos Semilla Mundiales**: Al detectar conectividad a internet, el nodo nativo Rust se conecta a los bootstrap peers oficiales de libp2p/IPFS (`/dnsaddr/bootstrap.libp2p.io/...`), permitiendo comunicación directa punto a punto entre usuarios a escala global.
-2. **Traspaso de NAT y Circuit Relay v2**: Auto-descubrimiento y evasión de CGNAT y cortafuegos mediante paquetes UDP/QUIC y relays cifrados E2E con Noise Protocol.
-3. **Store-and-Forward ("Mulas de Datos")**: Los nodos en zonas sin red acumulan mensajes cifrados localmente. Cualquier nodo que se desplace a una zona con cobertura actúa como pasarela y retransmite automáticamente la cola a la red mundial.
-4. **Túneles Encubiertos Anti-Censura**:
+1. **WebRTC P2P DataChannels & STUN NAT Traversal**: Comunicación directa de alta velocidad y baja latencia entre clientes Web (navegador en PC / GitHub Pages) y aplicaciones móviles Android a través de canales binarios directos (`red-mesh-data`) negociados mediante múltiples servidores STUN de Google (`stun.l.google.com:19302`).
+2. **Relé Ciego Cifrado Zero-Knowledge (`mesh-relay`)**: En entornos con CGNAT simétrico estricto donde el canal WebRTC directo es bloqueado por cortafuegos corporativos o de operadores móviles, los paquetes de malla cifrados de extremo a extremo con AES-256-GCM se transportan a través del servidor de señalización de forma completamente ciega (sin que el relé conozca el contenido ni las claves).
+3. **DHT Kademlia & Nodos Semilla Mundiales**: Al detectar conectividad a internet, el nodo nativo Rust se conecta a los bootstrap peers oficiales de libp2p/IPFS (`/dnsaddr/bootstrap.libp2p.io/...`), permitiendo comunicación directa punto a punto entre usuarios a escala global.
+4. **Traspaso de NAT y Circuit Relay v2**: Auto-descubrimiento y evasión de CGNAT y cortafuegos mediante paquetes UDP/QUIC y relays cifrados E2E con Noise Protocol.
+5. **Store-and-Forward ("Mulas de Datos")**: Los nodos en zonas sin red acumulan mensajes cifrados localmente. Cualquier nodo que se desplace a una zona con cobertura actúa como pasarela y retransmite automáticamente la cola a la red mundial.
+6. **Túneles Encubiertos Anti-Censura**:
    - **Túnel DNS (`DnsTunnelEngine`)**: Transporta paquetes Base32 en consultas DNS-over-HTTPS (DoH) hacia 1.1.1.1 / 8.8.8.8.
    - **SNI Fronting (`SniSpoofEngine`)**: Oculta el tráfico en cabeceras TLS hacia redes de distribución de contenido.
 

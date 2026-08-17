@@ -111,6 +111,7 @@ export interface UserPreferences {
     meshPowerProfile: MeshPowerProfile;
     imageCompression: ImageCompressionQuality;
     autoCheckUpdates: boolean;
+    signalingServerUrl?: string;
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -126,6 +127,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     meshPowerProfile: 'balanced',
     imageCompression: 'medium',
     autoCheckUpdates: true,
+    signalingServerUrl: '',
 };
 
 const STORAGE_KEY = 'red_user_preferences_v1';
@@ -165,6 +167,9 @@ export class SettingsManager {
         if (typeof window !== 'undefined') {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentPrefs));
+                if (patch.signalingServerUrl !== undefined) {
+                    localStorage.setItem('red_signaling_url', patch.signalingServerUrl);
+                }
             } catch (e) {
                 console.error('[SettingsManager] Failed to save preferences', e);
             }

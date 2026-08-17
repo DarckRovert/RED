@@ -106,3 +106,19 @@ Para transmisión por LoRa (915 MHz) o ultrasonido SoundMesh (18.5–20.5 kHz):
 - **Inundación Controlada (Controlled Flood)**: Cada nodo retransmite el paquete a sus vecinos si no es el destinatario final y el TTL > 0.
 - **Ventana de Deduplicación**: Tabla de nonces en memoria durante 72 horas para prevenir bucles de enrutamiento.
 - **Store-and-Forward**: Almacenamiento diferido de paquetes en cola cifrada cuando el destinatario está temporalmente fuera de rango radio.
+
+---
+
+## 8. WebRTC P2P DataChannels & Relé Ciego Zero-Knowledge
+
+Para interoperabilidad global entre clientes de navegador Web y nodos móviles Android a través de Internet:
+
+1. **Señalización Directa & STUN NAT Traversal**:
+   - Descubrimiento de direcciones IP públicas reflexivas mediante servidores STUN (`stun.l.google.com:19302`).
+   - Negociación SDP (Offer/Answer/ICE) enrutada por `targetPeerId` a través del servidor de señalización WebSocket.
+2. **Canal de Datos Binario (`RTCDataChannel`)**:
+   - Nombre de canal: `red-mesh-data` con `binaryType: 'arraybuffer'`.
+   - Modos: Ordenado (`ordered: true`) para transmisión de tramas de voz y paquetes tácticos.
+3. **Relé Ciego Cifrado Zero-Knowledge (`mesh-relay`)**:
+   - Enrutamiento por `targetPeerId` con payload cifrado en Hexadecimal.
+   - El relé central actúa únicamente como transportador de paquetes ciegos sin descifrar ni almacenar claves.

@@ -41,7 +41,7 @@ app.get("/health", (_, res) => res.json({
 
 // In-memory state
 // rooms: roomId  → Set<peerId>
-// peers: peerId  → { ws, roomId, registeredAt }
+// peers: peerId  → { ws, rooms: Set<roomId>, registeredAt }
 const rooms = new Map();
 const peers = new Map();
 
@@ -49,7 +49,7 @@ const wss = new WebSocket.Server({ server });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function send(ws, data) {
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(data));
     }
 }
@@ -72,21 +72,21 @@ function broadcastToRoom(roomId, senderId, data) {
 function removePeer(peerId) {
     const peer = peers.get(peerId);
     if (!peer) return;
-    const room = rooms.get(peer.roomId);
-    if (room) {
-        room.delete(peerId);
-        if (room.size === 0) rooms.delete(peer.roomId);
-        else broadcastToRoom(peer.roomId, peerId, { type: "peer-left", peerId });
+    for (const rId of peer.rooms) {
+        const room = rooms.get(rId);
+        if (room) {
+            room.delete(peerId);
+            if (room.size === 0) rooms.delete(rId);
+            else broadcastToRoom(rId, peerId, { type: "peer-left", peerId, roomId: rId });
+        }
     }
     peers.delete(peerId);
-    console.log(`[RED Signaling] Peer disconnected: ${peerId} (room: ${peer.roomId})`);
+    console.log(`[RED Signaling] Peer disconnected: ${peerId}`);
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 wss.on("connection", (ws, req) => {
     // SEC-FIX M-3: Mandatory Token Authentication (Enforced only if configured)
-    // Prevents unauthorized clients from connecting in production, while remaining
-    // open and zero-config for development/local testing.
     const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
     const token = url.searchParams.get("token");
     const requiredToken = process.env.SIGNALING_TOKEN;
@@ -99,7 +99,7 @@ wss.on("connection", (ws, req) => {
             return;
         }
     } else {
-        console.log(`[RED Signaling] Connection from ${req.socket.remoteAddress} accepted without token (development mode)`);
+        console.log(`[RED Signaling] Connection from ${req.socket.remoteAddress} accepted without token`);
     }
 
     const ip = req.socket.remoteAddress;
@@ -111,43 +111,149 @@ wss.on("connection", (ws, req) => {
         let msg;
         try { msg = JSON.parse(raw); } catch { return; }
 
-        const { type, roomId } = msg;
+        const { type, roomId, targetPeerId } = msg;
 
         switch (type) {
-            // ── Register peer in a room ───────────────────────────────────
+            // ── Register peer (optionally in a room) ─────────────────────
             case "register": {
                 peerId = msg.peerId || crypto.randomUUID?.() || `peer_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-                const room = getOrCreateRoom(msg.roomId);
+                const initialRoomId = msg.roomId || "red-global-mesh";
+                
+                let peerEntry = peers.get(peerId);
+                if (!peerEntry) {
+                    peerEntry = { ws, rooms: new Set(), registeredAt: Date.now() };
+                    peers.set(peerId, peerEntry);
+                } else {
+                    peerEntry.ws = ws;
+                }
 
-                if (room.size >= 50) {
-                    send(ws, { type: "error", message: "Room is full (max 50 peers)" });
+                const room = getOrCreateRoom(initialRoomId);
+                if (room.size >= 500) {
+                    send(ws, { type: "error", message: "Room is full (max 500 peers)" });
                     return;
                 }
 
-                peers.set(peerId, { ws, roomId: msg.roomId, registeredAt: Date.now() });
                 room.add(peerId);
+                peerEntry.rooms.add(initialRoomId);
 
-                send(ws, { type: "registered", peerId, roomId: msg.roomId, peerCount: room.size });
-                broadcastToRoom(msg.roomId, peerId, { type: "peer-joined", peerId });
+                send(ws, { 
+                    type: "registered", 
+                    peerId, 
+                    roomId: initialRoomId, 
+                    peerCount: room.size,
+                    onlinePeers: Array.from(room).filter(id => id !== peerId)
+                });
+                broadcastToRoom(initialRoomId, peerId, { type: "peer-joined", peerId, roomId: initialRoomId });
 
-                console.log(`[RED Signaling] Peer registered: ${peerId} → room: ${msg.roomId} (${room.size}/50)`);
+                console.log(`[RED Signaling] Peer registered: ${peerId} → room: ${initialRoomId} (peers: ${room.size})`);
                 break;
             }
 
-            // ── Call signaling (offer, answer, ICE) ───────────────────────
+            // ── Join additional room (e.g. direct conversation pair room) ─
+            case "join-room": {
+                if (!peerId || !peers.has(peerId)) {
+                    send(ws, { type: "error", message: "Not registered" });
+                    return;
+                }
+                const targetRoom = msg.roomId;
+                if (!targetRoom) return;
+
+                const room = getOrCreateRoom(targetRoom);
+                room.add(peerId);
+                peers.get(peerId).rooms.add(targetRoom);
+
+                send(ws, { 
+                    type: "room-joined", 
+                    roomId: targetRoom, 
+                    peerCount: room.size,
+                    onlinePeers: Array.from(room).filter(id => id !== peerId)
+                });
+                broadcastToRoom(targetRoom, peerId, { type: "peer-joined", peerId, roomId: targetRoom });
+                break;
+            }
+
+            // ── Leave a specific room ─────────────────────────────────────
+            case "leave-room": {
+                if (peerId && peers.has(peerId) && msg.roomId) {
+                    const room = rooms.get(msg.roomId);
+                    if (room) {
+                        room.delete(peerId);
+                        if (room.size === 0) rooms.delete(msg.roomId);
+                        else broadcastToRoom(msg.roomId, peerId, { type: "peer-left", peerId, roomId: msg.roomId });
+                    }
+                    peers.get(peerId).rooms.delete(msg.roomId);
+                }
+                break;
+            }
+
+            // ── WebRTC Signaling (offer, answer, ICE) ────────────────────
             case "offer":
             case "answer":
             case "ice-candidate":
             case "call-request":
             case "call-accepted":
             case "call-rejected":
-            case "hangup": {
+            case "hangup":
+            case "signal": {
                 if (!peerId || !peers.has(peerId)) {
                     send(ws, { type: "error", message: "Not registered" });
                     return;
                 }
-                // Forward to all OTHER peers in the same room
-                broadcastToRoom(peers.get(peerId).roomId, peerId, { ...msg, fromPeer: peerId });
+
+                // If explicit targetPeerId is specified, route directly to that peer
+                if (targetPeerId) {
+                    const target = peers.get(targetPeerId);
+                    if (target && target.ws.readyState === WebSocket.OPEN) {
+                        send(target.ws, { ...msg, fromPeer: peerId, senderId: peerId });
+                    } else {
+                        send(ws, { type: "peer-offline", targetPeerId, originalType: type });
+                    }
+                    return;
+                }
+
+                // Fallback: broadcast to room if roomId is provided
+                const targetRoomId = roomId || Array.from(peers.get(peerId).rooms)[0];
+                if (targetRoomId) {
+                    broadcastToRoom(targetRoomId, peerId, { ...msg, fromPeer: peerId, senderId: peerId });
+                }
+                break;
+            }
+
+            // ── Blind Encrypted Mesh Relay (Zero-Knowledge Packet Forward) ─
+            case "mesh-relay": {
+                if (!peerId || !peers.has(peerId)) {
+                    send(ws, { type: "error", message: "Not registered" });
+                    return;
+                }
+                const targetRecipient = targetPeerId || msg.recipient;
+                if (!targetRecipient) {
+                    send(ws, { type: "error", message: "Missing recipient for mesh-relay" });
+                    return;
+                }
+
+                // Find target peer (exact DID match or prefix match)
+                let target = peers.get(targetRecipient);
+                if (!target && targetRecipient.length >= 8) {
+                    for (const [pId, pData] of peers.entries()) {
+                        if (pId.startsWith(targetRecipient) || targetRecipient.startsWith(pId)) {
+                            target = pData;
+                            break;
+                        }
+                    }
+                }
+
+                if (target && target.ws.readyState === WebSocket.OPEN) {
+                    send(target.ws, {
+                        type: "mesh-relay",
+                        fromPeer: peerId,
+                        recipient: targetRecipient,
+                        payload: msg.payload,
+                        payloadHex: msg.payloadHex
+                    });
+                    send(ws, { type: "mesh-relay-ack", recipient: targetRecipient, status: "delivered" });
+                } else {
+                    send(ws, { type: "peer-offline", targetPeerId: targetRecipient, status: "queued_locally" });
+                }
                 break;
             }
 

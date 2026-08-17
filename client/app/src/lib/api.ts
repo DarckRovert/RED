@@ -205,22 +205,56 @@ class RedAPIClient {
         return this.req<StatusResponse>('/status');
     }
 
+    // ── Local Web Storage Helpers for Pure Browser / Off-Grid Web Mode ───────
+    private getWebStore<T>(key: string, defaultVal: T): T {
+        if (typeof window === 'undefined') return defaultVal;
+        try {
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : defaultVal;
+        } catch {
+            return defaultVal;
+        }
+    }
+
+    private setWebStore<T>(key: string, val: T): void {
+        if (typeof window === 'undefined') return;
+        try {
+            localStorage.setItem(key, JSON.stringify(val));
+        } catch {}
+    }
+
     // ── Conversations & Contacts ──────────────────────────────────────────────
 
     async getConversations(): Promise<ConversationItem[]> {
-        return this.reqList<ConversationItem>('/conversations').catch(() => []);
+        try {
+            return await this.reqList<ConversationItem>('/conversations');
+        } catch {
+            return this.getWebStore<ConversationItem[]>('red_web_conversations', []);
+        }
     }
 
     async getContacts(): Promise<any[]> {
-        return this.reqList<any>('/contacts').catch(() => []);
+        try {
+            return await this.reqList<any>('/contacts');
+        } catch {
+            return this.getWebStore<any[]>('red_web_contacts', []);
+        }
     }
 
     async getGroups(): Promise<any[]> {
-        return this.reqList<any>('/groups').catch(() => []);
+        try {
+            return await this.reqList<any>('/groups');
+        } catch {
+            return this.getWebStore<any[]>('red_web_groups', []);
+        }
     }
 
     async getMessages(conversationId: string): Promise<MessageItem[]> {
-        return this.reqList<MessageItem>(`/conversations/${conversationId}/messages`).catch(() => []);
+        try {
+            return await this.reqList<MessageItem>(`/conversations/${conversationId}/messages`);
+        } catch {
+            return this.getWebStore<MessageItem[]>(`red_web_messages_${conversationId}`, []);
+        }
     }
 
     async sendMessage(recipient: string, content: string, options?: Record<string, any>): Promise<void> {
@@ -228,12 +262,51 @@ class RedAPIClient {
         try {
             await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
         } catch (e) {
-            // Direct P2P Mesh Fallback over BLE / WiFi Direct / LoRa
+            // Save outgoing message in local Web store
+            const msgId = options?.id || 'msg_' + Date.now();
+            const myDid = (typeof window !== 'undefined' && localStorage.getItem('red_identity_hash')) || 'me';
+            const msgItem: MessageItem = {
+                id: msgId,
+                sender: myDid,
+                content,
+                timestamp: Date.now() / 1000,
+                is_mine: true,
+                msg_type: options?.msg_type || 'text',
+                status: 'Sent',
+                ...options
+            };
+
+            const convKey = `red_web_messages_${recipient}`;
+            const existingMsgs = this.getWebStore<MessageItem[]>(convKey, []);
+            if (!existingMsgs.some(m => m.id === msgId)) {
+                existingMsgs.push(msgItem);
+                this.setWebStore(convKey, existingMsgs);
+            }
+
+            // Update conversation list
+            const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
+            const convIdx = convs.findIndex(c => c.id === recipient || c.peer === recipient);
+            const convData: ConversationItem = {
+                id: recipient,
+                peer: recipient,
+                last_message: content,
+                last_timestamp: Date.now() / 1000,
+                unread_count: 0
+            };
+            if (convIdx >= 0) {
+                convs[convIdx] = { ...convs[convIdx], ...convData };
+            } else {
+                convs.unshift(convData);
+            }
+            this.setWebStore('red_web_conversations', convs);
+
+            // Direct P2P Mesh Fallback over WebRTC DataChannel / Blind Relay / BLE
             try {
                 const { meshRouter } = await import('./mesh/meshRouter');
                 const payloadStr = JSON.stringify({
-                    id: 'msg_' + Date.now(),
+                    id: msgId,
                     content,
+                    sender: myDid,
                     msg_type: options?.msg_type || 'text',
                     ...options
                 });
@@ -307,12 +380,29 @@ class RedAPIClient {
         // NOTE: Rust struct SendMessageRequest requires `recipient: String`.
         // Omitting recipient caused Serde deserialization failure (422 Unprocessable Entity).
         const body = { recipient: groupId, content, ...options };
-        await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
+        try {
+            await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
+        } catch {
+            await this.sendMessage(groupId, content, { ...options, is_group: true, group_id: groupId });
+        }
     }
 
     async addContact(identity_hash: string, display_name: string, public_key?: string | null): Promise<void> {
         const body = { identity_hash, display_name, public_key };
-        await this.req('/contacts', { method: 'POST', body: JSON.stringify(body) });
+        try {
+            await this.req('/contacts', { method: 'POST', body: JSON.stringify(body) });
+        } catch {
+            // Save in Web local storage
+            const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+            const existingIdx = contacts.findIndex(c => c.identity_hash === identity_hash);
+            const newContact = { identity_hash, display_name, public_key: public_key || null, online: true };
+            if (existingIdx >= 0) {
+                contacts[existingIdx] = { ...contacts[existingIdx], ...newContact };
+            } else {
+                contacts.push(newContact);
+            }
+            this.setWebStore('red_web_contacts', contacts);
+        }
     }
 
     async blockContact(identity_hash: string): Promise<void> {
