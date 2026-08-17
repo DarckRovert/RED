@@ -422,20 +422,29 @@ export class WifiDirectTransport {
         this.dataChannels.set(peerId, channel);
     }
 
+    private isPolite(peerId: string): boolean {
+        return (this.myId || '') < (peerId || '');
+    }
+
     public async createOffer(peerId: string, iceRestart = false): Promise<void> {
         try {
             const pc = this.getOrCreatePeerConnection(peerId);
-            const channel = pc.createDataChannel('red-mesh-data', { ordered: true });
-            this.setupDataChannel(peerId, channel);
+            if (!this.dataChannels.has(peerId) || this.dataChannels.get(peerId)?.readyState === 'closed') {
+                const channel = pc.createDataChannel('red-mesh-data', { ordered: true });
+                this.setupDataChannel(peerId, channel);
+            }
 
             const offer = await pc.createOffer(iceRestart ? { iceRestart: true } : undefined);
+            if (pc.signalingState !== 'stable') return;
             await pc.setLocalDescription(offer);
 
-            this.sendWs({
+            const sigPayload = {
                 type: 'offer',
                 targetPeerId: peerId,
                 sdp: offer,
-            });
+            };
+            this.sendWs(sigPayload);
+            mqttRelay.sendSignaling(peerId, sigPayload);
         } catch (err) {
             console.warn(`[WebRtcTransport] Failed to create offer for ${peerId.slice(0, 8)}:`, err);
         }
@@ -444,6 +453,18 @@ export class WifiDirectTransport {
     private async handleOffer(peerId: string, sdp: RTCSessionDescriptionInit) {
         try {
             const pc = this.getOrCreatePeerConnection(peerId);
+            const isOfferCollision = pc.signalingState !== 'stable';
+            
+            if (isOfferCollision && !this.isPolite(peerId)) {
+                console.log(`[WebRtcTransport] Glare detected with ${peerId.slice(0, 8)} — impolite node stands ground`);
+                return;
+            }
+
+            if (isOfferCollision && this.isPolite(peerId)) {
+                console.log(`[WebRtcTransport] Glare detected with ${peerId.slice(0, 8)} — polite node rolls back`);
+                await pc.setLocalDescription({ type: 'rollback' } as any).catch(() => {});
+            }
+
             await pc.setRemoteDescription(new RTCSessionDescription(sdp));
 
             // Process any pending ICE candidates queued before remote description was set
@@ -458,11 +479,13 @@ export class WifiDirectTransport {
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
 
-            this.sendWs({
+            const ansPayload = {
                 type: 'answer',
                 targetPeerId: peerId,
                 sdp: answer,
-            });
+            };
+            this.sendWs(ansPayload);
+            mqttRelay.sendSignaling(peerId, ansPayload);
         } catch (err) {
             console.warn(`[WebRtcTransport] Failed to handle offer from ${peerId.slice(0, 8)}:`, err);
         }
