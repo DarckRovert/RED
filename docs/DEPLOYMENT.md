@@ -1,48 +1,47 @@
-# 🚀 Guía de Despliegue - RED (v5.0)
+# 🚀 Guía de Despliegue - RED (v31.0.0 Sovereign Master)
 
-Esta guía cubre el despliegue de la infraestructura de RED en dispositivos móviles y servidores, optimizada para la versión 5.0 "Solid Gold".
+Esta guía cubre el despliegue de la infraestructura de RED en dispositivos móviles y servidores, optimizada para la versión 31.0.0 Sovereign Master.
 
 ---
 
-## 📱 Despliegue Móvil Nativo (Capacitor 8)
+## 📱 Despliegue Móvil Nativo (Capacitor & OpenJDK 21)
 
-RED se despliega como una aplicación híbrida de alto rendimiento.
+RED se despliega como una aplicación híbrida de alto rendimiento con backend local embebido en Rust.
 
 ### Compilación Automatizada del APK (Recomendado)
-Para compilar automáticamente todo el frontend Next.js, sincronizarlo con Capacitor, compilar el motor Rust (aarch64) y empaquetar el APK de producción (lanzamiento) usando Gradle:
-```bash
-./build_android.ps1
-```
-El archivo APK final estará en `client/app/android/app/build/outputs/apk/release/app-release-unsigned.apk`.
+Para compilar automáticamente todo el frontend Next.js 16 Turbopack, sincronizarlo con Capacitor y empaquetar el APK nativo usando Gradle con OpenJDK 21:
 
-### Compilación Manual Paso a Paso
-
-### 1. Preparación del Frontend
-El frontend en `client/app` debe compilarse como un export estático:
 ```bash
-npm run build # Genera la carpeta /out
-```
-
-### 2. Sincronización con Android
-```bash
+cd client/app
+npm run build
 npx cap sync android
-npx cap open android # Abre Android Studio para compilar manualmente
+cd android
+./gradlew assembleDebug
+```
+El archivo APK resultante estará en `client/app/android/app/build/outputs/apk/debug/app-debug.apk`.
+
+### Instalación Directa en Dispositivos por ADB
+```bash
+adb install -r -d app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 3. Configuraciones Críticas de Android 14 (API 34)
+---
+
+## ⚙️ Configuraciones Críticas de Android 15 (API 35)
+
 Para garantizar la estabilidad del nodo P2P:
-- **Foreground Service:** El archivo `AndroidManifest.xml` debe incluir:
+- **Foreground Service:** En `AndroidManifest.xml`:
   ```xml
   <service android:name=".RedNodeService" 
-           android:foregroundServiceType="dataSync" />
+           android:foregroundServiceType="connectedDevice|dataSync" />
   ```
-- **Energía:** Es recomendable solicitar al usuario el permiso `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
+- **Control de Energía:** Conectado al `KineticDutyGovernor.ts` para ajustar automáticamente el intervalo de escaneo BLE y prolongar la batería hasta 48 horas continuas.
 
 ---
 
 ## 🖥️ Despliegue de Nodo Servidor (Relay/Bootstrap)
 
-Si deseas montar un nodo de apoyo en la red global:
+Si deseas montar un nodo de apoyo en la red global libp2p:
 
 ### Compilación desde Fuente
 ```bash
@@ -51,18 +50,10 @@ cd RED
 cargo build --release --package red-node
 ```
 
-### Configuración del Firewall
-Asegura que los siguientes puertos estén abiertos:
-- **7331 (P2P):** Para la comunicación libp2p entre nodos.
-- **7333 (API Local):** Solo accesible desde el dispositivo (localhost).
+### Puertos de Red
+- **7331 (P2P):** Para la comunicación libp2p Kademlia entre nodos.
+- **7333 (API Local):** Solo accesible desde el dispositivo (`127.0.0.1`).
 
 ---
 
-## 🔐 Seguridad y Post-Instalación
-
-- **Firma de APK:** Siempre genera APKs firmadas para producción para habilitar las APIs de Google/Android seguras.
-- **Detección de Root:** El sistema detectará automáticamente si el dispositivo es inseguro y lo notificará en el panel de Criptografía.
-
----
-
-**RED Docs v5.0** — Desplegando libertad bit a bit.
+**RED Docs v31.0.0** — Desplegando libertad bit a bit.
