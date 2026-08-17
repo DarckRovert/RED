@@ -27,7 +27,8 @@ interface MessageBubbleProps {
 }
 
 function datePill(ts: number): string {
-    const d = new Date(ts * 1000), now = new Date();
+    const raw = ts > 1e11 ? ts / 1000 : ts;
+    const d = new Date(raw * 1000), now = new Date();
     const diff = Math.floor((now.getTime() - d.getTime()) / 86400000);
     if (diff === 0) return "Hoy";
     if (diff === 1) return "Ayer";
@@ -36,7 +37,8 @@ function datePill(ts: number): string {
 }
 
 function timeStr(ts: number) {
-    return new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const raw = ts > 1e11 ? ts / 1000 : ts;
+    return new Date(raw * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];

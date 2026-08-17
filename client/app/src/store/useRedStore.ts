@@ -509,20 +509,23 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     try {
                         const payloadStr = new TextDecoder().decode(packet.payload);
                         let parsed: any;
+                        const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
                         try {
                             parsed = JSON.parse(payloadStr);
                         } catch {
                             parsed = {
-                                id: 'msg_' + Date.now(),
+                                id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
                                 content: payloadStr,
                                 sender: packet.sender,
-                                timestamp: packet.timestamp / 1000,
+                                timestamp: normTs,
                                 is_mine: false,
                                 msg_type: 'text'
                             };
                         }
                         if (parsed) {
                             if (!parsed.sender) parsed.sender = packet.sender;
+                            if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
+                            if (!parsed.timestamp) parsed.timestamp = normTs;
                             get().addIncomingMessage(parsed);
                         }
                     } catch (deliveryErr) {
@@ -792,29 +795,32 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         try {
                             const payloadStr = new TextDecoder().decode(packet.payload);
                             let parsed: any;
+                            const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
                             try {
                                 parsed = JSON.parse(payloadStr);
                             } catch {
                                 parsed = {
-                                    id: 'msg_' + Date.now(),
+                                    id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
                                     content: payloadStr,
                                     sender: packet.sender,
-                                    timestamp: packet.timestamp / 1000,
+                                    timestamp: normTs,
                                     is_mine: false,
                                     msg_type: 'text'
                                 };
                             }
                             if (parsed) {
                                 if (!parsed.sender) parsed.sender = packet.sender;
+                                if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
+                                if (!parsed.timestamp) parsed.timestamp = normTs;
                                 get().addIncomingMessage(parsed);
                             }
                         } catch (deliveryErr) {
                             console.warn('[RED Native] Error handling mesh packet delivery:', deliveryErr);
                         }
                     });
-                }).catch(e =>
-                    console.warn('[RED] Mesh init failed (non-critical):', e)
-                );
+                }).catch(err => {
+                    console.warn('[RED Native] LocalTransport init failed:', err);
+                });
 
                 return true;
             } catch (err) {
@@ -1647,6 +1653,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
             (canonicalRecipient && canonicalRecipient.length >= 8 && canonicalRecipient !== myHash && activeConversationId?.includes(canonicalRecipient.substring(0, 8)));
 
         if (isCurrentChat) {
+            const rawTs = (item as any).timestamp;
+            const normTimestamp = rawTs ? (rawTs > 1e11 ? rawTs / 1000 : rawTs) : (Date.now() / 1000);
+
             const resolvedIsMine = Boolean(
                 item.is_mine ||
                 item.sender === 'me' ||
@@ -1658,26 +1667,46 @@ export const useRedStore = create<RedStore>((set, get) => ({
             );
             const normalizedItem: MessageItem = {
                 ...(item as MessageItem),
+                timestamp: normTimestamp,
                 is_mine: resolvedIsMine,
                 status: (item as any).status || (resolvedIsMine ? 'Sent' : 'Delivered'),
             };
 
-            const existingIndex = messages.findIndex((m: MessageItem) =>
-                m.id === item.id ||
-                (m.id.startsWith('temp_') && (
-                    m.content === item.content ||
-                    (m.media_data && item.media_data && m.media_data.length === item.media_data.length) ||
-                    (m.msg_type === item.msg_type && Math.abs((m.timestamp || 0) - (item.timestamp || 0)) < 15)
-                )) ||
-                (m.is_mine && normalizedItem.is_mine && m.content === normalizedItem.content && Math.abs((m.timestamp || 0) - (normalizedItem.timestamp || 0)) < 15) ||
-                (!m.is_mine && !normalizedItem.is_mine && (m.sender === normalizedItem.sender || m.sender === item.sender) && m.content === normalizedItem.content && Math.abs((m.timestamp || 0) - (normalizedItem.timestamp || 0)) < 15)
-            );
+            const existingIndex = messages.findIndex((m: MessageItem) => {
+                const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : normTimestamp;
+                const timeDiff = Math.abs(mTs - normTimestamp);
+
+                // 1. Exact ID match
+                if (m.id && item.id && m.id === item.id) return true;
+
+                // 2. Pending optimistic message replacement by content / media / type
+                if (m.id.startsWith('temp_') || m.id.startsWith('msg_pending_')) {
+                    if (m.content === item.content) return true;
+                    if (m.media_data && item.media_data && m.media_data.length === item.media_data.length) return true;
+                    if (m.msg_type === item.msg_type && timeDiff < 30) return true;
+                }
+
+                // 3. Sender & Content deduplication within 30-second window (prevents duplicate bubbles from dual SSE + MeshRouter channels)
+                if (m.content && normalizedItem.content && m.content === normalizedItem.content && timeDiff < 30) {
+                    if (m.is_mine && normalizedItem.is_mine) return true;
+                    if (!m.is_mine && !normalizedItem.is_mine) {
+                        const mSender = (m.sender || '').toLowerCase();
+                        const nSender = (normalizedItem.sender || item.sender || '').toLowerCase();
+                        if (mSender === nSender || mSender.startsWith(nSender.slice(0, 8)) || nSender.startsWith(mSender.slice(0, 8))) {
+                            return true;
+                        }
+                    }
+                }
+
+                return false;
+            });
             
             if (existingIndex !== -1) {
                 const updated = [...messages];
                 updated[existingIndex] = {
                     ...updated[existingIndex],
                     ...normalizedItem,
+                    timestamp: updated[existingIndex].timestamp || normalizedItem.timestamp,
                     media_data: normalizedItem.media_data || updated[existingIndex].media_data
                 };
                 set({ messages: updated });
@@ -1708,7 +1737,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         id: convId,
                         peer: item.sender,
                         last_message: item.content || 'Mensaje P2P',
-                        last_timestamp: item.timestamp || Date.now() / 1000,
+                        last_timestamp: normTimestamp,
                         unread_count: 0
                     };
                     if (idx >= 0) {
