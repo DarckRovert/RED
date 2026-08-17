@@ -30,7 +30,13 @@ class LocalTransport {
    * Call this once after the Rust node is ready and we have our identity.
    */
   async init(myIdentityHash: string) {
-    if (this.isStarted) return;
+    if (this.isStarted) {
+      if (myIdentityHash && myIdentityHash !== this.myIdentityHash) {
+        this.myIdentityHash = myIdentityHash;
+        meshRouter.updateIdentity(myIdentityHash);
+      }
+      return;
+    }
     this.myIdentityHash = myIdentityHash;
     this.isStarted = true;
 

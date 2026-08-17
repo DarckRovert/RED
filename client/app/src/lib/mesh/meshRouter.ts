@@ -36,6 +36,40 @@ import { RedAPI } from '../api';
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000; // 72 hours
 const MAX_DEDUP_CACHE = 50_000;
 
+/**
+ * Normalizes any identity format (DID, short-id, with prefixes or uppercase)
+ * into a clean lowercase 64-char or canonical identifier.
+ */
+export function normalizeIdentity(id: string): string {
+  if (!id) return '';
+  let clean = id.trim();
+  if (clean.startsWith('did:red:')) {
+    clean = clean.replace(/^did:red:/i, '');
+  }
+  if (clean.includes(':')) {
+    clean = clean.split(':')[0].trim();
+  }
+  return clean.toLowerCase();
+}
+
+/**
+ * Generates a unique, deterministic message identifier for cross-transport idempotency.
+ */
+export function generateDeterministicMsgId(sender: string, recipient: string, content: string, timestamp?: number): string {
+  const cleanSender = normalizeIdentity(sender).slice(0, 16);
+  const cleanRecipient = normalizeIdentity(recipient).slice(0, 16);
+  const ts = timestamp || Date.now();
+  // Generate short alphanumeric hash from content
+  let hash = 0;
+  for (let i = 0; i < (content || '').length; i++) {
+    hash = ((hash << 5) - hash) + content.charCodeAt(i);
+    hash |= 0;
+  }
+  const contentCode = Math.abs(hash).toString(36);
+  const rand = Math.random().toString(36).substring(2, 7);
+  return `msg_${ts}_${cleanSender}_${cleanRecipient}_${contentCode}_${rand}`;
+}
+
 export interface MeshPeer {
   id: string;          // Canonical node ID or hardware device ID
   canonicalId?: string; // Resolved canonical identity hash (64-char hex)
@@ -61,12 +95,27 @@ interface PendingIdentityQuery {
 }
 
 class MeshRouter {
-  private myIdentityHash: string = '';
+  public myIdentityHash: string = '';
   public wifi: WifiDirectTransport | null = null;
   public hasInternetAccess = false;
 
-  /** Nonces of recently seen packets — prevents relay loops */
-  private seenNonces: Map<string, number> = new Map(); // nonce → timestamp
+  /** Nonces of recently seen packets — prevents relay loops (hydrated from localStorage) */
+  private seenNonces: Map<string, number> = (() => {
+    const map = new Map<string, number>();
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('red_seen_nonces');
+        if (raw) {
+          const list: [string, number][] = JSON.parse(raw);
+          const cutoff = Date.now() - DEDUP_WINDOW_MS;
+          for (const [k, v] of list) {
+            if (v > cutoff) map.set(k, v);
+          }
+        }
+      } catch {}
+    }
+    return map;
+  })();
 
   /** Known peers across all transports (keyed by canonical ID or hardware ID) */
   public peers: Map<string, MeshPeer> = new Map();
@@ -80,8 +129,8 @@ class MeshRouter {
   /** Pending identity query promises keyed by hardware device ID or sender hash */
   private pendingIdentityQueries: Map<string, PendingIdentityQuery[]> = new Map();
 
-  /** Listeners for packets addressed to THIS node */
-  private localDeliveryHandlers: MeshMessageHandler[] = [];
+  /** Listeners for packets addressed to THIS node (Set prevents duplicate subscriber registrations) */
+  private localDeliveryHandlers: Set<MeshMessageHandler> = new Set();
 
   private initialized = false;
   private unsubscribeNetwork: (() => void) | null = null;
@@ -89,7 +138,12 @@ class MeshRouter {
   // ─── Initialization ─────────────────────────────────────────────────────────
 
   init(myIdentityHash: string) {
-    if (this.initialized) return;
+    if (this.initialized) {
+      if (myIdentityHash && myIdentityHash !== this.myIdentityHash) {
+        this.updateIdentity(myIdentityHash);
+      }
+      return;
+    }
     this.myIdentityHash = myIdentityHash;
     this.wifi = new WifiDirectTransport(myIdentityHash);
     this.initialized = true;
@@ -115,6 +169,17 @@ class MeshRouter {
     });
 
     console.log('[MeshRouter] Initialized — identity:', myIdentityHash.slice(0, 12));
+  }
+
+  public updateIdentity(newIdentityHash: string) {
+    if (!newIdentityHash || newIdentityHash === this.myIdentityHash) return;
+    console.log(`[MeshRouter] Updating identity: ${this.myIdentityHash?.slice(0, 8)} -> ${newIdentityHash.slice(0, 8)}`);
+    this.myIdentityHash = newIdentityHash;
+    if (this.wifi) {
+      this.wifi.updateIdentity(newIdentityHash);
+    } else {
+      this.wifi = new WifiDirectTransport(newIdentityHash);
+    }
   }
 
   async start() {
@@ -165,9 +230,15 @@ class MeshRouter {
    * hardware ID (BLE MAC, UUID, WiFi peer ID) or returns the original ID
    * if already canonical.
    */
-  getCanonicalId(id: string): string {
+   getCanonicalId(id: string): string {
     if (!id) return '';
-    const clean = id.trim();
+    let clean = id.trim();
+    if (clean.startsWith('did:red:')) {
+      clean = clean.replace(/^did:red:/i, '');
+    }
+    if (clean.includes(':')) {
+      clean = clean.split(':')[0].trim();
+    }
     if (this.deviceToCanonicalMap.has(clean)) {
       return this.deviceToCanonicalMap.get(clean)!;
     }
@@ -178,7 +249,7 @@ class MeshRouter {
     if (clean.length === 64 && /^[0-9a-fA-F]+$/.test(clean)) {
       return clean.toLowerCase();
     }
-    return clean;
+    return clean.toLowerCase();
   }
 
   /**
@@ -451,7 +522,7 @@ class MeshRouter {
   }
 
   /**
-   * Broadcast a raw payload to ALL connected peers (mesh flood).
+   * Broadcast a raw payload to ALL connected peers (mesh flood) and WAN relays.
    */
   async broadcast(payload: Uint8Array, exceptPeer?: string): Promise<number> {
     let sent = 0;
@@ -460,13 +531,47 @@ class MeshRouter {
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', payload);
       if (ok) sent++;
     }
+
+    // Also forward to WAN / WebRTC / MQTT Blind Relay
+    try {
+      const packet = decode(payload);
+      if (packet) {
+        if (packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' && packet.recipient.length >= 16) {
+          this.wifi?.send(packet.recipient, payload).catch(() => {});
+        } else {
+          this.wifi?.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payload).catch(() => {});
+        }
+      }
+    } catch {}
+
     return sent;
   }
 
   // ─── Receiving & Relaying ───────────────────────────────────────────────────
 
   private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
-    const packet = decode(raw);
+    let packet = decode(raw);
+    if (!packet) {
+      // Check if raw is a JSON envelope string (e.g. from MQTT relay or direct Web bridge)
+      try {
+        const str = new TextDecoder().decode(raw);
+        if (str.startsWith('{')) {
+          const parsed = JSON.parse(str);
+          if (parsed.sender || parsed.content || parsed.recipient || parsed.msg_type) {
+            packet = {
+              recipient: this.getCanonicalId(parsed.recipient || this.myIdentityHash),
+              sender: this.getCanonicalId(parsed.sender || fromTransportId || 'unknown'),
+              ttl: 10,
+              flags: 0,
+              timestamp: (parsed.timestamp ? (parsed.timestamp > 1e11 ? parsed.timestamp : parsed.timestamp * 1000) : Date.now()),
+              nonce: parsed.id || ('nonce_' + Math.random().toString(36).substring(2, 10)),
+              payload: raw,
+            };
+          }
+        }
+      } catch {}
+    }
+
     if (!packet) {
       console.warn('[MeshRouter] Received malformed packet, ignoring');
       return;
@@ -491,9 +596,10 @@ class MeshRouter {
     let isDeliveryAck = false;
     let ackNonce: string | null = null;
     let ackMessageId: string | null = null;
+    let payloadStr = '';
 
     try {
-      const payloadStr = new TextDecoder().decode(packet.payload);
+      payloadStr = new TextDecoder().decode(packet.payload);
 
       // 1. DELIVERY_ACK Handling
       if (payloadStr.startsWith('{') && payloadStr.includes('DELIVERY_ACK')) {
@@ -527,6 +633,22 @@ class MeshRouter {
                   localStorage.setItem(convKey, JSON.stringify(msgs));
                 }
               }
+
+              // Reactively update active messages in Zustand store without delay
+              import('../../store/useRedStore').then(({ useRedStore }) => {
+                const currentMsgs = useRedStore.getState().messages;
+                let storeUpdated = false;
+                const updatedStoreMsgs = currentMsgs.map(m => {
+                  if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
+                    storeUpdated = true;
+                    return { ...m, status: 'Delivered' as const };
+                  }
+                  return m;
+                });
+                if (storeUpdated) {
+                  useRedStore.setState({ messages: updatedStoreMsgs });
+                }
+              }).catch(() => {});
             } catch {}
           }
           return;
@@ -586,23 +708,41 @@ class MeshRouter {
       }
     } catch {}
 
-    const isForMe =
-      isHandshakeMsg ||
-      isLocationMsg ||
-      packet.recipient === this.myIdentityHash ||
+    const isBroadcast =
       packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
-      packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000' ||
-      (packet.recipient.length >= 4 && this.myIdentityHash.toLowerCase().includes(packet.recipient.toLowerCase())) ||
-      (packet.recipient.length >= 4 && packet.recipient.toLowerCase().includes(this.myIdentityHash.substring(0, 8).toLowerCase()));
+      packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000';
+
+    const isDirectlyToMe =
+      packet.recipient === this.myIdentityHash ||
+      (this.myIdentityHash && packet.recipient.length >= 8 && this.myIdentityHash.toLowerCase().startsWith(packet.recipient.toLowerCase())) ||
+      (this.myIdentityHash && packet.recipient.length >= 8 && packet.recipient.toLowerCase().startsWith(this.myIdentityHash.toLowerCase()));
+
+    const isForMe = isBroadcast || isDirectlyToMe || (isLocationMsg && isBroadcast);
 
     if (isForMe) {
       // ── FINAL DELIVERY: packet is for us ──
       console.log(`[MeshRouter] Packet delivered locally from ${packet.sender.slice(0, 8)}`);
-      this.deliverToRustNode(packet);
-      this.localDeliveryHandlers.forEach(h => h(packet));
+      
+      const isNative = typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.();
+      const isJsonPayload = payloadStr.trim().startsWith('{') || payloadStr.trim().startsWith('[');
+
+      if (isJsonPayload || !isNative) {
+        // Structured JSON packet (Web <-> Mobile bridge, direct P2P chat, handshakes):
+        // Deliver directly to local store handlers with idempotency deduplication
+        this.localDeliveryHandlers.forEach(h => {
+          try { h(packet); } catch (err) { console.error('[MeshRouter] Handler error:', err); }
+        });
+      } else {
+        // Binary OnionPacket from Rust P2P swarm: inject to Rust node
+        this.deliverToRustNode(packet).catch(() => {
+          this.localDeliveryHandlers.forEach(h => {
+            try { h(packet); } catch (err) { console.error('[MeshRouter] Handler fallback error:', err); }
+          });
+        });
+      }
 
       // Emit DELIVERY_ACK to sender (unless broadcast packet)
-      if (packet.sender && packet.sender !== this.myIdentityHash && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+      if (packet.sender && packet.sender !== this.myIdentityHash && !isBroadcast) {
         this.sendDeliveryAck(packet.sender, packet.nonce).catch(() => {});
       }
     } else {
@@ -713,6 +853,7 @@ class MeshRouter {
       await RedAPI.injectMeshPayload(hex);
     } catch (e) {
       console.error('[MeshRouter] Failed to deliver to Rust node:', e);
+      throw e;
     }
   }
 
@@ -906,6 +1047,13 @@ class MeshRouter {
         .map(([k]) => k);
       oldest.forEach(k => this.seenNonces.delete(k));
     }
+    // Persist most recent nonces to storage periodically/on change
+    if (typeof window !== 'undefined') {
+      try {
+        const recent = Array.from(this.seenNonces.entries()).slice(-1000);
+        localStorage.setItem('red_seen_nonces', JSON.stringify(recent));
+      } catch {}
+    }
   }
 
   private purgeDedup() {
@@ -913,12 +1061,19 @@ class MeshRouter {
     for (const [nonce, ts] of this.seenNonces) {
       if (ts < cutoff) this.seenNonces.delete(nonce);
     }
+    if (typeof window !== 'undefined') {
+      try {
+        const recent = Array.from(this.seenNonces.entries()).slice(-1000);
+        localStorage.setItem('red_seen_nonces', JSON.stringify(recent));
+      } catch {}
+    }
   }
 
   // ─── Event Handlers ────────────────────────────────────────────────────────────
 
-  onLocalDelivery(handler: MeshMessageHandler) {
-    this.localDeliveryHandlers.push(handler);
+  onLocalDelivery(handler: MeshMessageHandler): () => void {
+    this.localDeliveryHandlers.add(handler);
+    return () => this.localDeliveryHandlers.delete(handler);
   }
 }
 

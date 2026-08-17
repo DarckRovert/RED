@@ -41,11 +41,15 @@ fn parse_identity_hash(raw: &str) -> std::result::Result<IdentityHash, String> {
     }
     
     let parts: Vec<&str> = clean.split(':').collect();
-    let hash_part = parts[0];
+    let hash_part = parts[0].trim();
     
-    // Si es un short ID (ej: de BLE), lo devolvemos como error especial 
-    // para que el handler intente resolverlo contra los peers conectados.
-    if hash_part.len() < 32 {
+    if hash_part.len() == 64 {
+        if let Ok(h) = IdentityHash::from_hex(hash_part) {
+            return Ok(h);
+        }
+    }
+    
+    if hash_part.len() < 64 && hash_part.len() >= 8 {
         return Err(format!("SHORT_ID:{}", hash_part));
     }
 
@@ -924,8 +928,22 @@ async fn handle_send_message(
     State(state): State<ApiState>,
     Json(req): Json<SendMessageRequest>,
 ) -> impl IntoResponse {
-    let recipient = match IdentityHash::from_hex(&req.recipient) {
+    let recipient = match parse_identity_hash(&req.recipient) {
         Ok(h) => h,
+        Err(e) if e.starts_with("SHORT_ID:") => {
+            let short = &e[9..];
+            let node = state.node.lock().await;
+            let peers = node.get_peers().await.unwrap_or_default();
+            if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
+                p.identity_hash.clone().unwrap()
+            } else {
+                let mut bytes = [0u8; 32];
+                let sb = short.as_bytes();
+                let len = sb.len().min(32);
+                bytes[..len].copy_from_slice(&sb[..len]);
+                IdentityHash::from_bytes(bytes)
+            }
+        }
         Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,
@@ -1154,26 +1172,18 @@ async fn handle_add_contact(
             if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
                 p.identity_hash.clone().unwrap()
             } else {
-                let mut bytes = [0u8; 32];
-                let sb = short.as_bytes();
-                let len = sb.len().min(32);
-                bytes[..len].copy_from_slice(&sb[..len]);
-                IdentityHash::from_bytes(bytes)
+                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("No se encontró un peer activo con el ID corto {}", short)}))).into_response();
             }
         }
-        Err(_) => {
-            let mut bytes = [0u8; 32];
-            let sb = req.identity_hash.as_bytes();
-            let len = sb.len().min(32);
-            bytes[..len].copy_from_slice(&sb[..len]);
-            IdentityHash::from_bytes(bytes)
+        Err(e) => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("Identidad inválida: {}", e)}))).into_response();
         }
     };
 
-
-
     let pub_key_bytes = if let Some(ref pk_hex) = req.public_key {
-        hex::decode(pk_hex).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
+        let pk_clean = pk_hex.trim().replace("did:red:", "");
+        let pk_val = pk_clean.split(':').last().unwrap_or(&pk_clean);
+        hex::decode(pk_val).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
     } else {
         let parts: Vec<&str> = req.identity_hash.split(':').collect();
         if parts.len() >= 4 && parts[0] == "did" && parts[1] == "red" {
@@ -1186,10 +1196,30 @@ async fn handle_add_contact(
     };
 
     let node = state.node.lock().await;
+    let existing = node.get_sync_payload().await.ok().and_then(|(contacts, _, _)| {
+        contacts.into_iter().find(|c| c.identity_hash == hash)
+    });
+
+    let display_name = if let Some(ref ex) = existing {
+        if !req.display_name.is_empty() && !req.display_name.starts_with("Nodo ") && !req.display_name.starts_with("Par Escaneado") && !req.display_name.starts_with("Operador ") {
+            req.display_name
+        } else if !ex.display_name.is_empty() && !ex.display_name.starts_with("Nodo ") && !ex.display_name.starts_with("Par Escaneado") && !ex.display_name.starts_with("Operador ") {
+            ex.display_name.clone()
+        } else if !req.display_name.is_empty() {
+            req.display_name
+        } else {
+            format!("Operador {}", hash.short())
+        }
+    } else if req.display_name.is_empty() {
+        format!("Operador {}", hash.short())
+    } else {
+        req.display_name
+    };
+
     let contact = red_core::storage::Contact {
         identity_hash: hash,
-        display_name: req.display_name,
-        public_key: pub_key_bytes,
+        display_name,
+        public_key: if pub_key_bytes != [0u8; 32] { pub_key_bytes } else { existing.map(|e| e.public_key).unwrap_or([0u8; 32]) },
         added_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
         verified: false,
@@ -1199,6 +1229,7 @@ async fn handle_add_contact(
         bio: None,
         last_sync: 0,
     };
+
     match node.add_contact(contact).await {
         Ok(_) => (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),

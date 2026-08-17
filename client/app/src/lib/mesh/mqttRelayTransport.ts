@@ -34,13 +34,21 @@ export class MqttRelayTransport {
     'wss://test.mosquitto.org:8081',
   ];
 
+  private cleanId(raw: string): string {
+    if (!raw) return '';
+    let clean = raw.trim();
+    if (clean.startsWith('did:red:')) clean = clean.replace(/^did:red:/i, '');
+    if (clean.includes(':')) clean = clean.split(':')[0].trim();
+    return clean.toLowerCase();
+  }
+
   constructor(myId: string) {
-    this.myId = myId.toLowerCase().trim();
+    this.myId = this.cleanId(myId);
   }
 
   public updateIdentity(myId: string) {
     if (!myId) return;
-    const clean = myId.toLowerCase().trim();
+    const clean = this.cleanId(myId);
     if (this.myId !== clean) {
       this.myId = clean;
       if (this.isConnected) {
@@ -367,24 +375,32 @@ export class MqttRelayTransport {
    * Sends an encrypted packet directly to a recipient's topic.
    */
   public sendPacket(recipientHash: string, payload: Uint8Array): boolean {
-    const clean = recipientHash.toLowerCase().trim();
-    const topic = `red/mesh/dm/${clean}`;
-    return this.publish(topic, payload);
+    const clean = this.cleanId(recipientHash);
+    if (!clean) return false;
+    let published = this.publish(`red/mesh/dm/${clean}`, payload);
+    if (clean.length > 8) {
+      this.publish(`red/mesh/dm/${clean.slice(0, 8)}`, payload);
+    }
+    return published;
   }
 
   /**
    * Sends a WebRTC signaling payload (offer/answer/ice) to a peer.
    */
   public sendSignaling(targetHash: string, signalData: any): boolean {
-    const clean = targetHash.toLowerCase().trim();
-    const topic = `red/mesh/sig/${clean}`;
+    const clean = this.cleanId(targetHash);
+    if (!clean) return false;
     const jsonStr = JSON.stringify({
       fromPeer: this.myId,
       targetPeerId: clean,
       timestamp: Date.now(),
       ...signalData
     });
-    return this.publish(topic, jsonStr);
+    let published = this.publish(`red/mesh/sig/${clean}`, jsonStr);
+    if (clean.length > 8) {
+      this.publish(`red/mesh/sig/${clean.slice(0, 8)}`, jsonStr);
+    }
+    return published;
   }
 
   public onMessage(callback: (msg: { from: string; payload: Uint8Array }) => void) {

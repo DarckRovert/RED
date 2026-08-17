@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { RedAPI, IdentityResponse, ConversationItem, MessageItem, StatusResponse } from '../lib/api';
 import { localTransport } from '../lib/mesh/localTransport';
-import { meshRouter } from '../lib/mesh/meshRouter';
+import { meshRouter, normalizeIdentity, generateDeterministicMsgId } from '../lib/mesh/meshRouter';
 import { toast } from '../components/Toast';
 import { GuardianEngine } from '../lib/guardianEngine';
 import { RED_VERSION } from '../lib/version';
@@ -38,6 +38,32 @@ let _fetchInterval: ReturnType<typeof setInterval> | null = null;
 let _mainSSE: EventSource | null = null;
 let _outboundSSE: EventSource | null = null;
 let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Persistent cross-session message deduplication set
+const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (() => {
+    try {
+        const raw = localStorage.getItem('red_processed_msg_ids');
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+    } catch { return []; }
+})() : []);
+
+function recordProcessedMessageId(id: string) {
+    if (!id) return;
+    _processedMessageIds.add(id);
+    if (_processedMessageIds.size > 2500) {
+        const first = _processedMessageIds.values().next().value;
+        if (first) _processedMessageIds.delete(first);
+    }
+    if (typeof window !== 'undefined') {
+        try {
+            const arr = Array.from(_processedMessageIds).slice(-1000);
+            localStorage.setItem('red_processed_msg_ids', JSON.stringify(arr));
+        } catch {}
+    }
+}
+
+const _processedHandshakes = new Set<string>();
 
 /**
  * RED 2.0 SPA Store.
@@ -81,7 +107,7 @@ interface RedStore {
     sendMessage:  (content: string, options?: Record<string, any>) => Promise<void>;
     sendTyping:   () => void;
     addIncomingMessage: (rawEvent: any) => void;
-    addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<boolean>;
+    addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<string | boolean>;
     deleteMessage: (messageId: string) => Promise<void>;
     editMessage: (messageId: string, newContent: string) => Promise<void>;
     clearConversation: () => Promise<void>;
@@ -660,6 +686,19 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     continue;
                 }
 
+                if (typeof window !== 'undefined' && identity.identity_hash) {
+                    localStorage.setItem("red_identity_hash", identity.identity_hash);
+                    if (identity.short_id) localStorage.setItem("red_short_id", identity.short_id);
+                }
+                try {
+                    const { Capacitor } = await import('@capacitor/core');
+                    if (Capacitor.isNativePlatform() && identity.identity_hash) {
+                        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                        SecureStoragePlugin.set({ key: "red_identity_hash", value: identity.identity_hash }).catch(() => null);
+                        if (identity.short_id) SecureStoragePlugin.set({ key: "red_short_id", value: identity.short_id }).catch(() => null);
+                    }
+                } catch {}
+
                 set({ identity: finalIdentity, status, nodeOnline: true });
                 if (process.env.NODE_ENV === 'development') {
                     console.log("[RED] Attached to Rust Node Natively (PoW complete):", identity.short_id);
@@ -852,14 +891,93 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 RedAPI.getContacts(),
                 RedAPI.getGroups()
             ]);
-            const safeConvs = Array.isArray(convs) ? convs : [];
-            const safeConts = Array.isArray(conts) ? conts : [];
-            const safeGrps  = Array.isArray(grps)  ? grps  : [];
+            const myHash = get().identity?.identity_hash?.toLowerCase();
+
+            // Filter out corrupt / self entries: 'me', 'local', myHash, 'Operador me'
+            const cleanConvs = (Array.isArray(convs) ? convs : []).filter((c: any) => {
+                if (!c) return false;
+                const peer = (c.peer || c.id || '').toLowerCase();
+                const name = (c.name || c.display_name || '').toLowerCase();
+                if (peer === 'me' || peer === 'local' || peer === 'unknown' || name === 'operador me') return false;
+                if (myHash && (peer === myHash || (peer.length >= 16 && myHash.startsWith(peer)))) return false;
+                if (c.last_message && (c.last_message.startsWith('{"') || c.last_message.includes('"sender_hash"') || c.last_message.includes('contact_request') || c.last_message.includes('contact_response'))) {
+                    c.last_message = 'Contacto P2P establecido';
+                }
+                return true;
+            });
+
+            // Deduplicate conversations by peer
+            const seenPeers = new Set<string>();
+            const dedupedConvs: ConversationItem[] = [];
+            for (const c of cleanConvs) {
+                const p = (c.peer || c.id || '').toLowerCase();
+                const shortP = p.slice(0, 16);
+                if (!seenPeers.has(shortP)) {
+                    seenPeers.add(shortP);
+                    dedupedConvs.push(c);
+                }
+            }
+
+            const cleanConts = (Array.isArray(conts) ? conts : []).filter((c: any) => {
+                if (!c) return false;
+                const hash = (c.identity_hash || '').toLowerCase();
+                const name = (c.display_name || '').toLowerCase();
+                if (hash === 'me' || hash === 'local' || hash === 'unknown' || name === 'operador me') return false;
+                if (myHash && (hash === myHash || (hash.length >= 16 && myHash.startsWith(hash)))) return false;
+                return true;
+            });
+
+            // Deduplicate contacts by identity_hash
+            const seenContacts = new Set<string>();
+            const dedupedConts: any[] = [];
+            for (const ct of cleanConts) {
+                const h = (ct.identity_hash || '').toLowerCase();
+                const shortH = h.slice(0, 16);
+                if (!seenContacts.has(shortH)) {
+                    seenContacts.add(shortH);
+                    dedupedConts.push(ct);
+                }
+            }
+
+            const safeGrps = Array.isArray(grps) ? grps : [];
+
+            // Purge dirty entries from Web storage
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.removeItem('red_web_messages_me');
+                    localStorage.removeItem('red_web_messages_local');
+                    const rawWebConvs = localStorage.getItem('red_web_conversations');
+                    if (rawWebConvs) {
+                        const parsed = JSON.parse(rawWebConvs);
+                        const filtered = parsed.filter((c: any) => {
+                            const p = (c.peer || c.id || '').toLowerCase();
+                            const n = (c.name || c.display_name || '').toLowerCase();
+                            return p !== 'me' && p !== 'local' && n !== 'operador me' && (!myHash || (p !== myHash && !myHash.startsWith(p)));
+                        }).map((c: any) => {
+                            if (c.last_message && (c.last_message.startsWith('{"') || c.last_message.includes('contact_request') || c.last_message.includes('contact_response'))) {
+                                c.last_message = 'Contacto P2P establecido';
+                            }
+                            return c;
+                        });
+                        localStorage.setItem('red_web_conversations', JSON.stringify(filtered));
+                    }
+                    const rawWebConts = localStorage.getItem('red_web_contacts');
+                    if (rawWebConts) {
+                        const parsed = JSON.parse(rawWebConts);
+                        const filtered = parsed.filter((c: any) => {
+                            const h = (c.identity_hash || '').toLowerCase();
+                            const n = (c.display_name || '').toLowerCase();
+                            return h !== 'me' && h !== 'local' && n !== 'operador me' && (!myHash || (h !== myHash && !myHash.startsWith(h)));
+                        });
+                        localStorage.setItem('red_web_contacts', JSON.stringify(filtered));
+                    }
+                } catch {}
+            }
 
             const { currentScreen, activeConversationId } = get();
             let newActiveId = activeConversationId;
             if (currentScreen === 'chat' && activeConversationId) {
-                const matched = safeConvs.find((c: any) =>
+                const matched = dedupedConvs.find((c: any) =>
                     c && (
                         c.id === activeConversationId ||
                         c.peer === activeConversationId ||
@@ -873,8 +991,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }
 
             set({
-                conversations: safeConvs,
-                contacts: safeConts,
+                conversations: dedupedConvs,
+                contacts: dedupedConts,
                 groups: safeGrps,
                 activeConversationId: newActiveId
             });
@@ -924,9 +1042,14 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        let cleanPeerHash = peerHash.trim();
+        if (cleanPeerHash.startsWith('did:red:')) cleanPeerHash = cleanPeerHash.replace(/^did:red:/i, '');
+        if (cleanPeerHash.includes(':')) cleanPeerHash = cleanPeerHash.split(':')[0].trim();
+        cleanPeerHash = cleanPeerHash.toLowerCase();
+
         // ── GROUP ROUTING FIX ──────────────────────────────────────────────────
         // Check if peerHash matches a known group id (hex-encoded GroupId)
-        const matchedGroup = (groups as any[]).find((g: any) => g.id === peerHash);
+        const matchedGroup = (groups as any[]).find((g: any) => g.id === cleanPeerHash || g.id === peerHash);
         const isGroupConv = !!matchedGroup;
 
         // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
@@ -948,20 +1071,30 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }
         }
 
-        // Reactions and typing pulses are not appended as new bubbles
-        const isReaction = options?.msg_type === 'reaction';
-        const isTyping   = options?.msg_type === 'typing';
+        // Control messages (handshake, reactions, typing, signals) are not appended as visible chat bubbles
+        const isControlMessage = 
+            options?.msg_type === 'reaction' ||
+            options?.msg_type === 'typing' ||
+            options?.msg_type === 'contact_request' ||
+            options?.msg_type === 'contact_response' ||
+            options?.msg_type === 'webrtc_signal' ||
+            options?.msg_type === 'location_ping' ||
+            options?.msg_type === 'timer_update' ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
 
         let tempId: string | null = null;
         const defaultTtlSec = SettingsManager.getAutoDestructSeconds(get().preferences?.autoDestructDefault);
         const effectiveTtl = options?.ttl || (defaultTtlSec > 0 ? defaultTtlSec : undefined);
+        const myIdentity = get().identity;
+        const myDid = myIdentity?.identity_hash || 'me';
+        const msgId = options?.id || generateDeterministicMsgId(myDid, cleanPeerHash, content);
 
-        if (!isReaction && !isTyping) {
-            const myIdentity = get().identity;
+        if (!isControlMessage) {
             const detectedMediaData = options?.media_data || (content?.startsWith('data:') ? content : undefined);
-            const tempMsg: MessageItem = {
-                id: 'temp_' + Date.now(),
-                sender: myIdentity?.identity_hash || 'me',
+            const optimisticMsg: MessageItem = {
+                id: msgId,
+                sender: myDid,
+                recipient: cleanPeerHash,
                 content,
                 timestamp: Date.now() / 1000,
                 is_mine: true,
@@ -976,12 +1109,13 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 expires_at:  effectiveTtl ? (Date.now() / 1000 + effectiveTtl) : options?.expires_at,
                 status: 'Pending',
             };
-            tempId = tempMsg.id;
-            set({ messages: [...get().messages, tempMsg] });
+            tempId = msgId;
+            set({ messages: [...get().messages.filter(m => m.id !== msgId), optimisticMsg] });
+            recordProcessedMessageId(msgId);
         }
 
         try {
-            const apiOptions: Record<string, any> = { ...options };
+            const apiOptions: Record<string, any> = { ...options, id: msgId };
             if (effectiveTtl && !apiOptions.ttl) {
                 apiOptions.ttl = effectiveTtl;
             }
@@ -991,34 +1125,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
             // Compute Proof-of-Work to protect mesh from flooding
             try {
-                const myDid = get().identity?.identity_hash || 'me';
                 const powProof = await MeshProofOfWork.mineProof(content, myDid, 3);
                 if (powProof) apiOptions.pow = powProof;
             } catch {}
 
             if (isGroupConv) {
                 // Group message → dedicated fan-out endpoint
-                await RedAPI.sendGroupMessage(peerHash, content, apiOptions);
+                await RedAPI.sendGroupMessage(cleanPeerHash, content, apiOptions);
             } else {
-                // Direct message → standard DM endpoint
-                await RedAPI.sendMessage(peerHash, content, apiOptions);
-            }
-
-            // Direct P2P Mesh Dispatch over WebRTC / Blind Relay / BLE
-            try {
-                const myDid = get().identity?.identity_hash || 'me';
-                const payloadStr = JSON.stringify({
-                    id: tempId || ('msg_' + Date.now()),
-                    content,
-                    sender: myDid,
-                    msg_type: options?.msg_type || 'text',
-                    timestamp: Date.now() / 1000,
-                    ...apiOptions
-                });
-                const payloadBytes = new TextEncoder().encode(payloadStr);
-                await meshRouter.send(peerHash, payloadBytes);
-            } catch (meshErr) {
-                console.warn('[useRedStore.sendMessage] Direct mesh dispatch:', meshErr);
+                // Direct message → standard DM endpoint (RedAPI handles native & mesh dispatch)
+                await RedAPI.sendMessage(cleanPeerHash, content, apiOptions);
             }
 
             // Upgrade status Pending → Sent after API confirms delivery
@@ -1177,6 +1293,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
         if (!item) return;
 
+        // 0. Global deduplication of incoming messages across transports/SSE
+        if (item.id) {
+            if (_processedMessageIds.has(item.id)) return;
+            recordProcessedMessageId(item.id);
+        } else if (item.sender && item.content) {
+            const semanticKey = `sem_${item.sender}_${item.content.slice(0, 30)}_${Math.round(item.timestamp || 0)}`;
+            if (_processedMessageIds.has(semanticKey)) return;
+            recordProcessedMessageId(semanticKey);
+        }
+
         // Anti-spam PoW verification for incoming peer messages
         const rawPacket = data as any;
         if (rawPacket?.pow && item.sender && !item.is_mine) {
@@ -1188,8 +1314,6 @@ export const useRedStore = create<RedStore>((set, get) => ({
         }
 
         const { activeConversationId, messages, typingTimeout } = get();
-
-
 
         // ── Incoming status/story entry from peer ─────────────────────────────
         if (item.msg_type === 'status') {
@@ -1321,24 +1445,93 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
-        if (item.msg_type === 'live_comment') {
-            const rawItem = item as any;
-            const streamId = rawItem.conversation_id;
-            if (streamId && rawItem.content) {
-                set(s => {
-                    const currentStream = s.liveStreams[streamId];
-                    if (!currentStream) return s;
-                    const newComments = [...(currentStream.comments || []), {
-                        sender: rawItem.sender_name || `Operador ${item.sender.substring(0, 4)}`,
-                        text: rawItem.content
-                    }].slice(-30);
-                    return {
-                        liveStreams: {
-                            ...s.liveStreams,
-                            [streamId]: { ...currentStream, comments: newComments }
+        // ── Delivery Acknowledgment (ACK) Handling ─────────────────────────────
+        if (item.msg_type === 'ack' || item.msg_type === 'delivery_ack') {
+            const targetId = (item as any).target_id || item.content;
+            if (targetId) {
+                set(s => ({
+                    messages: s.messages.map(m =>
+                        (m.id === targetId || m.id === item.id) ? { ...m, status: 'Delivered' as const, delivered: true } : m
+                    )
+                }));
+            }
+            return;
+        }
+
+        // ── Identity Handshake Protocol (contact_request / contact_response) ─────
+        const isHandshakePacket = 
+            item.msg_type === 'contact_request' || 
+            item.msg_type === 'contact_response' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"sender_hash"') && item.content.includes('"sender_pk"'));
+
+        if (isHandshakePacket) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : data;
+                const senderHash = meshRouter.getCanonicalId(parsed.sender_hash || item.sender);
+                const senderName = parsed.sender_name || `Operador ${senderHash.substring(0, 6)}`;
+                const senderPk = parsed.sender_pk || null;
+                const myHash = get().identity?.identity_hash?.toLowerCase();
+
+                if (!senderHash || senderHash === 'me' || senderHash === 'local' || (myHash && senderHash.toLowerCase() === myHash)) {
+                    return;
+                }
+
+                const existingContacts = get().contacts || [];
+                const existing = existingContacts.find((c: any) => 
+                    c.identity_hash?.toLowerCase() === senderHash.toLowerCase() ||
+                    (senderHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(senderHash.substring(0, 8).toLowerCase())) ||
+                    (c.identity_hash?.length >= 8 && senderHash.toLowerCase().startsWith(c.identity_hash.substring(0, 8).toLowerCase()))
+                );
+
+                const isGenericName = !existing?.display_name || 
+                    existing.display_name.startsWith('Operador ') || 
+                    existing.display_name.startsWith('Nodo ') ||
+                    existing.display_name.startsWith('Par Escaneado') ||
+                    existing.display_name === 'Nuevo Par';
+                const finalName = (existing && !isGenericName) ? existing.display_name : senderName;
+
+                const handshakeKey = `${senderHash.toLowerCase()}_${item.msg_type || (parsed.sender_pk ? 'req' : 'res')}`;
+                const alreadyHandshaked = _processedHandshakes.has(handshakeKey);
+                _processedHandshakes.add(handshakeKey);
+
+                RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {
+                    if (!existing) {
+                        set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: finalName, public_key: senderPk }] });
+                    }
+                }).finally(() => {
+                    if (!alreadyHandshaked) {
+                        if (item.msg_type === 'contact_request' || (!item.msg_type && isHandshakePacket)) {
+                            toast.success(`🤝 ${finalName} te ha agregado como contacto.`);
+                            const myIdentity = get().identity;
+                            const myName = myIdentity?.nickname || 'Operador RED';
+                            if (myIdentity?.identity_hash) {
+                                RedAPI.sendMessage(senderHash, JSON.stringify({
+                                    sender_hash: myIdentity.identity_hash,
+                                    sender_name: myName,
+                                    sender_pk: myIdentity.public_key || null
+                                }), { msg_type: 'contact_response' }).catch(() => {});
+                            }
+                        } else if (item.msg_type === 'contact_response') {
+                            toast.success(`🤝 ${finalName} ha aceptado tu invitación.`);
                         }
-                    };
+                    }
+                    get().fetchData();
                 });
+            } catch {
+                const senderHash = meshRouter.getCanonicalId(item.sender);
+                const myHash = get().identity?.identity_hash?.toLowerCase();
+                if (senderHash && senderHash !== 'me' && senderHash !== 'local' && (!myHash || senderHash.toLowerCase() !== myHash)) {
+                    const existingContacts = get().contacts || [];
+                    const existing = existingContacts.find((c: any) => 
+                        c.identity_hash?.toLowerCase() === senderHash.toLowerCase() ||
+                        (senderHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(senderHash.substring(0, 8).toLowerCase()))
+                    );
+                    if (!existing) {
+                        const senderName = `Operador ${senderHash.substring(0, 6)}`;
+                        set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: senderName }] });
+                        get().fetchData();
+                    }
+                }
             }
             return;
         }
@@ -1379,137 +1572,6 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
-        // ── Contact Request & Response: Reciprocal P2P auto-add & nickname exchange ──
-        if (item.msg_type === 'contact_request' || item.msg_type === 'contact_response') {
-            try {
-                const data = JSON.parse(item.content);
-                const senderHash = data.sender_hash || item.sender;
-                const senderName = data.sender_name || `Operador ${senderHash.substring(0, 6)}`;
-                const senderPk   = data.sender_pk || null;
-
-                const existingContacts = get().contacts || [];
-                const existing = existingContacts.find((c: any) => 
-                    c.identity_hash === senderHash ||
-                    (senderHash.length >= 8 && c.identity_hash?.startsWith(senderHash.substring(0, 8))) ||
-                    (c.identity_hash?.length >= 8 && senderHash.startsWith(c.identity_hash.substring(0, 8)))
-                );
-
-                // Preserve user-assigned non-generic contact names
-                const isGenericName = !existing?.display_name || 
-                    existing.display_name.startsWith('Operador ') || 
-                    existing.display_name.startsWith('Nodo RED');
-                const finalName = (existing && !isGenericName) ? existing.display_name : senderName;
-
-                RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {
-                    // Fallback to local store
-                    if (!existing) {
-                        set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: finalName, public_key: senderPk }] });
-                    }
-                }).finally(() => {
-                    if (item.msg_type === 'contact_request') {
-                        toast.success(`🤝 ${finalName} te ha agregado como contacto.`);
-                        const myIdentity = get().identity;
-                        const myName = myIdentity?.nickname || 'Operador RED';
-                        if (myIdentity?.identity_hash) {
-                            RedAPI.sendMessage(senderHash, JSON.stringify({
-                                sender_hash: myIdentity.identity_hash,
-                                sender_name: myName,
-                                sender_pk: myIdentity.public_key || null
-                            }), { msg_type: 'contact_response' }).catch(() => {});
-                        }
-                    } else if (item.msg_type === 'contact_response') {
-                        toast.success(`🤝 ${finalName} ha aceptado tu invitación.`);
-                    }
-                    get().fetchData();
-                });
-            } catch {
-                const senderHash = item.sender;
-                const existingContacts = get().contacts || [];
-                const existing = existingContacts.find((c: any) => 
-                    c.identity_hash === senderHash ||
-                    (senderHash.length >= 8 && c.identity_hash?.startsWith(senderHash.substring(0, 8)))
-                );
-                if (!existing) {
-                    const senderName = `Operador ${senderHash.substring(0, 6)}`;
-                    set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: senderName }] });
-                    get().fetchData();
-                }
-            }
-            return;
-        }
-
-        // ── Auto-register un-added sender as contact on incoming message ─────────
-        if (!item.is_mine && item.sender && !item.sender.startsWith('local_')) {
-            const contactsList = get().contacts || [];
-            const exists = contactsList.some((c: any) => 
-                c.identity_hash === item.sender ||
-                (item.sender.length >= 8 && c.identity_hash?.startsWith(item.sender.substring(0, 8))) ||
-                (c.identity_hash?.length >= 8 && item.sender.startsWith(c.identity_hash.substring(0, 8)))
-            );
-            if (!exists) {
-                const autoName = `Operador ${item.sender.substring(0, 6)}`;
-                RedAPI.addContact(item.sender, autoName, null).then(() => {
-                    const myIdentity = get().identity;
-                    const myName = myIdentity?.nickname || 'Operador RED';
-                    if (myIdentity?.identity_hash) {
-                        RedAPI.sendMessage(item.sender, JSON.stringify({
-                            sender_hash: myIdentity.identity_hash,
-                            sender_name: myName,
-                            sender_pk: myIdentity.public_key || null
-                        }), { msg_type: 'contact_request' }).catch(() => {});
-                    }
-                    get().fetchData();
-                }).catch(() => {});
-            }
-        }
-
-        // If we are looking at this exact chat right now — add if not already present
-        const currentConv = get().conversations.find((c: any) => c && (c.id === activeConversationId || c.peer === activeConversationId));
-        const myHash = get().identity?.identity_hash;
-        const itemRecipient = (item as any).recipient as string | undefined;
-        const itemSender = item.sender || '';
-
-        const canonicalSender = meshRouter.getCanonicalId(itemSender) || itemSender;
-        const canonicalRecipient = itemRecipient ? (meshRouter.getCanonicalId(itemRecipient) || itemRecipient) : undefined;
-
-        const isCurrentChat =
-            activeConversationId === item.conversation_id ||
-            (currentConv && (
-                currentConv.peer === itemSender ||
-                currentConv.peer === canonicalSender ||
-                (itemRecipient && (currentConv.peer === itemRecipient || currentConv.peer === canonicalRecipient)) ||
-                currentConv.id === item.conversation_id
-            )) ||
-            (canonicalSender.length >= 8 && canonicalSender !== myHash && activeConversationId?.includes(canonicalSender.substring(0, 8))) ||
-            (canonicalRecipient && canonicalRecipient.length >= 8 && canonicalRecipient !== myHash && activeConversationId?.includes(canonicalRecipient.substring(0, 8))) ||
-            (itemSender.length >= 8 && itemSender !== myHash && activeConversationId?.includes(itemSender.substring(0, 8))) ||
-            (itemRecipient && itemRecipient.length >= 8 && itemRecipient !== myHash && activeConversationId?.includes(itemRecipient.substring(0, 8)));
-
-        // ── Reactions: apply to target bubble, never append as new message ──
-        if (item.msg_type === 'reaction' && typeof item.content === 'string') {
-            // Format: "reaction:❤️:target_msg_id"
-            const parts = item.content.split(':');
-            if (parts.length >= 3) {
-                const emoji    = parts[1];
-                const targetId = parts.slice(2).join(':');
-                const senderId = item.sender;
-                const updated  = messages.map((m: MessageItem) => {
-                    if (m.id !== targetId) return m;
-                    const reactions = { ...(m.reactions || {}) };
-                    if (reactions[emoji]?.includes(senderId)) {
-                        reactions[emoji] = reactions[emoji].filter((id: string) => id !== senderId);
-                        if (!reactions[emoji].length) delete reactions[emoji];
-                    } else {
-                        reactions[emoji] = [...(reactions[emoji] || []), senderId];
-                    }
-                    return { ...m, reactions };
-                });
-                if (isCurrentChat) set({ messages: updated });
-            }
-            get().fetchData();
-            return;
-        }
-
         // ── Walkie-Talkie Voice Burst: ingest and save to bursts store ──
         if (item.msg_type === 'voice_burst') {
             try {
@@ -1543,8 +1605,48 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        // ── Reactions: apply to target bubble, never append as new message ──
+        if (item.msg_type === 'reaction' && typeof item.content === 'string') {
+            const parts = item.content.split(':');
+            if (parts.length >= 3) {
+                const emoji    = parts[1];
+                const targetId = parts.slice(2).join(':');
+                const senderId = item.sender;
+                const updated  = messages.map((m: MessageItem) => {
+                    if (m.id !== targetId) return m;
+                    const reactions = { ...(m.reactions || {}) };
+                    if (reactions[emoji]?.includes(senderId)) {
+                        reactions[emoji] = reactions[emoji].filter((id: string) => id !== senderId);
+                        if (!reactions[emoji].length) delete reactions[emoji];
+                    } else {
+                        reactions[emoji] = [...(reactions[emoji] || []), senderId];
+                    }
+                    return { ...m, reactions };
+                });
+                set({ messages: updated });
+            }
+            get().fetchData();
+            return;
+        }
+
+        const myHash = get().identity?.identity_hash;
+        const currentConv = get().conversations.find((c: any) => c && (c.id === activeConversationId || c.peer === activeConversationId));
+        const itemRecipient = (item as any).recipient as string | undefined;
+        const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
+        const canonicalRecipient = itemRecipient ? (meshRouter.getCanonicalId(itemRecipient) || itemRecipient) : undefined;
+
+        const isCurrentChat =
+            activeConversationId === item.conversation_id ||
+            (currentConv && (
+                currentConv.peer === item.sender ||
+                currentConv.peer === canonicalSender ||
+                (itemRecipient && (currentConv.peer === itemRecipient || currentConv.peer === canonicalRecipient)) ||
+                currentConv.id === item.conversation_id
+            )) ||
+            (canonicalSender.length >= 8 && canonicalSender !== myHash && activeConversationId?.includes(canonicalSender.substring(0, 8))) ||
+            (canonicalRecipient && canonicalRecipient.length >= 8 && canonicalRecipient !== myHash && activeConversationId?.includes(canonicalRecipient.substring(0, 8)));
+
         if (isCurrentChat) {
-            // Ensure is_mine is accurately computed for incoming packet
             const resolvedIsMine = Boolean(
                 item.is_mine ||
                 item.sender === 'me' ||
@@ -1557,20 +1659,24 @@ export const useRedStore = create<RedStore>((set, get) => ({
             const normalizedItem: MessageItem = {
                 ...(item as MessageItem),
                 is_mine: resolvedIsMine,
+                status: (item as any).status || (resolvedIsMine ? 'Sent' : 'Delivered'),
             };
 
-            // DEDUP / IN-PLACE REPLACE: replace optimistic temp_ message or update existing
             const existingIndex = messages.findIndex((m: MessageItem) =>
                 m.id === item.id ||
                 (m.id.startsWith('temp_') && (
                     m.content === item.content ||
                     (m.media_data && item.media_data && m.media_data.length === item.media_data.length) ||
                     (m.msg_type === item.msg_type && Math.abs((m.timestamp || 0) - (item.timestamp || 0)) < 15)
-                ))
+                )) ||
+                (m.is_mine && normalizedItem.is_mine && m.content === normalizedItem.content && Math.abs((m.timestamp || 0) - (normalizedItem.timestamp || 0)) < 15) ||
+                (!m.is_mine && !normalizedItem.is_mine && (m.sender === normalizedItem.sender || m.sender === item.sender) && m.content === normalizedItem.content && Math.abs((m.timestamp || 0) - (normalizedItem.timestamp || 0)) < 15)
             );
+            
             if (existingIndex !== -1) {
                 const updated = [...messages];
                 updated[existingIndex] = {
+                    ...updated[existingIndex],
                     ...normalizedItem,
                     media_data: normalizedItem.media_data || updated[existingIndex].media_data
                 };
@@ -1579,10 +1685,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 set({ messages: [...messages, normalizedItem] });
                 if (!normalizedItem.is_mine) {
                     TacticalAudioEngine.playMessageReceived();
+                    if (item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {
+                        meshRouter.sendDeliveryAck(item.sender, item.id || 'ack_nonce', item.id).catch(() => {});
+                    }
                 }
             }
 
-            // Persist message in Web local storage for pure browser mode
             if (typeof window !== 'undefined' && item.sender) {
                 try {
                     const convId = item.conversation_id || item.sender;
@@ -1593,7 +1701,6 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         list.push(normalizedItem);
                         localStorage.setItem(convKey, JSON.stringify(list));
                     }
-
                     const rawConvs = localStorage.getItem('red_web_conversations');
                     const convs: ConversationItem[] = rawConvs ? JSON.parse(rawConvs) : [];
                     const idx = convs.findIndex(c => c.id === convId || c.peer === convId);
@@ -1612,11 +1719,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     localStorage.setItem('red_web_conversations', JSON.stringify(convs));
                 } catch {}
             }
-
-            // Refresh sidebar badge (debounced, only if not already active chat)
             return;
         } else {
-            // Persist message in Web local storage for pure browser mode
             if (typeof window !== 'undefined' && item.sender) {
                 try {
                     const convId = item.conversation_id || item.sender;
@@ -1644,6 +1748,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         convs.unshift(convObj);
                     }
                     localStorage.setItem('red_web_conversations', JSON.stringify(convs));
+                    set({ conversations: convs });
+                    get().fetchData().catch(() => {});
                 } catch {}
             }
             if (!item.is_mine) {
@@ -1733,12 +1839,20 @@ export const useRedStore = create<RedStore>((set, get) => ({
         // 3. Immediately update UI state with zero lag
         const currentContacts = get().contacts || [];
         const existingIdx = currentContacts.findIndex(c => 
-            c.identity_hash === cleanHash || 
-            (cleanHash.length >= 16 && c.identity_hash?.startsWith(cleanHash.slice(0, 16)))
+            c.identity_hash?.toLowerCase() === cleanHash.toLowerCase() || 
+            (cleanHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(cleanHash.slice(0, 8).toLowerCase())) ||
+            (c.identity_hash?.length >= 8 && cleanHash.toLowerCase().startsWith(c.identity_hash.slice(0, 8).toLowerCase()))
         );
         let updatedContacts = [...currentContacts];
         if (existingIdx >= 0) {
-            updatedContacts[existingIdx] = { ...updatedContacts[existingIdx], ...localContact };
+            const currentEntry = updatedContacts[existingIdx];
+            const isOldGeneric = !currentEntry.display_name || 
+                currentEntry.display_name.startsWith('Operador ') || 
+                currentEntry.display_name.startsWith('Nodo ') || 
+                currentEntry.display_name.startsWith('Par Escaneado') || 
+                currentEntry.display_name === 'Nuevo Par';
+            const resolvedName = (isOldGeneric || (!cleanName.startsWith('Nodo ') && !cleanName.startsWith('Par Escaneado') && !cleanName.startsWith('Operador '))) ? cleanName : currentEntry.display_name;
+            updatedContacts[existingIdx] = { ...currentEntry, ...localContact, display_name: resolvedName };
         } else {
             updatedContacts.push(localContact);
         }
@@ -1775,6 +1889,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const myIdentity = get().identity;
         const myName = myIdentity?.nickname || 'Operador RED';
         if (myIdentity?.identity_hash) {
+            _processedHandshakes.add(`${cleanHash.toLowerCase()}_res`);
             RedAPI.sendMessage(cleanHash, JSON.stringify({
                 sender_hash: myIdentity.identity_hash,
                 sender_name: myName,
@@ -1782,7 +1897,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }), { msg_type: 'contact_request' }).catch(() => {});
         }
 
-        return true;
+        return cleanHash;
     },
 
     // ── A2: Delete message ────────────────────────────────────────────────────

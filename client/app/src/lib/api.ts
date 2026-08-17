@@ -258,25 +258,57 @@ class RedAPIClient {
     }
 
     async sendMessage(recipient: string, content: string, options?: Record<string, any>): Promise<void> {
-        const body = { recipient, content, ...options };
-        try {
-            await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
-        } catch (e) {
-            // Save outgoing message in local Web store
-            const msgId = options?.id || 'msg_' + Date.now();
-            const myDid = (typeof window !== 'undefined' && localStorage.getItem('red_identity_hash')) || 'me';
-            const msgItem: MessageItem = {
-                id: msgId,
-                sender: myDid,
-                content,
-                timestamp: Date.now() / 1000,
-                is_mine: true,
-                msg_type: options?.msg_type || 'text',
-                status: 'Sent',
-                ...options
-            };
+        let cleanRecipient = recipient.trim();
+        if (cleanRecipient.startsWith('did:red:')) cleanRecipient = cleanRecipient.replace(/^did:red:/i, '');
+        if (cleanRecipient.includes(':')) cleanRecipient = cleanRecipient.split(':')[0].trim();
+        cleanRecipient = cleanRecipient.toLowerCase();
 
-            const convKey = `red_web_messages_${recipient}`;
+        const msgId = options?.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
+        let myDid = (typeof window !== 'undefined' && localStorage.getItem('red_identity_hash')) || '';
+        if (!myDid || myDid === 'me' || myDid === 'local') {
+            try {
+                const { useRedStore } = await import('../store/useRedStore');
+                const storeId = useRedStore.getState().identity?.identity_hash;
+                if (storeId && storeId !== 'me' && storeId !== 'local') {
+                    myDid = storeId;
+                }
+            } catch {}
+        }
+        if (!myDid) {
+            try {
+                const { meshRouter } = await import('./mesh/meshRouter');
+                if (meshRouter.myIdentityHash) {
+                    myDid = meshRouter.myIdentityHash;
+                }
+            } catch {}
+        }
+        if (!myDid) myDid = 'me';
+
+        const msgItem: MessageItem = {
+            id: msgId,
+            sender: myDid,
+            recipient: cleanRecipient,
+            content,
+            timestamp: Date.now() / 1000,
+            is_mine: true,
+            msg_type: options?.msg_type || 'text',
+            status: 'Sent',
+            ...options
+        };
+
+        const isControlMessage = 
+            options?.msg_type === 'reaction' ||
+            options?.msg_type === 'typing' ||
+            options?.msg_type === 'contact_request' ||
+            options?.msg_type === 'contact_response' ||
+            options?.msg_type === 'webrtc_signal' ||
+            options?.msg_type === 'location_ping' ||
+            options?.msg_type === 'timer_update' ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
+
+        // 1. Save in Web / local store for instant UI rendering and persistence (only for real user chat messages)
+        if (!isControlMessage && cleanRecipient !== 'me' && cleanRecipient !== 'local') {
+            const convKey = `red_web_messages_${cleanRecipient}`;
             const existingMsgs = this.getWebStore<MessageItem[]>(convKey, []);
             if (!existingMsgs.some(m => m.id === msgId)) {
                 existingMsgs.push(msgItem);
@@ -285,10 +317,10 @@ class RedAPIClient {
 
             // Update conversation list
             const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
-            const convIdx = convs.findIndex(c => c.id === recipient || c.peer === recipient);
+            const convIdx = convs.findIndex(c => c.id === cleanRecipient || c.peer === cleanRecipient);
             const convData: ConversationItem = {
-                id: recipient,
-                peer: recipient,
+                id: cleanRecipient,
+                peer: cleanRecipient,
                 last_message: content,
                 last_timestamp: Date.now() / 1000,
                 unread_count: 0
@@ -299,22 +331,32 @@ class RedAPIClient {
                 convs.unshift(convData);
             }
             this.setWebStore('red_web_conversations', convs);
+        }
 
-            // Direct P2P Mesh Fallback over WebRTC DataChannel / Blind Relay / BLE
-            try {
-                const { meshRouter } = await import('./mesh/meshRouter');
-                const payloadStr = JSON.stringify({
-                    id: msgId,
-                    content,
-                    sender: myDid,
-                    msg_type: options?.msg_type || 'text',
-                    ...options
-                });
-                const payloadBytes = new TextEncoder().encode(payloadStr);
-                await meshRouter.send(recipient, payloadBytes);
-            } catch (meshErr) {
-                console.warn('[RedAPI.sendMessage] Mesh fallback failed:', meshErr);
-            }
+        // 2. Dispatch to local Rust node if native
+        const body = { recipient: cleanRecipient, content, ...options, id: msgId };
+        try {
+            await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
+        } catch (e) {
+            // Web environment or offline node fallback
+        }
+
+        // 3. Dispatch concurrently via MeshRouter (BLE, WebRTC DataChannel, WAN MQTT Blind Relay)
+        try {
+            const { meshRouter } = await import('./mesh/meshRouter');
+            const payloadStr = JSON.stringify({
+                id: msgId,
+                content,
+                sender: myDid,
+                recipient: cleanRecipient,
+                msg_type: options?.msg_type || 'text',
+                timestamp: Date.now() / 1000,
+                ...options
+            });
+            const payloadBytes = new TextEncoder().encode(payloadStr);
+            await meshRouter.send(cleanRecipient, payloadBytes);
+        } catch (meshErr) {
+            console.warn('[RedAPI.sendMessage] Mesh dispatch failed:', meshErr);
         }
     }
 
@@ -388,21 +430,27 @@ class RedAPIClient {
     }
 
     async addContact(identity_hash: string, display_name: string, public_key?: string | null): Promise<void> {
-        const body = { identity_hash, display_name, public_key };
+        let cleanHash = identity_hash.trim();
+        if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
+        if (cleanHash.includes(':')) cleanHash = cleanHash.split(':')[0].trim();
+        cleanHash = cleanHash.toLowerCase();
+
+        // 1. Save in Web local storage
+        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const existingIdx = contacts.findIndex(c => c.identity_hash === cleanHash);
+        const newContact = { identity_hash: cleanHash, display_name, public_key: public_key || null, online: true };
+        if (existingIdx >= 0) {
+            contacts[existingIdx] = { ...contacts[existingIdx], ...newContact };
+        } else {
+            contacts.push(newContact);
+        }
+        this.setWebStore('red_web_contacts', contacts);
+
+        // 2. Dispatch to Native Rust node if available
+        const body = { identity_hash: cleanHash, display_name, public_key };
         try {
             await this.req('/contacts', { method: 'POST', body: JSON.stringify(body) });
-        } catch {
-            // Save in Web local storage
-            const contacts = this.getWebStore<any[]>('red_web_contacts', []);
-            const existingIdx = contacts.findIndex(c => c.identity_hash === identity_hash);
-            const newContact = { identity_hash, display_name, public_key: public_key || null, online: true };
-            if (existingIdx >= 0) {
-                contacts[existingIdx] = { ...contacts[existingIdx], ...newContact };
-            } else {
-                contacts.push(newContact);
-            }
-            this.setWebStore('red_web_contacts', contacts);
-        }
+        } catch {}
     }
 
     async blockContact(identity_hash: string): Promise<void> {

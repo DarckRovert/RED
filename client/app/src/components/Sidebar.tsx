@@ -598,12 +598,13 @@ export default function Sidebar() {
                                         const alias = newContactAlias.trim();
                                         setIsSubmittingContact(true);
                                         try {
-                                            await addContact(input, alias);
+                                            const cleanHash = await addContact(input, alias);
                                             setAddContactOpen(false);
                                             setNewContactInput("");
                                             setNewContactAlias("");
                                             toast.success("✅ Contacto añadido. Iniciando chat P2P...");
-                                            navigate("chat", input);
+                                            const targetChat = (typeof cleanHash === 'string' && cleanHash) ? cleanHash : input;
+                                            navigate("chat", targetChat);
                                         } catch (err: any) {
                                             toast.error(`❌ Error: ${err?.message || err}`);
                                         } finally {

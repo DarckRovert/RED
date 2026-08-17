@@ -39,6 +39,17 @@ export class WifiDirectTransport {
         });
     }
 
+    public updateIdentity(newId: string): void {
+        if (!newId || newId === this.myId) return;
+        this.myId = newId;
+        mqttRelay.updateIdentity(newId);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                this.ws.send(JSON.stringify({ type: 'register', id: newId }));
+            } catch {}
+        }
+    }
+
     /**
      * Resolves an ordered list of candidate signaling/relay endpoints.
      */
@@ -49,32 +60,41 @@ export class WifiDirectTransport {
             return ['ws://localhost:3001', 'ws://127.0.0.1:3001'];
         }
 
+        const isHttps = window.location.protocol === 'https:';
+
         // 1. User-customized signaling URL in localStorage
         const custom = localStorage.getItem('red_signaling_url');
         if (custom && custom.trim()) {
-            candidates.push(custom.trim());
+            if (!isHttps || custom.startsWith('wss://')) {
+                candidates.push(custom.trim());
+            }
         }
 
         // 2. Environment variable
         if (process.env.NEXT_PUBLIC_SIGNALING_URL) {
-            candidates.push(process.env.NEXT_PUBLIC_SIGNALING_URL.trim());
+            const envUrl = process.env.NEXT_PUBLIC_SIGNALING_URL.trim();
+            if (!isHttps || envUrl.startsWith('wss://')) {
+                candidates.push(envUrl);
+            }
         }
 
-        // 3. High-availability public WebRTC signaling and mesh relays
+        // 3. High-availability public WebRTC signaling and mesh relays (strictly WSS)
         candidates.push('wss://red-signaling.onrender.com');
         candidates.push('wss://signaling.yjs.dev');
 
         // 4. Dynamic host / LAN candidates
-        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const proto = isHttps ? 'wss:' : 'ws:';
         const hostname = window.location.hostname;
 
         if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1' && !hostname.endsWith('.github.io')) {
             candidates.push(`${proto}//${hostname}:3001`);
         }
 
-        // 5. Local loopback candidates (for dev servers or local testbed)
-        candidates.push('ws://localhost:3001');
-        candidates.push('ws://127.0.0.1:3001');
+        // 5. Local loopback candidates (only for HTTP / dev mode)
+        if (!isHttps) {
+            candidates.push('ws://localhost:3001');
+            candidates.push('ws://127.0.0.1:3001');
+        }
 
         // Remove duplicates while preserving order
         return Array.from(new Set(candidates));

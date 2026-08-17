@@ -43,12 +43,12 @@ export default function ChatWindow() {
         (canonicalFromMesh && (c.peer === canonicalFromMesh || c.id === canonicalFromMesh))
     ));
     
-    // Robust fallback to resolve peer hash even if conversation object is not yet indexed
-    const peerHash = activeConv?.peer || (
+    const rawPeerHash = activeConv?.peer || (
         canonicalFromMesh && canonicalFromMesh.length === 64 ? canonicalFromMesh : (
             activeConversationId?.includes('-') ? activeConversationId.split('-')[1] : (activeConversationId || '')
         )
     );
+    const peerHash = rawPeerHash.replace(/^did:red:/i, '').split(':')[0].trim().toLowerCase();
     const peerContact = contacts.find((c: any) => 
         c.identity_hash === peerHash ||
         (canonicalFromMesh && c.identity_hash === canonicalFromMesh) ||

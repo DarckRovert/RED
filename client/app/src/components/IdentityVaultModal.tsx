@@ -30,12 +30,30 @@ export const IdentityVaultModal: React.FC = () => {
     const [allergies, setAllergies] = useState("");
     const [emergencyContact, setEmergencyContact] = useState("");
     const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+    const [identityQrCodeData, setIdentityQrCodeData] = useState<string | null>(null);
 
     // Shamir Secret Sharing State
     const [secretToSplit, setSecretToSplit] = useState("");
     const [sssShares, setSssShares] = useState<SecretShare[]>([]);
     const [reconstructedSecret, setReconstructedSecret] = useState<string | null>(null);
     const [sharesToReconstruct, setSharesToReconstruct] = useState<string>("");
+
+    // Generate Identity QR code for tactical scanning
+    useEffect(() => {
+        if (identity?.identity_hash) {
+            const pk = identity.public_key || identity.identity_hash;
+            const nameParam = encodeURIComponent(nickname || 'Operador RED');
+            const qrText = `did:red:${identity.identity_hash}:${pk}:${nameParam}`;
+            import("qrcode").then(QRCode => {
+                QRCode.toDataURL(qrText, {
+                    width: 320,
+                    margin: 1,
+                    color: { dark: "#00E676", light: "#04060A" }
+                }).then(url => setIdentityQrCodeData(url))
+                .catch(() => {});
+            }).catch(() => {});
+        }
+    }, [identity, nickname]);
 
     // Initial Load
     useEffect(() => {
@@ -288,6 +306,32 @@ export const IdentityVaultModal: React.FC = () => {
                             >
                                 {isProfileSaved ? "✅ GUARDADO" : "💾 ACTUALIZAR PERFIL DE OPERADOR"}
                             </button>
+
+                            {/* Código QR Táctico de Identidad */}
+                            <div className="card-tactical" style={{ padding: "16px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 230, 118, 0.2)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-green)", display: "flex", alignItems: "center", gap: "6px" }}>
+                                    <span>📡</span> CÓDIGO QR TÁCTICO DE ENLACE DIRECTO
+                                </div>
+                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", maxWidth: "340px" }}>
+                                    Escanea este código desde la app móvil RED o la versión Web para vincular este terminal inmediatamente con su nombre real y clave pública.
+                                </div>
+                                {identityQrCodeData ? (
+                                    <div style={{ padding: "12px", background: "#04060A", borderRadius: "12px", border: "1px solid var(--accent-green)" }}>
+                                        <img 
+                                            src={identityQrCodeData} 
+                                            alt="Código QR de Identidad RED" 
+                                            style={{ width: "200px", height: "200px", display: "block", borderRadius: "8px" }} 
+                                        />
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: "40px", color: "var(--text-muted)", fontSize: "0.80rem" }}>
+                                        Generando código QR criptográfico...
+                                    </div>
+                                )}
+                                <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", wordBreak: "break-all" }}>
+                                    {nickname} • {identity?.identity_hash ? `${identity.identity_hash.substring(0, 16)}…` : 'Cargando...'}
+                                </div>
+                            </div>
                         </div>
                     )}
 

@@ -612,8 +612,16 @@ async fn handle_send_message(
     State(state): State<ApiState>,
     Json(req): Json<SendMessageRequest>,
 ) -> impl IntoResponse {
-    let recipient = match IdentityHash::from_hex(&req.recipient) {
+    let recipient = match parse_identity_hash(&req.recipient) {
         Ok(h) => h,
+        Err(e) if e.starts_with("SHORT_ID:") => {
+            let short = &e[9..];
+            let mut bytes = [0u8; 32];
+            let sb = short.as_bytes();
+            let len = sb.len().min(32);
+            bytes[..len].copy_from_slice(&sb[..len]);
+            IdentityHash::from_bytes(bytes)
+        }
         Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,

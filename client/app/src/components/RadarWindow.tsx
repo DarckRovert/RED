@@ -26,9 +26,9 @@ export default function RadarWindow() {
     // QR Generation Hook
     useEffect(() => {
         if (identity?.identity_hash) {
-            const qrText = identity.public_key 
-                ? `did:red:${identity.identity_hash}:${identity.public_key}` 
-                : identity.identity_hash;
+            const pk = identity.public_key || identity.identity_hash;
+            const nameParam = encodeURIComponent(identity.nickname || 'Operador RED');
+            const qrText = `did:red:${identity.identity_hash}:${pk}:${nameParam}`;
             import("qrcode").then(QRCode => {
                 QRCode.toDataURL(qrText, {
                     width: 320,
@@ -95,41 +95,51 @@ export default function RadarWindow() {
 
             if (result.hasContent) {
                 const raw = result.content.trim();
+                let cleanHash = "";
+                let pubKey: string | null = null;
+                let scannedName = "Operador RED";
+
                 if (raw.startsWith("RED_ID_VAULT:")) {
                     try {
                         const encoded = raw.split(":")[1];
                         const decoded = JSON.parse(atob(encoded));
-                        const cleanHash = decoded.did || "";
-                        const pubKey = decoded.pk || null;
-                        if (cleanHash) {
-                            await addContact(cleanHash, "Bóveda Escaneada", pubKey);
-                            toast.success("¡Identidad y clave guardadas con éxito!");
-                            navigate("chat", cleanHash);
-                        }
+                        cleanHash = meshRouter.getCanonicalId(decoded.did || "");
+                        pubKey = decoded.pk || null;
+                        scannedName = decoded.name || `Nodo ${cleanHash.slice(0, 8)}`;
                     } catch {
                         toast.error("Bóveda QR Inválida");
                     }
                 } else if (raw.startsWith("did:red:")) {
                     try {
                         const parts = raw.split(":");
-                        const cleanHash = parts[2];
-                        const pubKey = parts[3] || null;
-                        await addContact(cleanHash, "Par Escaneado", pubKey);
-                        toast.success("¡Contacto y clave pública guardados!");
-                        navigate("chat", cleanHash);
+                        cleanHash = meshRouter.getCanonicalId(parts[2] || "");
+                        pubKey = parts[3] || null;
+                        if (parts[4]) {
+                            try {
+                                scannedName = decodeURIComponent(parts[4]);
+                            } catch {
+                                scannedName = parts[4];
+                            }
+                        } else {
+                            scannedName = `Operador ${cleanHash.slice(0, 6)}`;
+                        }
                     } catch (addErr) {
                         const msg = addErr instanceof Error ? addErr.message : String(addErr);
-                        toast.error(`Error al añadir: ${msg}`);
+                        toast.error(`Error al interpretar QR: ${msg}`);
                     }
                 } else {
-                    const cleanHash = raw;
+                    cleanHash = meshRouter.getCanonicalId(raw);
+                    scannedName = `Operador ${cleanHash.slice(0, 6)}`;
+                }
+
+                if (cleanHash && cleanHash.length >= 8) {
                     try {
-                        await addContact(cleanHash, "Par Escaneado");
-                        toast.success("¡Contacto añadido con éxito!");
+                        await addContact(cleanHash, scannedName, pubKey);
+                        toast.success(`🤝 ¡Contacto ${scannedName} añadido con éxito!`);
                         navigate("chat", cleanHash);
                     } catch (addErr) {
                         const msg = addErr instanceof Error ? addErr.message : String(addErr);
-                        toast.error(`Error al añadir: ${msg}`);
+                        toast.error(`Error al añadir contacto: ${msg}`);
                     }
                 }
             }
