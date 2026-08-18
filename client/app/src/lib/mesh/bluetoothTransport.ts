@@ -36,30 +36,41 @@ class BluetoothTransport {
         this.isInitialized = true;
     }
 
-    async scan(onDeviceFound: (device: RedDevice) => void, timeoutMs: number = 10000) {
-        await this.init();
-        await BleClient.requestLEScan(
-            // We scan all devices and check both the 'RED-' name prefix and the RED service UUID in advertisements.
-            { allowDuplicates: false },
-            (result) => {
-                const devName = result.device.name ?? result.localName ?? '';
-                const hasRedService = result.uuids?.some(
-                    (uuid) => uuid.toLowerCase() === RED_BLE_SERVICE.toLowerCase()
-                );
+    private isScanning = false;
 
-                if (devName.startsWith('RED-') || hasRedService) {
-                    onDeviceFound({
-                        id: result.device.deviceId,
-                        name: devName || 'Dispositivo RED',
-                        rssi: result.rssi ?? -100
-                    });
+    async scan(onDeviceFound: (device: RedDevice) => void, timeoutMs: number = 4000) {
+        if (this.isScanning) return;
+        await this.init();
+        try {
+            this.isScanning = true;
+            await BleClient.requestLEScan(
+                // We scan all devices and check both the 'RED-' name prefix and the RED service UUID in advertisements.
+                { allowDuplicates: false },
+                (result) => {
+                    const devName = result.device.name ?? result.localName ?? '';
+                    const hasRedService = result.uuids?.some(
+                        (uuid) => uuid.toLowerCase() === RED_BLE_SERVICE.toLowerCase()
+                    );
+
+                    if (devName.startsWith('RED-') || hasRedService) {
+                        onDeviceFound({
+                            id: result.device.deviceId,
+                            name: devName || 'Dispositivo RED',
+                            rssi: result.rssi ?? -100
+                        });
+                    }
                 }
-            }
-        );
-        
-        setTimeout(async () => {
-            await BleClient.stopLEScan();
-        }, timeoutMs);
+            );
+
+            await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+        } catch (e) {
+            console.warn('[BLE] Scan error:', e);
+        } finally {
+            try {
+                await BleClient.stopLEScan();
+            } catch {}
+            this.isScanning = false;
+        }
     }
 
     async connect(deviceId: string) {

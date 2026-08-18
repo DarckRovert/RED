@@ -5,6 +5,25 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [32.0.0-sovereign-master] - 2026-08-17
+
+### Añadido y Refactorizado — RED v32.0.0 Sovereign Global P2P Master Release
+
+**WebRTC W3C Perfect Negotiation & Dual ICE Signaling (`wifiDirectTransport.ts`)**
+- **Estándar W3C de Negociación Perfecta:** Resolución determinística de colisiones (*Glare*) mediante ordenación lexicográfica de identificadores (`isPolite = myId < peerId`). Rollback seguro en nodos educados sin interrupción de DataChannels.
+- **Señalización Dual (WebSocket + MQTT Blind Relay):** Ofertas SDP, respuestas y candidatos ICE propagados simultáneamente a través de WebSocket y tópicos MQTT (`red/mesh/sig/{peerId}`), garantizando conectividad directa incluso detrás de NAT simétricos o proxies celulares.
+- **Calibración de STUN Servers:** Retiro de servicios obsoletos e integración de endpoints STUN de alta disponibilidad (Google, Cloudflare, NextCloud, Matrix).
+
+**Deduplicación Multi-Criterio & Normalización Temporal UTC (`useRedStore.ts` & `MessageBubble.tsx`)**
+- **Normalización UTC a Segundos:** Conversión estricta de marcas de tiempo de milisegundos a segundos UTC para eliminar desfases en encabezados diarios y burbujas de chat.
+- **Deduplicación Tri-Capa:** Filtro por ID determinístico, Nonce y coincidencia semántica `(remitente + contenido)` en ventana móvil de 30 segundos.
+
+**Calibración y Optimización de Radio BLE para Android OS (`bluetoothTransport.ts` & `localTransport.ts`)**
+- **Inmunidad al Throttling de Android (5 scans / 30s):** Ciclo de trabajo duty-cycle calibrado a 14s (4s activo / 10s reposo) y mutex `isScanning` para evitar suspensiones de hardware por parte de `BtGatt.ScanHelper`.
+- **Perfiles de Energía Optimizados:** Gestión adaptativa de batería en modo `high` (8s), `balanced` (14s) y `eco` (30s).
+
+---
+
 ## [31.1.0-hybrid-mesh] - 2026-08-17
 
 ### Añadido y Refactorizado — RED v31.1.0 Hybrid 4G/5G, Persistent DTN & Autonomous Mesh Gateway Release

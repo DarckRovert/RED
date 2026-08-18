@@ -76,7 +76,7 @@ class LocalTransport {
   }
 
   private bleScanIntervalTimer: ReturnType<typeof setInterval> | null = null;
-  private bleScanIntervalMs: number = 6000;
+  private bleScanIntervalMs: number = 14000;
 
   // ─── BLE ─────────────────────────────────────────────────────────────────────
 

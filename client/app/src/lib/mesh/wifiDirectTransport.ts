@@ -21,7 +21,7 @@ export class WifiDirectTransport {
         { urls: 'stun:stun4.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478' },
         { urls: 'stun:turn.matrix.org:3478' },
-        { urls: 'stun:stun.services.mozilla.com:3478' },
+        { urls: 'stun:stun.nextcloud.com:443' },
     ];
 
     constructor(myId: string) {

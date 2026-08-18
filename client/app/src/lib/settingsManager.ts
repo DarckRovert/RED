@@ -272,15 +272,15 @@ export class SettingsManager {
         }
     }
 
-    /** Intervalos de escaneo de malla según perfil de energía */
+    /** Intervalos de escaneo de malla según perfil de energía (respetando límite de Android OS de 5 escaneos / 30s) */
     public static getMeshPowerIntervals(profile?: MeshPowerProfile): { bleScanMs: number; peerPollMs: number } {
         const val = profile || this.currentPrefs.meshPowerProfile;
         switch (val) {
-            case 'high': return { bleScanMs: 2500, peerPollMs: 2000 };
-            case 'eco': return { bleScanMs: 15000, peerPollMs: 12000 };
+            case 'high': return { bleScanMs: 8000, peerPollMs: 3000 };
+            case 'eco': return { bleScanMs: 30000, peerPollMs: 15000 };
             case 'balanced':
             default:
-                return { bleScanMs: 6000, peerPollMs: 4000 };
+                return { bleScanMs: 14000, peerPollMs: 5000 };
         }
     }
 

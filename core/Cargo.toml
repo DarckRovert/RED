@@ -1,6 +1,6 @@
 [package]
-name = "red-core"
-version = "31.0.0"
+name = "red_core"
+version = "32.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "Core library for RED - Decentralized Encrypted Network"

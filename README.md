@@ -1,8 +1,8 @@
-# 🛡️ RED — Red Militar Criptográfica Off-Grid & P2P Mesh v31.1.0
+# 🛡️ RED — Red Militar Criptográfica Off-Grid & P2P Mesh v32.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet.
 
-[![Descargar APK Oficial RED v31.1.0](https://img.shields.io/badge/Descargar_APK_v31.1.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v31.1.0)
+[![Descargar APK Oficial RED v32.0.0](https://img.shields.io/badge/Descargar_APK_v32.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v32.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
 [![Rust Workspace](https://img.shields.io/badge/Rust_Cargo-0_Errors_Pass-DEA584?style=for-the-badge&logo=rust)](https://github.com/DarckRovert/RED)
