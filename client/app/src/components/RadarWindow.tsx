@@ -171,25 +171,6 @@ export default function RadarWindow() {
         }
     };
 
-    if (scanning) {
-        return (
-            <div style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column", background: "transparent" }}>
-                <div style={{ padding: "32px 16px", background: "rgba(0,0,0,0.85)", color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <button onClick={stopScan} className="btn-tactical-secondary" style={{ padding: "8px 16px" }}>✕ Cancelar</button>
-                    <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Apunta al código QR del par</span>
-                </div>
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <div style={{ 
-                        width: "250px", height: "250px", 
-                        border: "3px solid var(--accent-emerald)", borderRadius: "20px",
-                        boxShadow: "0 0 0 4000px rgba(0,0,0,0.65)",
-                        animation: "pulseGlowEmerald 1.5s infinite"
-                    }} />
-                </div>
-            </div>
-        );
-    }
-
     const myDid = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:local_node";
 
     if (scanning) {

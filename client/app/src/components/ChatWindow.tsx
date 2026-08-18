@@ -33,7 +33,7 @@ export default function ChatWindow() {
         activeConversationId, conversations, contacts, groups, messages,
         sendMessage, sendTyping, goBack, navigate, peerTyping, addContact,
         deleteMessage, editMessage, clearConversation, starMessage, starredMessages,
-        identity, peerPresence, markAsRead, preferences,
+        identity, peerPresence, markAsRead, preferences, setActiveCallType,
     } = useRedStore();
 
     const canonicalFromMesh = activeConversationId ? meshRouter.getCanonicalId(activeConversationId) : '';
@@ -67,16 +67,87 @@ export default function ChatWindow() {
 
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
+    const [pinnedMessage, setPinnedMessage] = useState<MessageItem | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const [burnTimer, setBurnTimer] = useState<number | undefined>(undefined);
     const [isSummarizing, setIsSummarizing] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
+    const mediaInputRef = useRef<HTMLInputElement | null>(null);
+    const docInputRef = useRef<HTMLInputElement | null>(null);
 
     const convMessages = useMemo(() => {
         const list = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
         return [...list];
     }, [messages, activeConversationId]);
+
+    const searchMatches = useMemo(() => {
+        if (!searchQuery.trim()) return [];
+        return convMessages.filter(m => m.content && m.content.toLowerCase().includes(searchQuery.toLowerCase()));
+    }, [convMessages, searchQuery]);
+
+    const handleNextMatch = () => {
+        if (searchMatches.length === 0) return;
+        const nextIdx = (currentMatchIdx + 1) % searchMatches.length;
+        setCurrentMatchIdx(nextIdx);
+        const targetMsg = searchMatches[nextIdx];
+        const el = document.querySelector(`[data-msgid="${targetMsg.id}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+
+    const handlePrevMatch = () => {
+        if (searchMatches.length === 0) return;
+        const prevIdx = (currentMatchIdx - 1 + searchMatches.length) % searchMatches.length;
+        setCurrentMatchIdx(prevIdx);
+        const targetMsg = searchMatches[prevIdx];
+        const el = document.querySelector(`[data-msgid="${targetMsg.id}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+
+    const handlePinMessage = (msg: MessageItem) => {
+        if (pinnedMessage?.id === msg.id) {
+            setPinnedMessage(null);
+            toast.info("Mensaje desfijado");
+        } else {
+            setPinnedMessage(msg);
+            toast.success("Mensaje fijado en el canal");
+        }
+    };
+
+    const scrollToPinned = () => {
+        if (!pinnedMessage) return;
+        const el = document.querySelector(`[data-msgid="${pinnedMessage.id}"]`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+
+    const handleDocumentSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !peerHash) return;
+        e.target.value = "";
+        if (file.size > 25 * 1024 * 1024) {
+            toast.error("El archivo supera el límite de 25 MB");
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            if (ev.target?.result) {
+                try {
+                    await sendMessage(ev.target.result as string, {
+                        msg_type: "document",
+                        file_name: file.name,
+                        file_size: file.size,
+                        mime_type: file.type || "application/octet-stream"
+                    });
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success(`Documento "${file.name}" enviado`);
+                } catch {
+                    toast.error("Error al enviar documento");
+                }
+            }
+        };
+        reader.readAsDataURL(file);
+    };
 
     const scrollToBottom = useCallback((smooth = true) => {
         messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
@@ -93,7 +164,6 @@ export default function ChatWindow() {
     }, [convMessages.length]);
 
     const [replyTo, setReplyTo] = useState<MessageItem | null>(null);
-    const mediaInputRef = useRef<HTMLInputElement | null>(null);
     const [isRecording, setIsRecording] = useState(false);
     const [recordSec, setRecordSec] = useState(0);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -385,18 +455,18 @@ export default function ChatWindow() {
                 backdropFilter: "blur(20px)",
                 zIndex: 10, flexShrink: 0,
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, overflow: "hidden" }}>
                     <button
                         onClick={goBack}
                         className="btn-icon"
                         title="Volver a la lista"
-                        style={{ width: 36, height: 36 }}
+                        style={{ width: 36, height: 36, flexShrink: 0 }}
                     >
                         ←
                     </button>
 
                     {/* Avatar del Interlocutor */}
-                    <div style={{ position: "relative" }}>
+                    <div style={{ position: "relative", flexShrink: 0 }}>
                         <div style={{
                             width: 38, height: 38, borderRadius: "50%",
                             ...avStyle(peerHash || "RED"),
@@ -414,28 +484,53 @@ export default function ChatWindow() {
                         }} />
                     </div>
 
-                    <div>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span>{peerName}</span>
-                            <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.62rem", padding: "1px 6px" }}>NOISE E2E</span>
+                    <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{peerName}</span>
+                            <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.62rem", padding: "1px 6px", flexShrink: 0 }}>NOISE E2E</span>
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: isOnline ? "var(--accent-emerald)" : "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                        <div style={{ fontSize: "0.68rem", color: isOnline ? "var(--accent-emerald)" : "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {isOnline ? "● CONECTADO EN MALLA" : `DID: ${peerHash.substring(0, 10)}…`}
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                    <button
+                        onClick={() => setSearchOpen(v => !v)}
+                        className="btn-icon"
+                        title="Buscar en conversación"
+                        style={{ width: 36, height: 36, color: searchOpen ? "var(--accent-amber)" : "var(--text-secondary)" }}
+                    >
+                        🔍
+                    </button>
+
                     <button
                         onClick={() => {
                             const target = fullPeerHash || peerHash;
+                            setActiveCallType('audio');
+                            useRedStore.setState({ activeCallPeer: target });
                             navigate("call", target);
                         }}
                         className="btn-icon"
-                        title="Llamada WebRTC Cifrada"
+                        title="Llamada de Voz P2P WebRTC"
                         style={{ width: 36, height: 36, color: "var(--accent-emerald)" }}
                     >
                         📞
+                    </button>
+
+                    <button
+                        onClick={() => {
+                            const target = fullPeerHash || peerHash;
+                            setActiveCallType('video');
+                            useRedStore.setState({ activeCallPeer: target });
+                            navigate("call", target);
+                        }}
+                        className="btn-icon"
+                        title="Videollamada HD P2P WebRTC"
+                        style={{ width: 36, height: 36, color: "var(--accent-cyan)" }}
+                    >
+                        📹
                     </button>
 
                     <button
@@ -458,6 +553,70 @@ export default function ChatWindow() {
                     </button>
                 </div>
             </header>
+
+            {/* In-Chat Search Bar Overlay */}
+            {searchOpen && (
+                <div style={{
+                    display: "flex", alignItems: "center", gap: "10px", padding: "8px 16px",
+                    background: "rgba(18,20,36,0.98)", borderBottom: "1px solid var(--glass-border)",
+                    boxShadow: "0 4px 20px rgba(0,0,0,0.5)", zIndex: 9
+                }}>
+                    <span style={{ fontSize: "1.1rem" }}>🔍</span>
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => {
+                            setSearchQuery(e.target.value);
+                            setCurrentMatchIdx(0);
+                        }}
+                        placeholder="Buscar en esta conversación..."
+                        autoFocus
+                        style={{
+                            flex: 1, padding: "6px 12px", background: "rgba(255,255,255,0.06)",
+                            border: "1px solid var(--glass-border)", borderRadius: "var(--radius-full)",
+                            color: "#fff", fontSize: "0.85rem", outline: "none"
+                        }}
+                    />
+                    {searchMatches.length > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "monospace", color: "var(--accent-amber)" }}>
+                            <span>{currentMatchIdx + 1}/{searchMatches.length}</span>
+                            <button onClick={handlePrevMatch} className="btn-icon" style={{ width: 28, height: 28 }} title="Anterior">▲</button>
+                            <button onClick={handleNextMatch} className="btn-icon" style={{ width: 28, height: 28 }} title="Siguiente">▼</button>
+                        </div>
+                    )}
+                    <button onClick={() => { setSearchOpen(false); setSearchQuery(""); }} className="btn-icon" style={{ width: 30, height: 30 }} title="Cerrar búsqueda">✕</button>
+                </div>
+            )}
+
+            {/* Pinned Message Banner */}
+            {pinnedMessage && (
+                <div
+                    onClick={scrollToPinned}
+                    style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "6px 14px", background: "rgba(0,229,255,0.08)",
+                        borderBottom: "1px solid rgba(0,229,255,0.2)", cursor: "pointer",
+                        fontSize: "0.78rem", zIndex: 8
+                    }}
+                >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span style={{ color: "var(--accent-cyan)", fontWeight: 800 }}>📌 Fijado:</span>
+                        <span style={{ color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {pinnedMessage.content?.startsWith("data:") ? "📎 Archivo adjunto" : pinnedMessage.content}
+                        </span>
+                    </div>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setPinnedMessage(null);
+                        }}
+                        style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.9rem" }}
+                        title="Desfijar"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
 
             {/* Voice Preview Sheet */}
             {voicePreviewUrl && (
@@ -584,6 +743,7 @@ export default function ChatWindow() {
                                 onCancelLongPress={() => {}}
                                 onReaction={handleReaction}
                                 onVote={handleVote}
+                                onPin={handlePinMessage}
                             />
                         );
                     })
@@ -618,6 +778,14 @@ export default function ChatWindow() {
                 onChange={handleFileSelected}
             />
 
+            {/* Hidden Document Picker */}
+            <input
+                type="file"
+                ref={docInputRef}
+                style={{ display: "none" }}
+                onChange={handleDocumentSelected}
+            />
+
             {/* Input Bar Táctica */}
             <div style={{ borderTop: "1px solid var(--glass-border)", background: "rgba(10, 10, 20, 0.95)", backdropFilter: "blur(20px)" }}>
                 <ChatInput
@@ -627,6 +795,7 @@ export default function ChatWindow() {
                     setReplyTo={setReplyTo}
                     handleCamera={handleCamera}
                     handleGallery={handleGallery}
+                    handleDocument={() => docInputRef.current?.click()}
                     handleLocation={handleLocation}
                     peerHash={peerHash}
                     peerName={peerName}
@@ -635,6 +804,16 @@ export default function ChatWindow() {
                     recordSec={recordSec}
                     startRecording={startRecording}
                     stopRecording={stopRecording}
+                    cancelRecording={() => {
+                        setIsRecording(false);
+                        if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+                        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+                            mediaRecorderRef.current.stop();
+                            mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+                        }
+                        audioChunksRef.current = [];
+                        setRecordSec(0);
+                    }}
                 />
             </div>
         </div>

@@ -50,7 +50,7 @@ export interface MessageItem {
     duration_ms?: number;
     conversation_id?: string;
     /** Delivery status */
-    status?: 'Pending' | 'Sent' | 'Delivered' | 'Failed';
+    status?: 'Pending' | 'Sent' | 'Delivered' | 'Read' | 'Failed';
     read?: boolean;
     delivered?: boolean;
     [key: string]: any;

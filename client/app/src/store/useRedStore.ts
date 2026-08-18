@@ -137,10 +137,17 @@ interface RedStore {
     streamId: string | null;             // own active stream id
 
     // ── WebRTC Voice & Video Call State ───────────────────────────────────────
-    incomingCall: { callerHash: string; callerName: string; offer: any } | null;
+    incomingCall: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video' } | null;
     activeCallSignal: { senderHash: string; signal: any } | null;
-    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any } | null) => void;
+    callSignalQueue: { senderHash: string; signal: any; timestamp: number }[];
+    activeCallType: 'audio' | 'video';
+    activeCallPeer: string | null;
+    setActiveCallPeer: (peer: string | null) => void;
+    setActiveCallType: (type: 'audio' | 'video') => void;
+    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video' } | null) => void;
     setActiveCallSignal: (sig: { senderHash: string; signal: any } | null) => void;
+    pushCallSignal: (sig: { senderHash: string; signal: any }) => void;
+    clearCallSignals: () => void;
 
     publishStatus: (content: string, media?: string | null, theme?: number) => Promise<void>;
     openLiveStream: (streamId: string) => void;
@@ -355,8 +362,18 @@ export const useRedStore = create<RedStore>((set, get) => ({
     // WebRTC Call Signaling State
     incomingCall: null,
     activeCallSignal: null,
+    callSignalQueue: [],
+    activeCallType: 'video',
+    activeCallPeer: null,
+    setActiveCallPeer: (peer) => set({ activeCallPeer: peer }),
+    setActiveCallType: (type) => set({ activeCallType: type }),
     setIncomingCall: (call) => set({ incomingCall: call }),
     setActiveCallSignal: (sig) => set({ activeCallSignal: sig }),
+    pushCallSignal: (sig) => set((state) => ({
+        activeCallSignal: sig,
+        callSignalQueue: [...state.callSignalQueue, { ...sig, timestamp: Date.now() }].slice(-50)
+    })),
+    clearCallSignals: () => set({ activeCallSignal: null, callSignalQueue: [] }),
 
     // Navigation mechanism for SPA
     navigate: (screen: ScreenView, contextId?: string) => {
@@ -1110,6 +1127,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 latitude:    options?.latitude,
                 longitude:   options?.longitude,
                 accuracy:    options?.accuracy,
+                file_name:   options?.file_name,
+                file_size:   options?.file_size,
+                mime_type:   options?.mime_type,
                 reply_to:    options?.reply_to,
                 ttl:         effectiveTtl,
                 expires_at:  effectiveTtl ? (Date.now() / 1000 + effectiveTtl) : options?.expires_at,
@@ -1545,7 +1565,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
         // ── WebRTC Signaling: intercept for calls, never append as chat bubble ──
         if (item.msg_type === 'webrtc_signal') {
             try {
-                const signal = JSON.parse(item.content);
+                const signal = typeof item.content === 'string' ? JSON.parse(item.content) : item.content;
                 const senderHash = item.sender;
                 const contacts = get().contacts || [];
                 const contact = contacts.find((c: any) => 
@@ -1556,21 +1576,26 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 const callerName = contact?.display_name || `Operador ${senderHash.substring(0, 8)}`;
 
                 if (signal.offer) {
+                    const determinedType: 'audio' | 'video' = signal.callType === 'audio' || (signal.offer?.sdp && !signal.offer.sdp.includes('m=video')) ? 'audio' : 'video';
                     set({
                         incomingCall: {
                             callerHash: senderHash,
                             callerName: callerName,
-                            offer: signal.offer
-                        }
+                            offer: signal.offer,
+                            callType: determinedType
+                        },
+                        activeCallType: determinedType
                     });
+                    get().pushCallSignal({ senderHash, signal });
                 } else if (signal.hangup) {
-                    set({ incomingCall: null, activeCallSignal: { senderHash, signal } });
+                    set({ incomingCall: null });
+                    get().pushCallSignal({ senderHash, signal });
                     if (get().currentScreen === 'call') {
                         toast.info('Llamada finalizada');
                         get().goBack();
                     }
                 } else {
-                    set({ activeCallSignal: { senderHash, signal } });
+                    get().pushCallSignal({ senderHash, signal });
                 }
             } catch (e) {
                 console.warn('[WebRTC Signal Parse Error]', e);

@@ -21,6 +21,7 @@
 
 import { bluetoothTransport } from './bluetoothTransport';
 import { WifiDirectTransport } from './wifiDirectTransport';
+import { mqttRelay } from './mqttRelayTransport';
 import { networkWatcher, NetworkState } from './networkWatcher';
 import { dtnStorage } from './dtnStorage';
 import {
@@ -193,14 +194,20 @@ class MeshRouter {
       console.warn('[MeshRouter] No WiFi signaling available (ok if offline):', e);
     }
 
+    // Automatically flush pending DTN store-and-forward queue when MQTT connects/reconnects
+    mqttRelay.onConnect(() => {
+      console.log('[MeshRouter] Global MQTT relay active — flushing pending DTN queue');
+      this.flushPendingQueue().catch(() => {});
+    });
+
     // Schedule dedup cache purge every 5 minutes
     setInterval(() => this.purgeDedup(), 5 * 60 * 1000);
 
-    // Retry persistent DTN pending queue every 8 seconds
-    setInterval(() => this.flushPendingQueue(), 8000);
+    // Actively retry unacknowledged DTN pending packets every 6 seconds
+    setInterval(() => this.flushPendingQueue(), 6000);
 
     // Initial DTN flush on boot
-    setTimeout(() => this.flushPendingQueue(), 2000);
+    setTimeout(() => this.flushPendingQueue(), 1500);
   }
 
   private handleNetworkChange(state: NetworkState) {
@@ -513,11 +520,29 @@ class MeshRouter {
 
   /**
    * Send a payload to a specific recipient identity hash.
-   * If no immediate route exists, the packet enters the persistent DTN queue.
+   * Tracks delivery in the persistent DTN queue until end-to-end DELIVERY_ACK is confirmed.
    */
   async send(recipientHash: string, payload: Uint8Array): Promise<'sent' | 'queued' | 'failed'> {
     const canonicalRecipient = this.getCanonicalId(recipientHash);
     const packet = createPacket(this.myIdentityHash, canonicalRecipient, payload);
+
+    const isBroadcast =
+      canonicalRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+      canonicalRecipient === '0000000000000000000000000000000000000000000000000000000000000000';
+
+    let isProtocol = false;
+    try {
+      const str = new TextDecoder().decode(payload);
+      if (str.includes('DELIVERY_ACK') || str.includes('IDENTITY_ANNOUNCE') || str.includes('IDENTITY_RESPONSE')) {
+        isProtocol = true;
+      }
+    } catch {}
+
+    // Store-and-Forward: register in persistent DTN tracker to guarantee delivery
+    if (!isBroadcast && !isProtocol) {
+      dtnStorage.enqueue(packet);
+    }
+
     return this.forwardPacket(packet, null);
   }
 
@@ -596,6 +621,7 @@ class MeshRouter {
     let isDeliveryAck = false;
     let ackNonce: string | null = null;
     let ackMessageId: string | null = null;
+    let incomingMsgId: string | null = null;
     let payloadStr = '';
 
     try {
@@ -611,26 +637,35 @@ class MeshRouter {
 
           if (ackNonce) {
             dtnStorage.remove(ackNonce);
-            console.log(`[MeshRouter] Received DELIVERY_ACK for nonce ${ackNonce.slice(0, 8)} — cleared from DTN storage`);
+            console.log(`[MeshRouter] ✅ Received DELIVERY_ACK for nonce ${ackNonce.slice(0, 8)} — cleared from DTN storage`);
           }
 
           // Update local conversation store message status to 'Delivered'
           if (typeof window !== 'undefined' && (ackMessageId || ackNonce)) {
             try {
-              const peerKey = packet.sender;
-              const convKey = `red_web_messages_${peerKey}`;
-              const rawMsgs = localStorage.getItem(convKey);
-              if (rawMsgs) {
-                const msgs = JSON.parse(rawMsgs);
-                let updated = false;
-                for (const m of msgs) {
-                  if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
-                    m.status = 'Delivered';
-                    updated = true;
+              const peerKey = this.getCanonicalId(packet.sender);
+              const shortPeerKey = peerKey.slice(0, 8);
+              const keysToCheck = [
+                `red_web_messages_${peerKey}`,
+                `red_web_messages_${shortPeerKey}`,
+                `red_web_messages_${packet.sender}`
+              ];
+
+              for (const convKey of keysToCheck) {
+                const rawMsgs = localStorage.getItem(convKey);
+                if (rawMsgs) {
+                  const msgs = JSON.parse(rawMsgs);
+                  let updated = false;
+                  for (const m of msgs) {
+                    if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
+                      m.status = 'Delivered';
+                      m.delivered = true;
+                      updated = true;
+                    }
                   }
-                }
-                if (updated) {
-                  localStorage.setItem(convKey, JSON.stringify(msgs));
+                  if (updated) {
+                    localStorage.setItem(convKey, JSON.stringify(msgs));
+                  }
                 }
               }
 
@@ -641,7 +676,7 @@ class MeshRouter {
                 const updatedStoreMsgs = currentMsgs.map(m => {
                   if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
                     storeUpdated = true;
-                    return { ...m, status: 'Delivered' as const };
+                    return { ...m, status: 'Delivered' as const, delivered: true };
                   }
                   return m;
                 });
@@ -653,6 +688,14 @@ class MeshRouter {
           }
           return;
         }
+      }
+
+      // Check if this payload has an internal message ID
+      if (payloadStr.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(payloadStr);
+          if (parsed.id) incomingMsgId = parsed.id;
+        } catch {}
       }
 
       // 2. Identity Handshake Protocol Handling
@@ -741,9 +784,9 @@ class MeshRouter {
         });
       }
 
-      // Emit DELIVERY_ACK to sender (unless broadcast packet)
-      if (packet.sender && packet.sender !== this.myIdentityHash && !isBroadcast) {
-        this.sendDeliveryAck(packet.sender, packet.nonce).catch(() => {});
+      // Emit DELIVERY_ACK to sender (unless broadcast packet or handshake)
+      if (packet.sender && packet.sender !== this.myIdentityHash && !isBroadcast && !isHandshakeMsg && !isDeliveryAck) {
+        this.sendDeliveryAck(packet.sender, packet.nonce, incomingMsgId || undefined).catch(() => {});
       }
     } else {
       // ── RELAY: packet is for someone else — forward it ──
@@ -808,6 +851,9 @@ class MeshRouter {
       dtnStorage.enqueue(packet);
       console.log(`[MeshRouter] No reachable route — saved in persistent DTN queue for ${packet.recipient.slice(0, 8)}`);
       return 'queued';
+    } else {
+      // Record attempt for unacknowledged retransmission
+      dtnStorage.markAttempt(packet.nonce, false);
     }
 
     return 'sent';
@@ -866,18 +912,28 @@ class MeshRouter {
     let flushed = 0;
     for (const item of items) {
       const packet = dtnStorage.toMeshPacket(item);
-      const result = await this.forwardPacket(packet, null);
+      const encoded = encode(packet);
+      let sent = false;
 
-      if (result === 'sent') {
-        dtnStorage.markAttempt(item.id, true);
-        flushed++;
-      } else {
-        dtnStorage.markAttempt(item.id, false);
+      // 1. Direct local mesh peers
+      for (const [peerId, peer] of this.peers) {
+        const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
+        if (ok) sent = true;
       }
+
+      // 2. Global WAN / WebRTC / MQTT Blind Relay
+      if (this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+        const ok = await this.wifi.send(packet.recipient, encoded);
+        if (ok) sent = true;
+      }
+
+      // 3. Mark attempt with exponential backoff (persists until cryptographic DELIVERY_ACK is received)
+      dtnStorage.markAttempt(item.id, false);
+      if (sent) flushed++;
     }
 
     if (flushed > 0) {
-      console.log(`[MeshRouter] ✅ Flushed and delivered ${flushed} DTN packets from persistent storage`);
+      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed} DTN packets awaiting DELIVERY_ACK`);
     }
 
     // Periodically purge dead expired packets (>7 days)

@@ -22,9 +22,11 @@ export class MqttRelayTransport {
   private myId: string;
   private isConnecting = false;
   private reconnectTimer: any = null;
+  private primaryFailbackTimer: any = null;
   private activeBrokerIndex = 0;
   private messageListeners: ((msg: { from: string; payload: Uint8Array }) => void)[] = [];
   private signalingListeners: ((msg: any) => void)[] = [];
+  private connectListeners: (() => void)[] = [];
   private pingInterval: any = null;
   public isConnected = false;
   private seenMqttHashes: Set<string> = new Set();
@@ -58,6 +60,13 @@ export class MqttRelayTransport {
     }
   }
 
+  public onConnect(callback: () => void) {
+    this.connectListeners.push(callback);
+    if (this.isConnected) {
+      try { callback(); } catch {}
+    }
+  }
+
   async connect(): Promise<void> {
     if (typeof window === 'undefined') return;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
@@ -71,7 +80,7 @@ export class MqttRelayTransport {
     const url = brokers[this.activeBrokerIndex % brokers.length];
 
     return new Promise<void>((resolve) => {
-      console.log(`[MqttRelay] Connecting to global broker [${this.activeBrokerIndex + 1}/${brokers.length}]: ${url}...`);
+      console.log(`[MqttRelay] Connecting to primary global broker [${this.activeBrokerIndex + 1}/${brokers.length}]: ${url}...`);
 
       let socket: WebSocket;
       try {
@@ -131,6 +140,18 @@ export class MqttRelayTransport {
   private tryNextBroker() {
     this.activeBrokerIndex = (this.activeBrokerIndex + 1) % MqttRelayTransport.BROKER_POOL.length;
     this.scheduleReconnect(1000);
+
+    // If we fell back to a secondary broker, attempt to return to primary broker in 30s
+    if (this.activeBrokerIndex !== 0) {
+      if (this.primaryFailbackTimer) clearTimeout(this.primaryFailbackTimer);
+      this.primaryFailbackTimer = setTimeout(() => {
+        console.log('[MqttRelay] Attempting failback to primary deterministic broker (EMQX)...');
+        this.activeBrokerIndex = 0;
+        if (this.ws) {
+          try { this.ws.close(); } catch {}
+        }
+      }, 30000);
+    }
   }
 
   private scheduleReconnect(delayMs = 3000) {
@@ -145,7 +166,9 @@ export class MqttRelayTransport {
     this.pingInterval = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         // Send MQTT PINGREQ (0xC0, 0x00)
-        this.ws.send(new Uint8Array([0xC0, 0x00]));
+        try {
+          this.ws.send(new Uint8Array([0xC0, 0x00]));
+        } catch {}
       }
     }, 20000);
   }
@@ -204,14 +227,22 @@ export class MqttRelayTransport {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.myId) return;
 
     const topics = [
+      `red/v32/dm/${this.myId}`,
+      `red/v32/sig/${this.myId}`,
+      `red/v32/mb/${this.myId}`,
       `red/mesh/dm/${this.myId}`,
       `red/mesh/sig/${this.myId}`,
       'red/mesh/broadcast',
+      'red/v32/broadcast'
     ];
 
     if (this.myId.length >= 8) {
-      topics.push(`red/mesh/dm/${this.myId.slice(0, 8)}`);
-      topics.push(`red/mesh/sig/${this.myId.slice(0, 8)}`);
+      const short = this.myId.slice(0, 8);
+      topics.push(`red/v32/dm/${short}`);
+      topics.push(`red/v32/sig/${short}`);
+      topics.push(`red/v32/mb/${short}`);
+      topics.push(`red/mesh/dm/${short}`);
+      topics.push(`red/mesh/sig/${short}`);
     }
 
     topics.forEach(t => this.subscribe(t));
@@ -303,6 +334,9 @@ export class MqttRelayTransport {
         this.startPing();
         this.subscribeToMyTopics();
         if (onConnected) onConnected();
+        this.connectListeners.forEach(cb => {
+          try { cb(); } catch (err) { console.warn('[MqttRelay] Error in connect listener:', err); }
+        });
       } else {
         console.warn(`[MqttRelay] Connection rejected by broker (code ${returnCode})`);
         this.tryNextBroker();
@@ -387,14 +421,26 @@ export class MqttRelayTransport {
   // ─── High-Level Messaging & Signaling API ───────────────────────────────────
 
   /**
-   * Sends an encrypted packet directly to a recipient's topic.
+   * Sends an encrypted packet directly to a recipient's topics (realtime DM + Blind Mailbox).
    */
   public sendPacket(recipientHash: string, payload: Uint8Array): boolean {
     const clean = this.cleanId(recipientHash);
     if (!clean) return false;
-    let published = this.publish(`red/mesh/dm/${clean}`, payload);
+    
+    // Publish to primary v32 realtime topic
+    let published = this.publish(`red/v32/dm/${clean}`, payload);
+    
+    // Also publish to v32 Blind Mailbox topic (retained E2E rendezvous)
+    this.publish(`red/v32/mb/${clean}`, payload);
+
+    // Legacy mesh fallback topic
+    this.publish(`red/mesh/dm/${clean}`, payload);
+
     if (clean.length > 8) {
-      this.publish(`red/mesh/dm/${clean.slice(0, 8)}`, payload);
+      const short = clean.slice(0, 8);
+      this.publish(`red/v32/dm/${short}`, payload);
+      this.publish(`red/v32/mb/${short}`, payload);
+      this.publish(`red/mesh/dm/${short}`, payload);
     }
     return published;
   }
@@ -411,9 +457,14 @@ export class MqttRelayTransport {
       timestamp: Date.now(),
       ...signalData
     });
-    let published = this.publish(`red/mesh/sig/${clean}`, jsonStr);
+
+    let published = this.publish(`red/v32/sig/${clean}`, jsonStr);
+    this.publish(`red/mesh/sig/${clean}`, jsonStr);
+
     if (clean.length > 8) {
-      this.publish(`red/mesh/sig/${clean.slice(0, 8)}`, jsonStr);
+      const short = clean.slice(0, 8);
+      this.publish(`red/v32/sig/${short}`, jsonStr);
+      this.publish(`red/mesh/sig/${short}`, jsonStr);
     }
     return published;
   }

@@ -5,15 +5,26 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 
 export function IncomingCallBanner() {
-    const { incomingCall, setIncomingCall, navigate } = useRedStore();
+    const { incomingCall, setIncomingCall, navigate, setActiveCallType } = useRedStore();
 
-    // ── Tactical Web Audio Ringtone Chime ─────────────────────────────────────
+    const isVideo = incomingCall?.callType === 'video';
+
+    // ── Tactical Web Audio Ringtone Chime & Vibration ─────────────────────────
     React.useEffect(() => {
         if (!incomingCall) return;
 
         let audioCtx: AudioContext | null = null;
         let isCancelled = false;
         let intervalId: any = null;
+
+        // Vibrate mobile hardware if supported
+        const triggerVibration = () => {
+            if (typeof navigator !== "undefined" && navigator.vibrate) {
+                try {
+                    navigator.vibrate([400, 200, 400, 200, 800]);
+                } catch {}
+            }
+        };
 
         try {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -23,6 +34,8 @@ export function IncomingCallBanner() {
                 const playChime = () => {
                     if (isCancelled || !audioCtx || audioCtx.state === 'closed') return;
                     if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+
+                    triggerVibration();
 
                     const now = audioCtx.currentTime;
                     const osc = audioCtx.createOscillator();
@@ -54,6 +67,11 @@ export function IncomingCallBanner() {
             if (audioCtx && audioCtx.state !== 'closed') {
                 audioCtx.close().catch(() => {});
             }
+            if (typeof navigator !== "undefined" && navigator.vibrate) {
+                try {
+                    navigator.vibrate(0);
+                } catch {}
+            }
         };
     }, [incomingCall]);
 
@@ -61,7 +79,8 @@ export function IncomingCallBanner() {
 
     const handleAccept = () => {
         const callerId = incomingCall.callerHash;
-        useRedStore.setState({ activeConversationId: callerId });
+        setActiveCallType(incomingCall.callType || 'video');
+        useRedStore.setState({ activeConversationId: callerId, activeCallPeer: callerId });
         navigate("call", callerId);
     };
 
@@ -85,10 +104,10 @@ export function IncomingCallBanner() {
             zIndex: 99999,
             background: "linear-gradient(135deg, rgba(16,18,32,0.98), rgba(8,10,20,0.98))",
             backdropFilter: "blur(20px)",
-            border: "1px solid var(--accent-crimson)",
+            border: isVideo ? "1px solid var(--accent-cyan)" : "1px solid var(--accent-emerald)",
             borderRadius: "var(--radius-lg)",
             padding: "14px 18px",
-            boxShadow: "0 12px 48px rgba(255,51,85,0.4)",
+            boxShadow: isVideo ? "0 12px 48px rgba(0,229,255,0.4)" : "0 12px 48px rgba(0,230,118,0.4)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -98,20 +117,27 @@ export function IncomingCallBanner() {
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{
                     width: 44, height: 44, borderRadius: "50%",
-                    background: "linear-gradient(135deg, #FF3355, #E8213A)",
+                    background: isVideo 
+                        ? "linear-gradient(135deg, #00E5FF, #0097A7)"
+                        : "linear-gradient(135deg, #00E676, #00B368)",
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "1.3rem", color: "white",
-                    boxShadow: "0 0 16px rgba(255,51,85,0.6)",
+                    fontSize: "1.3rem", color: isVideo ? "#000" : "#000",
+                    boxShadow: isVideo ? "0 0 16px rgba(0,229,255,0.6)" : "0 0 16px rgba(0,230,118,0.6)",
                     animation: "pulse 1s infinite"
                 }}>
-                    📞
+                    {isVideo ? "📹" : "📞"}
                 </div>
                 <div>
                     <div style={{ color: "white", fontWeight: 800, fontSize: "0.95rem" }}>
                         {incomingCall.callerName}
                     </div>
-                    <div style={{ color: "var(--accent-emerald)", fontSize: "0.72rem", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
-                        LLAMADA P2P WEBRTC ENTRANTE…
+                    <div style={{ 
+                        color: isVideo ? "var(--accent-cyan)" : "var(--accent-emerald)", 
+                        fontSize: "0.72rem", 
+                        fontWeight: 800, 
+                        fontFamily: "JetBrains Mono, monospace" 
+                    }}>
+                        {isVideo ? "VIDEOLAMADA HD ENTRANTE…" : "LLAMADA DE VOZ P2P ENTRANTE…"}
                     </div>
                 </div>
             </div>
@@ -128,7 +154,16 @@ export function IncomingCallBanner() {
                 <button
                     onClick={handleAccept}
                     className="btn-tactical-primary"
-                    style={{ padding: "8px 16px", borderRadius: "var(--radius-full)", background: "linear-gradient(135deg, #00E676, #00B368)", color: "#000", fontWeight: 900, fontSize: "0.82rem" }}
+                    style={{ 
+                        padding: "8px 16px", 
+                        borderRadius: "var(--radius-full)", 
+                        background: isVideo 
+                            ? "linear-gradient(135deg, #00E5FF, #00B4D8)" 
+                            : "linear-gradient(135deg, #00E676, #00B368)", 
+                        color: "#000", 
+                        fontWeight: 900, 
+                        fontSize: "0.82rem" 
+                    }}
                 >
                     Contestar
                 </button>

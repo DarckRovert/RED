@@ -23,8 +23,8 @@ public class MainActivity extends BridgeActivity {
             settings.setMediaPlaybackRequiresUserGesture(false);
             webView.setInitialScale(0);
 
-            // Grant WebRTC and Media Capture permissions inside Capacitor WebView
-            webView.setWebChromeClient(new android.webkit.WebChromeClient() {
+            // Grant WebRTC and Media Capture permissions inside Capacitor WebView preserving Bridge features
+            webView.setWebChromeClient(new com.getcapacitor.BridgeWebChromeClient(this.bridge) {
                 @Override
                 public void onPermissionRequest(final android.webkit.PermissionRequest request) {
                     runOnUiThread(() -> {

@@ -24,6 +24,7 @@ interface MessageBubbleProps {
     onCancelLongPress: () => void;
     onReaction: (msgId: string, emoji: string) => void;
     onVote: (msgId: string, optIdx: number) => void;
+    onPin?: (msg: MessageItem) => void;
 }
 
 function datePill(ts: number): string {
@@ -41,12 +42,30 @@ function timeStr(ts: number) {
     return new Date(raw * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatBytes(bytes?: number): string {
+    if (!bytes || isNaN(bytes)) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileIcon(name?: string, mime?: string): string {
+    const ext = (name || "").split(".").pop()?.toLowerCase() || "";
+    if (ext === "pdf" || mime?.includes("pdf")) return "📕";
+    if (["zip", "tar", "gz", "7z", "rar"].includes(ext)) return "📦";
+    if (["txt", "md", "json", "csv"].includes(ext)) return "📝";
+    if (["apk"].includes(ext)) return "🤖";
+    if (["gpx", "kml"].includes(ext)) return "🗺️";
+    if (["doc", "docx"].includes(ext)) return "📄";
+    return "📁";
+}
+
 const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
-function ContextMenu({ x, y, isMine, onReply, onCopy, onEdit, onDelete, onReact, onClose }: {
+function ContextMenu({ x, y, isMine, onReply, onCopy, onPin, onDelete, onReact, onClose }: {
     x: number; y: number; isMine: boolean;
-    onReply: () => void; onCopy: () => void; onEdit?: () => void;
+    onReply: () => void; onCopy: () => void; onPin?: () => void;
     onDelete: () => void; onReact: (e: string) => void; onClose: () => void;
 }) {
     return (
@@ -89,7 +108,7 @@ function ContextMenu({ x, y, isMine, onReply, onCopy, onEdit, onDelete, onReact,
                 {[
                     { label: "Responder", icon: "↩️", action: onReply },
                     { label: "Copiar", icon: "📋", action: onCopy },
-                    ...(isMine ? [{ label: "Editar", icon: "✏️", action: onEdit || (() => {}) }] : []),
+                    ...(onPin ? [{ label: "Fijar Mensaje", icon: "📌", action: onPin }] : []),
                     { label: "Eliminar", icon: "🗑️", action: onDelete, danger: true },
                 ].map((item: any) => (
                     <button key={item.label} onClick={() => { item.action(); onClose(); }}
@@ -116,7 +135,7 @@ function ContextMenu({ x, y, isMine, onReply, onCopy, onEdit, onDelete, onReact,
 export const MessageBubble = memo(({
     msg, isMine, isFirst, isLast, showDate, peerName, starredMessages,
     searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
-    onLongPress, onCancelLongPress, onReaction, onVote
+    onLongPress, onCancelLongPress, onReaction, onVote, onPin
 }: MessageBubbleProps) => {
     const [viewingImageSrc, setViewingImageSrc] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -127,7 +146,6 @@ export const MessageBubble = memo(({
     const br = isMine ? (isLast ? 6 : 16) : (isLast ? 16 : 6);
     const bl = isMine ? 6 : (isLast ? 6 : 16);
 
-    const hasReactions = msg.reactions && Object.keys(msg.reactions).length > 0;
     const isSystem = msg.msg_type === "system";
 
     const openContextMenu = useCallback((e: React.TouchEvent | React.MouseEvent) => {
@@ -158,11 +176,41 @@ export const MessageBubble = memo(({
         }
     };
 
-    // Read receipt color
+    const handleDownloadDocument = () => {
+        const url = msg.media_data || msg.content;
+        if (!url || !url.startsWith("data:")) return;
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = (msg as any).file_name || `archivo_${msg.id.substring(0, 8)}.dat`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    // Read receipt color & symbol
+    const isDelivered = msg.status === 'Delivered' || (msg as any).delivered === true;
+    const isRead = msg.status === 'Read' || (msg as any).read === true;
+    const isPending = msg.status === 'Pending';
+    const isFailed = msg.status === 'Failed';
+
     const checkColor = isMine
-        ? (msg.read ? "#00E5FF" : (msg.delivered ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.3)"))
+        ? (isRead ? "#00E5FF" : (isDelivered ? "#00E676" : (isFailed ? "#FF5252" : "rgba(255,255,255,0.65)")))
         : undefined;
-    const checkSymbol = msg.read ? "✓✓" : (msg.delivered ? "✓✓" : "✓");
+    const checkSymbol = isFailed ? "⚠️" : (isPending ? "🕒" : (isRead ? "✓✓" : (isDelivered ? "✓✓" : "✓")));
+
+    // Location message detector
+    const isLocationMessage = typeof msg.content === "string" && msg.content.includes("📍 Ubicación Táctica:");
+    const locationCoords = isLocationMessage
+        ? msg.content.match(/📍 Ubicación Táctica:\s*([-\d.]+),\s*([-\d.]+)/)
+        : null;
+
+    // Document detector
+    const isDocumentMessage = msg.msg_type === "document" ||
+        (msg.content && msg.content.startsWith("data:") && !msg.content.startsWith("data:image") && !msg.content.startsWith("data:video") && !msg.content.startsWith("data:audio")) ||
+        (msg.media_data && msg.media_data.startsWith("data:") && !msg.media_data.startsWith("data:image") && !msg.media_data.startsWith("data:video") && !msg.media_data.startsWith("data:audio"));
+
+    const documentName = (msg as any).file_name || "Documento Adjunto";
+    const documentSize = (msg as any).file_size || 0;
 
     if (isSystem) {
         return (
@@ -180,6 +228,7 @@ export const MessageBubble = memo(({
                     onClose={() => setContextMenu(null)}
                     onReply={() => onLongPress({} as any, msg)}
                     onCopy={handleCopy}
+                    onPin={onPin ? () => onPin(msg) : undefined}
                     onDelete={() => onLongPress({} as any, msg)}
                     onReact={(e) => onReaction(msg.id, e)}
                 />
@@ -207,16 +256,20 @@ export const MessageBubble = memo(({
                     onTouchEnd={handleTouchEnd}
                     onContextMenu={openContextMenu}
                     style={{
-                        maxWidth: "80%",
+                        maxWidth: "82%",
                         padding: msg.msg_type === "image" ? "4px" : "10px 14px",
                         borderRadius: `${tl}px ${tr}px ${br}px ${bl}px`,
-                        background: isMine
-                            ? "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)"
-                            : "rgba(18, 18, 30, 0.95)",
+                        background: isSearchHighlight
+                            ? "linear-gradient(135deg, rgba(255,167,38,0.4) 0%, rgba(255,109,0,0.6) 100%)"
+                            : (isMine
+                                ? "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)"
+                                : "rgba(18, 18, 30, 0.95)"),
                         color: isMine ? "#000" : "#fff",
-                        border: isMine ? "none" : "1px solid var(--glass-border)",
+                        border: isSearchHighlight
+                            ? "2px solid var(--accent-amber)"
+                            : (isMine ? "none" : "1px solid var(--glass-border)"),
                         boxShadow: isMine ? "0 4px 14px rgba(0,229,255,0.25)" : "0 2px 8px rgba(0,0,0,0.5)",
-                        display: "flex", flexDirection: "column", gap: "4px",
+                        display: "flex", flexDirection: "column", gap: "6px",
                         userSelect: "none",
                         WebkitUserSelect: "none",
                     }}
@@ -240,13 +293,84 @@ export const MessageBubble = memo(({
                         <VoiceMessage msg={msg} isMine={isMine} />
                     )}
 
+                    {/* Document / File Card */}
+                    {isDocumentMessage && (
+                        <div
+                            onClick={handleDownloadDocument}
+                            style={{
+                                display: "flex", alignItems: "center", gap: "10px",
+                                padding: "8px 12px", borderRadius: "10px",
+                                background: isMine ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.06)",
+                                border: `1px solid ${isMine ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.12)"}`,
+                                cursor: "pointer", minWidth: "180px"
+                            }}
+                            title="Toca para descargar archivo"
+                        >
+                            <span style={{ fontSize: "1.8rem" }}>{getFileIcon(documentName)}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 800, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    {documentName}
+                                </div>
+                                <div style={{ fontSize: "0.68rem", opacity: 0.75, fontFamily: "JetBrains Mono, monospace" }}>
+                                    {formatBytes(documentSize) || "Documento"} · Toca para guardar
+                                </div>
+                            </div>
+                            <span style={{ fontSize: "1.1rem", opacity: 0.8 }}>⬇️</span>
+                        </div>
+                    )}
+
+                    {/* Tactical GPS Location Card */}
+                    {isLocationMessage && locationCoords && (
+                        <div style={{
+                            borderRadius: "10px", padding: "10px 12px",
+                            background: isMine ? "rgba(0,0,0,0.15)" : "rgba(0,230,118,0.10)",
+                            border: `1px solid ${isMine ? "rgba(0,0,0,0.2)" : "rgba(0,230,118,0.3)"}`,
+                            display: "flex", flexDirection: "column", gap: "6px"
+                        }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 800, fontSize: "0.85rem", color: isMine ? "#000" : "var(--accent-emerald)" }}>
+                                <span>📍</span>
+                                <span>COORDENADA TÁCTICA GPS</span>
+                            </div>
+                            <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.78rem", fontWeight: 700 }}>
+                                Lat: {locationCoords[1]}<br/>
+                                Lon: {locationCoords[2]}
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
+                                <button
+                                    onClick={() => {
+                                        navigator.clipboard?.writeText(`${locationCoords[1]}, ${locationCoords[2]}`);
+                                    }}
+                                    style={{
+                                        flex: 1, padding: "4px 8px", borderRadius: "6px", border: "none",
+                                        background: isMine ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)",
+                                        color: isMine ? "#000" : "#fff", fontSize: "0.68rem", fontWeight: 700, cursor: "pointer"
+                                    }}
+                                >
+                                    📋 Copiar
+                                </button>
+                                <a
+                                    href={`https://maps.google.com/?q=${locationCoords[1]},${locationCoords[2]}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                        flex: 1, padding: "4px 8px", borderRadius: "6px", textAlign: "center", textDecoration: "none",
+                                        background: isMine ? "rgba(0,0,0,0.8)" : "var(--accent-emerald)",
+                                        color: isMine ? "#fff" : "#000", fontSize: "0.68rem", fontWeight: 800
+                                    }}
+                                >
+                                    🗺️ Abrir Mapa
+                                </a>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Poll */}
                     {msg.msg_type === "poll" && (
                         <PollMessage msg={msg} onVote={optIdx => onVote(msg.id, optIdx)} />
                     )}
 
-                    {/* Text content */}
-                    {msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && (
+                    {/* Standard Text content (when not location card or document) */}
+                    {!isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && (
                         <div style={{ fontSize: "0.90rem", lineHeight: 1.45, fontWeight: isMine ? 600 : 400, wordBreak: "break-word" }}>
                             {msg.content}
                         </div>
@@ -275,4 +399,5 @@ export const MessageBubble = memo(({
         </React.Fragment>
     );
 });
+
 
