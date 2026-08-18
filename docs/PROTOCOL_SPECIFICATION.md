@@ -1,6 +1,6 @@
-# 📜 Especificación del Protocolo Ω (RED v31.0.0 Sovereign Master)
+# 📜 Especificación del Protocolo Ω (RED v34.0.0 Sovereign Master)
 
-**Versión**: 31.0.0 | **Estado**: Estándar de Producción Aprobado | **Fecha**: Agosto 2026
+**Versión**: 34.0.0 | **Estado**: Estándar de Producción Aprobado | **Fecha**: Agosto 2026
 
 ---
 

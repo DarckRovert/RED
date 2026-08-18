@@ -54,3 +54,6 @@ $Adb = "C:\Users\darck\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 - [x] **Auto-Intercambio Recíproco**: La recepción de `contact_request` almacena la clave del remitente y envía `contact_response`.
 - [x] **Recepción en Segundo Plano**: Los mensajes entrantes cuando el chat no está abierto disparan la notificación local y refrescan la lista de conversaciones (`fetchData`).
 - [x] **Inmunidad a VPN**: El transporte BLE y el servidor GATT nativo continúan operando con VPN activa.
+- [x] **Difusión P2P Mesh Integral (v34.0.0)**: Canales públicos, PTT Walkie-Talkie, Balizas SOS, Triaje START y Vales Soberanos propagados y recibidos en tiempo real entre Moto G y Tablet.
+- [x] **Auto-Reparación de Integridad Merkle**: `StateIntegrityEngine` verifica y aísla registros flash corruptos en el arranque sin crasheos.
+- [x] **Biometría de Hardware Adaptativa**: Huella dactilar activa en Moto G (`biometryType: 3`) y degradación limpia a PIN soberano en Tablet (`biometryNotAvailable`).

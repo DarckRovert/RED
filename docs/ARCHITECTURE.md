@@ -1,4 +1,4 @@
-# 🏗️ Especificación Arquitectónica de RED v31.0.0
+# 🏗️ Especificación Arquitectónica de RED v34.0.0
 
 Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware, los actuadores de hardware nativo (`CameraManager`), el motor de eventos SSE unificado, los 4 motores de infraestructura táctica y la arquitectura completa de los 35 módulos de interfaz.
 

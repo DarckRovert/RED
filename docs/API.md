@@ -1,4 +1,4 @@
-# RED API Reference (v31.0.0 Sovereign Master)
+# RED API Reference (v34.0.0 Sovereign Master)
 
 ## Overview
 

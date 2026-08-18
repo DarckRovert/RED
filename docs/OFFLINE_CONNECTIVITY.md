@@ -1,6 +1,6 @@
 # 🛜 Conectividad Offline & Malla Global — Especificación Técnica
 
-**Versión**: 31.0.0 | **Fecha**: Agosto 2026
+**Versión**: 34.0.0 | **Fecha**: Agosto 2026
 
 ## Resumen
 

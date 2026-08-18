@@ -50,7 +50,7 @@ Sigue estos comandos en la raíz de tu proyecto RED:
 Una vez abierto Android Studio:
 
 1.  **Cambiar el ID de la App**: En `app/build.gradle`, asegúrate de que `applicationId` sea único (ej: `f.red.app`).
-2.  **Versión**: Incrementa `versionCode` (entero) y `versionName` (ej: "1.0.0") en cada actualización.
+2.  **Versión**: Incrementa `versionCode` (entero, ej: `34000`) y `versionName` (ej: `"34.0.0"`) en cada actualización.
 3.  **Certificado de Firma**:
     *   Ve a **Build > Generate Signed Bundle / APK...**
     *   Selecciona **Android App Bundle (.aab)**.

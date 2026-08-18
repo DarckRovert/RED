@@ -10,11 +10,12 @@ RED está diseñado para funcionar sin recolectar ninguna información personal 
 - **Sin Correos Electrónicos:** No hay cuentas vinculadas a identidades del mundo real.
 - **Identidades DID:** Tu identidad es un identificador descentralizado generado localmente en tu dispositivo.
 
-## 2. Cifrado de Extremo a Extremo (E2E)
+## 2. Cifrado de Extremo a Extremo (E2E) & Post-Cuántica (PQC)
 Todos los mensajes, archivos y metadatos de comunicación están cifrados mediante:
-- **X25519:** Para el intercambio de claves.
-- **AES-256-GCM:** Para el cifrado de datos en tránsito y reposo.
-- **Perfect Forward Secrecy:** Cada mensaje utiliza claves de sesión únicas.
+- **ML-KEM-768 (FIPS 203):** Encapsulación de claves basada en retículos post-cuánticos.
+- **X25519 / NIST P-256:** Para el intercambio híbrido de claves efímeras (Dual Hybrid ECDH).
+- **AES-256-GCM / ChaCha20-Poly1305:** Para el cifrado autenticado de datos en tránsito y reposo.
+- **Perfect Forward Secrecy:** Cada mensaje utiliza claves de sesión rotadas por Double Ratchet / Noise Protocol.
 
 ## 3. Almacenamiento Local y Bóvedas
 Tus datos residen exclusivamente en tu dispositivo. RED utiliza el **Android Keystore** y el **iOS Secure Enclave** para proteger tus llaves maestras con seguridad respaldada por hardware.

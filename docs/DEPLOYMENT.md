@@ -1,6 +1,6 @@
-# 🚀 Guía de Despliegue - RED (v31.0.0 Sovereign Master)
+# 🚀 Guía de Despliegue - RED (v34.0.0 Sovereign Master)
 
-Esta guía cubre el despliegue de la infraestructura de RED en dispositivos móviles y servidores, optimizada para la versión 31.0.0 Sovereign Master.
+Esta guía cubre el despliegue de la infraestructura de RED en dispositivos móviles y servidores, optimizada para la versión 34.0.0 Sovereign Master.
 
 ---
 
