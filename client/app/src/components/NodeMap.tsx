@@ -86,10 +86,19 @@ export default function NodeMap() {
         speed?: number;
         heading?: number;
         timestamp: number;
-    }>({
-        lat: -12.1383,
-        lng: -76.9828,
-        timestamp: Date.now()
+    }>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const saved = localStorage.getItem("red_last_known_gps");
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (typeof parsed.lat === "number" && typeof parsed.lng === "number") {
+                        return { lat: parsed.lat, lng: parsed.lng, timestamp: parsed.timestamp || Date.now() };
+                    }
+                }
+            } catch {}
+        }
+        return { lat: 0, lng: 0, timestamp: Date.now() };
     });
     const [realGPS, setRealGPS] = useState(false);
     const [selectedPeer, setSelectedPeer] = useState<CanonicalNode | null>(null);
@@ -114,6 +123,10 @@ export default function NodeMap() {
                 timestamp: timestamp || Date.now()
             });
             setRealGPS(true);
+
+            if (typeof window !== "undefined") {
+                localStorage.setItem("red_last_known_gps", JSON.stringify({ lat: newLat, lng: newLng, timestamp: Date.now() }));
+            }
 
             if (leafletMapRef.current && !realGPS) {
                 try {

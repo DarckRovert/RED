@@ -78,6 +78,13 @@ export function IncomingCallBanner() {
     if (!incomingCall) return null;
 
     const handleAccept = () => {
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+                const ctx = new AudioContextClass();
+                if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            }
+        } catch {}
         const callerId = incomingCall.callerHash;
         setActiveCallType(incomingCall.callType || 'video');
         useRedStore.setState({ activeConversationId: callerId, activeCallPeer: callerId });

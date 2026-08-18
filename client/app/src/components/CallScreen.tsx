@@ -117,6 +117,21 @@ export default function CallScreen() {
         return `${m}:${s}`;
     };
 
+    // Helper to unlock Web Audio & media playback on mobile user interaction
+    const unlockAudioPlayback = useCallback(() => {
+        if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+            audioCtxRef.current.resume().catch(() => {});
+        }
+        if (remoteAudioRef.current) {
+            remoteAudioRef.current.muted = false;
+            remoteAudioRef.current.play().catch(() => {});
+        }
+        if (remoteVideoRef.current) {
+            remoteVideoRef.current.muted = false;
+            remoteVideoRef.current.play().catch(() => {});
+        }
+    }, []);
+
     // ── Setup Tactical Audio Visualizer (Web Audio API) ────────────────────────
     const setupAudioVisualizer = useCallback((stream: MediaStream) => {
         try {
@@ -224,6 +239,38 @@ export default function CallScreen() {
             }
         }
     };
+
+    // ── Robust Stream Re-attachment Synchronizer Hook ────────────────────────
+    useEffect(() => {
+        if (localStreamRef.current && localVideoRef.current && !isAudioOnly) {
+            if (localVideoRef.current.srcObject !== localStreamRef.current) {
+                localVideoRef.current.srcObject = localStreamRef.current;
+            }
+            localVideoRef.current.muted = true;
+            localVideoRef.current.play().catch(() => {});
+        }
+        if (remoteStreamRef.current) {
+            if (remoteVideoRef.current && !isAudioOnly) {
+                if (remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
+                    remoteVideoRef.current.srcObject = remoteStreamRef.current;
+                }
+                remoteVideoRef.current.muted = false;
+                remoteVideoRef.current.play().catch(e => {
+                    console.warn("[CallScreen] Remote video play deferred until touch:", e);
+                });
+            }
+            if (remoteAudioRef.current) {
+                if (remoteAudioRef.current.srcObject !== remoteStreamRef.current) {
+                    remoteAudioRef.current.srcObject = remoteStreamRef.current;
+                }
+                remoteAudioRef.current.muted = false;
+                remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+                remoteAudioRef.current.play().catch(e => {
+                    console.warn("[CallScreen] Remote audio play deferred until touch:", e);
+                });
+            }
+        }
+    }, [callActive, isAudioOnly, facingMode, camMuted, isSpeakerOn]);
 
     // ── Telemetry Monitor (RTCPeerConnection.getStats) ─────────────────────────
     useEffect(() => {
@@ -353,7 +400,7 @@ export default function CallScreen() {
 
                 localStreamRef.current = stream;
 
-                // Attach to local video/audio element
+                // Attach to local video element (always muted locally to prevent echo feedback)
                 if (!isAudioOnly && localVideoRef.current) {
                     localVideoRef.current.srcObject = stream;
                     localVideoRef.current.muted = true;
@@ -373,12 +420,21 @@ export default function CallScreen() {
                         { urls: "stun:stun3.l.google.com:19302" },
                         { urls: "stun:stun4.l.google.com:19302" },
                         { urls: "stun:stun.cloudflare.com:3478" },
-                        { urls: "stun:turn.matrix.org:3478" },
                         { urls: "stun:stun.nextcloud.com:443" }
                     ],
                     iceCandidatePoolSize: 10
                 });
                 peerRef.current = pc;
+
+                // Guarantee bidirectional sendrecv transceivers
+                try {
+                    if (pc.addTransceiver) {
+                        pc.addTransceiver('audio', { direction: 'sendrecv' });
+                        pc.addTransceiver('video', { direction: isAudioOnly ? 'inactive' : 'sendrecv' });
+                    }
+                } catch (tErr) {
+                    console.warn("[CallScreen] Transceiver setup note:", tErr);
+                }
 
                 // Add local tracks to WebRTC session
                 stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -420,17 +476,20 @@ export default function CallScreen() {
                     }
                     remoteStreamRef.current = streamToPlay;
 
+                    // Unmute remote video to allow incoming voice & sound
                     if (remoteVideoRef.current) {
                         remoteVideoRef.current.srcObject = streamToPlay;
-                        remoteVideoRef.current.muted = true;
+                        remoteVideoRef.current.muted = false;
                         remoteVideoRef.current.playsInline = true;
-                        remoteVideoRef.current.play().catch(e => console.warn("[WebRTC Call] Remote video play warning:", e));
+                        remoteVideoRef.current.play().catch(e => console.warn("[WebRTC Call] Remote video play deferred:", e));
                     }
 
+                    // Also attach to remote audio element for robust multi-track playback
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = streamToPlay;
-                        remoteAudioRef.current.volume = 1.0;
-                        remoteAudioRef.current.play().catch(e => console.warn("[WebRTC Call] Remote audio play warning:", e));
+                        remoteAudioRef.current.muted = false;
+                        remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.4;
+                        remoteAudioRef.current.play().catch(e => console.warn("[WebRTC Call] Remote audio play deferred:", e));
                     }
 
                     setCallActive(true);
@@ -466,6 +525,7 @@ export default function CallScreen() {
                         answer: finalAnswer,
                         callType: isAudioOnly ? "audio" : "video"
                     }), { msg_type: "webrtc_signal" });
+                    setCallActive(true);
                 }
                 // CALLER MODE: Creating new call offer
                 else {
@@ -697,7 +757,10 @@ export default function CallScreen() {
         const nextSpeaker = !isSpeakerOn;
         setIsSpeakerOn(nextSpeaker);
         if (remoteAudioRef.current) {
-            remoteAudioRef.current.volume = nextSpeaker ? 1.0 : 0.3;
+            remoteAudioRef.current.volume = nextSpeaker ? 1.0 : 0.4;
+        }
+        if (remoteVideoRef.current) {
+            remoteVideoRef.current.volume = nextSpeaker ? 1.0 : 0.4;
         }
         if (typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype && (remoteAudioRef.current as any)?.setSinkId) {
             try {
@@ -709,7 +772,11 @@ export default function CallScreen() {
     };
 
     return (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#05070e", overflow: "hidden", userSelect: "none" }}>
+        <div
+            onClick={unlockAudioPlayback}
+            onTouchStart={unlockAudioPlayback}
+            style={{ position: "fixed", inset: 0, zIndex: 99999, background: "#05070e", overflow: "hidden", userSelect: "none" }}
+        >
             <style>{`
                 @keyframes sonar-ring {
                     0% { transform: scale(1); opacity: 0.7; }
@@ -729,6 +796,7 @@ export default function CallScreen() {
             <audio
                 ref={remoteAudioRef}
                 autoPlay
+                playsInline
                 style={{
                     position: "absolute",
                     top: "-1000px",
@@ -743,12 +811,11 @@ export default function CallScreen() {
             {/* ── VIDEO MODE RENDERING ──────────────────────────────────────── */}
             {!isAudioOnly && (
                 <>
-                    {/* Remote Video (Full Screen) */}
+                    {/* Remote Video (Full Screen - UNMUTED so remote voice/audio can be heard) */}
                     <video
                         ref={remoteVideoRef}
                         autoPlay
                         playsInline
-                        muted
                         style={{
                             position: "absolute", inset: 0,
                             width: "100%", height: "100%",
@@ -760,7 +827,7 @@ export default function CallScreen() {
                         }}
                     />
 
-                    {/* Local Video (Floating Tactical PIP) */}
+                    {/* Local Video (Floating Tactical PIP - MUTED to prevent local acoustic feedback) */}
                     <video
                         ref={localVideoRef}
                         autoPlay playsInline muted

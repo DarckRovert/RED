@@ -146,4 +146,33 @@ export class TacticalAudioEngine {
             osc.stop(now + 0.125);
         } catch {}
     }
+
+    /** Tono de sirena de emergencia táctica / baliza SOS (880Hz <-> 1760Hz oscilante) */
+    public static playEmergencyAlarm(): void {
+        const prefs = SettingsManager.getPreferences();
+        if (!prefs.soundsEnabled) return;
+
+        const ctx = this.getContext();
+        if (!ctx) return;
+
+        try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(880, now);
+            osc.frequency.linearRampToValueAtTime(1760, now + 0.15);
+            osc.frequency.linearRampToValueAtTime(880, now + 0.3);
+
+            gain.gain.setValueAtTime(0.18, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(now);
+            osc.stop(now + 0.36);
+        } catch {}
+    }
 }

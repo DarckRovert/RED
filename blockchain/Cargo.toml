@@ -1,6 +1,6 @@
 [package]
 name = "red-blockchain"
-version = "31.0.0"
+version = "34.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "Blockchain for RED identity management"
@@ -11,8 +11,7 @@ name = "red_blockchain"
 path = "src/lib.rs"
 
 [dependencies]
-# Core
-red-core = { path = "../core" }
+red-core = { path = "../core", package = "red_core" }
 
 # Cryptography
 ed25519-dalek = { version = "2.0", features = ["rand_core"] }

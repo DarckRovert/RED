@@ -271,6 +271,16 @@ export default function AppRouter() {
       }
     };
 
+    const runIntegrityAudit = async () => {
+      try {
+        const { StateIntegrityEngine } = await import("../lib/StateIntegrityEngine");
+        const audit = await StateIntegrityEngine.verifyAndHealStorage();
+        if (!audit.isHealthy && audit.quarantinedKeys.length > 0) {
+          console.warn("[StateIntegrity] Storage self-healed corrupted keys:", audit.quarantinedKeys);
+        }
+      } catch {}
+    };
+
     const setupBackButton = async () => {
       try {
         const { App: CapApp } = await import("@capacitor/app");
@@ -313,6 +323,7 @@ export default function AppRouter() {
     };
 
     setupBackButton();
+    runIntegrityAudit();
     checkLanding();
     checkProfile();
 

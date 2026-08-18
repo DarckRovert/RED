@@ -410,10 +410,15 @@ pub fn build_router(state: ApiState) -> Router {
         // v25.0: Social P2P
         .route("/api/social/feed", get(get_social_feed))
         .route("/api/social/post", post(create_social_post))
+        .route("/api/social/posts", post(create_social_post))
         .route("/api/social/react", post(create_social_reaction))
         .route("/api/social/follow", post(follow_user))
         .route("/api/social/unfollow", post(unfollow_user))
         .route("/api/social/following", get(get_following))
+        // Blackout mode
+        .route("/api/blackout/status", get(handle_get_blackout))
+        .route("/api/blackout/mode", post(handle_set_blackout))
+        .route("/api/network/blackout", get(handle_get_blackout).post(handle_set_blackout))
         .route(
             "/api/groups/:id/members/:hash",
             axum::routing::delete(handle_remove_group_member),

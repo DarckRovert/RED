@@ -1,6 +1,6 @@
 [package]
 name = "red_node"
-version = "32.0.0"
+version = "34.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "RED network node"
@@ -11,8 +11,7 @@ name = "red-node"
 path = "src/main.rs"
 
 [dependencies]
-# Core libraries
-red-core = { path = "../core" }
+red-core = { path = "../core", package = "red_core" }
 red-blockchain = { path = "../blockchain" }
 
 # Async runtime

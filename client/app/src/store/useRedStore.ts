@@ -1606,7 +1606,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
         // ── Walkie-Talkie Voice Burst: ingest and save to bursts store ──
         if (item.msg_type === 'voice_burst') {
             try {
-                const burst = JSON.parse(item.content);
+                const burst = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
                 const raw = localStorage.getItem('red_voice_bursts');
                 const bursts: any[] = raw ? JSON.parse(raw) : [];
                 if (!bursts.some((b: any) => b.id === burst.id)) {
@@ -1621,9 +1621,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
         }
 
         // ── Public Channels & Canvas Sync: ingest into channel messages store ──
-        if (item.msg_type === 'channel_post') {
+        if (item.msg_type === 'channel_post' || item.msg_type === 'channel_msg') {
             try {
-                const chMsg = JSON.parse(item.content);
+                const chMsg = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
                 const raw = localStorage.getItem('red_channel_messages');
                 const msgs: any[] = raw ? JSON.parse(raw) : [];
                 if (!msgs.some((m: any) => m.id === chMsg.id)) {
@@ -1633,6 +1633,155 @@ export const useRedStore = create<RedStore>((set, get) => ({
             } catch (e) {
                 console.warn('[Channel Post Parse Error]', e);
             }
+            return;
+        }
+
+        // ── Emergency Distress SOS Beacon: ingest, alert & update activeSosBeacons ──
+        if (item.msg_type === 'emergency_beacon') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const beacon = (parsed as any).beacon || parsed;
+                const raw = localStorage.getItem('red_emergency_beacons');
+                const list: any[] = raw ? JSON.parse(raw) : [];
+                if (!list.some((b: any) => b.beacon_id === beacon.beacon_id)) {
+                    list.unshift({ ...beacon, active: true });
+                    localStorage.setItem('red_emergency_beacons', JSON.stringify(list));
+                    set((s) => ({
+                        activeSosBeacons: [...s.activeSosBeacons.filter(b => b.beacon_id !== beacon.beacon_id), { ...beacon, active: true }]
+                    }));
+                    TacticalAudioEngine.playEmergencyAlarm();
+                    toast.error(`🚨 SOS: ${beacon.sender_name || 'Alerta de Emergencia'} transmitió auxilio!`);
+                }
+            } catch (e) {
+                console.warn('[Emergency Beacon Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── Cancel SOS Beacon ──
+        if (item.msg_type === 'emergency_beacon_cancel') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const beaconId = (parsed as any).beacon_id || (item as any).beacon_id;
+                if (beaconId) {
+                    const raw = localStorage.getItem('red_emergency_beacons');
+                    const list: any[] = raw ? JSON.parse(raw) : [];
+                    const updated = list.map((b: any) => b.beacon_id === beaconId ? { ...b, active: false } : b);
+                    localStorage.setItem('red_emergency_beacons', JSON.stringify(updated));
+                    set((s) => ({
+                        activeSosBeacons: s.activeSosBeacons.filter(b => b.beacon_id !== beaconId)
+                    }));
+                    toast.info(`Baliza SOS cancelada.`);
+                }
+            } catch (e) {
+                console.warn('[Cancel SOS Error]', e);
+            }
+            return;
+        }
+
+        // ── Triage Report: ingest into medical records store ──
+        if (item.msg_type === 'triage_report') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const report = (parsed as any).report || parsed;
+                const raw = localStorage.getItem('red_triage_reports');
+                const reports: any[] = raw ? JSON.parse(raw) : [];
+                const id = report.id || report.report_id;
+                if (id && !reports.some((r: any) => r.id === id || r.report_id === id)) {
+                    reports.unshift(report);
+                    localStorage.setItem('red_triage_reports', JSON.stringify(reports));
+                    toast.info(`🏥 Reporte de triaje recibido: ${report.victim_label || 'Víctima'} [${report.category || 'TRIAGE'}]`);
+                }
+            } catch (e) {
+                console.warn('[Triage Report Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── Weather CAP Report: ingest into atmospheric bulletins store ──
+        if (item.msg_type === 'weather_report') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const report = (parsed as any).report || parsed;
+                const raw = localStorage.getItem('red_weather_reports');
+                const reports: any[] = raw ? JSON.parse(raw) : [];
+                if (!reports.some((r: any) => r.id === report.id)) {
+                    reports.unshift(report);
+                    localStorage.setItem('red_weather_reports', JSON.stringify(reports.slice(0, 30)));
+                    set((s) => ({
+                        activeWeatherReports: [report, ...s.activeWeatherReports.filter(r => r.id !== report.id)].slice(0, 30)
+                    }));
+                    if (report.is_disaster_alert) {
+                        toast.error(`⚠️ Alerta Meteorológica: ${report.condition_summary || 'Condición Severa'}`);
+                    } else {
+                        toast.info(`🌤️ Boletín Meteorológico de ${report.sender_name || 'Nodo'}`);
+                    }
+                }
+            } catch (e) {
+                console.warn('[Weather Report Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── P2P Voucher: ingest into sovereign wallet ──
+        if (item.msg_type === 'p2p_voucher') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const voucher = (parsed as any).voucher || parsed;
+                if (voucher && voucher.id) {
+                    const raw = localStorage.getItem('red_p2p_vouchers');
+                    const vouchers: any[] = raw ? JSON.parse(raw) : [];
+                    if (!vouchers.some((v: any) => v.id === voucher.id)) {
+                        vouchers.unshift({ ...voucher, is_outgoing: false });
+                        localStorage.setItem('red_p2p_vouchers', JSON.stringify(vouchers));
+                        toast.success(`💳 ¡Vale P2P recibido de ${voucher.amount} créditos RED!`);
+                    }
+                }
+            } catch (e) {
+                console.warn('[P2P Voucher Ingest Error]', e);
+            }
+            return;
+        }
+
+        // ── Decentralized Social Post & Reactions ──
+        if (item.msg_type === 'social_post') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const post = (parsed as any).post || parsed;
+                if (post && post.id) {
+                    const raw = localStorage.getItem('red_social_posts');
+                    const posts: any[] = raw ? JSON.parse(raw) : [];
+                    if (!posts.some((p: any) => p.id === post.id)) {
+                        posts.unshift(post);
+                        localStorage.setItem('red_social_posts', JSON.stringify(posts.slice(0, 100)));
+                    }
+                }
+            } catch (e) {
+                console.warn('[Social Post Ingest Error]', e);
+            }
+            return;
+        }
+
+        if (item.msg_type === 'social_react') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const postId = (parsed as any).post_id;
+                const emoji = (parsed as any).emoji;
+                const authorHash = (parsed as any).author_hash;
+                if (postId && emoji) {
+                    const raw = localStorage.getItem('red_social_posts');
+                    const posts: any[] = raw ? JSON.parse(raw) : [];
+                    const target = posts.find((p: any) => p.id === postId);
+                    if (target) {
+                        if (!target.reactions) target.reactions = {};
+                        if (!target.reactions[emoji]) target.reactions[emoji] = [];
+                        if (!target.reactions[emoji].includes(authorHash)) {
+                            target.reactions[emoji].push(authorHash);
+                        }
+                        localStorage.setItem('red_social_posts', JSON.stringify(posts));
+                    }
+                }
+            } catch (e) {}
             return;
         }
 

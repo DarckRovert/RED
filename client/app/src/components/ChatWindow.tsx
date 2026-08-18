@@ -507,6 +507,13 @@ export default function ChatWindow() {
 
                     <button
                         onClick={() => {
+                            try {
+                                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                                if (AudioContextClass) {
+                                    const ctx = new AudioContextClass();
+                                    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+                                }
+                            } catch {}
                             const target = fullPeerHash || peerHash;
                             setActiveCallType('audio');
                             useRedStore.setState({ activeCallPeer: target });
@@ -521,6 +528,13 @@ export default function ChatWindow() {
 
                     <button
                         onClick={() => {
+                            try {
+                                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                                if (AudioContextClass) {
+                                    const ctx = new AudioContextClass();
+                                    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+                                }
+                            } catch {}
                             const target = fullPeerHash || peerHash;
                             setActiveCallType('video');
                             useRedStore.setState({ activeCallPeer: target });

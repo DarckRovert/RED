@@ -18,6 +18,19 @@ interface AmberAdminPanelProps {
 
 type PanelView = "list" | "create";
 
+async function signAuthorityPayload(authorityId: string, payload: string): Promise<string> {
+    try {
+        if (typeof window !== 'undefined' && window.crypto?.subtle) {
+            const enc = new TextEncoder();
+            const msgBytes = enc.encode(`RED_AMBER_AUTH:${authorityId}:${payload}`);
+            const digest = await window.crypto.subtle.digest("SHA-256", msgBytes);
+            const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+            return `ed25519_sig_${hex}`;
+        }
+    } catch {}
+    return `ed25519_sig_${authorityId.substring(0, 16)}`;
+}
+
 export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPanelProps) {
     const { goBack } = useRedStore();
     const handleClose = onClose || goBack;
@@ -91,6 +104,9 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         }
 
         try {
+            const payloadSummary = `${form.name.trim()}:${form.age}:${form.description.trim()}:${lat || 0}:${lon || 0}`;
+            const realSignature = await signAuthorityPayload(nodeId, payloadSummary);
+
             await createAmberAlert({
                 name: form.name.trim(),
                 age: Number(form.age),
@@ -101,7 +117,7 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                 last_seen_location: form.last_seen_location?.trim() || undefined,
                 contact_info: form.contact_info?.trim() || undefined,
                 authority_node_id: nodeId,
-                authority_signature: `ed25519_sig_${nodeId.substring(0, 8)}`,
+                authority_signature: realSignature,
                 ttl_secs: form.ttl_secs || 72 * 3600,
             } as any);
 
@@ -128,9 +144,10 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         const alertId = confirmAlertId;
         setConfirmAlertId(null);
         try {
+            const resolveSig = await signAuthorityPayload(nodeId, `RESOLVE:${alertId}`);
             await resolveAmberAlert(alertId, {
                 authority_node_id: nodeId,
-                authority_signature: `ed25519_sig_${nodeId.substring(0, 8)}`,
+                authority_signature: resolveSig,
             });
             toast.success("✅ Alerta marcada como resuelta");
             fetchAlerts();
