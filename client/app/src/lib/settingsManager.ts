@@ -24,6 +24,8 @@ export interface TacticalTheme {
     primarySurface: string;
     accentGlow: string;
     previewGradient: string;
+    bubbleGradient: string;
+    bubbleBorder: string;
 }
 
 export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
@@ -38,6 +40,8 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         primarySurface: 'rgba(232, 33, 58, 0.06)',
         accentGlow: 'rgba(232, 33, 58, 0.55)',
         previewGradient: 'linear-gradient(135deg, #E8213A 0%, #750010 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(232, 33, 58, 0.32) 0%, rgba(170, 18, 40, 0.46) 100%)',
+        bubbleBorder: 'rgba(255, 60, 95, 0.42)',
     },
     'cyber-cyan': {
         id: 'cyber-cyan',
@@ -50,6 +54,8 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         primarySurface: 'rgba(0, 229, 255, 0.06)',
         accentGlow: 'rgba(0, 229, 255, 0.55)',
         previewGradient: 'linear-gradient(135deg, #00E5FF 0%, #006064 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(0, 229, 255, 0.28) 0%, rgba(0, 140, 190, 0.42) 100%)',
+        bubbleBorder: 'rgba(0, 229, 255, 0.45)',
     },
     'emerald-recon': {
         id: 'emerald-recon',
@@ -62,6 +68,8 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         primarySurface: 'rgba(0, 230, 118, 0.06)',
         accentGlow: 'rgba(0, 230, 118, 0.55)',
         previewGradient: 'linear-gradient(135deg, #00E676 0%, #004D40 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(0, 230, 118, 0.26) 0%, rgba(0, 150, 75, 0.40) 100%)',
+        bubbleBorder: 'rgba(0, 230, 118, 0.42)',
     },
     'ghost-purple': {
         id: 'ghost-purple',
@@ -74,6 +82,8 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         primarySurface: 'rgba(179, 136, 255, 0.06)',
         accentGlow: 'rgba(179, 136, 255, 0.55)',
         previewGradient: 'linear-gradient(135deg, #B388FF 0%, #4A148C 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(179, 136, 255, 0.28) 0%, rgba(120, 70, 200, 0.42) 100%)',
+        bubbleBorder: 'rgba(179, 136, 255, 0.42)',
     },
     'solar-amber': {
         id: 'solar-amber',
@@ -86,6 +96,8 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         primarySurface: 'rgba(255, 179, 0, 0.06)',
         accentGlow: 'rgba(255, 179, 0, 0.55)',
         previewGradient: 'linear-gradient(135deg, #FFB300 0%, #E65100 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(255, 179, 0, 0.26) 0%, rgba(200, 115, 0, 0.40) 100%)',
+        bubbleBorder: 'rgba(255, 179, 0, 0.42)',
     },
     'stealth-dark': {
         id: 'stealth-dark',
@@ -98,6 +110,8 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         primarySurface: 'rgba(144, 164, 174, 0.06)',
         accentGlow: 'rgba(144, 164, 174, 0.55)',
         previewGradient: 'linear-gradient(135deg, #90A4AE 0%, #263238 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(144, 164, 174, 0.26) 0%, rgba(85, 105, 115, 0.40) 100%)',
+        bubbleBorder: 'rgba(144, 164, 174, 0.40)',
     }
 };
 
@@ -211,8 +225,8 @@ export class SettingsManager {
         root.style.setProperty('--primary-subtle', theme.primarySubtle);
         root.style.setProperty('--primary-surface', theme.primarySurface);
         root.style.setProperty('--glass-border-active', theme.accentGlow);
-        root.style.setProperty('--bubble-me', theme.primarySubtle);
-        root.style.setProperty('--bubble-me-border', theme.primaryBright);
+        root.style.setProperty('--bubble-me', theme.bubbleGradient);
+        root.style.setProperty('--bubble-me-border', theme.bubbleBorder);
 
         // 2. Escala de tipografía
         if (prefs.fontSize === 'compact') {

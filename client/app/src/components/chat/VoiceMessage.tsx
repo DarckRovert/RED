@@ -134,8 +134,8 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
     const activeBarIndex = Math.floor(progressRatio * waveformBars.length);
 
-    const primaryColor = isMine ? "#000000" : "var(--accent-cyan)";
-    const inactiveColor = isMine ? "rgba(0,0,0,0.3)" : "rgba(0,229,255,0.3)";
+    const primaryColor = isMine ? "var(--primary-bright, #FF3355)" : "var(--accent-cyan, #00E5FF)";
+    const inactiveColor = isMine ? "rgba(255, 255, 255, 0.28)" : "rgba(0, 229, 255, 0.25)";
 
     return (
         <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 230, userSelect: "none" }}>
@@ -144,12 +144,12 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                 onClick={togglePlay}
                 style={{
                     width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                    background: isMine ? "rgba(0,0,0,0.18)" : "rgba(0,229,255,0.18)",
-                    border: `1.5px solid ${isMine ? "rgba(0,0,0,0.3)" : "rgba(0,229,255,0.4)"}`,
-                    color: primaryColor, cursor: "pointer",
+                    background: isMine ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 229, 255, 0.18)",
+                    border: `1.5px solid ${isMine ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 229, 255, 0.45)"}`,
+                    color: "#FFFFFF", cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: "1rem", fontWeight: 900,
-                    boxShadow: isMine ? "none" : "0 0 12px rgba(0,229,255,0.25)",
+                    boxShadow: isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)",
                     transition: "transform 0.1s ease, background 0.2s ease"
                 }}
                 title={playing ? "Pausar" : "Reproducir"}
@@ -179,7 +179,7 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                                     width: 3.5,
                                     height: height,
                                     borderRadius: 3,
-                                    background: isPlayed ? primaryColor : inactiveColor,
+                                    background: isPlayed ? (isMine ? "#FFFFFF" : primaryColor) : inactiveColor,
                                     transform: isPlayed && playing ? "scaleY(1.15)" : "scaleY(1)",
                                     transition: "background 0.1s ease, transform 0.1s ease",
                                     flexShrink: 0
@@ -191,19 +191,19 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
 
                 {/* Sub-info: Time & Speed Toggle */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace" }}>
-                    <span style={{ color: isMine ? "rgba(0,0,0,0.75)" : "var(--text-muted)", fontWeight: 700 }}>
+                    <span style={{ color: "rgba(255, 255, 255, 0.85)", fontWeight: 700 }}>
                         {formatTime(currentTime)} / {formatTime(duration || (msg.duration_ms ? msg.duration_ms / 1000 : 0))}
                     </span>
                     <button
                         onClick={toggleSpeed}
                         style={{
-                            background: isMine ? "rgba(0,0,0,0.1)" : "rgba(0,229,255,0.12)",
-                            border: `1px solid ${isMine ? "rgba(0,0,0,0.2)" : "rgba(0,229,255,0.25)"}`,
+                            background: isMine ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 229, 255, 0.12)",
+                            border: `1px solid ${isMine ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 229, 255, 0.25)"}`,
                             borderRadius: "6px",
                             padding: "1px 5px",
                             fontSize: "0.64rem",
                             fontWeight: 800,
-                            color: primaryColor,
+                            color: isMine ? "#FFFFFF" : primaryColor,
                             cursor: "pointer"
                         }}
                         title="Cambiar velocidad de reproducción"

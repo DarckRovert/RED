@@ -324,13 +324,15 @@ export const MessageBubble = memo(({
                         background: isSearchHighlight
                             ? "linear-gradient(135deg, rgba(255,167,38,0.4) 0%, rgba(255,109,0,0.6) 100%)"
                             : (isMine
-                                ? "var(--bubble-me, linear-gradient(135deg, #00E5FF 0%, #0284C7 100%))"
-                                : "rgba(18, 18, 30, 0.95)"),
-                        color: isMine ? "#000" : "#fff",
+                                ? "linear-gradient(135deg, rgba(232, 33, 58, 0.32) 0%, rgba(170, 18, 40, 0.46) 100%)"
+                                : "rgba(18, 22, 36, 0.95)"),
+                        color: "#FFFFFF",
                         border: isSearchHighlight
                             ? "2px solid var(--accent-amber)"
-                            : (isMine ? "1px solid var(--bubble-me-border, transparent)" : "1px solid var(--glass-border)"),
-                        boxShadow: isMine ? "0 4px 14px var(--primary-glow, rgba(0,229,255,0.25))" : "0 2px 8px rgba(0,0,0,0.5)",
+                            : (isMine ? "1px solid rgba(255, 60, 95, 0.42)" : "1px solid rgba(255, 255, 255, 0.09)"),
+                        boxShadow: isMine
+                            ? "0 4px 16px rgba(232, 33, 58, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.16)"
+                            : "0 2px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
                         display: "flex", flexDirection: "column", gap: "4px",
                         userSelect: "none",
                         WebkitUserSelect: "none",
@@ -344,17 +346,17 @@ export const MessageBubble = memo(({
                             style={{
                                 padding: "6px 10px",
                                 borderRadius: "8px",
-                                background: isMine ? "rgba(0,0,0,0.18)" : "rgba(255,255,255,0.06)",
-                                borderLeft: `3px solid ${isMine ? "#000" : "var(--accent-cyan)"}`,
+                                background: "rgba(0, 0, 0, 0.32)",
+                                borderLeft: `3px solid ${isMine ? "var(--primary-bright, #FF3355)" : "var(--accent-cyan, #00E5FF)"}`,
                                 cursor: "pointer",
                                 fontSize: "0.75rem",
                                 marginBottom: "2px",
                             }}
                         >
-                            <div style={{ fontWeight: 800, color: isMine ? "#000" : "var(--accent-cyan)", marginBottom: "1px" }}>
+                            <div style={{ fontWeight: 800, color: isMine ? "#FF8599" : "var(--accent-cyan)", marginBottom: "1px" }}>
                                 {msg.reply_to.sender ? `Operador ${msg.reply_to.sender.substring(0, 8)}` : "Respondiendo a mensaje"}
                             </div>
-                            <div style={{ opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div style={{ color: "rgba(255, 255, 255, 0.88)", opacity: 0.9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {msg.reply_to.content || `[${msg.reply_to.msg_type || "Medio"}]`}
                             </div>
                         </div>
@@ -362,7 +364,7 @@ export const MessageBubble = memo(({
 
                     {/* Deleted Message Notice */}
                     {isDeleted ? (
-                        <div style={{ fontStyle: "italic", fontSize: "0.85rem", opacity: 0.7, padding: "4px 6px" }}>
+                        <div style={{ fontStyle: "italic", fontSize: "0.85rem", color: "rgba(255,255,255,0.6)", padding: "4px 6px" }}>
                             🚫 Este mensaje fue eliminado
                         </div>
                     ) : (
@@ -421,22 +423,22 @@ export const MessageBubble = memo(({
                                     style={{
                                         display: "flex", alignItems: "center", gap: "10px",
                                         padding: "8px 12px", borderRadius: "10px",
-                                        background: isMine ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.06)",
-                                        border: `1px solid ${isMine ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.12)"}`,
+                                        background: "rgba(0, 0, 0, 0.28)",
+                                        border: `1px solid ${isMine ? "rgba(255, 60, 95, 0.35)" : "rgba(255,255,255,0.12)"}`,
                                         cursor: "pointer", minWidth: "180px"
                                     }}
                                     title="Toca para descargar archivo"
                                 >
                                     <span style={{ fontSize: "1.8rem" }}>{getFileIcon(documentName)}</span>
                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: 800, fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                        <div style={{ fontWeight: 800, fontSize: "0.85rem", color: "#FFFFFF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                             {documentName}
                                         </div>
-                                        <div style={{ fontSize: "0.68rem", opacity: 0.75, fontFamily: "JetBrains Mono, monospace" }}>
+                                        <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.75)", fontFamily: "JetBrains Mono, monospace" }}>
                                             {formatBytes(documentSize) || "Documento"} · Toca para guardar
                                         </div>
                                     </div>
-                                    <span style={{ fontSize: "1.1rem", opacity: 0.8 }}>⬇️</span>
+                                    <span style={{ fontSize: "1.1rem", opacity: 0.9 }}>⬇️</span>
                                 </div>
                             )}
 
@@ -444,15 +446,15 @@ export const MessageBubble = memo(({
                             {isLocationMessage && locationCoords && (
                                 <div style={{
                                     borderRadius: "10px", padding: "10px 12px",
-                                    background: isMine ? "rgba(0,0,0,0.15)" : "rgba(0,230,118,0.10)",
-                                    border: `1px solid ${isMine ? "rgba(0,0,0,0.2)" : "rgba(0,230,118,0.3)"}`,
+                                    background: "rgba(0, 0, 0, 0.32)",
+                                    border: `1px solid ${isMine ? "rgba(255, 60, 95, 0.35)" : "rgba(0,230,118,0.3)"}`,
                                     display: "flex", flexDirection: "column", gap: "6px"
                                 }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 800, fontSize: "0.85rem", color: isMine ? "#000" : "var(--accent-emerald)" }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 800, fontSize: "0.85rem", color: "var(--accent-emerald)" }}>
                                         <span>📍</span>
                                         <span>COORDENADA TÁCTICA GPS</span>
                                     </div>
-                                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.78rem", fontWeight: 700 }}>
+                                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.78rem", fontWeight: 700, color: "#FFFFFF" }}>
                                         Lat: {locationCoords[1]}<br/>
                                         Lon: {locationCoords[2]}
                                     </div>
@@ -462,9 +464,9 @@ export const MessageBubble = memo(({
                                                 navigator.clipboard?.writeText(`${locationCoords[1]}, ${locationCoords[2]}`);
                                             }}
                                             style={{
-                                                flex: 1, padding: "4px 8px", borderRadius: "6px", border: "none",
-                                                background: isMine ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)",
-                                                color: isMine ? "#000" : "#fff", fontSize: "0.68rem", fontWeight: 700, cursor: "pointer"
+                                                flex: 1, padding: "5px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)",
+                                                background: "rgba(255,255,255,0.1)",
+                                                color: "#FFFFFF", fontSize: "0.68rem", fontWeight: 700, cursor: "pointer"
                                             }}
                                         >
                                             📋 Copiar
@@ -474,9 +476,9 @@ export const MessageBubble = memo(({
                                             target="_blank"
                                             rel="noreferrer"
                                             style={{
-                                                flex: 1, padding: "4px 8px", borderRadius: "6px", textAlign: "center", textDecoration: "none",
-                                                background: isMine ? "rgba(0,0,0,0.8)" : "var(--accent-emerald)",
-                                                color: isMine ? "#fff" : "#000", fontSize: "0.68rem", fontWeight: 800
+                                                flex: 1, padding: "5px 8px", borderRadius: "6px", textAlign: "center", textDecoration: "none",
+                                                background: "var(--accent-emerald)",
+                                                color: "#000000", fontSize: "0.68rem", fontWeight: 800
                                             }}
                                         >
                                             🗺️ Abrir Mapa
@@ -492,7 +494,7 @@ export const MessageBubble = memo(({
 
                             {/* Standard Text content */}
                             {!isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
-                                <div style={{ fontSize: "0.90rem", lineHeight: 1.45, fontWeight: isMine ? 600 : 400, wordBreak: "break-word" }}>
+                                <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
                                     {msg.content}
                                 </div>
                             )}
@@ -502,7 +504,7 @@ export const MessageBubble = memo(({
                     {/* Timestamp & Status footer */}
                     <div style={{
                         display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "4px",
-                        fontSize: "0.65rem", color: isMine ? "rgba(0,0,0,0.65)" : "var(--text-muted)",
+                        fontSize: "0.65rem", color: isMine ? "rgba(255,255,255,0.72)" : "var(--text-muted)",
                         fontFamily: "JetBrains Mono, monospace", marginTop: "1px"
                     }}>
                         {isEdited && !isDeleted && <span>(editado)</span>}
