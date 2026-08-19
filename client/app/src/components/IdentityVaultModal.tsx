@@ -307,6 +307,19 @@ export const IdentityVaultModal: React.FC = () => {
                                 {isProfileSaved ? "✅ GUARDADO" : "💾 ACTUALIZAR PERFIL DE OPERADOR"}
                             </button>
 
+                            {/* Enlace Directo a Respaldo & Nube */}
+                            <button
+                                onClick={() => navigate("backup")}
+                                className="btn-tactical-secondary"
+                                style={{
+                                    width: "100%", padding: "12px", fontSize: "0.85rem", fontWeight: 800,
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                    background: "rgba(56, 189, 248, 0.08)", borderColor: "rgba(56, 189, 248, 0.3)", color: "var(--accent-cyan)"
+                                }}
+                            >
+                                <span>☁️</span> Respaldo Soberano en Google Drive / IPFS / Frase Semilla ➔
+                            </button>
+
                             {/* Código QR Táctico de Identidad */}
                             <div className="card-tactical" style={{ padding: "16px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 230, 118, 0.2)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", textAlign: "center" }}>
                                 <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-green)", display: "flex", alignItems: "center", gap: "6px" }}>

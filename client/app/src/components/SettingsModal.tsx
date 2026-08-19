@@ -19,7 +19,7 @@ import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../lib/version";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
 
-type SettingsTab = "appearance" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "updates";
+type SettingsTab = "appearance" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "backup" | "updates";
 
 interface SettingsModalProps {
     onClose?: () => void;
@@ -223,6 +223,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     { id: "privacy", icon: "🛡️", label: "Privacidad" },
                     { id: "mesh", icon: "📡", label: "Malla & Batería" },
                     { id: "identity", icon: "🔑", label: "Identidad & Claves" },
+                    { id: "backup", icon: "☁️", label: "Respaldo & Nube" },
                     { id: "updates", icon: "🚀", label: "Actualizador" },
                 ].map(tab => (
                     <button
@@ -964,6 +965,78 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                     Ver Bóveda de Claves ➔
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── TAB: RESPALDO SOBERANO & MULTI-NUBE ── */}
+                {activeTab === "backup" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
+                                Bóveda Soberana: Respaldo, Nube & Recuperación
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                Copias de seguridad cifradas con AES-256-GCM, sincronización en Google Drive, anclaje IPFS Web3 y frase semilla BIP-39.
+                            </p>
+                        </div>
+
+                        {/* Card Principal */}
+                        <div className="card-tactical" style={{
+                            padding: "20px",
+                            background: "linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(14,16,28,0.9) 100%)",
+                            border: "1px solid rgba(56, 189, 248, 0.35)",
+                            display: "flex", flexDirection: "column", gap: "14px"
+                        }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <div style={{
+                                    width: "44px", height: "44px", borderRadius: "12px",
+                                    background: "rgba(56, 189, 248, 0.2)", border: "1px solid var(--accent-cyan)",
+                                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem"
+                                }}>
+                                    ☁️
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "1rem", fontWeight: 900, color: "#fff" }}>
+                                        Centro de Respaldo Criptográfico
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        GOOGLE DRIVE · IPFS WEB3 · ARCHIVO .REDVAULT · 12-WORDS SEED
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: "1.5", margin: 0 }}>
+                                Protege tu identidad, contactos, conversaciones e historial blockchain contra pérdida de dispositivo o reinstalaciones. Tus datos viajan 100% cifrados militarmente bajo esquema Zero-Knowledge.
+                            </p>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--glass-border)" }}>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>PLATAFORMAS DE NUBE</div>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#fff", marginTop: "2px" }}>Google Drive & IPFS Web3</div>
+                                </div>
+                                <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--glass-border)" }}>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>ESTÁNDAR CRIPTOGRÁFICO</div>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)", marginTop: "2px" }}>AES-256-GCM + PBKDF2</div>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => {
+                                    handleClose();
+                                    navigate("backup");
+                                }}
+                                className="btn-tactical-pill active"
+                                style={{
+                                    padding: "12px",
+                                    fontSize: "0.85rem",
+                                    fontWeight: 900,
+                                    width: "100%",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                                }}
+                            >
+                                <span>🚀</span> Abrir Bóveda de Respaldo & Nube ➔
+                            </button>
                         </div>
                     </div>
                 )}
