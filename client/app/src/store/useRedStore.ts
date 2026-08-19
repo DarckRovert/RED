@@ -432,6 +432,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
             set({ currentScreen: screen, activeConversationId: finalId, messages: [] });
 
+            const sanitizeMsgs = (list: any[]): MessageItem[] => {
+                if (!Array.isArray(list)) return [];
+                return list.filter(m => {
+                    if (!m) return false;
+                    if (m.msg_type === 'typing' || m.msg_type === 'typing_status') return false;
+                    if (typeof m.content === 'string' && m.content.startsWith('{') && m.content.includes('"status":') && m.content.includes('"sender_hash"')) return false;
+                    return true;
+                });
+            };
+
             const fetchMessages = async () => {
                 try {
                     let msgs = await RedAPI.getMessages(finalId);
@@ -440,12 +450,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         const fallbackMsgs = await RedAPI.getMessages(altPeer).catch(() => []);
                         if (fallbackMsgs && fallbackMsgs.length > 0) msgs = fallbackMsgs;
                     }
-                    set({ messages: Array.isArray(msgs) ? msgs : [] });
+                    set({ messages: sanitizeMsgs(msgs) });
                 } catch {
                     const altPeer = existingConv?.peer || (canonicalPeer !== finalId ? canonicalPeer : null);
                     if (altPeer && altPeer !== finalId) {
                         RedAPI.getMessages(altPeer)
-                            .then(msgs => set({ messages: Array.isArray(msgs) ? msgs : [] }))
+                            .then(msgs => set({ messages: sanitizeMsgs(msgs) }))
                             .catch(() => set({ messages: [] }));
                     } else {
                         set({ messages: [] });
@@ -1395,12 +1405,37 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
-        // ── Typing pulse: show indicator for 5s, then auto-clear ──────────────
-        if (item.msg_type === 'typing') {
-            if (typingTimeout) clearTimeout(typingTimeout);
-            const t = setTimeout(() => set({ peerTyping: false, typingTimeout: null }), 5000);
-            set({ peerTyping: true, typingTimeout: t });
-            return; // do NOT add to message list
+        // ── Real-Time Typing & Recording Indicator: never append to message list ──
+        if (
+            item.msg_type === 'typing' ||
+            item.msg_type === 'typing_status' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"status":') && item.content.includes('"sender_hash"'))
+        ) {
+            try {
+                let statusVal: 'typing' | 'recording_voice' | 'idle' = 'typing';
+                let senderHash = item.sender;
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    const parsed = JSON.parse(item.content);
+                    statusVal = parsed.status || 'typing';
+                    if (parsed.sender_hash) senderHash = parsed.sender_hash;
+                }
+                if (senderHash && senderHash !== 'me' && senderHash !== 'local') {
+                    if (typingTimeout) clearTimeout(typingTimeout);
+                    const t = setTimeout(() => {
+                        set(s => ({
+                            peerTyping: false,
+                            typingTimeout: null,
+                            peerTypingStatus: { ...s.peerTypingStatus, [senderHash]: 'idle' }
+                        }));
+                    }, 4000);
+                    set(s => ({
+                        peerTyping: statusVal !== 'idle',
+                        typingTimeout: t,
+                        peerTypingStatus: { ...s.peerTypingStatus, [senderHash]: statusVal }
+                    }));
+                }
+            } catch {}
+            return; // strictly do NOT add to message list
         }
 
         // ── LIVE Stream P2P Video Handlers ─────────────────────────────────────
@@ -1588,7 +1623,15 @@ export const useRedStore = create<RedStore>((set, get) => ({
         }
 
         // ── WebRTC Signaling: intercept for calls, never append as chat bubble ──
-        if (item.msg_type === 'webrtc_signal') {
+        const isWebrtcSignal = item.msg_type === 'webrtc_signal' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && (
+                item.content.includes('"offer":') ||
+                item.content.includes('"answer":') ||
+                item.content.includes('"candidate":') ||
+                item.content.includes('"hangup":')
+            ));
+
+        if (isWebrtcSignal) {
             try {
                 const myIdentity = get().identity;
                 const myHash = myIdentity?.identity_hash;
@@ -1924,31 +1967,6 @@ export const useRedStore = create<RedStore>((set, get) => ({
             } catch (e) {
                 console.warn('[Read Receipt Parse Error]', e);
             }
-            return;
-        }
-
-        // ── Real-Time Typing & Voice Recording Status ──
-        if (item.msg_type === 'typing_status' || item.msg_type === 'typing') {
-            try {
-                let statusVal: 'typing' | 'recording_voice' | 'idle' = 'typing';
-                if (typeof item.content === 'string' && item.content.startsWith('{')) {
-                    const parsed = JSON.parse(item.content);
-                    statusVal = parsed.status || 'typing';
-                }
-                const senderHash = item.sender;
-                if (senderHash) {
-                    set(s => ({
-                        peerTyping: statusVal !== 'idle',
-                        peerTypingStatus: { ...s.peerTypingStatus, [senderHash]: statusVal }
-                    }));
-                    setTimeout(() => {
-                        set(s => ({
-                            peerTyping: false,
-                            peerTypingStatus: { ...s.peerTypingStatus, [senderHash]: 'idle' }
-                        }));
-                    }, 3500);
-                }
-            } catch {}
             return;
         }
 

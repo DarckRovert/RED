@@ -44,6 +44,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const [localAttachOpen, setLocalAttachOpen] = useState(false);
     const [multiline, setMultiline] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
+    const lastTypingSentRef = useRef<number>(0);
+
+    const triggerTyping = useCallback(() => {
+        const now = Date.now();
+        if (now - lastTypingSentRef.current >= 3000) {
+            lastTypingSentRef.current = now;
+            sendTyping?.();
+        }
+    }, [sendTyping]);
 
     const text = inputText !== undefined ? inputText : localText;
     const setText = setInputText || setLocalText;
@@ -251,7 +260,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 value={text}
                                 onChange={(e) => {
                                     setText(e.target.value);
-                                    sendTyping?.();
+                                    if (e.target.value.trim().length > 0) {
+                                        triggerTyping();
+                                    }
                                 }}
                                 onKeyDown={handleKeyDown}
                                 placeholder={burnTimer ? `Mensaje autodestructible (${burnTimer}s)...` : "Escribe un mensaje cifrado..."}

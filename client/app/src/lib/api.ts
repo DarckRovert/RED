@@ -299,11 +299,22 @@ class RedAPIClient {
         const isControlMessage = 
             options?.msg_type === 'reaction' ||
             options?.msg_type === 'typing' ||
+            options?.msg_type === 'typing_status' ||
+            options?.msg_type === 'read_receipt' ||
+            options?.msg_type === 'message_edit' ||
+            options?.msg_type === 'message_delete' ||
             options?.msg_type === 'contact_request' ||
             options?.msg_type === 'contact_response' ||
             options?.msg_type === 'webrtc_signal' ||
             options?.msg_type === 'location_ping' ||
             options?.msg_type === 'timer_update' ||
+            options?.msg_type === 'ack' ||
+            options?.msg_type === 'delivery_ack' ||
+            options?.msg_type === 'live_frame' ||
+            options?.msg_type === 'live_announce' ||
+            options?.msg_type === 'live_end' ||
+            options?.msg_type === 'live_comment' ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"status":') && content.includes('"sender_hash"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
 
         // 1. Save in Web / local store for instant UI rendering and persistence (only for real user chat messages)
@@ -333,12 +344,28 @@ class RedAPIClient {
             this.setWebStore('red_web_conversations', convs);
         }
 
-        // 2. Dispatch to local Rust node if native
-        const body = { recipient: cleanRecipient, content, ...options, id: msgId };
-        try {
-            await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
-        } catch (e) {
-            // Web environment or offline node fallback
+        // 2. Dispatch to local Rust node if native (only for real user messages or dedicated endpoints)
+        if (!isControlMessage) {
+            const body = { recipient: cleanRecipient, content, ...options, id: msgId };
+            try {
+                await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
+            } catch (e) {
+                // Web environment or offline node fallback
+            }
+        } else if (options?.msg_type === 'message_edit' && options?.target_id) {
+            this.req(`/conversations/${cleanRecipient}/messages/${options.target_id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ content: options.new_content || content })
+            }).catch(() => {});
+        } else if (options?.msg_type === 'message_delete' && options?.target_id) {
+            this.req(`/conversations/${cleanRecipient}/messages/${options.target_id}`, {
+                method: 'DELETE'
+            }).catch(() => {});
+        } else if (options?.msg_type === 'read_receipt') {
+            this.req(`/conversations/${cleanRecipient}/read`, {
+                method: 'POST',
+                body: '{}'
+            }).catch(() => {});
         }
 
         // 3. Dispatch concurrently via MeshRouter (BLE, WebRTC DataChannel, WAN MQTT Blind Relay)

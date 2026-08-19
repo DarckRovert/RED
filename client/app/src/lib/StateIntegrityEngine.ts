@@ -126,6 +126,33 @@ export class StateIntegrityEngine {
             }
         }
 
+        // Sanitize conversation message stores: remove any stray typing or control packets
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith("red_web_messages_")) {
+                    const raw = localStorage.getItem(k);
+                    if (raw) {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            if (Array.isArray(parsed)) {
+                                const clean = parsed.filter((m: any) => {
+                                    if (!m) return false;
+                                    if (m.msg_type === 'typing' || m.msg_type === 'typing_status') return false;
+                                    if (typeof m.content === 'string' && m.content.startsWith('{') && m.content.includes('"status":') && m.content.includes('"sender_hash"')) return false;
+                                    return true;
+                                });
+                                if (clean.length !== parsed.length) {
+                                    localStorage.setItem(k, JSON.stringify(clean));
+                                    healedCount += (parsed.length - clean.length);
+                                }
+                            }
+                        } catch {}
+                    }
+                }
+            }
+        } catch {}
+
         const merkleRoot = await this.computeMerkleRoot(leafHashes);
 
         return {

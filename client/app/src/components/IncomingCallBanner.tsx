@@ -7,13 +7,13 @@ import { RedAPI } from "../lib/api";
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
 
 export function IncomingCallBanner() {
-    const { incomingCall, setIncomingCall, navigate, setActiveCallType, preferences } = useRedStore();
+    const { incomingCall, setIncomingCall, navigate, setActiveCallType, preferences, currentScreen } = useRedStore();
 
     const isVideo = incomingCall?.callType === 'video';
 
     // ── Tactical Web Audio Ringtone & Vibration via CallRingtoneEngine ────────
     React.useEffect(() => {
-        if (!incomingCall) {
+        if (!incomingCall || currentScreen === 'call') {
             CallRingtoneEngine.stop();
             return;
         }
@@ -23,9 +23,9 @@ export function IncomingCallBanner() {
         return () => {
             CallRingtoneEngine.stop();
         };
-    }, [incomingCall]);
+    }, [incomingCall, currentScreen]);
 
-    if (!incomingCall) return null;
+    if (!incomingCall || currentScreen === 'call') return null;
 
     const handleAccept = () => {
         CallRingtoneEngine.stop();

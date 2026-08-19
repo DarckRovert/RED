@@ -641,6 +641,23 @@ async fn handle_send_message(
     // No rompe E2E ni compromete la privacidad del receptor.
     let msg_type_str = req.msg_type.as_deref().unwrap_or("text");
 
+    // Skip storage persistence for ephemeral control signals
+    if msg_type_str == "typing"
+        || msg_type_str == "typing_status"
+        || msg_type_str == "webrtc_signal"
+        || msg_type_str == "location_ping"
+        || req.content.starts_with("{\"status\":\"typing\"")
+    {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "status": "ephemeral_ok",
+                "recipient": recipient.to_hex()
+            })),
+        )
+            .into_response();
+    }
+
     // Analizar texto (con ventana de contexto reciente si está disponible)
     let mut context_msgs: Vec<String> = Vec::new();
     if msg_type_str == "text" || msg_type_str == "system" {
