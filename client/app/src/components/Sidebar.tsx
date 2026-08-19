@@ -115,12 +115,22 @@ export default function Sidebar() {
             title: "🪪 Identidad, Pagos & Soberanía",
             items: [
                 { icon: "⚡", label: "Hub Comercial & Recompensas", action: "commercialHub" },
+                { icon: "🦊", label: "Bóveda Web3 & MetaMask", action: "web3Vault" },
                 { icon: "🪪", label: "Perfil & Bóveda DID", action: "idVault" },
                 { icon: "💳", label: "Pagos & Vouchers P2P", action: "p2pPay" },
                 { icon: "🔐", label: "Bóveda Criptográfica PQC", action: "crypto" },
                 { icon: "⛓️", label: "Explorador Blockchain", action: "explorer" },
                 { icon: "🖼️", label: "Bóveda Esteganográfica", action: "stegoVault" },
                 { icon: "💾", label: "Respaldos & Restauración", action: "backup" },
+            ]
+        },
+        {
+            title: "🛡️ Ciberdefensa & Escudo Global",
+            items: [
+                { icon: "🛡️", label: "Escudo Global (DEFCON Matrix)", action: "globalShield" },
+                { icon: "⚡", label: "Simulador Apagón Blackout", action: "blackout" },
+                { icon: "💀", label: "Hombre Muerto DMS", action: "dms" },
+                { icon: "🛡️", label: "Seguridad Zero-Trust", action: "security" },
             ]
         },
         {

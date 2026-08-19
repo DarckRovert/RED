@@ -53,6 +53,8 @@ const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreMo
 const SettingsModal        = dynamic(() => import("../components/SettingsModal").then(m => ({ default: m.SettingsModal })),        { ssr: false, loading: () => <AppLoader /> });
 const UpdateModal          = dynamic(() => import("../components/UpdateModal").then(m => ({ default: m.UpdateModal })),          { ssr: false, loading: () => <AppLoader /> });
 const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
+const GlobalShieldPanel    = dynamic(() => import("../components/GlobalShieldPanel"),    { ssr: false, loading: () => <AppLoader /> });
+const Web3VaultModal       = dynamic(() => import("../components/Web3VaultModal"),       { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
@@ -427,7 +429,9 @@ export default function AppRouter() {
                 {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
                 {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
                 {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
-                {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
+                {currentScreen === "globalShield" && <GlobalShieldPanel />}
+                {currentScreen === "web3Vault" && <Web3VaultModal />}
+                {currentScreen === "commercialHub" || currentScreen === "hub" ? <CommercialHubModal isOpen={true} onClose={goBack} /> : null}
                 {currentScreen === "nodemap" && <NodeMap />}
                 {currentScreen === "radar" && <RadarWindow />}
                 {currentScreen === "call" && <CallScreen />}
@@ -481,6 +485,8 @@ export default function AppRouter() {
               {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
               {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
               {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
+              {currentScreen === "globalShield" && <GlobalShieldPanel />}
+              {currentScreen === "web3Vault" && <Web3VaultModal />}
               {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
               {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
             </>

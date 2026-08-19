@@ -5,6 +5,29 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [38.0.0-tactical-master] - 2026-08-19
+
+### Añadido y Perfeccionado — RED v38.0.0 Sovereign Mesh Master Release
+
+**Integración Web3 & Bóveda MetaMask (`Web3BridgeEngine.ts`, `Web3VaultModal.tsx`)**
+- **Conectividad EIP-1193 Nativa:** Detección de billeteras inyectadas (MetaMask, Brave, Coinbase, Rabby) con reconexión reactiva y gestión de eventos (`accountsChanged`, `chainChanged`, `disconnect`).
+- **Soporte Multi-Red EVM:** Conmutación y auto-configuración de Ethereum Mainnet, Polygon PoS, Arbitrum One, Base y Sepolia Testnet.
+- **Atestación Criptográfica EIP-712 / DID Binding:** Vinculación bidireccional entre la dirección Ethereum y el Identificador Descentralizado soberano de RED (`did:red:<identity_hash>`) mediante firma digital de mensaje verificable sin comisiones de gas.
+- **Balances en Tiempo Real:** Lector directo JSON-RPC de saldos nativos y tokens $RED on-chain.
+
+**Escudo Global & Matriz de Ciberdefensa DEFCON (`GlobalShieldEngine.ts`, `GlobalShieldPanel.tsx`)**
+- **Gobernanza DEFCON Dinámica (Niveles 4 a 1):** Conmutación táctica entre DEFCON 4 (Estándar), DEFCON 3 (Elevado), DEFCON 2 (Alta Seguridad / Domain Fronting SNI forzado) y DEFCON 1 (Apagón Táctico / DoH DNS Tunneling forzado + Bloqueo Biométrico inmediato).
+- **Escalamiento PoW Anti-Sybil en Malla:** Ajuste dinámico de la dificultad PoW en `MeshProofOfWork.ts` (de 2 a 5 bits) según el nivel de amenaza activo.
+- **HUD Perimetral en Vivo:** Monitorización de ataques Sybil repelidos, paquetes ofuscados, saltos Onion y autonomía de batería mesh.
+- **Prueba Activa de Enrutamiento:** Disparador en tiempo real para verificar el camuflaje de tráfico a través de SNI Spoofing y DoH DNS Tunneling.
+
+**Tokenomics & Libro Mayor Descentralizado (`TokenomicsEngine.ts`)**
+- **Recompensas Proof-of-Relay:** Incentivos económicos automáticos por el reenvío de paquetes en la malla P2P y almacenamiento DTN.
+- **Staking PoS:** Rendimiento estimado del 14.8% APY con penalizaciones de slashing por inactividad.
+- **Vales Criptográficos Ed25519 Offline:** Emisión y canje de vales con firma digital, códigos QR (`RED_PAY:<id>:<monto>:<firma>`) y mitigación estricta de doble gasto.
+
+---
+
 ## [36.0.0-tactical-master] - 2026-08-19
 
 ### Añadido y Perfeccionado — RED v36.0.0 Sovereign Competitive Superiority Master Release

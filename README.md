@@ -1,8 +1,8 @@
-# 🛡️ RED — Sovereign Mesh OS v37.0.0
+# 🛡️ RED — Sovereign Mesh OS v38.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet.
 
-[![Descargar APK Oficial RED v37.0.0](https://img.shields.io/badge/Descargar_APK_v37.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v37.0.0)
+[![Descargar APK Oficial RED v38.0.0](https://img.shields.io/badge/Descargar_APK_v38.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v38.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
@@ -16,12 +16,12 @@
 1. [Visión General & Filosofía de Diseño](#-visión-general--filosofía-de-diseño)
 2. [Arquitectura del Sistema & Motores de Bajo Nivel](#-arquitectura-del-sistema--motores-de-bajo-nivel)
 3. [Conectividad Global & Red Malla Descentralizada](#-conectividad-global--red-malla-descentralizada)
-4. [Catálogo Completo de los 35 Módulos Tácticos](#-catálogo-completo-de-los-35-módulos-tácticos)
+4. [Catálogo Completo de los 37 Módulos Tácticos](#-catálogo-completo-de-los-37-módulos-tácticos)
 5. [Criptografía Post-Cuántica & Seguridad Zero-Trust](#-criptografía-post-cuántica--seguridad-zero-trust)
-6. [Actuadores Físicos & Sensores de Hardware](#-actuadores-físicos--sensores-de-hardware)
-7. [Arquitectura Real-Time SSE Unificada (Cero Polling)](#-arquitectura-real-time-sse-unificada-cero-polling)
-8. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
-9. [Estructura del Proyecto & Documentación Técnica](#-estructura-del-proyecto--documentación-técnica)
+6. [Integración Web3 MetaMask & Soberanía Digital](#-integración-web3-metamask--soberanía-digital)
+7. [Escudo Global & Matriz DEFCON](#-escudo-global--matriz-defcon)
+8. [Tokenomics & Proof-of-Relay](#-tokenomics--proof-of-relay)
+9. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
 
 ---
 
@@ -29,18 +29,19 @@
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v37.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v38.0.0 |
 |---|---|---|
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
 | **Conectividad Global** | Centralizada en servidores corporativos | **P2P Kademlia DHT + Bootstrap Peers + Auto-Relay Circuit v2 + DoH Tunnels** |
-| **Identidad** | Vinculada a número telefónico/email | **Soberana Criptográfica (`did:red:`)** |
+| **Identidad & Web3** | Vinculada a número telefónico/email | **Soberana (`did:red:`) + EIP-712 MetaMask Multi-Chain Binding** |
+| **Ciberdefensa Activa** | Firewall básico en servidor | **Escudo Global DEFCON Matrix (PoW Anti-Sybil + SNI Domain Fronting)** |
+| **Incentivos Económicos** | Sin recompensas | **Tokenomics Proof-of-Relay + Vales Criptográficos Offline Ed25519** |
 | **Criptografía** | Clásica (vulnerable a computación cuántica) | **Híbrida Post-Cuántica: ML-KEM-768 (FIPS 203) + ECDH P-256 + AES-256-GCM** |
 | **Audio Táctico** | Códecs pesados (WebM/AAC 32-64 kbps) | **LowBitrateVocoder DSP (8kHz IMA-ADPCM 1.6–3.2 kbps, -97.9% compresión)** |
-| **Anti-Spam / Anti-DDoS** | Bloqueo por IP central | **Proof-of-Work Criptográfico SHA-256 (Hashcash descentralizado)** |
 | **Integridad de Datos** | Vulnerable a cortes de energía | **Árbol Merkle SHA-256 con autorreparación automática en arranque** |
 | **Inteligencia IA** | Dependiente de APIs en la Nube | **100% Offline Neuronal WASM (`LaMini-Flan-T5`) + Guardian Firewall** |
-| **Cero Datos Ficticios** | Simulación en modo demo | **0% Datos Hardcodeados / 100% Funcionalidad Real Verificada** |
+| **Cero Datos Ficticios** | Simulación en modo demo | **0% Datos Hardcodeados / 100% Funcionalidad Real Verificada en Hardware** |
 
 ---
 

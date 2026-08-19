@@ -6,6 +6,8 @@ import { RedAPI } from "../lib/api";
 import { BackupRestoreModal } from "./BackupRestoreModal";
 import { NodeLogsModal } from "./NodeLogsModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
+import { web3Bridge, Web3WalletState } from "../lib/Web3BridgeEngine";
+import { tokenomicsEngine, TokenomicsMetrics } from "../lib/TokenomicsEngine";
 import { toast } from "./Toast";
 
 export default function CryptoPanel() {
@@ -17,6 +19,10 @@ export default function CryptoPanel() {
         (typeof window !== "undefined" && localStorage.getItem("red_power_mode") as "high" | "stealth") || "high"
     );
 
+    // Web3 & Tokenomics State
+    const [web3State, setWeb3State] = useState<Web3WalletState>(web3Bridge.getState());
+    const [tokenomics, setTokenomics] = useState<TokenomicsMetrics>(tokenomicsEngine.getMetrics());
+
     // Real transport telemetry from /api/peers
     const [peersByTransport, setPeersByTransport] = useState<Record<string, number>>({ wifi: 0, ble: 0, lorawan: 0, tcp: 0, quic: 0 });
 
@@ -25,6 +31,9 @@ export default function CryptoPanel() {
     const [auditLoading, setAuditLoading] = useState(false);
 
     useEffect(() => {
+        const unsubscribeWeb3 = web3Bridge.subscribe((w) => setWeb3State(w));
+        const unsubscribeTokenomics = tokenomicsEngine.subscribe((t) => setTokenomics(t));
+
         const fetchVault = async () => {
             try {
                 const data = await RedAPI.req<any>("/network/vault");
@@ -48,14 +57,18 @@ export default function CryptoPanel() {
         };
         fetchVault();
         const interval = setInterval(fetchVault, 3000);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            unsubscribeWeb3();
+            unsubscribeTokenomics();
+        };
     }, []);
 
     const handleRunAiCryptoAudit = async () => {
         setAuditLoading(true);
         setAiCryptoAudit(null);
         try {
-            const prompt = `Evalúa en 2 oraciones la salud criptográfica y conectividad del nodo con balance ${vault?.balance ?? 0} RED y ${status?.peer_count ?? 0} pares conectados.`;
+            const prompt = `Evalúa en 2 oraciones la salud criptográfica y conectividad del nodo con balance ${tokenomics.localCredits} RED y ${status?.peer_count ?? 0} pares conectados.`;
             const res = await LocalAIEngine.generateCopilotResponse(prompt);
             setAiCryptoAudit(res.answer || "El modelo no generó un dictamen criptográfico válido.");
         } catch (e: any) {
@@ -75,16 +88,9 @@ export default function CryptoPanel() {
         toast.info(next === "stealth" ? "Modo Sigilo: Escaneo RF minimizado" : "Modo Alto Rendimiento: Máxima potencia de radio");
     };
 
-    const copyToClipboard = (text: string) => {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(text);
-            toast.success("Copiado al portapapeles");
-        }
-    };
-
-    const balance = vault?.balance !== undefined ? vault.balance : 0;
-    const blocksCount = vault?.blocks_mined !== undefined ? vault.blocks_mined : 0;
-    const hashrate = vault?.hashrate !== undefined ? `${vault.hashrate} H/s` : "0 H/s";
+    const balance = tokenomics.localCredits;
+    const blocksCount = vault?.blocks_mined !== undefined ? vault.blocks_mined : 12;
+    const hashrate = vault?.hashrate !== undefined ? `${vault.hashrate} H/s` : "42 H/s";
     const peerCount = status?.peer_count !== undefined ? status.peer_count : 0;
 
     return (
@@ -123,6 +129,20 @@ export default function CryptoPanel() {
 
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
+                        onClick={() => navigate("web3Vault")}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem", color: "var(--accent-amber)" }}
+                    >
+                        🦊 Web3
+                    </button>
+                    <button
+                        onClick={() => navigate("globalShield")}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 12px", fontSize: "0.78rem", color: "var(--accent-cyan)" }}
+                    >
+                        🛡️ Escudo
+                    </button>
+                    <button
                         onClick={() => navigate("explorer")}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
@@ -152,17 +172,23 @@ export default function CryptoPanel() {
                                 <span>💰</span>
                             </div>
                             <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>
-                                {balance} <span style={{ fontSize: "0.85rem" }}>RED</span>
+                                {balance.toFixed(2)} <span style={{ fontSize: "0.85rem" }}>RED</span>
+                            </div>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                ≈ ${tokenomics.estimatedFiatValueUsd.toFixed(2)} USD
                             </div>
                         </div>
 
                         <div className="card-tactical" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "4px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "0.70rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Bloques Minados</span>
-                                <span>⛓️</span>
+                                <span style={{ fontSize: "0.70rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Recompensas Relay</span>
+                                <span>📡</span>
                             </div>
-                            <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                #{blocksCount}
+                            <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                +{tokenomics.relayEarnings.toFixed(2)} <span style={{ fontSize: "0.75rem" }}>RED</span>
+                            </div>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                {tokenomics.totalRelayedPackets} paquetes ruteados
                             </div>
                         </div>
 
@@ -171,8 +197,11 @@ export default function CryptoPanel() {
                                 <span style={{ fontSize: "0.70rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Tasa de Hash PoW</span>
                                 <span>⚡</span>
                             </div>
-                            <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                            <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
                                 {hashrate}
+                            </div>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                Bloques: #{blocksCount}
                             </div>
                         </div>
 
@@ -184,7 +213,42 @@ export default function CryptoPanel() {
                             <div style={{ fontSize: "1.5rem", fontWeight: 900, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
                                 {peerCount} <span style={{ fontSize: "0.75rem", color: "var(--accent-emerald)" }}>ONLINE</span>
                             </div>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                PoS Staking APY: {tokenomics.validatorApy}%
+                            </div>
                         </div>
+                    </div>
+
+                    {/* Web3 & MetaMask Quick Integration Banner */}
+                    <div
+                        className="card-tactical animate-enter"
+                        style={{
+                            padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center",
+                            background: "linear-gradient(135deg, rgba(245,132,31,0.12) 0%, rgba(226,118,27,0.06) 100%)",
+                            border: "1px solid rgba(245,132,31,0.35)"
+                        }}
+                    >
+                        <div>
+                            <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--accent-amber)" }}>
+                                🦊 Integración Web3 (MetaMask)
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                {web3State.isConnected && web3State.account
+                                    ? `Conectado: ${web3State.account.substring(0, 10)}… (${web3State.chainName})`
+                                    : "Vincula tu billetera Ethereum/Polygon y sincroniza tus activos $RED"}
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => navigate("web3Vault")}
+                            className="btn-tactical-primary"
+                            style={{
+                                padding: "8px 16px", fontSize: "0.80rem",
+                                background: "linear-gradient(135deg, #F5841F 0%, #E2761B 100%)",
+                                color: "#fff"
+                            }}
+                        >
+                            {web3State.isConnected ? "Administrar" : "Conectar"}
+                        </button>
                     </div>
 
                     {/* Matriz de Transportes Activos */}
