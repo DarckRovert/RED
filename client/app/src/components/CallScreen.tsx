@@ -5,6 +5,9 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { ErrorBanner } from "./ui/ErrorBanner";
 
+import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
+import { SettingsManager } from "../lib/settingsManager";
+
 export default function CallScreen() {
     const {
         identity,
@@ -14,31 +17,44 @@ export default function CallScreen() {
         goBack,
         incomingCall,
         setIncomingCall,
+        activeCallOffer,
+        setActiveCallOffer,
         activeCallSignal,
         callSignalQueue,
         activeCallType,
         activeCallPeer,
-        clearCallSignals
+        clearCallSignals,
+        preferences
     } = useRedStore();
+
+    // Ensure any leftover ringtone is immediately stopped
+    useEffect(() => {
+        CallRingtoneEngine.stop();
+    }, []);
 
     const activeConv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
 
-    // 1. Resolve full 64-character peer DID hash
-    const rawPeer = activeCallPeer || activeConv?.peer || incomingCall?.callerHash || (
+    // 1. Resolve full 64-character peer DID hash (case-insensitive)
+    const rawPeer = (activeCallPeer || activeConv?.peer || incomingCall?.callerHash || (
         activeConversationId && activeConversationId.length === 64 ? activeConversationId : (
             activeConversationId?.includes("-") ? activeConversationId.split("-")[1] : activeConversationId
         )
-    ) || "";
+    ) || "").toLowerCase().trim();
 
-    const peerContact = contacts.find((c: any) =>
-        c.identity_hash === rawPeer ||
-        (rawPeer.length >= 8 && c.identity_hash?.startsWith(rawPeer)) ||
-        (rawPeer.length >= 8 && rawPeer.startsWith(c.identity_hash?.substring(0, 8))) ||
-        (rawPeer.length >= 8 && c.identity_hash?.includes(rawPeer))
-    );
+    const peerContact = contacts.find((c: any) => {
+        const contactHash = (c.identity_hash || "").toLowerCase();
+        return (
+            contactHash === rawPeer ||
+            (rawPeer.length >= 8 && contactHash.startsWith(rawPeer.substring(0, 8))) ||
+            (contactHash.length >= 8 && rawPeer.startsWith(contactHash.substring(0, 8)))
+        );
+    });
 
     const resolvedPeerHash = peerContact?.identity_hash || (rawPeer.length === 64 ? rawPeer : (
-        conversations.find(c => c.peer && (c.peer === rawPeer || c.peer.startsWith(rawPeer) || rawPeer.startsWith(c.peer.substring(0, 8))))?.peer || rawPeer
+        conversations.find(c => {
+            const cPeer = (c.peer || "").toLowerCase();
+            return cPeer === rawPeer || (rawPeer.length >= 8 && cPeer.startsWith(rawPeer.substring(0, 8)));
+        })?.peer || rawPeer
     ));
 
     // Immutable ref for target peer hash to avoid state tear-down during call transitions
@@ -66,6 +82,8 @@ export default function CallScreen() {
     const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
     const [showStats, setShowStats] = useState<boolean>(false);
     const [callDuration, setCallDuration] = useState<number>(0);
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [hasRemoteVideo, setHasRemoteVideo] = useState<boolean>(false);
 
     // Live WebRTC Network & Telemetry Stats
     const [statsData, setStatsData] = useState<{
@@ -91,6 +109,8 @@ export default function CallScreen() {
     const remoteStreamRef = useRef<MediaStream | null>(null);
     const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
     const processedSignalsRef = useRef<Set<string>>(new Set());
+    const callStartTimeRef = useRef<number>(Date.now());
+    const initializedRef = useRef<boolean>(false);
 
     // Web Audio API Visualizer Refs
     const audioCtxRef = useRef<AudioContext | null>(null);
@@ -126,14 +146,17 @@ export default function CallScreen() {
             remoteAudioRef.current.muted = false;
             remoteAudioRef.current.play().catch(() => {});
         }
-        if (remoteVideoRef.current) {
+        if (remoteVideoRef.current && !isAudioOnly) {
             remoteVideoRef.current.muted = false;
             remoteVideoRef.current.play().catch(() => {});
         }
-    }, []);
+    }, [isAudioOnly]);
 
-    // ── Setup Tactical Audio Visualizer (Web Audio API) ────────────────────────
+    // ── Setup Web Audio API FFT Spectrum Visualizer for Voice Activity ────────
     const setupAudioVisualizer = useCallback((stream: MediaStream) => {
+        const audioTrack = stream.getAudioTracks()[0];
+        if (!audioTrack) return;
+
         try {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             if (!AudioContextClass) return;
@@ -150,24 +173,23 @@ export default function CallScreen() {
             analyser.smoothingTimeConstant = 0.8;
             analyserRef.current = analyser;
 
-            const source = ctx.createMediaStreamSource(stream);
+            const source = ctx.createMediaStreamSource(new MediaStream([audioTrack]));
             source.connect(analyser);
 
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
 
             const renderWaveform = () => {
                 if (!analyserRef.current) return;
                 analyserRef.current.getByteFrequencyData(dataArray);
 
-                // Compute Average Volume Level
                 let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
+                for (let i = 0; i < bufferLength; i++) {
                     sum += dataArray[i];
                 }
-                const avg = sum / dataArray.length;
-                setVadLevel(Math.min(100, Math.round((avg / 255) * 100)));
+                const avg = sum / bufferLength;
+                setVadLevel(avg);
 
-                // Draw to Canvas
                 const canvas = waveformCanvasRef.current;
                 if (canvas) {
                     const canvasCtx = canvas.getContext("2d");
@@ -176,10 +198,10 @@ export default function CallScreen() {
                         const height = canvas.height;
                         canvasCtx.clearRect(0, 0, width, height);
 
-                        const barWidth = (width / dataArray.length) * 1.8;
+                        const barWidth = (width / bufferLength) * 1.8;
                         let x = 0;
 
-                        for (let i = 0; i < dataArray.length; i++) {
+                        for (let i = 0; i < bufferLength; i++) {
                             const barHeight = (dataArray[i] / 255) * height * 0.9;
                             const gradient = canvasCtx.createLinearGradient(0, height, 0, height - barHeight);
                             gradient.addColorStop(0, "rgba(0, 230, 118, 0.4)");
@@ -270,7 +292,7 @@ export default function CallScreen() {
                 });
             }
         }
-    }, [callActive, isAudioOnly, facingMode, camMuted, isSpeakerOn]);
+    }, [callActive, isAudioOnly, facingMode, camMuted, isSpeakerOn, localStream, hasRemoteVideo]);
 
     // ── Telemetry Monitor (RTCPeerConnection.getStats) ─────────────────────────
     useEffect(() => {
@@ -351,46 +373,56 @@ export default function CallScreen() {
         };
     }, [callActive, isAudioOnly]);
 
-    // ── WebRTC PeerConnection Initialization ─────────────────────────────────
+    // ── WebRTC PeerConnection Initialization (Runs strictly once on mount) ────
     useEffect(() => {
+        if (initializedRef.current) return;
+        initializedRef.current = true;
+
         const targetPeer = targetPeerRef.current;
         if (!identity || !targetPeer) return;
         let isSubscribed = true;
 
+        // Clear any prior signal artifacts
+        processedSignalsRef.current.clear();
+        clearCallSignals();
+
         const initCall = async () => {
-            setStatus(`Solicitando acceso a ${isAudioOnly ? "micrófono" : "cámara y micrófono"}...`);
+            const requestedAudioOnly = isAudioOnly;
+            setStatus(`Solicitando acceso a ${requestedAudioOnly ? "micrófono" : "cámara y micrófono"}...`);
             try {
-                // Determine media constraints based on call mode
-                const constraints: MediaStreamConstraints = isAudioOnly
+                // Adaptive media constraints
+                const videoConstraints = SettingsManager.getVideoCallConstraints(preferences?.videoQuality, facingMode);
+                const constraints: MediaStreamConstraints = requestedAudioOnly
                     ? {
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+                        audio: { echoCancellation: true, noiseSuppression: Boolean(preferences?.noiseSuppression ?? true), autoGainControl: true },
                         video: false
                     }
                     : {
-                        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-                        video: {
-                            facingMode: facingMode,
-                            width: { ideal: 1280, max: 1920 },
-                            height: { ideal: 720, max: 1080 }
-                        }
+                        audio: { echoCancellation: true, noiseSuppression: Boolean(preferences?.noiseSuppression ?? true), autoGainControl: true },
+                        video: videoConstraints
                     };
 
                 let stream: MediaStream;
                 try {
                     stream = await navigator.mediaDevices.getUserMedia(constraints);
                 } catch (camErr) {
-                    console.warn("[CallScreen] Tier 1 getUserMedia failed, attempting resilient fallback:", camErr);
+                    console.warn("[CallScreen] Tier 1 getUserMedia failed, attempting standard VGA fallback:", camErr);
                     try {
                         stream = await navigator.mediaDevices.getUserMedia(
-                            isAudioOnly
+                            requestedAudioOnly
                                 ? { audio: true, video: false }
-                                : { audio: true, video: { facingMode: facingMode } }
+                                : { audio: true, video: { facingMode: facingMode, width: { ideal: 640 }, height: { ideal: 480 } } }
                         );
                     } catch (tier2Err) {
                         console.warn("[CallScreen] Tier 2 fallback failed, attempting basic stream:", tier2Err);
-                        stream = await navigator.mediaDevices.getUserMedia(
-                            isAudioOnly ? { audio: true, video: false } : { audio: true, video: true }
-                        );
+                        try {
+                            stream = await navigator.mediaDevices.getUserMedia(
+                                requestedAudioOnly ? { audio: true, video: false } : { audio: true, video: true }
+                            );
+                        } catch (audioFallbackErr) {
+                            console.warn("[CallScreen] Video completely failed, falling back to audio-only stream:", audioFallbackErr);
+                            stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                        }
                     }
                 }
                 if (!isSubscribed) {
@@ -399,9 +431,10 @@ export default function CallScreen() {
                 }
 
                 localStreamRef.current = stream;
+                setLocalStream(stream);
 
                 // Attach to local video element (always muted locally to prevent echo feedback)
-                if (!isAudioOnly && localVideoRef.current) {
+                if (!requestedAudioOnly && localVideoRef.current) {
                     localVideoRef.current.srcObject = stream;
                     localVideoRef.current.muted = true;
                     localVideoRef.current.playsInline = true;
@@ -411,29 +444,29 @@ export default function CallScreen() {
                 // Connect local audio to visualizer
                 setupAudioVisualizer(stream);
 
-                // Create WebRTC Peer Connection with STUN/TURN fallback
+                // Setup STUN servers list with user custom STUN fallback
+                const stunServers = [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" },
+                    { urls: "stun:stun2.l.google.com:19302" },
+                    { urls: "stun:stun.cloudflare.com:3478" },
+                    { urls: "stun:stun.nextcloud.com:443" }
+                ];
+                if (preferences?.customStunServer && preferences.customStunServer.startsWith("stun:")) {
+                    stunServers.unshift({ urls: preferences.customStunServer.trim() });
+                }
+
+                // Create WebRTC Peer Connection
                 const pc = new RTCPeerConnection({
-                    iceServers: [
-                        { urls: "stun:stun.l.google.com:19302" },
-                        { urls: "stun:stun1.l.google.com:19302" },
-                        { urls: "stun:stun2.l.google.com:19302" },
-                        { urls: "stun:stun3.l.google.com:19302" },
-                        { urls: "stun:stun4.l.google.com:19302" },
-                        { urls: "stun:stun.cloudflare.com:3478" },
-                        { urls: "stun:stun.nextcloud.com:443" }
-                    ],
+                    iceServers: stunServers,
                     iceCandidatePoolSize: 10
                 });
                 peerRef.current = pc;
 
-                // Guarantee bidirectional sendrecv transceivers
-                try {
-                    if (pc.addTransceiver) {
-                        pc.addTransceiver('audio', { direction: 'sendrecv' });
-                        pc.addTransceiver('video', { direction: isAudioOnly ? 'inactive' : 'sendrecv' });
-                    }
-                } catch (tErr) {
-                    console.warn("[CallScreen] Transceiver setup note:", tErr);
+                // Explicitly add Transceivers to guarantee bi-directional sendrecv media negotiation
+                pc.addTransceiver('audio', { direction: 'sendrecv' });
+                if (!requestedAudioOnly) {
+                    pc.addTransceiver('video', { direction: 'sendrecv' });
                 }
 
                 // Add local tracks to WebRTC session
@@ -475,8 +508,11 @@ export default function CallScreen() {
                         streamToPlay = remoteStreamRef.current;
                     }
                     remoteStreamRef.current = streamToPlay;
+                    if (streamToPlay.getVideoTracks().length > 0) {
+                        setHasRemoteVideo(true);
+                    }
 
-                    // Unmute remote video to allow incoming voice & sound
+                    // Attach to remote video
                     if (remoteVideoRef.current) {
                         remoteVideoRef.current.srcObject = streamToPlay;
                         remoteVideoRef.current.muted = false;
@@ -484,7 +520,7 @@ export default function CallScreen() {
                         remoteVideoRef.current.play().catch(e => console.warn("[WebRTC Call] Remote video play deferred:", e));
                     }
 
-                    // Also attach to remote audio element for robust multi-track playback
+                    // Attach to remote audio element for robust audio output
                     if (remoteAudioRef.current) {
                         remoteAudioRef.current.srcObject = streamToPlay;
                         remoteAudioRef.current.muted = false;
@@ -501,15 +537,18 @@ export default function CallScreen() {
                     if (event.candidate && targetPeer) {
                         RedAPI.sendMessage(targetPeer, JSON.stringify({
                             candidate: event.candidate,
-                            callType: isAudioOnly ? "audio" : "video"
+                            callType: requestedAudioOnly ? "audio" : "video"
                         }), { msg_type: "webrtc_signal" }).catch(() => {});
                     }
                 };
 
+                // Determine if we have an incoming offer (Callee Mode)
+                const pendingOffer = activeCallOffer || incomingCall?.offer;
+
                 // CALLEE MODE: Answering an incoming call offer
-                if (incomingCall && incomingCall.offer) {
+                if (pendingOffer) {
                     setStatus("Estableciendo enlace con interlocutor...");
-                    await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
+                    await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
 
                     // Flush any early received ICE candidates
                     await drainPendingCandidates(pc);
@@ -523,16 +562,17 @@ export default function CallScreen() {
                     const finalAnswer = pc.localDescription || answer;
                     await RedAPI.sendMessage(targetPeer, JSON.stringify({
                         answer: finalAnswer,
-                        callType: isAudioOnly ? "audio" : "video"
+                        callType: requestedAudioOnly ? "audio" : "video"
                     }), { msg_type: "webrtc_signal" });
                     setCallActive(true);
+                    setActiveCallOffer(null);
                 }
                 // CALLER MODE: Creating new call offer
                 else {
                     setStatus("Llamando (Esperando respuesta E2E)...");
                     const offer = await pc.createOffer({
                         offerToReceiveAudio: true,
-                        offerToReceiveVideo: !isAudioOnly
+                        offerToReceiveVideo: !requestedAudioOnly
                     });
                     await pc.setLocalDescription(offer);
 
@@ -542,7 +582,7 @@ export default function CallScreen() {
                     const finalOffer = pc.localDescription || offer;
                     await RedAPI.sendMessage(targetPeer, JSON.stringify({
                         offer: finalOffer,
-                        callType: isAudioOnly ? "audio" : "video"
+                        callType: requestedAudioOnly ? "audio" : "video"
                     }), { msg_type: "webrtc_signal" });
                 }
 
@@ -558,7 +598,7 @@ export default function CallScreen() {
             isSubscribed = false;
             endCallInternal();
         };
-    }, [isAudioOnly]);
+    }, []);
 
     // ── Process FIFO Signal Queue & Real-Time Incoming Signals ─────────────────
     useEffect(() => {
@@ -567,20 +607,41 @@ export default function CallScreen() {
 
         const handleQueue = async () => {
             const queue = callSignalQueue || [];
+            const targetPeer = (targetPeerRef.current || "").toLowerCase();
+
             for (const item of queue) {
-                const signalId = `${item.senderHash}_${JSON.stringify(item.signal).substring(0, 40)}_${item.timestamp}`;
+                const sHash = (item.senderHash || "").toLowerCase();
+
+                // Only process signals for our target interlocutor
+                if (targetPeer && sHash && sHash !== targetPeer && !targetPeer.startsWith(sHash.substring(0, 8)) && !sHash.startsWith(targetPeer.substring(0, 8))) {
+                    continue;
+                }
+
+                // Correct millisecond timestamp normalization (prevents seconds-vs-ms discard bug)
+                const itemTs = (item.timestamp > 1e11 ? item.timestamp : (item.timestamp || 0) * 1000);
+                if (itemTs && itemTs < callStartTimeRef.current - 5000) {
+                    continue;
+                }
+
+                const signalId = `${sHash}_${JSON.stringify(item.signal).substring(0, 40)}_${itemTs}`;
                 if (processedSignalsRef.current.has(signalId)) continue;
-                processedSignalsRef.current.add(signalId);
 
                 const { signal } = item;
                 try {
                     // Remote Answer
-                    if (signal.answer && pc.signalingState !== "stable") {
-                        console.log("[WebRTC Call] Applying remote SDP answer");
-                        await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
-                        await drainPendingCandidates(pc);
-                        setStatus("CONECTADO (E2E DTLS-SRTP)");
-                        setCallActive(true);
+                    if (signal.answer) {
+                        if (pc.signalingState === "have-local-offer") {
+                            console.log("[WebRTC Call] Applying remote SDP answer");
+                            await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+                            await drainPendingCandidates(pc);
+                            setStatus("CONECTADO (E2E DTLS-SRTP)");
+                            setCallActive(true);
+                            processedSignalsRef.current.add(signalId);
+                        } else if (pc.signalingState === "stable") {
+                            processedSignalsRef.current.add(signalId);
+                        } else {
+                            console.log("[WebRTC Call] Remote answer in queue; signalingState:", pc.signalingState);
+                        }
                     }
                     // Remote ICE Candidate
                     else if (signal.candidate) {
@@ -588,26 +649,30 @@ export default function CallScreen() {
                             await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch((e) => {
                                 console.warn("[WebRTC Call] addIceCandidate failed:", e);
                             });
+                            processedSignalsRef.current.add(signalId);
                         } else {
                             pendingCandidatesRef.current.push(signal.candidate);
+                            processedSignalsRef.current.add(signalId);
                         }
                     }
                     // Remote Hangup
                     else if (signal.hangup) {
                         setStatus("Llamada Finalizada");
+                        processedSignalsRef.current.add(signalId);
                         setTimeout(endCallInternal, 400);
                     }
                 } catch (e) {
-                    console.warn("[CallScreen] Queue signal processing warning:", e);
+                    console.warn("[WebRTC Call] Queue signal processing warning:", e);
                 }
             }
         };
 
         handleQueue();
-    }, [callSignalQueue, activeCallSignal]);
+    }, [callSignalQueue, activeCallSignal, status]);
 
     // ── Internal Cleanup Routine ─────────────────────────────────────────────
     const endCallInternal = () => {
+        CallRingtoneEngine.stop();
         const targetPeer = targetPeerRef.current;
         if (targetPeer && peerRef.current) {
             RedAPI.sendMessage(targetPeer, JSON.stringify({ hangup: true }), { msg_type: "webrtc_signal" }).catch(() => {});

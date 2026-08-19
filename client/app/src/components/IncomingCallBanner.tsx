@@ -4,94 +4,49 @@ import React from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 
+import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
+
 export function IncomingCallBanner() {
-    const { incomingCall, setIncomingCall, navigate, setActiveCallType } = useRedStore();
+    const { incomingCall, setIncomingCall, navigate, setActiveCallType, preferences } = useRedStore();
 
     const isVideo = incomingCall?.callType === 'video';
 
-    // ── Tactical Web Audio Ringtone Chime & Vibration ─────────────────────────
+    // ── Tactical Web Audio Ringtone & Vibration via CallRingtoneEngine ────────
     React.useEffect(() => {
-        if (!incomingCall) return;
+        if (!incomingCall) {
+            CallRingtoneEngine.stop();
+            return;
+        }
 
-        let audioCtx: AudioContext | null = null;
-        let isCancelled = false;
-        let intervalId: any = null;
-
-        // Vibrate mobile hardware if supported
-        const triggerVibration = () => {
-            if (typeof navigator !== "undefined" && navigator.vibrate) {
-                try {
-                    navigator.vibrate([400, 200, 400, 200, 800]);
-                } catch {}
-            }
-        };
-
-        try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-                audioCtx = new AudioContextClass();
-                
-                const playChime = () => {
-                    if (isCancelled || !audioCtx || audioCtx.state === 'closed') return;
-                    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-
-                    triggerVibration();
-
-                    const now = audioCtx.currentTime;
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-
-                    osc.type = "sine";
-                    osc.frequency.setValueAtTime(880, now); // A5
-                    osc.frequency.setValueAtTime(1174.66, now + 0.15); // D6
-                    osc.frequency.setValueAtTime(880, now + 0.3);
-
-                    gain.gain.setValueAtTime(0.2, now);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-
-                    osc.start(now);
-                    osc.stop(now + 0.45);
-                };
-
-                playChime();
-                intervalId = setInterval(playChime, 2500);
-            }
-        } catch {}
+        CallRingtoneEngine.startIncoming((preferences as any)?.ringtoneType || "tactical-alpha");
 
         return () => {
-            isCancelled = true;
-            if (intervalId) clearInterval(intervalId);
-            if (audioCtx && audioCtx.state !== 'closed') {
-                audioCtx.close().catch(() => {});
-            }
-            if (typeof navigator !== "undefined" && navigator.vibrate) {
-                try {
-                    navigator.vibrate(0);
-                } catch {}
-            }
+            CallRingtoneEngine.stop();
         };
     }, [incomingCall]);
 
     if (!incomingCall) return null;
 
     const handleAccept = () => {
-        try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-                const ctx = new AudioContextClass();
-                if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-            }
-        } catch {}
+        CallRingtoneEngine.stop();
         const callerId = incomingCall.callerHash;
-        setActiveCallType(incomingCall.callType || 'video');
-        useRedStore.setState({ activeConversationId: callerId, activeCallPeer: callerId });
+        const callType = incomingCall.callType || 'video';
+        const offer = incomingCall.offer;
+        
+        setActiveCallType(callType);
+        useRedStore.setState({
+            activeConversationId: callerId,
+            activeCallPeer: callerId,
+            activeCallOffer: offer,
+            incomingCall: null,
+            activeCallSignal: null,
+            callSignalQueue: [] // Clear old stale queue on call accept
+        });
         navigate("call", callerId);
     };
 
     const handleReject = async () => {
+        CallRingtoneEngine.stop();
         try {
             await RedAPI.sendMessage(incomingCall.callerHash, JSON.stringify({ hangup: true }), {
                 msg_type: "webrtc_signal"

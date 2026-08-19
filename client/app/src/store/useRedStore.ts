@@ -9,6 +9,7 @@ import { SettingsManager, UserPreferences, DEFAULT_PREFERENCES } from '../lib/se
 import { TacticalAudioEngine } from '../lib/TacticalAudioEngine';
 import { StateIntegrityEngine } from '../lib/StateIntegrityEngine';
 import { MeshProofOfWork } from '../lib/MeshProofOfWork';
+import { CallRingtoneEngine } from '../lib/CallRingtoneEngine';
 
 // ── Live Streaming Types ──────────────────────────────────────────────────────
 export interface LiveStreamItem {
@@ -138,12 +139,14 @@ interface RedStore {
 
     // ── WebRTC Voice & Video Call State ───────────────────────────────────────
     incomingCall: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video' } | null;
+    activeCallOffer: any | null;
     activeCallSignal: { senderHash: string; signal: any } | null;
     callSignalQueue: { senderHash: string; signal: any; timestamp: number }[];
     activeCallType: 'audio' | 'video';
     activeCallPeer: string | null;
     setActiveCallPeer: (peer: string | null) => void;
     setActiveCallType: (type: 'audio' | 'video') => void;
+    setActiveCallOffer: (offer: any | null) => void;
     setIncomingCall: (call: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video' } | null) => void;
     setActiveCallSignal: (sig: { senderHash: string; signal: any } | null) => void;
     pushCallSignal: (sig: { senderHash: string; signal: any }) => void;
@@ -361,13 +364,18 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
     // WebRTC Call Signaling State
     incomingCall: null,
+    activeCallOffer: null,
     activeCallSignal: null,
     callSignalQueue: [],
     activeCallType: 'video',
     activeCallPeer: null,
     setActiveCallPeer: (peer) => set({ activeCallPeer: peer }),
     setActiveCallType: (type) => set({ activeCallType: type }),
-    setIncomingCall: (call) => set({ incomingCall: call }),
+    setActiveCallOffer: (offer) => set({ activeCallOffer: offer }),
+    setIncomingCall: (call) => {
+        if (!call) CallRingtoneEngine.stop();
+        set({ incomingCall: call });
+    },
     setActiveCallSignal: (sig) => set({ activeCallSignal: sig }),
     pushCallSignal: (sig) => set((state) => ({
         activeCallSignal: sig,
@@ -1111,9 +1119,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const myIdentity = get().identity;
         const myDid = myIdentity?.identity_hash || 'me';
         const msgId = options?.id || generateDeterministicMsgId(myDid, cleanPeerHash, content);
+        const detectedMediaData = options?.media_data || (content?.startsWith('data:') ? content : undefined);
 
         if (!isControlMessage) {
-            const detectedMediaData = options?.media_data || (content?.startsWith('data:') ? content : undefined);
             const optimisticMsg: MessageItem = {
                 id: msgId,
                 sender: myDid,
@@ -1141,7 +1149,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
         }
 
         try {
-            const apiOptions: Record<string, any> = { ...options, id: msgId };
+            const apiOptions: Record<string, any> = { ...options, id: msgId, media_data: detectedMediaData };
             if (effectiveTtl && !apiOptions.ttl) {
                 apiOptions.ttl = effectiveTtl;
             }
@@ -1323,10 +1331,14 @@ export const useRedStore = create<RedStore>((set, get) => ({
         if (item.id) {
             if (_processedMessageIds.has(item.id)) return;
             recordProcessedMessageId(item.id);
-        } else if (item.sender && item.content) {
-            const semanticKey = `sem_${item.sender}_${item.content.slice(0, 30)}_${Math.round(item.timestamp || 0)}`;
-            if (_processedMessageIds.has(semanticKey)) return;
-            recordProcessedMessageId(semanticKey);
+        }
+        if (item.sender) {
+            const bodyKey = (item.media_data || item.content || '').slice(0, 40);
+            if (bodyKey) {
+                const semanticKey = `sem_${item.sender}_${bodyKey}_${Math.round((item.timestamp || Date.now()) / 10000)}`;
+                if (_processedMessageIds.has(semanticKey)) return;
+                recordProcessedMessageId(semanticKey);
+            }
         }
 
         // Anti-spam PoW verification for incoming peer messages
@@ -1565,8 +1577,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
         // ── WebRTC Signaling: intercept for calls, never append as chat bubble ──
         if (item.msg_type === 'webrtc_signal') {
             try {
-                const signal = typeof item.content === 'string' ? JSON.parse(item.content) : item.content;
+                const myIdentity = get().identity;
+                const myHash = myIdentity?.identity_hash;
                 const senderHash = item.sender;
+
+                // 1. Strict self-filtering: Never process signals sent by ourselves (prevents self-ringing)
+                if (item.is_mine || (myHash && senderHash === myHash) || (myHash && senderHash && myHash.length >= 8 && senderHash.length >= 8 && (myHash.startsWith(senderHash) || senderHash.startsWith(myHash)))) {
+                    return;
+                }
+
+                const signal = typeof item.content === 'string' ? JSON.parse(item.content) : item.content;
                 const contacts = get().contacts || [];
                 const contact = contacts.find((c: any) => 
                     c.identity_hash === senderHash ||
@@ -1576,23 +1596,33 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 const callerName = contact?.display_name || `Operador ${senderHash.substring(0, 8)}`;
 
                 if (signal.offer) {
-                    const determinedType: 'audio' | 'video' = signal.callType === 'audio' || (signal.offer?.sdp && !signal.offer.sdp.includes('m=video')) ? 'audio' : 'video';
-                    set({
-                        incomingCall: {
-                            callerHash: senderHash,
-                            callerName: callerName,
-                            offer: signal.offer,
-                            callType: determinedType
-                        },
-                        activeCallType: determinedType
-                    });
+                    // Only display incoming call banner if not already inside an active call
+                    if (get().currentScreen !== 'call') {
+                        const determinedType: 'audio' | 'video' = signal.callType === 'audio' || (signal.offer?.sdp && !signal.offer.sdp.includes('m=video')) ? 'audio' : 'video';
+                        set({
+                            incomingCall: {
+                                callerHash: senderHash,
+                                callerName: callerName,
+                                offer: signal.offer,
+                                callType: determinedType
+                            },
+                            activeCallType: determinedType
+                        });
+                    }
                     get().pushCallSignal({ senderHash, signal });
                 } else if (signal.hangup) {
+                    CallRingtoneEngine.stop();
                     set({ incomingCall: null });
-                    get().pushCallSignal({ senderHash, signal });
-                    if (get().currentScreen === 'call') {
-                        toast.info('Llamada finalizada');
-                        get().goBack();
+                    const activePeer = get().activeCallPeer;
+                    const activeConv = get().activeConversationId;
+                    const isFromCurrentCallPeer = !activePeer || activePeer === senderHash || (activePeer.length >= 8 && senderHash.startsWith(activePeer.substring(0, 8))) || (senderHash.length >= 8 && activePeer.startsWith(senderHash.substring(0, 8))) || (activeConv && (activeConv === senderHash || activeConv.includes(senderHash.substring(0, 8))));
+
+                    if (isFromCurrentCallPeer) {
+                        get().pushCallSignal({ senderHash, signal });
+                        if (get().currentScreen === 'call') {
+                            toast.info('Llamada finalizada');
+                            get().goBack();
+                        }
                     }
                 } else {
                     get().pushCallSignal({ senderHash, signal });
@@ -1855,13 +1885,15 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
                 // 2. Pending optimistic message replacement by content / media / type
                 if (m.id.startsWith('temp_') || m.id.startsWith('msg_pending_')) {
-                    if (m.content === item.content) return true;
-                    if (m.media_data && item.media_data && m.media_data.length === item.media_data.length) return true;
+                    if (m.content && item.content && m.content === item.content) return true;
+                    if (m.media_data && item.media_data && (m.media_data === item.media_data || m.media_data.length === item.media_data.length)) return true;
                     if (m.msg_type === item.msg_type && timeDiff < 30) return true;
                 }
 
-                // 3. Sender & Content deduplication within 30-second window (prevents duplicate bubbles from dual SSE + MeshRouter channels)
-                if (m.content && normalizedItem.content && m.content === normalizedItem.content && timeDiff < 30) {
+                // 3. Sender & Content / Media deduplication within 30-second window (prevents duplicate bubbles from dual SSE + MeshRouter channels)
+                const mPayload = m.media_data || m.content;
+                const nPayload = normalizedItem.media_data || normalizedItem.content;
+                if (mPayload && nPayload && (mPayload === nPayload || (mPayload.length > 60 && nPayload.length > 60 && mPayload.slice(0, 60) === nPayload.slice(0, 60))) && timeDiff < 30) {
                     if (m.is_mine && normalizedItem.is_mine) return true;
                     if (!m.is_mine && !normalizedItem.is_mine) {
                         const mSender = (m.sender || '').toLowerCase();

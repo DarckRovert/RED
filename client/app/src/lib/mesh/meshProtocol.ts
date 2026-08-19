@@ -67,8 +67,8 @@ export function encode(packet: MeshPacket): Uint8Array {
   // Flags (1 byte, offset 69)
   view.setUint8(69, packet.flags & 0xFF);
 
-  // PayloadLen (2 bytes, offset 70, LE)
-  view.setUint16(70, payloadLen, true);
+  // PayloadLen (2 bytes, offset 70, LE — capped at 0xFFFF for wire compatibility)
+  view.setUint16(70, Math.min(payloadLen, 0xFFFF), true);
 
   // Timestamp (8 bytes, offset 72) — split into two u32 to avoid BigInt (ES2020 req.)
   const ts = packet.timestamp; // unix ms — safe as number for dates until year 2255
@@ -110,7 +110,10 @@ export function decode(data: Uint8Array): MeshPacket | null {
   const tsHigh = view.getUint32(76, true);
   const timestamp = tsLow + tsHigh * 0x100000000;
   const nonce = bytesToHex(data.slice(80, 96));
-  const payload = data.slice(HEADER_SIZE_REAL, HEADER_SIZE_REAL + payloadLen);
+  // Robust full slice: use actual buffer length beyond header to prevent Uint16 overflow truncation on images
+  const actualRemaining = data.length - HEADER_SIZE_REAL;
+  const sliceLen = (actualRemaining >= payloadLen || payloadLen === 0xFFFF) ? actualRemaining : payloadLen;
+  const payload = data.slice(HEADER_SIZE_REAL, HEADER_SIZE_REAL + sliceLen);
 
   return { recipient, sender, ttl, flags, timestamp, nonce, payload };
 }

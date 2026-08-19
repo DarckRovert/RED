@@ -9,21 +9,23 @@ import {
     AutoDestructTimer,
     MeshPowerProfile,
     ImageCompressionQuality,
+    VideoCallQuality,
     SettingsManager,
 } from "../lib/settingsManager";
+import { CallRingtoneEngine, RINGTONE_OPTIONS, RingtoneType } from "../lib/CallRingtoneEngine";
 import { UpdateManager, UpdateInfo, DownloadProgress } from "../lib/updateManager";
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../lib/version";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
 
-type SettingsTab = "appearance" | "audio" | "privacy" | "mesh" | "updates";
+type SettingsTab = "appearance" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "updates";
 
 interface SettingsModalProps {
     onClose?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
-    const { preferences, updatePreferences, goBack, navigate } = useRedStore();
+    const { preferences, updatePreferences, goBack, navigate, identity, conversations, contacts } = useRedStore();
     const handleClose = onClose || goBack;
 
     const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
@@ -35,11 +37,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
     const [permissionNeeded, setPermissionNeeded] = useState(false);
 
+    // Estado de medición de almacenamiento
+    const [storageMetrics, setStorageMetrics] = useState({
+        totalKb: 0,
+        messagesKb: 0,
+        conversationsKb: 0,
+        mediaKb: 0,
+        contactsCount: 0,
+        messagesCount: 0,
+    });
+
+    const calculateStorage = () => {
+        if (typeof window === "undefined") return;
+        try {
+            let total = 0;
+            let msgSize = 0;
+            let convSize = 0;
+            let mediaSize = 0;
+            let totalMsgs = 0;
+
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (!key) continue;
+                const val = localStorage.getItem(key) || "";
+                const byteLength = key.length + val.length;
+                total += byteLength;
+
+                if (key.startsWith("red_web_messages_") || key === "red_messages") {
+                    msgSize += byteLength;
+                    try {
+                        const parsed = JSON.parse(val);
+                        if (Array.isArray(parsed)) totalMsgs += parsed.length;
+                    } catch {}
+                } else if (key.startsWith("red_web_conversations") || key === "red_conversations") {
+                    convSize += byteLength;
+                } else if (key.includes("media") || key.includes("stories") || key.includes("bursts")) {
+                    mediaSize += byteLength;
+                }
+            }
+
+            setStorageMetrics({
+                totalKb: Math.round(total / 1024),
+                messagesKb: Math.round(msgSize / 1024),
+                conversationsKb: Math.round(convSize / 1024),
+                mediaKb: Math.round(mediaSize / 1024),
+                contactsCount: (contacts || []).length,
+                messagesCount: totalMsgs,
+            });
+        } catch {}
+    };
+
     useEffect(() => {
         UpdateManager.checkInstallPermission().then(granted => {
             setPermissionNeeded(!granted);
         });
-    }, []);
+        calculateStorage();
+    }, [activeTab]);
 
     const handleThemeChange = (id: TacticalThemeId) => {
         SettingsManager.triggerHaptic("medium");
@@ -99,6 +152,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
         }
     };
 
+    const handlePurgeMediaCache = () => {
+        SettingsManager.triggerHaptic("warning");
+        try {
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.startsWith("red_peer_stories") || key.startsWith("red_voice_bursts") || key.startsWith("red_channel_messages"))) {
+                    keysToRemove.push(key);
+                }
+            }
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            calculateStorage();
+            toast.success("🧹 Caché temporal de medios y canales liberada.");
+        } catch {
+            toast.error("Error al purgar la caché de medios.");
+        }
+    };
+
     const formatBytes = (bytes: number): string => {
         if (!bytes || bytes <= 0) return "0 MB";
         return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -124,10 +195,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </button>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff", letterSpacing: "0.4px" }}>
-                            Ajustes & Personalización
+                            Ajustes & Configuración Soberana
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            TACTICAL CONFIGURATION HUB
+                            MASTER CONFIGURATION HUB
                         </div>
                     </div>
                 </div>
@@ -143,41 +214,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                 padding: "10px 16px", borderBottom: "1px solid var(--glass-border)",
                 background: "rgba(10, 12, 22, 0.95)", overflowX: "auto", flexShrink: 0
             }}>
-                <button
-                    onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab("appearance"); }}
-                    className={`btn-tactical-pill ${activeTab === "appearance" ? "active" : ""}`}
-                    style={{ whiteSpace: "nowrap", padding: "8px 14px", fontSize: "0.78rem" }}
-                >
-                    🎨 Apariencia
-                </button>
-                <button
-                    onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab("audio"); }}
-                    className={`btn-tactical-pill ${activeTab === "audio" ? "active" : ""}`}
-                    style={{ whiteSpace: "nowrap", padding: "8px 14px", fontSize: "0.78rem" }}
-                >
-                    🔔 Sonido & Háptica
-                </button>
-                <button
-                    onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab("privacy"); }}
-                    className={`btn-tactical-pill ${activeTab === "privacy" ? "active" : ""}`}
-                    style={{ whiteSpace: "nowrap", padding: "8px 14px", fontSize: "0.78rem" }}
-                >
-                    🛡️ Privacidad
-                </button>
-                <button
-                    onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab("mesh"); }}
-                    className={`btn-tactical-pill ${activeTab === "mesh" ? "active" : ""}`}
-                    style={{ whiteSpace: "nowrap", padding: "8px 14px", fontSize: "0.78rem" }}
-                >
-                    📡 Malla & Batería
-                </button>
-                <button
-                    onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab("updates"); }}
-                    className={`btn-tactical-pill ${activeTab === "updates" ? "active" : ""}`}
-                    style={{ whiteSpace: "nowrap", padding: "8px 14px", fontSize: "0.78rem" }}
-                >
-                    🚀 Actualizador OTA
-                </button>
+                {[
+                    { id: "appearance", icon: "🎨", label: "Apariencia" },
+                    { id: "calls", icon: "📞", label: "Llamadas & Video" },
+                    { id: "audio", icon: "🔔", label: "Sonido & Tonos" },
+                    { id: "storage", icon: "💾", label: "Almacenamiento" },
+                    { id: "privacy", icon: "🛡️", label: "Privacidad" },
+                    { id: "mesh", icon: "📡", label: "Malla & Batería" },
+                    { id: "identity", icon: "🔑", label: "Identidad & Claves" },
+                    { id: "updates", icon: "🚀", label: "Actualizador" },
+                ].map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab(tab.id as SettingsTab); }}
+                        className={`btn-tactical-pill ${activeTab === tab.id ? "active" : ""}`}
+                        style={{ whiteSpace: "nowrap", padding: "8px 12px", fontSize: "0.75rem" }}
+                    >
+                        {tab.icon} {tab.label}
+                    </button>
+                ))}
             </div>
 
             {/* Contenido de la Pestaña Activa */}
@@ -247,13 +302,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         {/* Escala de Tipografía */}
                         <div>
                             <h4 style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Escala Tipográfica & Densidad de Información
+                                Escala Tipográfica & Densidad
                             </h4>
-                            <p style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginBottom: "10px" }}>
-                                Ajusta el tamaño de los textos y elementos para mayor campo de visión o máxima legibilidad.
-                            </p>
-
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "8px" }}>
                                 {(["compact", "normal", "large"] as FontSizeScale[]).map((scale) => {
                                     const labels = { compact: "Compacta (14px)", normal: "Estándar (16px)", large: "Amplia (18px)" };
                                     const isSelected = preferences.fontSize === scale;
@@ -271,16 +322,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                         </div>
 
-                        <hr style={{ borderColor: "var(--glass-border)", margin: "4px 0" }} />
-
                         {/* Toggles de Apariencia */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                            {/* Modo OLED Puro */}
                             <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div>
                                     <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Modo OLED Negro Absoluto (#000000)</div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Apaga los píxeles en pantallas AMOLED y desactiva desenfoques para mínimo consumo de batería.
+                                        Apaga los píxeles en pantallas AMOLED para mínimo consumo.
                                     </div>
                                 </div>
                                 <input
@@ -294,12 +342,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 />
                             </div>
 
-                            {/* Reducir Animaciones */}
                             <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Reducir Animaciones / Ahorro de GPU</div>
+                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Reducir Animaciones / Ahorro GPU</div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Optimiza la tasa de cuadros en dispositivos con recursos limitados.
+                                        Desactiva transiciones complejas para acelerar la interfaz en hardware limitado.
                                     </div>
                                 </div>
                                 <input
@@ -316,23 +363,198 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* ── TAB 2: AUDIO & HÁPTICA ── */}
+                {/* ── TAB 2: LLAMADAS & WEBRTC ── */}
+                {activeTab === "calls" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
+                                Parámetros de Voz & Videollamadas WebRTC P2P
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                Calidad de video adaptativa, códecs de audio y servidores de enlace STUN.
+                            </p>
+                        </div>
+
+                        {/* Calidad de Video */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Resolución de Cámara en Videollamadas</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Ajusta la resolución de captura en caliente para equilibrar nitidez y ancho de banda.
+                                </div>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                                {[
+                                    { id: "hd720p", label: "720p HD", desc: "1280x720 30fps" },
+                                    { id: "sd480p", label: "480p Estándar", desc: "640x480 24fps (Recomendado)" },
+                                    { id: "eco360p", label: "360p Eco", desc: "480x360 20fps (Baja señal)" }
+                                ].map((q) => {
+                                    const isSelected = (preferences.videoQuality || "sd480p") === q.id;
+                                    return (
+                                        <button
+                                            key={q.id}
+                                            onClick={() => {
+                                                SettingsManager.triggerHaptic("light");
+                                                updatePreferences({ videoQuality: q.id as VideoCallQuality });
+                                                toast.info(`Calidad de video: ${q.label}`);
+                                            }}
+                                            className={`btn-tactical-pill ${isSelected ? "active" : ""}`}
+                                            style={{ padding: "10px 6px", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}
+                                        >
+                                            <span style={{ fontSize: "0.76rem", fontWeight: 800 }}>{q.label}</span>
+                                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>{q.desc}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Cancelación de Ruido */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Supresión de Eco & Reducción de Ruido</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Filtra ruido ambiental y acoplamiento acústico en llamadas de voz.
+                                </div>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={preferences.noiseSuppression ?? true}
+                                onChange={(e) => {
+                                    SettingsManager.triggerHaptic("light");
+                                    updatePreferences({ noiseSuppression: e.target.checked });
+                                }}
+                                style={{ width: 22, height: 22, accentColor: "var(--primary)" }}
+                            />
+                        </div>
+
+                        {/* Altavoz Automático */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Altavoz Automático en Videollamadas</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Enruta el audio directamente al altavoz principal al iniciar o contestar videollamadas.
+                                </div>
+                            </div>
+                            <input
+                                type="checkbox"
+                                checked={preferences.autoSpeakerVideo ?? true}
+                                onChange={(e) => {
+                                    SettingsManager.triggerHaptic("light");
+                                    updatePreferences({ autoSpeakerVideo: e.target.checked });
+                                }}
+                                style={{ width: 22, height: 22, accentColor: "var(--primary)" }}
+                            />
+                        </div>
+
+                        {/* Servidor STUN Personalizado */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Servidor STUN Personalizado</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Servidor para descubrimiento NAT en videollamadas P2P a través de Internet.
+                                </div>
+                            </div>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                                <input
+                                    type="text"
+                                    placeholder="stun:stun.l.google.com:19302"
+                                    value={preferences.customStunServer || ""}
+                                    onChange={(e) => updatePreferences({ customStunServer: e.target.value })}
+                                    style={{
+                                        flex: 1,
+                                        padding: "8px 12px",
+                                        background: "rgba(0,0,0,0.4)",
+                                        border: "1px solid var(--glass-border)",
+                                        borderRadius: "6px",
+                                        color: "#fff",
+                                        fontSize: "0.78rem",
+                                        fontFamily: "monospace"
+                                    }}
+                                />
+                                <button
+                                    onClick={() => {
+                                        SettingsManager.triggerHaptic("light");
+                                        toast.success("✅ Servidor STUN guardado");
+                                    }}
+                                    className="btn-tactical-pill active"
+                                    style={{ padding: "8px 14px", fontSize: "0.75rem" }}
+                                >
+                                    Guardar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── TAB 3: AUDIO & TONOS DE LLAMADA ── */}
                 {activeTab === "audio" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Retroalimentación Acústica y Háptica
+                                Retroalimentación Acústica & Tonos de Alerta
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Configuración de respuestas sensoriales para operaciones tácticas.
+                                Personaliza los timbres de llamada sintetizados en tiempo real mediante Web Audio API.
                             </p>
                         </div>
 
+                        {/* Selector de Tonos de Llamada */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>
+                                Tono de Llamada Entrante
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {RINGTONE_OPTIONS.map((tone) => {
+                                    const isSelected = (preferences.ringtoneType || "tactical-alpha") === tone.id;
+                                    return (
+                                        <div
+                                            key={tone.id}
+                                            onClick={() => {
+                                                SettingsManager.triggerHaptic("light");
+                                                updatePreferences({ ringtoneType: tone.id });
+                                                CallRingtoneEngine.playPreview(tone.id);
+                                            }}
+                                            className="card-tactical-interactive"
+                                            style={{
+                                                padding: "10px 14px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "space-between",
+                                                border: isSelected ? "1px solid var(--accent-cyan)" : "1px solid var(--glass-border)",
+                                                background: isSelected ? "rgba(0,229,255,0.06)" : "transparent"
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: isSelected ? "var(--accent-cyan)" : "#fff" }}>
+                                                    {tone.name}
+                                                </div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                                    {tone.description}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    CallRingtoneEngine.playPreview(tone.id);
+                                                }}
+                                                className="btn-tactical-secondary"
+                                                style={{ padding: "4px 10px", fontSize: "0.70rem" }}
+                                            >
+                                                ▶ Probar
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Toggles de Audio */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div>
                                 <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Vibración Háptica Táctica</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Micro-pulsos de vibración en botones, teclado y confirmación de mensajes cifrados.
+                                    Micro-pulsos de vibración en botones y mensajes.
                                 </div>
                             </div>
                             <input
@@ -348,9 +570,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div>
-                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Efectos de Sonido en Mensajería</div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Efectos de Sonido en Mensajes</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Tonos de baja frecuencia al recibir o despachar paquetes en la malla.
+                                    Tonos al enviar y recibir paquetes en la malla.
                                 </div>
                             </div>
                             <input
@@ -366,9 +588,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                             <div>
-                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-crimson)" }}>Sirena Acústica en Alertas SOS</div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-crimson)" }}>Sirena Acústica SOS</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Emite sonido de máxima potencia al detectar una baliza SOS de emergencia en proximidad.
+                                    Alarma de alta intensidad ante balizas de socorro.
                                 </div>
                             </div>
                             <input
@@ -381,36 +603,107 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 style={{ width: 22, height: 22, accentColor: "var(--accent-crimson)" }}
                             />
                         </div>
+                    </div>
+                )}
 
-                        {/* Botones de Prueba Acústica */}
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "4px" }}>
+                {/* ── TAB 4: ALMACENAMIENTO & DATOS ── */}
+                {activeTab === "storage" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
+                                Uso de Almacenamiento & Gestión de Caché
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                Diagnóstico en tiempo real de la base de datos cifrada local en el dispositivo.
+                            </p>
+                        </div>
+
+                        {/* Métricas de Almacenamiento */}
+                        <div className="card-tactical" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>ESPACIO TOTAL EN BÓVEDA LOCAL</div>
+                                    <div style={{ fontSize: "1.4rem", fontWeight: 900, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {storageMetrics.totalKb} KB
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={calculateStorage}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "6px 12px", fontSize: "0.72rem" }}
+                                >
+                                    🔄 Recalcular
+                                </button>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", background: "rgba(0,0,0,0.3)", padding: "12px", borderRadius: "8px" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Mensajes & Conversaciones</div>
+                                    <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {storageMetrics.messagesKb + storageMetrics.conversationsKb} KB ({storageMetrics.messagesCount} msgs)
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Medios & Canales Temporales</div>
+                                    <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {storageMetrics.mediaKb} KB
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Compresión de Imágenes */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Calidad de Compresión de Imágenes</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Reduce las fotos antes de emitirlas por canales de radio de baja velocidad.
+                                </div>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+                                {[
+                                    { id: "low", label: "Ligera (800px)", desc: "Ideal para BLE/LoRa" },
+                                    { id: "medium", label: "Media (1024px)", desc: "Estándar P2P" },
+                                    { id: "high", label: "Alta (1600px)", desc: "Máxima resolución" },
+                                ].map((opt) => {
+                                    const isSelected = preferences.imageCompression === opt.id;
+                                    return (
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => {
+                                                SettingsManager.triggerHaptic("light");
+                                                updatePreferences({ imageCompression: opt.id as ImageCompressionQuality });
+                                            }}
+                                            className={`btn-tactical-pill ${isSelected ? "active" : ""}`}
+                                            style={{ padding: "8px 4px", fontSize: "0.74rem" }}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Botón de Purga */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-crimson)" }}>Limpiar Caché de Medios</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Elimina historias temporales y audios antiguos sin borrar tus contactos ni chats.
+                                </div>
+                            </div>
                             <button
-                                onClick={() => {
-                                    TacticalAudioEngine.playMessageSent();
-                                    SettingsManager.triggerHaptic("light");
-                                    toast.info("🔊 Tono de Envío Táctico");
-                                }}
+                                onClick={handlePurgeMediaCache}
                                 className="btn-tactical-secondary"
-                                style={{ padding: "10px", fontSize: "0.76rem" }}
+                                style={{ padding: "8px 14px", fontSize: "0.75rem", color: "var(--accent-crimson)", borderColor: "rgba(232,33,58,0.4)" }}
                             >
-                                📤 Probar Envío
-                            </button>
-                            <button
-                                onClick={() => {
-                                    TacticalAudioEngine.playMessageReceived();
-                                    SettingsManager.triggerHaptic("medium");
-                                    toast.info("📥 Tono de Recepción Táctico");
-                                }}
-                                className="btn-tactical-secondary"
-                                style={{ padding: "10px", fontSize: "0.76rem" }}
-                            >
-                                📥 Probar Recepción
+                                🧹 Purgar Caché
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* ── TAB 3: PRIVACIDAD & SEGURIDAD ── */}
+                {/* ── TAB 5: PRIVACIDAD & SEGURIDAD ── */}
                 {activeTab === "privacy" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
@@ -447,7 +740,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <div>
                                 <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Temporizador de Autodestrucción Predeterminado</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Tiempo de vida automático asignado a nuevos mensajes directos.
+                                    Tiempo de vida asignado automáticamente a los nuevos mensajes directos.
                                 </div>
                             </div>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "6px" }}>
@@ -490,7 +783,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* ── TAB 4: MALLA & BATERÍA ── */}
+                {/* ── TAB 6: MALLA & BATERÍA ── */}
                 {activeTab === "mesh" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
@@ -498,7 +791,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                 Parámetros de Red Mesh & Eficiencia Energética
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Optimización del tráfico mDNS, BLE y compresión de paquetes en operaciones de campo.
+                                Optimización del tráfico mDNS, BLE y perfiles de escaneo en operaciones de campo.
                             </p>
                         </div>
 
@@ -507,7 +800,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <div>
                                 <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Perfil de Descubrimiento de Pares</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Determina la frecuencia de balizas BLE y mDNS para descubrir nodos cercanos.
+                                    Frecuencia de escaneo BLE y descubrimiento de nodos cercanos.
                                 </div>
                             </div>
 
@@ -532,12 +825,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             </div>
                         </div>
 
-                        {/* Servidor de Señalización & Relé Global WebRTC */}
+                        {/* Servidor de Señalización */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div>
                                 <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Servidor de Señalización & Relé Global (WebRTC)</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    URL del servidor de relé ciego y señalización para comunicación Web a Móvil a través de Internet (STUN / CGNAT Traversal).
+                                    URL del servidor de relé ciego para comunicación Web a Móvil por Internet.
                                 </div>
                             </div>
 
@@ -573,7 +866,60 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     </div>
                 )}
 
-                {/* ── TAB 5: ACTUALIZADOR OTA INTEGRADO ── */}
+                {/* ── TAB 7: IDENTIDAD & CLAVES ── */}
+                {activeTab === "identity" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
+                                Identidad Criptográfica & Credenciales Soberanas
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                Par de claves asimétricas de curva elíptica Curve25519 / Dilithium y DID Soberano.
+                            </p>
+                        </div>
+
+                        <div className="card-tactical" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>DID IDENTIFIER</div>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", wordBreak: "break-all" }}>
+                                    did:red:{identity?.identity_hash || "local"}
+                                </div>
+                            </div>
+
+                            <div>
+                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>ALIAS DE OPERADOR</div>
+                                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#fff" }}>
+                                    {identity?.nickname || "Operador RED"}
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                <button
+                                    onClick={() => {
+                                        if (identity?.identity_hash) {
+                                            navigator.clipboard.writeText(`did:red:${identity.identity_hash}`);
+                                            SettingsManager.triggerHaptic("light");
+                                            toast.success("📋 DID copiado al portapapeles");
+                                        }
+                                    }}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "8px 12px", fontSize: "0.75rem" }}
+                                >
+                                    Copiar DID Completo
+                                </button>
+                                <button
+                                    onClick={() => navigate("idVault")}
+                                    className="btn-tactical-pill active"
+                                    style={{ padding: "8px 14px", fontSize: "0.75rem" }}
+                                >
+                                    Ver Bóveda de Claves ➔
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── TAB 8: ACTUALIZADOR OTA INTEGRADO ── */}
                 {activeTab === "updates" && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>

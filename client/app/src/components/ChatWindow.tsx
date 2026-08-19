@@ -318,7 +318,34 @@ export default function ChatWindow() {
         }
     };
 
-    const handleCamera = () => {
+    const handleCamera = async () => {
+        try {
+            const { Camera, CameraResultType, CameraSource } = await import("@capacitor/camera");
+            const photo = await Camera.getPhoto({
+                quality: 75,
+                allowEditing: false,
+                resultType: CameraResultType.Base64,
+                source: CameraSource.Camera,
+                correctOrientation: true,
+                width: 1280,
+                height: 1280,
+            });
+            if (photo.base64String) {
+                const mimeType = `image/${photo.format || 'jpeg'}`;
+                const dataUrl = `data:${mimeType};base64,${photo.base64String}`;
+                await sendMessage(dataUrl, {
+                    msg_type: "image",
+                    mime_type: mimeType,
+                    media_data: dataUrl
+                });
+                TacticalAudioEngine.playMessageSent();
+                toast.success("Foto enviada");
+                return;
+            }
+        } catch (err: any) {
+            console.log("[ChatWindow] Native Camera fallback:", err?.message || err);
+        }
+
         if (mediaInputRef.current) {
             mediaInputRef.current.setAttribute("capture", "environment");
             mediaInputRef.current.accept = "image/*";
@@ -338,36 +365,31 @@ export default function ChatWindow() {
                     return;
                 }
                 const reader = new FileReader();
-                reader.onload = (ev) => {
+                reader.onload = async (ev) => {
                     if (ev.target?.result) {
-                        // Show preview first
-                        setMediaPreview({ dataUrl: ev.target.result as string, type: "video", mimeType: file.type || "video/mp4", caption: "" });
+                        const dataUrl = ev.target.result as string;
+                        await sendMessage(dataUrl, {
+                            msg_type: "video",
+                            mime_type: file.type || "video/mp4",
+                            media_data: dataUrl
+                        });
+                        TacticalAudioEngine.playMessageSent();
+                        toast.success("Video enviado");
                     }
                 };
                 reader.readAsDataURL(file);
             } else {
                 const compressedB64 = await compressImage(file);
-                // Show preview first
-                setMediaPreview({ dataUrl: compressedB64, type: "image", mimeType: "image/jpeg", caption: "" });
+                await sendMessage(compressedB64, {
+                    msg_type: "image",
+                    mime_type: "image/jpeg",
+                    media_data: compressedB64
+                });
+                TacticalAudioEngine.playMessageSent();
+                toast.success("Foto enviada");
             }
         } catch (err) {
             console.error("Error al procesar archivo:", err);
-            toast.error("Error al enviar multimedia");
-        }
-    };
-
-    const confirmMediaSend = async () => {
-        if (!mediaPreview) return;
-        const { dataUrl, type, mimeType, caption } = mediaPreview;
-        setMediaPreview(null);
-        try {
-            await sendMessage(dataUrl, { msg_type: type, mime_type: mimeType });
-            TacticalAudioEngine.playMessageSent();
-            if (caption.trim()) {
-                await sendMessage(caption.trim(), { msg_type: "text" });
-            }
-            toast.success(type === "video" ? "Video enviado" : "Foto enviada");
-        } catch {
             toast.error("Error al enviar multimedia");
         }
     };
@@ -516,7 +538,12 @@ export default function ChatWindow() {
                             } catch {}
                             const target = fullPeerHash || peerHash;
                             setActiveCallType('audio');
-                            useRedStore.setState({ activeCallPeer: target });
+                            useRedStore.setState({
+                                activeCallPeer: target,
+                                activeCallOffer: null,
+                                activeCallSignal: null,
+                                callSignalQueue: []
+                            });
                             navigate("call", target);
                         }}
                         className="btn-icon"
@@ -537,7 +564,12 @@ export default function ChatWindow() {
                             } catch {}
                             const target = fullPeerHash || peerHash;
                             setActiveCallType('video');
-                            useRedStore.setState({ activeCallPeer: target });
+                            useRedStore.setState({
+                                activeCallPeer: target,
+                                activeCallOffer: null,
+                                activeCallSignal: null,
+                                callSignalQueue: []
+                            });
                             navigate("call", target);
                         }}
                         className="btn-icon"
@@ -648,41 +680,6 @@ export default function ChatWindow() {
                     <div style={{ display: "flex", gap: "16px" }}>
                         <button onClick={cancelVoicePreview} className="btn-tactical-secondary" style={{ padding: "10px 28px", borderRadius: "40px" }}>✕ Cancelar</button>
                         <button onClick={confirmVoiceSend} className="btn-tactical-primary" style={{ padding: "10px 28px", borderRadius: "40px" }}>➤ Enviar</button>
-                    </div>
-                </div>
-            )}
-
-            {/* Media Preview Sheet */}
-            {mediaPreview && (
-                <div style={{
-                    position: "absolute", inset: 0, zIndex: 50,
-                    background: "rgba(6,6,16,0.96)", backdropFilter: "blur(12px)",
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
-                    padding: "20px 0 0 0"
-                }}>
-                    {/* Header */}
-                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%", padding: "0 16px 12px 16px" }}>
-                        <button onClick={() => setMediaPreview(null)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "1.3rem", cursor: "pointer" }}>✕</button>
-                        <span style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-primary)" }}>{mediaPreview.type === "video" ? "Vista previa de video" : "Vista previa de foto"}</span>
-                        <button onClick={confirmMediaSend} style={{ background: "transparent", border: "none", color: "var(--accent-cyan)", fontSize: "0.9rem", fontWeight: 800, cursor: "pointer" }}>Enviar ➤</button>
-                    </div>
-                    {/* Preview */}
-                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", width: "100%", overflow: "hidden" }}>
-                        {mediaPreview.type === "image" ? (
-                            <img src={mediaPreview.dataUrl} alt="preview" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", borderRadius: "8px" }} />
-                        ) : (
-                            <video src={mediaPreview.dataUrl} controls muted autoPlay playsInline style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: "8px" }} />
-                        )}
-                    </div>
-                    {/* Caption input */}
-                    <div style={{ width: "100%", padding: "12px 16px", background: "rgba(10,12,24,0.95)", borderTop: "1px solid var(--glass-border)" }}>
-                        <input
-                            type="text"
-                            value={mediaPreview.caption}
-                            onChange={e => setMediaPreview(p => p ? { ...p, caption: e.target.value } : p)}
-                            placeholder="Añadir un comentario…"
-                            style={{ width: "100%", padding: "10px 14px", background: "rgba(20,22,38,0.9)", border: "1px solid var(--glass-border)", borderRadius: "var(--radius-full)", color: "#fff", fontSize: "0.88rem", outline: "none", boxSizing: "border-box" }}
-                        />
                     </div>
                 </div>
             )}

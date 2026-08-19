@@ -275,9 +275,33 @@ export const MessageBubble = memo(({
                     }}
                 >
                     {/* Media Image */}
-                    {(msg.msg_type === "image" || msg.media_data?.startsWith("data:image") || msg.content?.startsWith("data:image")) && (
-                        <div style={{ borderRadius: "12px", overflow: "hidden", cursor: "pointer" }} onClick={() => setViewingImageSrc(msg.media_data || (msg.content?.startsWith("data:image") ? msg.content : null))}>
-                            <img src={msg.media_data || (msg.content?.startsWith("data:image") ? msg.content : "")} alt="Foto" style={{ maxWidth: "100%", maxHeight: "240px", objectFit: "cover", display: "block", borderRadius: "8px" }} />
+                    {(msg.msg_type === "image" || msg.media_data?.startsWith("data:image") || msg.content?.startsWith("data:image") || msg.content?.startsWith("/9j/") || msg.content?.startsWith("iVBORw0")) && (
+                        <div
+                            style={{ borderRadius: "12px", overflow: "hidden", cursor: "pointer" }}
+                            onClick={() => {
+                                const src = msg.media_data || (
+                                    msg.content?.startsWith("data:image") ? msg.content : (
+                                        msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
+                                            msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : null
+                                        )
+                                    )
+                                );
+                                setViewingImageSrc(src);
+                            }}
+                        >
+                            <img
+                                src={
+                                    msg.media_data || (
+                                        msg.content?.startsWith("data:image") ? msg.content : (
+                                            msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
+                                                msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : ""
+                                            )
+                                        )
+                                    )
+                                }
+                                alt="Foto"
+                                style={{ maxWidth: "100%", maxHeight: "240px", objectFit: "cover", display: "block", borderRadius: "8px" }}
+                            />
                         </div>
                     )}
 
@@ -370,7 +394,7 @@ export const MessageBubble = memo(({
                     )}
 
                     {/* Standard Text content (when not location card or document) */}
-                    {!isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && (
+                    {!isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                         <div style={{ fontSize: "0.90rem", lineHeight: 1.45, fontWeight: isMine ? 600 : 400, wordBreak: "break-word" }}>
                             {msg.content}
                         </div>

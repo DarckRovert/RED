@@ -5,6 +5,27 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [35.0.0-tactical-master] - 2026-08-19
+
+### Añadido, Corregido y Optimizado — RED v35.0.0 Sovereign Tactical Master Release
+
+**Motor Acústico Singleton & Corrección Definitiva del Timbre (`CallRingtoneEngine.ts` & `IncomingCallBanner.tsx`)**
+- **Síntesis Acústica Multitono:** Generación en tiempo real de 4 timbres de llamada tácticos (*Táctico Alfa*, *Pulso Radar*, *Sintetizador Suave*, *Silencioso*) mediante Web Audio API sin dependencias externas de archivos.
+- **Cancelación Atómica Garantizada:** El método `CallRingtoneEngine.stop()` asegura el apagado incondicional de osciladores, ganancias, timers de intervalos y patrones hápticos al contestar, rechazar o montar la pantalla de llamada (`CallScreen.tsx`), resolviendo el bug de timbre persistente.
+
+**Videollamadas P2P WebRTC Resilientes (`CallScreen.tsx`)**
+- **Corrección Crítica de Timestamps:** Normalización de marcas de tiempo en la cola de señales WebRTC (`itemTs = item.timestamp > 1e11 ? item.timestamp : item.timestamp * 1000`), evitando el descarte erróneo del 100% de las respuestas SDP (`answer`) y candidatos ICE remotos por disparidad de unidades (segundos vs milisegundos).
+- **Matching Insensible a Mayúsculas/Minúsculas en DIDs:** Normalización de identificadores (`toLowerCase()`) en el procesamiento de colas de señalización P2P.
+- **Transceivers Bidireccionales Explícitos:** Inclusión de `pc.addTransceiver('audio', { direction: 'sendrecv' })` y `pc.addTransceiver('video', { direction: 'sendrecv' })` para garantizar la negociación bidireccional de flujos de video y audio en hardware Android heterogéneo.
+- **Captura de Cámara Adaptativa:** Restricciones de resolución configurables (`720p HD`, `480p SD`, `360p Eco`) con soporte de fallbacks resilientes multinivel para evitar fallos de hardware en sensores de dispositivos móviles.
+
+**Centro Maestro de Ajustes & Configuración Soberana (`SettingsModal.tsx` & `settingsManager.ts`)**
+- **8 Paneles Tácticos Especializados:** Navegación por pestañas para *Apariencia & Temas*, *Llamadas & Video*, *Sonido & Tonos*, *Almacenamiento & Caché*, *Privacidad & Biometría*, *Malla & Batería*, *Identidad & Claves* y *Actualizador OTA*.
+- **Gestión Real de Almacenamiento:** Cálculo en vivo del espacio ocupado por mensajes, conversaciones y medios temporales en la bóveda local (`localStorage`), con herramienta de purga de caché de medios sin alterar contactos ni chats.
+- **Configuración WebRTC Personalizable:** Servidores STUN personalizables, supresión de eco y control de altavoz predeterminado en videollamadas.
+
+---
+
 ## [33.0.0-tactical-master] - 2026-08-18
 
 ### Añadido y Refactorizado — RED v33.0.0 Sovereign Tactical Master Release

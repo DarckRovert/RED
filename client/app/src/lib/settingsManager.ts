@@ -1,14 +1,17 @@
 /**
  * RED 2.0 — Tactical Settings & UI Customization Engine
  * Manages runtime CSS variable injection, typography scales, pure OLED power saving,
- * privacy flags, haptics, and mesh profiles with persistent storage.
+ * privacy flags, WebRTC call preferences, audio acoustics, storage, and mesh profiles with persistent storage.
  */
+
+import { RingtoneType } from "./CallRingtoneEngine";
 
 export type TacticalThemeId = 'void-crimson' | 'cyber-cyan' | 'emerald-recon' | 'ghost-purple' | 'solar-amber' | 'stealth-dark';
 export type FontSizeScale = 'compact' | 'normal' | 'large';
 export type AutoDestructTimer = 'off' | '5m' | '1h' | '24h' | '7d';
 export type MeshPowerProfile = 'high' | 'balanced' | 'eco';
 export type ImageCompressionQuality = 'low' | 'medium' | 'high';
+export type VideoCallQuality = 'hd720p' | 'sd480p' | 'eco360p';
 
 export interface TacticalTheme {
     id: TacticalThemeId;
@@ -112,6 +115,13 @@ export interface UserPreferences {
     imageCompression: ImageCompressionQuality;
     autoCheckUpdates: boolean;
     signalingServerUrl?: string;
+    // WebRTC & Calls preferences
+    videoQuality: VideoCallQuality;
+    ringtoneType: RingtoneType;
+    customStunServer: string;
+    noiseSuppression: boolean;
+    autoSpeakerVideo: boolean;
+    biometricLock: boolean;
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -128,6 +138,12 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     imageCompression: 'medium',
     autoCheckUpdates: true,
     signalingServerUrl: '',
+    videoQuality: 'sd480p',
+    ringtoneType: 'tactical-alpha',
+    customStunServer: 'stun:stun.l.google.com:19302',
+    noiseSuppression: true,
+    autoSpeakerVideo: true,
+    biometricLock: false,
 };
 
 const STORAGE_KEY = 'red_user_preferences_v1';
@@ -169,6 +185,9 @@ export class SettingsManager {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(this.currentPrefs));
                 if (patch.signalingServerUrl !== undefined) {
                     localStorage.setItem('red_signaling_url', patch.signalingServerUrl);
+                }
+                if (patch.customStunServer !== undefined) {
+                    localStorage.setItem('red_custom_stun', patch.customStunServer);
                 }
             } catch (e) {
                 console.error('[SettingsManager] Failed to save preferences', e);
@@ -269,6 +288,35 @@ export class SettingsManager {
             case 'medium':
             default:
                 return { maxDim: 1024, qualityFactor: 0.65 };
+        }
+    }
+
+    /** Constraints de Video WebRTC según calidad configurada */
+    public static getVideoCallConstraints(quality?: VideoCallQuality, facingMode: 'user' | 'environment' = 'user'): MediaTrackConstraints {
+        const val = quality || this.currentPrefs.videoQuality;
+        switch (val) {
+            case 'hd720p':
+                return {
+                    facingMode: facingMode,
+                    width: { ideal: 1280, max: 1280 },
+                    height: { ideal: 720, max: 720 },
+                    frameRate: { ideal: 30, max: 30 }
+                };
+            case 'eco360p':
+                return {
+                    facingMode: facingMode,
+                    width: { ideal: 480, max: 640 },
+                    height: { ideal: 360, max: 480 },
+                    frameRate: { ideal: 20, max: 24 }
+                };
+            case 'sd480p':
+            default:
+                return {
+                    facingMode: facingMode,
+                    width: { ideal: 640, max: 854 },
+                    height: { ideal: 480, max: 480 },
+                    frameRate: { ideal: 24, max: 30 }
+                };
         }
     }
 

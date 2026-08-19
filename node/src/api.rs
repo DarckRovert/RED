@@ -693,12 +693,35 @@ async fn handle_send_message(
     let mut node = state.node.lock().await;
     let sender = node.identity_hash().clone();
 
-    let content = if msg_type_str != "text" && req.media_data.is_some() {
+    let is_media_data = req.media_data.is_some() || req.content.starts_with("data:image") || req.content.starts_with("data:audio") || req.content.starts_with("data:video");
+    let detected_media_data = req.media_data.clone().or_else(|| {
+        if req.content.starts_with("data:") {
+            Some(req.content.clone())
+        } else {
+            None
+        }
+    });
+    let detected_msg_type = if (msg_type_str == "text" || msg_type_str.is_empty()) && is_media_data {
+        if req.content.starts_with("data:image") {
+            "image".to_string()
+        } else if req.content.starts_with("data:audio") {
+            "voice".to_string()
+        } else if req.content.starts_with("data:video") {
+            "video".to_string()
+        } else {
+            msg_type_str.to_string()
+        }
+    } else {
+        msg_type_str.to_string()
+    };
+
+    let content = if detected_msg_type != "text" && (is_media_data || detected_media_data.is_some()) {
         // Encode rich metadata as JSON in the content field
+        let text_caption = if req.content.starts_with("data:") { "" } else { &req.content };
         serde_json::json!({
-            "text": req.content,
-            "msg_type": msg_type_str,
-            "media_data": req.media_data,
+            "text": text_caption,
+            "msg_type": detected_msg_type,
+            "media_data": detected_media_data,
             "mime_type": req.mime_type,
             "width": req.width,
             "height": req.height,
@@ -878,6 +901,30 @@ async fn handle_get_messages(
                                             meta["accuracy"].as_f64(),
                                             meta["target_message_id"].as_str().map(String::from),
                                         )
+                                    } else if text.starts_with("data:image") || text.starts_with("/9j/") || text.starts_with("iVBORw0") {
+                                        (
+                                            text.clone(),
+                                            "image".into(),
+                                            Some(text.clone()),
+                                            Some("image/jpeg".into()),
+                                            None, None, None, None, None, None, None,
+                                        )
+                                    } else if text.starts_with("data:audio") {
+                                        (
+                                            text.clone(),
+                                            "voice".into(),
+                                            Some(text.clone()),
+                                            Some("audio/webm".into()),
+                                            None, None, None, None, None, None, None,
+                                        )
+                                    } else if text.starts_with("data:video") {
+                                        (
+                                            text.clone(),
+                                            "video".into(),
+                                            Some(text.clone()),
+                                            Some("video/mp4".into()),
+                                            None, None, None, None, None, None, None,
+                                        )
                                     } else {
                                         (
                                             text.clone(),
@@ -893,6 +940,30 @@ async fn handle_get_messages(
                                             None,
                                         )
                                     }
+                                } else if text.starts_with("data:image") || text.starts_with("/9j/") || text.starts_with("iVBORw0") {
+                                    (
+                                        text.clone(),
+                                        "image".into(),
+                                        Some(text.clone()),
+                                        Some("image/jpeg".into()),
+                                        None, None, None, None, None, None, None,
+                                    )
+                                } else if text.starts_with("data:audio") {
+                                    (
+                                        text.clone(),
+                                        "voice".into(),
+                                        Some(text.clone()),
+                                        Some("audio/webm".into()),
+                                        None, None, None, None, None, None, None,
+                                    )
+                                } else if text.starts_with("data:video") {
+                                    (
+                                        text.clone(),
+                                        "video".into(),
+                                        Some(text.clone()),
+                                        Some("video/mp4".into()),
+                                        None, None, None, None, None, None, None,
+                                    )
                                 } else {
                                     (
                                         text.clone(),
