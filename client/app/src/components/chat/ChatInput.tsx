@@ -7,13 +7,15 @@ export interface ChatInputProps {
     inputText?: string;
     setInputText?: (text: string) => void;
     handleSend?: () => void;
-    onSendMessage?: (text: string, replyToId?: string) => Promise<void> | void;
+    onSendMessage?: (text: string, replyToMsg?: MessageItem | null) => Promise<void> | void;
     onSendVoice?: (blob?: Blob) => void;
     sendTyping?: () => void;
     attachOpen?: boolean;
     setAttachOpen?: React.Dispatch<React.SetStateAction<boolean>>;
     replyTo?: MessageItem | null;
     setReplyTo?: (msg: MessageItem | null) => void;
+    editingMsg?: MessageItem | null;
+    setEditingMsg?: (msg: MessageItem | null) => void;
     peerName?: string;
     peerHash?: string;
     burnTimer?: number;
@@ -31,7 +33,7 @@ export interface ChatInputProps {
 
 export const ChatInput: React.FC<ChatInputProps> = ({
     inputText, setInputText, handleSend, onSendMessage, onSendVoice, sendTyping,
-    attachOpen, setAttachOpen, replyTo, setReplyTo, peerName, peerHash, burnTimer,
+    attachOpen, setAttachOpen, replyTo, setReplyTo, editingMsg, setEditingMsg, peerName, peerHash, burnTimer,
     isRecording = false, recordSec = 0,
     startRecording = () => {}, stopRecording = () => {}, cancelRecording = () => {},
     handleCamera = () => {}, handleGallery = () => {}, handleDocument = () => {},
@@ -41,11 +43,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const [localText, setLocalText] = useState("");
     const [localAttachOpen, setLocalAttachOpen] = useState(false);
     const [multiline, setMultiline] = useState(false);
+    const [isPaused, setIsPaused] = useState(false);
 
     const text = inputText !== undefined ? inputText : localText;
     const setText = setInputText || setLocalText;
     const isAttachOpen = attachOpen !== undefined ? attachOpen : localAttachOpen;
     const setIsAttachOpen = setAttachOpen || setLocalAttachOpen;
+
+    useEffect(() => {
+        if (editingMsg) {
+            setText(editingMsg.content || "");
+            textareaRef.current?.focus();
+        }
+    }, [editingMsg, setText]);
 
     useEffect(() => {
         const ta = textareaRef.current;
@@ -60,13 +70,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     const onSend = useCallback(() => {
         if (!text.trim()) return;
-        if (onSendMessage) onSendMessage(text.trim(), replyTo?.id);
+        if (onSendMessage) onSendMessage(text.trim(), replyTo);
         else if (handleSend) handleSend();
         setText("");
         setMultiline(false);
+        if (setReplyTo) setReplyTo(null);
+        if (setEditingMsg) setEditingMsg(null);
         const ta = textareaRef.current;
         if (ta) { ta.style.height = "auto"; ta.style.overflowY = "hidden"; }
-    }, [text, onSendMessage, handleSend, setText, replyTo]);
+    }, [text, onSendMessage, handleSend, setText, replyTo, setReplyTo, setEditingMsg]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
@@ -79,11 +91,72 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
 
     return (
-        <React.Fragment>
+        <div style={{ display: "flex", flexDirection: "column", background: "rgba(10,12,22,0.98)", borderTop: "1px solid var(--glass-border)", zIndex: 30 }}>
+            {/* ── Reply Quote Banner Bar ── */}
+            {replyTo && (
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 16px",
+                    background: "rgba(0, 229, 255, 0.08)",
+                    borderLeft: "4px solid var(--accent-cyan)",
+                    borderBottom: "1px solid var(--glass-border)",
+                    animation: "fadeIn 0.15s ease-out"
+                }}>
+                    <div style={{ overflow: "hidden", paddingRight: "10px" }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                            ↩️ Respondiendo a {replyTo.is_mine ? "ti mismo" : (peerName || "Operador")}
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            {replyTo.content || `[${replyTo.msg_type || "Medio"}]`}
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setReplyTo?.(null)}
+                        className="btn-icon"
+                        style={{ width: 28, height: 28, fontSize: "0.85rem", flexShrink: 0 }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
+            {/* ── Editing Message Banner Bar ── */}
+            {editingMsg && (
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 16px",
+                    background: "rgba(255, 179, 0, 0.10)",
+                    borderLeft: "4px solid var(--accent-amber)",
+                    borderBottom: "1px solid var(--glass-border)",
+                    animation: "fadeIn 0.15s ease-out"
+                }}>
+                    <div style={{ overflow: "hidden", paddingRight: "10px" }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--accent-amber)" }}>
+                            ✏️ Editando mensaje
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
+                            {editingMsg.content}
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => { setEditingMsg?.(null); setText(""); }}
+                        className="btn-icon"
+                        style={{ width: 28, height: 28, fontSize: "0.85rem", flexShrink: 0 }}
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
+            {/* ── Attachments Bar ── */}
             {isAttachOpen && (
                 <div style={{
                     display: "flex", gap: "10px", padding: "12px 16px",
-                    background: "rgba(10,12,22,0.98)", borderTop: "1px solid var(--glass-border)",
+                    background: "rgba(14,16,28,0.98)", borderBottom: "1px solid var(--glass-border)",
                     overflowX: "auto", flexShrink: 0
                 }}>
                     {[
@@ -98,134 +171,145 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             onClick={a.action}
                             className="btn-tactical-secondary"
                             style={{
-                                display: "flex", flexDirection: "column", alignItems: "center",
-                                gap: "4px", padding: "8px 12px", minWidth: "64px",
-                                fontSize: "0.72rem", fontWeight: 700
+                                padding: "8px 14px", display: "flex", alignItems: "center", gap: "6px",
+                                fontSize: "0.78rem", whiteSpace: "nowrap", flexShrink: 0
                             }}
                         >
-                            <span style={{ fontSize: "1.2rem" }}>{a.icon}</span>
-                            {a.label}
+                            <span>{a.icon}</span>
+                            <span>{a.label}</span>
                         </button>
                     ))}
                 </div>
             )}
 
-            {replyTo && (
-                <div style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "8px 16px", background: "rgba(232,33,58,0.1)",
-                    borderTop: "1px solid var(--accent-crimson)", fontSize: "0.78rem", color: "#fff"
-                }}>
-                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        <span style={{ color: "var(--accent-crimson-bright)", fontWeight: 800 }}>Respondiendo: </span>
-                        {replyTo.content?.startsWith("data:") ? "📎 Archivo adjunto" : (replyTo.content || "Archivo adjunto")}
-                    </div>
-                    <button onClick={() => setReplyTo && setReplyTo(null)} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "1rem" }}>✕</button>
-                </div>
-            )}
+            {/* ── Main Input & Voice Recording Area ── */}
+            <div style={{
+                display: "flex", alignItems: "flex-end", gap: "8px",
+                padding: "8px 12px", minHeight: "56px"
+            }}>
+                {isRecording ? (
+                    /* Tactical Recording Mode */
+                    <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        flex: 1, height: "42px", padding: "0 14px",
+                        background: "rgba(232,33,58,0.12)", border: "1px solid rgba(232,33,58,0.4)",
+                        borderRadius: "24px", animation: "pulse 1.5s infinite"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#FF3355", boxShadow: "0 0 10px #FF3355" }} />
+                            <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                                {formatTimer(recordSec)}
+                            </span>
+                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                Grabando audio P2P...
+                            </span>
+                        </div>
 
-            <div style={{ display: "flex", alignItems: "flex-end", gap: "8px", padding: "10px 14px", paddingBottom: "calc(10px + var(--safe-bottom, 0px))" }}>
-                {!isRecording ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                                onClick={cancelRecording}
+                                className="btn-icon"
+                                style={{ width: 34, height: 34, fontSize: "0.90rem", color: "#FF5252" }}
+                                title="Descartar grabación"
+                            >
+                                🗑️
+                            </button>
+                            <button
+                                onClick={stopRecording}
+                                className="btn-icon"
+                                style={{ width: 34, height: 34, fontSize: "1rem", background: "var(--primary)", color: "#fff" }}
+                                title="Enviar audio"
+                            >
+                                📤
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    /* Standard Chat Input Mode */
                     <>
                         <button
-                            onClick={() => setIsAttachOpen(v => !v)}
-                            className="btn-icon"
-                            style={{ width: 38, height: 38, flexShrink: 0 }}
-                            title="Adjuntar archivos o ubicación"
+                            onClick={() => setIsAttachOpen(!isAttachOpen)}
+                            className={`btn-icon ${isAttachOpen ? "active" : ""}`}
+                            style={{ width: 40, height: 40, fontSize: "1.2rem", flexShrink: 0 }}
+                            title="Adjuntar multimedia"
                         >
                             📎
                         </button>
-                        <div style={{ flex: 1, position: "relative" }}>
+
+                        <div style={{
+                            flex: 1,
+                            display: "flex",
+                            alignItems: "center",
+                            background: "rgba(255,255,255,0.06)",
+                            border: "1px solid var(--glass-border)",
+                            borderRadius: multiline ? "16px" : "24px",
+                            padding: "6px 14px",
+                            minHeight: "40px",
+                        }}>
                             <textarea
                                 ref={textareaRef}
                                 value={text}
-                                rows={1}
-                                onChange={e => { setText(e.target.value); sendTyping && sendTyping(); }}
+                                onChange={(e) => {
+                                    setText(e.target.value);
+                                    sendTyping?.();
+                                }}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Mensaje cifrado…"
+                                placeholder={burnTimer ? `Mensaje autodestructible (${burnTimer}s)...` : "Escribe un mensaje cifrado..."}
+                                rows={1}
                                 style={{
-                                    width: "100%", padding: "10px 14px",
-                                    background: "rgba(20, 22, 38, 0.9)",
-                                    border: "1px solid var(--glass-border)",
-                                    borderRadius: multiline ? "16px" : "var(--radius-full)",
-                                    color: "#fff", fontSize: "0.90rem", outline: "none",
-                                    resize: "none", overflowY: "hidden",
-                                    lineHeight: "20px", display: "block",
-                                    boxSizing: "border-box",
-                                    transition: "border-radius 0.15s ease",
-                                    fontFamily: "inherit", minHeight: "40px",
+                                    width: "100%",
+                                    background: "transparent",
+                                    border: "none",
+                                    outline: "none",
+                                    color: "#fff",
+                                    fontSize: "0.90rem",
+                                    resize: "none",
+                                    maxHeight: "120px",
+                                    fontFamily: "inherit",
+                                    lineHeight: "1.4",
                                 }}
                             />
                         </div>
-                        {text.trim().length > 0 ? (
+
+                        {text.trim() ? (
                             <button
                                 onClick={onSend}
                                 className="btn-tactical-primary"
-                                style={{ width: 40, height: 40, borderRadius: "50%", padding: 0, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                                style={{
+                                    width: 42,
+                                    height: 42,
+                                    borderRadius: "50%",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "1.1rem",
+                                    padding: 0,
+                                    flexShrink: 0,
+                                }}
                                 title="Enviar mensaje"
                             >
-                                ➤
+                                ➔
                             </button>
                         ) : (
                             <button
                                 onClick={startRecording}
                                 className="btn-icon"
-                                style={{ width: 38, height: 38, flexShrink: 0, background: "rgba(255,255,255,0.06)", color: "var(--accent-cyan)" }}
+                                style={{
+                                    width: 42,
+                                    height: 42,
+                                    borderRadius: "50%",
+                                    fontSize: "1.2rem",
+                                    background: "rgba(255,255,255,0.08)",
+                                    flexShrink: 0,
+                                }}
                                 title="Grabar nota de voz"
                             >
-                                🎤
+                                🎙️
                             </button>
                         )}
                     </>
-                ) : (
-                    /* Live Tactical Audio Recording Bar */
-                    <div style={{
-                        flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between",
-                        background: "rgba(232,33,58,0.15)", border: "1px solid var(--accent-crimson)",
-                        borderRadius: "var(--radius-full)", padding: "6px 14px", minHeight: "44px",
-                        animation: "pulse 1.5s infinite"
-                    }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <span style={{
-                                width: "10px", height: "10px", borderRadius: "50%",
-                                background: "var(--accent-crimson)", boxShadow: "0 0 8px #FF1744"
-                            }} />
-                            <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.88rem", fontWeight: 800, color: "#fff" }}>
-                                {formatTimer(recordSec)}
-                            </span>
-                            <span style={{ fontSize: "0.75rem", color: "var(--accent-crimson-bright)", fontWeight: 600 }}>
-                                Grabando nota OPUS...
-                            </span>
-                        </div>
-
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <button
-                                onClick={cancelRecording}
-                                style={{
-                                    background: "rgba(255,255,255,0.1)", border: "none",
-                                    color: "var(--text-muted)", borderRadius: "var(--radius-full)",
-                                    padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer"
-                                }}
-                            >
-                                ✕ Cancelar
-                            </button>
-                            <button
-                                onClick={stopRecording}
-                                style={{
-                                    background: "var(--accent-crimson)", border: "none",
-                                    color: "#fff", borderRadius: "var(--radius-full)",
-                                    padding: "5px 12px", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer",
-                                    boxShadow: "0 0 10px rgba(255,23,68,0.4)"
-                                }}
-                            >
-                                ✓ Enviar
-                            </button>
-                        </div>
-                    </div>
                 )}
             </div>
-        </React.Fragment>
+        </div>
     );
 };
-
-export default ChatInput;

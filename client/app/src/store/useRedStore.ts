@@ -107,6 +107,9 @@ interface RedStore {
     // Chat Actions
     sendMessage:  (content: string, options?: Record<string, any>) => Promise<void>;
     sendTyping:   () => void;
+    sendTypingStatus: (status: 'typing' | 'recording_voice' | 'idle') => void;
+    sendReaction: (messageId: string, emoji: string) => Promise<void>;
+    deleteMessageForEveryone: (messageId: string) => Promise<void>;
     addIncomingMessage: (rawEvent: any) => void;
     addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<string | boolean>;
     deleteMessage: (messageId: string) => Promise<void>;
@@ -118,6 +121,7 @@ interface RedStore {
     connectPeer: (multiaddr: string) => Promise<boolean>;
     // Real-time typing state (set by incoming SSE typing messages)
     peerTyping: boolean;
+    peerTypingStatus: Record<string, 'typing' | 'recording_voice' | 'idle'>;
     typingTimeout: ReturnType<typeof setTimeout> | null;
     peerPresence: Record<string, 'online' | 'offline' | 'nearby'>;
 
@@ -128,6 +132,10 @@ interface RedStore {
     toggleArchiveChat: (id: string) => void;
     setProfile: (profile: string | { nickname?: string; phone_number?: string; bio?: string }) => Promise<void>;
     enableDecoyVault: () => void;
+    selectedContactForProfile: any | null;
+    setSelectedContactForProfile: (contact: any | null) => void;
+    isCallPipMinimized: boolean;
+    setCallPipMinimized: (minimized: boolean) => void;
 
     // ── Stories & Live Streaming ───────────────────────────────────────────────
     liveStreams: Record<string, LiveStreamItem>;
@@ -293,6 +301,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
         } catch {}
     },
     peerPresence: {},
+    peerTypingStatus: {},
+    isCallPipMinimized: false,
+    selectedContactForProfile: null,
+    setSelectedContactForProfile: (contact) => set({ selectedContactForProfile: contact }),
+    setCallPipMinimized: (minimized) => set({ isCallPipMinimized: minimized }),
 
     // Stories & Live Streaming
     liveStreams: {},
@@ -1815,27 +1828,127 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
-        // ── Reactions: apply to target bubble, never append as new message ──
-        if (item.msg_type === 'reaction' && typeof item.content === 'string') {
-            const parts = item.content.split(':');
-            if (parts.length >= 3) {
-                const emoji    = parts[1];
-                const targetId = parts.slice(2).join(':');
-                const senderId = item.sender;
-                const updated  = messages.map((m: MessageItem) => {
-                    if (m.id !== targetId) return m;
-                    const reactions = { ...(m.reactions || {}) };
-                    if (reactions[emoji]?.includes(senderId)) {
-                        reactions[emoji] = reactions[emoji].filter((id: string) => id !== senderId);
-                        if (!reactions[emoji].length) delete reactions[emoji];
-                    } else {
-                        reactions[emoji] = [...(reactions[emoji] || []), senderId];
+        // ── Real-Time Reactions: apply to target bubble, never append as new message ──
+        if (item.msg_type === 'reaction') {
+            try {
+                let targetId = '';
+                let emoji = '';
+                let senderId = item.sender;
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    const parsed = JSON.parse(item.content);
+                    targetId = parsed.target_id || parsed.targetMsgId || '';
+                    emoji = parsed.emoji || '';
+                    senderId = parsed.sender_hash || item.sender;
+                } else if (typeof item.content === 'string') {
+                    const parts = item.content.split(':');
+                    if (parts.length >= 3) {
+                        emoji = parts[1];
+                        targetId = parts.slice(2).join(':');
                     }
-                    return { ...m, reactions };
+                }
+                if (targetId && emoji) {
+                    const updated = messages.map((m: MessageItem) => {
+                        if (m.id !== targetId) return m;
+                        const reactions = { ...(m.reactions || {}) };
+                        if (reactions[emoji]?.includes(senderId)) {
+                            reactions[emoji] = reactions[emoji].filter((id: string) => id !== senderId);
+                            if (!reactions[emoji].length) delete reactions[emoji];
+                        } else {
+                            reactions[emoji] = [...(reactions[emoji] || []), senderId];
+                        }
+                        return { ...m, reactions };
+                    });
+                    set({ messages: updated });
+                }
+            } catch (e) {
+                console.warn('[Reaction Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── Real-Time Message Edit: update content in-place ──
+        if (item.msg_type === 'message_edit') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const targetId = parsed.target_id || parsed.targetMsgId;
+                const newContent = parsed.new_content || parsed.newContent;
+                if (targetId && newContent) {
+                    const updated = messages.map((m: MessageItem) => {
+                        if (m.id !== targetId) return m;
+                        return { ...m, content: newContent, is_edited: true, edited: true };
+                    });
+                    set({ messages: updated });
+                }
+            } catch (e) {
+                console.warn('[Message Edit Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── Real-Time Message Delete ("Delete for Everyone"): redact content ──
+        if (item.msg_type === 'message_delete') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const targetId = parsed.target_id || parsed.targetMsgId;
+                if (targetId) {
+                    const updated = messages.map((m: MessageItem) => {
+                        if (m.id !== targetId) return m;
+                        return {
+                            ...m,
+                            is_deleted: true,
+                            content: "Este mensaje fue eliminado",
+                            media_data: undefined
+                        };
+                    });
+                    set({ messages: updated });
+                }
+            } catch (e) {
+                console.warn('[Message Delete Parse Error]', e);
+            }
+            return;
+        }
+
+        // ── Real-Time Read Receipt E2E ACK: update outgoing ticks to Read ──
+        if (item.msg_type === 'read_receipt') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item;
+                const readUpTo = parsed.read_up_to || parsed.readUpToTs || (Date.now() / 1000);
+                const updated = messages.map((m: MessageItem) => {
+                    const mTs = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
+                    if (m.is_mine && mTs <= readUpTo) {
+                        return { ...m, status: 'Read' as const, read: true, delivered: true };
+                    }
+                    return m;
                 });
                 set({ messages: updated });
+            } catch (e) {
+                console.warn('[Read Receipt Parse Error]', e);
             }
-            get().fetchData();
+            return;
+        }
+
+        // ── Real-Time Typing & Voice Recording Status ──
+        if (item.msg_type === 'typing_status' || item.msg_type === 'typing') {
+            try {
+                let statusVal: 'typing' | 'recording_voice' | 'idle' = 'typing';
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    const parsed = JSON.parse(item.content);
+                    statusVal = parsed.status || 'typing';
+                }
+                const senderHash = item.sender;
+                if (senderHash) {
+                    set(s => ({
+                        peerTyping: statusVal !== 'idle',
+                        peerTypingStatus: { ...s.peerTypingStatus, [senderHash]: statusVal }
+                    }));
+                    setTimeout(() => {
+                        set(s => ({
+                            peerTyping: false,
+                            peerTypingStatus: { ...s.peerTypingStatus, [senderHash]: 'idle' }
+                        }));
+                    }, 3500);
+                }
+            } catch {}
             return;
         }
 
@@ -2200,18 +2313,95 @@ export const useRedStore = create<RedStore>((set, get) => ({
         return ok;
     },
 
-    // ── Mark conversation as read (clear badge + notify Rust) ─────────────────
+    sendReaction: async (messageId: string, emoji: string) => {
+        const { activeConversationId, messages, conversations, identity } = get();
+        if (!activeConversationId) return;
+        const myHash = identity?.identity_hash || 'me';
+        const conv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
+        const peerHash = conv?.peer || activeConversationId;
+
+        // Optimistic update
+        const updated = messages.map(m => {
+            if (m.id !== messageId) return m;
+            const reactions = { ...(m.reactions || {}) };
+            if (reactions[emoji]?.includes(myHash)) {
+                reactions[emoji] = reactions[emoji].filter(id => id !== myHash);
+                if (!reactions[emoji].length) delete reactions[emoji];
+            } else {
+                reactions[emoji] = [...(reactions[emoji] || []), myHash];
+            }
+            return { ...m, reactions };
+        });
+        set({ messages: updated });
+
+        // Broadcast reaction to peer
+        if (peerHash) {
+            RedAPI.sendMessage(peerHash, JSON.stringify({
+                target_id: messageId,
+                emoji: emoji,
+                sender_hash: myHash
+            }), { msg_type: 'reaction' }).catch(() => {});
+        }
+    },
+
+    deleteMessageForEveryone: async (messageId: string) => {
+        const { activeConversationId, messages, conversations } = get();
+        if (!activeConversationId) return;
+        const conv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
+        const peerHash = conv?.peer || activeConversationId;
+        
+        // Optimistic update
+        set({
+            messages: messages.map(m => m.id === messageId ? {
+                ...m,
+                is_deleted: true,
+                content: "Este mensaje fue eliminado",
+                media_data: undefined
+            } : m)
+        });
+
+        // Broadcast delete order across mesh
+        if (peerHash) {
+            RedAPI.sendMessage(peerHash, JSON.stringify({
+                target_id: messageId,
+                delete_for_everyone: true
+            }), { msg_type: 'message_delete' }).catch(() => {});
+        }
+    },
+
+    sendTypingStatus: (status: 'typing' | 'recording_voice' | 'idle' = 'typing') => {
+        const { activeConversationId, conversations, identity } = get();
+        if (!activeConversationId) return;
+        const conv = conversations.find(c => c.id === activeConversationId || c.peer === activeConversationId);
+        const peerHash = conv?.peer || activeConversationId;
+        if (!peerHash) return;
+        RedAPI.sendMessage(peerHash, JSON.stringify({
+            status,
+            sender_hash: identity?.identity_hash || 'me'
+        }), { msg_type: 'typing_status' }).catch(() => {});
+    },
+
+    // ── Mark conversation as read (clear badge + notify Rust + send ACK) ───────
     markAsRead: (conversationId: string) => {
         if (!conversationId) return;
-        const { conversations } = get();
-        const conv = conversations.find(c => c.id === conversationId);
+        const { conversations, identity } = get();
+        const conv = conversations.find(c => c.id === conversationId || c.peer === conversationId);
+        const peerHash = conv?.peer || conversationId;
         const hasUnread = conv && (conv.unread_count || 0) > 0;
         if (hasUnread) {
             set({
                 conversations: conversations.map(c =>
-                    c.id === conversationId ? { ...c, unread_count: 0 } : c
+                    (c.id === conversationId || c.peer === conversationId) ? { ...c, unread_count: 0 } : c
                 )
             });
+        }
+        // Send E2E Read Receipt to peer
+        if (peerHash && identity?.identity_hash) {
+            RedAPI.sendMessage(peerHash, JSON.stringify({
+                conversation_id: conversationId,
+                read_up_to: Date.now() / 1000,
+                reader_hash: identity.identity_hash
+            }), { msg_type: 'read_receipt' }).catch(() => {});
         }
         // Best-effort: tell Rust the conversation is read
         RedAPI.req(`/conversations/${conversationId}/read`, { method: 'POST' }).catch(() => {});

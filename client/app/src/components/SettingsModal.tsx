@@ -13,6 +13,7 @@ import {
     SettingsManager,
 } from "../lib/settingsManager";
 import { CallRingtoneEngine, RINGTONE_OPTIONS, RingtoneType } from "../lib/CallRingtoneEngine";
+import { BiometricLockEngine, BiometricTimeout } from "../lib/BiometricLockEngine";
 import { UpdateManager, UpdateInfo, DownloadProgress } from "../lib/updateManager";
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../lib/version";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
@@ -713,6 +714,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
                                 Control de fugas visuales, efimeridad de datos y herramientas de coacción.
                             </p>
+                        </div>
+
+                        {/* Bloqueo Biométrico & Bóveda */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Bloqueo Biométrico / PIN de Bóveda</div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                        Requiere huella dactilar, Face ID o PIN para acceder a la aplicación tras inactividad.
+                                    </div>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={BiometricLockEngine.getStatus().isEnabled}
+                                    onChange={(e) => {
+                                        SettingsManager.triggerHaptic("medium");
+                                        BiometricLockEngine.setEnabled(e.target.checked);
+                                        toast.info(e.target.checked ? "🔒 Bloqueo biométrico activado" : "Bloqueo desactivado");
+                                    }}
+                                    style={{ width: 22, height: 22, accentColor: "var(--primary)" }}
+                                />
+                            </div>
+
+                            {BiometricLockEngine.getStatus().isEnabled && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px", borderTop: "1px solid var(--glass-border)", paddingTop: "10px" }}>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>TIEMPO DE INACTIVIDAD PARA BLOQUEO:</div>
+                                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+                                        {[
+                                            { id: "immediate", label: "Inmediato" },
+                                            { id: "1m", label: "1 Min" },
+                                            { id: "5m", label: "5 Min" },
+                                            { id: "15m", label: "15 Min" },
+                                        ].map((t) => (
+                                            <button
+                                                key={t.id}
+                                                onClick={() => {
+                                                    BiometricLockEngine.setTimeout(t.id as BiometricTimeout);
+                                                    SettingsManager.triggerHaptic("light");
+                                                }}
+                                                className={`btn-tactical-pill ${BiometricLockEngine.getStatus().timeout === t.id ? "active" : ""}`}
+                                                style={{ padding: "6px 2px", fontSize: "0.68rem" }}
+                                            >
+                                                {t.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Privacy Screen */}

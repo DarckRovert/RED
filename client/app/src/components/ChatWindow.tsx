@@ -6,6 +6,8 @@ import { MessageItem, RedAPI, summarizeChannelAI, translateTextAI } from "../lib
 import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
+import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
+import { ContactProfileModal } from "./ContactProfileModal";
 import { toast } from "./Toast";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
@@ -31,8 +33,8 @@ function avStyle(s: string) {
 export default function ChatWindow() {
     const {
         activeConversationId, conversations, contacts, groups, messages,
-        sendMessage, sendTyping, goBack, navigate, peerTyping, addContact,
-        deleteMessage, editMessage, clearConversation, starMessage, starredMessages,
+        sendMessage, sendTyping, sendTypingStatus, sendReaction, goBack, navigate, peerTyping, peerTypingStatus, addContact,
+        deleteMessage, deleteMessageForEveryone, editMessage, clearConversation, starMessage, starredMessages,
         identity, peerPresence, markAsRead, preferences, setActiveCallType,
     } = useRedStore();
 
@@ -72,6 +74,9 @@ export default function ChatWindow() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [burnTimer, setBurnTimer] = useState<number | undefined>(undefined);
     const [isSummarizing, setIsSummarizing] = useState(false);
+    const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
+    const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
+    const [editingMsg, setEditingMsg] = useState<MessageItem | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const mediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -178,10 +183,20 @@ export default function ChatWindow() {
 
     const isOnline = peerPresence?.[peerHash] === 'online' || peerPresence?.[peerHash] === 'nearby';
 
-    const handleSendText = async (text: string, replyToId?: string) => {
+    const handleSendText = async (text: string, replyToMsg?: MessageItem | null) => {
         if (!text.trim() || !peerHash) return;
+        const resolvedReply = replyToMsg || replyTo;
         try {
-            await sendMessage(text.trim(), { msg_type: "text", reply_to_id: replyToId || replyTo?.id });
+            await sendMessage(text.trim(), {
+                msg_type: "text",
+                reply_to: resolvedReply ? {
+                    id: resolvedReply.id,
+                    content: resolvedReply.content,
+                    sender: resolvedReply.sender,
+                    msg_type: resolvedReply.msg_type
+                } : undefined,
+                reply_to_id: resolvedReply?.id
+            });
             TacticalAudioEngine.playMessageSent();
             setReplyTo(null);
         } catch {
@@ -487,32 +502,50 @@ export default function ChatWindow() {
                         ←
                     </button>
 
-                    {/* Avatar del Interlocutor */}
-                    <div style={{ position: "relative", flexShrink: 0 }}>
-                        <div style={{
-                            width: 38, height: 38, borderRadius: "50%",
-                            ...avStyle(peerHash || "RED"),
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontWeight: 900, color: "white", fontSize: "1rem"
-                        }}>
-                            {peerName[0]?.toUpperCase() || "🔴"}
+                    {/* Avatar y Datos del Interlocutor (Click para abrir perfil) */}
+                    <div
+                        onClick={() => setIsContactProfileOpen(true)}
+                        style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, overflow: "hidden", cursor: "pointer" }}
+                        title="Ver info y archivos del contacto"
+                    >
+                        <div style={{ position: "relative", flexShrink: 0 }}>
+                            <div style={{
+                                width: 38, height: 38, borderRadius: "50%",
+                                ...avStyle(peerHash || "RED"),
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontWeight: 900, color: "white", fontSize: "1rem"
+                            }}>
+                                {peerName[0]?.toUpperCase() || "🔴"}
+                            </div>
+                            <div style={{
+                                position: "absolute", bottom: -1, right: -1,
+                                width: 10, height: 10, borderRadius: "50%",
+                                background: isOnline ? "var(--accent-emerald)" : "var(--text-muted)",
+                                border: "2px solid var(--bg-void)",
+                                boxShadow: isOnline ? "0 0 6px var(--accent-emerald)" : "none"
+                            }} />
                         </div>
-                        <div style={{
-                            position: "absolute", bottom: -1, right: -1,
-                            width: 10, height: 10, borderRadius: "50%",
-                            background: isOnline ? "var(--accent-emerald)" : "var(--text-muted)",
-                            border: "2px solid var(--bg-void)",
-                            boxShadow: isOnline ? "0 0 6px var(--accent-emerald)" : "none"
-                        }} />
-                    </div>
 
-                    <div style={{ minWidth: 0, overflow: "hidden" }}>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{peerName}</span>
-                            <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.62rem", padding: "1px 6px", flexShrink: 0 }}>NOISE E2E</span>
-                        </div>
-                        <div style={{ fontSize: "0.68rem", color: isOnline ? "var(--accent-emerald)" : "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {isOnline ? "● CONECTADO EN MALLA" : `DID: ${peerHash.substring(0, 10)}…`}
+                        <div style={{ minWidth: 0, overflow: "hidden" }}>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{peerName}</span>
+                                <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.62rem", padding: "1px 6px", flexShrink: 0 }}>NOISE E2E</span>
+                            </div>
+                            <div style={{
+                                fontSize: "0.68rem",
+                                color: (peerTypingStatus?.[peerHash] && peerTypingStatus[peerHash] !== 'idle') || peerTyping
+                                    ? "var(--accent-cyan)"
+                                    : (isOnline ? "var(--accent-emerald)" : "var(--text-muted)"),
+                                fontFamily: "JetBrains Mono, monospace",
+                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                                fontWeight: (peerTypingStatus?.[peerHash] && peerTypingStatus[peerHash] !== 'idle') || peerTyping ? 800 : 500
+                            }}>
+                                {peerTypingStatus?.[peerHash] === 'recording_voice'
+                                    ? '🎙️ Grabando audio...'
+                                    : ((peerTypingStatus?.[peerHash] === 'typing' || peerTyping)
+                                        ? '✍️ Escribiendo...'
+                                        : (isOnline ? "● CONECTADO EN MALLA" : `DID: ${peerHash.substring(0, 10)}…`))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -752,9 +785,13 @@ export default function ChatWindow() {
                                 onTouchEnd={() => {}}
                                 onLongPress={(e) => handleLongPress(e, msg)}
                                 onCancelLongPress={() => {}}
-                                onReaction={handleReaction}
+                                onReaction={(msgId, emoji) => sendReaction(msgId, emoji)}
                                 onVote={handleVote}
                                 onPin={handlePinMessage}
+                                onReply={(m) => setReplyTo(m)}
+                                onEdit={(m) => setEditingMsg(m)}
+                                onDeleteForEveryone={(id) => deleteMessageForEveryone(id)}
+                                onOpenMediaGallery={(m) => setSelectedViewerMedia(m)}
                             />
                         );
                     })
@@ -802,8 +839,11 @@ export default function ChatWindow() {
                 <ChatInput
                     onSendMessage={handleSendText}
                     onSendVoice={handleSendVoice}
+                    sendTyping={() => sendTypingStatus('typing')}
                     replyTo={replyTo}
                     setReplyTo={setReplyTo}
+                    editingMsg={editingMsg}
+                    setEditingMsg={setEditingMsg}
                     handleCamera={handleCamera}
                     handleGallery={handleGallery}
                     handleDocument={() => docInputRef.current?.click()}
@@ -827,6 +867,37 @@ export default function ChatWindow() {
                     }}
                 />
             </div>
+
+            {/* Contact Profile & Shared Media Modal */}
+            {isContactProfileOpen && (
+                <ContactProfileModal
+                    contact={peerContact || { identity_hash: peerHash, display_name: peerName }}
+                    conversation={activeConv}
+                    messages={convMessages}
+                    onClose={() => setIsContactProfileOpen(false)}
+                    onStartCall={(type) => {
+                        const target = fullPeerHash || peerHash;
+                        setActiveCallType(type);
+                        useRedStore.setState({
+                            activeCallPeer: target,
+                            activeCallOffer: null,
+                            activeCallSignal: null,
+                            callSignalQueue: []
+                        });
+                        navigate("call", target);
+                    }}
+                    onClearChat={clearConversation}
+                />
+            )}
+
+            {/* Media Gallery Full-Screen Modal */}
+            {selectedViewerMedia && (
+                <MediaGalleryViewer
+                    activeMedia={selectedViewerMedia}
+                    allMessages={convMessages}
+                    onClose={() => setSelectedViewerMedia(null)}
+                />
+            )}
         </div>
     );
 }

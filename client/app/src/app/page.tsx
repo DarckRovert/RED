@@ -55,6 +55,8 @@ const UpdateModal          = dynamic(() => import("../components/UpdateModal").t
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
+const FloatingCallPIP       = dynamic(() => import("../components/FloatingCallPIP").then(m => ({ default: m.FloatingCallPIP })),       { ssr: false, loading: () => null });
+const BiometricShieldOverlay = dynamic(() => import("../components/BiometricShieldOverlay").then(m => ({ default: m.BiometricShieldOverlay })), { ssr: false, loading: () => null });
 
 function AppLoader() {
   return (
@@ -357,6 +359,8 @@ export default function AppRouter() {
       <ToastProvider />
       <AuthWall>
         <IncomingCallBanner />
+        <FloatingCallPIP />
+        <BiometricShieldOverlay />
         {activeLiveStreamId && (
           <LiveStreamViewer
             streamId={activeLiveStreamId}

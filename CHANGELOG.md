@@ -5,6 +5,32 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [36.0.0-tactical-master] - 2026-08-19
+
+### Añadido y Perfeccionado — RED v36.0.0 Sovereign Competitive Superiority Master Release
+
+**Mensajería Reactiva & Core Chat de Siguiente Generación (`MessageBubble.tsx`, `ChatInput.tsx`, `useRedStore.ts`)**
+- **Reacciones E2E en Tiempo Real:** Selector flotante de reacciones con persistencia y sincronización bidireccional mediante paquetes de malla (`msg_type: 'reaction'`), agregando badges de conteo táctiles que alternan la reacción del usuario con un solo toque.
+- **Citas Táctiles & Swipe-to-Reply:** Gesto de deslizamiento hacia la derecha en cualquier burbuja con animación elástica e indicador visual para citar mensajes de inmediato. Renderizado de caja de cita citada con salto táctil automático (`scrollIntoView` suave + resaltado flash) al mensaje original.
+- **Edición y Eliminación para Todos:** Soporte de edición en vivo (`msg_type: 'message_edit'`) con marca `(editado)` y eliminación para todos (`msg_type: 'message_delete'`) redactando el contenido a nivel de protocolo y almacenamiento.
+- **Confirmaciones de Lectura Criptográficas Reales:** Ciclo completo de confirmación de entrega `pending` (🕒) $\rightarrow$ `sent` (✓) $\rightarrow$ `delivered` (✓✓ verde) $\rightarrow$ `read` (✓✓ cian) transmitido punto a punto mediante paquetes `read_receipt`.
+- **Estados Efímeros de Escritura y Grabación de Voz:** Transmisión en tiempo real del estado `✍️ Escribiendo...` y `🎙️ Grabando audio...` en la cabecera de chat con temporizador de reset automático a los 3.5 segundos.
+
+**Visor Multimedia In-App a Pantalla Completa (`MediaGalleryViewer.tsx`)**
+- **Galería Táctica con Zoom Multitáctil:** Visor flotante para imágenes y videos con zoom multitáctil (`pinch-to-zoom`), doble toque para ampliar, navegación lateral táctil / por teclado y swipe vertical para cerrar.
+- **Guardado y Compartido Nativo:** Integración directa con `@capacitor/filesystem` para guardar archivos en el directorio de Documentos del dispositivo y `@capacitor/share` para invocar el diálogo nativo de Android.
+
+**Videollamadas con PIP In-App & Auto-Reconexión ICE (`CallScreen.tsx`, `FloatingCallPIP.tsx`)**
+- **Ventana Picture-in-Picture (PIP) Flotante:** Modo PIP arrastrable en pantalla que permite continuar chateando o navegando por la aplicación sin interrumpir la llamada activa.
+- **Auto-Reconexión ICE Restart:** Detección de cambios de red o caídas de ruta con activación automática de `pc.restartIce()` sin colgar la llamada.
+
+**Bóveda Biometría, Respaldos Cifrados & Perfil de Contacto (`BiometricLockEngine.ts`, `BackupRestoreEngine.ts`, `ContactProfileModal.tsx`)**
+- **Bloqueo Biométrico Nativo & PIN de Seguridad:** Integración de `@aparajita/capacitor-biometric-auth` con temporizador de inactividad configurable (`inmediato`, `1m`, `5m`, `15m`) y pantalla de desbloqueo táctica `BiometricShieldOverlay.tsx`.
+- **Copia de Seguridad Cifrada AES-256-GCM:** Exportación e importación de la base de datos completa y claves criptográficas protegidas con clave derivada mediante PBKDF2 (100,000 iteraciones SHA-256).
+- **Panel de Información y Medios Compartidos:** Modal de contacto con pestañas organizadas para Fotos/Videos, Documentos, Audios y Enlaces/Coordenadas.
+
+---
+
 ## [35.0.0-tactical-master] - 2026-08-19
 
 ### Añadido, Corregido y Optimizado — RED v35.0.0 Sovereign Tactical Master Release

@@ -24,7 +24,8 @@ export default function CallScreen() {
         activeCallType,
         activeCallPeer,
         clearCallSignals,
-        preferences
+        preferences,
+        setCallPipMinimized
     } = useRedStore();
 
     // Ensure any leftover ringtone is immediately stopped
@@ -532,6 +533,19 @@ export default function CallScreen() {
                     setStatus("CONECTADO (E2E DTLS-SRTP)");
                 };
 
+                // Auto-reconnection on network switch or route changes (ICE Restart)
+                pc.oniceconnectionstatechange = () => {
+                    console.log("[WebRTC Call ICE State]", pc.iceConnectionState);
+                    if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
+                        setStatus("Reconectando malla (ICE Restart)...");
+                        if (typeof pc.restartIce === "function") {
+                            pc.restartIce();
+                        }
+                    } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+                        setStatus("CONECTADO (E2E DTLS-SRTP)");
+                    }
+                };
+
                 // Send ICE candidates via continuous P2P signaling
                 pc.onicecandidate = (event) => {
                     if (event.candidate && targetPeer) {
@@ -1022,28 +1036,57 @@ export default function CallScreen() {
                     )}
                 </div>
 
-                {/* Telemetry HUD Toggle Button */}
-                <button
-                    onClick={() => setShowStats(!showStats)}
-                    style={{
-                        background: showStats ? "var(--accent-cyan)" : "rgba(8,12,24,0.88)",
-                        color: showStats ? "#000" : "white",
-                        border: "1px solid rgba(255,255,255,0.15)",
-                        borderRadius: "var(--radius-full)",
-                        padding: "8px 14px",
-                        fontSize: "0.75rem",
-                        fontWeight: 800,
-                        fontFamily: "JetBrains Mono, monospace",
-                        cursor: "pointer",
-                        backdropFilter: "blur(20px)",
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px"
-                    }}
-                >
-                    📊 {statsData.rttMs}ms
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    {/* PIP Floating Minimize Button */}
+                    <button
+                        onClick={() => {
+                            setCallPipMinimized(true);
+                            goBack();
+                        }}
+                        style={{
+                            background: "rgba(8,12,24,0.88)",
+                            color: "var(--accent-cyan)",
+                            border: "1px solid rgba(0,229,255,0.3)",
+                            borderRadius: "var(--radius-full)",
+                            padding: "8px 14px",
+                            fontSize: "0.75rem",
+                            fontWeight: 800,
+                            fontFamily: "JetBrains Mono, monospace",
+                            cursor: "pointer",
+                            backdropFilter: "blur(20px)",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px"
+                        }}
+                        title="Minimizar llamada a PIP flotante para chatear"
+                    >
+                        🗗 PIP
+                    </button>
+
+                    {/* Telemetry HUD Toggle Button */}
+                    <button
+                        onClick={() => setShowStats(!showStats)}
+                        style={{
+                            background: showStats ? "var(--accent-cyan)" : "rgba(8,12,24,0.88)",
+                            color: showStats ? "#000" : "white",
+                            border: "1px solid rgba(255,255,255,0.15)",
+                            borderRadius: "var(--radius-full)",
+                            padding: "8px 14px",
+                            fontSize: "0.75rem",
+                            fontWeight: 800,
+                            fontFamily: "JetBrains Mono, monospace",
+                            cursor: "pointer",
+                            backdropFilter: "blur(20px)",
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px"
+                        }}
+                    >
+                        📊 {statsData.rttMs}ms
+                    </button>
+                </div>
             </div>
 
             {/* ── LIVE TELEMETRY MODAL / OVERLAY ────────────────────────────── */}
