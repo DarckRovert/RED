@@ -114,6 +114,7 @@ export default function Sidebar() {
         {
             title: "🪪 Identidad, Pagos & Soberanía",
             items: [
+                { icon: "⚡", label: "Hub Comercial & Recompensas", action: "commercialHub" },
                 { icon: "🪪", label: "Perfil & Bóveda DID", action: "idVault" },
                 { icon: "💳", label: "Pagos & Vouchers P2P", action: "p2pPay" },
                 { icon: "🔐", label: "Bóveda Criptográfica PQC", action: "crypto" },

@@ -71,7 +71,7 @@ const _processedHandshakes = new Set<string>();
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'groupAdmin' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing';
+export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub';
 
 interface RedStore {
     // 0. User Preferences & UI Customization
@@ -196,7 +196,7 @@ const OVERLAY_SCREENS = new Set<ScreenView>([
     'proximitySettings', 'radar', 'contacts', 'settings', 'updater', 'nodemap',
     'compass', 'idVault', 'amber', 'guardian', 'channels', 'crypto',
     'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast', 'call',
-    'security', 'groups', 'p2pCompass', 'socialFeed', 'shakePair', 'p2pPay', 'blackout', 'health', 'nodeLogs', 'calculator', 'secReport', 'backup'
+    'security', 'groups', 'p2pCompass', 'socialFeed', 'shakePair', 'p2pPay', 'blackout', 'health', 'nodeLogs', 'calculator', 'secReport', 'backup', 'commercialHub', 'hub'
 ]);
 
 export const useRedStore = create<RedStore>((set, get) => ({

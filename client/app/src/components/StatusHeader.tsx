@@ -115,6 +115,19 @@ export default function StatusHeader() {
                 </div>
 
                 <button
+                    onClick={() => navigate("commercialHub")}
+                    style={{
+                        background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(255,51,85,0.15) 100%)", 
+                        border: "1px solid rgba(255,60,95,0.45)",
+                        borderRadius: "var(--radius-full)", padding: "1px 8px", color: "#FF8599",
+                        fontSize: "0.66rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 0 8px rgba(232,33,58,0.3)"
+                    }}
+                >
+                    ⚡ HUB
+                </button>
+
+                <button
                     onClick={() => navigate("nodemap")}
                     style={{
                         background: "rgba(255,255,255,0.06)", border: "1px solid var(--glass-border)",

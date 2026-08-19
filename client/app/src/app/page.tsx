@@ -52,6 +52,7 @@ const SecurityReportModal  = dynamic(() => import("../components/SecurityReportM
 const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreModal").then(m => ({ default: m.BackupRestoreModal })),   { ssr: false, loading: () => <AppLoader /> });
 const SettingsModal        = dynamic(() => import("../components/SettingsModal").then(m => ({ default: m.SettingsModal })),        { ssr: false, loading: () => <AppLoader /> });
 const UpdateModal          = dynamic(() => import("../components/UpdateModal").then(m => ({ default: m.UpdateModal })),          { ssr: false, loading: () => <AppLoader /> });
+const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
@@ -212,6 +213,16 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           <span style={{ fontSize: "1.8rem" }}>⚙️</span>
           <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Ajustes & Temas</span>
           <span style={{ fontSize: "0.70rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>UI Customization</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("commercialHub")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(232,33,58,0.12) 0%, rgba(255,51,85,0.06) 100%)", border: "1px solid rgba(255,60,95,0.3)" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>⚡</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FF8599" }}>Hub Comercial</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>AdMob & Hardware P2P</span>
         </div>
 
         <div
@@ -416,6 +427,7 @@ export default function AppRouter() {
                 {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
                 {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
                 {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
+                {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
                 {currentScreen === "nodemap" && <NodeMap />}
                 {currentScreen === "radar" && <RadarWindow />}
                 {currentScreen === "call" && <CallScreen />}
@@ -469,6 +481,7 @@ export default function AppRouter() {
               {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
               {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
               {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
+              {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
               {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
             </>
           )}
