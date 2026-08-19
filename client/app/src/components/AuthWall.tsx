@@ -17,35 +17,56 @@ import { toast } from "./Toast";
 type AuthMode = "checking" | "onboarding" | "unlock";
 
 async function getSecurePin(key: string): Promise<string | null> {
+    // 1. Instant synchronous check in localStorage / sessionStorage
+    if (typeof window !== "undefined") {
+        try {
+            const localVal = localStorage.getItem(key) || sessionStorage.getItem(key);
+            if (localVal && localVal.trim().length >= 4) {
+                return localVal.trim();
+            }
+        } catch {}
+    }
+
+    // 2. Hardware Keystore check via SecureStoragePlugin
     try {
         if (typeof window !== "undefined") {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
                 const res = await SecureStoragePlugin.get({ key }).catch(() => null);
-                if (res && res.value) return res.value;
+                if (res && res.value && res.value.trim().length >= 4) {
+                    const val = res.value.trim();
+                    try { localStorage.setItem(key, val); } catch {}
+                    return val;
+                }
             }
         }
     } catch {}
-    try {
-        return typeof window !== "undefined" ? localStorage.getItem(key) || null : null;
-    } catch {
-        return null;
-    }
+
+    return null;
 }
 
 async function setSecurePin(key: string, value: string): Promise<void> {
+    const cleanVal = value.trim();
+    if (!cleanVal) return;
+
+    // 1. Instant synchronous persistence
+    if (typeof window !== "undefined") {
+        try {
+            localStorage.setItem(key, cleanVal);
+            sessionStorage.setItem(key, cleanVal);
+        } catch {}
+    }
+
+    // 2. Hardware-backed Keystore persistence
     try {
         if (typeof window !== "undefined") {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                await SecureStoragePlugin.set({ key, value }).catch(() => null);
+                await SecureStoragePlugin.set({ key, value: cleanVal }).catch(() => null);
             }
         }
-    } catch {}
-    try {
-        if (typeof window !== "undefined") localStorage.setItem(key, value);
     } catch {}
 }
 
@@ -65,22 +86,14 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         let isMounted = true;
 
-        const safetyTimer = setTimeout(() => {
-            if (isMounted) {
-                setMode(prev => prev === "checking" ? "onboarding" : prev);
-                setIsLoaded(true);
-            }
-        }, 500);
-
         const init = async () => {
             try {
                 if (typeof window !== "undefined") {
                     setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
                 }
 
-                const pinPromise = getSecurePin("master_pin");
-                const timeoutPromise = new Promise<null>(r => setTimeout(() => r(null), 300));
-                const masterPin = await Promise.race([pinPromise, timeoutPromise]);
+                // 1. Query master PIN with solid fallback
+                const masterPin = await getSecurePin("master_pin");
 
                 if (!isMounted) return;
 
@@ -89,20 +102,22 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                 } else {
                     setMode("onboarding");
                 }
+                setIsLoaded(true);
 
+                // 2. Biometrics check and auto-prompt if available
                 try {
                     const { Capacitor } = await import("@capacitor/core");
                     if (Capacitor.isNativePlatform()) {
                         const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
                         const bioPromise = BiometricAuth.checkBiometry();
-                        const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 300));
+                        const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 2000));
                         const info = await Promise.race([bioPromise, bioTimeout]);
                         if (isMounted) setBiometryAvailable(info.isAvailable);
 
                         if (masterPin && info.isAvailable && localStorage.getItem("red_disguise_mode") !== "true") {
                             try {
                                 const authPromise = BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
-                                const authTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Biometric timeout")), 2500));
+                                const authTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Biometric timeout")), 5000));
                                 await Promise.race([authPromise, authTimeout]);
                                 if (!isMounted) return;
                                 setMode("unlock");
@@ -115,7 +130,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                                 }
                                 return;
                             } catch {
-                                // Fallback to PIN
+                                // Biometric cancelled or failed — user can enter PIN manually
                             }
                         }
                     } else {
@@ -126,16 +141,18 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                 }
             } catch (e) {
                 console.error("[AuthWall] Init error:", e);
-            } finally {
-                clearTimeout(safetyTimer);
-                if (isMounted) setIsLoaded(true);
+                if (isMounted) {
+                    // Fallback check
+                    const fallbackPin = typeof window !== "undefined" ? localStorage.getItem("master_pin") : null;
+                    setMode(fallbackPin ? "unlock" : "onboarding");
+                    setIsLoaded(true);
+                }
             }
         };
 
         init();
         return () => {
             isMounted = false;
-            clearTimeout(safetyTimer);
         };
     }, [login]);
 
