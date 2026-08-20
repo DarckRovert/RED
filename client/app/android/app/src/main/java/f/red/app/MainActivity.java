@@ -3,6 +3,10 @@ package f.red.app;
 import com.getcapacitor.BridgeActivity;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.PowerManager;
+import android.content.Intent;
+import android.net.Uri;
+import android.provider.Settings;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -36,6 +40,7 @@ public class MainActivity extends BridgeActivity {
 
         copyDebugLogsToPublicStorage();
         requestP2pPermissions();
+        requestBatteryExemption();
     }
 
     private void requestP2pPermissions() {
@@ -114,4 +119,28 @@ public class MainActivity extends BridgeActivity {
             e.printStackTrace();
         }
     }
+
+    /**
+     * Request battery optimization exemption from the user.
+     * On Xiaomi HyperOS / MIUI, this is REQUIRED to keep the foreground service alive.
+     * Without this, Android will kill the mesh node service regardless of WakeLock and
+     * foreground service type declarations. The system shows a one-time dialog to the user.
+     */
+    private void requestBatteryExemption() {
+        try {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            }
+        } catch (Exception e) {
+            // Fallback: open generic battery optimization settings if direct request fails
+            try {
+                Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                startActivity(intent);
+            } catch (Exception ignored) {}
+        }
+    }
 }
+

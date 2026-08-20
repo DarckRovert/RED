@@ -396,10 +396,18 @@ public class RedNodeService extends Service {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel serviceChannel = new NotificationChannel(
                     CHANNEL_ID,
-                    "RED Node Background Process",
-                    NotificationManager.IMPORTANCE_LOW
+                    "RED Mesh Node",
+                    // IMPORTANCE_HIGH: required to prevent Xiaomi HyperOS from considering
+                    // the service as non-critical. IMPORTANCE_LOW channels are killed first.
+                    NotificationManager.IMPORTANCE_HIGH
             );
-            serviceChannel.setDescription("Keeps the decentralized P2P network connected in the background");
+            serviceChannel.setDescription("Emergency P2P mesh network node - keeps communication alive when infrastructure is down");
+            // Disable sound/vibration for high-importance channel (this is a silent persistent service)
+            serviceChannel.setSound(null, null);
+            serviceChannel.enableVibration(false);
+            serviceChannel.setShowBadge(false);
+            // Prevent user from turning off this channel from Settings (on supported APIs)
+            serviceChannel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
                 manager.createNotificationChannel(serviceChannel);

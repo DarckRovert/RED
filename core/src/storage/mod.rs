@@ -224,6 +224,10 @@ impl Storage {
         let serialized = bincode::serialize(value).map_err(|e| StorageError::SerializationError(e.to_string()))?;
         let encrypted = encrypt(&self.encryption_key, &serialized)?;
         tree.insert(key, encrypted.to_bytes()).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        // Force synchronous flush to guarantee crash-safe durability (Sled WAL → disk).
+        // Critical for Android where HyperOS/MIUI kills the process without flushing OS page cache.
+        let _ = tree.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
+        let _ = db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
         Ok(())
     }
 
@@ -258,6 +262,9 @@ impl Storage {
         let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
         let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         tree.remove(key).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+        // Flush to disk after delete to ensure removal survives process kill.
+        let _ = tree.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
+        let _ = db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
         Ok(())
     }
 

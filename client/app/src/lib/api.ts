@@ -227,18 +227,65 @@ class RedAPIClient {
     // ── Conversations & Contacts ──────────────────────────────────────────────
 
     async getConversations(): Promise<ConversationItem[]> {
+        // Always read local cache first — these are the conversations that arrived via P2P mesh
+        // and may not exist yet in the Rust Sled tree (they were saved to localStorage).
+        const localConvs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
         try {
-            return await this.reqList<ConversationItem>('/conversations');
+            const rustConvs = await this.reqList<ConversationItem>('/conversations');
+            // Bidirectional merge: build a map keyed by first 16 chars of peer hash.
+            // Rust entries WIN on timestamp tie-breaks; local entries are preserved if missing from Rust.
+            const mergedMap = new Map<string, ConversationItem>();
+            for (const lc of localConvs) {
+                const key = ((lc.peer || lc.id || '').toLowerCase()).slice(0, 16);
+                if (key) mergedMap.set(key, lc);
+            }
+            for (const rc of rustConvs) {
+                const key = ((rc.peer || rc.id || '').toLowerCase()).slice(0, 16);
+                if (!key) continue;
+                const existing = mergedMap.get(key);
+                if (!existing) {
+                    mergedMap.set(key, rc);
+                } else {
+                    // Pick the entry with the newer last_timestamp
+                    const existTs = existing.last_timestamp || 0;
+                    const rustTs = rc.last_timestamp || 0;
+                    mergedMap.set(key, rustTs >= existTs ? { ...existing, ...rc } : existing);
+                }
+            }
+            const merged = Array.from(mergedMap.values());
+            // Write merged result back to localStorage so next cold-boot always has data
+            this.setWebStore('red_web_conversations', merged);
+            return merged;
         } catch {
-            return this.getWebStore<ConversationItem[]>('red_web_conversations', []);
+            // Rust backend unreachable — return local cache (zero data loss)
+            return localConvs;
         }
     }
 
     async getContacts(): Promise<any[]> {
+        // Always read local cache first — P2P handshake contacts land here before Rust stores them.
+        const localConts = this.getWebStore<any[]>('red_web_contacts', []);
         try {
-            return await this.reqList<any>('/contacts');
+            const rustConts = await this.reqList<any>('/contacts');
+            // Bidirectional merge keyed by first 16 chars of identity_hash.
+            const mergedMap = new Map<string, any>();
+            for (const lc of localConts) {
+                const key = ((lc.identity_hash || '').toLowerCase()).slice(0, 16);
+                if (key) mergedMap.set(key, lc);
+            }
+            for (const rc of rustConts) {
+                const key = ((rc.identity_hash || '').toLowerCase()).slice(0, 16);
+                if (!key) continue;
+                // Rust wins but preserve any extra local fields (public_key, avatar, etc.)
+                const existing = mergedMap.get(key);
+                mergedMap.set(key, existing ? { ...existing, ...rc } : rc);
+            }
+            const merged = Array.from(mergedMap.values());
+            // Persist merged set so it survives next cold boot
+            this.setWebStore('red_web_contacts', merged);
+            return merged;
         } catch {
-            return this.getWebStore<any[]>('red_web_contacts', []);
+            return localConts;
         }
     }
 
@@ -251,10 +298,21 @@ class RedAPIClient {
     }
 
     async getMessages(conversationId: string): Promise<MessageItem[]> {
+        const localKey = `red_web_messages_${conversationId}`;
+        const localMsgs = this.getWebStore<MessageItem[]>(localKey, []);
         try {
-            return await this.reqList<MessageItem>(`/conversations/${conversationId}/messages`);
+            const rustMsgs = await this.reqList<MessageItem>(`/conversations/${conversationId}/messages`);
+            if (!rustMsgs || rustMsgs.length === 0) {
+                // Rust returned empty (conversation only exists in local mesh cache) — use local vault
+                return localMsgs;
+            }
+            // Merge: use message IDs as deduplication key, local entries fill any gaps
+            const msgMap = new Map<string, MessageItem>();
+            for (const lm of localMsgs) { if (lm.id) msgMap.set(lm.id, lm); }
+            for (const rm of rustMsgs) { if (rm.id) msgMap.set(rm.id, { ...msgMap.get(rm.id), ...rm }); }
+            return Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         } catch {
-            return this.getWebStore<MessageItem[]>(`red_web_messages_${conversationId}`, []);
+            return localMsgs;
         }
     }
 

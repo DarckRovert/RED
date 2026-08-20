@@ -983,6 +983,27 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
     fetchData: async () => {
         if (get().isDecoyMode) return;
+
+        // ── COLD BOOT INSTANT RESTORE ──────────────────────────────────────────────
+        // Immediately seed the UI from localStorage BEFORE awaiting the Rust backend.
+        // This guarantees zero perceived data loss during the seconds the native node takes to boot.
+        // The Rust response will merge on top via the bidirectional merge in api.ts.
+        if (typeof window !== 'undefined') {
+            try {
+                const snapConvs = localStorage.getItem('red_web_conversations');
+                const snapConts = localStorage.getItem('red_web_contacts');
+                const parsedConvs: ConversationItem[] = snapConvs ? JSON.parse(snapConvs) : [];
+                const parsedConts: any[] = snapConts ? JSON.parse(snapConts) : [];
+                const { conversations: currentConvs, contacts: currentConts } = get();
+                // Only populate if the in-memory store is empty (true cold boot)
+                if ((!currentConvs || currentConvs.length === 0) && parsedConvs.length > 0) {
+                    set({ conversations: parsedConvs });
+                }
+                if ((!currentConts || currentConts.length === 0) && parsedConts.length > 0) {
+                    set({ contacts: parsedConts });
+                }
+            } catch { /* ignore parse errors on corrupt localStorage */ }
+        }
         get().evaluateLocalDMS().catch(() => {});
         try {
             const [convs, conts, grps] = await Promise.all([
@@ -1721,6 +1742,21 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 const alreadyHandshaked = _processedHandshakes.has(handshakeKey);
                 _processedHandshakes.add(handshakeKey);
 
+                // ── IMMEDIATE LOCAL PERSISTENCE (zero-loss guarantee) ─────────────
+                // Write the new P2P contact to localStorage BEFORE the async Rust call.
+                // If HyperOS kills the process during the Rust write, the contact is already
+                // in localStorage and will be merged back into Rust on the next cold boot.
+                try {
+                    const cachedConts = JSON.parse(localStorage.getItem('red_web_contacts') || '[]') as any[];
+                    const alreadyCached = cachedConts.some((c: any) =>
+                        c.identity_hash?.toLowerCase().startsWith(senderHash.substring(0, 8).toLowerCase())
+                    );
+                    if (!alreadyCached) {
+                        cachedConts.push({ identity_hash: senderHash, display_name: finalName, public_key: senderPk });
+                        localStorage.setItem('red_web_contacts', JSON.stringify(cachedConts));
+                    }
+                } catch { /* quota exceeded — not fatal */ }
+                // ─────────────────────────────────────────────────────────────────
                 RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {
                     if (!existing) {
                         set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: finalName, public_key: senderPk }] });
