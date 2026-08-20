@@ -241,6 +241,38 @@ Sí, tenemos un programa de bug bounty para vulnerabilidades de seguridad. Conta
 
 ---
 
+## ☁️ Respaldo en 1 Toque & Nube
+
+### ¿Cómo respaldo mi cuenta sin perder mis datos ni aprender cosas técnicas?
+En Ajustes $\rightarrow$ **Respaldo & Nube** o en el menú lateral, simplemente presionas el botón **`⚡ Respaldar a Google Drive en 1 Toque`**. La aplicación cifra toda tu información usando tu PIN Maestro existente y abre directamente Google Drive para guardar tu archivo `.redvault`.
+
+### ¿Si cambio de teléfono o reinstalo la app, cómo recupero mi cuenta?
+Al abrir la app por primera vez, verás el botón: **`☁️ ¿Tienes una copia o cuenta previa? Restaurar aquí`**. Escribes tu PIN de 6 dígitos, seleccionas el archivo `.redvault` que guardaste en Google Drive y listo: tus contactos, chats e identidad se restauran al instante sin tener que registrarte de nuevo.
+
+---
+
+## 💰 Moneda $RED, Tokenomics & Pagos en Soles
+
+### ¿Qué es la moneda $RED y de dónde sale su valor?
+El token **$RED** no es dinero especulativo; está respaldado por el trabajo físico que hacen los teléfonos al retransmitir mensajes en zonas sin señal (**Proof-of-Relay**), el ahorro de batería y el almacenamiento de mensajes de emergencia.
+
+### ¿Puedo pagarle a alguien si no hay internet ni electricidad?
+Sí. Puedes emitir un **Voucher Criptográfico Offline** firmado con tu clave Ed25519. El comerciante o receptor escanea tu código QR y su teléfono verifica matemáticamente por Bluetooth que el vale es auténtico, permitiendo comerciar en apagones o catástrofes.
+
+### ¿Cómo cambio mis $RED por Soles Peruanos (PEN / Yape / BCP)?
+1. En la app vas a **Bóveda Web3** y conectas tu billetera **MetaMask** (red Polygon).
+2. Intercambias tus $RED por **USDT** (dólares digitales) en Uniswap o QuickSwap.
+3. En Binance P2P, Bitso o Bybit vendes los USDT por Soles y los recibes directamente en tu cuenta de **Yape, Plin o banco peruano (BCP / BBVA / Interbank)**.
+
+---
+
+## 💻 Versión Web para PC & Interoperabilidad
+
+### ¿Puedo usar RED desde mi computadora y hablar con usuarios en celulares?
+Sí. La versión Web SPA funciona directamente en tu navegador (Chrome, Edge, Firefox, Safari) en PC o Mac. Puedes ingresar con un alias rápido y conectarte por canales WebRTC de datos en tiempo real con usuarios que tengan la app instalada en sus dispositivos móviles Android.
+
+---
+
 ## Contacto
 
 - **GitHub**: https://github.com/DarckRovert/RED

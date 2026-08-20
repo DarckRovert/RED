@@ -1,20 +1,29 @@
-# 🚀 Guía de Inicio Rápido - RED
+# 🚀 Guía de Inicio Rápido - RED v38.0.0
 
-> Empieza a usar RED en menos de 5 minutos
+> Empieza a usar RED en menos de 1 minuto en PC o Android
 
 ---
 
-## Requisitos Previos
+## ⚡ Formas de Acceso Inmediato
 
-### Sistema Operativo
-- **Windows** 10/11 (x64)
-- **macOS** 12+ (Intel/Apple Silicon)
-- **Linux** (Ubuntu 20.04+, Debian 11+, Fedora 35+)
+### Opción 1: Web App en PC (Sin Instalar Nada)
+1. Abre [https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/) en tu navegador (Chrome, Edge, Firefox, Safari).
+2. Escribe tu Alias o apodo y presiona **"Entrar a la Web App"**.
+3. ¡Listo! Puedes chatear, enviar archivos y conectarte en tiempo real con usuarios en teléfonos móviles Android mediante WebRTC y canales P2P.
 
-### Software Necesario
-- **Rust** 1.70 o superior
-- **Git** 2.30 o superior
-- **OpenSSL** 1.1+ (Linux/macOS)
+### Opción 2: Instalar APK en Teléfono Android
+1. Descarga la última versión: [`red-v38.0.0-latest.apk`](https://github.com/DarckRovert/RED/releases/download/v38.0.0/red-v38.0.0-latest.apk).
+2. Abre el archivo en tu teléfono y concede permiso de instalación.
+3. Configura tu **PIN Maestro de 6 dígitos** (o toca `☁️ ¿Tienes una copia previa? Restaurar aquí` si ya tenías cuenta).
+4. La app activará automáticamente la radio Bluetooth LE y Wi-Fi Direct para enrutar mensajes sin internet.
+
+---
+
+## 🛠️ Compilación para Desarrolladores
+
+### Requisitos Previos
+- **Rust** 1.75+ y **Node.js** 20+
+- **Android NDK** r27+ (para compilar la librería nativa `libred_mobile.so`)
 
 ### Verificar Instalación
 

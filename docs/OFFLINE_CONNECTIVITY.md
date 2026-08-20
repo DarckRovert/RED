@@ -1,6 +1,6 @@
 # 🛜 Conectividad Offline & Malla Global — Especificación Técnica
 
-**Versión**: 34.0.0 | **Fecha**: Agosto 2026
+**Versión**: 38.0.0 | **Fecha**: Agosto 2026
 
 ## Resumen
 
@@ -9,10 +9,11 @@ RED implementa comunicación directa entre dispositivos sin necesidad de interne
 | Transporte | Frecuencia / Capa | Alcance | Velocidad / Bitrate | Consumo | Uso Táctico |
 |---|---|---|---|---|---|
 | **Bluetooth LE (GATT)** | 2.4 GHz ISM | ~100m | ~50–200 Kbps | Mínimo | Mensajes E2EE, PoW anti-spam, beacons de presencia |
-| **WiFi Direct / WebRTC** | 2.4 / 5 GHz LAN | ~150m | ~10–54 Mbps | Medio | Streaming de video, canvas en vivo, sincronización pesada |
+| **WiFi Direct / WebRTC** | 2.4 / 5 GHz LAN | ~150m | ~10–54 Mbps | Medio | Streaming de video, canvas en vivo, sincronización pesada, interoperabilidad PC Web |
 | **Módem LoRa** | 915 / 868 MHz | ~5–15 km | ~0.3–5.5 Kbps | Bajo | Ráfagas de texto táctico, voz comprimida con Vocoder |
 | **SoundMesh Ultrasonido** | 18.5–20.5 kHz BFSK | ~10–25m | ~25 bps – 2 Kbps | Mínimo | Comunicación en apagón electromagnético / Jaula de Faraday |
 | **DHT Global libp2p** | TCP/QUIC / Auto-Relay | Mundial | Según enlace WAN | Variable | Sincronización global Kademlia cuando hay conexión |
+| **Incentivo DePIN PoR** | Micro-créditos $RED | Malla | Automático por salto | Zero | Pago compensatorio por batería y ancho de banda prestado |
 
 ---
 

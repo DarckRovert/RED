@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v31.0.0 Sovereign Master
+# 📘 Manual Operativo del Usuario — RED v38.0.0 Sovereign Master
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura o censura.
 
@@ -7,32 +7,42 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 ## 📋 Tabla de Contenidos
 
 1. [Primer Inicio & Autenticación Soberana](#1-primer-inicio--autenticación-soberana)
-2. [Gestión de Seguridad & Modo Señuelo](#2-gestión-de-seguridad--modo-señuelo)
-3. [Manual Operativo de los 35 Módulos Tácticos](#3-manual-operativo-de-los-35-módulos-tácticos)
-4. [Actuadores de Hardware: Flash LED Morse SOS & Triaje START](#4-actuadores-de-hardware-flash-led-morse-sos--triaje-start)
-5. [Interruptor del Hombre Muerto (DMS) & Purga](#5-interruptor-del-hombre-muerto-dms--purga)
-6. [Inmunidad a VPNs & Red Mesh Off-Grid](#6-inmunidad-a-vpns--red-mesh-off-grid)
-7. [Preguntas Frecuentes & Solución de Problemas](#7-preguntas-frecuentes--solución-de-problemas)
+2. [Respaldo en 1 Toque & Restauración Instantánea](#2-respaldo-en-1-toque--restauración-instantánea)
+3. [Gestión de Seguridad & Modo Señuelo](#3-gestión-de-seguridad--modo-señuelo)
+4. [Manual Operativo de los 38 Módulos Tácticos](#4-manual-operativo-de-los-38-módulos-tácticos)
+5. [Tokenomics DePIN, Vouchers Offline & Conversión a Soles](#5-tokenomics-depin-vouchers-offline--conversión-a-soles)
+6. [Actuadores de Hardware: Flash LED Morse SOS & Triaje START](#6-actuadores-de-hardware-flash-led-morse-sos--triaje-start)
+7. [Interruptor del Hombre Muerto (DMS) & Purga](#7-interruptor-del-hombre-muerto-dms--purga)
+8. [Uso de la Versión Web en PC & Comunicación con Celulares](#8-uso-de-la-versión-web-en-pc--comunicación-con-celulares)
+9. [Preguntas Frecuentes & Solución de Problemas](#9-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
 ## 1. Primer Inicio & Autenticación Soberana
 
-1. Al abrir la aplicación RED por primera vez, el sistema te solicitará ingresar una **Contraseña Maestra**.
-2. Esta contraseña protege tu **Bóveda de Claves Criptográficas** en la memoria segura del dispositivo (Android KeyStore / Secure Storage).
-3. Tras la verificación de contraseña, el motor nativo en Rust ejecutará un proceso de **Prueba de Trabajo (Proof of Work - PoW)** local para generar tu Identidad Soberana única (`did:red:<identity_hash>:<public_key>`).
+1. Al abrir la aplicación RED por primera vez, el sistema te solicitará configurar tu **PIN Maestro de 6 dígitos**.
+2. Este PIN protege tu **Bóveda de Claves Criptográficas** en la memoria segura por hardware del dispositivo (Android KeyStore / StrongBox TEE).
+3. Tras la verificación, el motor nativo en Rust genera tu Identidad Soberana única (`did:red:<identity_hash>:<public_key>`).
 
 ---
 
-## 2. Gestión de Seguridad & Modo Señuelo
+## 2. Respaldo en 1 Toque & Restauración Instantánea
+
+- **⚡ Respaldar a Google Drive:** Entra a Ajustes $\rightarrow$ *Respaldo & Nube* o al menú lateral y presiona `⚡ Respaldar a Google Drive en 1 Toque`. No requiere contraseñas adicionales; la clave se deriva de tu PIN Maestro de forma automática bajo cifrado militar **AES-256-GCM**.
+- **🔄 Auto-Sync en Segundo Plano:** Activa el interruptor para que la app mantenga una copia actualizada en tu nube personal cada vez que añadas contactos o chats.
+- **☁️ Restauración en Teléfono Nuevo:** En la pantalla de bienvenida, toca `☁️ ¿Tienes una copia previa? Restaurar aquí`, introduce tu PIN de 6 dígitos, selecciona el archivo `.redvault` de Google Drive y recupera tu cuenta en 3 segundos sin registrarte de nuevo.
+
+---
+
+## 3. Gestión de Seguridad & Modo Señuelo
 
 - **PIN Maestro:** Acceso a la bóveda principal con todos los chats, contactos e historial cifrado.
-- **PIN Señuelo (`decoy_pin`):** Iniciar sesión con el PIN señuelo abre un entorno totalmente limpio y verosímil sin dejar rastro de tus comunicaciones reales.
-- **PIN de Pánico (`panic_pin`):** Iniciar sesión con el PIN de pánico ejecuta inmediatamente el protocolo de autodestrucción nativo (`RedNodePlugin.destroy`), purgando las llaves y la base de datos Sled.
+- **PIN Señuelo (`decoy_pin`):** Iniciar sesión con el PIN señuelo abre un entorno totalmente limpio y verosímil con contactos y mensajes simulados sin dejar rastro de tus comunicaciones reales.
+- **PIN de Pánico (`panic_pin`) / Agitación Destructiva:** Activa el protocolo de autodestrucción nativo (`RedNodePlugin.destroyNode`), purgando las llaves y la base de datos en menos de 500 ms.
 
 ---
 
-## 3. Manual Operativo de los 35 Módulos Tácticos
+## 4. Manual Operativo de los 38 Módulos Tácticos
 
 1. **Canales Mesh Locales:** Explora temas abiertos en `PublicChannelsPanel.tsx` con moderación automática por Guardian IA.
 2. **RED Social Feed P2P:** Publicaciones descentralizadas resistentes a censura en `SocialFeedPanel.tsx`.
@@ -50,14 +60,16 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 14. **Batería Eco-Mesh:** Ajusta el consumo energético en `EcoMeshPanel.tsx` adaptando el intervalo de beaconing.
 15. **Topología de Red:** Supervisa la salud del enjambre libp2p en `NetworkPanel.tsx`.
 16. **Perfil & Bóveda DID:** Gestiona tu identidad soberana y esquema de fragmentación Shamir en `IdentityVaultModal.tsx`.
-17. **Pagos & Vouchers P2P:** Genera y transfiere vouchers de valor fuera de línea en `RedP2PPayModal.tsx`.
-18. **Bóveda Criptográfica PQC:** Inspecciona claves Post-Cuánticas Kyber-1024 en `CryptoPanel.tsx`.
+17. **Pagos & Vouchers P2P:** Genera y transfiere vouchers de valor fuera de línea firmados con Ed25519 en `RedP2PPayModal.tsx`.
+18. **Bóveda Criptográfica PQC:** Inspecciona claves Post-Cuánticas ML-KEM-768 en `CryptoPanel.tsx`.
 19. **Explorador Blockchain RED:** Verifica bloques y transacciones inmutables en `BlockchainExplorer.tsx`.
 20. **Bóveda Esteganográfica:** Oculta mensajes cifrados en fotos usando `StegoVaultModal.tsx`.
-21. **Respaldos & Restauración:** Exporta respaldos cifrados protegidos por PBKDF2 en `BackupRestoreModal.tsx`.
+21. **Respaldos & Restauración:** Suite completa de 1-toque, Google Drive, IPFS y BIP-39 en `BackupRestoreModal.tsx`.
 22. **Signos Vitales & Triaje START:** En `VitalScanModal.tsx`, coloca el dedo sobre la cámara trasera y el flash LED para medir pulso cardíaco, SpO2 y evaluar el triaje de víctimas.
 23. **Baliza SOS & Módem SoundMesh:** En `SurvivalBeaconModal.tsx`, emite alertas de socorro GPS, activa el flash LED SOS en código Morse y transmite por ultrasonido en 18–20 kHz BFSK.
 24. **Sistema Alerta AMBER:** Gestiona emergencias comunitarias en `AmberAdminPanel.tsx` con avisos de alta prioridad.
+25. **Escudo Global DEFCON Matrix:** Control centralizado de ciberdefensa en `GlobalShieldPanel.tsx`.
+26. **Bóveda Web3 & MetaMask:** Conecta tu wallet EVM y gestiona tus tokens en `Web3VaultModal.tsx`.
 25. **Hombre Muerto DMS:** Configura el temporizador de inactividad de seguridad en `DMSSettings.tsx`.
 26. **Simulador Apagón Blackout:** Realiza pruebas de estrés desconectando la WAN en `BlackoutSimulatorModal.tsx`.
 27. **Copiloto IA Offline:** Invocación de `AICopilotModal.tsx` para consultas tácticas mediante LLM en memoria.

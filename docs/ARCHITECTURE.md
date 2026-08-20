@@ -1,6 +1,6 @@
-# 🏗️ Especificación Arquitectónica de RED v34.0.0
+# 🏗️ Especificación Arquitectónica de RED v38.0.0 (Sovereign Master)
 
-Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware, los actuadores de hardware nativo (`CameraManager`), el motor de eventos SSE unificado, los 4 motores de infraestructura táctica y la arquitectura completa de los 35 módulos de interfaz.
+Este documento contiene la especificación arquitectónica detallada de **RED**, incluyendo la estructura del motor Rust nativo, la capa de bindings JNI para Android, los transportes de radio de hardware, el motor de respaldo soberano 1-Toque, la suite Web3 MetaMask y los 38 módulos tácticos.
 
 ---
 
@@ -8,13 +8,13 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 
 1. [Visión General de Capas](#1-visión-general-de-capas)
 2. [Capa Nativa Android & Actuadores Hardware](#2-capa-nativa-android--actuadores-hardware)
-3. [Motores de Infraestructura Táctica (DSP, PoW, Batería, Merkle)](#3-motores-de-infraestructura-táctica)
+3. [Motores de Infraestructura Táctica](#3-motores-de-infraestructura-táctica)
 4. [Motor Criptográfico Nativo & Post-Cuántica (PQC)](#4-motor-criptográfico-nativo--post-cuántica-pqc)
-5. [Capa de Red Mesh Multi-Radio & Conectividad Global](#5-capa-de-red-mesh-multi-radio--conectividad-global)
-6. [Motor de IA Neuronal Off-Grid ONNX WASM](#6-motor-de-ia-neuronal-off-grid-onnx-wasm)
-7. [Desglose Arquitectónico de los 35 Módulos Tácticos](#7-desglose-arquitectónico-de-los-35-módulos-tácticos)
-8. [Capa de Almacenamiento & Cifrado en Disco](#8-capa-de-almacenamiento--cifrado-en-disco)
-9. [Endpoints de la API Axum REST & SSE](#9-endpoints-de-la-api-axum-rest--sse)
+5. [Suite de Respaldo Soberano & Sincronización Automática](#5-suite-de-respaldo-soberano--sincronización-automática)
+6. [Puente Web3, Tokenomics DePIN & MetaMask](#6-puente-web3-tokenomics-depin--metamask)
+7. [Capa de Red Mesh Multi-Radio & Conectividad Global](#7-capa-de-red-mesh-multi-radio--conectividad-global)
+8. [Desglose de los 38 Módulos Tácticos](#8-desglose-de-los-38-módulos-tácticos)
+9. [Interoperabilidad PC Web SPA y Nodos Móviles](#9-interoperabilidad-pc-web-spa-y-nodos-móviles)
 
 ---
 
@@ -24,7 +24,7 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 +-----------------------------------------------------------------------+
 |                    CAPA DE PRESENTACIÓN (FRONTEND)                    |
 |      Next.js 16 SPA (Turbopack) + React 19 + Zustand Store + CSS      |
-|           35 Módulos de Interfaz Táctica & Visualización UI           |
+|           38 Módulos de Interfaz Táctica & Visualización UI           |
 +-----------------------------------------------------------------------+
                                    │
               HTTP REST / SSE (http://127.0.0.1:7333/api)
@@ -33,7 +33,7 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 |                    CAPA NATIVA ANDROID (MIDDLEWARE)                   |
 |       RedNodeService.java (Foreground) + RedNodePlugin.java (JNI)     |
 |   Camera2 API (Flash LED Morse SOS) + Sensors (Barometer, Compass)    |
-|    GATT Server / BleTransport + Direct Native HTTP POST Mesh Inject   |
+|   SecureStoragePlugin (Keystore TEE) + Share + Filesystem SAF         |
 +-----------------------------------------------------------------------+
                                    │
                           JNI Bindings (Rust C-ABI)
@@ -42,7 +42,7 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 |                      MOTOR NATIVO RUST (CORE)                         |
 |     red_mobile (Axum REST API + SSE) + red_core (Protocol Engine)    |
 |   Noise XK Handshake + Ed25519 Signatures + ChaCha20-Poly1305 E2E     |
-|     red-blockchain (Proof-of-Mesh UTXO) + Sled Embedded Storage       |
+|     red-blockchain (Proof-of-Stake & Slashing) + SQLite Storage       |
 +-----------------------------------------------------------------------+
                                    │
               TRANSPORTE MULTI-RADIO AD-HOC OFF-GRID & GLOBAL
@@ -57,103 +57,99 @@ Este documento contiene la especificación arquitectónica detallada de **RED**,
 
 ## 2. Capa Nativa Android & Actuadores Hardware
 
-- **`RedNodeService.java`**: Servicio en primer plano (*Foreground Service*) que registra un canal de notificaciones persistente para evitar que el sistema operativo mate el nodo.
-  - Administra el **GATT Server BLE** escuchando solicitudes en las características `RED_BLE_RX_CHAR` y `RED_BLE_TX_CHAR`.
-  - Inyecta directamente tramas capturadas por radio hacia el servidor Axum en `http://127.0.0.1:7333/api/mesh/receive`.
-- **`RedNodePlugin.java`**: Plugin de Capacitor que expone las funciones JNI de Rust a JavaScript (`start`, `destroy`), control de antorcha Flash LED para pulsos Morse militares SOS (`setTorchMode`) y eventos `bleMessageReceived`.
+- **`RedNodeService.java`**: Servicio en primer plano (*Foreground Service*) que registra un canal de notificaciones persistente (`f.red.app.NODE_SERVICE`) para evitar que el sistema operativo suspenda el nodo en segundo plano.
+- **`RedNodePlugin.java`**: Expone la interfaz JNI a `libred_mobile.so`, monitorea el acelerómetro (`Sensor.TYPE_ACCELEROMETER`) para agitación destructiva (*Shake-to-Destroy*) y modula el Flash LED en código Morse.
+- **`RedDisguisePlugin.java`**: Permite cambiar dinámicamente el icono y nombre de la aplicación a una Calculadora funcional mediante `Activity-Alias` en tiempo de ejecución.
+- **`SecureStoragePlugin`**: Almacena el PIN Maestro y claves de sesión en el chip de seguridad **Android KeyStore (StrongBox / TEE)**.
 
 ---
 
 ## 3. Motores de Infraestructura Táctica
 
-1. **`LowBitrateVocoder.ts` (DSP de Voz Táctica 8kHz IMA-ADPCM)**:
-   - Remuestrea a 8000 Hz 16-bit Mono PCM, aplica pre-énfasis vocal y comprime audio a 1.6–3.2 kbps con cuantización ADPCM de 4 bits.
-   - **Ratio de compresión de -97.9%**, permitiendo voz táctica sobre enlaces LoRaWAN y módem acústico ultrasónico SoundMesh.
-2. **`MeshProofOfWork.ts` (Hashcash PoW SHA-256 Anti-DDoS)**:
-   - Resuelve retos criptográficos matemáticos antes de emitir paquetes a la malla, blindando la red contra inundaciones y spam sin requerir servidores centrales.
-3. **`KineticDutyGovernor.ts` (Gobernador Cinemático de Batería)**:
-   - Analiza la varianza de aceleración RMS del dispositivo y estado de batería para conmutar perfiles de escaneo radio (800ms a 12s), extendiendo la autonomía hasta 48 horas.
-4. **`StateIntegrityEngine.ts` (Verificador Merkle & Self-Healing)**:
-   - Valida la raíz Merkle SHA-256 del almacenamiento local en el arranque y aísla registros dañados en cuarentena para autorreparar la base de datos tras apagones abruptos.
+1. **`LowBitrateVocoder.ts`**: Procesamiento de señal digital (DSP) que digitaliza audio a 8kHz IMA-ADPCM (1.6 a 3.2 kbps), logrando un **-97.9% de compresión** para transmitir notas de voz por radio Bluetooth.
+2. **`MeshProofOfWork.ts`**: Prueba de trabajo Hashcash SHA-256 descentralizada en cada paquete para mitigar ataques Sybil y DDoS sin servidores.
+3. **`KineticDutyGovernor.ts`**: Gobernador cinético que adapta los intervalos de baliza BLE al nivel de batería, extendiendo la autonomía hasta **48 horas continuas**.
+4. **`StateIntegrityEngine.ts`**: Verificación Merkle SHA-256 local para garantizar la consistencia de los datos en disco tras cortes repentinos de energía.
 
 ---
 
 ## 4. Motor Criptográfico Nativo & Post-Cuántica (PQC)
 
-- **ML-KEM-768 (FIPS 203) & Doble Híbrido**: Encapsulamiento de claves basado en retículos combinado con **ECDH P-256 / X25519** y derivación HKDF-SHA256.
-- **Identidad Soberana**: Derivación determinista mediante curva **Ed25519** (`did:red:`).
-- **Cifrado Simétrico**: **AES-256-GCM** y **ChaCha20-Poly1305** para tramas en vuelo.
-- **División de Secretos de Shamir**: Esquema $(k, n)$ sobre $GF(2^8)$ con polinomio irreducible $x^8 + x^4 + x^3 + x + 1$.
+- **ML-KEM-768 (FIPS 203)**: Encapsulamiento post-cuántico basado en retículos algebraicos (M-LWE) con 256 bits de seguridad cuántica.
+- **Noise XK Dual Hybrid**: Combina ML-KEM-768 con Diffie-Hellman elíptico (X25519) en cada sesión.
+- **Cifrado Simétrico Autenticado**: AES-256-GCM y ChaCha20-Poly1305.
+- **Firmas Digitales**: Ed25519.
 
 ---
 
-## 5. Capa de Red Mesh Multi-Radio & Conectividad Global
+## 5. Suite de Respaldo Soberano & Sincronización Automática
 
-- **Bluetooth Low Energy (BLE)**: Operación en modo Periférico y Central simultáneo. Advertising con UUID `00001818-0000-1000-8000-00805f9b34fb`.
-- **WiFi Direct**: Descubrimiento P2P mediante DataChannels WebRTC locales.
-- **Módems LoRa (915 MHz)**: Puente de comunicación de largo alcance.
-- **SoundMesh Ultrasonido**: Módem acústico en 18–20 kHz BFSK para entornos de denegación total de RF.
-- **Conectividad Global (libp2p)**: Kademlia DHT con nodos semilla mundiales (`bootstrap.libp2p.io`), Auto-Relay Circuit v2 para atravesar CGNAT, y túneles encubiertos DNS-over-HTTPS (`DnsTunnelEngine`) y SNI Fronting (`SniSpoofEngine`).
-
----
-
-## 6. Motor de IA Neuronal Off-Grid ONNX WASM
-
-- Inferencia neuronal local en el dispositivo mediante `LaMini-Flan-T5` empaquetado en WebAssembly/ONNX Runtime.
-- **Guardian IA (`guardianEngine.ts`)**: Cortafuegos cognitivo que audita en tiempo real mensajes y contenidos para evitar inyecciones de código y spam en canales públicos.
+- **Derivación de Clave Zero-Friction**: Genera la clave simétrica AES-256-GCM a partir del PIN Maestro del Keystore y sal criptográfica sin requerir contraseñas adicionales.
+- **Sincronización Inteligente**: Guarda snapshots cifrados en segundo plano en Google Drive mediante Android Storage Access Framework (SAF) y `@capacitor/share`.
+- **Anclaje IPFS Web3**: Calcula el CIDv1 determinista SHA-256 (`bafybeic...`) para custodia en redes descentralizadas.
+- **Frase Semilla BIP-39**: Genera 12 palabras mnemónicas para restauración matemática sin archivos.
 
 ---
 
-## 7. Desglose Arquitectónico de los 35 Módulos Tácticos
+## 6. Puente Web3, Tokenomics DePIN & MetaMask
 
-1. **Canales Mesh Locales (`PublicChannelsPanel.tsx`)**: Canales temáticos y de emergencia.
-2. **RED Social Feed P2P (`SocialFeedPanel.tsx`)**: Muro de noticias distribuidas por chismes de malla.
-3. **Difusión Privada (`BroadcastPanel.tsx`)**: Envío de alertas a múltiples contactos.
-4. **Walkie-Talkie Mesh HQ (`P2PWalkieTalkieModal.tsx`)**: PTT táctico con compresión DSP Vocoder.
-5. **Canvas Táctico P2P (`LiveCanvasModal.tsx`)**: Pizarra colaborativa vectorizada.
-6. **Live Broadcast Stream (`LiveStreamBroadcaster.tsx`, `LiveStreamViewer.tsx`)**: Transmisión de video P2P.
-7. **Shake & Pair (`ShakePairModal.tsx`)**: Emparejamiento por acelerómetro.
-8. **Radar Topográfico GPS (`OffGridCompassModal.tsx`)**: Brújula táctica con declinación magnética y cálculo Haversine.
-9. **Mapa de Nodos P2P (`NodeMap.tsx`)**: Visualización geoespacial en mapa vectorial offline.
-10. **Radar Hardware BLE/WiFi (`NearbyDevicesPanel.tsx`)**: Descubrimiento y medición de RSSI.
-11. **Analizador Espectro RF / EW (`RfSpectrumModal.tsx`)**: Detección de interferencias y jamming.
-12. **Ondas de Proximidad (`ProximityWaveModal.tsx`)**: Detección de presencia táctica.
-13. **Clima & Barómetro CAP (`WeatherAlertPanel.tsx`)**: Alertas meteorológicas CAP.
-14. **Batería Eco-Mesh (`EcoMeshPanel.tsx`)**: Gobernador cinemático de consumo de energía.
-15. **Topología de Red (`NetworkPanel.tsx`)**: Monitoreo de enjambre y túneles encubiertos.
-16. **Perfil & Bóveda DID (`IdentityVaultModal.tsx`)**: Gestión de identidad soberana y Shamir.
-17. **Pagos & Vouchers P2P (`RedP2PPayModal.tsx`)**: Vales digitales fuera de línea.
-18. **Bóveda Criptográfica PQC (`CryptoPanel.tsx`)**: Intercambio de claves post-cuánticas ML-KEM-768.
-19. **Explorador Blockchain (`BlockchainExplorer.tsx`)**: Libro contable distribuido.
-20. **Bóveda Esteganográfica (`StegoVaultModal.tsx`)**: Ocultamiento en imágenes por inserción LSB.
-21. **Respaldos & Restauración (`BackupRestoreModal.tsx`)**: Copias de seguridad cifradas con AES-256-GCM.
-22. **Signos Vitales & Triaje START (`VitalScanModal.tsx`)**: Medición fotopletismográfica (PPG) y triaje médico.
-23. **Baliza Ultrasonido SOS (`SurvivalBeaconModal.tsx`)**: Emisión acústica en 18-20 kHz y pulsos Morse.
-24. **Sistema Alerta AMBER (`AmberAdminPanel.tsx`)**: Difusión de emergencia comunitaria.
-25. **Hombre Muerto DMS (`DMSSettings.tsx`)**: Temporizador de seguridad con purga destructiva.
-26. **Simulador Apagón Blackout (`BlackoutSimulatorModal.tsx`)**: Pruebas de estrés en aislamiento de red.
-27. **Copiloto IA Offline (`AICopilotModal.tsx`)**: Asistente táctico local impulsado por LLM en memoria.
-28. **Guardian IA (Firewall) (`GuardianStatusPanel.tsx`)**: Cortafuegos de contenido en canales.
-29. **Ajustes & Personalización (`SettingsModal.tsx`)**: Configuración global de la app.
-30. **Actualizador OTA (`UpdateModal.tsx`)**: Instalación de actualizaciones de software in-app.
-31. **Diagnóstico Salud Sistema (`SystemHealthModal.tsx`)**: Benchmarks de rendimiento criptográfico y almacenamiento.
-32. **Logs del Nodo Rust SSE (`NodeLogsModal.tsx`)**: Visor de registros del núcleo en tiempo real.
-33. **Calculadora Señuelo (`CalculatorScreen.tsx`)**: Pantalla de camuflaje operativo.
-34. **Reporte Auditoría Seguridad (`SecurityReportModal.tsx`)**: Informe Zero-Trust de integridad.
-35. **Seguridad Zero-Trust (`SecurityPanel.tsx`)**: Gestión de PINs, bloqueo de capturas y políticas de defensa.
+- **EIP-1193 / EIP-712**: Vinculación criptográfica bidireccional entre la identidad soberana `did:red:<hash>` y direcciones públicas EVM (`0x...`).
+- **Proof-of-Relay (PoR)**: Recompensas en micro-créditos $RED por retransmitir paquetes en la malla.
+- **Vouchers Offline Ed25519**: Vales de pago firmados digitalmente para transaccionar sin internet con prevención de doble gasto.
+- **Liquidez Fiat**: Ruta de conversión a Dólares Digitales (USDT) en Uniswap y a Soles Peruanos (PEN) vía P2P (Yape/Plin/BCP).
 
 ---
 
-## 8. Capa de Almacenamiento & Cifrado en Disco
+## 7. Capa de Red Mesh Multi-Radio & Conectividad Global
 
-- Base de datos embebida **Sled / SQLite** cifrada con claves derivadas de la contraseña maestra mediante **PBKDF2**.
-- Árbol **Merkle SHA-256** para auditoría y autorreparación automática de integridad en tiempo real.
+- **Malla Local Off-Grid**: Bluetooth LE 5.0 (GATT Client/Server) + Wi-Fi Direct.
+- **Malla Global**: Nodos Bootstrap oficiales de Libp2p/IPFS (`bootstrap.libp2p.io`), Kademlia DHT y relés Circuit v2 para cruce de NAT celular.
 
 ---
 
-## 9. Endpoints de la API Axum REST & SSE
+## 8. Desglose de los 38 Módulos Tácticos
 
-- `GET /api/status`: Estado del nodo, conteo de pares y altura de cadena.
-- `GET /api/events`: Flujo reactivo SSE unificado (<1ms) para mensajes, balizas y alertas.
-- `POST /api/messages`: Envío de mensajes cifrados P2P.
-- `POST /api/mesh/receive`: Inyección directa de tramas de hardware capturadas por BLE/WiFi Direct/LoRa.
+1. `ChatWindow`: Mensajería P2P cifrada E2EE.
+2. `Sidebar`: Navegación y radar de contactos.
+3. `SecurityPanel`: Estado de seguridad y claves.
+4. `RadarWindow`: Visualización de nodos en malla.
+5. `CallScreen`: Llamadas de voz WebRTC de baja tasa de bits.
+6. `BroadcastPanel`: Mensajes de difusión masiva.
+7. `CryptoPanel`: Cifrado PQC y firmas.
+8. `GroupsPanel`: Grupos de comunicación cerrados.
+9. `StatusView`: Estado del nodo y telemetría.
+10. `BlockchainExplorer`: Explorador de bloques y transacciones.
+11. `AuthWall`: Bloqueo biométrico y primer arranque.
+12. `NodeMap`: Mapa de geolocalización de nodos.
+13. `NetworkPanel`: Configuración de IP y multiaddrs.
+14. `OnboardingProfile`: Creación de identidad.
+15. `DMSSettings`: Interruptor de hombre muerto.
+16. `AmberAdminPanel`: Alertas de emergencia comunitarias.
+17. `GuardianStatusPanel`: Cortafuegos de paquetes.
+18. `P2PCompassModal`: Brújula táctica hacia peers.
+19. `PublicChannelsPanel`: Canales públicos por radio.
+20. `SocialFeedPanel`: Tablón de anuncios descentralizado.
+21. `P2PWalkieTalkieModal`: Walkie-Talkie Push-to-Talk.
+22. `WeatherAlertPanel`: Barómetro y alertas meteorológicas.
+23. `IdentityVaultModal`: Bóveda DID soberana.
+24. `ProximityWaveModal`: Radar de proximidad ultra-cercana.
+25. `LiveCanvasModal`: Pizarra táctica colaborativa en vivo.
+26. `EcoMeshPanel`: Monitoreo de ahorro de batería.
+27. `ProximitySettingsModal`: Ajustes de radio BLE.
+28. `AICopilotModal`: Asistente de IA offline en dispositivo.
+29. `NearbyDevicesPanel`: Detección de dispositivos vecinos.
+30. `LiveStreamBroadcaster`: Transmisión de video P2P.
+31. `OffGridCompassModal`: Navegación sin satélites GPS.
+32. `VitalScanModal`: Triaje START y signos vitales.
+33. `SurvivalBeaconModal`: Baliza de rescate acústica y óptica.
+34. `RfSpectrumModal`: Analizador de espectro electromagnético.
+35. `StegoVaultModal`: Esteganografía en imágenes.
+36. `RedP2PPayModal`: Pagos P2P y vouchers offline.
+37. `BackupRestoreModal`: Respaldo en 1 toque y nube.
+38. `Web3VaultModal`: Conexión MetaMask y Tokenomics.
+
+---
+
+## 9. Interoperabilidad PC Web SPA y Nodos Móviles
+
+- La versión Web SPA ([RedShowcaseLanding.tsx](file:///d:/PROYECTO%20RED/client/app/src/components/RedShowcaseLanding.tsx)) permite a usuarios en navegadores de PC (Chrome, Firefox, Edge, Safari) ingresar con un alias rápido y conectarse a la red mediante WebRTC DataChannels y pasarelas de señalización, manteniendo comunicación bidireccional en tiempo real con usuarios en dispositivos móviles Android.

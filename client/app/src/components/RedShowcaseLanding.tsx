@@ -650,6 +650,22 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
                   Protecciones físicas directas: Bloqueo de capturas `FLAG_SECURE`, Modo Camuflaje Calculadora, PIN de Pánico (Wipe), Bóveda Señuelo y Dead Man's Switch en Android Keystore.
                 </div>
               </div>
+
+              <div style={{ padding: '24px', borderRadius: '20px', background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(168,85,247,0.35)' }}>
+                <div style={{ fontSize: '28px', marginBottom: '12px' }}>💰</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px' }}>Economía DePIN & Token $RED</div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', lineHeight: 1.6 }}>
+                  Incentivos por retransmisión (Proof-of-Relay), Vouchers criptográficos offline Ed25519 para comercio sin internet, Staking PoS (14.8% APY) y puente Web3 directo con MetaMask en Polygon/EVM.
+                </div>
+              </div>
+
+              <div style={{ padding: '24px', borderRadius: '20px', background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(255,179,0,0.35)' }}>
+                <div style={{ fontSize: '28px', marginBottom: '12px' }}>☁️</div>
+                <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px' }}>Respaldo 1-Toque & Nube Cifrada</div>
+                <div style={{ fontSize: '13px', color: '#94A3B8', lineHeight: 1.6 }}>
+                  Copia de seguridad automática sin fricción con derivación de PIN Maestro, exportación nativa a Google Drive, anclaje a IPFS Web3 y restauración de identidad mediante frase semilla BIP-39 (12 palabras).
+                </div>
+              </div>
             </div>
 
             {/* Target Verticals */}

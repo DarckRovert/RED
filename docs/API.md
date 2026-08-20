@@ -1,16 +1,18 @@
-# RED API Reference (v34.0.0 Sovereign Master)
+# RED API Reference (v38.0.0 Sovereign Master)
 
 ## Overview
 
-RED provides a secure, decentralized messaging API with core modules across Rust native (`core`, `red_mobile`) and JavaScript client (`useRedStore`, `RedAPI`):
+RED provides a secure, decentralized messaging API with core modules across Rust native (`core`, `red_mobile`) and TypeScript client (`useRedStore`, `RedAPI`, `SovereignBackupEngine`, `Web3BridgeEngine`):
 
-- **Identity**: Sovereign identity management with DID (`did:red:<hash>:<pk>`)
-- **Crypto**: Cryptographic primitives (Noise XK, ChaCha20-Poly1305, Ed25519, X25519, Kyber-1024)
-- **Protocol**: Protocol Ω envelope with Controlled Flood routing
+- **Identity**: Sovereign identity management with DID (`did:red:<hash>:<pk>`) and EIP-712 MetaMask binding
+- **Crypto**: Cryptographic primitives (Noise XK, ChaCha20-Poly1305, Ed25519, X25519, ML-KEM-768 FIPS 203)
+- **Protocol**: Protocol Ω envelope with Controlled Flood routing and Mesh Hashcash PoW
 - **Network**: P2P networking with BLE GATT Server, WiFi Direct, LoRa Radio and SoundMesh
 - **Axum Local Server (`127.0.0.1:7333`)**: HTTP REST API and Real-Time SSE Event streams (`/api/events`)
+- **P2P Economy & Vouchers**: Offline signed Ed25519 vouchers, double-spend ledger, and Proof-of-Relay rewards
+- **Sovereign Backup Engine**: 1-Touch AES-256-GCM + PBKDF2 encryption, Google Drive SAF sync, IPFS Web3 and BIP-39 mnemonic
 - **Native Hardware Actuators**: Android Camera2 API Torch, Morse SOS thread, environmental sensors and zero-trust wipe
-- **Storage**: Encrypted local Sled embedded key-value database
+- **Storage**: Encrypted local SQLite embedded database with Zero-Knowledge schemas
 
 ---
 

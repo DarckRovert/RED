@@ -1,6 +1,6 @@
-# 🔴 RED - Manual del Administrador (Node Ops v31.0.0)
+# 🔴 RED - Manual del Administrador (Node Ops v38.0.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v31.0.0, con soporte para interconexión P2P Web ↔ Mobile, actuadores de hardware nativos (Flash LED Morse SOS, sensores barométricos) y arquitectura de eventos en tiempo real SSE unificada sin polling.
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v38.0.0, con soporte para interconexión P2P Web ↔ Mobile, suite de Respaldo Soberano en 1 Toque, validación Proof-of-Stake / Staking, actuadores de hardware nativos (Flash LED Morse SOS, sensores barométricos) y arquitectura de eventos en tiempo real SSE unificada sin polling.
 
 ---
 
@@ -8,16 +8,18 @@ Este manual está dirigido a operadores de nodos, desarrolladores e integradores
 
 1. [Despliegue del Servidor de Señalización (`signaling/server.js`)](#1-despliegue-del-servidor-de-señalización-signalingserverjs)
 2. [Conectividad y Hardware P2P (BLE, WiFi Direct, LoRa, SoundMesh)](#2-conectividad-y-hardware-p2p-ble-wifi-direct-lora-soundmesh)
-3. [API REST Axum & Eventos SSE en Tiempo Real](#3-api-rest-axum--eventos-sse-en-tiempo-real)
-4. [Configuración de Guardian IA & Alertas AMBER](#4-configuración-de-guardian-ia--alertas-amber)
-5. [Hardening, Seguridad OPSEC & Bóvedas de Memoria](#5-hardening-seguridad-opsec--bóvedas-de-memoria)
-6. [Resolución de Problemas & Diagnósticos NDK/JNI](#6-resolución-de-problemas--diagnósticos-ndkjni)
+3. [Administración del Respaldo Soberano & Sincronización Nube](#3-administración-del-respaldo-soberano--sincronización-nube)
+4. [Operación de Nodos Validadores & Staking PoS](#4-operación-de-nodos-validadores--staking-pos)
+5. [API REST Axum & Eventos SSE en Tiempo Real](#5-api-rest-axum--eventos-sse-en-tiempo-real)
+6. [Configuración de Guardian IA & Alertas AMBER](#6-configuración-de-guardian-ia--alertas-amber)
+7. [Hardening, Seguridad OPSEC & Bóvedas de Memoria](#7-hardening-seguridad-opsec--bóvedas-de-memoria)
+8. [Resolución de Problemas & Diagnósticos NDK/JNI](#8-resolución-de-problemas--diagnósticos-ndkjni)
 
 ---
 
 ## 🛠️ 1. Despliegue del Servidor de Señalización (`signaling/server.js`)
 
-El servidor de señalización actúa como coordinador ciego (zero-knowledge) para la negociación WebRTC (offers/answers e ICE Candidates) entre clientes Web SPA y la App Móvil:
+El servidor de señalización actúa como coordinador ciego (zero-knowledge) para la negociación WebRTC (offers/answers e ICE Candidates) entre clientes Web SPA en PC y la App Móvil:
 
 ```bash
 cd signaling
@@ -25,9 +27,9 @@ npm install
 PORT=3001 node server.js
 ```
 
-### Características del Servidor de Señalización v30.0.0:
+### Características del Servidor de Señalización v38.0.0:
 - **Capacidad de Sala Ampliada:** Soporta hasta **50 pares P2P simultáneos** por sala (`roomId = sort([DID1, DID2]).join("-")`).
-- **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociación de red.
+- **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociación de red y relé ciego (`mesh-relay`).
 - **Health Check HTTP:** Monitoreo en vivo vía `GET /health` (`status`, `uptime`, `peers`, `rooms`).
 
 ---

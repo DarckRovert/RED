@@ -1,6 +1,6 @@
-# 📜 Especificación del Protocolo Ω (RED v34.0.0 Sovereign Master)
+# 📜 Especificación del Protocolo Ω (RED v38.0.0 Sovereign Master)
 
-**Versión**: 34.0.0 | **Estado**: Estándar de Producción Aprobado | **Fecha**: Agosto 2026
+**Versión**: 38.0.0 | **Estado**: Estándar de Producción Aprobado | **Fecha**: Agosto 2026
 
 ---
 
@@ -13,6 +13,9 @@
 5. [Estructura del Paquete Binario (Envelope Táctico)](#5-estructura-del-paquete-binario-envelope-táctico)
 6. [Trama de Voz Comprimida (LowBitrateVocoder)](#6-trama-de-voz-comprimida-lowbitratevocoder)
 7. [Enrutamiento Malla DTN & Deduplicación](#7-enrutamiento-malla-dtn--deduplicación)
+8. [Cápsula de Respaldo Soberano (`.redvault`)](#8-cápsula-de-respaldo-soberano-redvault)
+9. [Vouchers Criptográficos Offline P2P (Ed25519)](#9-vouchers-criptográficos-offline-p2p-ed25519)
+10. [Enlace de Identidad Web3 EIP-712](#10-enlace-de-identidad-web3-eip-712)
 
 ---
 
@@ -111,7 +114,7 @@ Para transmisión por LoRa (915 MHz) o ultrasonido SoundMesh (18.5–20.5 kHz):
 
 ## 8. WebRTC P2P DataChannels & Relé Ciego Zero-Knowledge
 
-Para interoperabilidad global entre clientes de navegador Web y nodos móviles Android a través de Internet:
+Para interoperabilidad global entre clientes de navegador Web (PC) y nodos móviles Android a través de Internet:
 
 1. **Señalización Directa & STUN NAT Traversal**:
    - Descubrimiento de direcciones IP públicas reflexivas mediante servidores STUN (`stun.l.google.com:19302`).
@@ -122,3 +125,69 @@ Para interoperabilidad global entre clientes de navegador Web y nodos móviles A
 3. **Relé Ciego Cifrado Zero-Knowledge (`mesh-relay`)**:
    - Enrutamiento por `targetPeerId` con payload cifrado en Hexadecimal.
    - El relé central actúa únicamente como transportador de paquetes ciegos sin descifrar ni almacenar claves.
+
+---
+
+## 9. Cápsula de Respaldo Soberano (`.redvault`)
+
+Estructura del archivo binario serializado exportado por `SovereignBackupEngine`:
+
+```
++---------------------------------------------------------------+
+|  MAGIC HEADER: "REDVAULT_V2" (11 bytes UTF-8)                 |
++---------------------------------------------------------------+
+|  SALT (16 bytes criptográficos)                               |
++---------------------------------------------------------------+
+|  IV / NONCE (12 bytes AES-GCM)                                 |
++---------------------------------------------------------------+
+|  ENCRYPTED PAYLOAD (AES-256-GCM + 16B Auth Tag):              |
+|    - Versión de Protocolo                                    |
+|    - Identidad Soberana (did:red, claves privadas, nickname)   |
+|    - Contactos & Grupos                                       |
+|    - Conversaciones & Mensajes E2EE                          |
+|    - Vouchers & Balances de Tokenomics                       |
+|    - Vinculación Web3 MetaMask                                |
++---------------------------------------------------------------+
+```
+
+---
+
+## 10. Vouchers Criptográficos Offline P2P (Ed25519)
+
+Estructura del vale digital emitido sin conexión para transacciones de emergencia:
+
+```json
+{
+  "id": "vch_7f8a91b2c3d4",
+  "amount": 50.0,
+  "issuerDid": "did:red:a8f1...:c29b...",
+  "recipientDid": "did:red:3e10...:991a...",
+  "timestamp": 1724112000,
+  "signatureEd25519": "4a8c9b... (64 bytes hex)",
+  "status": "ACTIVE"
+}
+```
+
+---
+
+## 11. Enlace de Identidad Web3 EIP-712
+
+Esquema de firma tipada para vincular identidades DID a billeteras EVM en MetaMask:
+
+```json
+{
+  "types": {
+    "EIP712Domain": [
+      { "name": "name", "type": "string" },
+      { "name": "version", "type": "string" },
+      { "name": "chainId", "type": "uint256" }
+    ],
+    "SovereignIdentityBinding": [
+      { "name": "sovereignDid", "type": "string" },
+      { "name": "ethereumAddress", "type": "address" },
+      { "name": "timestamp", "type": "uint256" },
+      { "name": "statement", "type": "string" }
+    ]
+  }
+}
+```

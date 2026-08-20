@@ -33,10 +33,12 @@ En situaciones de emergencia o denegación de red, las aplicaciones tradicionale
 |---|---|---|
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
+| **Interoperabilidad Web PC** | Limitada a clientes cerrados | **Web App SPA en PC interoperable en tiempo real con nodos móviles Android** |
 | **Conectividad Global** | Centralizada en servidores corporativos | **P2P Kademlia DHT + Bootstrap Peers + Auto-Relay Circuit v2 + DoH Tunnels** |
+| **Respaldo & Recuperación** | Dependiente de cuentas de usuario / SMS | **1-Toque Zero-Friction: Cifrado AES-256-GCM + Google Drive + IPFS + Frase Semilla BIP-39** |
 | **Identidad & Web3** | Vinculada a número telefónico/email | **Soberana (`did:red:`) + EIP-712 MetaMask Multi-Chain Binding** |
-| **Ciberdefensa Activa** | Firewall básico en servidor | **Escudo Global DEFCON Matrix (PoW Anti-Sybil + SNI Domain Fronting)** |
-| **Incentivos Económicos** | Sin recompensas | **Tokenomics Proof-of-Relay + Vales Criptográficos Offline Ed25519** |
+| **Ciberdefensa Activa** | Firewall básico en servidor | **Escudo Global DEFCON Matrix (PoW Anti-Sybil + SNI Domain Fronting + Killswitch)** |
+| **Incentivos Económicos** | Sin recompensas | **DePIN Tokenomics Proof-of-Relay + Vales Criptográficos Offline Ed25519 (Paridad Soles/PEN)** |
 | **Criptografía** | Clásica (vulnerable a computación cuántica) | **Híbrida Post-Cuántica: ML-KEM-768 (FIPS 203) + ECDH P-256 + AES-256-GCM** |
 | **Audio Táctico** | Códecs pesados (WebM/AAC 32-64 kbps) | **LowBitrateVocoder DSP (8kHz IMA-ADPCM 1.6–3.2 kbps, -97.9% compresión)** |
 | **Integridad de Datos** | Vulnerable a cortes de energía | **Árbol Merkle SHA-256 con autorreparación automática en arranque** |
