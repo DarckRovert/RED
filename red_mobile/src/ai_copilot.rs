@@ -205,8 +205,48 @@ impl AICopilotEngine {
             }
         };
 
+        // Formateo de ChatML / Instruct formal según la arquitectura
+        let formatted_prompt = if model_name_lower.contains("qwen") {
+            if let Some(ctx) = &req.context {
+                format!(
+                    "<|im_start|>system\nEres el Copiloto IA Soberano de RED, un asistente táctico de emergencia 100% offline. Utiliza el siguiente protocolo oficial cuando sea relevante: {}\nResponde en español de forma precisa, concisa y útil.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    ctx, prompt
+                )
+            } else {
+                format!(
+                    "<|im_start|>system\nEres el Copiloto IA Soberano de RED, un asistente táctico de emergencia 100% offline. Responde en español de forma precisa, concisa y útil.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    prompt
+                )
+            }
+        } else if model_name_lower.contains("phi") {
+            if let Some(ctx) = &req.context {
+                format!(
+                    "<|system|>\nEres el Copiloto IA de RED. Protocolo táctico: {}\nResponde en español de forma concisa.<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n",
+                    ctx, prompt
+                )
+            } else {
+                format!(
+                    "<|system|>\nEres el Copiloto IA de RED. Responde en español de forma concisa.<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n",
+                    prompt
+                )
+            }
+        } else {
+            // Llama / SmolLM2
+            if let Some(ctx) = &req.context {
+                format!(
+                    "<|im_start|>system\nEres el Copiloto IA de RED. Protocolo táctico: {}\nResponde en español de forma directa.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    ctx, prompt
+                )
+            } else {
+                format!(
+                    "<|im_start|>system\nEres el Copiloto IA de RED. Responde en español de forma directa y concisa.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    prompt
+                )
+            }
+        };
+
         // Buscamos un tokenizer adjunto
-        let tokenizer_path = path.with_extension("").with_extension("json"); // asume .json junto al .gguf
+        let tokenizer_path = path.with_extension("").with_extension("json");
         let tokenizer_path_alt = path.parent().unwrap().join("tokenizer.json");
         
         let tokenizer_file = if tokenizer_path.exists() {
@@ -229,7 +269,6 @@ impl AICopilotEngine {
                 }
             },
             None => {
-                // Fallback de tokenizer simple si no existe
                 return CopilotResponse {
                     answer: "⚠️ [Advertencia]: Falta el archivo tokenizer.json en el mismo directorio del modelo.".to_string(),
                     topic_category: "Error Interno".to_string(),
@@ -240,7 +279,7 @@ impl AICopilotEngine {
             }
         };
 
-        let mut tokens = match tokenizer.encode(prompt.to_string(), true) {
+        let mut tokens = match tokenizer.encode(formatted_prompt, true) {
             Ok(t) => t.get_ids().to_vec(),
             Err(e) => {
                 return CopilotResponse {
@@ -253,7 +292,7 @@ impl AICopilotEngine {
             }
         };
 
-        let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, None, None);
+        let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.7), Some(0.9));
         let mut generated_text = String::new();
         let max_tokens = 256; // Límite seguro para móvil
 
@@ -264,20 +303,54 @@ impl AICopilotEngine {
             
             let logits = match model.forward(&input, start_pos) {
                 Ok(l) => l,
-                Err(_) => break, // Fallo de inferencia, detenemos
+                Err(_) => break,
             };
-            let logits = logits.squeeze(0).unwrap().squeeze(0).unwrap();
+            let mut logits = logits.squeeze(0).unwrap().squeeze(0).unwrap();
             
-            let next_token = logits_processor.sample(&logits).unwrap();
+            // Penalización de repetición ligera en los últimos 32 tokens
+            if tokens.len() > 1 {
+                let recent_tokens = &tokens[tokens.len().saturating_sub(32)..];
+                logits = match candle_transformers::utils::apply_repeat_penalty(&logits, 1.15, recent_tokens) {
+                    Ok(l) => l,
+                    Err(_) => logits,
+                };
+            }
+
+            let next_token = match logits_processor.sample(&logits) {
+                Ok(t) => t,
+                Err(_) => break,
+            };
+
+            // Interceptar Stop Tokens oficiales
+            if next_token == 151645 || next_token == 151643 || next_token == 2 || next_token == 0 || next_token == 32000 {
+                break;
+            }
+
             tokens.push(next_token);
             
             if let Some(text) = tokenizer.decode(&[next_token], true).ok() {
                 generated_text.push_str(&text);
+                if generated_text.ends_with("<|im_end|>") 
+                    || generated_text.ends_with("<|endoftext|>") 
+                    || generated_text.ends_with("</s>") 
+                    || generated_text.ends_with("<|end|>") 
+                    || generated_text.ends_with("<|eot_id|>") {
+                    break;
+                }
             }
         }
 
+        let clean_answer = generated_text
+            .replace("<|im_end|>", "")
+            .replace("<|endoftext|>", "")
+            .replace("</s>", "")
+            .replace("<|end|>", "")
+            .replace("<|eot_id|>", "")
+            .trim()
+            .to_string();
+
         CopilotResponse {
-            answer: generated_text.trim().to_string(),
+            answer: if clean_answer.is_empty() { "Inferencia completada sin texto.".to_string() } else { clean_answer },
             topic_category: "Inferencia Local GGUF".to_string(),
             source: "RED Motor Neural Rust (Candle)".to_string(),
             model_used: model_name,

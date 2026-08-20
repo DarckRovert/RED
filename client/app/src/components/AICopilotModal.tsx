@@ -21,6 +21,16 @@ interface ChatMessage {
 
 const CHAT_HISTORY_KEY = "red_copilot_chat_history_v2";
 
+const TACTICAL_PRESETS = [
+    { icon: "🚨", label: "Triage START", query: "Explica el protocolo de Triage START en combate y desastres paso a paso con códigos de color." },
+    { icon: "🩹", label: "Torniquete & Hemorragias", query: "Protocolo de aplicación de torniquete táctico y control de hemorragia exanguinante en zona caliente." },
+    { icon: "💧", label: "Purificar Agua", query: "¿Cómo potabilizar agua de río o estancada en situación de supervivencia extrema (filtrado, ebullición, cloro)?" },
+    { icon: "📻", label: "Morse SOS & Frecuencias", query: "Códigos Morse de auxilio SOS (... --- ...) y frecuencias de radio de emergencia internacional VHF/UHF." },
+    { icon: "📡", label: "Diagnóstico Mesh P2P", query: "¿Cómo funciona el enrutamiento tolerante a retrasos DTN y los saltos Onion en la red RED?" },
+    { icon: "⚡", label: "Apagón Eléctrico", query: "Protocolo de supervivencia inmediata ante un colapso de infraestructura eléctrica y comunicaciones." },
+    { icon: "🛡️", label: "Cifrado Noise XK", query: "¿Cómo protegen las llaves efímeras Curve25519 y ChaCha20-Poly1305 los mensajes contra intercepción?" }
+];
+
 export const AICopilotModal: React.FC = () => {
     const {
         conversations,
@@ -28,6 +38,7 @@ export const AICopilotModal: React.FC = () => {
         messages: allMessages,
         contacts,
         status,
+        sendMessage,
         goBack
     } = useRedStore();
 
@@ -42,6 +53,9 @@ export const AICopilotModal: React.FC = () => {
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
     const [includeTacticalContext, setIncludeTacticalContext] = useState(true);
+    const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+    const [isListening, setIsListening] = useState(false);
+    const recognitionRef = useRef<any>(null);
 
     // Chat History State
     const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -57,7 +71,7 @@ export const AICopilotModal: React.FC = () => {
             {
                 id: "initial_ai_msg",
                 sender: "ai",
-                text: "🤖 Saludos, Operador. Soy el Copiloto IA Neuronal Soberano de RED.\n\nPuedo asistirte en protocolos de supervivencia, triage médico de combate, purificación de recursos, frecuencias de radio y síntesis táctica 100% offline.\n\n💡 *Tip:* Para razonamiento conversacional ilimitado sobre cualquier tema, puedes descargar un micro-modelo (ej: SmolLM 360M o Qwen 0.5B) en la pestaña [Modelos].",
+                text: "🤖 Saludos, Operador. Soy el Copiloto IA Neuronal Soberano de RED.\n\nPuedo asistirte en protocolos de supervivencia, triage médico de combate, purificación de recursos, frecuencias de radio y síntesis táctica 100% offline.\n\n💡 *Tip:* Para razonamiento conversacional ilimitado sobre cualquier tema, puedes descargar un micro-modelo (ej: SmolLM2 360M o Qwen 2.5 0.5B) en la pestaña [Modelos].",
                 modelTag: "Motor Táctico RAG MiniLM (100% Offline)",
                 timestamp: Date.now()
             }
@@ -69,6 +83,7 @@ export const AICopilotModal: React.FC = () => {
     const [availableModels, setAvailableModels] = useState<LocalModelMetaData[]>([]);
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [downloadProgress, setDownloadProgress] = useState<number>(0);
+    const [downloadBytes, setDownloadBytes] = useState<{ loaded: number; total: number }>({ loaded: 0, total: 0 });
 
     // Translator State
     const [targetLang, setTargetLang] = useState<GlossaryLanguage>("en");
@@ -100,12 +115,16 @@ export const AICopilotModal: React.FC = () => {
     }, [messages]);
 
     // Load Models on Mount
-    useEffect(() => {
-        const models = ModelManager.getModels();
-        setAvailableModels(models);
+    const refreshModels = useCallback(async () => {
+        const models = await ModelManager.checkLocalModelsStatus();
+        setAvailableModels([...models]);
         const currentActive = ModelManager.getActiveModel();
         setActiveModel(currentActive);
     }, []);
+
+    useEffect(() => {
+        refreshModels();
+    }, [refreshModels]);
 
     // Auto-scroll on new messages
     useEffect(() => {
@@ -121,12 +140,82 @@ export const AICopilotModal: React.FC = () => {
             return;
         }
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(textToSpeak.slice(0, 300));
+        const utterance = new SpeechSynthesisUtterance(textToSpeak.slice(0, 400));
         utterance.lang = targetLang === "en" ? "en-US" : targetLang === "fr" ? "fr-FR" : "es-ES";
         utterance.rate = 1.0;
         window.speechSynthesis.speak(utterance);
         toast.info("🔊 Reproduciendo respuesta táctica...");
     }, [targetLang]);
+
+    // Copy Text to Clipboard
+    const copyToClipboard = (text: string, msgId: string) => {
+        if (typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            setCopiedMsgId(msgId);
+            toast.success("📋 Directiva copiada al portapapeles");
+            setTimeout(() => setCopiedMsgId(null), 2000);
+        }
+    };
+
+    // Share AI Answer to Active Chat Channel
+    const shareToChannel = (text: string) => {
+        if (sendMessage) {
+            const formatted = `🤖 [Directiva Copiloto IA]:\n${text}`;
+            sendMessage(formatted);
+            toast.success("🚀 Directiva enviada al canal de chat activo");
+        } else {
+            toast.error("Canal de chat no disponible");
+        }
+    };
+
+    // Voice Dictation Toggle (Speech-to-Text)
+    const toggleVoiceInput = () => {
+        if (isListening) {
+            recognitionRef.current?.stop();
+            setIsListening(false);
+            return;
+        }
+
+        const SpeechRecognition = typeof window !== "undefined" && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+        if (!SpeechRecognition) {
+            toast.warning("Reconocimiento de voz no disponible en este dispositivo");
+            return;
+        }
+
+        try {
+            const recognition = new SpeechRecognition();
+            recognition.lang = "es-ES";
+            recognition.continuous = false;
+            recognition.interimResults = true;
+
+            recognition.onstart = () => {
+                setIsListening(true);
+                toast.info("🎙️ Escuchando comando...");
+            };
+
+            recognition.onresult = (event: any) => {
+                const transcript = Array.from(event.results)
+                    .map((r: any) => r[0].transcript)
+                    .join("");
+                setInput(transcript);
+            };
+
+            recognition.onerror = (err: any) => {
+                console.warn("[Voice Input Error]", err);
+                setIsListening(false);
+            };
+
+            recognition.onend = () => {
+                setIsListening(false);
+            };
+
+            recognitionRef.current = recognition;
+            recognition.start();
+        } catch (e) {
+            console.error(e);
+            setIsListening(false);
+        }
+    };
 
     const handleSend = async (customText?: string) => {
         const text = (customText || input).trim();
@@ -190,7 +279,7 @@ export const AICopilotModal: React.FC = () => {
             const switchMsg: ChatMessage = {
                 id: "msg_switch_" + Date.now().toString(36),
                 sender: "ai",
-                text: `🔄 Motor neural cambiado a: ${selected.name}.\nTodas las consultas posteriores se ejecutarán con esta arquitectura.`,
+                text: `🔄 Motor neural cambiado a: ${selected.name}.\nLas consultas se ejecutarán con aceleración nativa local.`,
                 modelTag: selected.name,
                 timestamp: Date.now()
             };
@@ -201,19 +290,35 @@ export const AICopilotModal: React.FC = () => {
     const handleDownloadModel = async (modelId: string) => {
         setDownloadingId(modelId);
         setDownloadProgress(0);
+        setDownloadBytes({ loaded: 0, total: 0 });
         try {
-            await ModelManager.downloadModel(modelId, (pct) => {
+            await ModelManager.downloadModel(modelId, (pct, loaded, total) => {
                 setDownloadProgress(pct);
+                setDownloadBytes({ loaded, total });
             });
             ModelManager.setActiveModel(modelId);
-            const downloaded = ModelManager.getActiveModel();
-            setActiveModel(downloaded);
-            setAvailableModels([...ModelManager.getModels()]);
+            await refreshModels();
             toast.success("Modelo descargado y activado");
         } catch {
             toast.error("Error al descargar modelo");
         } finally {
             setDownloadingId(null);
+        }
+    };
+
+    const handleCancelDownload = (modelId: string) => {
+        ModelManager.cancelDownload(modelId);
+        setDownloadingId(null);
+        toast.info("Descarga cancelada");
+    };
+
+    const handleDeleteModel = async (modelId: string) => {
+        const ok = await ModelManager.deleteModel(modelId);
+        if (ok) {
+            await refreshModels();
+            toast.success("Modelo eliminado para liberar espacio");
+        } else {
+            toast.error("No se pudo eliminar el archivo");
         }
     };
 
@@ -268,7 +373,7 @@ export const AICopilotModal: React.FC = () => {
             id: "initial_ai_msg",
             sender: "ai",
             text: "🤖 Historial reiniciado. Copiloto IA listo para nuevas instrucciones.",
-            modelTag: activeModel ? activeModel.name : "Qwen 2.5 1.5B (ARM64 Nativo)",
+            modelTag: activeModel ? activeModel.name : "Motor RAG MiniLM (100% Offline)",
             timestamp: Date.now()
         };
         setMessages([initialMsg]);
@@ -279,234 +384,241 @@ export const AICopilotModal: React.FC = () => {
         ? EMERGENCY_GLOSSARY
         : EMERGENCY_GLOSSARY.filter(e => e.category === selectedCategory);
 
+    const totalStorageMb = ModelManager.getTotalStorageUsedMb();
+
     return (
         <div className="modal-screen-container">
             {/* Header Táctico */}
             <header className="safe-header" style={{
-                padding: "12px 20px",
+                padding: "10px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
+                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.98) 0%, rgba(8, 8, 16, 0.98) 100%)",
                 backdropFilter: "blur(20px)",
                 zIndex: 10, flexShrink: 0,
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button onClick={goBack} className="btn-icon" title="Regresar" style={{ width: 34, height: 34 }}>
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
+                        width: 36, height: 36, borderRadius: "10px",
                         background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.4)"
+                        fontSize: "1.1rem", boxShadow: "0 2px 10px rgba(0,229,255,0.3)"
                     }}>🤖</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Copiloto IA Offline & Asistente Táctico
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 800, letterSpacing: "0.5px" }}>COPILOTO IA SOBERANO</span>
+                            <span className="badge-live-cyan" style={{ fontSize: "0.62rem", padding: "2px 6px" }}>100% OFFLINE</span>
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {activeModel ? activeModel.name : "QWEN 2.5 1.5B (GGUF RUST / ONNX)"} · 100% AIR-GAPPED
+                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                            Motor: <span style={{ color: "var(--accent-cyan)", fontWeight: 700 }}>{activeModel?.name || "RAG Táctico MiniLM"}</span>
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <div style={{ display: "flex", gap: "4px", background: "rgba(0,0,0,0.4)", padding: "3px", borderRadius: "var(--radius-full)", border: "1px solid var(--glass-border)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {activeTab === "chat" && (
                         <button
-                            onClick={() => setActiveTab("chat")}
-                            className={activeTab === "chat" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
+                            onClick={handleClearChat}
+                            className="btn-ghost"
+                            style={{ padding: "4px 8px", fontSize: "0.72rem", color: "var(--text-muted)" }}
+                            title="Limpiar Conversación"
                         >
-                            💬 Chat RAG
+                            🗑️ Limpiar
                         </button>
-                        <button
-                            onClick={() => setActiveTab("translator")}
-                            className={activeTab === "translator" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
-                        >
-                            🌐 Glosario / Traductor
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("summarizer")}
-                            className={activeTab === "summarizer" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
-                        >
-                            📋 Resumidor
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("models")}
-                            className={activeTab === "models" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
-                        >
-                            🧠 Modelos
-                        </button>
-                    </div>
-
-                    <button
-                        onClick={goBack}
-                        className="btn-icon"
-                        title="Cerrar Copiloto"
-                        style={{ width: 38, height: 38 }}
-                    >
-                        ✕
-                    </button>
+                    )}
                 </div>
             </header>
 
-            {/* PESTAÑA 1: CHAT TÁCTICO RAG */}
-            {activeTab === "chat" && (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                    {/* Barra Superior de Controles de Chat */}
-                    <div style={{
-                        padding: "8px 16px",
-                        background: "rgba(0,0,0,0.3)",
-                        borderBottom: "1px solid var(--glass-border)",
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                        fontSize: "0.72rem"
-                    }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", color: "var(--accent-cyan)", fontWeight: 700 }}>
-                                <input
-                                    type="checkbox"
-                                    checked={includeTacticalContext}
-                                    onChange={e => setIncludeTacticalContext(e.target.checked)}
-                                    style={{ width: 14, height: 14 }}
-                                />
-                                Inyectar Contexto de Malla RAG ({status?.peer_count ?? contacts.length} Nodos)
-                            </label>
-                        </div>
-                        <div style={{ display: "flex", gap: "8px" }}>
-                            <button
-                                onClick={handleClearChat}
-                                className="btn-ghost"
-                                style={{ padding: "3px 8px", fontSize: "0.68rem" }}
-                            >
-                                🗑️ Limpiar
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Chips de Consultas Tácticas Rápidas */}
-                    <div style={{
-                        padding: "8px 16px",
-                        background: "rgba(0, 229, 255, 0.02)",
-                        borderBottom: "1px solid var(--glass-border)",
-                        display: "flex", gap: "6px", overflowX: "auto", whiteSpace: "nowrap"
-                    }}>
-                        <button
-                            onClick={() => handleSend("Protocolo de Triage START para víctimas múltiples en combate")}
-                            className="btn-tactical-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.70rem" }}
-                        >
-                            🩺 Triage START
-                        </button>
-                        <button
-                            onClick={() => handleSend("Método de purificación solar de agua SODIS y desinfección química")}
-                            className="btn-tactical-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.70rem" }}
-                        >
-                            💧 Agua Segura (SODIS)
-                        </button>
-                        <button
-                            onClick={() => handleSend("Frecuencias de emergencia VHF/UHF y protocolo de llamada Mayday")}
-                            className="btn-tactical-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.70rem" }}
-                        >
-                            📡 Frecuencias Mayday
-                        </button>
-                        <button
-                            onClick={() => handleSend("Procedimiento para detener una hemorragia arterial severa con torniquete")}
-                            className="btn-tactical-secondary"
-                            style={{ padding: "4px 10px", fontSize: "0.70rem" }}
-                        >
-                            🩸 Torniquete Arterial
-                        </button>
-                    </div>
-
-                    {/* Mensajes del Chat */}
-                    <div
-                        ref={chatContainerRef}
-                        className="scroll-container"
-                        style={{ flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto" }}
+            {/* Selector de Pestañas Táctico */}
+            <div style={{
+                display: "flex",
+                background: "rgba(0,0,0,0.4)",
+                borderBottom: "1px solid var(--glass-border)",
+                padding: "4px 8px", gap: "4px", overflowX: "auto"
+            }}>
+                {([
+                    { id: "chat", icon: "💬", label: "Copiloto" },
+                    { id: "translator", icon: "🌐", label: "Traductor & Glosario" },
+                    { id: "summarizer", icon: "📋", label: "Resumidor" },
+                    { id: "models", icon: "🧠", label: `Modelos ${totalStorageMb > 0 ? `(${totalStorageMb} MB)` : ""}` }
+                ] as const).map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as CopilotTab)}
+                        className={activeTab === tab.id ? "glow-pill-active" : "btn-ghost"}
+                        style={{
+                            flex: 1, padding: "8px 10px", fontSize: "0.76rem",
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                            whiteSpace: "nowrap"
+                        }}
                     >
-                        {messages.map((m) => (
-                            <div
-                                key={m.id}
+                        <span>{tab.icon}</span>
+                        <span>{tab.label}</span>
+                    </button>
+                ))}
+            </div>
+
+            {/* PESTAÑA 1: CHAT CON IA NEURONAL */}
+            {activeTab === "chat" && (
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "calc(100% - 105px)", overflow: "hidden" }}>
+                    {/* Barra de Presets Tácticos de 1 Toque */}
+                    <div style={{
+                        display: "flex", gap: "6px", padding: "8px 12px",
+                        overflowX: "auto", background: "rgba(0,229,255,0.03)",
+                        borderBottom: "1px solid var(--glass-border)",
+                        scrollbarWidth: "none"
+                    }}>
+                        {TACTICAL_PRESETS.map((p, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleSend(p.query)}
+                                disabled={loading}
+                                className="btn-tactical-secondary hover-bright"
                                 style={{
-                                    alignSelf: m.sender === "user" ? "flex-end" : "flex-start",
-                                    maxWidth: "85%",
-                                    display: "flex", flexDirection: "column",
-                                    alignItems: m.sender === "user" ? "flex-end" : "flex-start"
+                                    padding: "4px 10px", fontSize: "0.72rem",
+                                    whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px",
+                                    borderRadius: "14px", flexShrink: 0
                                 }}
                             >
-                                <div style={{
-                                    padding: "12px 16px",
-                                    borderRadius: m.sender === "user" ? "16px 16px 2px 16px" : "16px 16px 16px 2px",
-                                    background: m.sender === "user" ? "var(--accent-cyan-glow)" : "rgba(20, 20, 35, 0.85)",
-                                    border: `1px solid ${m.sender === "user" ? "var(--accent-cyan)" : "var(--glass-border)"}`,
-                                    color: "#fff",
-                                    fontSize: "0.85rem",
-                                    lineHeight: 1.5,
-                                    whiteSpace: "pre-wrap",
-                                    wordBreak: "break-word",
-                                    boxShadow: m.sender === "user" ? "0 4px 12px rgba(0,229,255,0.2)" : "0 4px 12px rgba(0,0,0,0.3)"
-                                }}>
-                                    {m.text}
-                                </div>
-
-                                {m.sender === "ai" && (
-                                    <div style={{
-                                        display: "flex", alignItems: "center", gap: "8px",
-                                        marginTop: "4px", fontSize: "0.65rem",
-                                        color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace"
-                                    }}>
-                                        <span>⚡ {m.modelTag || "RED Copilot"}</span>
-                                        {m.latencyMs && <span>· {m.latencyMs}ms</span>}
-                                        <button
-                                            onClick={() => speakText(m.text)}
-                                            style={{ background: "none", border: "none", color: "var(--accent-cyan)", cursor: "pointer", fontSize: "0.75rem", padding: "0 2px" }}
-                                            title="Escuchar respuesta (Voz manos libres)"
-                                        >
-                                            🔊
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(m.text);
-                                                toast.info("Respuesta copiada al portapapeles");
-                                            }}
-                                            style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem", padding: "0 2px" }}
-                                            title="Copiar texto"
-                                        >
-                                            📋
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
+                                <span>{p.icon}</span>
+                                <span>{p.label}</span>
+                            </button>
                         ))}
+                    </div>
+
+                    {/* Mensajes de Chat */}
+                    <div ref={chatContainerRef} className="scroll-container" style={{
+                        flex: 1, padding: "14px 14px 10px 14px",
+                        display: "flex", flexDirection: "column", gap: "12px",
+                        overflowY: "auto"
+                    }}>
+                        {messages.map(msg => {
+                            const isAI = msg.sender === "ai";
+                            const isCopied = copiedMsgId === msg.id;
+
+                            return (
+                                <div
+                                    key={msg.id}
+                                    style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        alignItems: isAI ? "flex-start" : "flex-end",
+                                        maxWidth: "85%",
+                                        alignSelf: isAI ? "flex-start" : "flex-end"
+                                    }}
+                                >
+                                    <div
+                                        className={isAI ? "card-tactical" : "card-tactical-active"}
+                                        style={{
+                                            padding: "12px 14px",
+                                            borderRadius: isAI ? "12px 12px 12px 2px" : "12px 12px 2px 12px",
+                                            background: isAI ? "rgba(18, 18, 30, 0.95)" : "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                                            color: isAI ? "var(--text-primary)" : "#000",
+                                            border: isAI ? "1px solid var(--glass-border)" : "none",
+                                            boxShadow: isAI ? "0 4px 16px rgba(0,0,0,0.3)" : "0 4px 16px rgba(0,229,255,0.3)"
+                                        }}
+                                    >
+                                        <div style={{
+                                            fontSize: "0.86rem",
+                                            lineHeight: 1.5,
+                                            whiteSpace: "pre-wrap",
+                                            wordBreak: "break-word",
+                                            fontWeight: isAI ? 400 : 600
+                                        }}>
+                                            {msg.text}
+                                        </div>
+
+                                        {isAI && (
+                                            <div style={{
+                                                marginTop: "8px", paddingTop: "6px",
+                                                borderTop: "1px solid rgba(255,255,255,0.06)",
+                                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                fontSize: "0.68rem", color: "var(--text-muted)"
+                                            }}>
+                                                <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {msg.modelTag} {msg.latencyMs ? `· ${msg.latencyMs}ms` : ""}
+                                                </span>
+
+                                                <div style={{ display: "flex", gap: "6px" }}>
+                                                    <button
+                                                        onClick={() => copyToClipboard(msg.text, msg.id)}
+                                                        className="btn-ghost"
+                                                        style={{ padding: "2px 6px", fontSize: "0.68rem" }}
+                                                        title="Copiar"
+                                                    >
+                                                        {isCopied ? "✓ Copiado" : "📋 Copiar"}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => shareToChannel(msg.text)}
+                                                        className="btn-ghost"
+                                                        style={{ padding: "2px 6px", fontSize: "0.68rem", color: "var(--accent-cyan)" }}
+                                                        title="Enviar a canal de chat activo"
+                                                    >
+                                                        🚀 Enviar a Chat
+                                                    </button>
+                                                    <button
+                                                        onClick={() => speakText(msg.text)}
+                                                        className="btn-ghost"
+                                                        style={{ padding: "2px 6px", fontSize: "0.68rem" }}
+                                                        title="Escuchar audio"
+                                                    >
+                                                        🔊
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
 
                         {loading && (
-                            <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(0,0,0,0.4)", borderRadius: "12px", border: "1px solid var(--glass-border)" }}>
-                                <div className="pulse-indicator" style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent-cyan)" }} />
-                                <span style={{ fontSize: "0.75rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                    Generando razonamiento táctico offline...
-                                </span>
+                            <div style={{
+                                display: "flex", alignItems: "center", gap: "8px",
+                                padding: "10px 14px", background: "rgba(0,229,255,0.05)",
+                                border: "1px solid var(--accent-cyan)", borderRadius: "12px",
+                                maxWidth: "260px", color: "var(--accent-cyan)", fontSize: "0.80rem"
+                            }}>
+                                <span style={{ animation: "pulse 1s infinite" }}>⚙️</span>
+                                <span>Razonando directiva táctica offline...</span>
                             </div>
                         )}
                     </div>
 
-                    {/* Input y Botón de Envío */}
+                    {/* Input Bar con Dictado por Voz y Enviar */}
                     <div style={{
-                        padding: "12px 16px",
+                        padding: "10px 14px",
+                        background: "rgba(10, 10, 20, 0.98)",
                         borderTop: "1px solid var(--glass-border)",
-                        background: "rgba(10, 10, 20, 0.95)",
-                        display: "flex", gap: "8px", alignItems: "center"
+                        display: "flex", alignItems: "center", gap: "8px"
                     }}>
+                        <button
+                            onClick={toggleVoiceInput}
+                            className={isListening ? "btn-tactical-primary" : "btn-icon"}
+                            style={{
+                                width: 38, height: 38, borderRadius: "50%",
+                                background: isListening ? "var(--accent-crimson)" : "rgba(255,255,255,0.05)",
+                                color: isListening ? "#fff" : "var(--accent-cyan)",
+                                flexShrink: 0
+                            }}
+                            title={isListening ? "Detener grabación" : "Dictar por voz"}
+                        >
+                            {isListening ? "⏹️" : "🎙️"}
+                        </button>
+
                         <input
                             type="text"
                             value={input}
                             onChange={e => setInput(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                            placeholder="Formula una consulta de supervivencia o táctica..."
+                            placeholder={isListening ? "Escuchando dictado..." : "Formula una consulta de emergencia, medicina o táctica..."}
                             style={{ flex: 1, fontSize: "0.85rem", padding: "10px 14px" }}
                             disabled={loading}
                         />
+
                         <button
                             onClick={() => handleSend()}
                             disabled={!input.trim() || loading}
@@ -521,7 +633,7 @@ export const AICopilotModal: React.FC = () => {
 
             {/* PESTAÑA 2: TRADUCTOR TÁCTICO OFF-GRID */}
             {activeTab === "translator" && (
-                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div>
@@ -543,7 +655,7 @@ export const AICopilotModal: React.FC = () => {
                                         { id: "pt", label: "🇧🇷 Português" },
                                         { id: "fr", label: "🇫🇷 Français" },
                                         { id: "de", label: "🇩🇪 Deutsch" },
-                                        { id: "qu", label: "🇵🇪 Quechua (Runasimi)" }
+                                        { id: "qu", label: "🇵🇪 Quechua" }
                                     ] as const).map(l => (
                                         <button
                                             key={l.id}
@@ -646,7 +758,7 @@ export const AICopilotModal: React.FC = () => {
 
             {/* PESTAÑA 3: RESUMIDOR DE CANAL */}
             {activeTab === "summarizer" && (
-                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
                             <div>
@@ -712,13 +824,21 @@ export const AICopilotModal: React.FC = () => {
 
             {/* PESTAÑA 4: GESTOR DE MODELOS GGUF / ONNX */}
             {activeTab === "models" && (
-                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Modelos Neuronales GGUF & ONNX WASM</div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Catálogo de modelos compatibles con aceleración de hardware ARM64 y WebAssembly local.
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Modelos Neuronales GGUF (Inferencia ARM64)</div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                        Ejecución 100% nativa fuera de red en el procesador de tu dispositivo.
+                                    </div>
+                                </div>
+                                <div style={{ textAlign: "right" }}>
+                                    <span style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>Almacenamiento ocupado:</span>
+                                    <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {totalStorageMb} MB
+                                    </div>
                                 </div>
                             </div>
 
@@ -726,6 +846,7 @@ export const AICopilotModal: React.FC = () => {
                                 {availableModels.map(model => {
                                     const isActive = activeModel?.id === model.id;
                                     const isDownloading = downloadingId === model.id;
+                                    const isReady = model.isDownloaded || model.is_downloaded;
 
                                     return (
                                         <div
@@ -749,27 +870,67 @@ export const AICopilotModal: React.FC = () => {
                                                 </div>
 
                                                 <div style={{ display: "flex", gap: "6px" }}>
-                                                    {model.isDownloaded || model.is_downloaded ? (
-                                                        <button
-                                                            onClick={() => handleSelectModel(model.id)}
-                                                            disabled={isActive}
-                                                            className={isActive ? "glow-pill-active" : "btn-tactical-secondary"}
-                                                            style={{ padding: "6px 12px", fontSize: "0.74rem" }}
-                                                        >
-                                                            {isActive ? "Activo" : "Seleccionar"}
-                                                        </button>
+                                                    {isReady ? (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleSelectModel(model.id)}
+                                                                disabled={isActive}
+                                                                className={isActive ? "glow-pill-active" : "btn-tactical-secondary"}
+                                                                style={{ padding: "6px 12px", fontSize: "0.74rem" }}
+                                                            >
+                                                                {isActive ? "Activo" : "Seleccionar"}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteModel(model.id)}
+                                                                className="btn-ghost"
+                                                                style={{ padding: "6px 8px", fontSize: "0.74rem", color: "var(--accent-crimson)" }}
+                                                                title="Eliminar modelo para liberar espacio"
+                                                            >
+                                                                🗑️
+                                                            </button>
+                                                        </>
                                                     ) : (
-                                                        <button
-                                                            onClick={() => handleDownloadModel(model.id)}
-                                                            disabled={isDownloading}
-                                                            className="btn-tactical-primary"
-                                                            style={{ padding: "6px 12px", fontSize: "0.74rem" }}
-                                                        >
-                                                            {isDownloading ? `Descargando ${downloadProgress}%` : "Descargar"}
-                                                        </button>
+                                                        <>
+                                                            {isDownloading ? (
+                                                                <button
+                                                                    onClick={() => handleCancelDownload(model.id)}
+                                                                    className="btn-tactical-secondary"
+                                                                    style={{ padding: "6px 12px", fontSize: "0.74rem", color: "var(--accent-crimson)" }}
+                                                                >
+                                                                    Cancelar
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => handleDownloadModel(model.id)}
+                                                                    className="btn-tactical-primary"
+                                                                    style={{ padding: "6px 12px", fontSize: "0.74rem" }}
+                                                                >
+                                                                    Descargar ({model.fileSizeMb} MB)
+                                                                </button>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {isDownloading && (
+                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                    <div style={{
+                                                        height: "6px", width: "100%", background: "rgba(255,255,255,0.1)",
+                                                        borderRadius: "3px", overflow: "hidden"
+                                                    }}>
+                                                        <div style={{
+                                                            height: "100%", width: `${downloadProgress}%`,
+                                                            background: "linear-gradient(90deg, #00E5FF, #0284C7)",
+                                                            transition: "width 0.2s"
+                                                        }} />
+                                                    </div>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.66rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                        <span>Descargando: {downloadProgress}%</span>
+                                                        <span>{downloadBytes.total > 0 ? `${(downloadBytes.loaded / (1024*1024)).toFixed(1)} / ${(downloadBytes.total / (1024*1024)).toFixed(1)} MB` : ""}</span>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             <div style={{ fontSize: "0.74rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
                                                 {model.description}
@@ -785,4 +946,5 @@ export const AICopilotModal: React.FC = () => {
         </div>
     );
 };
+
 export default AICopilotModal;

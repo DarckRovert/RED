@@ -2059,7 +2059,7 @@ async fn handle_ai_copilot_query(
     State(state): State<ApiState>,
     Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
 ) -> impl IntoResponse {
-    let res = state.ai_copilot.query(req);
+    let res = state.ai_copilot.query_async(req).await;
     Json(res).into_response()
 }
 

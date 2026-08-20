@@ -52,7 +52,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     {
         id: 'qwen-2.5-1.5b-q4',
         name: 'Qwen 2.5 1.5B Instruct (Alibaba)',
-        description: '🌟 RECOMENDADO PARA MÓVILES. El modelo sub-2B más inteligente del mundo. Razonamiento táctico brillante en español con solo 1.6 GB de RAM.',
+        description: '🌟 RECOMENDADO PARA MÓVILES. Razonamiento táctico brillante en español con 1.6 GB de RAM.',
         parameterCount: '1.5B',
         fileSizeMb: 1040,
         downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
@@ -66,7 +66,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     {
         id: 'llama-3.2-1b-q4',
         name: 'Llama 3.2 1B Instruct (Meta)',
-        description: '⚡ ULTRA-RÁPIDO. Modelo oficial 1B de Meta optimizado para velocidad extrema en procesadores ARM64 móviles (1.2 GB RAM).',
+        description: '⚡ ULTRA-RÁPIDO. Modelo oficial 1B de Meta optimizado para velocidad extrema en procesadores ARM64 móviles.',
         parameterCount: '1.0B',
         fileSizeMb: 770,
         downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
@@ -107,7 +107,6 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     }
 ];
 
-// Helper to convert Uint8Array chunk to base64 string safely
 function uint8ArrayToBase64(bytes: Uint8Array): string {
     let binary = '';
     const len = bytes.byteLength;
@@ -132,7 +131,6 @@ class ModelManagerClass {
 
         for (const [id, model] of this.models.entries()) {
             try {
-                // Check physical file via Capacitor Filesystem
                 try {
                     const filePath = `models/${model.fileName}`;
                     const stat = await Filesystem.stat({
@@ -140,7 +138,7 @@ class ModelManagerClass {
                         directory: Directory.Data
                     });
 
-                    if (stat && stat.size > 10 * 1024 * 1024) { // Valid GGUF file > 10MB
+                    if (stat && stat.size > 10 * 1024 * 1024) {
                         const uri = await Filesystem.getUri({
                             path: filePath,
                             directory: Directory.Data
@@ -152,12 +150,10 @@ class ModelManagerClass {
                         localStorage.setItem(`red_model_${id}_ready`, 'true');
                         localStorage.setItem(`red_model_${id}_path`, uri.uri);
                         
-                        // Auto-sanación proactiva: asegurar que el tokenizer existe
                         this.ensureTokenizerDownloaded(id).catch(() => {});
                         continue;
                     }
                 } catch {
-                    // Fallback to localStorage flag if Filesystem plugin is not ready
                     const isCached = localStorage.getItem(`red_model_${id}_ready`) === 'true';
                     if (isCached) {
                         model.isDownloaded = true;
@@ -185,7 +181,7 @@ class ModelManagerClass {
     /** Returns currently selected active model if downloaded */
     public getActiveModel(): LocalModelMetaData | null {
         if (typeof window === 'undefined') return null;
-        const activeId = localStorage.getItem('red_active_model_id') || 'llama-3.2-1b-q4';
+        const activeId = localStorage.getItem('red_active_model_id') || 'smollm-360m-q4';
         const model = this.models.get(activeId);
         if (model && model.isDownloaded) {
             return model;
@@ -219,7 +215,6 @@ class ModelManagerClass {
         const defaultPath = `models/tokenizer.json`;
 
         try {
-            // Verificar si ya existe en disco
             try {
                 const stat = await Filesystem.stat({
                     path: targetPath,
@@ -232,7 +227,6 @@ class ModelManagerClass {
 
             console.log(`[ModelManager] Auto-descargando tokenizer.json para ${model.name}...`);
             
-            // Intentar descarga directa de texto
             const resp = await fetch(model.tokenizerUrl);
             if (resp.ok) {
                 const text = await resp.text();
@@ -240,7 +234,6 @@ class ModelManagerClass {
                 const bytes = encoder.encode(text);
                 const base64Data = uint8ArrayToBase64(bytes);
 
-                // Escribir en nombre específico y genérico
                 await Filesystem.writeFile({
                     path: targetPath,
                     data: base64Data,
@@ -281,7 +274,6 @@ class ModelManagerClass {
             model.downloadProgress = 0;
             model.downloadedBytes = 0;
 
-            // Ensure models directory exists
             try {
                 await Filesystem.mkdir({
                     path: 'models',
@@ -292,7 +284,6 @@ class ModelManagerClass {
 
             const targetFilePath = `models/${model.fileName}`;
 
-            // 1. Intentar descarga nativa multihilo mediante Filesystem.downloadFile (Bypasses CORS en Android)
             let nativeSuccess = false;
             try {
                 const progressListener = await Filesystem.addListener('progress', (status: any) => {
@@ -321,7 +312,6 @@ class ModelManagerClass {
                 console.warn('[ModelManager] DownloadFile nativo no disponible o falló en Web, intentando fetch stream:', nativeErr);
             }
 
-            // 2. Si es entorno Web SPA, utilizar streaming real por Fetch (sin simulaciones)
             if (!nativeSuccess) {
                 const response = await fetch(model.downloadUrl, {
                     signal: controller.signal,
@@ -348,7 +338,6 @@ class ModelManagerClass {
                     loadedBytes += value.byteLength;
                     model.downloadedBytes = loadedBytes;
 
-                    // High-performance typed buffer concatenation
                     const merged = new Uint8Array(chunkBuffer.length + value.byteLength);
                     merged.set(chunkBuffer, 0);
                     merged.set(value, chunkBuffer.length);
@@ -392,10 +381,8 @@ class ModelManagerClass {
                 }
             }
 
-            // 3. Descargar y emparejar Tokenizer JSON correspondiente
             await this.ensureTokenizerDownloaded(modelId);
 
-            // Confirmación de ruta URI física final en disco
             let localUri = `models/${model.fileName}`;
             try {
                 const uriResult = await Filesystem.getUri({
@@ -437,6 +424,59 @@ class ModelManagerClass {
             controller.abort();
             this.activeDownloads.delete(modelId);
         }
+    }
+
+    /** Deletes a downloaded model and its tokenizer to free storage */
+    public async deleteModel(modelId: string): Promise<boolean> {
+        const model = this.models.get(modelId);
+        if (!model) return false;
+
+        try {
+            const targetFilePath = `models/${model.fileName}`;
+            try {
+                await Filesystem.deleteFile({
+                    path: targetFilePath,
+                    directory: Directory.Data
+                });
+            } catch {}
+
+            if (model.tokenizerFileName) {
+                try {
+                    await Filesystem.deleteFile({
+                        path: `models/${model.tokenizerFileName}`,
+                        directory: Directory.Data
+                    });
+                } catch {}
+            }
+
+            model.isDownloaded = false;
+            model.downloadProgress = 0;
+            model.downloadedBytes = 0;
+            model.localPath = undefined;
+
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem(`red_model_${modelId}_ready`);
+                localStorage.removeItem(`red_model_${modelId}_path`);
+                if (localStorage.getItem('red_active_model_id') === modelId) {
+                    localStorage.removeItem('red_active_model_id');
+                }
+            }
+            return true;
+        } catch (e) {
+            console.error(`[ModelManager] Error deleting model ${modelId}:`, e);
+            return false;
+        }
+    }
+
+    /** Returns total storage used by downloaded models in MB */
+    public getTotalStorageUsedMb(): number {
+        let total = 0;
+        for (const m of this.models.values()) {
+            if (m.isDownloaded) {
+                total += m.fileSizeMb;
+            }
+        }
+        return total;
     }
 }
 
