@@ -321,56 +321,57 @@ export class MqttRelayTransport {
   // ─── Packet Dispatcher ──────────────────────────────────────────────────────
 
   private handleMqttPacket(data: Uint8Array, onConnected?: () => void) {
-    if (data.length < 2) return;
-    const packetType = data[0] >> 4;
-
-    // 1. CONNACK (Type 2)
-    if (packetType === 2) {
-      const returnCode = data[3];
-      if (returnCode === 0) {
-        this.isConnected = true;
-        this.isConnecting = false;
-        console.log('[MqttRelay] ✅ Connected and authenticated with global broker');
-        this.startPing();
-        this.subscribeToMyTopics();
-        if (onConnected) onConnected();
-        this.connectListeners.forEach(cb => {
-          try { cb(); } catch (err) { console.warn('[MqttRelay] Error in connect listener:', err); }
-        });
-      } else {
-        console.warn(`[MqttRelay] Connection rejected by broker (code ${returnCode})`);
-        this.tryNextBroker();
-      }
-      return;
-    }
-
-    // 2. PINGRESP (Type 13)
-    if (packetType === 13) {
-      return; // Keep-alive ack, no action needed
-    }
-
-    // 3. PUBLISH (Type 3)
-    if (packetType === 3) {
-      let offset = 1;
-      // Read variable length
+    let cursor = 0;
+    while (cursor < data.length) {
+      if (data.length - cursor < 2) break;
+      const packetType = data[cursor] >> 4;
+      let offset = cursor + 1;
       let multiplier = 1;
       let remainingLength = 0;
       let byte = 0;
       do {
+        if (offset >= data.length) break;
         byte = data[offset++];
         remainingLength += (byte & 127) * multiplier;
         multiplier *= 128;
       } while ((byte & 128) !== 0 && offset < data.length);
 
-      // Read Topic Name
-      const topicLen = (data[offset] << 8) | data[offset + 1];
-      offset += 2;
-      const topic = new TextDecoder().decode(data.slice(offset, offset + topicLen));
-      offset += topicLen;
+      const packetEnd = offset + remainingLength;
+      if (packetEnd > data.length) break;
 
-      // Extract Payload
-      const payload = data.slice(offset);
-      this.routeIncomingMqttMessage(topic, payload);
+      // 1. CONNACK (Type 2)
+      if (packetType === 2) {
+        const returnCode = data[offset + 1];
+        if (returnCode === 0) {
+          this.isConnected = true;
+          this.isConnecting = false;
+          console.log('[MqttRelay] ✅ Connected and authenticated with global broker');
+          this.startPing();
+          this.subscribeToMyTopics();
+          if (onConnected) onConnected();
+          this.connectListeners.forEach(cb => {
+            try { cb(); } catch (err) { console.warn('[MqttRelay] Error in connect listener:', err); }
+          });
+        } else {
+          console.warn(`[MqttRelay] Connection rejected by broker (code ${returnCode})`);
+          this.tryNextBroker();
+        }
+      }
+      // 2. PINGRESP (Type 13)
+      else if (packetType === 13) {
+        // Keep-alive ack, no action needed
+      }
+      // 3. PUBLISH (Type 3)
+      else if (packetType === 3) {
+        const topicLen = (data[offset] << 8) | data[offset + 1];
+        offset += 2;
+        const topic = new TextDecoder().decode(data.slice(offset, offset + topicLen));
+        offset += topicLen;
+        const payload = data.slice(offset, packetEnd);
+        this.routeIncomingMqttMessage(topic, payload);
+      }
+
+      cursor = packetEnd;
     }
   }
 

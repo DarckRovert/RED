@@ -10,6 +10,7 @@ export class WifiDirectTransport {
     public onlinePeers: Set<string> = new Set();
     private isConnecting = false;
     private reconnectTimer: any = null;
+    private heartbeatTimer: any = null;
     private currentCandidateIndex = 0;
     private activeSignalingUrl: string = '';
 
@@ -37,6 +38,41 @@ export class WifiDirectTransport {
         mqttRelay.onSignaling((sigMsg) => {
             this.handleSignalingMessage(sigMsg);
         });
+
+        this.startHeartbeat();
+    }
+
+    private startHeartbeat(): void {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = setInterval(() => {
+            // 1. Send keepalive ping over all open WebRTC DataChannels
+            for (const [peerId, channel] of this.dataChannels) {
+                if (channel && channel.readyState === 'open') {
+                    try {
+                        const pingPayload = new TextEncoder().encode(JSON.stringify({
+                            type: 'mesh-ping',
+                            from: this.myId,
+                            timestamp: Date.now()
+                        }));
+                        const safeBuf = pingPayload.buffer.slice(pingPayload.byteOffset, pingPayload.byteOffset + pingPayload.byteLength) as ArrayBuffer;
+                        channel.send(safeBuf);
+                    } catch (err) {
+                        console.warn(`[WebRtcTransport] Keepalive ping failed for ${peerId.slice(0, 8)}:`, err);
+                    }
+                }
+            }
+
+            // 2. Send heartbeat to signaling WebSocket server
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                try {
+                    this.sendWs({
+                        type: 'heartbeat',
+                        peerId: this.myId,
+                        timestamp: Date.now()
+                    });
+                } catch {}
+            }
+        }, 8000);
     }
 
     public updateIdentity(newId: string): void {
@@ -409,6 +445,32 @@ export class WifiDirectTransport {
             } else {
                 return;
             }
+
+            // In-band heartbeat ping-pong inspection
+            try {
+                if (payload.length > 0 && payload[0] === 123) { // starts with '{'
+                    const str = new TextDecoder().decode(payload);
+                    if (str.includes('"type":"mesh-ping"')) {
+                        const ping = JSON.parse(str);
+                        const pongPayload = new TextEncoder().encode(JSON.stringify({
+                            type: 'mesh-pong',
+                            from: this.myId,
+                            echoTs: ping.timestamp,
+                            timestamp: Date.now()
+                        }));
+                        const safePongBuf = pongPayload.buffer.slice(pongPayload.byteOffset, pongPayload.byteOffset + pongPayload.byteLength) as ArrayBuffer;
+                        channel.send(safePongBuf);
+                        return;
+                    }
+                    if (str.includes('"type":"mesh-pong"')) {
+                        const pong = JSON.parse(str);
+                        const rtt = Date.now() - (pong.echoTs || Date.now());
+                        // RTT confirmed, keep channel warm
+                        return;
+                    }
+                }
+            } catch {}
+
             this.notifyMessageListeners(peerId, payload);
         };
 
@@ -568,7 +630,8 @@ export class WifiDirectTransport {
         const channel = this.dataChannels.get(peerId);
         if (channel && channel.readyState === 'open') {
             try {
-                channel.send(payload.buffer as ArrayBuffer);
+                const safeBuffer = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer;
+                channel.send(safeBuffer);
                 sent = true;
             } catch (err) {
                 console.warn(`[WebRtcTransport] DataChannel send failed for ${peerId.slice(0, 8)}, falling back to relay:`, err);

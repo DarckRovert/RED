@@ -32,12 +32,14 @@ export function IncomingCallBanner() {
         const callerId = incomingCall.callerHash;
         const callType = incomingCall.callType || 'video';
         const offer = incomingCall.offer;
+        const callId = incomingCall.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         
         setActiveCallType(callType);
         useRedStore.setState({
             activeConversationId: callerId,
             activeCallPeer: callerId,
             activeCallOffer: offer,
+            activeCallId: callId,
             incomingCall: null,
             activeCallSignal: null,
             callSignalQueue: [] // Clear old stale queue on call accept
@@ -48,7 +50,11 @@ export function IncomingCallBanner() {
     const handleReject = async () => {
         CallRingtoneEngine.stop();
         try {
-            await RedAPI.sendMessage(incomingCall.callerHash, JSON.stringify({ hangup: true }), {
+            await RedAPI.sendMessage(incomingCall.callerHash, JSON.stringify({
+                hangup: true,
+                callId: incomingCall.callId,
+                timestamp: Date.now()
+            }), {
                 msg_type: "webrtc_signal"
             });
         } catch {}

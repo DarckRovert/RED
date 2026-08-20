@@ -45,18 +45,20 @@ public class RedNodeService extends Service {
     private BluetoothGattServer gattServer = null;
     private PowerManager.WakeLock wakeLock = null;
     private WifiManager.MulticastLock multicastLock = null;
+    private WifiManager.WifiLock wifiLock = null;
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
         
-        // Acquire WakeLock to keep CPU running even when screen is off
+        // Acquire permanent WakeLock to keep CPU & network queues running in background
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "RedNode:WakeLock");
-            wakeLock.acquire(10 * 60 * 1000L); // 10 minutes timeout, renewable
-            Log.i(TAG, "WakeLock acquired: Node will stay active in background");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire();
+            Log.i(TAG, "WakeLock acquired: Node CPU will stay permanently active in background");
         }
 
         // Acquire MulticastLock to allow mDNS (UDP 224.0.0.251) packets to reach Rust libp2p
@@ -66,6 +68,15 @@ public class RedNodeService extends Service {
             multicastLock.setReferenceCounted(true);
             multicastLock.acquire();
             Log.i(TAG, "MulticastLock acquired: Android Firewall unblocked for mDNS P2P discovery");
+
+            try {
+                wifiLock = wifiManager.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "RedNode:WifiLock");
+                wifiLock.setReferenceCounted(false);
+                wifiLock.acquire();
+                Log.i(TAG, "WifiLock acquired: Wi-Fi radio set to High Performance Mode for seamless WebRTC / P2P mesh");
+            } catch (Exception e) {
+                Log.w(TAG, "WifiLock warning: " + e.getMessage());
+            }
         }
     }
 
@@ -260,6 +271,12 @@ public class RedNodeService extends Service {
         if (multicastLock != null && multicastLock.isHeld()) {
             multicastLock.release();
             Log.i(TAG, "MulticastLock released.");
+        }
+
+        // Release WifiLock
+        if (wifiLock != null && wifiLock.isHeld()) {
+            wifiLock.release();
+            Log.i(TAG, "WifiLock released.");
         }
 
         // Clean up BLE advertising when service is stopped

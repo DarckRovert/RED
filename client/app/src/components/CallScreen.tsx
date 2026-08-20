@@ -23,6 +23,8 @@ export default function CallScreen() {
         callSignalQueue,
         activeCallType,
         activeCallPeer,
+        activeCallId,
+        setActiveCallId,
         clearCallSignals,
         preferences,
         setCallPipMinimized
@@ -62,6 +64,12 @@ export default function CallScreen() {
     const targetPeerRef = useRef<string>(resolvedPeerHash);
     if (resolvedPeerHash && (!targetPeerRef.current || targetPeerRef.current.length < resolvedPeerHash.length)) {
         targetPeerRef.current = resolvedPeerHash;
+    }
+
+    const currentCallSessionId = activeCallId || incomingCall?.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const callIdRef = useRef<string>(currentCallSessionId);
+    if (activeCallId && callIdRef.current !== activeCallId) {
+        callIdRef.current = activeCallId;
     }
 
     const peerDisplayName = incomingCall?.callerName || peerContact?.display_name || (targetPeerRef.current ? `${targetPeerRef.current.substring(0, 10)}...` : "Operador RED");
@@ -551,7 +559,9 @@ export default function CallScreen() {
                     if (event.candidate && targetPeer) {
                         RedAPI.sendMessage(targetPeer, JSON.stringify({
                             candidate: event.candidate,
-                            callType: requestedAudioOnly ? "audio" : "video"
+                            callType: requestedAudioOnly ? "audio" : "video",
+                            callId: callIdRef.current,
+                            timestamp: Date.now()
                         }), { msg_type: "webrtc_signal" }).catch(() => {});
                     }
                 };
@@ -576,7 +586,9 @@ export default function CallScreen() {
                     const finalAnswer = pc.localDescription || answer;
                     await RedAPI.sendMessage(targetPeer, JSON.stringify({
                         answer: finalAnswer,
-                        callType: requestedAudioOnly ? "audio" : "video"
+                        callType: requestedAudioOnly ? "audio" : "video",
+                        callId: callIdRef.current,
+                        timestamp: Date.now()
                     }), { msg_type: "webrtc_signal" });
                     setCallActive(true);
                     setActiveCallOffer(null);
@@ -596,7 +608,9 @@ export default function CallScreen() {
                     const finalOffer = pc.localDescription || offer;
                     await RedAPI.sendMessage(targetPeer, JSON.stringify({
                         offer: finalOffer,
-                        callType: requestedAudioOnly ? "audio" : "video"
+                        callType: requestedAudioOnly ? "audio" : "video",
+                        callId: callIdRef.current,
+                        timestamp: Date.now()
                     }), { msg_type: "webrtc_signal" });
                 }
 
@@ -631,16 +645,23 @@ export default function CallScreen() {
                     continue;
                 }
 
-                // Correct millisecond timestamp normalization (prevents seconds-vs-ms discard bug)
-                const itemTs = (item.timestamp > 1e11 ? item.timestamp : (item.timestamp || 0) * 1000);
-                if (itemTs && itemTs < callStartTimeRef.current - 5000) {
+                const { signal } = item;
+                if (!signal) continue;
+
+                // Strict session callId validation
+                if (signal.callId && callIdRef.current && signal.callId !== callIdRef.current) {
                     continue;
                 }
 
-                const signalId = `${sHash}_${JSON.stringify(item.signal).substring(0, 40)}_${itemTs}`;
+                // Correct millisecond timestamp normalization
+                const itemTs = (item.timestamp > 1e11 ? item.timestamp : (item.timestamp || 0) * 1000) || signal.timestamp || 0;
+                if (itemTs > 0 && itemTs < callStartTimeRef.current - 3000) {
+                    continue;
+                }
+
+                const signalId = `${sHash}_${JSON.stringify(signal).substring(0, 40)}_${itemTs}`;
                 if (processedSignalsRef.current.has(signalId)) continue;
 
-                const { signal } = item;
                 try {
                     // Remote Answer
                     if (signal.answer) {
@@ -653,8 +674,6 @@ export default function CallScreen() {
                             processedSignalsRef.current.add(signalId);
                         } else if (pc.signalingState === "stable") {
                             processedSignalsRef.current.add(signalId);
-                        } else {
-                            console.log("[WebRTC Call] Remote answer in queue; signalingState:", pc.signalingState);
                         }
                     }
                     // Remote ICE Candidate
@@ -671,6 +690,12 @@ export default function CallScreen() {
                     }
                     // Remote Hangup
                     else if (signal.hangup) {
+                        if (signal.callId && signal.callId !== callIdRef.current) {
+                            continue;
+                        }
+                        if (itemTs > 0 && itemTs < callStartTimeRef.current - 1000) {
+                            continue;
+                        }
                         setStatus("Llamada Finalizada");
                         processedSignalsRef.current.add(signalId);
                         setTimeout(endCallInternal, 400);
@@ -689,18 +714,26 @@ export default function CallScreen() {
         CallRingtoneEngine.stop();
         const targetPeer = targetPeerRef.current;
         if (targetPeer && peerRef.current) {
-            RedAPI.sendMessage(targetPeer, JSON.stringify({ hangup: true }), { msg_type: "webrtc_signal" }).catch(() => {});
+            RedAPI.sendMessage(targetPeer, JSON.stringify({
+                hangup: true,
+                callId: callIdRef.current,
+                timestamp: Date.now()
+            }), { msg_type: "webrtc_signal" }).catch(() => {});
         }
         if (peerRef.current) {
-            peerRef.current.close();
+            try { peerRef.current.close(); } catch {}
             peerRef.current = null;
         }
         if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(t => t.stop());
+            localStreamRef.current.getTracks().forEach(t => {
+                try { t.stop(); } catch {}
+            });
             localStreamRef.current = null;
         }
         if (remoteStreamRef.current) {
-            remoteStreamRef.current.getTracks().forEach(t => t.stop());
+            remoteStreamRef.current.getTracks().forEach(t => {
+                try { t.stop(); } catch {}
+            });
             remoteStreamRef.current = null;
         }
         if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
@@ -714,6 +747,7 @@ export default function CallScreen() {
         pendingCandidatesRef.current = [];
         processedSignalsRef.current.clear();
         setIncomingCall(null);
+        setActiveCallId(null);
         clearCallSignals();
     };
 

@@ -146,16 +146,18 @@ interface RedStore {
     streamId: string | null;             // own active stream id
 
     // ── WebRTC Voice & Video Call State ───────────────────────────────────────
-    incomingCall: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video' } | null;
+    incomingCall: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video'; callId?: string } | null;
     activeCallOffer: any | null;
     activeCallSignal: { senderHash: string; signal: any } | null;
     callSignalQueue: { senderHash: string; signal: any; timestamp: number }[];
     activeCallType: 'audio' | 'video';
     activeCallPeer: string | null;
+    activeCallId: string | null;
+    setActiveCallId: (id: string | null) => void;
     setActiveCallPeer: (peer: string | null) => void;
     setActiveCallType: (type: 'audio' | 'video') => void;
     setActiveCallOffer: (offer: any | null) => void;
-    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video' } | null) => void;
+    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video'; callId?: string } | null) => void;
     setActiveCallSignal: (sig: { senderHash: string; signal: any } | null) => void;
     pushCallSignal: (sig: { senderHash: string; signal: any }) => void;
     clearCallSignals: () => void;
@@ -382,6 +384,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
     callSignalQueue: [],
     activeCallType: 'video',
     activeCallPeer: null,
+    activeCallId: null,
+    setActiveCallId: (id) => set({ activeCallId: id }),
     setActiveCallPeer: (peer) => set({ activeCallPeer: peer }),
     setActiveCallType: (type) => set({ activeCallType: type }),
     setActiveCallOffer: (offer) => set({ activeCallOffer: offer }),
