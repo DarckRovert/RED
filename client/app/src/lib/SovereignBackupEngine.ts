@@ -544,14 +544,42 @@ export class SovereignBackupEngine {
     }
 
     /**
+     * Safely resolves the active Master PIN from memory, localStorage, or hardware Keystore
+     */
+    public static async getSecureMasterPin(): Promise<string | null> {
+        if (typeof window !== "undefined") {
+            try {
+                const localVal = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin");
+                if (localVal && localVal.trim().length >= 4) return localVal.trim();
+            } catch {}
+
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
+                    if (res && res.value && res.value.trim().length >= 4) {
+                        const val = res.value.trim();
+                        try { localStorage.setItem("master_pin", val); } catch {}
+                        return val;
+                    }
+                }
+            } catch {}
+        }
+        return null;
+    }
+
+    /**
      * One-Touch Instant Backup — Automatically derives encryption from Master PIN or hardware seed
      */
     public static async createOneTouchBackup(customPin?: string): Promise<CloudUploadResult> {
         let pin = customPin?.trim();
-        if (!pin && typeof window !== "undefined") {
-            pin = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin") || "RED_DEFAULT_MASTER_VAULT_KEY";
+        if (!pin) {
+            pin = (await this.getSecureMasterPin()) || "";
         }
-        if (!pin) pin = "RED_DEFAULT_MASTER_VAULT_KEY";
+        if (!pin) {
+            throw new Error("No se encontró un PIN maestro registrado. Por favor configura tu PIN antes de respaldar.");
+        }
 
         const { blob, fileName } = await this.createEncryptedCapsule(pin);
         const res = await this.uploadToGoogleDrive(blob, fileName);
@@ -569,8 +597,8 @@ export class SovereignBackupEngine {
      */
     public static async restoreOneTouchBackup(buffer: ArrayBuffer, pin?: string): Promise<SovereignVaultCapsule> {
         let passwordToTry = pin?.trim();
-        if (!passwordToTry && typeof window !== "undefined") {
-            passwordToTry = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin") || "";
+        if (!passwordToTry) {
+            passwordToTry = (await this.getSecureMasterPin()) || "";
         }
         if (!passwordToTry) {
             throw new Error("Ingresa tu PIN maestro para desbloquear y restaurar la copia.");
@@ -580,6 +608,15 @@ export class SovereignBackupEngine {
         if (typeof window !== "undefined") {
             localStorage.setItem("red_last_backup_ts", Date.now().toString());
             localStorage.setItem("red_pending_backup_changes", "0");
+            try {
+                localStorage.setItem("master_pin", passwordToTry);
+                sessionStorage.setItem("master_pin", passwordToTry);
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                    await SecureStoragePlugin.set({ key: "master_pin", value: passwordToTry }).catch(() => null);
+                }
+            } catch {}
         }
         return capsule;
     }

@@ -30,6 +30,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
 
     // Restore State
     const [restoreFile, setRestoreFile] = useState<File | null>(null);
+    const [oneTouchPinInput, setOneTouchPinInput] = useState("");
     const [restorePassword, setRestorePassword] = useState("");
     const [ipfsCidInput, setIpfsCidInput] = useState("");
     const [mnemonicInput, setMnemonicInput] = useState("");
@@ -83,16 +84,17 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
         TacticalAudioEngine.playTap();
 
         try {
-            toast.info("Leyendo archivo de respaldo y descifrando con PIN maestro…");
             const buffer = await file.arrayBuffer();
             
-            // Try with stored PIN first, otherwise prompt
-            let pinToUse = typeof window !== "undefined" ? localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin") : null;
+            let pinToUse = oneTouchPinInput.trim() || (await SovereignBackupEngine.getSecureMasterPin()) || "";
             if (!pinToUse) {
-                pinToUse = prompt("Ingresa tu PIN maestro para desbloquear el respaldo:") || "";
+                toast.error("Por favor ingresa tu PIN maestro antes de seleccionar el archivo.");
+                setIsProcessing(false);
+                return;
             }
 
-            const capsule = await SovereignBackupEngine.restoreOneTouchBackup(buffer, pinToUse || undefined);
+            toast.info("Descifrando bóveda con PIN maestro…");
+            const capsule = await SovereignBackupEngine.restoreOneTouchBackup(buffer, pinToUse);
             toast.success(`✅ Bóveda restaurada con éxito: ${capsule.identity?.nickname || "Operador"}`);
             TacticalAudioEngine.playMessageReceived();
             refreshStatus();
@@ -440,29 +442,54 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
                         {/* Botón de Restauración Fácil */}
                         <div style={{
                             padding: "16px", borderRadius: "14px", background: "rgba(10, 15, 29, 0.8)",
-                            border: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "10px"
+                            border: "1px solid var(--border-subtle)", display: "flex", flexDirection: "column", gap: "12px"
                         }}>
-                            <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff" }}>
-                                📥 Restaurar Copia de Seguridad
-                            </div>
-                            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                                Selecciona el archivo <code>.redvault</code> desde Google Drive o descargas para restaurar tu cuenta con tu PIN:
+                            <div>
+                                <div style={{ fontSize: "13px", fontWeight: 800, color: "#fff" }}>
+                                    📥 Restaurar Copia de Seguridad
+                                </div>
+                                <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Ingresa tu PIN Maestro y selecciona el archivo <code>.redvault</code>:
+                                </div>
                             </div>
 
-                            <input
-                                type="file"
-                                accept=".redvault,.bin,.json"
-                                onChange={(e) => {
-                                    if (e.target.files && e.target.files[0]) {
-                                        handleOneTouchRestore(e.target.files[0]);
-                                    }
-                                }}
-                                style={{
-                                    width: "100%", padding: "10px",
-                                    background: "rgba(0, 0, 0, 0.4)", border: "1px solid var(--border-subtle)",
-                                    borderRadius: "10px", color: "#fff", fontSize: "12px"
-                                }}
-                            />
+                            <div>
+                                <label style={{ fontSize: "10px", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase" }}>
+                                    PIN Maestro de la Cuenta
+                                </label>
+                                <input
+                                    type="password"
+                                    maxLength={12}
+                                    placeholder="Introduce tu PIN maestro (ej. 123456)…"
+                                    value={oneTouchPinInput}
+                                    onChange={(e) => setOneTouchPinInput(e.target.value)}
+                                    style={{
+                                        width: "100%", padding: "10px", marginTop: "4px",
+                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid var(--border-subtle)",
+                                        borderRadius: "10px", color: "#fff", fontSize: "13px", letterSpacing: "1px"
+                                    }}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: "10px", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase" }}>
+                                    Archivo .redvault
+                                </label>
+                                <input
+                                    type="file"
+                                    accept=".redvault,.bin,.json"
+                                    onChange={(e) => {
+                                        if (e.target.files && e.target.files[0]) {
+                                            handleOneTouchRestore(e.target.files[0]);
+                                        }
+                                    }}
+                                    style={{
+                                        width: "100%", padding: "10px", marginTop: "4px",
+                                        background: "rgba(0, 0, 0, 0.4)", border: "1px solid var(--border-subtle)",
+                                        borderRadius: "10px", color: "#fff", fontSize: "12px"
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
                 )}
