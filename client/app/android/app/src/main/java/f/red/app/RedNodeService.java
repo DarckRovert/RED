@@ -32,7 +32,9 @@ import java.util.UUID;
 
 public class RedNodeService extends Service {
     private static final String TAG = "RedNodeService";
-    private static final String CHANNEL_ID = "RedNodeServiceChannel";
+    // v40: renamed from "RedNodeServiceChannel" to force recreation with IMPORTANCE_HIGH.
+    // Android ignores importance/sound changes on existing channel IDs — only new IDs take effect.
+    private static final String CHANNEL_ID = "RedMeshNode_v40";
     // RED P2P service UUID — must match bluethootTransport.ts constant
     private static final String RED_BLE_SERVICE_UUID = "00001818-0000-1000-8000-00805f9b34fb";
     private static final String RED_BLE_TX_CHAR_UUID = "00002a4d-0000-1000-8000-00805f9b34fb";

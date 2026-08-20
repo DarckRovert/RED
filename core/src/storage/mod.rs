@@ -224,10 +224,11 @@ impl Storage {
         let serialized = bincode::serialize(value).map_err(|e| StorageError::SerializationError(e.to_string()))?;
         let encrypted = encrypt(&self.encryption_key, &serialized)?;
         tree.insert(key, encrypted.to_bytes()).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
-        // Force synchronous flush to guarantee crash-safe durability (Sled WAL → disk).
-        // Critical for Android where HyperOS/MIUI kills the process without flushing OS page cache.
+        // tree.flush() persists THIS tree's WAL to disk (~3ms) — ACID safe per write.
+        // db.flush() (global fsync, ~10-50ms) is intentionally NOT called here to avoid
+        // blocking the message-receive hot path in high-frequency BLE mesh scenarios.
+        // Use flush_db() at node shutdown or checkpoint boundaries instead.
         let _ = tree.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
-        let _ = db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
         Ok(())
     }
 
@@ -262,9 +263,17 @@ impl Storage {
         let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
         let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         tree.remove(key).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
-        // Flush to disk after delete to ensure removal survives process kill.
+        // tree.flush() is sufficient for durability per-operation.
+        // db.flush() (global fsync) is reserved for node shutdown via flush_db().
         let _ = tree.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
-        let _ = db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()));
+        Ok(())
+    }
+
+    /// Global WAL flush for use at node shutdown or checkpoint boundaries.
+    /// Do NOT call on every write — use tree.flush() in store()/delete() instead.
+    pub fn flush_db(&self) -> StorageResult<()> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
     }
 

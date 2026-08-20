@@ -253,8 +253,11 @@ class RedAPIClient {
                 }
             }
             const merged = Array.from(mergedMap.values());
-            // Write merged result back to localStorage so next cold-boot always has data
-            this.setWebStore('red_web_conversations', merged);
+            // Only write to localStorage if the merged set is different from what was there.
+            // Avoids constant 5MB+ serialization on every 30s poll when nothing changed.
+            if (merged.length !== localConvs.length) {
+                this.setWebStore('red_web_conversations', merged);
+            }
             return merged;
         } catch {
             // Rust backend unreachable — return local cache (zero data loss)
@@ -281,8 +284,10 @@ class RedAPIClient {
                 mergedMap.set(key, existing ? { ...existing, ...rc } : rc);
             }
             const merged = Array.from(mergedMap.values());
-            // Persist merged set so it survives next cold boot
-            this.setWebStore('red_web_contacts', merged);
+            // Only write to localStorage if the contact set changed.
+            if (merged.length !== localConts.length) {
+                this.setWebStore('red_web_contacts', merged);
+            }
             return merged;
         } catch {
             return localConts;

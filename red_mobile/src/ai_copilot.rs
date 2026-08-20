@@ -206,7 +206,7 @@ impl AICopilotEngine {
         };
 
         // Formateo de ChatML / Instruct formal según la arquitectura
-        let formatted_prompt = if model_name_lower.contains("qwen") {
+        let formatted_prompt = if model_name_lower.contains("qwen") || model_name_lower.contains("smollm") {
             if let Some(ctx) = &req.context {
                 format!(
                     "<|im_start|>system\nEres el Copiloto IA Soberano de RED, un asistente táctico de emergencia 100% offline. Utiliza el siguiente protocolo oficial cuando sea relevante: {}\nResponde en español de forma precisa, concisa y útil.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
@@ -215,6 +215,18 @@ impl AICopilotEngine {
             } else {
                 format!(
                     "<|im_start|>system\nEres el Copiloto IA Soberano de RED, un asistente táctico de emergencia 100% offline. Responde en español de forma precisa, concisa y útil.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    prompt
+                )
+            }
+        } else if model_name_lower.contains("llama") {
+            if let Some(ctx) = &req.context {
+                format!(
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nEres el Copiloto IA Soberano de RED. Protocolo táctico: {}\nResponde en español de forma directa.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+                    ctx, prompt
+                )
+            } else {
+                format!(
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nEres el Copiloto IA Soberano de RED. Responde en español de forma directa y concisa.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
                     prompt
                 )
             }
@@ -231,15 +243,14 @@ impl AICopilotEngine {
                 )
             }
         } else {
-            // Llama / SmolLM2
             if let Some(ctx) = &req.context {
                 format!(
-                    "<|im_start|>system\nEres el Copiloto IA de RED. Protocolo táctico: {}\nResponde en español de forma directa.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    "<|im_start|>system\nEres el Copiloto IA de RED. Protocolo: {}\nResponde en español.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
                     ctx, prompt
                 )
             } else {
                 format!(
-                    "<|im_start|>system\nEres el Copiloto IA de RED. Responde en español de forma directa y concisa.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    "<|im_start|>system\nEres el Copiloto IA de RED. Responde en español.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
                     prompt
                 )
             }
@@ -294,18 +305,34 @@ impl AICopilotEngine {
 
         let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.7), Some(0.9));
         let mut generated_text = String::new();
-        let max_tokens = 256; // Límite seguro para móvil
+        let max_tokens = 512; // Límite para respuestas completas
 
         for index in 0..max_tokens {
             let context_size = if index > 0 { 1 } else { tokens.len() };
             let start_pos = tokens.len().saturating_sub(context_size);
-            let input = candle_core::Tensor::new(&tokens[start_pos..], &device).unwrap().unsqueeze(0).unwrap();
-            
+            // SAFETY: Tensor ops can fail on malformed GGUF or OOM — never unwrap() at JNI boundary.
+            let input = match candle_core::Tensor::new(&tokens[start_pos..], &device)
+                .and_then(|t| t.unsqueeze(0))
+            {
+                Ok(t) => t,
+                Err(e) => {
+                    generated_text = format!("🔴 [Error de Tensor]: Fallo al construir el tensor de entrada: {}. Posible modelo GGUF corrupto o memoria insuficiente.", e);
+                    break;
+                }
+            };
+
             let logits = match model.forward(&input, start_pos) {
                 Ok(l) => l,
                 Err(_) => break,
             };
-            let mut logits = logits.squeeze(0).unwrap().squeeze(0).unwrap();
+            // SAFETY: squeeze() puede fallar si la forma del tensor es inesperada.
+            let mut logits = match logits.squeeze(0).and_then(|l| l.squeeze(0)) {
+                Ok(l) => l,
+                Err(e) => {
+                    generated_text = format!("🔴 [Error de Logits]: Fallo al extraer logits: {}.", e);
+                    break;
+                }
+            };
             
             // Penalización de repetición ligera en los últimos 32 tokens
             if tokens.len() > 1 {
@@ -321,8 +348,16 @@ impl AICopilotEngine {
                 Err(_) => break,
             };
 
-            // Interceptar Stop Tokens oficiales
-            if next_token == 151645 || next_token == 151643 || next_token == 2 || next_token == 0 || next_token == 32000 {
+            // Interceptar Stop Tokens precisos según la arquitectura
+            let is_stop = if model_name_lower.contains("qwen") || model_name_lower.contains("smollm") {
+                next_token == 151645 || next_token == 151643
+            } else if model_name_lower.contains("phi") {
+                next_token == 32000 || next_token == 32001 || next_token == 32007
+            } else {
+                next_token == 128001 || next_token == 128009
+            };
+
+            if is_stop {
                 break;
             }
 
@@ -330,11 +365,11 @@ impl AICopilotEngine {
             
             if let Some(text) = tokenizer.decode(&[next_token], true).ok() {
                 generated_text.push_str(&text);
-                if generated_text.ends_with("<|im_end|>") 
-                    || generated_text.ends_with("<|endoftext|>") 
-                    || generated_text.ends_with("</s>") 
-                    || generated_text.ends_with("<|end|>") 
-                    || generated_text.ends_with("<|eot_id|>") {
+                if generated_text.contains("<|im_end|>") 
+                    || generated_text.contains("<|endoftext|>") 
+                    || generated_text.contains("</s>") 
+                    || generated_text.contains("<|end|>") 
+                    || generated_text.contains("<|eot_id|>") {
                     break;
                 }
             }

@@ -7,11 +7,16 @@ import android.os.PowerManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.Settings;
+import android.app.AlarmManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 
 public class MainActivity extends BridgeActivity {
+    // One-shot flags — prevents showing the dialog on every resume
+    private boolean batteryExemptionRequested = false;
+    private boolean exactAlarmRequested = false;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(RedNodePlugin.class);
@@ -40,7 +45,23 @@ public class MainActivity extends BridgeActivity {
 
         copyDebugLogsToPublicStorage();
         requestP2pPermissions();
-        requestBatteryExemption();
+        // NOTE: battery exemption moved to onResume() to avoid calling startActivity()
+        // during the CREATE phase before the window is fully attached.
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Request battery exemption once per app lifetime (not every resume)
+        if (!batteryExemptionRequested) {
+            batteryExemptionRequested = true;
+            requestBatteryExemption();
+        }
+        // Request exact alarm permission once per app lifetime
+        if (!exactAlarmRequested) {
+            exactAlarmRequested = true;
+            requestExactAlarmPermission();
+        }
     }
 
     private void requestP2pPermissions() {
@@ -142,5 +163,25 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception ignored) {}
         }
     }
+
+    /**
+     * Request exact alarm scheduling permission.
+     * On API 31-32 (Android 12-12L): requires user dialog via ACTION_REQUEST_SCHEDULE_EXACT_ALARM.
+     * On API 33+ (Android 13+): USE_EXACT_ALARM in manifest is sufficient (no dialog needed).
+     * Fixes: "AlarmManager: Package f.red.app lost permission to set exact alarms!" on Lenovo Tab.
+     */
+    private void requestExactAlarmPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            try {
+                AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+                if (am != null && !am.canScheduleExactAlarms()) {
+                    Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                    intent.setData(Uri.parse("package:" + getPackageName()));
+                    startActivity(intent);
+                }
+            } catch (Exception ignored) {}
+        }
+    }
 }
+
 

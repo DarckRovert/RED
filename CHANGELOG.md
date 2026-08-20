@@ -1,5 +1,25 @@
 # Changelog
 
+## [40.0.0-resilient-mesh] - 2026-08-20
+
+### Malla Resiliente — Persistencia ACID + Blindaje Antikill Android 16
+
+**Correcciones críticas de persistencia (Causa Raíz)**
+- `core/src/storage/mod.rs`: `store()` y `delete()` ahora llaman `tree.flush()` síncronamente después de cada escritura, garantizando durabilidad ACID. El `db.flush()` (fsync global) fue eliminado del hot path de mensajes (evita ANR en mallas BLE de alto tráfico) y se expuso como `flush_db()` para uso en checkpoints/cierre del nodo.
+- `client/app/src/lib/api.ts`: Implementado merge bidireccional real en `getConversations()`, `getContacts()` y `getMessages()`. Los registros P2P en localStorage y los de Rust Sled se mezclan sin pérdida (clave: primeros 16 chars del peer/identity hash). Las escrituras a localStorage ahora son condicionales — solo cuando el merge produce cambios.
+- `client/app/src/store/useRedStore.ts`: Restauración instantánea de chats/contactos desde localStorage al inicio de `fetchData()` ANTES de esperar al backend Rust. Persistencia inmediata de contactos P2P en localStorage ANTES de la llamada async a Rust.
+
+**Blindaje Android (HyperOS / Android 16)**
+- `AndroidManifest.xml`: Agregado `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, `FOREGROUND_SERVICE_SPECIAL_USE`, `USE_EXACT_ALARM` y `SCHEDULE_EXACT_ALARM`. `foregroundServiceType` expandido a `connectedDevice|dataSync|specialUse`.
+- `RedNodeService.java`: Canal de notificación renombrado a `RedMeshNode_v40` (fuerza recreación con `IMPORTANCE_HIGH` en actualizaciones). `startForeground()` en Android 14+ incluye `FOREGROUND_SERVICE_TYPE_SPECIAL_USE`.
+- `MainActivity.java`: `requestBatteryExemption()` movido de `onCreate()` a `onResume()` (evita fallo silencioso en HyperOS antes de que la ventana esté lista). Agregado `requestExactAlarmPermission()` — corrige `AlarmManager: lost permission to set exact alarms` en Lenovo Tablet.
+
+**Correcciones de seguridad Rust (JNI boundary)**
+- `red_mobile/src/ai_copilot.rs`: Eliminados `unwrap()` en operaciones de tensor Candle (líneas críticas en el inference loop). Reemplazados con `match` + `break` — un modelo GGUF corrupto u OOM ya no causa crash del proceso completo.
+
+**Versión Cargo.toml sincronizada a 40.0.0** (estaba en 38.0.0).
+
+
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
