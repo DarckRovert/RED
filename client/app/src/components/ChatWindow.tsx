@@ -154,6 +154,26 @@ export default function ChatWindow() {
         reader.readAsDataURL(file);
     };
 
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+    const [showScrollBottomFab, setShowScrollBottomFab] = useState(false);
+    const [unreadInChatCount, setUnreadInChatCount] = useState(0);
+
+    // P2P Quick Payment modal states
+    const [isPayModalOpen, setIsPayModalOpen] = useState(false);
+    const [payAmount, setPayAmount] = useState("25");
+    const [payMemo, setPayMemo] = useState("");
+
+    const handleScroll = useCallback(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        const isUp = distFromBottom > 150;
+        setShowScrollBottomFab(isUp);
+        if (!isUp) {
+            setUnreadInChatCount(0);
+        }
+    }, []);
+
     const scrollToBottom = useCallback((smooth = true) => {
         messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
     }, []);
@@ -165,7 +185,11 @@ export default function ChatWindow() {
     }, [activeConversationId]);
 
     useEffect(() => {
-        scrollToBottom(true);
+        if (showScrollBottomFab) {
+            setUnreadInChatCount(c => c + 1);
+        } else {
+            scrollToBottom(true);
+        }
     }, [convMessages.length]);
 
     const [replyTo, setReplyTo] = useState<MessageItem | null>(null);
@@ -183,8 +207,47 @@ export default function ChatWindow() {
 
     const isOnline = peerPresence?.[peerHash] === 'online' || peerPresence?.[peerHash] === 'nearby';
 
+    const handleSendPayment = async (amount: number, memo?: string) => {
+        if (!peerHash) return;
+        try {
+            const voucher = await RedAPI.createP2PVoucher({ amount, recipient: peerHash, memo });
+            const payload = {
+                voucher_id: voucher.id,
+                amount: voucher.amount,
+                memo: voucher.memo,
+                signature: voucher.signature,
+                recipient: peerHash,
+                created_at: voucher.created_at,
+                qr_payload: voucher.qr_payload
+            };
+            await sendMessage(JSON.stringify(payload), {
+                msg_type: "p2p_payment",
+            });
+            TacticalAudioEngine.playMessageSent();
+            toast.success(`🪙 Transferencia de ${amount} RED enviada`);
+            setIsPayModalOpen(false);
+            setPayMemo("");
+        } catch {
+            toast.error("Error al procesar transferencia P2P");
+        }
+    };
+
     const handleSendText = async (text: string, replyToMsg?: MessageItem | null) => {
         if (!text.trim() || !peerHash) return;
+
+        // Command /pay support
+        if (text.startsWith("/pay ") || text === "/pay") {
+            const parts = text.trim().split(" ");
+            const amt = parseFloat(parts[1] || "25");
+            const memo = parts.slice(2).join(" ") || "Pago Táctico RED";
+            if (isNaN(amt) || amt <= 0) {
+                toast.error("Monto inválido. Ejemplo: /pay 50 Café");
+                return;
+            }
+            await handleSendPayment(amt, memo);
+            return;
+        }
+
         const resolvedReply = replyToMsg || replyTo;
         try {
             await sendMessage(text.trim(), {
@@ -722,7 +785,12 @@ export default function ChatWindow() {
             )}
 
             {/* Lista de Mensajes con Scroll Suave */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "4px" }}>
+            <div
+                ref={scrollContainerRef}
+                onScroll={handleScroll}
+                className="scroll-container"
+                style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "4px", position: "relative" }}
+            >
                 {convMessages.length === 0 ? (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-muted)", gap: "10px" }}>
                         <span style={{ fontSize: "2.4rem" }}>🔐</span>
@@ -822,6 +890,51 @@ export default function ChatWindow() {
                 <div ref={messagesEndRef} />
             </div>
 
+            {/* Scroll-to-Bottom Floating Action Button (FAB) */}
+            {showScrollBottomFab && (
+                <button
+                    onClick={() => {
+                        scrollToBottom(true);
+                        setUnreadInChatCount(0);
+                        setShowScrollBottomFab(false);
+                    }}
+                    style={{
+                        position: "absolute",
+                        right: "20px",
+                        bottom: "84px",
+                        zIndex: 40,
+                        background: "rgba(18, 22, 38, 0.96)",
+                        backdropFilter: "blur(14px)",
+                        border: "1.5px solid var(--accent-cyan)",
+                        borderRadius: "28px",
+                        padding: unreadInChatCount > 0 ? "8px 14px" : "10px 14px",
+                        color: "#FFFFFF",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        boxShadow: "0 6px 24px rgba(0, 229, 255, 0.4)",
+                        animation: "fadeIn 0.2s ease-out"
+                    }}
+                    title="Bajar al mensaje más reciente"
+                >
+                    <span style={{ fontSize: "1.1rem", color: "var(--accent-cyan)", fontWeight: 900 }}>↓</span>
+                    {unreadInChatCount > 0 && (
+                        <span style={{
+                            background: "var(--accent-cyan)",
+                            color: "#000",
+                            fontSize: "0.72rem",
+                            fontWeight: 900,
+                            borderRadius: "12px",
+                            padding: "2px 7px",
+                            fontFamily: "JetBrains Mono, monospace"
+                        }}>
+                            {unreadInChatCount}
+                        </span>
+                    )}
+                </button>
+            )}
+
             {/* Hidden Media Picker for Camera / Gallery / Video */}
             <input
                 type="file"
@@ -852,6 +965,7 @@ export default function ChatWindow() {
                     handleGallery={handleGallery}
                     handleDocument={() => docInputRef.current?.click()}
                     handleLocation={handleLocation}
+                    handlePay={() => setIsPayModalOpen(true)}
                     peerHash={peerHash}
                     peerName={peerName}
                     burnTimer={burnTimer}
@@ -871,6 +985,104 @@ export default function ChatWindow() {
                     }}
                 />
             </div>
+
+            {/* Tactical Quick Pay Modal */}
+            {isPayModalOpen && (
+                <div style={{
+                    position: "fixed", inset: 0, zIndex: 100,
+                    background: "rgba(6, 8, 16, 0.88)", backdropFilter: "blur(14px)",
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+                }}>
+                    <div style={{
+                        width: "100%", maxWidth: "360px",
+                        background: "rgba(18, 22, 38, 0.98)",
+                        border: "1.5px solid var(--accent-emerald)",
+                        borderRadius: "20px", padding: "22px",
+                        boxShadow: "0 12px 40px rgba(0, 230, 118, 0.25)",
+                        display: "flex", flexDirection: "column", gap: "16px"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "1.4rem" }}>🪙</span>
+                                <div style={{ fontWeight: 800, fontSize: "1rem", color: "#FFFFFF" }}>
+                                    Transferir RED Tokens
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsPayModalOpen(false)}
+                                className="btn-icon"
+                                style={{ width: 30, height: 30 }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                            Destinatario: <strong style={{ color: "#FFFFFF" }}>{peerName}</strong>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                MONTO (RED)
+                            </label>
+                            <input
+                                type="number"
+                                value={payAmount}
+                                onChange={(e) => setPayAmount(e.target.value)}
+                                min="1"
+                                style={{
+                                    width: "100%", padding: "10px 14px",
+                                    borderRadius: "10px", background: "rgba(255,255,255,0.06)",
+                                    border: "1px solid var(--glass-border)", color: "#FFFFFF",
+                                    fontSize: "1.3rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace"
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)" }}>
+                                CONCEPTO / MEMO (OPCIONAL)
+                            </label>
+                            <input
+                                type="text"
+                                value={payMemo}
+                                onChange={(e) => setPayMemo(e.target.value)}
+                                placeholder="Ej: Pago café táctico"
+                                style={{
+                                    width: "100%", padding: "10px 14px",
+                                    borderRadius: "10px", background: "rgba(255,255,255,0.06)",
+                                    border: "1px solid var(--glass-border)", color: "#FFFFFF",
+                                    fontSize: "0.88rem"
+                                }}
+                            />
+                        </div>
+
+                        <div style={{ display: "flex", gap: "10px", marginTop: "6px" }}>
+                            <button
+                                onClick={() => setIsPayModalOpen(false)}
+                                className="btn-tactical-secondary"
+                                style={{ flex: 1, padding: "12px", borderRadius: "12px" }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    const amt = parseFloat(payAmount);
+                                    if (isNaN(amt) || amt <= 0) {
+                                        toast.error("Monto inválido");
+                                        return;
+                                    }
+                                    handleSendPayment(amt, payMemo);
+                                }}
+                                className="btn-tactical-primary"
+                                style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "var(--accent-emerald)", color: "#000" }}
+                            >
+                                💸 Enviar Pago
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Contact Profile & Shared Media Modal */}
             {isContactProfileOpen && (

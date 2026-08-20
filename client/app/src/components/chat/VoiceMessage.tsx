@@ -1,7 +1,10 @@
 "use client";
 
-import React, { useState, useRef, useMemo, useCallback } from "react";
+import React, { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { MessageItem } from "../../lib/api";
+import { indexedMediaVault } from "../../lib/indexedMediaVault";
+import { LocalAIEngine } from "../../lib/localAiEngine";
+import { toast } from "../Toast";
 
 interface VoiceMessageProps {
     msg: MessageItem;
@@ -16,6 +19,9 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const [duration, setDuration] = useState<number>((msg.duration_ms || 0) / 1000);
     const [playbackRate, setPlaybackRate] = useState<number>(1.0);
     const [isDragging, setIsDragging] = useState(false);
+    const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>("");
+    const [transcription, setTranscription] = useState<string | null>(msg.transcription || null);
+    const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
     const getAudioDataUrl = (dataStr: string): string => {
         if (!dataStr) return "";
@@ -28,7 +34,24 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     };
 
     const rawData = msg.media_data || (msg.content && !msg.content.startsWith("[") ? msg.content : undefined);
-    const audioSrc = rawData ? getAudioDataUrl(rawData) : undefined;
+
+    useEffect(() => {
+        let isMounted = true;
+        if (rawData) {
+            if (rawData.startsWith("red_vault://")) {
+                indexedMediaVault.resolveMediaUrl(rawData).then(resolved => {
+                    if (isMounted) setResolvedAudioSrc(getAudioDataUrl(resolved));
+                }).catch(() => {
+                    if (isMounted) setResolvedAudioSrc("");
+                });
+            } else {
+                setResolvedAudioSrc(getAudioDataUrl(rawData));
+            }
+        }
+        return () => { isMounted = false; };
+    }, [rawData]);
+
+    const audioSrc = resolvedAudioSrc;
 
     // Generate deterministic tactical waveform profile based on message id/payload
     const waveformBars = useMemo(() => {
@@ -39,7 +62,7 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
             hash |= 0;
         }
         const bars: number[] = [];
-        const count = 28;
+        const count = 26;
         for (let i = 0; i < count; i++) {
             const pseudoRand = Math.abs(Math.sin(hash + i * 1.37) * 10000);
             const val = pseudoRand - Math.floor(pseudoRand);
@@ -124,6 +147,24 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         }
     };
 
+    const handleTranscribe = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!audioSrc) {
+            toast.error("Audio no cargado aún.");
+            return;
+        }
+        setIsTranscribing(true);
+        try {
+            const res = await LocalAIEngine.transcribeAudio(audioSrc);
+            setTranscription(res.text);
+            toast.success("📝 Audio transcrito localmente");
+        } catch (err: any) {
+            toast.error("Error en transcripción local");
+        } finally {
+            setIsTranscribing(false);
+        }
+    };
+
     const formatTime = (secs: number): string => {
         if (isNaN(secs) || secs < 0) return "0:00";
         const m = Math.floor(secs / 60);
@@ -138,91 +179,136 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const inactiveColor = isMine ? "rgba(255, 255, 255, 0.28)" : "rgba(0, 229, 255, 0.25)";
 
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 230, userSelect: "none" }}>
-            {/* Play/Pause Button */}
-            <button
-                onClick={togglePlay}
-                style={{
-                    width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                    background: isMine ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 229, 255, 0.18)",
-                    border: `1.5px solid ${isMine ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 229, 255, 0.45)"}`,
-                    color: "#FFFFFF", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "1rem", fontWeight: 900,
-                    boxShadow: isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)",
-                    transition: "transform 0.1s ease, background 0.2s ease"
-                }}
-                title={playing ? "Pausar" : "Reproducir"}
-            >
-                {playing ? "❚❚" : "▶"}
-            </button>
-
-            {/* Interactive Waveform & Scrubbing Zone */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
-                <div
-                    ref={waveContainerRef}
-                    onPointerDown={handlePointerDown}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={handlePointerUp}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 230, userSelect: "none" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                {/* Play/Pause Button */}
+                <button
+                    onClick={togglePlay}
                     style={{
-                        display: "flex", alignItems: "center", gap: "2.5px", height: 26,
-                        cursor: "pointer", touchAction: "none", position: "relative"
+                        width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                        background: isMine ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 229, 255, 0.18)",
+                        border: `1.5px solid ${isMine ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 229, 255, 0.45)"}`,
+                        color: "#FFFFFF", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1rem", fontWeight: 900,
+                        boxShadow: isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)",
+                        transition: "transform 0.1s ease, background 0.2s ease"
                     }}
-                    title="Arrastra para avanzar o retroceder"
+                    title={playing ? "Pausar" : "Reproducir"}
                 >
-                    {waveformBars.map((height, i) => {
-                        const isPlayed = i <= activeBarIndex;
-                        return (
-                            <div
-                                key={i}
+                    {playing ? "❚❚" : "▶"}
+                </button>
+
+                {/* Interactive Waveform & Scrubbing Zone */}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div
+                        ref={waveContainerRef}
+                        onPointerDown={handlePointerDown}
+                        onPointerMove={handlePointerMove}
+                        onPointerUp={handlePointerUp}
+                        style={{
+                            display: "flex", alignItems: "center", gap: "2.5px", height: 26,
+                            cursor: "pointer", touchAction: "none", position: "relative"
+                        }}
+                        title="Arrastra para avanzar o retroceder"
+                    >
+                        {waveformBars.map((height, i) => {
+                            const isPlayed = i <= activeBarIndex;
+                            return (
+                                <div
+                                    key={i}
+                                    style={{
+                                        width: 3.5,
+                                        height: height,
+                                        borderRadius: 3,
+                                        background: isPlayed ? (isMine ? "#FFFFFF" : primaryColor) : inactiveColor,
+                                        transform: isPlayed && playing ? "scaleY(1.15)" : "scaleY(1)",
+                                        transition: "background 0.1s ease, transform 0.1s ease",
+                                        flexShrink: 0
+                                    }}
+                                />
+                            );
+                        })}
+                    </div>
+
+                    {/* Sub-info: Time & Speed Toggle & Transcribe Button */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace" }}>
+                        <span style={{ color: "rgba(255, 255, 255, 0.85)", fontWeight: 700 }}>
+                            {formatTime(currentTime)} / {formatTime(duration || (msg.duration_ms ? msg.duration_ms / 1000 : 0))}
+                        </span>
+                        
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            {!transcription && (
+                                <button
+                                    onClick={handleTranscribe}
+                                    disabled={isTranscribing}
+                                    style={{
+                                        background: "rgba(255, 255, 255, 0.10)",
+                                        border: "1px solid rgba(255, 255, 255, 0.20)",
+                                        borderRadius: "6px",
+                                        padding: "1px 6px",
+                                        fontSize: "0.62rem",
+                                        fontWeight: 800,
+                                        color: "#FFFFFF",
+                                        cursor: "pointer"
+                                    }}
+                                    title="Transcribir nota de voz con IA Whisper"
+                                >
+                                    {isTranscribing ? "⏳..." : "📝 Transcribir"}
+                                </button>
+                            )}
+
+                            <button
+                                onClick={toggleSpeed}
                                 style={{
-                                    width: 3.5,
-                                    height: height,
-                                    borderRadius: 3,
-                                    background: isPlayed ? (isMine ? "#FFFFFF" : primaryColor) : inactiveColor,
-                                    transform: isPlayed && playing ? "scaleY(1.15)" : "scaleY(1)",
-                                    transition: "background 0.1s ease, transform 0.1s ease",
-                                    flexShrink: 0
+                                    background: isMine ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 229, 255, 0.12)",
+                                    border: `1px solid ${isMine ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 229, 255, 0.25)"}`,
+                                    borderRadius: "6px",
+                                    padding: "1px 5px",
+                                    fontSize: "0.64rem",
+                                    fontWeight: 800,
+                                    color: isMine ? "#FFFFFF" : primaryColor,
+                                    cursor: "pointer"
                                 }}
-                            />
-                        );
-                    })}
+                                title="Cambiar velocidad de reproducción"
+                            >
+                                {playbackRate}x
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
-                {/* Sub-info: Time & Speed Toggle */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace" }}>
-                    <span style={{ color: "rgba(255, 255, 255, 0.85)", fontWeight: 700 }}>
-                        {formatTime(currentTime)} / {formatTime(duration || (msg.duration_ms ? msg.duration_ms / 1000 : 0))}
-                    </span>
-                    <button
-                        onClick={toggleSpeed}
-                        style={{
-                            background: isMine ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 229, 255, 0.12)",
-                            border: `1px solid ${isMine ? "rgba(255, 255, 255, 0.25)" : "rgba(0, 229, 255, 0.25)"}`,
-                            borderRadius: "6px",
-                            padding: "1px 5px",
-                            fontSize: "0.64rem",
-                            fontWeight: 800,
-                            color: isMine ? "#FFFFFF" : primaryColor,
-                            cursor: "pointer"
-                        }}
-                        title="Cambiar velocidad de reproducción"
-                    >
-                        {playbackRate}x
-                    </button>
-                </div>
+                {audioSrc && (
+                    <audio
+                        ref={audioRef}
+                        src={audioSrc}
+                        onTimeUpdate={handleTimeUpdate}
+                        onLoadedMetadata={handleLoadedMetadata}
+                        onEnded={handleEnded}
+                        onError={() => setPlaying(false)}
+                        style={{ display: "none" }}
+                    />
+                )}
             </div>
 
-            {audioSrc && (
-                <audio
-                    ref={audioRef}
-                    src={audioSrc}
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={handleLoadedMetadata}
-                    onEnded={handleEnded}
-                    onError={() => setPlaying(false)}
-                    style={{ display: "none" }}
-                />
+            {/* Local Whisper Transcription View */}
+            {transcription && (
+                <div style={{
+                    padding: "6px 10px",
+                    borderRadius: "8px",
+                    background: "rgba(0, 0, 0, 0.35)",
+                    borderLeft: `3px solid ${primaryColor}`,
+                    fontSize: "0.75rem",
+                    color: "rgba(255, 255, 255, 0.92)",
+                    lineHeight: 1.4,
+                    marginTop: "2px",
+                    animation: "fadeIn 0.2s ease-out"
+                }}>
+                    <div style={{ fontSize: "0.62rem", fontWeight: 800, color: primaryColor, marginBottom: "2px", fontFamily: "JetBrains Mono, monospace" }}>
+                        📝 TRANSCRIPCIÓN IA LOCAL (WHISPER)
+                    </div>
+                    {transcription}
+                </div>
             )}
         </div>
     );

@@ -57,8 +57,8 @@ export const AICopilotModal: React.FC = () => {
             {
                 id: "initial_ai_msg",
                 sender: "ai",
-                text: "🤖 Saludos, Operador. Soy el Copiloto IA Neuronal Soberano de RED.\n\nPuedo asistirte en protocolos de supervivencia, triage médico de combate, purificación de recursos, frecuencias de radio y síntesis táctica 100% offline.",
-                modelTag: "Qwen 2.5 1.5B (ARM64 Nativo)",
+                text: "🤖 Saludos, Operador. Soy el Copiloto IA Neuronal Soberano de RED.\n\nPuedo asistirte en protocolos de supervivencia, triage médico de combate, purificación de recursos, frecuencias de radio y síntesis táctica 100% offline.\n\n💡 *Tip:* Para razonamiento conversacional ilimitado sobre cualquier tema, puedes descargar un micro-modelo (ej: SmolLM 360M o Qwen 0.5B) en la pestaña [Modelos].",
+                modelTag: "Motor Táctico RAG MiniLM (100% Offline)",
                 timestamp: Date.now()
             }
         ];
@@ -121,11 +121,9 @@ export const AICopilotModal: React.FC = () => {
             return;
         }
         window.speechSynthesis.cancel();
-        const cleanText = textToSpeak.replace(/[#*`_•\[\]]/g, "").trim();
-        const utterance = new SpeechSynthesisUtterance(cleanText);
+        const utterance = new SpeechSynthesisUtterance(textToSpeak.slice(0, 300));
+        utterance.lang = targetLang === "en" ? "en-US" : targetLang === "fr" ? "fr-FR" : "es-ES";
         utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.lang = targetLang === "en" ? "en-US" : targetLang === "fr" ? "fr-FR" : targetLang === "pt" ? "pt-BR" : targetLang === "de" ? "de-DE" : "es-ES";
         window.speechSynthesis.speak(utterance);
         toast.info("🔊 Reproduciendo respuesta táctica...");
     }, [targetLang]);
@@ -147,17 +145,16 @@ export const AICopilotModal: React.FC = () => {
 
         const startTime = performance.now();
         try {
-            // Build tactical context from real mesh and channels if enabled
-            let fullPrompt = text;
+            let contextStr: string | undefined = undefined;
             if (includeTacticalContext) {
                 const nodeCount = status?.peer_count ?? contacts.length;
                 const activeCh = effectiveChannels.find(c => c.id === activeConversationId)?.name || "General";
-                fullPrompt = `[Contexto Táctico: Malla con ${nodeCount} nodos detectados. Canal activo: #${activeCh}. Modo: 100% Offline]\n${text}`;
+                contextStr = `Malla con ${nodeCount} nodos detectados. Canal activo: #${activeCh}. Modo: 100% Offline`;
             }
 
-            const res: CopilotResponse = await queryAICopilot(fullPrompt);
+            const res: CopilotResponse = await queryAICopilot(text, contextStr);
             const latency = Math.round(performance.now() - startTime);
-            const tag = res.source || (activeModel ? `${activeModel.name} (ARM64 Nativo)` : "Qwen 2.5 1.5B (ARM64 Nativo)");
+            const tag = res.source || (activeModel && activeModel.isDownloaded ? `${activeModel.name} (ARM64 Nativo)` : "Motor RAG MiniLM (100% Offline)");
 
             const aiMsg: ChatMessage = {
                 id: `msg_${Date.now()}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`,

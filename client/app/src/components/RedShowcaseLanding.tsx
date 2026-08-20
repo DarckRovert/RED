@@ -639,7 +639,7 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
                 <div style={{ fontSize: '28px', marginBottom: '12px' }}>🤖</div>
                 <div style={{ fontSize: '18px', fontWeight: 800, color: '#FFF', marginBottom: '8px' }}>IA Neuronal 100% Offline</div>
                 <div style={{ fontSize: '13px', color: '#94A3B8', lineHeight: 1.6 }}>
-                  Primera arquitectura de mensajería que ejecuta inferencia de modelos ONNX (`LaMini-Flan-T5`) directamente en el dispositivo cliente mediante WebAssembly, sin enviar datos a la nube.
+                  Primera arquitectura de mensajería que ejecuta inferencia de modelos ONNX (`Qwen 2.5 / SmolLM / Whisper`) directamente en el dispositivo cliente mediante WebAssembly, sin enviar datos a la nube.
                 </div>
               </div>
 

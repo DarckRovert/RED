@@ -4,6 +4,7 @@
  */
 import { GuardianEngine } from './guardianEngine';
 import { LocalAIEngine } from './localAiEngine';
+import { indexedMediaVault } from './indexedMediaVault';
 
 export interface IdentityResponse {
     identity_hash: string;
@@ -319,10 +320,22 @@ class RedAPIClient {
 
         // 1. Save in Web / local store for instant UI rendering and persistence (only for real user chat messages)
         if (!isControlMessage && cleanRecipient !== 'me' && cleanRecipient !== 'local') {
+            // Save heavy media to IndexedDB to avoid QuotaExceededError
+            const rawMedia = options?.media_data || (content?.startsWith('data:') ? content : undefined);
+            if (rawMedia && rawMedia.length > 512) {
+                indexedMediaVault.saveMedia(msgId, rawMedia, options?.mime_type).catch(() => {});
+            }
+
+            const lightMsgItem: MessageItem = {
+                ...msgItem,
+                media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${msgId}` : msgItem.media_data,
+                content: content?.startsWith('data:') && content.length > 512 ? `red_vault://${msgId}` : content
+            };
+
             const convKey = `red_web_messages_${cleanRecipient}`;
             const existingMsgs = this.getWebStore<MessageItem[]>(convKey, []);
             if (!existingMsgs.some(m => m.id === msgId)) {
-                existingMsgs.push(msgItem);
+                existingMsgs.push(lightMsgItem);
                 this.setWebStore(convKey, existingMsgs);
             }
 
@@ -331,10 +344,12 @@ class RedAPIClient {
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? '📹 Video' :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
+                            msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
                             (content?.startsWith('data:image') ? '📷 Foto' :
                              content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              content?.startsWith('data:video') ? '📹 Video' :
-                             content || 'Mensaje P2P');
+                             (content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (content || 'Mensaje P2P')));
 
             // Update conversation list
             const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);

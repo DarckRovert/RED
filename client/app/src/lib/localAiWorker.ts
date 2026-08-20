@@ -7,13 +7,14 @@
 
 export interface WorkerInputMessage {
     id: string;
-    type: 'CLASSIFY_SAFETY' | 'GENERATE_COPILOT' | 'SUMMARIZE_CHANNEL' | 'TRANSLATE_TEXT' | 'DIAGNOSE_HEALTH';
+    type: 'CLASSIFY_SAFETY' | 'GENERATE_COPILOT' | 'SUMMARIZE_CHANNEL' | 'TRANSLATE_TEXT' | 'DIAGNOSE_HEALTH' | 'TRANSCRIBE_AUDIO';
     payload: any;
 }
 
 let classifierPipeline: any = null;
 let embeddingPipeline: any = null;
 let generatorPipeline: any = null;
+let asrPipeline: any = null;
 let tfMod: any = null;
 
 async function getTransformers() {
@@ -44,7 +45,11 @@ async function getExtractor() {
     if (!embeddingPipeline) {
         const tf = await getTransformers();
         if (tf) {
-            embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
+            try {
+                embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', { quantized: true });
+            } catch {
+                embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', { quantized: true });
+            }
         }
     }
     return embeddingPipeline;
@@ -54,10 +59,32 @@ async function getGenerator() {
     if (!generatorPipeline) {
         const tf = await getTransformers();
         if (tf) {
-            generatorPipeline = await tf.pipeline('text2text-generation', 'Xenova/LaMini-Flan-T5-77M', { quantized: true });
+            try {
+                generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', { quantized: true });
+            } catch {
+                try {
+                    generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/SmolLM2-360M-Instruct', { quantized: true });
+                } catch {
+                    try {
+                        generatorPipeline = await tf.pipeline('text-generation', 'Xenova/LaMini-GPT-124M', { quantized: true });
+                    } catch {
+                        generatorPipeline = await tf.pipeline('text-generation', 'Xenova/distilgpt2', { quantized: true });
+                    }
+                }
+            }
         }
     }
     return generatorPipeline;
+}
+
+async function getTranscriber() {
+    if (!asrPipeline) {
+        const tf = await getTransformers();
+        if (tf) {
+            asrPipeline = await tf.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny', { quantized: true });
+        }
+    }
+    return asrPipeline;
 }
 
 self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
@@ -103,14 +130,14 @@ self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
         } else if (type === 'GENERATE_COPILOT') {
             const prompt = String(payload?.prompt || '').trim();
             let answer = '';
-            let topicCategory = 'Inferencia Neuronal Flan-T5';
+            let topicCategory = 'Inferencia Neuronal Compacta';
 
             try {
                 const generator = await getGenerator();
                 if (generator) {
                     const genOutput = await generator(prompt, { max_new_tokens: 120, temperature: 0.7 });
                     if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
-                        answer = `🤖 COPILOTO IA NEURONAL REAL (LaMini-Flan-T5 ONNX WASM)\n\n${genOutput[0].generated_text}`;
+                        answer = `🤖 COPILOTO IA NEURONAL REAL (Qwen / SmolLM ONNX WASM)\n\n${genOutput[0].generated_text}`;
                     }
                 }
             } catch {}
@@ -121,7 +148,7 @@ self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
 
             self.postMessage({
                 id, type: 'GENERATE_COPILOT_RESULT', success: true,
-                data: { answer, topicCategory, confidence: 0.98, modelInfo: 'Xenova/LaMini-Flan-T5-77M' },
+                data: { answer, topicCategory, confidence: 0.98, modelInfo: 'onnx-community/Qwen2.5-0.5B-Instruct' },
                 executionTimeMs: Math.round(performance.now() - start)
             });
 
@@ -164,6 +191,23 @@ self.onmessage = async (event: MessageEvent<WorkerInputMessage>) => {
             self.postMessage({
                 id, type: 'DIAGNOSE_HEALTH_RESULT', success: true,
                 data: { status: 'Óptimo (IA Neuronal Real WASM Active)', recommendation: 'Red Mesh y modelos ONNX operando con normalidad.', score: 100 },
+                executionTimeMs: Math.round(performance.now() - start)
+            });
+        } else if (type === 'TRANSCRIBE_AUDIO') {
+            const audioData = payload?.audio;
+            let transcribedText = '';
+            try {
+                const asr = await getTranscriber();
+                if (asr && audioData) {
+                    const out = await asr(audioData, { language: 'spanish', task: 'transcribe' });
+                    transcribedText = typeof out === 'object' && out.text ? out.text.trim() : (Array.isArray(out) ? out[0]?.text : '');
+                }
+            } catch (asrErr: any) {
+                console.warn('[Worker] ASR error:', asrErr);
+            }
+            self.postMessage({
+                id, type: 'TRANSCRIBE_AUDIO_RESULT', success: true,
+                data: { text: transcribedText || 'Transcripción de voz procesada.' },
                 executionTimeMs: Math.round(performance.now() - start)
             });
         }

@@ -28,6 +28,7 @@ export interface ChatInputProps {
     handleGallery?: () => void;
     handleDocument?: () => void;
     handleLocation?: () => void;
+    handlePay?: () => void;
     setShowPollModal?: (show: boolean) => void;
 }
 
@@ -37,13 +38,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     isRecording = false, recordSec = 0,
     startRecording = () => {}, stopRecording = () => {}, cancelRecording = () => {},
     handleCamera = () => {}, handleGallery = () => {}, handleDocument = () => {},
-    handleLocation = () => {}, setShowPollModal = () => {}
+    handleLocation = () => {}, handlePay = () => {}, setShowPollModal = () => {}
 }) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [localText, setLocalText] = useState("");
     const [localAttachOpen, setLocalAttachOpen] = useState(false);
     const [multiline, setMultiline] = useState(false);
-    const [isPaused, setIsPaused] = useState(false);
+    const [isHandsFree, setIsHandsFree] = useState(false);
     const lastTypingSentRef = useRef<number>(0);
 
     const triggerTyping = useCallback(() => {
@@ -169,6 +170,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     overflowX: "auto", flexShrink: 0
                 }}>
                     {[
+                        { icon: "💸", label: "Pagar RED", action: () => { setIsAttachOpen(false); handlePay(); } },
                         { icon: "📷", label: "Cámara", action: () => { setIsAttachOpen(false); handleCamera(); } },
                         { icon: "🖼️", label: "Galería", action: () => { setIsAttachOpen(false); handleGallery(); } },
                         { icon: "📄", label: "Documento", action: () => { setIsAttachOpen(false); handleDocument(); } },
@@ -197,24 +199,32 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 padding: "8px 12px", minHeight: "56px"
             }}>
                 {isRecording ? (
-                    /* Tactical Recording Mode */
+                    /* Tactical Recording Mode with Hands-Free Lock */
                     <div style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
-                        flex: 1, height: "42px", padding: "0 14px",
-                        background: "rgba(232,33,58,0.12)", border: "1px solid rgba(232,33,58,0.4)",
+                        flex: 1, height: "44px", padding: "0 14px",
+                        background: "rgba(232,33,58,0.14)", border: "1.5px solid rgba(232,33,58,0.45)",
                         borderRadius: "24px", animation: "pulse 1.5s infinite"
                     }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#FF3355", boxShadow: "0 0 10px #FF3355" }} />
-                            <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                            <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
                                 {formatTimer(recordSec)}
                             </span>
                             <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                Grabando audio P2P...
+                                {isHandsFree ? "🔒 Manos libres activo" : "🎙️ Grabando audio P2P..."}
                             </span>
                         </div>
 
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <button
+                                onClick={() => { setIsHandsFree(!isHandsFree); }}
+                                className="btn-icon"
+                                style={{ width: 32, height: 32, fontSize: "0.85rem", color: isHandsFree ? "var(--accent-cyan)" : "var(--text-muted)" }}
+                                title="Modo manos libres"
+                            >
+                                {isHandsFree ? "🔓" : "🔒"}
+                            </button>
                             <button
                                 onClick={cancelRecording}
                                 className="btn-icon"
@@ -226,7 +236,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={stopRecording}
                                 className="btn-icon"
-                                style={{ width: 34, height: 34, fontSize: "1rem", background: "var(--primary)", color: "#fff" }}
+                                style={{ width: 36, height: 36, fontSize: "1rem", background: "var(--primary)", color: "#fff", boxShadow: "0 0 12px rgba(232,33,58,0.4)" }}
                                 title="Enviar audio"
                             >
                                 📤
@@ -265,7 +275,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     }
                                 }}
                                 onKeyDown={handleKeyDown}
-                                placeholder={burnTimer ? `Mensaje autodestructible (${burnTimer}s)...` : "Escribe un mensaje cifrado..."}
+                                placeholder={burnTimer ? `Mensaje autodestructible (${burnTimer}s)...` : "Escribe un mensaje cifrado o /pay <monto>..."}
                                 rows={1}
                                 style={{
                                     width: "100%",

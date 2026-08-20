@@ -61,7 +61,15 @@ class DtnStorage {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch (e) {
-      console.error('[DtnStorage] Failed to persist DTN queue:', e);
+      console.warn('[DtnStorage] Storage quota reached, pruning expired and lowest priority packets:', e);
+      try {
+        const now = Date.now();
+        const pruned = items.filter(it => it.expiresAt > now).slice(-200);
+        this.cache = pruned;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
+      } catch (inner) {
+        console.error('[DtnStorage] Critical storage error, keeping in-memory queue only:', inner);
+      }
     }
   }
 

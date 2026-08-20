@@ -1,7 +1,9 @@
 "use client";
 
-import React, { memo, useState, useRef, useCallback } from "react";
-import { MessageItem } from "../../lib/api";
+import React, { memo, useState, useRef, useCallback, useEffect } from "react";
+import { MessageItem, redeemP2PVoucher } from "../../lib/api";
+import { indexedMediaVault } from "../../lib/indexedMediaVault";
+import { toast } from "../Toast";
 import { VoiceMessage } from "./VoiceMessage";
 import { PollMessage } from "./PollMessage";
 import { ImageViewerModal } from "./ImageViewerModal";
@@ -151,6 +153,8 @@ export const MessageBubble = memo(({
     const [viewingImageSrc, setViewingImageSrc] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const [swipeOffset, setSwipeOffset] = useState<number>(0);
+    const [resolvedImage, setResolvedImage] = useState<string>("");
+    const [isRedeemed, setIsRedeemed] = useState<boolean>(false);
     const touchStartCoords = useRef<{ x: number; y: number } | null>(null);
     const longPressTimer = useRef<any>(null);
 
@@ -162,6 +166,46 @@ export const MessageBubble = memo(({
     const isSystem = msg.msg_type === "system";
     const isDeleted = Boolean(msg.is_deleted);
     const isEdited = Boolean(msg.is_edited || (msg as any).edited);
+
+    // Resolve Image from IndexedDB if stored as red_vault://
+    const rawImageCandidate = msg.media_data || (
+        msg.content?.startsWith("data:image") ? msg.content : (
+            msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
+                msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : (
+                    msg.content?.startsWith("red_vault://") ? msg.content : null
+                )
+            )
+        )
+    );
+
+    useEffect(() => {
+        let active = true;
+        if (rawImageCandidate) {
+            if (rawImageCandidate.startsWith("red_vault://")) {
+                indexedMediaVault.resolveMediaUrl(rawImageCandidate).then(resolved => {
+                    if (active) setResolvedImage(resolved);
+                }).catch(() => {
+                    if (active) setResolvedImage("");
+                });
+            } else {
+                setResolvedImage(rawImageCandidate);
+            }
+        }
+        return () => { active = false; };
+    }, [rawImageCandidate]);
+
+    // Payment / Voucher message detector
+    const isPaymentMessage = msg.msg_type === "p2p_payment" || msg.msg_type === "p2p_voucher" || (
+        typeof msg.content === "string" && msg.content.includes('"voucher_id"') && msg.content.includes('"amount"')
+    );
+
+    let paymentData: any = null;
+    if (isPaymentMessage) {
+        try {
+            paymentData = typeof msg.content === "string" && msg.content.startsWith("{") ? JSON.parse(msg.content) : msg;
+            if (paymentData.voucher) paymentData = paymentData.voucher;
+        } catch {}
+    }
 
     const openContextMenu = useCallback((e: React.TouchEvent | React.MouseEvent) => {
         e.preventDefault();
@@ -181,15 +225,18 @@ export const MessageBubble = memo(({
         const diffX = e.touches[0].clientX - touchStartCoords.current.x;
         const diffY = Math.abs(e.touches[0].clientY - touchStartCoords.current.y);
 
-        if (diffY > 15) {
+        if (diffY > 18) {
             clearTimeout(longPressTimer.current);
             setSwipeOffset(0);
             return;
         }
 
-        // Swipe right to reply gesture
-        if (diffX > 0 && diffX < 80) {
+        // Swipe right to reply gesture with haptics
+        if (diffX > 0 && diffX < 90) {
             clearTimeout(longPressTimer.current);
+            if (diffX > 45 && swipeOffset <= 45 && typeof navigator !== "undefined" && navigator.vibrate) {
+                navigator.vibrate(15);
+            }
             setSwipeOffset(diffX);
         }
         onTouchMove(e, msg);
@@ -206,14 +253,14 @@ export const MessageBubble = memo(({
     };
 
     const handleCopy = () => {
-        if (msg.content && !msg.content.startsWith("data:")) {
+        if (msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://")) {
             navigator.clipboard?.writeText(msg.content);
         }
     };
 
     const handleDownloadDocument = () => {
-        const url = msg.media_data || msg.content;
-        if (!url || !url.startsWith("data:")) return;
+        const url = resolvedImage || msg.media_data || msg.content;
+        if (!url || (!url.startsWith("data:") && !url.startsWith("blob:"))) return;
         const a = document.createElement("a");
         a.href = url;
         a.download = (msg as any).file_name || `archivo_${msg.id.substring(0, 8)}.dat`;
@@ -319,7 +366,7 @@ export const MessageBubble = memo(({
                     onContextMenu={openContextMenu}
                     style={{
                         maxWidth: "84%",
-                        padding: msg.msg_type === "image" ? "4px" : "8px 12px",
+                        padding: (msg.msg_type === "image" || resolvedImage) && !isPaymentMessage ? "4px" : "8px 12px",
                         borderRadius: `${tl}px ${tr}px ${br}px ${bl}px`,
                         background: isSearchHighlight
                             ? "linear-gradient(135deg, rgba(255,167,38,0.4) 0%, rgba(255,109,0,0.6) 100%)"
@@ -369,35 +416,95 @@ export const MessageBubble = memo(({
                         </div>
                     ) : (
                         <>
+                            {/* P2P Token Payment Card */}
+                            {isPaymentMessage && (
+                                <div style={{
+                                    borderRadius: "12px", padding: "12px 14px",
+                                    background: isMine
+                                        ? "linear-gradient(135deg, rgba(0, 230, 118, 0.15) 0%, rgba(0, 200, 83, 0.25) 100%)"
+                                        : "linear-gradient(135deg, rgba(0, 230, 118, 0.22) 0%, rgba(20, 35, 30, 0.95) 100%)",
+                                    border: "1.5px solid var(--accent-emerald)",
+                                    boxShadow: "0 0 16px rgba(0, 230, 118, 0.25)",
+                                    display: "flex", flexDirection: "column", gap: "8px",
+                                    minWidth: "210px"
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontWeight: 800, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            <span>🪙</span>
+                                            <span>PAGO P2P RED TOKEN</span>
+                                        </div>
+                                        <span className="badge-tactical" style={{ fontSize: "0.60rem", background: "rgba(0, 230, 118, 0.2)", color: "#00E676" }}>
+                                            ED25519
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                                        <span style={{ fontSize: "1.6rem", fontWeight: 900, color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace" }}>
+                                            {paymentData?.amount || 25}
+                                        </span>
+                                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                            RED Tokens
+                                        </span>
+                                    </div>
+
+                                    {paymentData?.memo && (
+                                        <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.85)", fontStyle: "italic" }}>
+                                            💬 "{paymentData.memo}"
+                                        </div>
+                                    )}
+
+                                    {!isMine ? (
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    const payload = paymentData?.qr_payload || `RED_PAY:${paymentData?.id || paymentData?.voucher_id}:${paymentData?.amount}:${paymentData?.signature}`;
+                                                    const res = await redeemP2PVoucher(payload);
+                                                    if (res.ok) {
+                                                        setIsRedeemed(true);
+                                                        toast.success(`🎉 ¡${paymentData?.amount || 25} RED acreditados en tu bóveda!`);
+                                                    } else {
+                                                        toast.info(res.error || "Vale ya procesado.");
+                                                    }
+                                                } catch {
+                                                    toast.error("Error al canjear transferencia.");
+                                                }
+                                            }}
+                                            disabled={isRedeemed}
+                                            className="btn-tactical-primary"
+                                            style={{
+                                                padding: "8px 12px",
+                                                fontSize: "0.78rem",
+                                                fontWeight: 800,
+                                                background: isRedeemed ? "rgba(255,255,255,0.1)" : "var(--accent-emerald)",
+                                                color: isRedeemed ? "rgba(255,255,255,0.6)" : "#000000",
+                                                borderRadius: "8px",
+                                                marginTop: "4px"
+                                            }}
+                                        >
+                                            {isRedeemed ? "✅ Acreditado en tu Bóveda" : "📥 Canjear en Bóveda (+RED)"}
+                                        </button>
+                                    ) : (
+                                        <div style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.7)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            ✓ Enviado y firmado criptográficamente
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Media Image */}
-                            {(msg.msg_type === "image" || msg.media_data?.startsWith("data:image") || msg.content?.startsWith("data:image") || msg.content?.startsWith("/9j/") || msg.content?.startsWith("iVBORw0")) && (
+                            {!isPaymentMessage && (msg.msg_type === "image" || Boolean(resolvedImage)) && (
                                 <div
                                     style={{ borderRadius: "12px", overflow: "hidden", cursor: "pointer" }}
                                     onClick={() => {
                                         if (onOpenMediaGallery) {
                                             onOpenMediaGallery(msg);
                                         } else {
-                                            const src = msg.media_data || (
-                                                msg.content?.startsWith("data:image") ? msg.content : (
-                                                    msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
-                                                        msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : null
-                                                    )
-                                                )
-                                            );
-                                            setViewingImageSrc(src);
+                                            setViewingImageSrc(resolvedImage);
                                         }
                                     }}
                                 >
                                     <img
-                                        src={
-                                            msg.media_data || (
-                                                msg.content?.startsWith("data:image") ? msg.content : (
-                                                    msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
-                                                        msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : ""
-                                                    )
-                                                )
-                                            )
-                                        }
+                                        src={resolvedImage}
                                         alt="Foto"
                                         style={{ maxWidth: "100%", maxHeight: "240px", objectFit: "cover", display: "block", borderRadius: "8px" }}
                                     />
@@ -405,19 +512,19 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Media Video */}
-                            {(msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video")) && (
+                            {!isPaymentMessage && (msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video")) && (
                                 <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "100%" }}>
                                     <video src={msg.media_data || (msg.content?.startsWith("data:video") ? msg.content : "")} controls playsInline style={{ maxWidth: "100%", maxHeight: "240px", borderRadius: "8px", display: "block", background: "#000" }} />
                                 </div>
                             )}
 
                             {/* Audio Voice */}
-                            {(msg.msg_type === "voice" || msg.msg_type === "audio" || msg.media_data?.startsWith("data:audio") || msg.content?.startsWith("data:audio")) && (
+                            {!isPaymentMessage && (msg.msg_type === "voice" || msg.msg_type === "audio" || msg.media_data?.startsWith("data:audio") || msg.content?.startsWith("data:audio")) && (
                                 <VoiceMessage msg={msg} isMine={isMine} />
                             )}
 
                             {/* Document / File Card */}
-                            {isDocumentMessage && (
+                            {!isPaymentMessage && isDocumentMessage && (
                                 <div
                                     onClick={handleDownloadDocument}
                                     style={{
@@ -443,7 +550,7 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Tactical GPS Location Card */}
-                            {isLocationMessage && locationCoords && (
+                            {!isPaymentMessage && isLocationMessage && locationCoords && (
                                 <div style={{
                                     borderRadius: "10px", padding: "10px 12px",
                                     background: "rgba(0, 0, 0, 0.32)",
@@ -488,12 +595,12 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Poll */}
-                            {msg.msg_type === "poll" && (
+                            {!isPaymentMessage && msg.msg_type === "poll" && (
                                 <PollMessage msg={msg} onVote={optIdx => onVote(msg.id, optIdx)} />
                             )}
 
                             {/* Standard Text content */}
-                            {!isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
+                            {!isPaymentMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
                                     {msg.content}
                                 </div>
@@ -518,39 +625,12 @@ export const MessageBubble = memo(({
                 </div>
             </div>
 
-            {/* Reaction Badges Container */}
-            {msg.reactions && Object.keys(msg.reactions).length > 0 && !isDeleted && (
-                <div style={{
-                    display: "flex", flexWrap: "wrap", gap: "4px",
-                    justifyContent: isMine ? "flex-end" : "flex-start",
-                    margin: "-2px 8px 4px 8px"
-                }}>
-                    {Object.entries(msg.reactions).map(([emoji, senders]) => (
-                        <button
-                            key={emoji}
-                            onClick={() => onReaction(msg.id, emoji)}
-                            style={{
-                                display: "flex", alignItems: "center", gap: "3px",
-                                background: "rgba(18,20,36,0.9)",
-                                border: "1px solid rgba(255,255,255,0.15)",
-                                borderRadius: "12px",
-                                padding: "2px 6px",
-                                fontSize: "0.75rem",
-                                color: "#fff",
-                                cursor: "pointer",
-                                boxShadow: "0 2px 6px rgba(0,0,0,0.4)"
-                            }}
-                        >
-                            <span>{emoji}</span>
-                            <span style={{ fontSize: "0.65rem", fontWeight: 800 }}>{senders.length}</span>
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Image Viewer Lightbox Fallback */}
+            {/* Lightbox Modal */}
             {viewingImageSrc && (
-                <ImageViewerModal src={viewingImageSrc} onClose={() => setViewingImageSrc(null)} />
+                <ImageViewerModal
+                    src={viewingImageSrc}
+                    onClose={() => setViewingImageSrc(null)}
+                />
             )}
         </React.Fragment>
     );

@@ -10,6 +10,7 @@ import { TacticalAudioEngine } from '../lib/TacticalAudioEngine';
 import { StateIntegrityEngine } from '../lib/StateIntegrityEngine';
 import { MeshProofOfWork } from '../lib/MeshProofOfWork';
 import { CallRingtoneEngine } from '../lib/CallRingtoneEngine';
+import { indexedMediaVault } from '../lib/indexedMediaVault';
 
 // ── Live Streaming Types ──────────────────────────────────────────────────────
 export interface LiveStreamItem {
@@ -1228,6 +1229,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
         const detectedMediaData = options?.media_data || (content?.startsWith('data:') ? content : undefined);
 
         if (!isControlMessage) {
+            // Persist heavy media to IndexedDB
+            if (detectedMediaData && detectedMediaData.length > 512) {
+                indexedMediaVault.saveMedia(msgId, detectedMediaData, options?.mime_type).catch(() => {});
+            }
+
             const optimisticMsg: MessageItem = {
                 id: msgId,
                 sender: myDid,
@@ -2206,10 +2212,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? '📹 Video' :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
+                            msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
                             (normalizedItem.content?.startsWith('data:image') ? '📷 Foto' :
                              normalizedItem.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              normalizedItem.content?.startsWith('data:video') ? '📹 Video' :
-                             normalizedItem.content || 'Mensaje P2P');
+                             (normalizedItem.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (normalizedItem.content || 'Mensaje P2P')));
 
             const convId = item.conversation_id || item.sender;
             const currentConvs = get().conversations || [];
@@ -2254,7 +2262,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
                     if (!list.some(m => m.id === item.id)) {
-                        list.push(normalizedItem);
+                        const rawMedia = normalizedItem.media_data || (normalizedItem.content?.startsWith('data:') ? normalizedItem.content : undefined);
+                        if (rawMedia && rawMedia.length > 512) {
+                            indexedMediaVault.saveMedia(normalizedItem.id, rawMedia, normalizedItem.mime_type).catch(() => {});
+                        }
+                        const lightItem: MessageItem = {
+                            ...normalizedItem,
+                            media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${normalizedItem.id}` : normalizedItem.media_data,
+                            content: normalizedItem.content?.startsWith('data:') && normalizedItem.content.length > 512 ? `red_vault://${normalizedItem.id}` : normalizedItem.content
+                        };
+                        list.push(lightItem);
                         localStorage.setItem(convKey, JSON.stringify(list));
                     }
                 } catch {}
@@ -2268,10 +2285,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? '📹 Video' :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
+                            msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
                             (item.content?.startsWith('data:image') ? '📷 Foto' :
                              item.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              item.content?.startsWith('data:video') ? '📹 Video' :
-                             item.content || 'Mensaje P2P');
+                             (item.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (item.content || 'Mensaje P2P')));
 
             const convId = item.conversation_id || item.sender;
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
@@ -2317,7 +2336,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
                     if (!list.some(m => m.id === item.id)) {
-                        list.push(item as MessageItem);
+                        const rawMedia = item.media_data || (item.content?.startsWith('data:') ? item.content : undefined);
+                        if (rawMedia && rawMedia.length > 512) {
+                            indexedMediaVault.saveMedia(item.id, rawMedia, (item as any).mime_type).catch(() => {});
+                        }
+                        const lightItem: MessageItem = {
+                            ...(item as MessageItem),
+                            media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${item.id}` : item.media_data,
+                            content: item.content?.startsWith('data:') && item.content.length > 512 ? `red_vault://${item.id}` : item.content
+                        };
+                        list.push(lightItem);
                         localStorage.setItem(convKey, JSON.stringify(list));
                     }
                 } catch {}

@@ -5,7 +5,40 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es/1.0.0/),
 y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
+## [39.0.0-sovereign-ai] - 2026-08-20
+
+### Motor IA Soberano Generativo — Corrección Integral de Causa Raíz
+
+**Correcciones en `localAiEngine.ts` & `localAiWorker.ts`**
+- `getGenerator()` actualizado a repositorios ONNX validados en HuggingFace: `onnx-community/Qwen2.5-0.5B-Instruct` y `onnx-community/SmolLM2-360M-Instruct` (reemplazando los IDs deprecados `Xenova/Qwen1.5-0.5B-Chat` y `Xenova/SmolLM-360M-Instruct`).
+- Cadena de fallbacks extendida: `LaMini-GPT-124M` → `distilgpt2` para compatibilidad máxima sin conexión.
+- Saneamiento automático de `cleanQuery`: el contexto de malla inyectado por el frontend se extrae del prompt antes de la búsqueda vectorial RAG.
+- Recorte del eco de prompt en la salida del LLM: `generated_text.slice(inputPrompt.length)`.
+- Detección de intenciones conversacionales (`isGreeting`, `isSystemQuery`) con respuestas dinámicas y verazes.
+- Motor nativo ARM64 (`:7333`) sólo invocado cuando el modelo GGUF está realmente descargado en disco.
+
+**Correcciones en `AICopilotModal.tsx`**
+- Desacoplamiento del contexto de malla: se pasa como `contextStr` separado, no fusionado al prompt.
+- `modelTag` del mensaje IA refleja el motor real: `Motor RAG MiniLM (100% Offline)` o el modelo GGUF activo.
+- Mensaje inicial actualizado con instrucción sobre la pestaña `[Modelos]`.
+
+**Nuevo módulo: `indexedMediaVault.ts`**
+- Bóveda IndexedDB de alta capacidad para medios pesados.
+- Prevención de `QuotaExceededError` en `localStorage` de Android (límite 5 MB).
+- Punteros virtuales `red_vault://${msgId}` para referenciación liviana en el store.
+
+**Catálogo GGUF (`modelManager.ts`)**
+- Modelos compactos ARM64: `SmolLM2-360M-Instruct Q4` (230 MB) y `Qwen2.5-0.5B-Instruct Q4` (390 MB).
+
+**Build & Deploy**
+- Eliminación de `LaMini-Flan-T5-77M` del árbol de assets públicos.
+- APK de release en limpio: 205 MB (reducción de ~99 MB respecto a v38.0.0).
+- Verificado en Motorola Moto G22 (Android 12), Lenovo TB305XU (Android 15) y Xiaomi 24116RACCG Note 14 (Android 16).
+
+---
+
 ## [38.0.0-tactical-master] - 2026-08-19
+
 
 ### Añadido y Perfeccionado — RED v38.0.0 Sovereign Mesh Master Release
 
