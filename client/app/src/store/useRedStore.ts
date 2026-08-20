@@ -426,15 +426,28 @@ export const useRedStore = create<RedStore>((set, get) => ({
             ));
             
             let finalId = canonicalPeer;
+            let updatedConvs = [...conversations];
             if (existingConv) {
                 finalId = existingConv.id;
-            } else if (canonicalPeer.length >= 32 || !canonicalPeer.includes('-')) {
-                finalId = canonicalPeer;
-            } else if (identity) {
-                finalId = `${identity.short_id}-${canonicalPeer.substring(0, 8)}`;
+                updatedConvs = updatedConvs.map(c => (c.id === finalId || c.peer === canonicalPeer) ? { ...c, unread_count: 0 } : c);
+            } else {
+                if (canonicalPeer.length >= 32 || !canonicalPeer.includes('-')) {
+                    finalId = canonicalPeer;
+                } else if (identity) {
+                    finalId = `${identity.short_id}-${canonicalPeer.substring(0, 8)}`;
+                }
+                const newPlaceholder: ConversationItem = {
+                    id: finalId,
+                    peer: canonicalPeer,
+                    last_message: 'Nuevo chat P2P cifrado',
+                    last_timestamp: Date.now() / 1000,
+                    unread_count: 0
+                };
+                updatedConvs.unshift(newPlaceholder);
             }
 
-            set({ currentScreen: screen, activeConversationId: finalId, messages: [] });
+            set({ currentScreen: screen, activeConversationId: finalId, conversations: updatedConvs, messages: [] });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
 
             const sanitizeMsgs = (list: any[]): MessageItem[] => {
                 if (!Array.isArray(list)) return [];
@@ -479,11 +492,6 @@ export const useRedStore = create<RedStore>((set, get) => ({
             // badge doesn't reappear on next fetchData.
             const convForReceipt = existingConv || conversations.find(c => c.id === finalId);
             if (convForReceipt && (convForReceipt.unread_count || 0) > 0) {
-                set({
-                    conversations: get().conversations.map(c =>
-                        c.id === finalId ? { ...c, unread_count: 0 } : c
-                    )
-                });
                 // Tell Rust the conversation was read (best-effort, non-blocking)
                 RedAPI.req(`/conversations/${finalId}/read`, { method: 'POST' }).catch(() => {});
             }
@@ -511,15 +519,27 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 const connected = await get().initNodeConnection();
                 if (connected) {
                     set({ isAuthenticated: true });
-                    // ── Request notification permissions ──────────────────────
+                    // ── Request notification permissions and register action listener ──────
                     try {
                         const { LocalNotifications } = await import('@capacitor/local-notifications');
                         const perm = await LocalNotifications.checkPermissions();
                         if (perm.display !== 'granted') {
                             await LocalNotifications.requestPermissions();
                         }
+                        LocalNotifications.removeAllListeners().catch(() => {});
+                        LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+                            try {
+                                const extra = notificationAction.notification?.extra;
+                                const targetPeer = extra?.peer || extra?.conversation_id || extra?.sender;
+                                if (targetPeer) {
+                                    get().navigate('chat', targetPeer);
+                                }
+                            } catch (e) {
+                                console.warn('[RED] Failed to handle notification click:', e);
+                            }
+                        });
                     } catch (notifErr) {
-                        console.warn('[RED] LocalNotifications permission error:', notifErr);
+                        console.warn('[RED] LocalNotifications setup error:', notifErr);
                     }
                     return true;
                 }
@@ -1032,10 +1052,49 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 } catch {}
             }
 
+            // Merge backend dedupedConvs with local / in-memory conversations
+            const localConvs = get().conversations || [];
+            const mergedMap = new Map<string, ConversationItem>();
+
+            for (const c of dedupedConvs) {
+                const p = (c.peer || c.id || '').toLowerCase();
+                const key = p.slice(0, 16);
+                if (key) mergedMap.set(key, c);
+            }
+
+            for (const lc of localConvs) {
+                const p = (lc.peer || lc.id || '').toLowerCase();
+                const key = p.slice(0, 16);
+                if (!key) continue;
+                if (!mergedMap.has(key)) {
+                    mergedMap.set(key, lc);
+                } else {
+                    const existing = mergedMap.get(key)!;
+                    const existingTs = (typeof existing.last_message === 'object' && existing.last_message?.timestamp) || existing.last_timestamp || 0;
+                    const localTs = (typeof lc.last_message === 'object' && lc.last_message?.timestamp) || lc.last_timestamp || 0;
+                    if (localTs > existingTs) {
+                        mergedMap.set(key, {
+                            ...existing,
+                            last_message: lc.last_message || existing.last_message,
+                            last_timestamp: localTs,
+                            unread_count: lc.unread_count ?? existing.unread_count
+                        });
+                    }
+                }
+            }
+
+            const finalSortedConvs = Array.from(mergedMap.values()).sort((a, b) => {
+                const tsA = (typeof a.last_message === 'object' && a.last_message?.timestamp) || a.last_timestamp || 0;
+                const tsB = (typeof b.last_message === 'object' && b.last_message?.timestamp) || b.last_timestamp || 0;
+                const normA = tsA < 1e10 ? tsA : tsA / 1000;
+                const normB = tsB < 1e10 ? tsB : tsB / 1000;
+                return normB - normA;
+            });
+
             const { currentScreen, activeConversationId } = get();
             let newActiveId = activeConversationId;
             if (currentScreen === 'chat' && activeConversationId) {
-                const matched = dedupedConvs.find((c: any) =>
+                const matched = finalSortedConvs.find((c: any) =>
                     c && (
                         c.id === activeConversationId ||
                         c.peer === activeConversationId ||
@@ -1049,7 +1108,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
             }
 
             set({
-                conversations: dedupedConvs,
+                conversations: finalSortedConvs,
                 contacts: dedupedConts,
                 groups: safeGrps,
                 activeConversationId: newActiveId
@@ -1171,7 +1230,59 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 status: 'Pending',
             };
             tempId = msgId;
-            set({ messages: [...get().messages.filter(m => m.id !== msgId), optimisticMsg] });
+
+            // 1. Optimistically update conversations list in store and localStorage
+            const currentConvs = get().conversations || [];
+            const msgType = optimisticMsg.msg_type;
+            const snippet = msgType === 'image' ? '📷 Foto' :
+                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'location' ? '📍 Ubicación' :
+                            (content?.startsWith('data:image') ? '📷 Foto' :
+                             content?.startsWith('data:audio') ? '🎤 Nota de voz' :
+                             content?.startsWith('data:video') ? '📹 Video' :
+                             content || 'Mensaje P2P');
+
+            const canonicalPeer = meshRouter.getCanonicalId(cleanPeerHash) || cleanPeerHash;
+            const existingIdx = currentConvs.findIndex(c => 
+                c && (
+                    c.peer === cleanPeerHash ||
+                    c.id === cleanPeerHash ||
+                    c.peer === canonicalPeer ||
+                    c.id === canonicalPeer ||
+                    (canonicalPeer.length >= 8 && c.peer?.startsWith(canonicalPeer.slice(0, 8))) ||
+                    (c.peer?.length >= 8 && canonicalPeer.startsWith(c.peer.slice(0, 8)))
+                )
+            );
+
+            let updatedConvs = [...currentConvs];
+            const nowSec = Date.now() / 1000;
+            if (existingIdx >= 0) {
+                const existing = updatedConvs[existingIdx];
+                const updatedItem: ConversationItem = {
+                    ...existing,
+                    last_message: snippet,
+                    last_timestamp: nowSec,
+                    unread_count: 0
+                };
+                updatedConvs.splice(existingIdx, 1);
+                updatedConvs.unshift(updatedItem);
+            } else {
+                const newConv: ConversationItem = {
+                    id: cleanPeerHash,
+                    peer: cleanPeerHash,
+                    last_message: snippet,
+                    last_timestamp: nowSec,
+                    unread_count: 0
+                };
+                updatedConvs.unshift(newConv);
+            }
+
+            set({
+                messages: [...get().messages.filter(m => m.id !== msgId), optimisticMsg],
+                conversations: updatedConvs
+            });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
             recordProcessedMessageId(msgId);
         }
 
@@ -2069,9 +2180,56 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 }
             }
 
+            // ── In-Memory & Storage Conversation List Update for Active Chat ──
+            const msgType = normalizedItem.msg_type;
+            const snippet = msgType === 'image' ? '📷 Foto' :
+                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'location' ? '📍 Ubicación' :
+                            (normalizedItem.content?.startsWith('data:image') ? '📷 Foto' :
+                             normalizedItem.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
+                             normalizedItem.content?.startsWith('data:video') ? '📹 Video' :
+                             normalizedItem.content || 'Mensaje P2P');
+
+            const convId = item.conversation_id || item.sender;
+            const currentConvs = get().conversations || [];
+            const idx = currentConvs.findIndex(c => 
+                c && (
+                    c.id === convId ||
+                    c.peer === item.sender ||
+                    c.peer === canonicalSender ||
+                    c.id === item.sender ||
+                    (canonicalSender.length >= 8 && c.peer?.startsWith(canonicalSender.slice(0, 8))) ||
+                    (c.peer?.length >= 8 && canonicalSender.startsWith(c.peer.slice(0, 8)))
+                )
+            );
+
+            let updatedConvs = [...currentConvs];
+            if (idx >= 0) {
+                const existing = updatedConvs[idx];
+                const updatedObj: ConversationItem = {
+                    ...existing,
+                    last_message: snippet,
+                    last_timestamp: normTimestamp,
+                    unread_count: 0
+                };
+                updatedConvs.splice(idx, 1);
+                updatedConvs.unshift(updatedObj);
+            } else {
+                const newObj: ConversationItem = {
+                    id: convId,
+                    peer: item.sender,
+                    last_message: snippet,
+                    last_timestamp: normTimestamp,
+                    unread_count: 0
+                };
+                updatedConvs.unshift(newObj);
+            }
+            set({ conversations: updatedConvs });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
+
             if (typeof window !== 'undefined' && item.sender) {
                 try {
-                    const convId = item.conversation_id || item.sender;
                     const convKey = `red_web_messages_${convId}`;
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
@@ -2079,29 +2237,62 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         list.push(normalizedItem);
                         localStorage.setItem(convKey, JSON.stringify(list));
                     }
-                    const rawConvs = localStorage.getItem('red_web_conversations');
-                    const convs: ConversationItem[] = rawConvs ? JSON.parse(rawConvs) : [];
-                    const idx = convs.findIndex(c => c.id === convId || c.peer === convId);
-                    const convObj: ConversationItem = {
-                        id: convId,
-                        peer: item.sender,
-                        last_message: item.content || 'Mensaje P2P',
-                        last_timestamp: normTimestamp,
-                        unread_count: 0
-                    };
-                    if (idx >= 0) {
-                        convs[idx] = { ...convs[idx], ...convObj };
-                    } else {
-                        convs.unshift(convObj);
-                    }
-                    localStorage.setItem('red_web_conversations', JSON.stringify(convs));
                 } catch {}
             }
             return;
         } else {
+            const rawTs = (item as any).timestamp;
+            const normTimestamp = rawTs ? (rawTs > 1e11 ? rawTs / 1000 : rawTs) : (Date.now() / 1000);
+            const msgType = item.msg_type;
+            const snippet = msgType === 'image' ? '📷 Foto' :
+                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'location' ? '📍 Ubicación' :
+                            (item.content?.startsWith('data:image') ? '📷 Foto' :
+                             item.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
+                             item.content?.startsWith('data:video') ? '📹 Video' :
+                             item.content || 'Mensaje P2P');
+
+            const convId = item.conversation_id || item.sender;
+            const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
+            const currentConvs = get().conversations || [];
+            const idx = currentConvs.findIndex(c => 
+                c && (
+                    c.id === convId ||
+                    c.peer === item.sender ||
+                    c.peer === canonicalSender ||
+                    c.id === item.sender ||
+                    (canonicalSender.length >= 8 && c.peer?.startsWith(canonicalSender.slice(0, 8))) ||
+                    (c.peer?.length >= 8 && canonicalSender.startsWith(c.peer.slice(0, 8)))
+                )
+            );
+
+            let updatedConvs = [...currentConvs];
+            if (idx >= 0) {
+                const existing = updatedConvs[idx];
+                const updatedObj: ConversationItem = {
+                    ...existing,
+                    last_message: snippet,
+                    last_timestamp: normTimestamp,
+                    unread_count: (existing.unread_count || 0) + 1
+                };
+                updatedConvs.splice(idx, 1);
+                updatedConvs.unshift(updatedObj);
+            } else {
+                const newObj: ConversationItem = {
+                    id: convId,
+                    peer: item.sender,
+                    last_message: snippet,
+                    last_timestamp: normTimestamp,
+                    unread_count: 1
+                };
+                updatedConvs.unshift(newObj);
+            }
+            set({ conversations: updatedConvs });
+            RedAPI.setWebStore('red_web_conversations', updatedConvs);
+
             if (typeof window !== 'undefined' && item.sender) {
                 try {
-                    const convId = item.conversation_id || item.sender;
                     const convKey = `red_web_messages_${convId}`;
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
@@ -2109,25 +2300,6 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         list.push(item as MessageItem);
                         localStorage.setItem(convKey, JSON.stringify(list));
                     }
-
-                    const rawConvs = localStorage.getItem('red_web_conversations');
-                    const convs: ConversationItem[] = rawConvs ? JSON.parse(rawConvs) : [];
-                    const idx = convs.findIndex(c => c.id === convId || c.peer === convId);
-                    const convObj: ConversationItem = {
-                        id: convId,
-                        peer: item.sender,
-                        last_message: item.content || 'Mensaje P2P',
-                        last_timestamp: item.timestamp || Date.now() / 1000,
-                        unread_count: (convs[idx]?.unread_count || 0) + 1
-                    };
-                    if (idx >= 0) {
-                        convs[idx] = { ...convs[idx], ...convObj };
-                    } else {
-                        convs.unshift(convObj);
-                    }
-                    localStorage.setItem('red_web_conversations', JSON.stringify(convs));
-                    set({ conversations: convs });
-                    get().fetchData().catch(() => {});
                 } catch {}
             }
             if (!item.is_mine) {
@@ -2136,32 +2308,33 @@ export const useRedStore = create<RedStore>((set, get) => ({
             // FIRE LOCAL NOTIFICATION IF CHAT IS NOT FOCUSED OR APP IS BACKGROUNDED
             import('@capacitor/core').then(({ Capacitor }) => {
                 if (Capacitor.isNativePlatform()) {
-                    const contacts = get().contacts;
-                    const contact = contacts.find((c: any) => c.identity_hash === item.sender);
-                    const senderDisplayName = contact?.display_name || `${item.sender.substring(0, 8)}…`;
+                    const contacts = get().contacts || [];
+                    const contact = contacts.find((c: any) => c.identity_hash === item.sender || (item.sender?.length >= 8 && c.identity_hash?.startsWith(item.sender.slice(0, 8))));
+                    const senderDisplayName = contact?.display_name || `Operador ${item.sender.substring(0, 8)}…`;
 
                     import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
                         LocalNotifications.schedule({
                             notifications: [
                                 {
                                     title: `💬 ${senderDisplayName}`,
-                                    body: item.msg_type === 'image' ? '📷 Foto cifrada' :
-                                          item.msg_type === 'voice' ? '🎤 Nota de voz' :
-                                          item.content || 'Nuevo mensaje P2P',
+                                    body: snippet,
                                     id: Math.floor(Date.now() % 2147483647),
                                     schedule: { at: new Date(Date.now() + 100) },
                                     sound: undefined,
                                     attachments: undefined,
                                     actionTypeId: "",
-                                    extra: null
+                                    extra: {
+                                        peer: item.sender,
+                                        conversation_id: convId,
+                                        sender: item.sender
+                                    }
                                 }
                             ]
                         }).catch(() => {});
                     });
                 }
             });
-            // ALWAYS REFRESH CONVERSATIONS & UNREAD BADGES IN SIDEBAR
-            get().fetchData();
+            get().fetchData().catch(() => {});
         }
         
         // Only refresh sidebar for messages in OTHER conversations (badge count update).

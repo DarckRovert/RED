@@ -77,9 +77,17 @@ export default function Sidebar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
 
-    const filteredConvs = conversations.filter(c =>
-        c && c.peer && !c.peer.startsWith("00000000") && resolvePeerName(c.peer || "").toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredConvs = useMemo(() => {
+        return conversations
+            .filter(c => c && c.peer && !c.peer.startsWith("00000000") && resolvePeerName(c.peer || "").toLowerCase().includes(searchQuery.toLowerCase()))
+            .sort((a, b) => {
+                const tsA = (typeof a.last_message === "object" && a.last_message?.timestamp) || (a as any).last_timestamp || 0;
+                const tsB = (typeof b.last_message === "object" && b.last_message?.timestamp) || (b as any).last_timestamp || 0;
+                const normA = tsA < 1e10 ? tsA : tsA / 1000;
+                const normB = tsB < 1e10 ? tsB : tsB / 1000;
+                return normB - normA;
+            });
+    }, [conversations, searchQuery, groups, contacts]);
     const filteredContacts = contacts.filter((c: any) =>
         c && ((c.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.identity_hash || "").toLowerCase().includes(searchQuery.toLowerCase()))
@@ -514,7 +522,10 @@ export default function Sidebar() {
                             filteredContacts.map(ct => (
                                 <div
                                     key={ct.identity_hash}
-                                    onClick={() => navigate("chat", ct.identity_hash)}
+                                    onClick={() => {
+                                        setActiveTab("chats");
+                                        navigate("chat", ct.identity_hash);
+                                    }}
                                     className="card-tactical-interactive"
                                     style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px" }}
                                 >
@@ -615,6 +626,7 @@ export default function Sidebar() {
                                             setNewContactAlias("");
                                             toast.success("✅ Contacto añadido. Iniciando chat P2P...");
                                             const targetChat = (typeof cleanHash === 'string' && cleanHash) ? cleanHash : input;
+                                            setActiveTab("chats");
                                             navigate("chat", targetChat);
                                         } catch (err: any) {
                                             toast.error(`❌ Error: ${err?.message || err}`);

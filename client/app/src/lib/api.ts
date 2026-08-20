@@ -326,18 +326,30 @@ class RedAPIClient {
                 this.setWebStore(convKey, existingMsgs);
             }
 
+            const msgType = options?.msg_type;
+            const snippet = msgType === 'image' ? '📷 Foto' :
+                            msgType === 'voice' ? '🎤 Nota de voz' :
+                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'location' ? '📍 Ubicación' :
+                            (content?.startsWith('data:image') ? '📷 Foto' :
+                             content?.startsWith('data:audio') ? '🎤 Nota de voz' :
+                             content?.startsWith('data:video') ? '📹 Video' :
+                             content || 'Mensaje P2P');
+
             // Update conversation list
             const convs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
             const convIdx = convs.findIndex(c => c.id === cleanRecipient || c.peer === cleanRecipient);
             const convData: ConversationItem = {
                 id: cleanRecipient,
                 peer: cleanRecipient,
-                last_message: content,
+                last_message: snippet,
                 last_timestamp: Date.now() / 1000,
                 unread_count: 0
             };
             if (convIdx >= 0) {
-                convs[convIdx] = { ...convs[convIdx], ...convData };
+                const existing = convs[convIdx];
+                convs.splice(convIdx, 1);
+                convs.unshift({ ...existing, ...convData });
             } else {
                 convs.unshift(convData);
             }
