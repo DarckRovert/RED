@@ -17,6 +17,7 @@ import { BiometricLockEngine, BiometricTimeout } from "../lib/BiometricLockEngin
 import { UpdateManager, UpdateInfo, DownloadProgress } from "../lib/updateManager";
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../lib/version";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { SovereignBackupEngine } from "../lib/SovereignBackupEngine";
 import { toast } from "./Toast";
 
 type SettingsTab = "appearance" | "calls" | "audio" | "storage" | "privacy" | "mesh" | "identity" | "backup" | "updates";
@@ -974,68 +975,124 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Bóveda Soberana: Respaldo, Nube & Recuperación
+                                Respaldo & Nube Automática (Google Drive)
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Copias de seguridad cifradas con AES-256-GCM, sincronización en Google Drive, anclaje IPFS Web3 y frase semilla BIP-39.
+                                Copias de seguridad automáticas en 1 toque, cifradas con AES-256-GCM y derivación de clave maestra.
                             </p>
                         </div>
 
-                        {/* Card Principal */}
-                        <div className="card-tactical" style={{
-                            padding: "20px",
-                            background: "linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(14,16,28,0.9) 100%)",
-                            border: "1px solid rgba(56, 189, 248, 0.35)",
-                            display: "flex", flexDirection: "column", gap: "14px"
-                        }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                <div style={{
-                                    width: "44px", height: "44px", borderRadius: "12px",
-                                    background: "rgba(56, 189, 248, 0.2)", border: "1px solid var(--accent-cyan)",
-                                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem"
+                        {/* Card Principal con Estado en Vivo */}
+                        {(() => {
+                            const status = SovereignBackupEngine.getAutoBackupStatus();
+                            return (
+                                <div className="card-tactical" style={{
+                                    padding: "18px",
+                                    background: "linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(14,16,28,0.95) 100%)",
+                                    border: "1px solid rgba(56, 189, 248, 0.35)",
+                                    display: "flex", flexDirection: "column", gap: "14px"
                                 }}>
-                                    ☁️
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                            <span style={{ fontSize: "1.6rem" }}>☁️</span>
+                                            <div>
+                                                <div style={{ fontSize: "1rem", fontWeight: 900, color: "#fff" }}>
+                                                    {status.isProtected ? "Bóveda Protegida" : "Sin Respaldo Reciente"}
+                                                </div>
+                                                <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    ÚLTIMA COPIA: {status.lastBackupFormatted}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <span className={`badge-tactical ${status.statusColor === "emerald" ? "badge-tactical-emerald" : (status.statusColor === "amber" ? "badge-tactical-amber" : "badge-tactical-crimson")}`} style={{ padding: "4px 10px", fontSize: "0.70rem" }}>
+                                            {status.statusLabel}
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", background: "rgba(0,0,0,0.35)", padding: "10px", borderRadius: "10px" }}>
+                                        <div>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>DESTINO AUTOMÁTICO</div>
+                                            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#fff", marginTop: "2px" }}>Google Drive / Almacenamiento</div>
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>CIFRADO SEGURO</div>
+                                            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-emerald)", marginTop: "2px" }}>AES-256-GCM (Zero-Knowledge)</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Botón de 1-Toque Directo */}
+                                    <button
+                                        onClick={async () => {
+                                            SettingsManager.triggerHaptic("medium");
+                                            toast.info("Cifrando y enviando a Google Drive…");
+                                            const res = await SovereignBackupEngine.createOneTouchBackup();
+                                            if (res.success) {
+                                                toast.success("✅ Respaldo guardado en Google Drive");
+                                                TacticalAudioEngine.playMessageSent();
+                                            } else {
+                                                toast.error(res.error || "Error al respaldar");
+                                            }
+                                        }}
+                                        className="btn-tactical-primary"
+                                        style={{
+                                            padding: "14px",
+                                            fontSize: "0.88rem",
+                                            fontWeight: 900,
+                                            background: "linear-gradient(135deg, #1E88E5 0%, #1565C0 100%)",
+                                            boxShadow: "0 4px 16px rgba(30, 136, 229, 0.45)",
+                                            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                                        }}
+                                    >
+                                        <span>⚡</span> Respaldar a Google Drive en 1 Toque
+                                    </button>
                                 </div>
-                                <div>
-                                    <div style={{ fontSize: "1rem", fontWeight: 900, color: "#fff" }}>
-                                        Centro de Respaldo Criptográfico
-                                    </div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                        GOOGLE DRIVE · IPFS WEB3 · ARCHIVO .REDVAULT · 12-WORDS SEED
-                                    </div>
+                            );
+                        })()}
+
+                        {/* Switch de Auto-Sync */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>
+                                    Sincronización Automática Inteligente
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Guarda copias en segundo plano cuando añades contactos o chats.
                                 </div>
                             </div>
+                            <input
+                                type="checkbox"
+                                checked={SovereignBackupEngine.getAutoBackupStatus().autoSyncEnabled}
+                                onChange={(e) => {
+                                    SettingsManager.triggerHaptic("light");
+                                    SovereignBackupEngine.setAutoSyncEnabled(e.target.checked);
+                                    toast.info(e.target.checked ? "Sincronización automática activada" : "Sincronización automática desactivada");
+                                }}
+                                style={{ width: 22, height: 22, accentColor: "var(--accent-cyan)", cursor: "pointer" }}
+                            />
+                        </div>
 
-                            <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: "1.5", margin: 0 }}>
-                                Protege tu identidad, contactos, conversaciones e historial blockchain contra pérdida de dispositivo o reinstalaciones. Tus datos viajan 100% cifrados militarmente bajo esquema Zero-Knowledge.
-                            </p>
-
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                                <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--glass-border)" }}>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>PLATAFORMAS DE NUBE</div>
-                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#fff", marginTop: "2px" }}>Google Drive & IPFS Web3</div>
-                                </div>
-                                <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.3)", border: "1px solid var(--glass-border)" }}>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>ESTÁNDAR CRIPTOGRÁFICO</div>
-                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)", marginTop: "2px" }}>AES-256-GCM + PBKDF2</div>
-                                </div>
-                            </div>
-
+                        {/* Accesos Rápidos: Restaurar & Avanzado */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                             <button
                                 onClick={() => {
                                     handleClose();
                                     navigate("backup");
                                 }}
-                                className="btn-tactical-pill active"
-                                style={{
-                                    padding: "12px",
-                                    fontSize: "0.85rem",
-                                    fontWeight: 900,
-                                    width: "100%",
-                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
-                                }}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "12px", fontSize: "0.78rem", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                             >
-                                <span>🚀</span> Abrir Bóveda de Respaldo & Nube ➔
+                                <span>📥</span> Restaurar Copia
+                            </button>
+                            <button
+                                onClick={() => {
+                                    handleClose();
+                                    navigate("backup");
+                                }}
+                                className="btn-tactical-secondary"
+                                style={{ padding: "12px", fontSize: "0.78rem", fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", color: "var(--accent-indigo)" }}
+                            >
+                                <span>🌐</span> Web3 IPFS / Frase Semilla
                             </button>
                         </div>
                     </div>

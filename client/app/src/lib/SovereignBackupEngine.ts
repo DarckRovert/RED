@@ -456,6 +456,135 @@ export class SovereignBackupEngine {
     }
 
     /**
+     * Obtains the current auto-backup & cloud sync status
+     */
+    public static getAutoBackupStatus(): {
+        isProtected: boolean;
+        lastBackupTimestamp: number;
+        lastBackupFormatted: string;
+        autoSyncEnabled: boolean;
+        pendingChangesCount: number;
+        statusColor: "emerald" | "amber" | "crimson";
+        statusLabel: string;
+    } {
+        if (typeof window === "undefined") {
+            return {
+                isProtected: false,
+                lastBackupTimestamp: 0,
+                lastBackupFormatted: "Nunca",
+                autoSyncEnabled: false,
+                pendingChangesCount: 0,
+                statusColor: "crimson",
+                statusLabel: "SIN RESPALDO"
+            };
+        }
+
+        const lastTsStr = localStorage.getItem("red_last_backup_ts");
+        const lastTs = lastTsStr ? parseInt(lastTsStr, 10) : 0;
+        const autoSyncEnabled = localStorage.getItem("red_auto_sync_enabled") !== "false";
+        const pendingChanges = parseInt(localStorage.getItem("red_pending_backup_changes") || "0", 10);
+
+        let lastBackupFormatted = "Nunca";
+        let statusColor: "emerald" | "amber" | "crimson" = "crimson";
+        let statusLabel = "SIN RESPALDO";
+
+        if (lastTs > 0) {
+            const diffMs = Date.now() - lastTs;
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffHours / 24);
+
+            if (diffHours < 1) {
+                const diffMins = Math.max(1, Math.floor(diffMs / (1000 * 60)));
+                lastBackupFormatted = `Hace ${diffMins} min`;
+            } else if (diffHours < 24) {
+                lastBackupFormatted = `Hace ${diffHours} horas`;
+            } else if (diffDays === 1) {
+                lastBackupFormatted = "Ayer";
+            } else {
+                lastBackupFormatted = `Hace ${diffDays} días`;
+            }
+
+            if (diffDays < 3 && pendingChanges === 0) {
+                statusColor = "emerald";
+                statusLabel = "AL DÍA";
+            } else {
+                statusColor = "amber";
+                statusLabel = "PENDIENTE";
+            }
+        }
+
+        return {
+            isProtected: lastTs > 0,
+            lastBackupTimestamp: lastTs,
+            lastBackupFormatted,
+            autoSyncEnabled,
+            pendingChangesCount: pendingChanges,
+            statusColor,
+            statusLabel
+        };
+    }
+
+    /**
+     * Enables or disables automatic cloud sync
+     */
+    public static setAutoSyncEnabled(enabled: boolean): void {
+        if (typeof window !== "undefined") {
+            localStorage.setItem("red_auto_sync_enabled", enabled ? "true" : "false");
+        }
+    }
+
+    /**
+     * Increments pending changes counter
+     */
+    public static markDataModified(): void {
+        if (typeof window !== "undefined") {
+            const cur = parseInt(localStorage.getItem("red_pending_backup_changes") || "0", 10);
+            localStorage.setItem("red_pending_backup_changes", (cur + 1).toString());
+        }
+    }
+
+    /**
+     * One-Touch Instant Backup — Automatically derives encryption from Master PIN or hardware seed
+     */
+    public static async createOneTouchBackup(customPin?: string): Promise<CloudUploadResult> {
+        let pin = customPin?.trim();
+        if (!pin && typeof window !== "undefined") {
+            pin = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin") || "RED_DEFAULT_MASTER_VAULT_KEY";
+        }
+        if (!pin) pin = "RED_DEFAULT_MASTER_VAULT_KEY";
+
+        const { blob, fileName } = await this.createEncryptedCapsule(pin);
+        const res = await this.uploadToGoogleDrive(blob, fileName);
+
+        if (res.success && typeof window !== "undefined") {
+            localStorage.setItem("red_last_backup_ts", Date.now().toString());
+            localStorage.setItem("red_pending_backup_changes", "0");
+        }
+
+        return res;
+    }
+
+    /**
+     * Restores capsule with 1 touch using active or typed master PIN
+     */
+    public static async restoreOneTouchBackup(buffer: ArrayBuffer, pin?: string): Promise<SovereignVaultCapsule> {
+        let passwordToTry = pin?.trim();
+        if (!passwordToTry && typeof window !== "undefined") {
+            passwordToTry = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin") || "";
+        }
+        if (!passwordToTry) {
+            throw new Error("Ingresa tu PIN maestro para desbloquear y restaurar la copia.");
+        }
+
+        const capsule = await this.decryptAndImportCapsule(buffer, passwordToTry);
+        if (typeof window !== "undefined") {
+            localStorage.setItem("red_last_backup_ts", Date.now().toString());
+            localStorage.setItem("red_pending_backup_changes", "0");
+        }
+        return capsule;
+    }
+
+    /**
      * Converts a Blob to Base64
      */
     public static blobToBase64(blob: Blob): Promise<string> {

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { CalculatorScreen } from "./CalculatorScreen";
+import { BackupRestoreModal } from "./BackupRestoreModal";
 import { toast } from "./Toast";
 
 /**
@@ -82,6 +83,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const [biometryAvailable, setBiometryAvailable] = useState(false);
     const [disguiseEnabled, setDisguiseEnabled] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
+    const [showRestoreModal, setShowRestoreModal] = useState(false);
 
     useEffect(() => {
         let isMounted = true;
@@ -452,16 +454,40 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
                 {/* Botón de Siguiente en Onboarding */}
                 {mode === "onboarding" && (
-                    <button
-                        onClick={handleOnboardingNext}
-                        disabled={loading || currentDigits.length < 6}
-                        className="btn-tactical-primary"
-                        style={{ width: "100%", padding: "14px", marginTop: "8px" }}
-                    >
-                        {loading ? "Derivando claves..." : (step === "enter" ? "Continuar ➔" : "Confirmar y Entrar")}
-                    </button>
+                    <>
+                        <button
+                            onClick={handleOnboardingNext}
+                            disabled={loading || currentDigits.length < 6}
+                            className="btn-tactical-primary"
+                            style={{ width: "100%", padding: "14px", marginTop: "8px" }}
+                        >
+                            {loading ? "Derivando claves..." : (step === "enter" ? "Continuar ➔" : "Confirmar y Entrar")}
+                        </button>
+
+                        <button
+                            onClick={() => setShowRestoreModal(true)}
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--accent-cyan)",
+                                fontSize: "12px",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                marginTop: "6px",
+                                textDecoration: "underline",
+                                padding: "6px"
+                            }}
+                        >
+                            ☁️ ¿Tienes una copia o cuenta previa? Restaurar aquí
+                        </button>
+                    </>
                 )}
             </div>
+
+            {/* Modal de Restauración en Onboarding */}
+            {showRestoreModal && (
+                <BackupRestoreModal onClose={() => setShowRestoreModal(false)} />
+            )}
         </div>
     );
 }
