@@ -52,9 +52,15 @@ export const FloatingCallPIP: React.FC = () => {
 
     const handleEndCall = () => {
         setCallPipMinimized(false);
-        RedAPI.sendMessage(activeCallPeer, JSON.stringify({ hangup: true }), { msg_type: "webrtc_signal" }).catch(() => {});
+        const currentCallId = useRedStore.getState().activeCallId;
+        RedAPI.sendMessage(activeCallPeer, JSON.stringify({
+            hangup: true,
+            callId: currentCallId,
+            timestamp: Date.now()
+        }), { msg_type: "webrtc_signal" }).catch(() => {});
         useRedStore.setState({
             activeCallPeer: null,
+            activeCallId: null,
             activeCallOffer: null,
             activeCallSignal: null,
             callSignalQueue: [],

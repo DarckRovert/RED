@@ -570,9 +570,11 @@ export default function ChatWindow() {
                                 }
                             } catch {}
                             const target = fullPeerHash || peerHash;
+                            const newCallId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                             setActiveCallType('audio');
                             useRedStore.setState({
                                 activeCallPeer: target,
+                                activeCallId: newCallId,
                                 activeCallOffer: null,
                                 activeCallSignal: null,
                                 callSignalQueue: []
@@ -596,9 +598,11 @@ export default function ChatWindow() {
                                 }
                             } catch {}
                             const target = fullPeerHash || peerHash;
+                            const newCallId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                             setActiveCallType('video');
                             useRedStore.setState({
                                 activeCallPeer: target,
+                                activeCallId: newCallId,
                                 activeCallOffer: null,
                                 activeCallSignal: null,
                                 callSignalQueue: []

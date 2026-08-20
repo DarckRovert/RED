@@ -622,8 +622,20 @@ export default function CallScreen() {
 
         initCall();
 
+        const heartbeatInterval = setInterval(() => {
+            const target = targetPeerRef.current;
+            if (target && isSubscribed && peerRef.current) {
+                RedAPI.sendMessage(target, JSON.stringify({
+                    type: 'call-heartbeat',
+                    callId: callIdRef.current,
+                    timestamp: Date.now()
+                }), { msg_type: "webrtc_signal" }).catch(() => {});
+            }
+        }, 3000);
+
         return () => {
             isSubscribed = false;
+            clearInterval(heartbeatInterval);
             endCallInternal();
         };
     }, []);
@@ -699,6 +711,10 @@ export default function CallScreen() {
                         setStatus("Llamada Finalizada");
                         processedSignalsRef.current.add(signalId);
                         setTimeout(endCallInternal, 400);
+                    }
+                    // Remote In-Call Heartbeat Keepalive
+                    else if (signal.type === 'call-heartbeat') {
+                        processedSignalsRef.current.add(signalId);
                     }
                 } catch (e) {
                     console.warn("[WebRTC Call] Queue signal processing warning:", e);

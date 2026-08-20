@@ -1659,20 +1659,28 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     // Only display incoming call banner if not already inside an active call
                     if (get().currentScreen !== 'call') {
                         const determinedType: 'audio' | 'video' = signal.callType === 'audio' || (signal.offer?.sdp && !signal.offer.sdp.includes('m=video')) ? 'audio' : 'video';
+                        const callId = signal.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                         set({
                             incomingCall: {
                                 callerHash: senderHash,
                                 callerName: callerName,
                                 offer: signal.offer,
-                                callType: determinedType
+                                callType: determinedType,
+                                callId: callId
                             },
-                            activeCallType: determinedType
+                            activeCallType: determinedType,
+                            activeCallId: callId
                         });
                     }
                     get().pushCallSignal({ senderHash, signal });
                 } else if (signal.hangup) {
+                    const currentCallId = get().activeCallId;
+                    if (signal.callId && currentCallId && signal.callId !== currentCallId) {
+                        // Discard hangup from different call session
+                        return;
+                    }
                     CallRingtoneEngine.stop();
-                    set({ incomingCall: null });
+                    set({ incomingCall: null, activeCallId: null });
                     const activePeer = get().activeCallPeer;
                     const activeConv = get().activeConversationId;
                     const isFromCurrentCallPeer = !activePeer || activePeer === senderHash || (activePeer.length >= 8 && senderHash.startsWith(activePeer.substring(0, 8))) || (senderHash.length >= 8 && activePeer.startsWith(senderHash.substring(0, 8))) || (activeConv && (activeConv === senderHash || activeConv.includes(senderHash.substring(0, 8))));
