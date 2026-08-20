@@ -170,6 +170,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     overflowX: "auto", flexShrink: 0
                 }}>
                     {[
+                        { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
                         { icon: "💸", label: "Pagar RED", action: () => { setIsAttachOpen(false); handlePay(); } },
                         { icon: "📷", label: "Cámara", action: () => { setIsAttachOpen(false); handleCamera(); } },
                         { icon: "🖼️", label: "Galería", action: () => { setIsAttachOpen(false); handleGallery(); } },

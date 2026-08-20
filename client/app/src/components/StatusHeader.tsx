@@ -115,6 +115,20 @@ export default function StatusHeader() {
                 </div>
 
                 <button
+                    onClick={() => navigate("aiCopilot")}
+                    style={{
+                        background: "linear-gradient(135deg, rgba(0,229,255,0.25) 0%, rgba(2,132,199,0.15) 100%)", 
+                        border: "1px solid rgba(0,229,255,0.45)",
+                        borderRadius: "var(--radius-full)", padding: "1px 8px", color: "var(--accent-cyan)",
+                        fontSize: "0.66rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 0 8px rgba(0,229,255,0.3)"
+                    }}
+                    title="Abrir Copiloto IA Soberano"
+                >
+                    🤖 IA
+                </button>
+
+                <button
                     onClick={() => navigate("commercialHub")}
                     style={{
                         background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(255,51,85,0.15) 100%)", 
