@@ -190,6 +190,8 @@ interface RedStore {
     addChannelMessage: (msg: any) => void;
     addVoiceBurst: (burst: any) => void;
     setSosBeacons: (beacons: any[]) => void;
+    pendingChatNavigation: string | null;
+    setPendingChatNavigation: (target: string | null) => void;
 }
 
 /** Screens that act as overlays and must NOT clear activeConversationId */
@@ -223,6 +225,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
     starredMessages: [],
     peerTyping: false,
     typingTimeout: null,
+    pendingChatNavigation: null,
+    setPendingChatNavigation: (target: string | null) => set({ pendingChatNavigation: target }),
     // Real-time Mesh SSE Events State
     activeSosBeacons: [],
     activeWeatherReports: [],
@@ -532,7 +536,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
                                 const extra = notificationAction.notification?.extra;
                                 const targetPeer = extra?.peer || extra?.conversation_id || extra?.sender;
                                 if (targetPeer) {
-                                    get().navigate('chat', targetPeer);
+                                    if (get().isAuthenticated) {
+                                        get().navigate('chat', targetPeer);
+                                    } else {
+                                        set({ pendingChatNavigation: targetPeer });
+                                    }
                                 }
                             } catch (e) {
                                 console.warn('[RED] Failed to handle notification click:', e);
@@ -540,6 +548,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         });
                     } catch (notifErr) {
                         console.warn('[RED] LocalNotifications setup error:', notifErr);
+                    }
+
+                    const pending = get().pendingChatNavigation;
+                    if (pending) {
+                        set({ pendingChatNavigation: null });
+                        get().navigate('chat', pending);
                     }
                     return true;
                 }
@@ -567,6 +581,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     nodeOnline: true,
                     isAuthenticated: true
                 });
+
+                const pending = get().pendingChatNavigation;
+                if (pending) {
+                    set({ pendingChatNavigation: null });
+                    get().navigate('chat', pending);
+                }
 
                 // Initialize Global WebRTC P2P Mesh & Blind Relay
                 localTransport.init(localHash).catch(e =>

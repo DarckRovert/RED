@@ -337,7 +337,33 @@ export default function AppRouter() {
       }
     };
 
+    const setupNotificationClickListeners = async () => {
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (Capacitor.isNativePlatform()) {
+          const { LocalNotifications } = await import("@capacitor/local-notifications");
+          LocalNotifications.addListener("localNotificationActionPerformed", (notificationAction) => {
+            try {
+              const extra = notificationAction.notification?.extra;
+              const targetPeer = extra?.peer || extra?.conversation_id || extra?.sender;
+              if (targetPeer) {
+                const store = useRedStore.getState();
+                if (store.isAuthenticated) {
+                  store.navigate("chat", targetPeer);
+                } else {
+                  useRedStore.setState({ pendingChatNavigation: targetPeer });
+                }
+              }
+            } catch (e) {
+              console.warn("[RED] Early notification action listener error:", e);
+            }
+          });
+        }
+      } catch {}
+    };
+
     setupBackButton();
+    setupNotificationClickListeners();
     runIntegrityAudit();
     checkLanding();
     checkProfile();
