@@ -112,7 +112,15 @@ public class RedNodeService extends Service {
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE | ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+                    // On Android 14+ (API 34): ALL types declared in the manifest's
+                    // foregroundServiceType MUST be passed here, or the OS throws
+                    // MissingForegroundServiceTypeException and kills the service.
+                    // specialUse is required because we added it to the manifest for
+                    // the 6-hour timeout exemption on Xiaomi HyperOS.
+                    startForeground(1, notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                            | ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                            | ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
                 } else {
                     startForeground(1, notification);
                 }
@@ -406,7 +414,8 @@ public class RedNodeService extends Service {
             serviceChannel.setSound(null, null);
             serviceChannel.enableVibration(false);
             serviceChannel.setShowBadge(false);
-            // Prevent user from turning off this channel from Settings (on supported APIs)
+            // Show full notification on lock screen (not private/hidden) so users see the
+            // service is active. Note: this does NOT prevent users from disabling the channel.
             serviceChannel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
