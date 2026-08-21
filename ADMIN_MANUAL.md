@@ -1,6 +1,6 @@
-# 🔴 RED - Manual del Administrador (Node Ops v52.0.0)
+# 🔴 RED - Manual del Administrador (Node Ops v53.0.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v52.0.0, con soporte para interconexión P2P Web ↔ Mobile, suite de Respaldo Soberano en 1 Toque, sincronización dinámica de perfiles en caliente, enrutamiento autónomo multicapa LQS, validación Proof-of-Stake / Staking, actuadores de hardware nativos y arquitectura de eventos en tiempo real SSE unificada sin polling.
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v53.0.0, con soporte para interconexión P2P Web ↔ Mobile, suite de Respaldo Soberano en 1 Toque, sincronización dinámica de perfiles en caliente, enrutamiento autónomo multicapa LQS, validación Proof-of-Stake / Staking, actuadores de hardware nativos y arquitectura de eventos en tiempo real SSE unificada sin polling.
 
 ---
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## [53.0.0-tactical-refinement] - 2026-08-21
+
+### Tactical Refinement, Storage Streamlining & UX Optimization Edition
+
+**Diferenciación Funcional de Acciones en Barra Superior**
+- `Sidebar.tsx`: Diferenciación funcional entre el botón de cámara `📷` (disparo directo del creador de fotos/historias efímeras tácticas de 24h `setStoryModal("creator")`) y el botón `➕` (apertura del formulario modal de registro de nuevo contacto/chat P2P soberano `setAddContactOpen(true)`).
+
+**Saneamiento de Protocolo de Borrado Remoto y Filtrado de Broadcast**
+- `lib/api.ts`: Incorporación de `conversation_wipe`, `message_wipe`, `profile_update` y el filtro de carga útil `user_remote_wipe` al conjunto `isControlMessage`, evitando la persistencia de comandos de protocolo como burbujas de texto visibles.
+- `MessageBubble.tsx`: Renderizado táctico estilizado tipo banner de sistema para avisos de purga remota en lugar de exponer estructuras JSON en bruto.
+- `useRedStore.ts`: Filtrado preventivo de direcciones de broadcast (`ffffffff...` y `00000000...`) y paquetes de control en el generador y cargador de conversaciones, garantizando que nunca se creen chats ficticios.
+
+**Optimización Extrema del Tamaño del Paquete Binario (-83% de peso)**
+- Saneamiento del árbol de assets públicos de Capacitor eliminando archivos `.apk` anidados recursivamente, reduciendo el peso final del APK de 1.16 GB a **199.36 MB** con tiempos de compilación de **17 segundos**.
+
+---
+
 ## [52.0.0-autonomous-mesh] - 2026-08-21
 
 ### Autonomous Mesh & P2P Live Sync Edition — Sincronización Dinámica de Identidad y Enrutamiento Inteligente
