@@ -359,7 +359,7 @@ export default function Sidebar() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-cyan)" }} title="Escanear Código QR de Contacto">
+                    <button onClick={() => setStoryModal("creator")} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-cyan)" }} title="Publicar Historia o Foto Efímera (24h)">
                         📷
                     </button>
                     <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-crimson)" }} title="Agregar nuevo contacto">
