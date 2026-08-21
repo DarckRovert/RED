@@ -354,7 +354,7 @@ export default function Sidebar() {
                         <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px", display: "flex", alignItems: "center", gap: "6px" }}>
                             <span>{identity?.nickname || "Operador RED"}</span>
                             <span className="badge-tactical" style={{ fontSize: "0.58rem", padding: "1px 5px", background: "rgba(232, 33, 58, 0.2)", color: "#FF3355", border: "1px solid rgba(232,33,58,0.4)" }}>
-                                v54.0
+                                v{RED_VERSION}
                             </span>
                         </div>
                         <div style={{ fontSize: "0.68rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px" }}>

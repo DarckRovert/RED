@@ -1,5 +1,24 @@
 # Changelog
 
+## [55.0.0-sovereign-tactical-mesh] - 2026-08-21
+
+### Sovereign Tactical Mesh OS Edition — Universal Scroll, Decoupled Scanners & Responsive Media Distribution
+
+**Sistema de Scroll Universal & Modales Adaptativos (`.modal-card-scrollable`)**
+- `globals.css`: Implementada la utilidad universal `.modal-card-scrollable` que fija la altura máxima a `calc(100dvh - 32px)` con `overflow-y: auto`, `overscroll-behavior: contain` y `touch-action: pan-y`.
+- `Sidebar.tsx`, `WebCompanionPairConfirmationModal.tsx`, `WebCompanionQRModal.tsx`, `WebCompanionLinkModal.tsx`, `BlockDetailsModal.tsx`, `GlobalSearchModal.tsx`, `DMSSettings.tsx`: Integración de scrolling adaptativo para garantizar que ningún botón o texto quede fuera del campo visual en pantallas compactas o con el teclado virtual abierto.
+
+**Desacoplamiento de Flujos de Escaneo de Cámara & Temas Visuales Dedicados**
+- `RadarWindow.tsx`: Visor de cámara exclusivo para contacto P2P (`🤝 ESCÁNER DE CONTACTO P2P`) con retícula verde esmeralda y haz láser esmeralda-cian.
+- `WebCompanionLinkModal.tsx`: Visor de cámara exclusivo para sincronización con PC (`💻 VINCULAR SESIÓN RED WEB`) con retícula cian neón y púrpura bóveda.
+- `Sidebar.tsx`: Diferenciación de accesos directos y liberación atómica de recursos de cámara en desmontaje.
+
+**Distribución Responsiva de Imágenes & Medios en Chat**
+- `MessageBubble.tsx`: Encapsulación de fotos y videos en `.chat-media-container` (`max-height: min(260px, 42vh)`, `max-width: min(320px, 78vw)`, `object-fit: cover`).
+- `Sidebar.tsx`: Padding de descompresión inferior en la lista de chats (`28px`) y en el Menú Lateral (`36px`) para evitar obstrucción con el Dock Táctico inferior.
+
+---
+
 ## [54.0.0-sovereign-tactical-mesh] - 2026-08-21
 
 ### Sovereign Tactical Mesh OS Edition — Full Synergy, Isolated Discovery & 100% Offline AI Engines
