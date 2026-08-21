@@ -389,11 +389,14 @@ export default function RadarWindow() {
                                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                                 <span className="badge-tactical badge-tactical-emerald">{p.rssi} dBm</span>
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={async () => {
                                                         const targetId = meshRouter.getCanonicalId(p.id) || p.id;
-                                                        addContact(targetId, p.name);
-                                                        toast.success(`Añadido ${p.name}`);
-                                                        navigate("chat", targetId);
+                                                        const peerRec = meshRouter.getPeerByAnyId(targetId) || meshRouter.getPeerByAnyId(p.id);
+                                                        const finalId = (peerRec?.canonicalId && peerRec.canonicalId.length === 64) ? peerRec.canonicalId : targetId;
+                                                        const finalName = p.name && !p.name.startsWith("Nodo ") ? p.name : (peerRec?.name || p.name);
+                                                        const resolved = await addContact(finalId, finalName, peerRec?.publicKey);
+                                                        toast.success(`Añadido ${finalName}`);
+                                                        navigate("chat", resolved || finalId);
                                                     }}
                                                     className="btn-tactical-secondary"
                                                     style={{ padding: "6px 12px", fontSize: "0.76rem" }}

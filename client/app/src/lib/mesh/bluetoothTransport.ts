@@ -77,11 +77,47 @@ class BluetoothTransport {
         try {
             const { registerPlugin } = await import('@capacitor/core');
             const RedNode = registerPlugin<any>('RedNode');
+            const receiveBuffers = new Map<string, { buffer: Uint8Array; timer: any }>();
             RedNode.addListener('bleMessageReceived', (data: any) => {
                 if (data && data.data) {
-                    const bytes = new Uint8Array(data.data);
+                    const chunk = new Uint8Array(data.data);
                     const fromDevice = data.device || 'ble_peer';
-                    this.messageListeners.forEach(cb => cb({ from: fromDevice, payload: bytes }));
+
+                    let entry = receiveBuffers.get(fromDevice);
+                    if (!entry) {
+                        entry = { buffer: new Uint8Array(0), timer: null };
+                        receiveBuffers.set(fromDevice, entry);
+                    }
+
+                    if (entry.timer) clearTimeout(entry.timer);
+                    const merged = new Uint8Array(entry.buffer.length + chunk.length);
+                    merged.set(entry.buffer);
+                    merged.set(chunk, entry.buffer.length);
+                    entry.buffer = merged;
+
+                    // 1. Direct check if complete RED packet is already assembled
+                    if (entry.buffer.length >= 96) {
+                        const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
+                        if (view.getUint32(0, false) === 0x52454401) {
+                            const expectedPayloadLen = view.getUint16(70, true);
+                            const totalRequired = 96 + expectedPayloadLen;
+                            if (expectedPayloadLen < 0xFFFF && entry.buffer.length >= totalRequired) {
+                                const fullPacket = entry.buffer.slice(0, totalRequired);
+                                entry.buffer = entry.buffer.slice(totalRequired);
+                                this.messageListeners.forEach(cb => cb({ from: fromDevice, payload: fullPacket }));
+                                return;
+                            }
+                        }
+                    }
+
+                    // 2. Debounced flush for non-standard payloads or final chunk
+                    entry.timer = setTimeout(() => {
+                        if (entry && entry.buffer.length > 0) {
+                            const payload = entry.buffer;
+                            entry.buffer = new Uint8Array(0);
+                            this.messageListeners.forEach(cb => cb({ from: fromDevice, payload }));
+                        }
+                    }, 120);
                 }
             });
         } catch (e) {

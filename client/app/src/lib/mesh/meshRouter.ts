@@ -45,10 +45,19 @@ export function normalizeIdentity(id: string): string {
   if (!id) return '';
   let clean = id.trim();
   if (clean.startsWith('did:red:')) {
-    clean = clean.replace(/^did:red:/i, '');
+    const withoutScheme = clean.slice(8);
+    const parts = withoutScheme.split(':');
+    return parts[0].trim().toLowerCase();
+  }
+  // Check if it's a MAC address (e.g. 58:24:29:4F:33:1B)
+  if (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(clean)) {
+    return clean.toLowerCase();
   }
   if (clean.includes(':')) {
-    clean = clean.split(':')[0].trim();
+    const parts = clean.split(':');
+    if (parts[0].length >= 16) {
+      return parts[0].trim().toLowerCase();
+    }
   }
   return clean.toLowerCase();
 }
@@ -132,6 +141,12 @@ class MeshRouter {
 
   /** Listeners for packets addressed to THIS node (Set prevents duplicate subscriber registrations) */
   private localDeliveryHandlers: Set<MeshMessageHandler> = new Set();
+
+  /** Listeners notified when a hardware device ID is bound to a canonical 64-char DID */
+  private identityResolvedListeners: Set<(info: { hardwareId: string; canonicalId: string; displayName: string; publicKey?: string }) => void> = new Set();
+
+  /** Listeners for Shake-to-Pair P2P signals */
+  private shakePairListeners: Set<(peer: { identity_hash: string; display_name: string; public_key?: string; timestamp: number }) => void> = new Set();
 
   private initialized = false;
   private unsubscribeNetwork: (() => void) | null = null;
@@ -241,22 +256,37 @@ class MeshRouter {
     if (!id) return '';
     let clean = id.trim();
     if (clean.startsWith('did:red:')) {
-      clean = clean.replace(/^did:red:/i, '');
+      const withoutScheme = clean.slice(8);
+      const parts = withoutScheme.split(':');
+      clean = parts[0].trim();
+    } else if (clean.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(clean)) {
+      const parts = clean.split(':');
+      if (parts[0].length >= 16) {
+        clean = parts[0].trim();
+      }
     }
-    if (clean.includes(':')) {
-      clean = clean.split(':')[0].trim();
-    }
+    const cleanLower = clean.toLowerCase();
     if (this.deviceToCanonicalMap.has(clean)) {
       return this.deviceToCanonicalMap.get(clean)!;
     }
-    const peer = this.peers.get(clean);
+    if (this.deviceToCanonicalMap.has(cleanLower)) {
+      return this.deviceToCanonicalMap.get(cleanLower)!;
+    }
+    const peer = this.peers.get(clean) || this.peers.get(cleanLower);
     if (peer?.canonicalId && peer.canonicalId.length === 64) {
       return peer.canonicalId;
     }
-    if (clean.length === 64 && /^[0-9a-fA-F]+$/.test(clean)) {
-      return clean.toLowerCase();
+    if (cleanLower.length === 64 && /^[0-9a-fA-F]+$/.test(cleanLower)) {
+      return cleanLower;
     }
-    return clean.toLowerCase();
+    return cleanLower;
+  }
+
+  /**
+   * Returns all active peer records.
+   */
+  getAllPeers(): MeshPeer[] {
+    return Array.from(this.peers.values());
   }
 
   /**
@@ -275,6 +305,88 @@ class MeshRouter {
   }
 
   /**
+   * Subscribes to identity resolution events (Hardware ID -> Canonical DID).
+   */
+  onIdentityResolved(cb: (info: { hardwareId: string; canonicalId: string; displayName: string; publicKey?: string }) => void): () => void {
+    this.identityResolvedListeners.add(cb);
+    return () => this.identityResolvedListeners.delete(cb);
+  }
+
+  /**
+   * Subscribes to Shake-to-Pair P2P handshake signals.
+   */
+  onShakePair(cb: (peer: { identity_hash: string; display_name: string; public_key?: string; timestamp: number }) => void): () => void {
+    this.shakePairListeners.add(cb);
+    return () => this.shakePairListeners.delete(cb);
+  }
+
+  /**
+   * Broadcasts a real P2P Shake & Pair pulse across all active transports.
+   */
+  async broadcastShakePair(displayName?: string, publicKey?: string | null): Promise<void> {
+    try {
+      if (!this.myIdentityHash) return;
+      let name = displayName;
+      let pk = publicKey;
+      if (!name && typeof window !== 'undefined') {
+        name = localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname') || 'Operador RED';
+        pk = localStorage.getItem('red_public_key') || this.myIdentityHash;
+      }
+      const payloadObj = {
+        type: 'SHAKE_PAIR_BROADCAST',
+        payload: {
+          identity_hash: this.myIdentityHash,
+          display_name: name || 'Operador RED',
+          public_key: pk || null,
+          timestamp: Date.now()
+        }
+      };
+      const raw = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(
+        this.myIdentityHash,
+        'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        raw
+      );
+      await this.broadcast(encode(packet));
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to broadcast shake pair:', e);
+    }
+  }
+
+  /**
+   * Sends a targeted Shake & Pair acceptance response.
+   */
+  async sendShakePairAccept(targetHash: string, displayName?: string, publicKey?: string | null): Promise<void> {
+    try {
+      if (!this.myIdentityHash || !targetHash) return;
+      let name = displayName;
+      let pk = publicKey;
+      if (!name && typeof window !== 'undefined') {
+        name = localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname') || 'Operador RED';
+        pk = localStorage.getItem('red_public_key') || this.myIdentityHash;
+      }
+      const payloadObj = {
+        type: 'SHAKE_PAIR_ACCEPT',
+        payload: {
+          identity_hash: this.myIdentityHash,
+          display_name: name || 'Operador RED',
+          public_key: pk || null,
+          timestamp: Date.now()
+        }
+      };
+      const raw = new TextEncoder().encode(JSON.stringify(payloadObj));
+      const packet = createPacket(
+        this.myIdentityHash,
+        targetHash,
+        raw
+      );
+      await this.broadcast(encode(packet));
+    } catch (e) {
+      console.warn('[MeshRouter] Failed to send shake pair accept:', e);
+    }
+  }
+
+  /**
    * Binds a hardware device ID (e.g. BLE MAC) to a canonical 64-hex identity_hash.
    */
   bindDeviceToCanonical(deviceId: string, canonicalId: string, displayName?: string, publicKey?: string) {
@@ -283,6 +395,7 @@ class MeshRouter {
     const cleanCanonical = canonicalId.trim();
 
     this.deviceToCanonicalMap.set(cleanDevice, cleanCanonical);
+    this.deviceToCanonicalMap.set(cleanDevice.toLowerCase(), cleanCanonical.toLowerCase());
 
     // Migrate any temporary peer record under deviceId to canonicalId
     const tempPeer = this.peers.get(cleanDevice);
@@ -306,6 +419,22 @@ class MeshRouter {
         this.peers.set(cleanCanonical, existing);
       }
     }
+
+    // Notify registered identity resolved subscribers (useRedStore, etc.)
+    const resolvedName = displayName || tempPeer?.name || `Operador ${cleanCanonical.slice(0, 6)}`;
+    const resolvedPk = publicKey || tempPeer?.publicKey;
+    this.identityResolvedListeners.forEach(listener => {
+      try {
+        listener({
+          hardwareId: cleanDevice,
+          canonicalId: cleanCanonical,
+          displayName: resolvedName,
+          publicKey: resolvedPk
+        });
+      } catch (err) {
+        console.error('[MeshRouter] Identity resolved listener error:', err);
+      }
+    });
 
     // Resolve any awaiting query promises
     this.notifyPendingIdentityQueries(cleanDevice, cleanCanonical, displayName, publicKey);
@@ -583,12 +712,16 @@ class MeshRouter {
   private async handleRawPacket(raw: Uint8Array, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
     let packet = decode(raw);
     if (!packet) {
-      // Check if raw is a JSON envelope string (e.g. from MQTT relay or direct Web bridge)
+      // Check if raw is a JSON envelope string (e.g. from MQTT relay, Hive capacity ads, or direct Web bridge)
       try {
-        const str = new TextDecoder().decode(raw);
+        let cleanRaw = raw;
+        if (raw.length >= 5 && raw[0] === 0 && raw[1] === 0 && raw[4] === 123 /* '{' */) {
+          cleanRaw = raw.slice(4);
+        }
+        const str = new TextDecoder().decode(cleanRaw);
         if (str.startsWith('{')) {
           const parsed = JSON.parse(str);
-          if (parsed.sender || parsed.content || parsed.recipient || parsed.msg_type) {
+          if (parsed.type || parsed.sender || parsed.content || parsed.recipient || parsed.msg_type) {
             packet = {
               recipient: this.getCanonicalId(parsed.recipient || this.myIdentityHash),
               sender: this.getCanonicalId(parsed.sender || fromTransportId || 'unknown'),
@@ -596,7 +729,7 @@ class MeshRouter {
               flags: 0,
               timestamp: (parsed.timestamp ? (parsed.timestamp > 1e11 ? parsed.timestamp : parsed.timestamp * 1000) : Date.now()),
               nonce: parsed.id || ('nonce_' + Math.random().toString(36).substring(2, 10)),
-              payload: raw,
+              payload: cleanRaw,
             };
           }
         }
@@ -769,7 +902,33 @@ class MeshRouter {
         }
       }
 
-      // 3. Contact & Location Signals
+      // 3. Shake-to-Pair Real P2P Mesh Handshake
+      if (payloadStr.startsWith('{') && (payloadStr.includes('SHAKE_PAIR_BROADCAST') || payloadStr.includes('SHAKE_PAIR_ACCEPT'))) {
+        try {
+          const parsed = JSON.parse(payloadStr);
+          const peerPayload = parsed.payload;
+          if (peerPayload && peerPayload.identity_hash && peerPayload.identity_hash !== this.myIdentityHash) {
+            const pHash = peerPayload.identity_hash;
+            const pName = peerPayload.display_name || `Nodo ${pHash.slice(0, 8)}`;
+            const pPk = peerPayload.public_key;
+            if (fromTransportId) {
+              this.bindDeviceToCanonical(fromTransportId, pHash, pName, pPk);
+            }
+            this.bindDeviceToCanonical(packet.sender, pHash, pName, pPk);
+            
+            this.shakePairListeners.forEach(listener => {
+              try { listener(peerPayload); } catch (e) { console.error('[MeshRouter] Shake listener error:', e); }
+            });
+
+            if (parsed.type === 'SHAKE_PAIR_BROADCAST') {
+              this.sendShakePairAccept(pHash).catch(() => {});
+            }
+            return;
+          }
+        } catch {}
+      }
+
+      // 4. Contact & Location Signals
       isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('shake_pair_');
       if (payloadStr.startsWith('{"type":"NODE_LOCATION_UPDATE"')) {
         isLocationMsg = true;

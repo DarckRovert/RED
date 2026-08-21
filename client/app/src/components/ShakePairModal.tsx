@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
-import { RedAPI, getProximityNodes } from "../lib/api";
+import { RedAPI } from "../lib/api";
 import { meshRouter } from "../lib/mesh/meshRouter";
 
 export const ShakePairModal: React.FC = () => {
@@ -14,31 +14,58 @@ export const ShakePairModal: React.FC = () => {
     const [statusText, setStatusText] = useState<string>("Sacude el teléfono para vincular nodos cercanos");
     const [pairedDevice, setPairedDevice] = useState<{ did: string; name: string; isAlreadyAdded: boolean } | null>(null);
 
-    const SHAKE_THRESHOLD = 15.0; // m/s^2
+    const SHAKE_THRESHOLD = 7.5; // m/s^2 above 1G
     const lastShakeTimeRef = useRef<number>(0);
 
     // Deduplication Helper: check if contact already exists in local contacts list
-    const checkExistingContact = useCallback((candidateHash: string) => {
+    const checkExistingContact = useCallback((candidateHash: string, candidateName?: string) => {
         if (!candidateHash) return { exists: false, contact: null };
-        const clean = candidateHash.replace(/^did:red:/, "").split(":")[0].trim().toLowerCase();
+        let clean = candidateHash.trim();
+        if (clean.startsWith("did:red:")) clean = clean.replace(/^did:red:/i, "");
+        if (clean.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(clean)) {
+            const parts = clean.split(":");
+            if (parts[0].length >= 16) clean = parts[0].trim();
+        }
+        clean = clean.toLowerCase();
         const canonical = meshRouter.getCanonicalId(clean) || clean;
         const shortCandidate = canonical.slice(0, 8);
         const contactsList = contacts || [];
 
+        const isGeneric = (n?: string) => !n || n.startsWith('Operador ') || n.startsWith('Nodo ') || n.startsWith('Par Escaneado') || n === 'Nuevo Par' || n === 'Par Malla';
+
         const found = contactsList.find((c: any) => {
             if (!c) return false;
-            const cHash = (c.identity_hash || c.id || c.did || "").replace(/^did:red:/, "").split(":")[0].trim().toLowerCase();
+            let cHash = (c.identity_hash || c.id || c.did || "").trim();
+            if (cHash.startsWith("did:red:")) cHash = cHash.replace(/^did:red:/i, "");
+            if (cHash.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cHash)) {
+                const parts = cHash.split(":");
+                if (parts[0].length >= 16) cHash = parts[0].trim();
+            }
+            cHash = cHash.toLowerCase();
             const cCanonical = meshRouter.getCanonicalId(cHash) || cHash;
             const cShort = cCanonical.slice(0, 8);
-            return cCanonical === canonical || cHash === clean || (cCanonical.length >= 8 && canonical.length >= 8 && cShort === shortCandidate);
+            if (cCanonical === canonical || cHash === clean || (cCanonical.length >= 8 && canonical.length >= 8 && cShort === shortCandidate)) {
+                return true;
+            }
+            if (candidateName && !isGeneric(candidateName) && !isGeneric(c.display_name)) {
+                const cName = c.display_name.trim().toLowerCase();
+                const candName = candidateName.trim().toLowerCase();
+                if (cName === candName || cName === `red-${candName}` || `red-${cName}` === candName) return true;
+            }
+            return false;
         });
 
         return { exists: !!found, contact: found };
     }, [contacts]);
 
     const processCandidatePeer = useCallback(async (peerHash: string, peerName: string, peerPk: string | null = null) => {
-        const cleanHash = peerHash.replace(/^did:red:/, "").split(":")[0].trim();
-        const { exists, contact } = checkExistingContact(cleanHash);
+        let cleanHash = peerHash.trim();
+        if (cleanHash.startsWith("did:red:")) cleanHash = cleanHash.replace(/^did:red:/i, "");
+        if (cleanHash.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanHash)) {
+            const parts = cleanHash.split(":");
+            if (parts[0].length >= 16) cleanHash = parts[0].trim();
+        }
+        const { exists, contact } = checkExistingContact(cleanHash, peerName);
 
         if (exists) {
             const actualName = contact?.display_name || peerName;
@@ -47,13 +74,13 @@ export const ShakePairModal: React.FC = () => {
                 name: actualName,
                 isAlreadyAdded: true
             });
-            setStatusText(`ℹ️ Dispositivo cercano previamente vinculado: ${actualName}`);
+            setStatusText(`ℹ️ Nodo cercano previamente vinculado: ${actualName}`);
             toast.info(`ℹ️ ${actualName} ya forma parte de tu lista de contactos.`);
         } else {
-            await addContact(cleanHash, peerName, peerPk);
-            try { await RedAPI.syncContactProfile(cleanHash); } catch {}
+            const resolvedHash = await addContact(cleanHash, peerName, peerPk);
+            try { await RedAPI.syncContactProfile(resolvedHash || cleanHash); } catch {}
             setPairedDevice({
-                did: `did:red:${cleanHash}`,
+                did: `did:red:${resolvedHash || cleanHash}`,
                 name: peerName,
                 isAlreadyAdded: false
             });
@@ -64,70 +91,65 @@ export const ShakePairModal: React.FC = () => {
         fetchData();
     }, [checkExistingContact, addContact, fetchData]);
 
-    // Live P2P Event listener for real-time incoming shake pairing signals
+    // 1. Direct P2P Mesh Shake-to-Pair packet listener
     useEffect(() => {
-        let eventSource: EventSource | null = null;
-        try {
-            eventSource = RedAPI.subscribeToEvents((event: any) => {
-                let data: any = {};
-                if (typeof event?.content === "string" && event.content.startsWith("{")) {
-                    try {
-                        data = JSON.parse(event.content);
-                    } catch {}
-                }
-
-                const effectiveType = data.msg_type || event?.msg_type;
-
-                if (effectiveType === "shake_pair_request" || effectiveType === "shake_pair_response") {
-                    const peerHash = data.sender_hash || event?.sender_hash || event?.from;
-                    const peerName = data.nickname || event?.nickname || `Nodo-${peerHash?.slice(0, 6)}`;
-                    const peerPk = data.public_key || null;
-
-                    if (peerHash && peerHash !== identity?.identity_hash) {
-                        processCandidatePeer(peerHash, peerName, peerPk);
-                    }
-                }
-            });
-        } catch {}
+        const unsub = meshRouter.onShakePair((peer) => {
+            if (!peer || !peer.identity_hash || peer.identity_hash === identity?.identity_hash) return;
+            console.log(`[ShakePairModal] Received P2P Shake Pulse from ${peer.display_name} (${peer.identity_hash.slice(0, 8)})`);
+            
+            if (typeof navigator !== "undefined" && navigator.vibrate) {
+                navigator.vibrate([150, 80, 150]);
+            }
+            
+            processCandidatePeer(peer.identity_hash, peer.display_name || `Nodo ${peer.identity_hash.slice(0, 8)}`, peer.public_key || null);
+        });
 
         return () => {
-            if (eventSource) eventSource.close();
+            unsub();
         };
     }, [identity, processCandidatePeer]);
 
-    // Accelerometer Motion Sensor Hardware Listener
+    // 2. Accelerometer Motion Sensor Hardware Listener
     useEffect(() => {
         const handleMotion = (e: DeviceMotionEvent) => {
-            const acc = e.accelerationIncludingGravity || e.acceleration;
+            const linearAcc = e.acceleration;
+            const gravAcc = e.accelerationIncludingGravity;
+            const acc = linearAcc?.x != null ? linearAcc : gravAcc;
             if (!acc) return;
 
             const x = acc.x || 0;
             const y = acc.y || 0;
             const z = acc.z || 0;
-            const mag = Math.sqrt(x * x + y * y + z * z);
-            setAccMagnitude(Math.round(mag * 10) / 10);
+            const rawMag = Math.sqrt(x * x + y * y + z * z);
+            
+            // Effective delta acceleration
+            const effectiveMag = linearAcc?.x != null ? rawMag : Math.abs(rawMag - 9.8);
+            setAccMagnitude(Math.round(effectiveMag * 10) / 10);
 
             const now = Date.now();
-            if (mag > SHAKE_THRESHOLD && now - lastShakeTimeRef.current > 2000) {
+            if (effectiveMag > SHAKE_THRESHOLD && now - lastShakeTimeRef.current > 1800) {
                 lastShakeTimeRef.current = now;
                 setShakeDetected(true);
-                setStatusText("📳 ¡SACUDIDA DETECTADA! Emitiendo pulso de emparejamiento...");
+                setStatusText("📳 ¡SACUDIDA DETECTADA! Emitiendo pulso de malla P2P...");
 
                 if (typeof navigator !== "undefined" && navigator.vibrate) {
                     navigator.vibrate([100, 50, 100]);
                 }
 
-                // Broadcast ephemeral handshake signal
-                meshRouter.broadcastDiscovery().catch(() => {});
-                getProximityNodes().then(nodes => {
-                    if (nodes && nodes.length > 0) {
-                        const top = nodes[0];
-                        const peerId = top.peer_id || top.node_hash || top.identity_hash;
-                        if (peerId) {
-                            processCandidatePeer(peerId, top.nickname || top.display_name || "Nodo RED");
-                        }
+                // Broadcast real P2P Shake pulse over BLE, WiFi Direct, and WebRTC
+                const myNick = identity?.nickname || "Operador RED";
+                const myPk = identity?.public_key || null;
+                meshRouter.broadcastShakePair(myNick, myPk).catch(() => {});
+
+                // Near-field scan check: if peer has strong signal (RSSI > -75), link immediately
+                const allPeers = meshRouter.getAllPeers();
+                const nearbyPeer = allPeers.find(p => p.rssi != null && p.rssi >= -75 && p.id !== identity?.identity_hash);
+                if (nearbyPeer) {
+                    const canonicalId = meshRouter.getCanonicalId(nearbyPeer.id) || nearbyPeer.id;
+                    if (canonicalId && canonicalId !== identity?.identity_hash) {
+                        processCandidatePeer(canonicalId, nearbyPeer.name || `Nodo ${canonicalId.slice(0, 8)}`, nearbyPeer.publicKey || null);
                     }
-                }).catch(() => {});
+                }
             }
         };
 
@@ -141,7 +163,27 @@ export const ShakePairModal: React.FC = () => {
                 window.removeEventListener("devicemotion", handleMotion, true);
             }
         };
-    }, [processCandidatePeer]);
+    }, [identity, processCandidatePeer]);
+
+    const handleManualEmit = () => {
+        setShakeDetected(true);
+        setStatusText("📳 Emitiendo pulso manual de emparejamiento...");
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]);
+        }
+        const myNick = identity?.nickname || "Operador RED";
+        const myPk = identity?.public_key || null;
+        meshRouter.broadcastShakePair(myNick, myPk).catch(() => {});
+
+        const allPeers = meshRouter.getAllPeers();
+        const validPeer = allPeers.find(p => p.id !== identity?.identity_hash);
+        if (validPeer) {
+            const canonicalId = meshRouter.getCanonicalId(validPeer.id) || validPeer.id;
+            if (canonicalId && canonicalId !== identity?.identity_hash) {
+                processCandidatePeer(canonicalId, validPeer.name || `Nodo ${canonicalId.slice(0, 8)}`, validPeer.publicKey || null);
+            }
+        }
+    };
 
     return (
         <div style={{
@@ -201,20 +243,25 @@ export const ShakePairModal: React.FC = () => {
                             }} />
                         )}
 
-                        <div style={{
-                            width: "160px", height: "160px", borderRadius: "50%",
-                            background: "radial-gradient(circle, rgba(14,30,24,0.9) 0%, rgba(8,16,12,0.98) 70%)",
-                            border: `2px solid ${shakeDetected ? "var(--accent-emerald)" : "rgba(0,230,118,0.3)"}`,
-                            boxShadow: "0 0 35px rgba(0,230,118,0.15)",
-                            display: "flex", flexDirection: "column",
-                            alignItems: "center", justifyContent: "center", gap: "4px"
-                        }}>
+                        <div 
+                            onClick={handleManualEmit}
+                            className="card-tactical-interactive"
+                            style={{
+                                width: "160px", height: "160px", borderRadius: "50%",
+                                background: "radial-gradient(circle, rgba(14,30,24,0.9) 0%, rgba(8,16,12,0.98) 70%)",
+                                border: `2px solid ${shakeDetected ? "var(--accent-emerald)" : "rgba(0,230,118,0.3)"}`,
+                                boxShadow: "0 0 35px rgba(0,230,118,0.15)",
+                                display: "flex", flexDirection: "column",
+                                alignItems: "center", justifyContent: "center", gap: "4px",
+                                cursor: "pointer"
+                            }}
+                        >
                             <span style={{ fontSize: "2.5rem" }}>📳</span>
                             <span style={{ fontSize: "1.2rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)" }}>
                                 {accMagnitude} m/s²
                             </span>
-                            <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                                Fuerza G Vectorial
+                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
+                                Toca o Sacude
                             </span>
                         </div>
                     </div>
@@ -225,9 +272,18 @@ export const ShakePairModal: React.FC = () => {
                             {statusText}
                         </div>
                         <div style={{ fontSize: "0.76rem", color: "var(--text-muted)", marginTop: "4px", lineHeight: 1.4 }}>
-                            Junta dos teléfonos con la app RED abierta y sacúdelos simultáneamente para intercambiar identidades de forma segura.
+                            Junta dos teléfonos con la app RED abierta y sacúdelos simultáneamente para intercambiar identidades de forma segura mediante la malla P2P.
                         </div>
                     </div>
+
+                    {/* Botón de Pulso Manual */}
+                    <button
+                        onClick={handleManualEmit}
+                        className="btn-tactical-primary"
+                        style={{ padding: "10px 20px", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "8px" }}
+                    >
+                        📡 Emitir Pulso de Emparejamiento
+                    </button>
 
                     {/* Tarjeta de Dispositivo Vinculado */}
                     {pairedDevice && (

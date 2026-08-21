@@ -52,12 +52,17 @@ export default function ChatWindow() {
             activeConversationId?.includes('-') ? activeConversationId.split('-')[1] : (activeConversationId || '')
         )
     );
-    const peerHash = rawPeerHash.replace(/^did:red:/i, '').split(':')[0].trim().toLowerCase();
+    let cleanRaw = rawPeerHash.replace(/^did:red:/i, '').trim();
+    if (cleanRaw.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanRaw)) {
+        const parts = cleanRaw.split(':');
+        if (parts[0].length >= 16) cleanRaw = parts[0].trim();
+    }
+    const peerHash = cleanRaw.toLowerCase();
     const peerContact = contacts.find((c: any) => 
         c.identity_hash === peerHash ||
         (canonicalFromMesh && c.identity_hash === canonicalFromMesh) ||
-        (peerHash.length >= 8 && c.identity_hash.startsWith(peerHash)) ||
-        (c.identity_hash.length >= 8 && peerHash.startsWith(c.identity_hash))
+        (peerHash.length >= 8 && c.identity_hash?.startsWith(peerHash)) ||
+        (c.identity_hash?.length >= 8 && peerHash.startsWith(c.identity_hash))
     );
     // Full 64-character identity hash of peer for crypto & WebRTC signaling
     const fullPeerHash = activeConv?.peer || peerContact?.identity_hash || (

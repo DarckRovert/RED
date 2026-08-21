@@ -325,7 +325,10 @@ class RedAPIClient {
     async sendMessage(recipient: string, content: string, options?: Record<string, any>): Promise<void> {
         let cleanRecipient = recipient.trim();
         if (cleanRecipient.startsWith('did:red:')) cleanRecipient = cleanRecipient.replace(/^did:red:/i, '');
-        if (cleanRecipient.includes(':')) cleanRecipient = cleanRecipient.split(':')[0].trim();
+        if (cleanRecipient.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanRecipient)) {
+            const parts = cleanRecipient.split(':');
+            if (parts[0].length >= 16) cleanRecipient = parts[0].trim();
+        }
         cleanRecipient = cleanRecipient.toLowerCase();
 
         const msgId = options?.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
@@ -635,7 +638,10 @@ class RedAPIClient {
     async addContact(identity_hash: string, display_name: string, public_key?: string | null): Promise<void> {
         let cleanHash = identity_hash.trim();
         if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
-        if (cleanHash.includes(':')) cleanHash = cleanHash.split(':')[0].trim();
+        if (cleanHash.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanHash)) {
+            const parts = cleanHash.split(':');
+            if (parts[0].length >= 16) cleanHash = parts[0].trim();
+        }
         cleanHash = cleanHash.toLowerCase();
 
         // 1. Save in Web local storage

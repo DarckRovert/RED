@@ -549,9 +549,13 @@ export default function NodeMap() {
 
                     <div style={{ display: "flex", gap: "8px" }}>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 const targetId = selectedPeer.canonicalId || meshRouter.getCanonicalId(selectedPeer.id) || selectedPeer.id;
-                                navigate("chat", targetId);
+                                const peerRec = meshRouter.getPeerByAnyId(targetId) || meshRouter.getPeerByAnyId(selectedPeer.id);
+                                const finalId = (peerRec?.canonicalId && peerRec.canonicalId.length === 64) ? peerRec.canonicalId : targetId;
+                                const finalName = selectedPeer.name && !selectedPeer.name.startsWith("Nodo ") ? selectedPeer.name : (peerRec?.name || selectedPeer.name);
+                                const resolvedHash = await addContact(finalId, finalName, peerRec?.publicKey);
+                                navigate("chat", resolvedHash || finalId);
                             }}
                             className="btn-tactical-primary"
                             style={{ flex: 1, padding: "8px", fontSize: "0.78rem" }}
@@ -559,10 +563,13 @@ export default function NodeMap() {
                             💬 Chat Seguro
                         </button>
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 const targetId = selectedPeer.canonicalId || meshRouter.getCanonicalId(selectedPeer.id) || selectedPeer.id;
-                                addContact(targetId, selectedPeer.name || "Par Malla");
-                                toast.success("Contacto guardado");
+                                const peerRec = meshRouter.getPeerByAnyId(targetId) || meshRouter.getPeerByAnyId(selectedPeer.id);
+                                const finalId = (peerRec?.canonicalId && peerRec.canonicalId.length === 64) ? peerRec.canonicalId : targetId;
+                                const finalName = selectedPeer.name && !selectedPeer.name.startsWith("Nodo ") ? selectedPeer.name : (peerRec?.name || selectedPeer.name);
+                                await addContact(finalId, finalName, peerRec?.publicKey);
+                                toast.success(`Contacto ${finalName} guardado`);
                             }}
                             className="btn-tactical-secondary"
                             style={{ padding: "8px 12px", fontSize: "0.78rem", whiteSpace: "nowrap" }}

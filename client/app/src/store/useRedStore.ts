@@ -40,6 +40,7 @@ let _fetchInterval: ReturnType<typeof setInterval> | null = null;
 let _mainSSE: EventSource | null = null;
 let _outboundSSE: EventSource | null = null;
 let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let _identityResolvedUnsub: (() => void) | null = null;
 
 // Persistent cross-session message deduplication set
 const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (() => {
@@ -112,7 +113,7 @@ interface RedStore {
     sendReaction: (messageId: string, emoji: string) => Promise<void>;
     deleteMessageForEveryone: (messageId: string) => Promise<void>;
     addIncomingMessage: (rawEvent: any) => void;
-    addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<string | boolean>;
+    addContact:   (identity_hash: string, display_name: string, public_key?: string | null) => Promise<string>;
     deleteMessage: (messageId: string) => Promise<void>;
     editMessage: (messageId: string, newContent: string) => Promise<void>;
     clearConversation: () => Promise<void>;
@@ -840,6 +841,50 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 
                 await get().fetchData();
 
+                // Subscribe to real-time P2P identity resolution events
+                if (_identityResolvedUnsub) { _identityResolvedUnsub(); _identityResolvedUnsub = null; }
+                _identityResolvedUnsub = meshRouter.onIdentityResolved(({ hardwareId, canonicalId, displayName, publicKey }) => {
+                    if (!canonicalId || canonicalId === get().identity?.identity_hash) return;
+                    const currentContacts = get().contacts || [];
+                    const isGeneric = (name?: string) => !name || name.startsWith('Operador ') || name.startsWith('Nodo ') || name.startsWith('Par Escaneado') || name === 'Nuevo Par' || name === 'Par Malla';
+                    const idx = currentContacts.findIndex(c => {
+                        if (!c) return false;
+                        const cHash = (c.identity_hash || '').toLowerCase();
+                        if (cHash === hardwareId.toLowerCase() || cHash === canonicalId.toLowerCase()) return true;
+                        if (displayName && !isGeneric(displayName) && !isGeneric(c.display_name)) {
+                            if (c.display_name.trim().toLowerCase() === displayName.trim().toLowerCase() ||
+                                c.display_name.trim().toLowerCase() === `red-${displayName.trim().toLowerCase()}`) return true;
+                        }
+                        return false;
+                    });
+                    if (idx >= 0) {
+                        const updated = [...currentContacts];
+                        const oldEntry = updated[idx];
+                        const oldHash = oldEntry.identity_hash;
+                        updated[idx] = {
+                            ...oldEntry,
+                            identity_hash: canonicalId,
+                            display_name: (!isGeneric(displayName)) ? displayName : oldEntry.display_name,
+                            public_key: publicKey || oldEntry.public_key
+                        };
+                        const currentConvs = get().conversations || [];
+                        let updatedConvs = [...currentConvs];
+                        if (oldHash && oldHash !== canonicalId) {
+                            updatedConvs = updatedConvs.map(conv => {
+                                if (conv.id === oldHash || conv.peer === oldHash) {
+                                    return { ...conv, id: canonicalId, peer: canonicalId };
+                                }
+                                return conv;
+                            });
+                            set({ contacts: updated, conversations: updatedConvs });
+                            RedAPI.setWebStore('red_web_conversations', updatedConvs);
+                        } else {
+                            set({ contacts: updated });
+                        }
+                        RedAPI.setWebStore('red_web_contacts', updated);
+                    }
+                });
+
                 // Run storage Merkle self-healing audit
                 StateIntegrityEngine.verifyAndHealStorage().then((audit) => {
                     if (!audit.isHealthy && audit.corruptedRecordsFound > 0) {
@@ -1243,7 +1288,10 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
         let cleanPeerHash = peerHash.trim();
         if (cleanPeerHash.startsWith('did:red:')) cleanPeerHash = cleanPeerHash.replace(/^did:red:/i, '');
-        if (cleanPeerHash.includes(':')) cleanPeerHash = cleanPeerHash.split(':')[0].trim();
+        if (cleanPeerHash.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanPeerHash)) {
+            const parts = cleanPeerHash.split(':');
+            if (parts[0].length >= 16) cleanPeerHash = parts[0].trim();
+        }
         cleanPeerHash = cleanPeerHash.toLowerCase();
 
         // ── GROUP ROUTING FIX ──────────────────────────────────────────────────
@@ -2707,35 +2755,52 @@ export const useRedStore = create<RedStore>((set, get) => ({
         let pubKey: string | null = public_key ?? null;
 
         // 1. Parse did:red:<hash>:<pk> or did:red:<hash> or <hash>:<pk> or red_<shortId>
-        if (!pubKey) {
-            if (inputStr.startsWith("did:red:")) {
-                const parts = inputStr.split(":");
-                if (parts.length >= 4) {
-                    cleanHash = parts[2];
-                    pubKey = parts[3];
-                } else if (parts.length >= 3) {
-                    cleanHash = parts[2];
-                }
-            } else if (inputStr.includes(":")) {
-                const parts = inputStr.split(":");
-                if (parts.length >= 2 && parts[0].length >= 16) {
-                    cleanHash = parts[0];
-                    pubKey = parts[1];
+        if (inputStr.startsWith("did:red:")) {
+            const withoutScheme = inputStr.slice(8);
+            const parts = withoutScheme.split(":");
+            cleanHash = parts[0].trim();
+            if (parts.length >= 2 && parts[1] && !pubKey) {
+                pubKey = parts[1].trim();
+            }
+        } else if (inputStr.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(inputStr)) {
+            const parts = inputStr.split(":");
+            if (parts[0].length >= 16) {
+                cleanHash = parts[0].trim();
+                if (parts[1] && !pubKey) {
+                    pubKey = parts[1].trim();
                 }
             }
         }
 
         // 2. Resolve canonical hash from meshRouter if input is a hardware device ID (BLE MAC / UUID)
         const canonicalFromMesh = meshRouter.getCanonicalId(cleanHash);
-        if (canonicalFromMesh && canonicalFromMesh !== cleanHash && canonicalFromMesh.length >= 16) {
+        if (canonicalFromMesh && canonicalFromMesh.length === 64) {
             cleanHash = canonicalFromMesh;
-            const peerInfo = meshRouter.getPeerByAnyId(cleanHash);
-            if (peerInfo?.publicKey && !pubKey) {
+        }
+
+        // Check active peers in MeshRouter to extract public key or canonical DID
+        const peerInfo = meshRouter.getPeerByAnyId(cleanHash) || meshRouter.getPeerByAnyId(inputStr);
+        if (peerInfo) {
+            if (peerInfo.canonicalId && peerInfo.canonicalId.length === 64) {
+                cleanHash = peerInfo.canonicalId;
+            }
+            if (peerInfo.publicKey && !pubKey) {
                 pubKey = peerInfo.publicKey;
+            }
+            if (peerInfo.name && (!cleanName || cleanName.startsWith('Nodo ') || cleanName.startsWith('Operador ') || cleanName === 'Par Malla')) {
+                cleanName = peerInfo.name;
             }
         }
 
-        if (!cleanName || cleanName === "Nuevo Par" || cleanName === "Operador RED") {
+        const isGenericName = (name?: string) => !name || 
+            name.startsWith('Operador ') || 
+            name.startsWith('Nodo ') || 
+            name.startsWith('Par Escaneado') || 
+            name.startsWith('Dispositivo RED') ||
+            name === 'Nuevo Par' || 
+            name === 'Par Malla';
+
+        if (!cleanName || cleanName === "Nuevo Par" || cleanName === "Operador RED" || cleanName === "Par Malla") {
             cleanName = `Nodo ${cleanHash.slice(0, 8)}`;
         }
 
@@ -2745,30 +2810,71 @@ export const useRedStore = create<RedStore>((set, get) => ({
             public_key: pubKey
         };
 
-        // 3. Immediately update UI state with zero lag
+        // 3. Smart Deduplication & Merging with zero lag
         const currentContacts = get().contacts || [];
-        const existingIdx = currentContacts.findIndex(c => 
-            c.identity_hash?.toLowerCase() === cleanHash.toLowerCase() || 
-            (cleanHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(cleanHash.slice(0, 8).toLowerCase())) ||
-            (c.identity_hash?.length >= 8 && cleanHash.toLowerCase().startsWith(c.identity_hash.slice(0, 8).toLowerCase()))
-        );
+        const existingIdx = currentContacts.findIndex(c => {
+            if (!c) return false;
+            const cHash = (c.identity_hash || '').toLowerCase();
+            const targetHash = cleanHash.toLowerCase();
+            const rawTarget = inputStr.toLowerCase();
+
+            // A. Exact hash match
+            if (cHash === targetHash || cHash === rawTarget) return true;
+
+            // B. Mesh canonical equivalence
+            const cCanonical = meshRouter.getCanonicalId(cHash);
+            if (cCanonical && targetHash && cCanonical.toLowerCase() === targetHash) return true;
+
+            // C. Prefix match for 64-char hashes
+            if (cHash.length === 64 && targetHash.length === 64 && cHash.slice(0, 16) === targetHash.slice(0, 16)) return true;
+
+            // D. Non-generic display name match (e.g. "Tab", "Moto G22", "Lenovo")
+            if (!isGenericName(cleanName) && !isGenericName(c.display_name)) {
+                const cName = c.display_name.trim().toLowerCase();
+                const nName = cleanName.trim().toLowerCase();
+                if (cName === nName || cName === `red-${nName}` || `red-${cName}` === nName) {
+                    return true;
+                }
+            }
+
+            return false;
+        });
+
         let updatedContacts = [...currentContacts];
+        const currentConvs = get().conversations || [];
+        let updatedConvs = [...currentConvs];
+
         if (existingIdx >= 0) {
             const currentEntry = updatedContacts[existingIdx];
-            const isOldGeneric = !currentEntry.display_name || 
-                currentEntry.display_name.startsWith('Operador ') || 
-                currentEntry.display_name.startsWith('Nodo ') || 
-                currentEntry.display_name.startsWith('Par Escaneado') || 
-                currentEntry.display_name === 'Nuevo Par';
-            const resolvedName = (isOldGeneric || (!cleanName.startsWith('Nodo ') && !cleanName.startsWith('Par Escaneado') && !cleanName.startsWith('Operador '))) ? cleanName : currentEntry.display_name;
-            updatedContacts[existingIdx] = { ...currentEntry, ...localContact, display_name: resolvedName };
+            const oldHash = currentEntry.identity_hash;
+            const resolvedHash = (cleanHash.length === 64 && /^[0-9a-fA-F]+$/.test(cleanHash)) 
+                ? cleanHash 
+                : (currentEntry.identity_hash.length === 64 ? currentEntry.identity_hash : cleanHash);
+            const resolvedName = !isGenericName(cleanName) ? cleanName : currentEntry.display_name;
+            const resolvedPk = pubKey || currentEntry.public_key;
+
+            updatedContacts[existingIdx] = { 
+                ...currentEntry, 
+                identity_hash: resolvedHash, 
+                display_name: resolvedName, 
+                public_key: resolvedPk 
+            };
+
+            // Migrate conversations and messages seamlessly
+            if (oldHash && oldHash !== resolvedHash) {
+                updatedConvs = updatedConvs.map(conv => {
+                    if (conv.id === oldHash || conv.peer === oldHash) {
+                        return { ...conv, id: resolvedHash, peer: resolvedHash };
+                    }
+                    return conv;
+                });
+            }
+            cleanHash = resolvedHash;
         } else {
             updatedContacts.push(localContact);
         }
 
         // 4. Ensure conversation entry exists in active chat list
-        const currentConvs = get().conversations || [];
-        let updatedConvs = [...currentConvs];
         if (!updatedConvs.some(c => c.id === cleanHash || c.peer === cleanHash)) {
             updatedConvs.unshift({
                 id: cleanHash,

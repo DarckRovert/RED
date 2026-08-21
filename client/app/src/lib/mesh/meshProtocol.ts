@@ -96,24 +96,33 @@ export function encode(packet: MeshPacket): Uint8Array {
 export function decode(data: Uint8Array): MeshPacket | null {
   if (data.length < HEADER_SIZE_REAL) return null;
 
+  let offset = 0;
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
-  const magic = view.getUint32(0, false);
-  if (magic !== MESH_MAGIC) return null;
+  let magic = view.getUint32(0, false);
+  if (magic !== MESH_MAGIC) {
+    if (data.length >= HEADER_SIZE_REAL + 4 && view.getUint32(4, false) === MESH_MAGIC) {
+      offset = 4;
+      magic = MESH_MAGIC;
+    } else {
+      return null;
+    }
+  }
 
-  const recipient = bytesToHex(data.slice(4, 36));
-  const sender = bytesToHex(data.slice(36, 68));
-  const ttl = view.getUint8(68);
-  const flags = view.getUint8(69);
-  const payloadLen = view.getUint16(70, true);
-  const tsLow = view.getUint32(72, true);
-  const tsHigh = view.getUint32(76, true);
+  const recipient = bytesToHex(data.slice(offset + 4, offset + 36));
+  const sender = bytesToHex(data.slice(offset + 36, offset + 68));
+  const ttl = view.getUint8(offset + 68);
+  const flags = view.getUint8(offset + 69);
+  const payloadLen = view.getUint16(offset + 70, true);
+  const tsLow = view.getUint32(offset + 72, true);
+  const tsHigh = view.getUint32(offset + 76, true);
   const timestamp = tsLow + tsHigh * 0x100000000;
-  const nonce = bytesToHex(data.slice(80, 96));
-  // Robust full slice: use actual buffer length beyond header to prevent Uint16 overflow truncation on images
-  const actualRemaining = data.length - HEADER_SIZE_REAL;
+  const nonce = bytesToHex(data.slice(offset + 80, offset + 96));
+  
+  const headerEnd = offset + HEADER_SIZE_REAL;
+  const actualRemaining = data.length - headerEnd;
   const sliceLen = (actualRemaining >= payloadLen || payloadLen === 0xFFFF) ? actualRemaining : payloadLen;
-  const payload = data.slice(HEADER_SIZE_REAL, HEADER_SIZE_REAL + sliceLen);
+  const payload = data.slice(headerEnd, headerEnd + sliceLen);
 
   return { recipient, sender, ttl, flags, timestamp, nonce, payload };
 }

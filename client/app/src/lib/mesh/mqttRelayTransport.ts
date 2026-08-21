@@ -41,7 +41,10 @@ export class MqttRelayTransport {
     if (!raw) return '';
     let clean = raw.trim();
     if (clean.startsWith('did:red:')) clean = clean.replace(/^did:red:/i, '');
-    if (clean.includes(':')) clean = clean.split(':')[0].trim();
+    if (clean.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(clean)) {
+      const parts = clean.split(':');
+      if (parts[0].length >= 16) clean = parts[0].trim();
+    }
     return clean.toLowerCase();
   }
 
