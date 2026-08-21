@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { companionSyncEngine, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
-import { RedAPI } from "../lib/api";
 
 interface WebCompanionLinkModalProps {
     onClose: () => void;
@@ -13,12 +12,26 @@ interface WebCompanionLinkModalProps {
 
 export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ onClose }) => {
     const { identity, contacts, conversations } = useRedStore();
-    const [status, setStatus] = useState<"scanning" | "encrypting" | "success" | "error">("scanning");
-    const [statusMessage, setStatusMessage] = useState<string>("Escaneando código QR de RED Web…");
+    const [status, setStatus] = useState<"camera" | "manual" | "encrypting" | "success" | "error">("camera");
+    const [statusMessage, setStatusMessage] = useState<string>("Apunta la cámara al código QR de RED Web en tu PC…");
     const [manualCode, setManualCode] = useState<string>("");
-    const [showManualInput, setShowManualInput] = useState<boolean>(false);
+    const isScanningRef = useRef(false);
 
-    // Iniciar escaneo nativo con Capacitor Barcode Scanner si está disponible
+    const stopCamera = async () => {
+        if (!isScanningRef.current) return;
+        isScanningRef.current = false;
+        document.body.classList.remove("scanner-active");
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                await BarcodeScanner.showBackground();
+                await BarcodeScanner.stopScan();
+            }
+        } catch {}
+    };
+
+    // Iniciar escaneo nativo con Capacitor Barcode Scanner
     useEffect(() => {
         let isMounted = true;
 
@@ -28,26 +41,35 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 if (Capacitor.isNativePlatform()) {
                     const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
                     
-                    const status = await BarcodeScanner.checkPermission({ force: true });
-                    if (!status.granted) {
-                        setShowManualInput(true);
+                    const perm = await BarcodeScanner.checkPermission({ force: true });
+                    if (perm.denied) {
+                        toast.error("Permiso de cámara denegado. Puedes pegar el código manualmente.");
+                        if (isMounted) setStatus("manual");
+                        return;
+                    }
+                    if (!perm.granted) {
+                        toast.warning("Permiso de cámara no concedido.");
+                        if (isMounted) setStatus("manual");
                         return;
                     }
 
                     await BarcodeScanner.hideBackground();
-                    document.body.style.background = "transparent";
+                    document.body.classList.add("scanner-active");
+                    isScanningRef.current = true;
+                    if (isMounted) setStatus("camera");
 
                     const result = await BarcodeScanner.startScan();
                     if (result.hasContent && isMounted) {
+                        await stopCamera();
                         await handleScannedCode(result.content);
                     }
                 } else {
-                    setShowManualInput(true);
+                    if (isMounted) setStatus("manual");
                 }
             } catch (e: any) {
-                if (isMounted) {
-                    setShowManualInput(true);
-                }
+                console.warn("[WebCompanionLink] Camera init error:", e);
+                await stopCamera();
+                if (isMounted) setStatus("manual");
             }
         };
 
@@ -55,28 +77,23 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
         return () => {
             isMounted = false;
-            import("@capacitor/core").then(({ Capacitor }) => {
-                if (Capacitor.isNativePlatform()) {
-                    import("@capacitor-community/barcode-scanner").then(({ BarcodeScanner }) => {
-                        BarcodeScanner.showBackground();
-                        BarcodeScanner.stopScan();
-                        document.body.style.background = "";
-                    }).catch(() => {});
-                }
-            }).catch(() => {});
+            stopCamera();
         };
     }, []);
 
     const handleScannedCode = async (code: string) => {
-        if (!code.startsWith("RED_PAIR:1:")) {
-            toast.error("El código escaneado no es un código de vinculación RED válido.");
+        await stopCamera();
+        const rawCode = code.trim();
+
+        if (!rawCode.startsWith("RED_PAIR:1:")) {
+            toast.error("El código escaneado no es un código de vinculación RED Web válido.");
             setStatus("error");
             setStatusMessage("Código no reconocido");
             return;
         }
 
         setStatus("encrypting");
-        setStatusMessage("Preparando bóveda y cifrando canal E2E…");
+        setStatusMessage("Derivando claves ECDH P-256 y empaquetando bóveda…");
         TacticalAudioEngine.playTap();
 
         try {
@@ -110,7 +127,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
             };
 
             await companionSyncEngine.transmitMobileVaultToWeb(
-                code,
+                rawCode,
                 payload,
                 (msg) => setStatusMessage(msg)
             );
@@ -127,7 +144,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
             setTimeout(() => {
                 onClose();
-            }, 1800);
+            }, 1600);
         } catch (e: any) {
             setStatus("error");
             setStatusMessage(e?.message || "Error al transmitir bóveda");
@@ -135,6 +152,71 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         }
     };
 
+    const handleCancel = async () => {
+        await stopCamera();
+        onClose();
+    };
+
+    // ── MODO 1: CÁMARA TRANSPARENTE EN TIEMPO REAL ───────────────────────────
+    if (status === "camera") {
+        return (
+            <div className="scanner-viewfinder-overlay" style={{ zIndex: 100000 }}>
+                {/* Header Superior del Visor */}
+                <div style={{
+                    padding: "12px 20px",
+                    borderRadius: "14px",
+                    background: "rgba(4,6,10,0.88)",
+                    border: "1px solid var(--accent-cyan)",
+                    color: "var(--accent-cyan)",
+                    fontWeight: 900,
+                    fontSize: "0.92rem",
+                    letterSpacing: "0.5px",
+                    textAlign: "center",
+                    boxShadow: "0 4px 25px rgba(0,229,255,0.35)",
+                    maxWidth: "340px",
+                    width: "90%"
+                }}>
+                    💻 APUNTA AL CÓDIGO QR EN TU PC
+                </div>
+
+                {/* Caja de Visor con Línea Láser Animada */}
+                <div className="scanner-target-box" style={{ width: "260px", height: "260px" }}>
+                    <div className="scanner-laser-line" />
+                </div>
+
+                {/* Botonera Inferior */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "90%", maxWidth: "340px", alignItems: "center" }}>
+                    <button
+                        onClick={() => {
+                            stopCamera();
+                            setStatus("manual");
+                        }}
+                        className="btn-tactical-secondary"
+                        style={{
+                            width: "100%", padding: "12px",
+                            fontSize: "0.85rem", background: "rgba(0,0,0,0.75)",
+                            borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)"
+                        }}
+                    >
+                        ⌨️ Ingresar código manualmente
+                    </button>
+                    <button
+                        onClick={handleCancel}
+                        className="btn-tactical-primary"
+                        style={{
+                            width: "100%", padding: "14px",
+                            fontSize: "0.92rem",
+                            boxShadow: "0 4px 25px rgba(232,33,58,0.5)"
+                        }}
+                    >
+                        ✕ Cancelar
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ── MODO 2: TARJETA DE PROCESO / ENTRADA MANUAL / RESULTADOS ─────────────
     return (
         <div style={{
             position: "fixed", inset: 0, zIndex: 100000,
@@ -153,7 +235,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 boxShadow: "0 0 45px rgba(0, 229, 255, 0.15)"
             }}>
                 <button
-                    onClick={onClose}
+                    onClick={handleCancel}
                     style={{
                         position: "absolute", top: "16px", right: "16px",
                         background: "rgba(255,255,255,0.06)", border: "none",
@@ -165,67 +247,70 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 </button>
 
                 <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: "2.2rem", marginBottom: "8px" }}>
-                        {status === "success" ? "🎉" : status === "encrypting" ? "⚡" : "💻"}
+                    <div style={{ fontSize: "2.4rem", marginBottom: "8px" }}>
+                        {status === "success" ? "🎉" : status === "encrypting" ? "⚡" : status === "error" ? "❌" : "💻"}
                     </div>
                     <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 900 }}>
-                        {status === "success" ? "¡Sesión Web Activa!" : "Vincular con RED Web"}
+                        {status === "success" ? "¡Sesión Web Activa!" : status === "encrypting" ? "Cifrando y Transmitiendo" : "Vincular con RED Web"}
                     </h3>
-                    <p style={{ margin: "6px 0 0 0", fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                    <p style={{ margin: "6px 0 0 0", fontSize: "0.82rem", color: "var(--text-muted)" }}>
                         {statusMessage}
                     </p>
                 </div>
 
-                {status === "scanning" && (
-                    <div style={{
-                        width: "200px", height: "200px",
-                        border: "2px dashed var(--accent-cyan)",
-                        borderRadius: "18px",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        position: "relative", overflow: "hidden"
-                    }}>
-                        <div style={{
-                            position: "absolute", width: "100%", height: "2px",
-                            background: "var(--accent-cyan)",
-                            boxShadow: "0 0 10px var(--accent-cyan)",
-                            animation: "radarSweep 2s ease-in-out infinite"
-                        }} />
-                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center", padding: "10px" }}>
-                            Apunta la cámara al código QR de la pantalla de tu PC
-                        </span>
-                    </div>
-                )}
-
                 {status === "encrypting" && (
-                    <div style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
-                        <div className="animate-spin" style={{ fontSize: "2rem" }}>⚙️</div>
-                        <span style={{ fontSize: "0.8rem", color: "var(--accent-cyan)", fontWeight: 700 }}>
-                            Derivando claves ECDH P-256…
+                    <div style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+                        <div style={{
+                            width: "50px", height: "50px", borderRadius: "50%",
+                            border: "3px solid rgba(0,229,255,0.2)", borderTopColor: "var(--accent-cyan)",
+                            animation: "spin 1s linear infinite"
+                        }} />
+                        <span style={{ fontSize: "0.8rem", color: "var(--accent-cyan)", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
+                            AES-256-GCM E2E VAULT PACKET
                         </span>
                     </div>
                 )}
 
-                {/* Entrada manual de respaldo */}
-                {showManualInput && status === "scanning" && (
-                    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "10px" }}>
-                        <input
-                            type="text"
-                            placeholder="Pega el código RED_PAIR aquí…"
+                {status === "manual" && (
+                    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <textarea
+                            placeholder="Pega el código RED_PAIR:1:... que aparece en tu pantalla PC"
                             value={manualCode}
                             onChange={(e) => setManualCode(e.target.value)}
+                            rows={3}
                             style={{
                                 width: "100%", padding: "12px", borderRadius: "12px",
-                                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)",
-                                color: "#fff", fontSize: "11px", fontFamily: "JetBrains Mono, monospace"
+                                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(0,229,255,0.3)",
+                                color: "#fff", fontSize: "11px", fontFamily: "JetBrains Mono, monospace",
+                                resize: "none"
                             }}
                         />
                         <button
                             onClick={() => handleScannedCode(manualCode.trim())}
                             disabled={!manualCode.trim()}
                             className="btn-tactical-primary"
+                            style={{ width: "100%", padding: "14px", fontWeight: 900 }}
+                        >
+                            ⚡ VINCULAR DISPOSITIVO AHORA
+                        </button>
+                    </div>
+                )}
+
+                {status === "error" && (
+                    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <button
+                            onClick={() => setStatus("camera")}
+                            className="btn-tactical-primary"
                             style={{ width: "100%", padding: "12px" }}
                         >
-                            Vincular Manualmente
+                            🔄 Reintentar Escaneo
+                        </button>
+                        <button
+                            onClick={() => setStatus("manual")}
+                            className="btn-tactical-secondary"
+                            style={{ width: "100%", padding: "12px" }}
+                        >
+                            ⌨️ Usar Entrada Manual
                         </button>
                     </div>
                 )}
