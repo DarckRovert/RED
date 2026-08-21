@@ -926,11 +926,25 @@ impl Node {
     }
 
     /// Internal message delivery logic
+    ///
+    /// ROUTING DECISION (v40.1.0 fix):
+    /// ─────────────────────────────────────────────────────────────────────────
+    /// OLD (BROKEN): if available_peers.len() >= 3  →  always Kademlia DHT
+    ///   Problem: 3 phones on local WiFi each expose wlan0 + p2p0 + cellular
+    ///   interfaces, so len() is always ≥ 3. Kademlia then fails because it
+    ///   receives an IdentityHash (32-byte BLAKE3), not a Libp2p PeerId
+    ///   multihash, producing: RoutingFailed("Invalid peer ID for Kademlia")
+    ///   and dropping every message into pending_deliveries forever.
+    ///
+    /// NEW (CORRECT): check if recipient is in known_peers() FIRST.
+    ///   - Recipient FOUND locally  → 1-hop direct GossipSub (always fast-path)
+    ///   - Recipient NOT found AND ≥3 relay peers exist → multi-hop onion via Kademlia
+    ///   - Recipient NOT found AND <3 relay peers       → WAN Kademlia best-effort
+    /// ─────────────────────────────────────────────────────────────────────────
     async fn deliver_message(&mut self, recipient: &IdentityHash, message: &Message) -> NetworkResult<()> {
         self.packets_sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let available_peers = self.transport.known_peers();
-        let is_recipient_online = available_peers.iter().any(|p| p.identity_hash.as_ref() == Some(recipient));
-        
+
         let payload = message.serialize()
             .map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
@@ -941,93 +955,16 @@ impl Node {
             s.get_contact(recipient).map(|c| c.public_key)
         };
 
-        if available_peers.len() >= 3 {
-            // ── FULL ONION ROUTING PATH ──
-            let peer_id = tokio::time::timeout(std::time::Duration::from_secs(5), self.transport.resolve(recipient))
-                .await
-                .unwrap_or(Err(NetworkError::RoutingFailed("Timeout resolving peer".to_string())))?;
+        // ── STEP 1: Check if recipient is directly reachable in local mesh ──
+        let local_destination = available_peers.iter()
+            .find(|p| p.identity_hash.as_ref() == Some(recipient))
+            .cloned();
 
-            let updated_peers = self.transport.known_peers();
-            let destination = updated_peers.into_iter()
-                .find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id)
-                .unwrap_or_else(|| {
-                    let pub_key = contact_pub_key
-                        .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
-                        .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
-
-                    crate::network::PeerInfo {
-                        id: peer_id.clone(),
-                        public_key: pub_key,
-                        identity_hash: Some(recipient.clone()),
-                        protocol_version: 1,
-                        user_agent: "red-node".to_string(),
-                        addresses: vec!["127.0.0.1:0".parse().unwrap()],
-                    }
-                });
-
-            let all_peers = self.transport.known_peers();
-            let route = self.onion_router.select_route(&all_peers, &destination)?;
-
-            let mut shared_secrets = Vec::new();
-            for hop in &route.hops {
-                let secret = self.identity.key_exchange(&hop.public_key);
-                shared_secrets.push(secret);
-            }
-
-            let packet = self.onion_router.create_packet(&route, &payload, &shared_secrets, my_pub_bytes)
-                .map_err(|e| NetworkError::TransportError(e.to_string()))?;
-
-            let first_hop = &route.hops[0].peer_id;
-            use crate::network::transport::TransportMessage;
-            self.transport.send(first_hop, TransportMessage::Onion(packet.clone())).await?;
-            info!("Onion message sent to first hop: {} (3-hop routing)", first_hop.to_hex());
-
-            // BUG FIX: Also emit multi-hop packet to frontend for BLE relay
-            if let Some(tx) = &self.outbound_payload_tx {
-                if let Ok(serialized_packet) = bincode::serialize(&packet) {
-                    let _ = tx.send(serialized_packet);
-                }
-            }
-
-        } else {
-            // ── DIRECT GOSSIPSUB PATH (≤2 peers, e.g. 2-phone demo) ──
-            // BUG FIX: Removed is_recipient_online block here to enable blind broadcasting
-            // over BLE Mesh/WiFi Direct. Offline nodes won't be seen as 'online' via Libp2p.
-
-            // We MUST encrypt the payload. Since we drop Libp2p's TCP Noise layer
-            // for offline BLE meshes, we wrap the message in a literal 1-hop OnionPacket.
-            let contact_pub_key = {
-                let s = self.storage.lock().await;
-                s.get_contact(recipient).map(|c| c.public_key)
-            };
-
-            let mut destination_opt = available_peers.into_iter()
-                .find(|p| p.identity_hash.as_ref() == Some(recipient));
-
-            if destination_opt.is_none() {
-                // GAP FIX: If peer is not in local mesh, ask Kademlia to find their IP on the WAN.
-                // We wait up to 5 seconds. If found, Kademlia will punch through NAT and connect.
-                if let Ok(Ok(peer_id)) = tokio::time::timeout(std::time::Duration::from_secs(5), self.transport.resolve(recipient)).await {
-                    let updated_peers = self.transport.known_peers();
-                    destination_opt = updated_peers.into_iter().find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id);
-                }
-            }
-
-            let destination = destination_opt.unwrap_or_else(|| {
-                let proper_peer_id = PeerId::from_bytes(*recipient.as_bytes());
-                let pub_key = contact_pub_key
-                    .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
-                    .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
-
-                crate::network::PeerInfo {
-                    id: proper_peer_id,
-                    public_key: pub_key,
-                    identity_hash: Some(recipient.clone()),
-                    protocol_version: 1,
-                    user_agent: "red-node".to_string(),
-                    addresses: vec![],
-                }
-            });
+        if let Some(destination) = local_destination {
+            // ── FAST PATH: Recipient is in local mesh → 1-hop direct delivery ──
+            // This is the CORRECT path for all local WiFi/BLE mesh scenarios.
+            // We never touch Kademlia here.
+            info!("[deliver] Recipient {} found in local mesh → direct 1-hop path", &recipient.to_hex()[..8]);
 
             let shared_secret = self.identity.key_exchange(&destination.public_key);
             let single_hop_route = crate::network::routing::Route {
@@ -1038,21 +975,139 @@ impl Node {
                 }],
             };
 
-            if let Ok(packet) = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret], my_pub_bytes) {
-                // BUG FIX: Emit encrypted packet to frontend for Bluetooth LE / WiFi-Direct transmission FIRST
+            let packet = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret], my_pub_bytes)
+                .map_err(|e| NetworkError::TransportError(format!("1-hop encrypt failed: {}", e)))?;
+
+            // Emit to BLE/WiFi-Direct frontend channel first
+            if let Some(tx) = &self.outbound_payload_tx {
+                if let Ok(serialized_packet) = bincode::serialize(&packet) {
+                    let _ = tx.send(serialized_packet);
+                }
+            }
+
+            // Publish over Libp2p GossipSub
+            use crate::network::transport::TransportMessage;
+            let _ = self.transport.send(
+                &destination.id,
+                TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }
+            ).await;
+            info!("[deliver] 1-hop encrypted Onion packet dispatched to {}", &recipient.to_hex()[..8]);
+
+        } else {
+            // ── STEP 2: Recipient NOT in local mesh → check for onion routing capacity ──
+            // Only use multi-hop Kademlia onion if we have ≥3 OTHER peers available as relays.
+            let relay_peer_count = available_peers.len();
+
+            if relay_peer_count >= 3 {
+                // ── MULTI-HOP ONION ROUTING PATH (WAN / relay circuit) ──
+                // Here we legitimately need Kademlia because the destination is remote.
+                // Attempt to resolve the IdentityHash → PeerId via the DHT.
+                info!("[deliver] Recipient not in local mesh, {} relay peers available → attempting multi-hop onion", relay_peer_count);
+
+                let peer_id = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    self.transport.resolve(recipient)
+                )
+                .await
+                .unwrap_or(Err(NetworkError::RoutingFailed("Timeout resolving peer".to_string())))?;
+
+                let updated_peers = self.transport.known_peers();
+                let destination = updated_peers.into_iter()
+                    .find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id)
+                    .unwrap_or_else(|| {
+                        let pub_key = contact_pub_key
+                            .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                            .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
+                        crate::network::PeerInfo {
+                            id: peer_id.clone(),
+                            public_key: pub_key,
+                            identity_hash: Some(recipient.clone()),
+                            protocol_version: 1,
+                            user_agent: "red-node".to_string(),
+                            addresses: vec!["127.0.0.1:0".parse().unwrap()],
+                        }
+                    });
+
+                let all_peers = self.transport.known_peers();
+                let route = self.onion_router.select_route(&all_peers, &destination)?;
+
+                let mut shared_secrets = Vec::new();
+                for hop in &route.hops {
+                    let secret = self.identity.key_exchange(&hop.public_key);
+                    shared_secrets.push(secret);
+                }
+
+                let packet = self.onion_router.create_packet(&route, &payload, &shared_secrets, my_pub_bytes)
+                    .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+
+                let first_hop = &route.hops[0].peer_id;
+                use crate::network::transport::TransportMessage;
+                self.transport.send(first_hop, TransportMessage::Onion(packet.clone())).await?;
+                info!("[deliver] Onion packet sent to first hop {} (multi-hop circuit)", first_hop.to_hex());
+
                 if let Some(tx) = &self.outbound_payload_tx {
                     if let Ok(serialized_packet) = bincode::serialize(&packet) {
                         let _ = tx.send(serialized_packet);
                     }
                 }
 
-                // Publish for internal Libp2p mesh (if any)
-                use crate::network::transport::TransportMessage;
-                let proper_peer = destination.id.clone();
-                let _ = self.transport.send(&proper_peer, TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }).await;
-                info!("Direct encrypted 1-hop Onion message dispatched (direct/WAN mode)");
             } else {
-                return Err(NetworkError::TransportError("Failed to encrypt 1-hop OnionPacket for offline mesh mode".to_string()));
+                // ── WAN BEST-EFFORT PATH (<3 relays, recipient not local) ──
+                // Attempt Kademlia resolution; if not found, create a fallback
+                // PeerInfo using the contact's stored public key for encryption.
+                info!("[deliver] Recipient not in local mesh, <3 relay peers → WAN best-effort path");
+
+                let mut destination_opt: Option<crate::network::PeerInfo> = None;
+                if let Ok(Ok(peer_id)) = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    self.transport.resolve(recipient)
+                ).await {
+                    let updated_peers = self.transport.known_peers();
+                    destination_opt = updated_peers.into_iter()
+                        .find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id);
+                }
+
+                let destination = destination_opt.unwrap_or_else(|| {
+                    let proper_peer_id = PeerId::from_bytes(*recipient.as_bytes());
+                    let pub_key = contact_pub_key
+                        .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                        .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
+                    crate::network::PeerInfo {
+                        id: proper_peer_id,
+                        public_key: pub_key,
+                        identity_hash: Some(recipient.clone()),
+                        protocol_version: 1,
+                        user_agent: "red-node".to_string(),
+                        addresses: vec![],
+                    }
+                });
+
+                let shared_secret = self.identity.key_exchange(&destination.public_key);
+                let single_hop_route = crate::network::routing::Route {
+                    hops: vec![crate::network::routing::RouteHop {
+                        peer_id: destination.id.clone(),
+                        public_key: destination.public_key.clone(),
+                        address: destination.addresses.first().copied().unwrap_or_else(|| "127.0.0.1:0".parse().unwrap()),
+                    }],
+                };
+
+                if let Ok(packet) = self.onion_router.create_packet(&single_hop_route, &payload, &[shared_secret], my_pub_bytes) {
+                    if let Some(tx) = &self.outbound_payload_tx {
+                        if let Ok(serialized_packet) = bincode::serialize(&packet) {
+                            let _ = tx.send(serialized_packet);
+                        }
+                    }
+                    use crate::network::transport::TransportMessage;
+                    let _ = self.transport.send(
+                        &destination.id,
+                        TransportMessage::Data { payload: bincode::serialize(&packet).unwrap_or_default() }
+                    ).await;
+                    info!("[deliver] WAN best-effort 1-hop packet dispatched");
+                } else {
+                    return Err(NetworkError::TransportError(
+                        "Failed to encrypt 1-hop OnionPacket for WAN best-effort mode".to_string()
+                    ));
+                }
             }
         }
 
