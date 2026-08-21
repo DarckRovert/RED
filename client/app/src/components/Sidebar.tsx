@@ -332,17 +332,17 @@ export default function Sidebar() {
 
             {/* Header Táctico Principal */}
             <header style={{
-                padding: "0 16px",
+                padding: "0 12px",
                 height: "var(--header-h)",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
                 borderBottom: "1px solid var(--glass-border)",
                 background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
                 backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0
+                zIndex: 10, flexShrink: 0, overflow: "hidden"
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }} onClick={() => navigate("idVault")}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", minWidth: 0, flex: "1 1 auto", marginRight: "8px", overflow: "hidden" }} onClick={() => navigate("idVault")}>
                     <div style={{
-                        width: 38, height: 38, borderRadius: "50%",
+                        width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontWeight: 900, color: "#fff", fontSize: "1rem",
                         border: "2px solid var(--glass-border)",
@@ -350,43 +350,55 @@ export default function Sidebar() {
                     }}>
                         {(identity?.short_id || "O").charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px", display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span>{identity?.nickname || "Operador RED"}</span>
-                            <span className="badge-tactical" style={{ fontSize: "0.58rem", padding: "1px 5px", background: "rgba(232, 33, 58, 0.2)", color: "#FF3355", border: "1px solid rgba(232,33,58,0.4)" }}>
+                    <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px", display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{identity?.nickname || "Operador RED"}</span>
+                            <span className="badge-tactical" style={{ fontSize: "0.56rem", padding: "1px 4px", background: "rgba(232, 33, 58, 0.2)", color: "#FF3355", border: "1px solid rgba(232,33,58,0.4)", flexShrink: 0 }}>
                                 v{RED_VERSION}
                             </span>
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px" }}>
+                        <div style={{ fontSize: "0.66rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             <span style={{
-                                width: 7, height: 7, borderRadius: "50%",
+                                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
                                 background: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)",
                                 display: "inline-block",
                                 boxShadow: nodeOnline ? "0 0 8px var(--accent-emerald)" : "none",
                                 animation: nodeOnline ? "beaconPulse 2s infinite" : "none"
                             }} />
-                            {nodeOnline ? `MALLA ACTIVA • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "OFFLINE"}
+                            {nodeOnline ? `MALLA • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "OFFLINE"}
                         </div>
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <button onClick={() => setStoryModal("creator")} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-cyan)" }} title="Publicar Historia o Foto Efímera (24h)">
+                <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+                    <button onClick={() => setStoryModal("creator")} className="btn-icon" style={{ width: 34, height: 34, color: "var(--accent-cyan)", flexShrink: 0 }} title="Publicar Historia / Foto">
                         📷
                     </button>
-                    <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-crimson)" }} title="Agregar nuevo contacto">
+                    <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 34, height: 34, color: "var(--accent-crimson)", flexShrink: 0 }} title="Agregar nuevo contacto">
                         ➕
                     </button>
-                    <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 38, height: 38 }} title="Búsqueda global">
+                    <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 34, height: 34, flexShrink: 0 }} title="Búsqueda global">
                         🔍
                     </button>
-                    <button onClick={() => navigate("radar")} className="btn-icon" style={{ width: 38, height: 38 }} title="Radar de pares y escáner QR">
-                        📡
-                    </button>
-                    <button onClick={() => navigate("webCompanionLink")} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-emerald)" }} title="💻 Vincular con RED Web (PC)">
+                    <button onClick={() => navigate("webCompanionLink")} className="btn-icon" style={{ width: 34, height: 34, color: "var(--accent-emerald)", flexShrink: 0 }} title="💻 Vincular con RED Web (PC)">
                         💻
                     </button>
-                    <button onClick={() => setMenuOpen(m => !m)} className="btn-icon" style={{ width: 38, height: 38 }} title="Centro de control">
+                    <button 
+                        onClick={() => setMenuOpen(m => !m)} 
+                        className="btn-icon" 
+                        style={{ 
+                            width: 36, height: 36, 
+                            background: menuOpen ? "var(--accent-cyan)" : "rgba(0, 229, 255, 0.15)", 
+                            border: "1px solid rgba(0, 229, 255, 0.45)", 
+                            color: menuOpen ? "#000" : "var(--accent-cyan)", 
+                            borderRadius: "10px", 
+                            fontWeight: 900, 
+                            fontSize: "1.1rem",
+                            boxShadow: "0 0 12px rgba(0, 229, 255, 0.25)",
+                            flexShrink: 0
+                        }} 
+                        title={`Centro de Control (${totalModules} Módulos Tácticos)`}
+                    >
                         ☰
                     </button>
                 </div>
@@ -658,7 +670,7 @@ export default function Sidebar() {
                 )}
             </div>
 
-            {/* ── Fixed Bottom Tactical HUD Dock (5 Key Modules) ── */}
+            {/* ── Fixed Bottom Tactical HUD Dock (6 Key Modules) ── */}
             <nav style={{
                 position: "sticky", bottom: 0, left: 0, right: 0,
                 minHeight: "58px",
@@ -667,36 +679,51 @@ export default function Sidebar() {
                 WebkitBackdropFilter: "blur(24px)",
                 borderTop: "1px solid var(--glass-border)",
                 display: "flex", alignItems: "center", justifyContent: "space-around",
-                padding: "4px 8px max(6px, env(safe-area-inset-bottom, 6px)) 8px",
+                padding: "4px 4px max(6px, env(safe-area-inset-bottom, 6px)) 4px",
                 zIndex: 40, flexShrink: 0
             }}>
                 {[
-                    { id: "chats", icon: "💬", label: "Chats", action: () => setActiveTab("chats"), active: activeTab === "chats" },
-                    { id: "radar", icon: "📡", label: "Radar", action: () => navigate("radar"), count: meshRouter.peers.size },
-                    { id: "ai", icon: "🤖", label: "Copiloto IA", action: () => navigate("aiCopilot"), highlight: true },
-                    { id: "compass", icon: "🧭", label: "Brújula", action: () => navigate("offGridCompass") },
-                    { id: "vault", icon: "🪪", label: "Bóveda", action: () => navigate("idVault") },
+                    { id: "chats", icon: "💬", label: "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen },
+                    { id: "radar", icon: "📡", label: "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
+                    { id: "modules", icon: "⚡", label: "Módulos", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: String(totalModules), isModulesBtn: true },
+                    { id: "ai", icon: "🤖", label: "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
+                    { id: "compass", icon: "🧭", label: "Brújula", action: () => { setMenuOpen(false); navigate("offGridCompass"); } },
+                    { id: "vault", icon: "🪪", label: "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
                 ].map(item => (
                     <button
                         key={item.id}
                         onClick={item.action}
                         style={{
                             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                            gap: "2px", background: "transparent", border: "none",
-                            color: item.active ? "var(--accent-crimson)" : (item.highlight ? "var(--accent-cyan)" : "var(--text-secondary)"),
-                            cursor: "pointer", padding: "4px 10px", borderRadius: "10px",
-                            transition: "all 0.15s ease", position: "relative"
+                            gap: "2px", 
+                            background: item.isModulesBtn && item.active ? "rgba(0, 229, 255, 0.15)" : "transparent",
+                            border: item.isModulesBtn ? (item.active ? "1px solid rgba(0, 229, 255, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)") : "none",
+                            color: item.active ? (item.isModulesBtn ? "var(--accent-cyan)" : "var(--accent-crimson)") : (item.highlight ? "var(--accent-cyan)" : (item.isModulesBtn ? "var(--accent-amber)" : "var(--text-secondary)")),
+                            cursor: "pointer", padding: "4px 6px", borderRadius: "10px",
+                            transition: "all 0.15s ease", position: "relative",
+                            minWidth: "46px"
                         }}
                     >
-                        <span style={{ fontSize: "1.2rem", filter: item.active ? "drop-shadow(0 0 8px rgba(232,33,58,0.6))" : "none" }}>
+                        <span style={{ fontSize: "1.15rem", filter: item.active ? "drop-shadow(0 0 8px rgba(0,229,255,0.6))" : "none" }}>
                             {item.icon}
                         </span>
-                        <span style={{ fontSize: "0.62rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.2px" }}>
+                        <span style={{ fontSize: "0.60rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.2px", whiteSpace: "nowrap" }}>
                             {item.label}
                         </span>
+                        {item.badgeText && (
+                            <span style={{
+                                position: "absolute", top: 1, right: 2,
+                                fontSize: "0.50rem", fontWeight: 900,
+                                background: "var(--accent-amber)", color: "#000",
+                                padding: "0 3px", borderRadius: "4px",
+                                boxShadow: "0 0 6px var(--accent-amber)"
+                            }}>
+                                {item.badgeText}
+                            </span>
+                        )}
                         {typeof item.count === "number" && item.count > 0 && (
                             <span style={{
-                                position: "absolute", top: 2, right: 8,
+                                position: "absolute", top: 2, right: 6,
                                 width: 7, height: 7, borderRadius: "50%",
                                 background: "var(--accent-emerald)", boxShadow: "0 0 6px var(--accent-emerald)"
                             }} />
