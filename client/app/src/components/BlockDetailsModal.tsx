@@ -35,10 +35,11 @@ export const BlockDetailsModal: React.FC<BlockDetailsModalProps> = ({ block, onC
             onClick={onClose}
         >
             <div
-                className="card-tactical animate-enter"
+                className="card-tactical animate-enter modal-card-scrollable"
                 style={{
                     width: "100%", maxWidth: "520px", padding: "20px",
-                    boxShadow: "0 20px 60px rgba(0,0,0,0.8)"
+                    boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+                    maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
                 }}
                 onClick={e => e.stopPropagation()}
             >

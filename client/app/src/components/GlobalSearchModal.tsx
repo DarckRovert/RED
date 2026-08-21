@@ -34,14 +34,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
             onClick={onClose}
         >
             <div
-                className="card-tactical animate-enter"
+                className="card-tactical animate-enter modal-card-scrollable"
                 style={{
                     width: "100%", maxWidth: "540px", padding: "20px",
-                    boxShadow: "0 20px 60px rgba(0,0,0,0.8)"
+                    boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+                    maxHeight: "calc(100dvh - 60px)",
+                    display: "flex", flexDirection: "column"
                 }}
                 onClick={e => e.stopPropagation()}
             >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexShrink: 0 }}>
                     <div style={{ fontSize: "1.05rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "8px" }}>
                         <span>🔍</span> Búsqueda Global en Malla
                     </div>
@@ -58,11 +60,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                         width: "100%", padding: "12px 16px", borderRadius: "var(--radius-md)",
                         background: "var(--bg-card)", color: "#fff",
                         border: "1px solid var(--glass-border)", outline: "none",
-                        fontSize: "0.95rem", marginBottom: "14px", boxSizing: "border-box"
+                        fontSize: "0.95rem", marginBottom: "14px", boxSizing: "border-box",
+                        flexShrink: 0
                     }}
                 />
 
-                <div style={{ maxHeight: "360px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div className="scroll-container" style={{ flex: 1, maxHeight: "min(420px, 50vh)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
                     {query.trim().length >= 2 && results.length === 0 && (
                         <EmptyState 
                             title="Sin coincidencias" 

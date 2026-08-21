@@ -84,16 +84,20 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: "20px"
         }}>
-            <div style={{
-                maxWidth: "380px", width: "100%",
-                background: "linear-gradient(180deg, rgba(22,27,42,0.98) 0%, rgba(11,14,24,0.98) 100%)",
-                border: "1px solid rgba(0, 229, 255, 0.3)",
-                borderRadius: "24px",
-                padding: "26px",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: "18px",
-                color: "#fff", position: "relative",
-                boxShadow: "0 0 45px rgba(0, 229, 255, 0.15)"
-            }}>
+            <div 
+                className="modal-card-scrollable"
+                style={{
+                    maxWidth: "380px", width: "100%",
+                    background: "linear-gradient(180deg, rgba(22,27,42,0.98) 0%, rgba(11,14,24,0.98) 100%)",
+                    border: "1px solid rgba(0, 229, 255, 0.3)",
+                    borderRadius: "24px",
+                    padding: "26px",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "18px",
+                    color: "#fff", position: "relative",
+                    boxShadow: "0 0 45px rgba(0, 229, 255, 0.15)",
+                    maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
+                }}
+            >
                 <button
                     onClick={onClose}
                     disabled={status === "transmitting"}

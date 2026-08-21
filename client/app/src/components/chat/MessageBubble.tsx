@@ -687,7 +687,8 @@ export const MessageBubble = memo(({
                             {/* Media Image */}
                             {!isPaymentMessage && (msg.msg_type === "image" || Boolean(resolvedImage)) && (
                                 <div
-                                    style={{ borderRadius: "12px", overflow: "hidden", cursor: "pointer" }}
+                                    className="chat-media-container"
+                                    style={{ cursor: "pointer", margin: "2px 0" }}
                                     onClick={() => {
                                         if (onOpenMediaGallery) {
                                             onOpenMediaGallery(msg);
@@ -698,16 +699,22 @@ export const MessageBubble = memo(({
                                 >
                                     <img
                                         src={resolvedImage}
-                                        alt="Foto"
-                                        style={{ maxWidth: "100%", maxHeight: "240px", objectFit: "cover", display: "block", borderRadius: "8px" }}
+                                        alt="Foto adjunta"
+                                        className="chat-media-img"
+                                        loading="lazy"
                                     />
                                 </div>
                             )}
 
                             {/* Media Video */}
                             {!isPaymentMessage && (msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video")) && (
-                                <div style={{ borderRadius: "12px", overflow: "hidden", maxWidth: "100%" }}>
-                                    <video src={msg.media_data || (msg.content?.startsWith("data:video") ? msg.content : "")} controls playsInline style={{ maxWidth: "100%", maxHeight: "240px", borderRadius: "8px", display: "block", background: "#000" }} />
+                                <div className="chat-media-container" style={{ margin: "2px 0" }}>
+                                    <video 
+                                        src={msg.media_data || (msg.content?.startsWith("data:video") ? msg.content : "")} 
+                                        controls 
+                                        playsInline 
+                                        style={{ maxWidth: "100%", maxHeight: "min(260px, 42vh)", borderRadius: "10px", display: "block", background: "#000" }} 
+                                    />
                                 </div>
                             )}
 

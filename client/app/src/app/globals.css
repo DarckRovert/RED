@@ -682,6 +682,7 @@ textarea:focus {
   -webkit-overflow-scrolling: touch !important;
   scroll-behavior: smooth !important;
   overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
   scrollbar-width: none !important;
   min-height: 0 !important;
 }
@@ -690,6 +691,46 @@ textarea:focus {
 }
 .scroll-container::-webkit-scrollbar {
   display: none !important;
+}
+
+/* ─── Universal Modal Card Scroll Helper ──────────────────────────────────── */
+.modal-card-scrollable {
+  max-height: calc(100dvh - 32px) !important;
+  max-height: calc(100vh - 32px) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  overscroll-behavior-y: contain !important;
+  touch-action: pan-y !important;
+}
+.modal-card-scrollable::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* ─── Responsive Media Bubble Distribution ───────────────────────────────── */
+.chat-media-container {
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: min(320px, 78vw);
+  width: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.chat-media-img {
+  max-width: 100%;
+  max-height: min(260px, 42vh);
+  width: auto;
+  height: auto;
+  object-fit: cover;
+  display: block;
+  border-radius: 10px;
+  transition: transform 0.2s ease;
+}
+.chat-media-img:active {
+  transform: scale(0.98);
 }
 
 ::-webkit-scrollbar       { width: 3px; }

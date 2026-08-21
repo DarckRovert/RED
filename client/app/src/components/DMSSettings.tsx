@@ -342,7 +342,7 @@ export default function DMSSettings() {
                     background: "rgba(0,0,0,0.85)", backdropFilter: "blur(20px)",
                     display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
                 }}>
-                    <div className="card-tactical-glow-crimson animate-pop" style={{ maxWidth: "420px", width: "100%", padding: "24px", display: "flex", flexDirection: "column", gap: "16px", background: "#0a0608" }}>
+                    <div className="card-tactical-glow-crimson animate-pop modal-card-scrollable" style={{ maxWidth: "420px", width: "100%", padding: "24px", display: "flex", flexDirection: "column", gap: "16px", background: "#0a0608", maxHeight: "calc(100dvh - 32px)", overflowY: "auto" }}>
                         <div style={{ fontSize: "2rem", textAlign: "center" }}>⚠️</div>
                         <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-crimson-bright)", textAlign: "center" }}>
                             ¿CONFIRMAR DESTRUCCIÓN TOTAL DE DATOS?

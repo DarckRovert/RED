@@ -96,16 +96,20 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: "20px"
         }}>
-            <div style={{
-                maxWidth: "420px", width: "100%",
-                background: "linear-gradient(180deg, rgba(20,24,36,0.98) 0%, rgba(10,12,20,0.98) 100%)",
-                border: "1px solid rgba(0, 229, 255, 0.3)",
-                borderRadius: "24px",
-                boxShadow: "0 0 45px rgba(0, 229, 255, 0.15), 0 20px 50px rgba(0,0,0,0.8)",
-                padding: "26px",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: "20px",
-                color: "#fff", position: "relative"
-            }}>
+            <div 
+                className="modal-card-scrollable"
+                style={{
+                    maxWidth: "420px", width: "100%",
+                    background: "linear-gradient(180deg, rgba(20,24,36,0.98) 0%, rgba(10,12,20,0.98) 100%)",
+                    border: "1px solid rgba(0, 229, 255, 0.3)",
+                    borderRadius: "24px",
+                    boxShadow: "0 0 45px rgba(0, 229, 255, 0.15), 0 20px 50px rgba(0,0,0,0.8)",
+                    padding: "26px",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "20px",
+                    color: "#fff", position: "relative",
+                    maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
+                }}
+            >
                 {/* Botón Cerrar */}
                 <button
                     onClick={onClose}
@@ -142,7 +146,7 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
                 {/* Contenedor del QR */}
                 <div style={{
                     position: "relative",
-                    width: "250px", height: "250px",
+                    width: "min(240px, 60vw)", height: "min(240px, 60vw)",
                     background: "#FFFFFF",
                     borderRadius: "20px",
                     padding: "10px",

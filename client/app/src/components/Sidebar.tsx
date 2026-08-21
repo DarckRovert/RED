@@ -262,7 +262,7 @@ export default function Sidebar() {
                         </div>
 
                         {/* Modules Scrollable Area */}
-                        <div className="scroll-container" style={{ flex: 1, padding: "8px 16px 16px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                        <div className="scroll-container" style={{ flex: 1, padding: "8px 16px 36px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
                             {filteredMenuCategories.map((cat: { title: string; items: Array<{ icon: string; label: string; action: string }> }) => (
                                 <div key={cat.title} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                     <div style={{
@@ -463,7 +463,7 @@ export default function Sidebar() {
             </div>
 
             {/* Listado Principal con Scroll */}
-            <div className="scroll-container" style={{ flex: 1, padding: "8px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div className="scroll-container" style={{ flex: 1, padding: "8px 12px 28px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
                 {activeTab === "chats" ? (
                     filteredConvs.length === 0 ? (
                         <div className="empty-state-tactical">
@@ -717,11 +717,12 @@ export default function Sidebar() {
                     onClick={() => setAddContactOpen(false)}
                 >
                     <div 
-                        className="card-tactical animate-enter"
+                        className="card-tactical animate-enter modal-card-scrollable"
                         style={{
                             maxWidth: "460px", width: "100%", padding: "24px",
                             display: "flex", flexDirection: "column", gap: "16px",
-                            border: "1px solid var(--glass-border)", background: "rgba(12,14,24,0.98)"
+                            border: "1px solid var(--glass-border)", background: "rgba(12,14,24,0.98)",
+                            maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
                         }}
                         onClick={e => e.stopPropagation()}
                     >
