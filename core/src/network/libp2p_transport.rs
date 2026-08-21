@@ -93,16 +93,20 @@ impl Libp2pTransport {
             crate::network::append_log(dir, &format!("[libp2p] Initializing transport with PeerId: {}", peer_id));
         }
 
+        let mut yamux_config = yamux::Config::default();
+        yamux_config.set_receive_window_size(4 * 1024 * 1024);
+        let yamux_relay = yamux_config.clone();
+
         #[cfg(not(target_os = "android"))]
         let swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
             .with_tokio()
             .with_tcp(
                 tcp::Config::default(),
                 noise::Config::new,
-                yamux::Config::default,
+                move || yamux_config.clone(),
             ).map_err(|e| NetworkError::TransportError(e.to_string()))?
             .with_dns().map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_relay_client(noise::Config::new, yamux::Config::default).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+            .with_relay_client(noise::Config::new, move || yamux_relay.clone()).map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
         #[cfg(target_os = "android")]
         let mut swarm_builder = libp2p::SwarmBuilder::with_existing_identity(local_key.clone())
@@ -110,15 +114,17 @@ impl Libp2pTransport {
             .with_tcp(
                 tcp::Config::default(),
                 noise::Config::new,
-                yamux::Config::default,
+                move || yamux_config.clone(),
             ).map_err(|e| NetworkError::TransportError(e.to_string()))?
-            .with_relay_client(noise::Config::new, yamux::Config::default).map_err(|e| NetworkError::TransportError(e.to_string()))?;
+            .with_relay_client(noise::Config::new, move || yamux_relay.clone()).map_err(|e| NetworkError::TransportError(e.to_string()))?;
 
         let mut swarm = swarm_builder
             .with_behaviour(|key, relay_client| {
+                // v40.2.0: Expanded max_transmit_size to 4 MB to support voice notes & media payloads
                 let gossipsub_config = gossipsub::ConfigBuilder::default()
                     .heartbeat_interval(Duration::from_secs(10))
                     .validation_mode(gossipsub::ValidationMode::Strict)
+                    .max_transmit_size(4 * 1024 * 1024)
                     .build()
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
@@ -195,14 +201,6 @@ impl Libp2pTransport {
         let handshake_topic = gossipsub::IdentTopic::new("red-handshake");
         swarm.behaviour_mut().gossipsub.subscribe(&handshake_topic)
             .map_err(|e: libp2p::gossipsub::SubscriptionError| NetworkError::TransportError(e.to_string()))?;
-
-        // Escuchar automáticamente en el canal de relé para NAT traversal en datos móviles
-        if let Ok(relay_addr) = "/p2p-circuit".parse::<libp2p::Multiaddr>() {
-            match swarm.listen_on(relay_addr) {
-                Ok(id) => info!("[libp2p] Autolisten on /p2p-circuit registered successfully (listener_id={:?})", id),
-                Err(e) => warn!("[libp2p] Failed to autolisten on /p2p-circuit: {:?}", e),
-            }
-        }
 
         let (cmd_tx, mut cmd_rx) = mpsc::channel(100);
         let (msg_tx, msg_rx) = mpsc::channel(100);
@@ -302,7 +300,14 @@ impl Libp2pTransport {
                             SwarmEvent::ConnectionClosed { peer_id, .. } => {
                                 debug!("Peer disconnected: {}", peer_id);
                                 connected_clone.lock().unwrap().remove(&peer_id.to_bytes());
-                                known_peers_clone.lock().unwrap().retain(|p| p.id.as_bytes() != peer_id.to_bytes().as_slice());
+                                let target_id_bytes = {
+                                    let b = peer_id.to_bytes();
+                                    let mut arr = [0u8; 32];
+                                    let len = b.len().min(32);
+                                    arr[..len].copy_from_slice(&b[..len]);
+                                    arr
+                                };
+                                known_peers_clone.lock().unwrap().retain(|p| p.id.as_bytes() != target_id_bytes.as_slice());
                             }
                             SwarmEvent::Behaviour(RedBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed { id, result, .. })) => {
                                 match result {

@@ -142,33 +142,51 @@ class BluetoothTransport {
         }
     }
 
+    private incomingBufferTimers: Map<string, any> = new Map();
+
     onMessage(callback: (msg: {from: string, payload: Uint8Array}) => void) {
         this.messageListeners.push(callback);
     }
 
     private handleIncomingChunk(deviceId: string, chunk: Uint8Array) {
-        // Very basic reassembly buffer
+        // Reset 10s reassembly timer
+        if (this.incomingBufferTimers.has(deviceId)) {
+            clearTimeout(this.incomingBufferTimers.get(deviceId));
+        }
+        this.incomingBufferTimers.set(deviceId, setTimeout(() => {
+            if (this.incomingBuffer.has(deviceId)) {
+                console.warn(`[BluetoothTransport] Reassembly timeout for device ${deviceId} — clearing incomplete buffer`);
+                this.incomingBuffer.delete(deviceId);
+                this.incomingBufferTimers.delete(deviceId);
+            }
+        }, 10000));
+
         let buffer = this.incomingBuffer.get(deviceId);
-        // If it's the start of a new message (we assume header is always at start)
-        // In a production environment, you'd use a more robust framing protocol instead of this naïve concat
         if (!buffer || buffer.length === 0) {
             if (chunk.length < 4) return;
             const totalLength = ((chunk[0] << 24) >>> 0) + (chunk[1] << 16) + (chunk[2] << 8) + chunk[3];
+            if (totalLength <= 0 || totalLength > 10 * 1024 * 1024) return; // Sanity check: max 10MB
             buffer = new Uint8Array(totalLength);
             buffer.set(chunk.slice(4), 0);
             (buffer as any)._bytesWritten = chunk.length - 4;
             (buffer as any)._totalLength = totalLength;
             this.incomingBuffer.set(deviceId, buffer);
         } else {
-            const written = (buffer as any)._bytesWritten;
-            buffer.set(chunk, written);
-            (buffer as any)._bytesWritten += chunk.length;
+            const written = (buffer as any)._bytesWritten || 0;
+            const remaining = buffer.length - written;
+            const toWrite = Math.min(chunk.length, remaining);
+            buffer.set(chunk.slice(0, toWrite), written);
+            (buffer as any)._bytesWritten = written + toWrite;
         }
 
         const currentWritten = (buffer as any)._bytesWritten;
         const targetLength = (buffer as any)._totalLength;
 
         if (currentWritten >= targetLength) {
+            if (this.incomingBufferTimers.has(deviceId)) {
+                clearTimeout(this.incomingBufferTimers.get(deviceId));
+                this.incomingBufferTimers.delete(deviceId);
+            }
             this.incomingBuffer.delete(deviceId);
             // Complete message received! Bubble it up!
             this.messageListeners.forEach(cb => cb({ from: deviceId, payload: buffer as Uint8Array }));

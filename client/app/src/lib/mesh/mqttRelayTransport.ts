@@ -227,17 +227,24 @@ export class MqttRelayTransport {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.myId) return;
 
     const topics = [
+      `red/v40/dm/${this.myId}`,
+      `red/v40/sig/${this.myId}`,
+      `red/v40/mb/${this.myId}`,
       `red/v32/dm/${this.myId}`,
       `red/v32/sig/${this.myId}`,
       `red/v32/mb/${this.myId}`,
       `red/mesh/dm/${this.myId}`,
       `red/mesh/sig/${this.myId}`,
       'red/mesh/broadcast',
+      'red/v40/broadcast',
       'red/v32/broadcast'
     ];
 
     if (this.myId.length >= 8) {
       const short = this.myId.slice(0, 8);
+      topics.push(`red/v40/dm/${short}`);
+      topics.push(`red/v40/sig/${short}`);
+      topics.push(`red/v40/mb/${short}`);
       topics.push(`red/v32/dm/${short}`);
       topics.push(`red/v32/sig/${short}`);
       topics.push(`red/v32/mb/${short}`);
@@ -428,17 +435,17 @@ export class MqttRelayTransport {
     const clean = this.cleanId(recipientHash);
     if (!clean) return false;
     
-    // Publish to primary v32 realtime topic
-    let published = this.publish(`red/v32/dm/${clean}`, payload);
-    
-    // Also publish to v32 Blind Mailbox topic (retained E2E rendezvous)
+    // Publish to primary v40 and v32 realtime topics
+    let published = this.publish(`red/v40/dm/${clean}`, payload);
+    this.publish(`red/v40/mb/${clean}`, payload);
+    this.publish(`red/v32/dm/${clean}`, payload);
     this.publish(`red/v32/mb/${clean}`, payload);
-
-    // Legacy mesh fallback topic
     this.publish(`red/mesh/dm/${clean}`, payload);
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
+      this.publish(`red/v40/dm/${short}`, payload);
+      this.publish(`red/v40/mb/${short}`, payload);
       this.publish(`red/v32/dm/${short}`, payload);
       this.publish(`red/v32/mb/${short}`, payload);
       this.publish(`red/mesh/dm/${short}`, payload);
@@ -459,11 +466,13 @@ export class MqttRelayTransport {
       ...signalData
     });
 
-    let published = this.publish(`red/v32/sig/${clean}`, jsonStr);
+    let published = this.publish(`red/v40/sig/${clean}`, jsonStr);
+    this.publish(`red/v32/sig/${clean}`, jsonStr);
     this.publish(`red/mesh/sig/${clean}`, jsonStr);
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
+      this.publish(`red/v40/sig/${short}`, jsonStr);
       this.publish(`red/v32/sig/${short}`, jsonStr);
       this.publish(`red/mesh/sig/${short}`, jsonStr);
     }

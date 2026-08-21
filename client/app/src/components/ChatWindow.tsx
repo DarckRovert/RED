@@ -286,7 +286,30 @@ export default function ChatWindow() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioChunksRef.current = [];
-            const mr = new MediaRecorder(stream);
+
+            // Determine best supported tactical voice codec (Opus 24 kbps)
+            let mimeType: string | undefined = undefined;
+            if (typeof MediaRecorder !== "undefined") {
+                if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+                    mimeType = "audio/webm;codecs=opus";
+                } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+                    mimeType = "audio/webm";
+                } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+                    mimeType = "audio/mp4";
+                } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+                    mimeType = "audio/ogg;codecs=opus";
+                }
+            }
+
+            // Tactical Opus audio at 24 kbps (5.3x lighter, crystal clear speech, instant mesh delivery)
+            const recorderOptions: MediaRecorderOptions = {
+                audioBitsPerSecond: 24000
+            };
+            if (mimeType) {
+                recorderOptions.mimeType = mimeType;
+            }
+
+            const mr = new MediaRecorder(stream, recorderOptions);
             mediaRecorderRef.current = mr;
             mr.ondataavailable = (e) => {
                 if (e.data.size > 0) audioChunksRef.current.push(e.data);
