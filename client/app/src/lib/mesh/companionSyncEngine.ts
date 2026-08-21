@@ -1,12 +1,14 @@
 /**
  * RED Web Companion Sync Engine
- * 
+ *
  * Protocolo de Vinculación Criptográfica Multidispositivo (Estilo WhatsApp Web)
  * Permite a la versión Web (Navegador PC) sincronizar en tiempo real
  * la identidad soberana, contactos y conversaciones desde la app móvil Android.
- * 
- * Utiliza brokers globales MQTT de alta disponibilidad sobre WebSockets
- * (EMQX, HiveMQ, Mosquitto) con cifrado E2E ECDH P-256 + AES-256-GCM.
+ *
+ * Utiliza brokers MQTT públicos sobre WebSockets con cifrado E2E ECDH P-256 + AES-256-GCM.
+ *
+ * FIX: El móvil lee el broker del propio QR para garantizar que ambos lados
+ *      usen el MISMO broker. Se elimina el pool no coordinado.
  */
 
 export interface CompanionSyncPayload {
@@ -95,13 +97,23 @@ async function decryptData(key: CryptoKey, ivHex: string, cipherHex: string): Pr
     return JSON.parse(decodedStr);
 }
 
-// ── Lightweight Zero-Dependency MQTT v3.1.1 Client ───────────────────────────
+// ── Broker Pool Ordenado por Estabilidad ──────────────────────────────────────
+// CRÍTICO: El broker elegido se embebe en el QR. El móvil usa EXACTAMENTE el mismo.
 
 const MQTT_BROKERS = [
     "wss://broker.emqx.io:8084/mqtt",
     "wss://broker.hivemq.com:8884/mqtt",
     "wss://test.mosquitto.org:8081"
 ];
+
+// Índice de broker codificado en el QR (0-2) para que el móvil use el mismo
+const BROKER_INDEX_MAP: Record<string, string> = {
+    "0": "wss://broker.emqx.io:8084/mqtt",
+    "1": "wss://broker.hivemq.com:8884/mqtt",
+    "2": "wss://test.mosquitto.org:8081"
+};
+
+// ── Lightweight Zero-Dependency MQTT v3.1.1 Client ───────────────────────────
 
 class SimpleMqttClient {
     private ws: WebSocket | null = null;
@@ -128,7 +140,7 @@ class SimpleMqttClient {
                     this.close();
                     reject(new Error(`Timeout conectando a broker ${this.brokerUrl}`));
                 }
-            }, 6000);
+            }, 8000);
 
             this.ws.onopen = () => {
                 this.sendConnect();
@@ -178,11 +190,11 @@ class SimpleMqttClient {
         const topicBytes = new TextEncoder().encode(topic);
         const pid = this.packetId++;
 
-        const varHeader = [ (pid >> 8) & 0xff, pid & 0xff ];
-        const payload = [ (topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes, 0x00 ];
+        const varHeader = [(pid >> 8) & 0xff, pid & 0xff];
+        const payload = [(topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes, 0x00];
 
         const remainingLength = varHeader.length + payload.length;
-        const packet = new Uint8Array([ 0x82, remainingLength, ...varHeader, ...payload ]);
+        const packet = new Uint8Array([0x82, remainingLength, ...varHeader, ...payload]);
         this.ws.send(packet);
     }
 
@@ -191,10 +203,10 @@ class SimpleMqttClient {
         const topicBytes = new TextEncoder().encode(topic);
         const payloadBytes = new TextEncoder().encode(payloadStr);
 
-        const varHeader = [ (topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes ];
+        const varHeader = [(topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes];
         const remainingLength = varHeader.length + payloadBytes.length;
 
-        // Encode remaining length (supports up to 16KB easily)
+        // Encode remaining length
         const lenBytes: number[] = [];
         let l = remainingLength;
         do {
@@ -204,7 +216,7 @@ class SimpleMqttClient {
             lenBytes.push(digit);
         } while (l > 0);
 
-        const packet = new Uint8Array([ 0x30, ...lenBytes, ...varHeader, ...payloadBytes ]);
+        const packet = new Uint8Array([0x30, ...lenBytes, ...varHeader, ...payloadBytes]);
         this.ws.send(packet);
     }
 
@@ -222,11 +234,11 @@ class SimpleMqttClient {
         const protoBytes = new TextEncoder().encode("MQTT");
         const clientBytes = new TextEncoder().encode(clientId);
 
-        const varHeader = [ 0x00, protoBytes.length, ...protoBytes, 0x04, 0x02, 0x00, 0x3c ];
-        const payload = [ (clientBytes.length >> 8) & 0xff, clientBytes.length & 0xff, ...clientBytes ];
+        const varHeader = [0x00, protoBytes.length, ...protoBytes, 0x04, 0x02, 0x00, 0x3c];
+        const payload = [(clientBytes.length >> 8) & 0xff, clientBytes.length & 0xff, ...clientBytes];
 
         const remainingLength = varHeader.length + payload.length;
-        const packet = new Uint8Array([ 0x10, remainingLength, ...varHeader, ...payload ]);
+        const packet = new Uint8Array([0x10, remainingLength, ...varHeader, ...payload]);
         this.ws.send(packet);
     }
 
@@ -262,7 +274,33 @@ class SimpleMqttClient {
 class CompanionSyncEngineClass {
 
     /**
+     * Conecta a un broker intentando cada uno del pool hasta encontrar uno funcional.
+     * Devuelve el cliente conectado + el índice del broker usado.
+     */
+    private async connectToBestBroker(
+        onProgress?: (msg: string) => void
+    ): Promise<{ client: SimpleMqttClient; brokerIndex: number }> {
+        for (let i = 0; i < MQTT_BROKERS.length; i++) {
+            const broker = MQTT_BROKERS[i];
+            onProgress?.(`Conectando al relé ${i + 1}/${MQTT_BROKERS.length}…`);
+            try {
+                const client = new SimpleMqttClient(broker);
+                await new Promise<void>((resolve, reject) =>
+                    client.connect(resolve, reject)
+                );
+                console.log(`[CompanionEngine] Conectado a broker[${i}]: ${broker}`);
+                return { client, brokerIndex: i };
+            } catch (e) {
+                console.warn(`[CompanionEngine] Broker[${i}] falló: ${broker}`, e);
+            }
+        }
+        throw new Error("No se pudo conectar a ningún relé de emparejamiento. Verifica tu conexión a internet.");
+    }
+
+    /**
      * Inicia una sesión de vinculación en el Navegador Web (muestra QR).
+     * SECUENCIAL: primero conecta al broker, luego retorna el QR con el índice
+     * del broker embebido. Garantiza que móvil y web usen el MISMO broker.
      */
     public async createWebPairingSession(
         onSuccess: (payload: CompanionSyncPayload) => void,
@@ -278,76 +316,67 @@ class CompanionSyncEngineClass {
             .map(b => b.toString(16).padStart(2, "0"))
             .join("");
         const sessionId = `redpair_${randomId}`;
-        const expiresAt = Date.now() + 120 * 1000; // 2 minutos de validez
+        const expiresAt = Date.now() + 180 * 1000; // 3 minutos
 
-        const qrPayload = `RED_PAIR:1:${sessionId}:${pubKeyHex}:${expiresAt}`;
+        // PASO 1: Conectar al broker ANTES de generar el QR
+        const { client, brokerIndex } = await this.connectToBestBroker();
+
         const vaultTopic = `red/pair/${sessionId}/vault`;
         const ackTopic = `red/pair/${sessionId}/ack`;
 
-        let activeClient: SimpleMqttClient | null = null;
+        client.subscribe(vaultTopic);
+        console.log(`[CompanionEngine] Web suscrita en: ${vaultTopic} vía broker[${brokerIndex}]`);
+
         let isClosed = false;
 
         const cleanup = () => {
             isClosed = true;
-            if (activeClient) {
-                activeClient.close();
-                activeClient = null;
-            }
+            client.close();
         };
 
-        // Conectar al pool de brokers MQTT de alta disponibilidad
-        (async () => {
-            for (const broker of MQTT_BROKERS) {
-                if (isClosed) break;
+        client.onMessage(async (topic, payloadStr) => {
+            if (isClosed) return;
+            if (topic === vaultTopic) {
                 try {
-                    const client = new SimpleMqttClient(broker);
-                    await client.connect(
-                        () => {
-                            if (isClosed) {
-                                client.close();
-                                return;
+                    const msg = JSON.parse(payloadStr);
+                    if (msg.senderPubKey && msg.iv && msg.ciphertext) {
+                        const mobilePubKey = await importPublicKeyHex(msg.senderPubKey);
+                        const aesKey = await deriveAesKey(keyPair.privateKey, mobilePubKey);
+                        const decrypted: CompanionSyncPayload = await decryptData(aesKey, msg.iv, msg.ciphertext);
+
+                        // ACK inmediato al móvil
+                        client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
+                        // ACK redundante 300ms después
+                        setTimeout(() => {
+                            if (!isClosed && client.isConnected) {
+                                client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
                             }
-                            activeClient = client;
-                            client.subscribe(vaultTopic);
-                            console.log(`[CompanionEngine] Web suscrita en topic: ${vaultTopic} vía ${broker}`);
-                        },
-                        () => {}
-                    );
+                        }, 300);
 
-                    client.onMessage(async (topic, payloadStr) => {
-                        if (isClosed) return;
-                        if (topic === vaultTopic) {
-                            try {
-                                const msg = JSON.parse(payloadStr);
-                                if (msg.senderPubKey && msg.iv && msg.ciphertext) {
-                                    // 1. Derivar clave simétrica con la clave pública del móvil
-                                    const mobilePubKey = await importPublicKeyHex(msg.senderPubKey);
-                                    const aesKey = await deriveAesKey(keyPair.privateKey, mobilePubKey);
-
-                                    // 2. Descifrar bóveda
-                                    const decrypted: CompanionSyncPayload = await decryptData(aesKey, msg.iv, msg.ciphertext);
-
-                                    // 3. Confirmar recepción al móvil vía ACK topic
-                                    client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
-
-                                    cleanup();
-                                    onSuccess(decrypted);
-                                }
-                            } catch (e: any) {
-                                console.error("[CompanionEngine] Error procesando cápsula:", e);
-                                onError(e?.message || "Error al descifrar bóveda recibida");
-                            }
-                        }
-                    });
-
-                    if (client.isConnected) {
-                        break; // Conectado exitosamente al primer broker funcional
+                        cleanup();
+                        onSuccess(decrypted);
                     }
-                } catch {
-                    // Probar siguiente broker
+                } catch (e: any) {
+                    console.error("[CompanionEngine] Error procesando cápsula:", e);
+                    onError(e?.message || "Error al descifrar bóveda recibida");
                 }
             }
-        })();
+        });
+
+        // Keepalive PINGREQ cada 30s para mantener la conexión WebSocket viva
+        const pingInterval = setInterval(() => {
+            if (isClosed || !client.isConnected) {
+                clearInterval(pingInterval);
+                return;
+            }
+            try {
+                (client as any).ws?.send(new Uint8Array([0xC0, 0x00]));
+            } catch {}
+        }, 30000);
+
+        // PASO 2: Generar el QR con el brokerIndex real embebido en el campo 6
+        // Formato: RED_PAIR:1:sessionId:pubKeyHex:expiresAt:brokerIdx
+        const qrPayload = `RED_PAIR:1:${sessionId}:${pubKeyHex}:${expiresAt}:${brokerIndex}`;
 
         return {
             sessionId,
@@ -358,7 +387,8 @@ class CompanionSyncEngineClass {
     }
 
     /**
-     * Ejecutado desde la App Móvil: Escanea el QR, cifra la bóveda y la envía a la Web.
+     * Ejecutado desde la App Móvil: Lee el broker del QR, cifra la bóveda y la envía.
+     * El campo broker_idx en el QR garantiza que móvil y web usen el MISMO broker.
      */
     public async transmitMobileVaultToWeb(
         qrData: string,
@@ -370,12 +400,18 @@ class CompanionSyncEngineClass {
         }
 
         const parts = qrData.split(":");
+        // Formato v1: RED_PAIR:1:sessionId:webPubKeyHex:expiresAt
+        // Formato v2: RED_PAIR:1:sessionId:webPubKeyHex:expiresAt:brokerIdx
         if (parts.length < 5) {
             throw new Error("Formato de emparejamiento incompleto");
         }
 
-        const [, , sessionId, webPubKeyHex, expiresAtStr] = parts;
-        const expiresAt = parseInt(expiresAtStr, 10);
+        const sessionId = parts[2];
+        const webPubKeyHex = parts[3];
+        const expiresAt = parseInt(parts[4], 10);
+        // El broker está en parts[5] si existe (formato v2). Default a 0 si no.
+        const brokerIdx = parts[6] ? parseInt(parts[6], 10) : (parts[5] ? parseInt(parts[5], 10) : -1);
+
         if (Date.now() > expiresAt) {
             throw new Error("El código QR ha caducado. Genera uno nuevo en la web.");
         }
@@ -393,7 +429,7 @@ class CompanionSyncEngineClass {
         const webPubKey = await importPublicKeyHex(webPubKeyHex);
         const aesKey = await deriveAesKey(mobileKeyPair.privateKey, webPubKey);
 
-        // 3. Cifrar la carga útil de la bóveda
+        // 3. Cifrar la carga útil
         onProgress?.("Cifrando bóveda táctica con AES-256-GCM…");
         const encrypted = await encryptData(aesKey, vaultPayload);
 
@@ -404,7 +440,15 @@ class CompanionSyncEngineClass {
             ciphertext: encrypted.ciphertext
         });
 
-        // 4. Conectar al broker y transmitir con confirmación
+        // 4. Determinar qué broker usar:
+        //    - Si el QR tiene un brokerIdx válido (v2), usarlo directamente.
+        //    - Si no, intentar todos en orden (v1 legacy).
+        const brokersToTry = (brokerIdx >= 0 && BROKER_INDEX_MAP[String(brokerIdx)])
+            ? [BROKER_INDEX_MAP[String(brokerIdx)], ...MQTT_BROKERS.filter((_, i) => i !== brokerIdx)]
+            : MQTT_BROKERS;
+
+        onProgress?.("Conectando con el relé seguro…");
+
         return new Promise<boolean>(async (resolve, reject) => {
             let activeClient: SimpleMqttClient | null = null;
             let isResolved = false;
@@ -413,38 +457,39 @@ class CompanionSyncEngineClass {
                 if (!isResolved) {
                     isResolved = true;
                     if (activeClient) activeClient.close();
-                    reject(new Error("Tiempo de espera agotado al sincronizar con la Web"));
+                    reject(new Error("Tiempo de espera agotado. Asegúrate de que la página web esté abierta y esperando el QR."));
                 }
-            }, 25000);
+            }, 45000); // 45s — tiempo suficiente para la bóveda completa
 
-            for (const broker of MQTT_BROKERS) {
+            for (const brokerUrl of brokersToTry) {
                 if (isResolved) break;
                 try {
-                    onProgress?.("Conectando con relé seguro…");
-                    const client = new SimpleMqttClient(broker);
-                    await client.connect(
-                        () => {
-                            if (isResolved) {
-                                client.close();
-                                return;
-                            }
-                            activeClient = client;
-                            // Suscribirse a la confirmación
-                            client.subscribe(ackTopic);
+                    onProgress?.(`Conectando al relé…`);
+                    const client = new SimpleMqttClient(brokerUrl);
+                    await new Promise<void>((res, rej) => client.connect(res, rej));
 
-                            // Transmitir bóveda cifrada
-                            onProgress?.("Transmitiendo cápsula cifrada al navegador…");
-                            client.publish(vaultTopic, vaultMessage);
+                    if (isResolved) {
+                        client.close();
+                        break;
+                    }
 
-                            // Enviar un segundo paquete por redundancia tras 500ms
-                            setTimeout(() => {
-                                if (!isResolved && client.isConnected) {
-                                    client.publish(vaultTopic, vaultMessage);
-                                }
-                            }, 500);
-                        },
-                        () => {}
-                    );
+                    activeClient = client;
+
+                    // Suscribirse al ACK
+                    client.subscribe(ackTopic);
+
+                    // Publicar la bóveda cifrada
+                    onProgress?.("Transmitiendo cápsula cifrada al navegador…");
+                    client.publish(vaultTopic, vaultMessage);
+
+                    // Re-publicar cada 1.5s hasta recibir ACK (en caso de que la web reconecte)
+                    const retryInterval = setInterval(() => {
+                        if (isResolved || !client.isConnected) {
+                            clearInterval(retryInterval);
+                            return;
+                        }
+                        client.publish(vaultTopic, vaultMessage);
+                    }, 1500);
 
                     client.onMessage((topic, payloadStr) => {
                         if (isResolved) return;
@@ -454,6 +499,7 @@ class CompanionSyncEngineClass {
                                 if (msg.type === "red_companion_ack" || msg.status === "success") {
                                     isResolved = true;
                                     clearTimeout(timeout);
+                                    clearInterval(retryInterval);
                                     client.close();
                                     resolve(true);
                                 }
@@ -461,18 +507,19 @@ class CompanionSyncEngineClass {
                         }
                     });
 
-                    if (client.isConnected) {
-                        break; // Conexión y transmisión iniciadas
-                    }
-                } catch {
-                    // Probar siguiente broker
+                    // Conectado al broker — esperar ACK o timeout
+                    break;
+
+                } catch (e) {
+                    console.warn(`[CompanionEngine:Mobile] Broker falló: ${brokerUrl}`, e);
+                    // Intentar siguiente
                 }
             }
 
             if (!activeClient && !isResolved) {
                 isResolved = true;
                 clearTimeout(timeout);
-                reject(new Error("No se pudo conectar a los relés de emparejamiento"));
+                reject(new Error("No se pudo conectar a los relés de emparejamiento. Verifica tu conexión a internet."));
             }
         });
     }
