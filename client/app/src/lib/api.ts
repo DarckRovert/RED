@@ -362,6 +362,9 @@ class RedAPIClient {
         };
 
         const isControlMessage = 
+            options?.msg_type === 'conversation_wipe' ||
+            options?.msg_type === 'message_wipe' ||
+            options?.msg_type === 'profile_update' ||
             options?.msg_type === 'reaction' ||
             options?.msg_type === 'typing' ||
             options?.msg_type === 'typing_status' ||
@@ -379,6 +382,7 @@ class RedAPIClient {
             options?.msg_type === 'live_announce' ||
             options?.msg_type === 'live_end' ||
             options?.msg_type === 'live_comment' ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"reason":"user_remote_wipe"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"status":') && content.includes('"sender_hash"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
 

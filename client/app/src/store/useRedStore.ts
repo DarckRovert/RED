@@ -1163,7 +1163,9 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 }
             }
 
-            const finalSortedConvs = Array.from(mergedMap.values()).sort((a, b) => {
+            const finalSortedConvs = Array.from(mergedMap.values())
+                .filter(c => c && !c.id.startsWith('ffffffff') && !c.peer?.startsWith('ffffffff') && !c.id.startsWith('00000000') && !c.peer?.startsWith('00000000'))
+                .sort((a, b) => {
                 const tsA = (typeof a.last_message === 'object' && a.last_message?.timestamp) || a.last_timestamp || 0;
                 const tsB = (typeof b.last_message === 'object' && b.last_message?.timestamp) || b.last_timestamp || 0;
                 const normA = tsA < 1e10 ? tsA : tsA / 1000;
@@ -2351,7 +2353,11 @@ export const useRedStore = create<RedStore>((set, get) => ({
         }
 
         // ── Remote Conversation Wipe (Sprint 4 v42.1.0) ──
-        if (item.msg_type === 'conversation_wipe' || item.msg_type === 'message_wipe') {
+        const isWipePacket = item.msg_type === 'conversation_wipe' || 
+                             item.msg_type === 'message_wipe' || 
+                             (typeof item.content === 'string' && item.content.includes('"reason":"user_remote_wipe"'));
+
+        if (isWipePacket) {
             try {
                 const senderHash = meshRouter.getCanonicalId(item.sender) || item.sender;
                 if (senderHash && senderHash !== 'me') {
@@ -2364,6 +2370,13 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     if (activeConversationId === senderHash || (activeConversationId && senderHash.length >= 8 && activeConversationId.includes(senderHash.slice(0, 8)))) {
                         set({ messages: [] });
                     }
+                    // 4. Remove any temporary conversation entry with ffffffff
+                    const currentConvs = (get().conversations || []).filter(c => 
+                        c && !c.id.startsWith('ffffffff') && !c.peer?.startsWith('ffffffff')
+                    );
+                    set({ conversations: currentConvs });
+                    RedAPI.setWebStore('red_web_conversations', currentConvs);
+
                     toast.error(`⚠️ Orden de borrado remoto ejecutada por ${senderHash.slice(0, 8)}… Historial purgado.`);
                 }
             } catch (e) {
@@ -2578,6 +2591,19 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
             const convId = item.conversation_id || item.sender;
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
+
+            // Never create conversations for broadcast addresses or control wipe packets
+            const isBroadcastId = !convId || convId === 'me' || convId === 'local' ||
+                convId.startsWith('ffffffff') || convId.startsWith('00000000') ||
+                item.sender?.startsWith('ffffffff') || item.sender?.startsWith('00000000');
+            
+            const isControlPayload = (typeof item.content === 'string' && item.content.includes('"reason":"user_remote_wipe"')) ||
+                item.msg_type === 'conversation_wipe' || item.msg_type === 'message_wipe' || item.msg_type === 'profile_update';
+
+            if (isBroadcastId || isControlPayload) {
+                return;
+            }
+
             const currentConvs = get().conversations || [];
             const idx = currentConvs.findIndex(c => 
                 c && (

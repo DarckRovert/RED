@@ -398,6 +398,14 @@ export const MessageBubble = memo(({
         );
     }
 
+    if (msg.msg_type === 'conversation_wipe' || msg.msg_type === 'message_wipe' || (typeof msg.content === 'string' && msg.content.includes('"user_remote_wipe"'))) {
+        return (
+            <div style={{ textAlign: "center", padding: "8px 14px", margin: "6px auto", maxWidth: "85%", borderRadius: "8px", background: "rgba(255,51,85,0.08)", border: "1px solid rgba(255,51,85,0.2)", fontSize: "0.72rem", color: "#FF5252", fontFamily: "JetBrains Mono, monospace" }}>
+                ⚠️ Historial de conversación purgado remotamente
+            </div>
+        );
+    }
+
     return (
         <React.Fragment>
             {contextMenu && (
