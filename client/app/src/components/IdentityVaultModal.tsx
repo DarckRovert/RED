@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { ShamirSecretSharingEngine, SecretShare } from "../lib/ShamirSecretSharingEngine";
+import { PqcCryptoEngine, HybridKeyPair } from "../lib/PqcCryptoEngine";
 import { toast } from "./Toast";
 
 const STORAGE_KEY = "red_identity_vault_v1";
@@ -13,7 +14,7 @@ interface VaultData {
     emergencyContact: string;
 }
 
-type IdentityTab = "profile" | "shamir" | "medical";
+type IdentityTab = "profile" | "pqc" | "shamir" | "medical";
 
 export const IdentityVaultModal: React.FC = () => {
     const { navigate, identity, setProfile } = useRedStore();
@@ -37,6 +38,18 @@ export const IdentityVaultModal: React.FC = () => {
     const [sssShares, setSssShares] = useState<SecretShare[]>([]);
     const [reconstructedSecret, setReconstructedSecret] = useState<string | null>(null);
     const [sharesToReconstruct, setSharesToReconstruct] = useState<string>("");
+
+    // Post-Quantum Cryptography State (NIST FIPS 203 ML-KEM-768 / Kyber)
+    const [pqcKeys, setPqcKeys] = useState<HybridKeyPair | null>(null);
+    const [isPqcGenerating, setIsPqcGenerating] = useState(false);
+    const [benchmarkResult, setBenchmarkResult] = useState<{
+        encapTimeMs: number;
+        decapTimeMs: number;
+        ciphertextBytes: number;
+        sharedSecretPreview: string;
+        success: boolean;
+    } | null>(null);
+    const [isBenchmarking, setIsBenchmarking] = useState(false);
 
     // Generate Identity QR code for tactical scanning
     useEffect(() => {
@@ -73,6 +86,13 @@ export const IdentityVaultModal: React.FC = () => {
                     setBloodType(data.bloodType || "");
                     setAllergies(data.allergies || "");
                     setEmergencyContact(data.emergencyContact || "");
+                }
+            } catch {}
+
+            try {
+                const rawPqc = localStorage.getItem("red_pqc_hybrid_keys");
+                if (rawPqc) {
+                    setPqcKeys(JSON.parse(rawPqc));
                 }
             } catch {}
         }
@@ -161,6 +181,78 @@ export const IdentityVaultModal: React.FC = () => {
         }
     };
 
+    const handleGeneratePqcKeys = async () => {
+        setIsPqcGenerating(true);
+        try {
+            const keys = await PqcCryptoEngine.generateHybridKeyPair();
+            setPqcKeys(keys);
+            if (typeof window !== "undefined") {
+                localStorage.setItem("red_pqc_hybrid_keys", JSON.stringify(keys));
+            }
+            toast.success("🔐 Par de llaves híbridas ML-KEM-768 + ECDH generado con éxito");
+        } catch (e: any) {
+            toast.error(`Error al generar llaves post-cuánticas: ${e.message || e}`);
+        } finally {
+            setIsPqcGenerating(false);
+        }
+    };
+
+    const handleRunPqcBenchmark = async () => {
+        let keysToUse = pqcKeys;
+        if (!keysToUse) {
+            setIsPqcGenerating(true);
+            try {
+                keysToUse = await PqcCryptoEngine.generateHybridKeyPair();
+                setPqcKeys(keysToUse);
+                if (typeof window !== "undefined") {
+                    localStorage.setItem("red_pqc_hybrid_keys", JSON.stringify(keysToUse));
+                }
+            } catch (e: any) {
+                toast.error(`Error al auto-generar llaves: ${e.message || e}`);
+                setIsPqcGenerating(false);
+                return;
+            }
+            setIsPqcGenerating(false);
+        }
+
+        setIsBenchmarking(true);
+        setBenchmarkResult(null);
+        try {
+            const t0 = performance.now();
+            const encap = await PqcCryptoEngine.encapsulateSharedSecret(
+                keysToUse.kyberPublicKeyHex,
+                keysToUse.x25519PublicKeyHex
+            );
+            const t1 = performance.now();
+
+            const t2 = performance.now();
+            const decap = await PqcCryptoEngine.decapsulateSharedSecret(
+                encap.ciphertextHex,
+                keysToUse.kyberPrivateKeyHex,
+                keysToUse.x25519PrivateKeyHex
+            );
+            const t3 = performance.now();
+
+            const isMatch = encap.sharedSecretHex.toLowerCase() === decap.toLowerCase();
+            if (isMatch) {
+                setBenchmarkResult({
+                    encapTimeMs: Math.round((t1 - t0) * 100) / 100,
+                    decapTimeMs: Math.round((t3 - t2) * 100) / 100,
+                    ciphertextBytes: encap.ciphertextHex.length / 2,
+                    sharedSecretPreview: encap.sharedSecretHex.substring(0, 32) + "…",
+                    success: true
+                });
+                toast.success("✅ ¡Cifrado híbrido ML-KEM-768 verificado bit a bit!");
+            } else {
+                toast.error("❌ Discrepancia en secreto compartido");
+            }
+        } catch (e: any) {
+            toast.error(`Fallo en el benchmark: ${e.message || e}`);
+        } finally {
+            setIsBenchmarking(false);
+        }
+    };
+
     const copyToClipboard = (text: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
@@ -222,6 +314,13 @@ export const IdentityVaultModal: React.FC = () => {
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
                     👤 Perfil Operador
+                </button>
+                <button
+                    onClick={() => setActiveTab("pqc")}
+                    className={activeTab === "pqc" ? "glow-pill-active" : "btn-ghost"}
+                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                >
+                    🔐 Post-Cuántica (ML-KEM)
                 </button>
                 <button
                     onClick={() => setActiveTab("shamir")}
@@ -348,7 +447,151 @@ export const IdentityVaultModal: React.FC = () => {
                         </div>
                     )}
 
-                    {/* ─── TAB 2: SHAMIR SECRET SHARING ────────────────────────── */}
+                    {/* ─── TAB 2: CRIPTOGRAFÍA POST-CUÁNTICA ML-KEM-768 ───────── */}
+                    {activeTab === "pqc" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontSize: "1.2rem" }}>🔐</span>
+                                    <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                        Criptografía Post-Cuántica NIST ML-KEM-768
+                                    </div>
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
+                                    Protección híbrida contra computadoras cuánticas (FIPS 203 Kyber-768 + ECDH P-256). Inmune a ataques de interceptación <em>"Harvest Now, Decrypt Later"</em>.
+                                </div>
+                            </div>
+
+                            {/* Status Card */}
+                            <div className="card-tactical" style={{ padding: "14px", background: "rgba(0, 240, 255, 0.05)", border: "1px solid rgba(0, 240, 255, 0.25)", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>
+                                        ESTADO DEL MOTOR CRIPTOGRÁFICO
+                                    </div>
+                                    <span className="mesh-badge" style={{ background: "rgba(0, 230, 118, 0.2)", color: "var(--accent-emerald)", border: "1px solid var(--accent-emerald)", fontSize: "0.68rem" }}>
+                                        {pqcKeys ? "ACTIVO · FIPS 203" : "NO INICIALIZADO"}
+                                    </span>
+                                </div>
+
+                                {pqcKeys ? (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                        <div>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                                LLAVE PÚBLICA ML-KEM-768 (1184 BYTES NTT POLYNOMIAL):
+                                            </div>
+                                            <div style={{
+                                                padding: "8px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.6)",
+                                                fontFamily: "JetBrains Mono, monospace", fontSize: "0.68rem", color: "var(--accent-cyan)",
+                                                wordBreak: "break-all", marginTop: "4px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px"
+                                            }}>
+                                                <span>{pqcKeys.kyberPublicKeyHex.substring(0, 48)}…{pqcKeys.kyberPublicKeyHex.slice(-16)}</span>
+                                                <button
+                                                    onClick={() => copyToClipboard(pqcKeys.kyberPublicKeyHex)}
+                                                    className="btn-tactical-secondary"
+                                                    style={{ padding: "3px 8px", fontSize: "0.65rem", flexShrink: 0 }}
+                                                >
+                                                    📋 Copiar
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>
+                                                LLAVE EFÍMERA ECDH P-256 (65 BYTES RAW UNCOMPRESSED):
+                                            </div>
+                                            <div style={{
+                                                padding: "8px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.6)",
+                                                fontFamily: "JetBrains Mono, monospace", fontSize: "0.68rem", color: "var(--accent-emerald)",
+                                                wordBreak: "break-all", marginTop: "4px"
+                                            }}>
+                                                {pqcKeys.x25519PublicKeyHex.substring(0, 48)}…
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", padding: "10px" }}>
+                                        Genera tu par de llaves post-cuánticas para habilitar el encapsulamiento seguro sobre la malla.
+                                    </div>
+                                )}
+
+                                <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                                    <button
+                                        onClick={handleGeneratePqcKeys}
+                                        disabled={isPqcGenerating}
+                                        className="btn-tactical-secondary"
+                                        style={{ flex: 1, padding: "10px", fontSize: "0.78rem", fontWeight: 700 }}
+                                    >
+                                        {isPqcGenerating ? "Generando…" : pqcKeys ? "🔄 Regenerar Par Híbrido" : "⚡ Generar Llaves ML-KEM-768"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Benchmark Live Test */}
+                            <div className="card-tactical" style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#fff" }}>
+                                    🧪 Test en Tiempo Real: Encapsulación & Decapsulación KEM
+                                </div>
+                                <div style={{ fontSize: "0.70rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                                    Ejecuta un ciclo completo de encapsulamiento lattice sobre el hardware de este dispositivo para medir latencia y confirmar derivación simétrica AES-256.
+                                </div>
+
+                                <button
+                                    onClick={handleRunPqcBenchmark}
+                                    disabled={isBenchmarking || isPqcGenerating}
+                                    className="btn-tactical-primary"
+                                    style={{
+                                        padding: "12px", fontSize: "0.84rem", fontWeight: 800,
+                                        background: "linear-gradient(135deg, #00F0FF 0%, #00B0FF 100%)", color: "#000"
+                                    }}
+                                >
+                                    {isBenchmarking ? "Ejecutando NTT & Lattice KEM…" : "⚡ Ejecutar Benchmark Criptográfico"}
+                                </button>
+
+                                {benchmarkResult && (
+                                    <div className="card-tactical animate-pop" style={{
+                                        padding: "12px", background: "rgba(0, 230, 118, 0.08)",
+                                        border: "1px solid rgba(0, 230, 118, 0.35)", display: "flex", flexDirection: "column", gap: "6px"
+                                    }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                                ✅ Ciclo KEM Exitoso (100% Coincidencia Bit a Bit)
+                                            </span>
+                                            <span style={{ fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)" }}>
+                                                Total: {Math.round((benchmarkResult.encapTimeMs + benchmarkResult.decapTimeMs) * 100) / 100}ms
+                                            </span>
+                                        </div>
+
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginTop: "4px" }}>
+                                            <div style={{ padding: "6px", background: "rgba(0,0,0,0.4)", borderRadius: "4px", textAlign: "center" }}>
+                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>ENCAPSULACIÓN</div>
+                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {benchmarkResult.encapTimeMs}ms
+                                                </div>
+                                            </div>
+                                            <div style={{ padding: "6px", background: "rgba(0,0,0,0.4)", borderRadius: "4px", textAlign: "center" }}>
+                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>DECAPSULACIÓN</div>
+                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {benchmarkResult.decapTimeMs}ms
+                                                </div>
+                                            </div>
+                                            <div style={{ padding: "6px", background: "rgba(0,0,0,0.4)", borderRadius: "4px", textAlign: "center" }}>
+                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>TAMAÑO CT</div>
+                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {benchmarkResult.ciphertextBytes} B
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div style={{ fontSize: "0.65rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", marginTop: "4px" }}>
+                                            KDF 256-bit Key: {benchmarkResult.sharedSecretPreview}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ─── TAB 3: SHAMIR SECRET SHARING ────────────────────────── */}
                     {activeTab === "shamir" && (
                         <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
                             <div>

@@ -3,6 +3,7 @@
 import React, { memo, useState, useRef, useCallback, useEffect } from "react";
 import { MessageItem, redeemP2PVoucher } from "../../lib/api";
 import { indexedMediaVault } from "../../lib/indexedMediaVault";
+import { AutoDestructEngine } from "../../lib/AutoDestructEngine";
 import { toast } from "../Toast";
 import { VoiceMessage } from "./VoiceMessage";
 import { PollMessage } from "./PollMessage";
@@ -28,9 +29,14 @@ interface MessageBubbleProps {
     onVote: (msgId: string, optIdx: number) => void;
     onPin?: (msg: MessageItem) => void;
     onReply?: (msg: MessageItem) => void;
+    onForward?: (msg: MessageItem) => void;
     onEdit?: (msg: MessageItem) => void;
     onDeleteForEveryone?: (msgId: string) => void;
     onOpenMediaGallery?: (msg: MessageItem) => void;
+    isSelectionMode?: boolean;
+    isSelected?: boolean;
+    onToggleSelect?: (msgId: string) => void;
+    onSelectMode?: (msg: MessageItem) => void;
 }
 
 function datePill(ts: number): string {
@@ -66,16 +72,59 @@ function getFileIcon(name?: string, mime?: string): string {
     return "📁";
 }
 
+function renderFormattedContent(content: string) {
+    if (!content) return null;
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    return parts.map((part, i) => {
+        if (part.match(urlRegex)) {
+            return (
+                <a
+                    key={i}
+                    href={part}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    style={{ color: "var(--accent-cyan, #00E5FF)", textDecoration: "underline", wordBreak: "break-all" }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    {part}
+                </a>
+            );
+        }
+        const mentionRegex = /(@[a-zA-Z0-9_\u00C0-\u017F]+)/g;
+        const subParts = part.split(mentionRegex);
+        return subParts.map((sub, j) => {
+            if (sub.startsWith('@')) {
+                return (
+                    <span
+                        key={`${i}-${j}`}
+                        style={{
+                            color: "var(--accent-cyan, #00E5FF)",
+                            fontWeight: 800,
+                            background: "rgba(0, 229, 255, 0.12)",
+                            padding: "1px 4px",
+                            borderRadius: "4px"
+                        }}
+                    >
+                        {sub}
+                    </span>
+                );
+            }
+            return sub;
+        });
+    });
+}
+
 const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
 function ContextMenu({
-    x, y, isMine, isDeleted, onReply, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onReact, onClose
+    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onClose
 }: {
     x: number; y: number; isMine: boolean; isDeleted: boolean;
-    onReply: () => void; onCopy: () => void; onPin?: () => void;
+    onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void;
     onEdit?: () => void; onDeleteForEveryone?: () => void; onDeleteLocal: () => void;
-    onReact: (e: string) => void; onClose: () => void;
+    onSelect?: () => void; onReact: (e: string) => void; onClose: () => void;
 }) {
     return (
         <>
@@ -118,7 +167,9 @@ function ContextMenu({
             }}>
                 {[
                     ...(!isDeleted ? [{ label: "Responder", icon: "↩️", action: onReply }] : []),
+                    ...(!isDeleted && onForward ? [{ label: "Reenviar", icon: "➡️", action: onForward }] : []),
                     ...(!isDeleted ? [{ label: "Copiar", icon: "📋", action: onCopy }] : []),
+                    ...(!isDeleted && onSelect ? [{ label: "Seleccionar", icon: "☑️", action: onSelect }] : []),
                     ...(onPin && !isDeleted ? [{ label: "Fijar Mensaje", icon: "📌", action: onPin }] : []),
                     ...(onEdit && isMine && !isDeleted ? [{ label: "Editar", icon: "✏️", action: onEdit }] : []),
                     ...(onDeleteForEveryone && isMine && !isDeleted ? [{ label: "Eliminar para todos", icon: "🗑️", action: onDeleteForEveryone, danger: true }] : []),
@@ -148,7 +199,8 @@ function ContextMenu({
 export const MessageBubble = memo(({
     msg, isMine, isFirst, isLast, showDate, peerName, starredMessages,
     searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
-    onLongPress, onCancelLongPress, onReaction, onVote, onPin, onReply, onEdit, onDeleteForEveryone, onOpenMediaGallery
+    onLongPress, onCancelLongPress, onReaction, onVote, onPin, onReply, onForward, onEdit, onDeleteForEveryone, onOpenMediaGallery,
+    isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode
 }: MessageBubbleProps) => {
     const [viewingImageSrc, setViewingImageSrc] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
@@ -166,6 +218,41 @@ export const MessageBubble = memo(({
     const isSystem = msg.msg_type === "system";
     const isDeleted = Boolean(msg.is_deleted);
     const isEdited = Boolean(msg.is_edited || (msg as any).edited);
+    const isForwarded = Boolean((msg as any).forwarded);
+
+    // Ephemeral / Self-Destruct Message Countdown Manager
+    const [burnSecondsLeft, setBurnSecondsLeft] = useState<number | null>(null);
+
+    useEffect(() => {
+        if (!msg.id || isDeleted) return;
+
+        // Register to engine for guaranteed persistence purge
+        AutoDestructEngine.registerMessage(msg);
+
+        const nowSec = Date.now() / 1000;
+        let expiresAt: number | null = null;
+        if (msg.expires_at && msg.expires_at > 0) {
+            expiresAt = msg.expires_at;
+        } else if (msg.ttl && msg.ttl > 0) {
+            const base = msg.timestamp > 1e11 ? msg.timestamp / 1000 : (msg.timestamp || nowSec);
+            expiresAt = base + msg.ttl;
+        }
+
+        if (!expiresAt) return;
+
+        const updateCountdown = () => {
+            const current = Date.now() / 1000;
+            const diff = Math.max(0, Math.ceil(expiresAt! - current));
+            setBurnSecondsLeft(diff);
+            if (diff <= 0) {
+                AutoDestructEngine.purgeMessage(msg.id);
+            }
+        };
+
+        updateCountdown();
+        const interval = setInterval(updateCountdown, 1000);
+        return () => clearInterval(interval);
+    }, [msg.id, msg.expires_at, msg.ttl, msg.timestamp, isDeleted]);
 
     // Resolve Image from IndexedDB if stored as red_vault://
     const rawImageCandidate = msg.media_data || (
@@ -318,11 +405,13 @@ export const MessageBubble = memo(({
                     x={contextMenu.x} y={contextMenu.y} isMine={isMine} isDeleted={isDeleted}
                     onClose={() => setContextMenu(null)}
                     onReply={() => onReply ? onReply(msg) : onLongPress({} as any, msg)}
+                    onForward={onForward ? () => onForward(msg) : undefined}
                     onCopy={handleCopy}
                     onPin={onPin ? () => onPin(msg) : undefined}
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDeleteForEveryone={onDeleteForEveryone ? () => onDeleteForEveryone(msg.id) : undefined}
                     onDeleteLocal={() => onLongPress({} as any, msg)}
+                    onSelect={onSelectMode ? () => onSelectMode(msg) : undefined}
                     onReact={(e) => onReaction(msg.id, e)}
                 />
             )}
@@ -343,6 +432,27 @@ export const MessageBubble = memo(({
                 transition: swipeOffset > 0 ? "none" : "transform 0.2s ease",
                 position: "relative",
             }}>
+                {/* Multi-selection Checkbox Indicator */}
+                {isSelectionMode && (
+                    <div
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleSelect?.(msg.id);
+                        }}
+                        style={{
+                            width: "22px", height: "22px", borderRadius: "50%",
+                            border: `2px solid ${isSelected ? "var(--accent-red, #E8213A)" : "rgba(255,255,255,0.4)"}`,
+                            background: isSelected ? "var(--accent-red, #E8213A)" : "rgba(0,0,0,0.4)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            color: "#fff", fontSize: "0.75rem", fontWeight: 900, cursor: "pointer",
+                            flexShrink: 0, margin: isMine ? "0 0 6px 6px" : "0 6px 6px 0",
+                            transition: "all 0.15s ease"
+                        }}
+                    >
+                        {isSelected && "✓"}
+                    </div>
+                )}
+
                 {/* Swipe to reply icon indicator */}
                 {swipeOffset > 20 && (
                     <div style={{
@@ -386,6 +496,39 @@ export const MessageBubble = memo(({
                         opacity: isDeleted ? 0.75 : 1,
                     }}
                 >
+                    {/* Forwarded Message Header */}
+                    {isForwarded && !isDeleted && (
+                        <div style={{
+                            display: "flex", alignItems: "center", gap: "4px",
+                            fontSize: "0.68rem", color: isMine ? "rgba(255, 255, 255, 0.75)" : "var(--accent-cyan)",
+                            fontWeight: 700, fontStyle: "italic", marginBottom: "2px"
+                        }}>
+                            <span>↩️ Reenviado</span>
+                        </div>
+                    )}
+
+                    {/* Ephemeral / Self-Destruct Burning Countdown Pill */}
+                    {burnSecondsLeft !== null && burnSecondsLeft > 0 && !isDeleted && (
+                        <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            padding: "3px 8px", borderRadius: "6px",
+                            background: "rgba(255, 68, 68, 0.18)",
+                            border: "1px solid rgba(255, 82, 82, 0.35)",
+                            fontSize: "0.66rem", fontWeight: 800,
+                            color: "#FF5252", fontFamily: "JetBrains Mono, monospace",
+                            marginBottom: "2px", letterSpacing: "0.3px",
+                            animation: "pulse 2s infinite"
+                        }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <span>🔥</span>
+                                <span>Expira en</span>
+                            </span>
+                            <span>
+                                {Math.floor(burnSecondsLeft / 60)}:{(burnSecondsLeft % 60).toString().padStart(2, '0')}
+                            </span>
+                        </div>
+                    )}
+
                     {/* Reply Quote Header */}
                     {msg.reply_to && !isDeleted && (
                         <div
@@ -599,10 +742,10 @@ export const MessageBubble = memo(({
                                 <PollMessage msg={msg} onVote={optIdx => onVote(msg.id, optIdx)} />
                             )}
 
-                            {/* Standard Text content */}
+                            {/* Standard Text content — with URL & mention highlighting */}
                             {!isPaymentMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
-                                    {msg.content}
+                                    {renderFormattedContent(msg.content)}
                                 </div>
                             )}
                         </>
@@ -614,6 +757,22 @@ export const MessageBubble = memo(({
                         fontSize: "0.65rem", color: isMine ? "rgba(255,255,255,0.72)" : "var(--text-muted)",
                         fontFamily: "JetBrains Mono, monospace", marginTop: "1px"
                     }}>
+                        {/* Flame self-destruct countdown */}
+                        {burnSecondsLeft !== null && burnSecondsLeft > 0 && !isDeleted && (
+                            <span style={{
+                                display: "inline-flex", alignItems: "center", gap: "2px",
+                                color: burnSecondsLeft <= 10 ? "#FF4B6B" : "rgba(255,180,0,0.95)",
+                                fontWeight: 800, animation: burnSecondsLeft <= 10 ? "pulse 0.6s infinite alternate" : "none"
+                            }}>
+                                🔥{burnSecondsLeft < 3600
+                                    ? `${Math.floor(burnSecondsLeft / 60)}:${String(burnSecondsLeft % 60).padStart(2, "0")}`
+                                    : `${Math.floor(burnSecondsLeft / 3600)}h`
+                                }
+                            </span>
+                        )}
+                        {isForwarded && !isDeleted && (
+                            <span style={{ opacity: 0.7, fontSize: "0.6rem" }}>↪ reenviado</span>
+                        )}
                         {isEdited && !isDeleted && <span>(editado)</span>}
                         <span>{timeStr(msg.timestamp)}</span>
                         {isMine && !isDeleted && (
@@ -622,6 +781,37 @@ export const MessageBubble = memo(({
                             </span>
                         )}
                     </div>
+
+                    {/* Reactions Pill List */}
+                    {msg.reactions && Object.keys(msg.reactions).length > 0 && !isDeleted && (
+                        <div style={{
+                            display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "2px",
+                            justifyContent: isMine ? "flex-end" : "flex-start"
+                        }}>
+                            {Object.entries(msg.reactions).map(([emoji, senders]) => {
+                                if (!Array.isArray(senders) || senders.length === 0) return null;
+                                return (
+                                    <button
+                                        key={emoji}
+                                        onClick={() => onReaction(msg.id, emoji)}
+                                        style={{
+                                            display: "inline-flex", alignItems: "center", gap: "3px",
+                                            padding: "2px 6px", borderRadius: "12px",
+                                            background: "rgba(0, 0, 0, 0.45)",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                                            fontSize: "0.72rem", color: "#FFFFFF", cursor: "pointer",
+                                            boxShadow: "0 2px 6px rgba(0,0,0,0.3)"
+                                        }}
+                                    >
+                                        <span>{emoji}</span>
+                                        <span style={{ fontSize: "0.62rem", fontWeight: 800, color: "rgba(255,255,255,0.8)" }}>
+                                            {senders.length}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             </div>
 

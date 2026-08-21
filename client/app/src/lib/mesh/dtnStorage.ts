@@ -87,7 +87,26 @@ class DtnStorage {
     return u8;
   }
 
-  public enqueue(packet: MeshPacket, priority = 1, ttlMs = DEFAULT_RETENTION_MS): void {
+  private calculatePacketPriority(packet: MeshPacket): number {
+    try {
+      const text = new TextDecoder().decode(packet.payload);
+      if (text.includes('"sos"') || text.includes('SOS_BEACON') || text.includes('SOS_ALERT') || text.includes('DISTRESS')) {
+        return 10; // Máxima prioridad: Emergencias y auxilio
+      }
+      if (text.includes('p2p_payment') || text.includes('p2p_voucher') || text.includes('RED_PAY:') || text.includes('voucher')) {
+        return 8; // Alta prioridad: Pagos y transacciones P2P
+      }
+      if (text.includes('DELIVERY_ACK') || text.includes('IDENTITY_ANNOUNCE') || text.includes('IDENTITY_RESPONSE')) {
+        return 6; // Prioridad protocolo: Handshakes y confirmaciones
+      }
+      if (text.includes('"media_chunk"') || text.includes('"voice_chunk"') || text.includes('"file"')) {
+        return 2; // Baja prioridad: Chunks multimedia pesados
+      }
+    } catch {}
+    return 4; // Prioridad estándar para mensajes de texto directo
+  }
+
+  public enqueue(packet: MeshPacket, priority?: number, ttlMs = DEFAULT_RETENTION_MS): void {
     const items = this.getItems();
     const nonce = packet.nonce;
 
@@ -95,6 +114,10 @@ class DtnStorage {
     if (items.some(it => it.id === nonce)) {
       return;
     }
+
+    const calculatedPriority = (priority !== undefined && priority > 0) 
+      ? priority 
+      : this.calculatePacketPriority(packet);
 
     const now = Date.now();
     const item: DtnQueueItem = {
@@ -114,25 +137,30 @@ class DtnStorage {
       lastAttempt: 0,
       nextRetryAfter: now,
       targetRecipient: packet.recipient,
-      priority,
+      priority: calculatedPriority,
     };
 
     // If queue is overflowing, prune lowest priority / oldest items
     if (items.length >= MAX_QUEUE_SIZE) {
-      items.sort((a, b) => a.createdAt - b.createdAt);
+      items.sort((a, b) => a.priority === b.priority ? a.createdAt - b.createdAt : a.priority - b.priority);
       items.shift();
     }
 
     items.push(item);
     this.saveItems(items);
-    console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
+    console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} (Priority: ${calculatedPriority}) for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
   }
 
   public getItemsToRetry(): DtnQueueItem[] {
     const now = Date.now();
     const items = this.getItems();
-    // Filter active items whose retry timer has elapsed
-    return items.filter(it => it.expiresAt > now && it.nextRetryAfter <= now);
+    // Filter active items whose retry timer has elapsed, sorted by Priority DESC then createdAt ASC
+    return items
+      .filter(it => it.expiresAt > now && it.nextRetryAfter <= now)
+      .sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        return a.createdAt - b.createdAt;
+      });
   }
 
   public markAttempt(nonce: string, success: boolean): void {

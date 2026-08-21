@@ -2056,6 +2056,98 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        // ── DTN Group History Sync (Sprint 3 v42.0.0) ─────────────────────────────
+        // When a peer joins a group or reconnects, they broadcast group_history_request.
+        // Any node with stored history responds with a group_history_response bundle.
+        if (item.msg_type === 'group_history_request') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item as any;
+                const groupId = parsed.group_id || (item as any).group_id;
+                const sinceTs = parsed.since_timestamp || (item as any).since_timestamp || 0;
+                const limit = Math.min(parsed.limit || 50, 100);
+                const requesterHash = parsed.requester_hash || item.sender;
+
+                if (!groupId || !requesterHash) return;
+
+                // Gather local stored messages for this group
+                const rawMsgs = localStorage.getItem(`red_web_messages_${groupId}`);
+                const allMsgs: any[] = rawMsgs ? JSON.parse(rawMsgs) : [];
+                const filtered = allMsgs
+                    .filter((m: any) => {
+                        const ts = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
+                        return ts >= sinceTs;
+                    })
+                    .sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+                    .slice(-limit);
+
+                if (filtered.length === 0) return;
+
+                const myIdentity = get().identity;
+                if (!myIdentity?.identity_hash) return;
+
+                // Send response over mesh
+                const responsePayload = {
+                    msg_type: 'group_history_response',
+                    group_id: groupId,
+                    responder_hash: myIdentity.identity_hash,
+                    messages: filtered,
+                    oldest_ts: filtered[0]?.timestamp || sinceTs,
+                    has_more: allMsgs.length > limit,
+                };
+                RedAPI.sendMessage(requesterHash, JSON.stringify(responsePayload), {
+                    msg_type: 'group_history_response',
+                    group_id: groupId,
+                }).catch(() => {});
+            } catch (e) {
+                console.warn('[DTN GroupHistoryRequest Error]', e);
+            }
+            return;
+        }
+
+        if (item.msg_type === 'group_history_response') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item as any;
+                const groupId = parsed.group_id || (item as any).group_id;
+                const incomingMsgs: any[] = parsed.messages || [];
+
+                if (!groupId || incomingMsgs.length === 0) return;
+
+                const storageKey = `red_web_messages_${groupId}`;
+                const existing: any[] = (() => {
+                    try { return JSON.parse(localStorage.getItem(storageKey) || '[]'); } catch { return []; }
+                })();
+
+                // Merge: deduplicate by id, sort by timestamp
+                const existingIds = new Set(existing.map((m: any) => m.id));
+                const newMsgs = incomingMsgs.filter((m: any) => m.id && !existingIds.has(m.id));
+
+                if (newMsgs.length === 0) return;
+
+                const merged = [...existing, ...newMsgs].sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0));
+                localStorage.setItem(storageKey, JSON.stringify(merged));
+
+                // If this group is currently active, update the in-memory messages list
+                const { activeConversationId } = get();
+                if (activeConversationId === groupId || activeConversationId?.includes(groupId.slice(0, 8))) {
+                    set((s) => {
+                        const existingInMemory = new Set(s.messages.map((m) => m.id));
+                        const toAdd = newMsgs.filter((m: any) => !existingInMemory.has(m.id));
+                        if (toAdd.length === 0) return s;
+                        const updated = [...s.messages, ...toAdd].sort((a, b) =>
+                            ((a.timestamp || 0) > 1e11 ? (a.timestamp || 0) / 1000 : (a.timestamp || 0)) -
+                            ((b.timestamp || 0) > 1e11 ? (b.timestamp || 0) / 1000 : (b.timestamp || 0))
+                        );
+                        return { messages: updated };
+                    });
+                }
+
+                toast.success(`📡 ${newMsgs.length} mensajes sincronizados vía DTN`);
+            } catch (e) {
+                console.warn('[DTN GroupHistoryResponse Error]', e);
+            }
+            return;
+        }
+
         // ── Real-Time Reactions: apply to target bubble, never append as new message ──
         if (item.msg_type === 'reaction') {
             try {
@@ -2136,6 +2228,28 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        // ── Remote Conversation Wipe (Sprint 4 v42.1.0) ──
+        if (item.msg_type === 'conversation_wipe' || item.msg_type === 'message_wipe') {
+            try {
+                const senderHash = meshRouter.getCanonicalId(item.sender) || item.sender;
+                if (senderHash && senderHash !== 'me') {
+                    // 1. Purge localStorage
+                    localStorage.removeItem(`red_web_messages_${senderHash}`);
+                    // 2. Clear from RedAPI backend
+                    RedAPI.clearConversation(senderHash).catch(() => {});
+                    // 3. Clear active in-memory messages if current chat matches
+                    const { activeConversationId } = get();
+                    if (activeConversationId === senderHash || (activeConversationId && senderHash.length >= 8 && activeConversationId.includes(senderHash.slice(0, 8)))) {
+                        set({ messages: [] });
+                    }
+                    toast.error(`⚠️ Orden de borrado remoto ejecutada por ${senderHash.slice(0, 8)}… Historial purgado.`);
+                }
+            } catch (e) {
+                console.warn('[Remote Wipe Ingest Error]', e);
+            }
+            return;
+        }
+
         // ── Real-Time Read Receipt E2E ACK: update outgoing ticks to Read ──
         if (item.msg_type === 'read_receipt') {
             try {
@@ -2156,6 +2270,17 @@ export const useRedStore = create<RedStore>((set, get) => ({
         }
 
         const myHash = get().identity?.identity_hash;
+        const resolvedIsMine = Boolean(
+            item.is_mine ||
+            item.sender === 'me' ||
+            (myHash && item.sender &&
+                (
+                    item.sender.toLowerCase() === myHash.toLowerCase() ||
+                    // Only match short_id scenario: full myHash starts with a genuine short sender prefix
+                    (myHash.length > 16 && item.sender.length >= 8 && item.sender.length < myHash.length && myHash.toLowerCase().startsWith(item.sender.toLowerCase()))
+                )
+            )
+        );
         const currentConv = get().conversations.find((c: any) => c && (c.id === activeConversationId || c.peer === activeConversationId));
         const itemRecipient = (item as any).recipient as string | undefined;
         const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
@@ -2179,11 +2304,12 @@ export const useRedStore = create<RedStore>((set, get) => ({
             const resolvedIsMine = Boolean(
                 item.is_mine ||
                 item.sender === 'me' ||
-                (myHash && (
-                    item.sender?.toLowerCase() === myHash.toLowerCase() ||
-                    myHash.toLowerCase().startsWith(item.sender?.toLowerCase() || '_____') ||
-                    (item.sender && item.sender.toLowerCase().startsWith(myHash.toLowerCase()))
-                ))
+                (myHash && item.sender &&
+                    (
+                        item.sender.toLowerCase() === myHash.toLowerCase() ||
+                        (myHash.length > 16 && item.sender.length >= 8 && item.sender.length < myHash.length && myHash.toLowerCase().startsWith(item.sender.toLowerCase()))
+                    )
+                )
             );
             const normalizedItem: MessageItem = {
                 ...(item as MessageItem),

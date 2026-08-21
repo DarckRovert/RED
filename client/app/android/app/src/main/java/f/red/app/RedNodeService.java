@@ -3,6 +3,7 @@ package f.red.app;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
@@ -28,14 +29,24 @@ import android.os.PowerManager;
 import android.net.wifi.WifiManager;
 import android.util.Log;
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.RemoteInput;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.json.JSONObject;
 
 public class RedNodeService extends Service {
     private static final String TAG = "RedNodeService";
     // v40: renamed from "RedNodeServiceChannel" to force recreation with IMPORTANCE_HIGH.
-    // Android ignores importance/sound changes on existing channel IDs — only new IDs take effect.
     private static final String CHANNEL_ID = "RedMeshNode_v40";
-    // RED P2P service UUID — must match bluethootTransport.ts constant
+    // v41: separate high-priority channel for incoming message heads-up notifications.
+    private static final String MSG_CHANNEL_ID = "RedIncomingMsg_v41";
+    // Key used by RemoteInput for inline reply from notification shade
+    private static final String REPLY_KEY = "red_inline_reply";
     private static final String RED_BLE_SERVICE_UUID = "00001818-0000-1000-8000-00805f9b34fb";
     private static final String RED_BLE_TX_CHAR_UUID = "00002a4d-0000-1000-8000-00805f9b34fb";
     private static final String RED_BLE_RX_CHAR_UUID = "00002a6e-0000-1000-8000-00805f9b34fb";
@@ -48,11 +59,16 @@ public class RedNodeService extends Service {
     private PowerManager.WakeLock wakeLock = null;
     private WifiManager.MulticastLock multicastLock = null;
     private WifiManager.WifiLock wifiLock = null;
+    // SSE notification consumer
+    private Thread sseThread = null;
+    private final AtomicBoolean sseShouldRun = new AtomicBoolean(false);
+    private int notifIdCounter = 2000;
 
     @Override
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
+        createMsgNotificationChannel(); // v41: message heads-up channel
         
         // Acquire permanent WakeLock to keep CPU & network queues running in background
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
@@ -165,10 +181,150 @@ public class RedNodeService extends Service {
 
             // Start BLE Advertising so nearby RED devices can discover this node
             startBleAdvertising();
+
+            // v41 Sprint 2: Start SSE consumer for native push notifications when app is backgrounded
+            startSseNotificationConsumer();
         }
 
         // START_STICKY ensures the OS tries to restart the background service if it kills it for memory
         return START_STICKY;
+    }
+
+    /**
+     * v41 — Starts a persistent SSE consumer on the local Rust node event stream.
+     * When a "new_message" event arrives and the app is in the background, it fires
+     * a heads-up NotificationCompat with BigTextStyle + RemoteInput inline reply.
+     */
+    private void startSseNotificationConsumer() {
+        if (sseShouldRun.getAndSet(true)) return; // Already running
+        sseThread = new Thread(() -> {
+            int backoffMs = 2000;
+            while (sseShouldRun.get()) {
+                HttpURLConnection conn = null;
+                try {
+                    URL url = new URL("http://127.0.0.1:7333/api/events");
+                    conn = (HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setRequestProperty("Accept", "text/event-stream");
+                    conn.setRequestProperty("Cache-Control", "no-cache");
+                    conn.setConnectTimeout(5000);
+                    conn.setReadTimeout(0); // infinite — SSE is a persistent stream
+                    conn.setDoInput(true);
+                    int status = conn.getResponseCode();
+                    if (status != 200) {
+                        Log.w(TAG, "SSE endpoint returned HTTP " + status + " — retrying in " + backoffMs + "ms");
+                        Thread.sleep(backoffMs);
+                        backoffMs = Math.min(backoffMs * 2, 30000);
+                        continue;
+                    }
+                    backoffMs = 2000; // reset backoff on successful connect
+                    Log.i(TAG, "SSE consumer connected to /api/events");
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    String line;
+                    String eventType = null;
+                    StringBuilder dataBuffer = new StringBuilder();
+                    while (sseShouldRun.get() && (line = reader.readLine()) != null) {
+                        if (line.startsWith("event:")) {
+                            eventType = line.substring(6).trim();
+                        } else if (line.startsWith("data:")) {
+                            dataBuffer.append(line.substring(5).trim());
+                        } else if (line.isEmpty() && dataBuffer.length() > 0) {
+                            // SSE event boundary — dispatch
+                            String data = dataBuffer.toString();
+                            dataBuffer.setLength(0);
+                            if ("new_message".equals(eventType)) {
+                                handleIncomingMessageEvent(data);
+                            }
+                            eventType = null;
+                        }
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    if (sseShouldRun.get()) {
+                        Log.w(TAG, "SSE consumer error (will retry): " + e.getMessage());
+                        try { Thread.sleep(backoffMs); backoffMs = Math.min(backoffMs * 2, 30000); } catch (InterruptedException ie) { break; }
+                    }
+                } finally {
+                    if (conn != null) conn.disconnect();
+                }
+            }
+            Log.i(TAG, "SSE consumer thread exited.");
+        }, "RedSSEConsumer");
+        sseThread.setDaemon(true);
+        sseThread.start();
+    }
+
+    /**
+     * Parses a new_message SSE event JSON payload and fires a heads-up notification.
+     * Only fires if the app is not in the foreground (checked via ActivityManager).
+     */
+    private void handleIncomingMessageEvent(String json) {
+        try {
+            JSONObject obj = new JSONObject(json);
+            String sender = obj.optString("sender_name", obj.optString("sender", "RED"));
+            String senderHash = obj.optString("sender", obj.optString("sender_hash", ""));
+            String content = obj.optString("content", "");
+            String conversationId = obj.optString("conversation_id", senderHash);
+            String recipient = !senderHash.isEmpty() ? senderHash : conversationId;
+            if (content.isEmpty()) return;
+
+            // Preview: truncate long messages
+            String preview = content.length() > 120 ? content.substring(0, 120) + "…" : content;
+
+            // Inline-reply RemoteInput
+            RemoteInput remoteInput = new RemoteInput.Builder(REPLY_KEY)
+                    .setLabel("Responder a " + sender + "…")
+                    .build();
+
+            // PendingIntent targets a BroadcastReceiver that will POST the reply to the Rust API
+            Intent replyIntent = new Intent(this, RedReplyReceiver.class);
+            replyIntent.putExtra("conversation_id", conversationId);
+            replyIntent.putExtra("sender", sender);
+            replyIntent.putExtra("recipient", recipient);
+            int reqCode = recipient.hashCode() & 0xFFFF;
+            PendingIntent replyPendingIntent = PendingIntent.getBroadcast(
+                    this, reqCode, replyIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE
+            );
+
+            NotificationCompat.Action replyAction = new NotificationCompat.Action.Builder(
+                    android.R.drawable.ic_menu_send,
+                    "Responder",
+                    replyPendingIntent
+            ).addRemoteInput(remoteInput).build();
+
+            // Open-app PendingIntent
+            Intent openIntent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+            if (openIntent != null) openIntent.putExtra("open_conversation", conversationId);
+            PendingIntent openPendingIntent = PendingIntent.getActivity(
+                    this, reqCode + 1,
+                    openIntent != null ? openIntent : new Intent(),
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+
+            NotificationCompat.Builder nb = new NotificationCompat.Builder(this, MSG_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_dialog_email)
+                    .setContentTitle("🔴 " + sender)
+                    .setContentText(preview)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(preview))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setAutoCancel(true)
+                    .setContentIntent(openPendingIntent)
+                    .addAction(replyAction)
+                    .setVisibility(NotificationCompat.VISIBILITY_PRIVATE) // protect content on lock screen
+                    .setGroup("RED_MESSAGES")
+                    .setGroupSummary(false);
+
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.notify(notifIdCounter++, nb.build());
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "handleIncomingMessageEvent parse error: " + e.getMessage());
+        }
     }
 
     /**
@@ -271,21 +427,28 @@ public class RedNodeService extends Service {
     public void onDestroy() {
         super.onDestroy();
         
+        // Stop the SSE consumer cleanly
+        sseShouldRun.set(false);
+        if (sseThread != null) {
+            sseThread.interrupt();
+            sseThread = null;
+        }
+
         // Release WakeLock
         if (wakeLock != null && wakeLock.isHeld()) {
-            wakeLock.release();
+            try { wakeLock.release(); } catch (Exception ignored) {}
             Log.i(TAG, "WakeLock released.");
         }
 
         // Release MulticastLock
         if (multicastLock != null && multicastLock.isHeld()) {
-            multicastLock.release();
+            try { multicastLock.release(); } catch (Exception ignored) {}
             Log.i(TAG, "MulticastLock released.");
         }
 
         // Release WifiLock
         if (wifiLock != null && wifiLock.isHeld()) {
-            wifiLock.release();
+            try { wifiLock.release(); } catch (Exception ignored) {}
             Log.i(TAG, "WifiLock released.");
         }
 
@@ -306,9 +469,11 @@ public class RedNodeService extends Service {
         }
 
         if (gattServer != null) {
-            gattServer.close();
+            try { gattServer.close(); } catch (Exception ignored) {}
             Log.i(TAG, "[BLE] GATT Server closed.");
         }
+
+        Log.i(TAG, "RedNodeService destroyed — all locks, BLE, and SSE consumer released.");
     }
 
     private void startGattServer() {
@@ -423,6 +588,24 @@ public class RedNodeService extends Service {
             if (manager != null) {
                 manager.createNotificationChannel(serviceChannel);
             }
+        }
+    }
+
+    /** v41: Creates the heads-up notification channel for incoming RED messages. */
+    private void createMsgNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel ch = new NotificationChannel(
+                    MSG_CHANNEL_ID,
+                    "RED — Mensajes Entrantes",
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            ch.setDescription("Notificaciones de mensajes cifrados RED recibidos mientras la app está en segundo plano");
+            ch.enableVibration(true);
+            ch.setVibrationPattern(new long[]{0, 120, 80, 120});
+            ch.setShowBadge(true);
+            ch.setLockscreenVisibility(android.app.Notification.VISIBILITY_PRIVATE);
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            if (manager != null) manager.createNotificationChannel(ch);
         }
     }
 

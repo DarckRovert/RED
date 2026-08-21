@@ -45,8 +45,27 @@ public class MainActivity extends BridgeActivity {
 
         copyDebugLogsToPublicStorage();
         requestP2pPermissions();
-        // NOTE: battery exemption moved to onResume() to avoid calling startActivity()
-        // during the CREATE phase before the window is fully attached.
+        handleConversationIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleConversationIntent(intent);
+    }
+
+    private void handleConversationIntent(Intent intent) {
+        if (intent == null) return;
+        String openConv = intent.getStringExtra("open_conversation");
+        if (openConv != null && !openConv.isEmpty()) {
+            android.webkit.WebView wv = this.bridge != null ? this.bridge.getWebView() : null;
+            if (wv != null) {
+                wv.postDelayed(() -> {
+                    wv.evaluateJavascript("if (window.dispatchEvent) { window.dispatchEvent(new CustomEvent('red:open_conversation', { detail: '" + openConv + "' })); }", null);
+                }, 1000);
+            }
+        }
     }
 
     @Override

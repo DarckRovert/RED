@@ -1,7 +1,6 @@
-"use client";
-
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { MessageItem } from "../../lib/api";
+import { useRedStore } from "../../store/useRedStore";
 
 export interface ChatInputProps {
     inputText?: string;
@@ -40,12 +39,15 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     handleCamera = () => {}, handleGallery = () => {}, handleDocument = () => {},
     handleLocation = () => {}, handlePay = () => {}, setShowPollModal = () => {}
 }) => {
+    const { contacts } = useRedStore();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [localText, setLocalText] = useState("");
     const [localAttachOpen, setLocalAttachOpen] = useState(false);
     const [multiline, setMultiline] = useState(false);
     const [isHandsFree, setIsHandsFree] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState<string | null>(null);
     const lastTypingSentRef = useRef<number>(0);
+    const mentionStartPos = useRef<number>(-1);
 
     const triggerTyping = useCallback(() => {
         const now = Date.now();
@@ -55,10 +57,41 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }
     }, [sendTyping]);
 
+    // Derive mention suggestions from store contacts filtered by mentionQuery
+    const mentionSuggestions = useMemo(() => {
+        if (!mentionQuery && mentionQuery !== "") return [];
+        const q = (mentionQuery || "").toLowerCase();
+        return contacts
+            .filter(c => {
+                const name = (c.nickname || c.peer_id || "").toLowerCase();
+                return name.startsWith(q) || name.includes(q);
+            })
+            .slice(0, 6);
+    }, [mentionQuery, contacts]);
+
     const text = inputText !== undefined ? inputText : localText;
     const setText = setInputText || setLocalText;
     const isAttachOpen = attachOpen !== undefined ? attachOpen : localAttachOpen;
     const setIsAttachOpen = setAttachOpen || setLocalAttachOpen;
+
+    // insertMention declared AFTER setText so the dependency is satisfied
+    const insertMention = useCallback((name: string) => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        const pos = mentionStartPos.current;
+        const current = ta.value;
+        const before = current.substring(0, pos);
+        const after = current.substring(ta.selectionEnd);
+        const newVal = `${before}@${name} ${after}`;
+        setText(newVal);
+        setMentionQuery(null);
+        mentionStartPos.current = -1;
+        setTimeout(() => {
+            ta.focus();
+            const cursor = before.length + name.length + 2; // @name<space>
+            ta.setSelectionRange(cursor, cursor);
+        }, 10);
+    }, [setText]);
 
     useEffect(() => {
         if (editingMsg) {
@@ -197,7 +230,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             {/* ── Main Input & Voice Recording Area ── */}
             <div style={{
                 display: "flex", alignItems: "flex-end", gap: "8px",
-                padding: "8px 12px", minHeight: "56px"
+                padding: "8px 12px", minHeight: "56px",
+                position: "relative"
             }}>
                 {isRecording ? (
                     /* Tactical Recording Mode with Hands-Free Lock */
@@ -270,9 +304,25 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 ref={textareaRef}
                                 value={text}
                                 onChange={(e) => {
-                                    setText(e.target.value);
-                                    if (e.target.value.trim().length > 0) {
-                                        triggerTyping();
+                                    const val = e.target.value;
+                                    setText(val);
+                                    if (val.trim().length > 0) triggerTyping();
+
+                                    // @ mention detection: find last '@' before cursor
+                                    const cursor = e.target.selectionStart ?? val.length;
+                                    const slice = val.substring(0, cursor);
+                                    const atIdx = slice.lastIndexOf("@");
+                                    if (atIdx !== -1) {
+                                        const word = slice.substring(atIdx + 1);
+                                        // Only trigger if no space between @ and cursor
+                                        if (!/\s/.test(word)) {
+                                            mentionStartPos.current = atIdx;
+                                            setMentionQuery(word);
+                                        } else {
+                                            setMentionQuery(null);
+                                        }
+                                    } else {
+                                        setMentionQuery(null);
                                     }
                                 }}
                                 onKeyDown={handleKeyDown}
@@ -292,6 +342,60 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 }}
                             />
                         </div>
+
+                        {/* ── @Mention Autocomplete Popup ── */}
+                        {mentionSuggestions.length > 0 && mentionQuery !== null && (
+                            <div style={{
+                                position: "absolute",
+                                bottom: "calc(100% + 4px)",
+                                left: 52,
+                                right: 52,
+                                background: "rgba(14,16,30,0.98)",
+                                backdropFilter: "blur(16px)",
+                                border: "1px solid rgba(0,229,255,0.25)",
+                                borderRadius: "12px",
+                                overflow: "hidden",
+                                boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
+                                zIndex: 200,
+                                animation: "fadeIn 0.12s ease"
+                            }}>
+                                {mentionSuggestions.map((c: any) => {
+                                    const name = c.nickname || c.peer_id || "???";
+                                    return (
+                                        <button
+                                            key={c.peer_id || name}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault(); // keep focus in textarea
+                                                insertMention(name);
+                                            }}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "10px",
+                                                width: "100%", padding: "10px 14px",
+                                                background: "transparent", border: "none",
+                                                color: "#fff", cursor: "pointer",
+                                                fontSize: "0.85rem", fontWeight: 600,
+                                                borderBottom: "1px solid rgba(255,255,255,0.05)",
+                                                textAlign: "left", transition: "background 0.1s"
+                                            }}
+                                            onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                            onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                        >
+                                            <span style={{
+                                                width: 28, height: 28, borderRadius: "50%",
+                                                background: "rgba(232,33,58,0.25)",
+                                                border: "1px solid rgba(232,33,58,0.4)",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                fontSize: "0.75rem", fontWeight: 900, color: "var(--accent-red, #E8213A)",
+                                                flexShrink: 0
+                                            }}>
+                                                {name.charAt(0).toUpperCase()}
+                                            </span>
+                                            <span>@{name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
 
                         {text.trim() ? (
                             <button

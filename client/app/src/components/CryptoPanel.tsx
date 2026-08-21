@@ -89,8 +89,8 @@ export default function CryptoPanel() {
     };
 
     const balance = tokenomics.localCredits;
-    const blocksCount = vault?.blocks_mined !== undefined ? vault.blocks_mined : 12;
-    const hashrate = vault?.hashrate !== undefined ? `${vault.hashrate} H/s` : "42 H/s";
+    const blocksCount = vault?.blocks_mined !== undefined ? vault.blocks_mined : undefined;
+    const hashrate = vault?.hashrate !== undefined ? `${vault.hashrate} H/s` : undefined;
     const peerCount = status?.peer_count !== undefined ? status.peer_count : 0;
 
     return (
@@ -198,10 +198,10 @@ export default function CryptoPanel() {
                                 <span>⚡</span>
                             </div>
                             <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                {hashrate}
+                                {hashrate ?? <span style={{ color: "var(--text-muted)", fontSize: "1rem" }}>—</span>}
                             </div>
                             <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                Bloques: #{blocksCount}
+                                Bloques: {blocksCount !== undefined ? `#${blocksCount}` : <span style={{ letterSpacing: 0 }}>—</span>}
                             </div>
                         </div>
 
@@ -217,6 +217,38 @@ export default function CryptoPanel() {
                                 PoS Staking APY: {tokenomics.validatorApy}%
                             </div>
                         </div>
+                    </div>
+
+                    {/* Post-Quantum Cryptographic Vault (Kyber-768 + Ed25519) */}
+                    <div
+                        className="card-tactical animate-enter"
+                        style={{
+                            padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center",
+                            background: "linear-gradient(135deg, rgba(0, 240, 255, 0.12) 0%, rgba(0, 230, 118, 0.06) 100%)",
+                            border: "1px solid rgba(0, 240, 255, 0.35)"
+                        }}
+                    >
+                        <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "1.1rem" }}>🔐</span>
+                                <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                    Bóveda Post-Cuántica ML-KEM-768 (Kyber)
+                                </div>
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
+                                Cifrado híbrido post-cuántico activo: <strong>Kyber-768 + Ed25519 Double Ratchet</strong> con almacenamiento endurecido AES-256-GCM.
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => setBackupModalOpen(true)}
+                            className="btn-tactical-primary"
+                            style={{
+                                padding: "8px 14px", fontSize: "0.78rem", whiteSpace: "nowrap",
+                                background: "linear-gradient(135deg, #00F0FF 0%, #00B0FF 100%)", color: "#000", fontWeight: 800
+                            }}
+                        >
+                            💾 Semilla BIP-39
+                        </button>
                     </div>
 
                     {/* Web3 & MetaMask Quick Integration Banner */}

@@ -362,6 +362,23 @@ export default function AppRouter() {
       } catch {}
     };
 
+    const handleNativeOpenConv = (event: any) => {
+      try {
+        const targetPeer = event?.detail;
+        if (targetPeer) {
+          const store = useRedStore.getState();
+          if (store.isAuthenticated) {
+            store.navigate("chat", targetPeer);
+          } else {
+            useRedStore.setState({ pendingChatNavigation: targetPeer } as any);
+          }
+        }
+      } catch (err) {
+        console.warn("[RED] Error handling native open conversation event:", err);
+      }
+    };
+    window.addEventListener("red:open_conversation", handleNativeOpenConv);
+
     setupBackButton();
     setupNotificationClickListeners();
     runIntegrityAudit();
@@ -370,6 +387,7 @@ export default function AppRouter() {
 
     return () => {
       window.removeEventListener("resize", checkViewport);
+      window.removeEventListener("red:open_conversation", handleNativeOpenConv);
     };
   }, []);
 

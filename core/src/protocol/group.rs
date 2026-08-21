@@ -45,15 +45,33 @@ pub struct GroupMember {
     pub joined_at: u64,
     /// Member role
     pub role: MemberRole,
+    /// Silenced: member can read but not send (temporary admin action)
+    pub muted: bool,
 }
 
 /// Member roles in a group
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemberRole {
-    /// Can manage members and settings
+    /// Can manage members, settings, and rotate keys
     Admin,
+    /// Can manage members but not group settings
+    Moderator,
     /// Regular member
     Member,
+    /// Can read messages but cannot send (observer/broadcast consumer)
+    ReadOnly,
+}
+
+impl MemberRole {
+    pub fn can_send(&self) -> bool {
+        matches!(self, MemberRole::Admin | MemberRole::Moderator | MemberRole::Member)
+    }
+    pub fn can_manage_members(&self) -> bool {
+        matches!(self, MemberRole::Admin | MemberRole::Moderator)
+    }
+    pub fn can_manage_settings(&self) -> bool {
+        matches!(self, MemberRole::Admin)
+    }
 }
 
 /// Sender Key for efficient group encryption
@@ -117,6 +135,10 @@ pub struct Group {
     pub id: GroupId,
     /// Group name
     pub name: String,
+    /// Optional group description
+    pub description: Option<String>,
+    /// Broadcast channel: only Admins/Moderators can send; Members/ReadOnly can only read
+    pub broadcast_only: bool,
     /// Group members
     members: HashMap<IdentityHash, GroupMember>,
     /// Our sender key
@@ -145,11 +167,79 @@ impl Group {
         Self {
             id,
             name,
+            description: None,
+            broadcast_only: false,
             members,
             our_sender_key: SenderKey::generate(),
             member_sender_keys: HashMap::new(),
             created_at: now,
             last_activity: now,
+        }
+    }
+
+    /// Promote a member to a higher role (requires caller to be Admin)
+    pub fn promote_member(
+        &mut self,
+        caller: &IdentityHash,
+        target: &IdentityHash,
+        new_role: MemberRole,
+    ) -> Result<(), GroupError> {
+        if !self.is_admin(caller) {
+            return Err(GroupError::NotAuthorized);
+        }
+        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        member.role = new_role;
+        Ok(())
+    }
+
+    /// Demote a member to ReadOnly (requires Admin or Moderator)
+    pub fn demote_member(
+        &mut self,
+        caller: &IdentityHash,
+        target: &IdentityHash,
+    ) -> Result<(), GroupError> {
+        let caller_role = self.members.get(caller)
+            .map(|m| m.role.clone())
+            .ok_or(GroupError::NotAuthorized)?;
+        if !caller_role.can_manage_members() {
+            return Err(GroupError::NotAuthorized);
+        }
+        // Moderators cannot demote Admins
+        if matches!(caller_role, MemberRole::Moderator) && self.is_admin(target) {
+            return Err(GroupError::NotAuthorized);
+        }
+        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        member.role = MemberRole::ReadOnly;
+        Ok(())
+    }
+
+    /// Mute a member (temporary send restriction, requires Admin or Moderator)
+    pub fn mute_member(
+        &mut self,
+        caller: &IdentityHash,
+        target: &IdentityHash,
+        muted: bool,
+    ) -> Result<(), GroupError> {
+        let caller_role = self.members.get(caller)
+            .map(|m| m.role.clone())
+            .ok_or(GroupError::NotAuthorized)?;
+        if !caller_role.can_manage_members() {
+            return Err(GroupError::NotAuthorized);
+        }
+        let member = self.members.get_mut(target).ok_or(GroupError::MemberNotFound)?;
+        member.muted = muted;
+        Ok(())
+    }
+
+    /// Check if a member can currently send messages
+    pub fn can_send(&self, identity_hash: &IdentityHash) -> bool {
+        match self.members.get(identity_hash) {
+            None => false,
+            Some(m) => {
+                if m.muted { return false; }
+                if self.broadcast_only { return m.role.can_manage_members(); }
+                m.role.can_send()
+            }
         }
     }
 
@@ -289,6 +379,34 @@ pub struct GroupMessage {
     pub ciphertext: Vec<u8>,
 }
 
+/// DTN History Sync — sent by a new member requesting historical messages
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GroupHistoryRequest {
+    /// Group identifier
+    pub group_id: GroupId,
+    /// Request from this peer
+    pub requester_hash: IdentityHash,
+    /// Only messages after this UNIX timestamp
+    pub since_timestamp: u64,
+    /// Maximum messages to return (capped server-side)
+    pub limit: u32,
+}
+
+/// DTN History Sync — response packet with encrypted history chunk
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GroupHistoryResponse {
+    /// Group identifier
+    pub group_id: GroupId,
+    /// Responder peer
+    pub responder_hash: IdentityHash,
+    /// Encrypted message bundles (each is a serialized GroupMessage)
+    pub message_bundles: Vec<Vec<u8>>,
+    /// Timestamp of the oldest included message
+    pub oldest_ts: u64,
+    /// Whether more history is available before oldest_ts
+    pub has_more: bool,
+}
+
 /// Group-related errors
 #[derive(Debug, Clone)]
 pub enum GroupError {
@@ -298,6 +416,7 @@ pub enum GroupError {
     EncryptionFailed,
     DecryptionFailed,
     NotAuthorized,
+    CannotSend,
 }
 
 impl std::fmt::Display for GroupError {
@@ -309,6 +428,7 @@ impl std::fmt::Display for GroupError {
             GroupError::EncryptionFailed => write!(f, "Encryption failed"),
             GroupError::DecryptionFailed => write!(f, "Decryption failed"),
             GroupError::NotAuthorized => write!(f, "Not authorized"),
+            GroupError::CannotSend => write!(f, "Member cannot send in this group"),
         }
     }
 }

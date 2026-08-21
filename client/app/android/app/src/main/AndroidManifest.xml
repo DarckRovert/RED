@@ -109,5 +109,10 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Emergency off-grid P2P mesh communication node (BLE + WebRTC + MQTT). Requires continuous background execution to relay encrypted messages in disaster or infrastructure-down scenarios where there is no internet connectivity." />
         </service>
+
+        <receiver
+            android:name=".RedReplyReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>

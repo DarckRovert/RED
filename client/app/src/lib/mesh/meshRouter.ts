@@ -814,25 +814,66 @@ class MeshRouter {
     exceptPeer: string | null
   ): Promise<'sent' | 'queued' | 'failed'> {
     const encoded = encode(packet);
-    const peersToSend = Array.from(this.peers.entries())
-      .filter(([id]) => id !== exceptPeer);
+    const isBroadcast =
+      packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+      packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000';
 
     let anySent = false;
 
-    // 1. Direct local mesh peers (BLE / WiFi LAN / LoRa)
+    // ─── 1. SMART UNICAST DIRECT ROUTING (Fast Path) ───
+    if (!isBroadcast) {
+      const canonicalRecipient = this.getCanonicalId(packet.recipient);
+      const directPeer = this.getPeerByAnyId(canonicalRecipient);
+
+      if (directPeer) {
+        // Direct Fast-Path 1: Direct WebRTC DataChannel (54 Mbps, <30ms)
+        if (this.wifi && (directPeer.transport === 'wifi' || this.wifi.onlinePeers.has(canonicalRecipient) || this.wifi.onlinePeers.has(directPeer.id))) {
+          const targetId = this.wifi.onlinePeers.has(canonicalRecipient) ? canonicalRecipient : directPeer.id;
+          const ok = await this.wifi.send(targetId, encoded);
+          if (ok) {
+            console.log(`[MeshRouter] ⚡ Fast-path: Delivered directly to ${canonicalRecipient.slice(0, 8)} via WiFi Direct`);
+            dtnStorage.markAttempt(packet.nonce, false);
+            return 'sent';
+          }
+        }
+
+        // Direct Fast-Path 2: Direct BLE GATT (<100ms) with LQS verification
+        const lqs = directPeer.rssi ? bluetoothTransport.getLinkQuality(directPeer.id) : 70;
+        if (lqs >= 20) {
+          const bleTargetId = directPeer.id || canonicalRecipient;
+          const ok = await bluetoothTransport.send(bleTargetId, encoded);
+          if (ok) {
+            console.log(`[MeshRouter] 📶 Direct BLE send to ${canonicalRecipient.slice(0, 8)} (LQS ${lqs}%)`);
+            dtnStorage.markAttempt(packet.nonce, false);
+            return 'sent';
+          }
+        }
+      }
+    }
+
+    // ─── 2. CONTROLLED MULTI-HOP FLOOD (LQS-Filtered) ───
+    // If not a direct peer or direct send failed, forward to connected neighbors with healthy links
+    const peersToSend = Array.from(this.peers.entries())
+      .filter(([id, peer]) => {
+        if (id === exceptPeer) return false;
+        // Don't waste radio energy on severely degraded links (LQS < 15%)
+        const lqs = peer.rssi ? bluetoothTransport.getLinkQuality(id) : 70;
+        return lqs >= 15;
+      });
+
     for (const [peerId, peer] of peersToSend) {
       const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
       if (ok) anySent = true;
     }
 
-    // 2. Global WAN / WebRTC / MQTT Blind Relay Transport
-    // Always attempt direct delivery over global transport for unicast packets
-    if (this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
+    // ─── 3. GLOBAL WAN / WebRTC / MQTT Blind Relay Transport ───
+    // For unicast packets, also attempt WAN relay uplink
+    if (this.wifi && !isBroadcast) {
       const ok = await this.wifi.send(packet.recipient, encoded);
       if (ok) anySent = true;
     }
 
-    // 3. Autonomous Mesh-to-Internet Gateway Delegation (Edge Bridge Routing)
+    // ─── 4. AUTONOMOUS MESH-TO-INTERNET GATEWAY DELEGATION ───
     // If we have NO internet, but a nearby local BLE/WiFi peer is an active Gateway:
     if (!anySent && !this.hasInternetAccess && this.activeGateways.size > 0) {
       for (const [gwId, gwPeer] of this.activeGateways.entries()) {

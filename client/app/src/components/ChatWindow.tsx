@@ -7,6 +7,8 @@ import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
 import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
+import { MessageForwardModal } from "./chat/MessageForwardModal";
+import { SafetyNumberModal } from "./chat/SafetyNumberModal";
 import { ContactProfileModal } from "./ContactProfileModal";
 import { toast } from "./Toast";
 import { meshRouter } from "../lib/mesh/meshRouter";
@@ -73,10 +75,48 @@ export default function ChatWindow() {
     const [pinnedMessage, setPinnedMessage] = useState<MessageItem | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const [burnTimer, setBurnTimer] = useState<number | undefined>(undefined);
+    const [burnMenuOpen, setBurnMenuOpen] = useState(false);
+    const [forwardingMsg, setForwardingMsg] = useState<MessageItem | null>(null);
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
     const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
     const [editingMsg, setEditingMsg] = useState<MessageItem | null>(null);
+    const [isSelectionMode, setIsSelectionMode] = useState(false);
+    const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
+
+    // Ref so selection callbacks can access convMessages without ordering issues
+    const convMessagesRef = useRef<MessageItem[]>([]);
+
+    const enterSelectionMode = useCallback((msg: MessageItem) => {
+        setIsSelectionMode(true);
+        setSelectedMsgIds(new Set([msg.id]));
+    }, []);
+
+    const toggleMsgSelect = useCallback((msgId: string) => {
+        setSelectedMsgIds(prev => {
+            const next = new Set(prev);
+            if (next.has(msgId)) next.delete(msgId);
+            else next.add(msgId);
+            return next;
+        });
+    }, []);
+
+    const exitSelectionMode = useCallback(() => {
+        setIsSelectionMode(false);
+        setSelectedMsgIds(new Set());
+    }, []);
+
+    const deleteSelected = useCallback(() => {
+        selectedMsgIds.forEach(id => deleteMessage(id));
+        exitSelectionMode();
+        toast.success(`${selectedMsgIds.size} mensaje(s) eliminado(s)`);
+    }, [selectedMsgIds, deleteMessage, exitSelectionMode]);
+
+    const forwardSelected = useCallback(() => {
+        const first = convMessagesRef.current.find(m => selectedMsgIds.has(m.id));
+        if (first) setForwardingMsg(first);
+        exitSelectionMode();
+    }, [selectedMsgIds, exitSelectionMode]);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const mediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -86,6 +126,9 @@ export default function ChatWindow() {
         const list = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
         return [...list];
     }, [messages, activeConversationId]);
+
+    // Keep ref in sync with latest convMessages
+    useEffect(() => { convMessagesRef.current = convMessages; }, [convMessages]);
 
     const searchMatches = useMemo(() => {
         if (!searchQuery.trim()) return [];
@@ -162,6 +205,28 @@ export default function ChatWindow() {
     const [isPayModalOpen, setIsPayModalOpen] = useState(false);
     const [payAmount, setPayAmount] = useState("25");
     const [payMemo, setPayMemo] = useState("");
+
+    // Security Sprint 4: Safety Number & Remote Wipe states
+    const [isSafetyModalOpen, setIsSafetyModalOpen] = useState(false);
+    const [isWipeConfirmOpen, setIsWipeConfirmOpen] = useState(false);
+    const [isSecurityMenuOpen, setIsSecurityMenuOpen] = useState(false);
+
+    const isVerified = Boolean(peerContact?.is_verified);
+    const isKeyChanged = Boolean(peerContact?.key_changed || (peerContact?.previous_public_key && peerContact?.previous_public_key !== peerContact?.public_key));
+
+    const handleRemoteWipe = async () => {
+        if (!peerHash) return;
+        try {
+            await sendMessage(JSON.stringify({ reason: "user_remote_wipe", timestamp: Date.now() / 1000 }), {
+                msg_type: "conversation_wipe",
+            });
+            await clearConversation();
+            toast.success("💣 Orden de borrado remoto enviada y chat purgado.");
+            setIsWipeConfirmOpen(false);
+        } catch {
+            toast.error("Error al ejecutar borrado remoto");
+        }
+    };
 
     const handleScroll = useCallback(() => {
         const el = scrollContainerRef.current;
@@ -253,6 +318,7 @@ export default function ChatWindow() {
         try {
             await sendMessage(text.trim(), {
                 msg_type: "text",
+                ttl: burnTimer,
                 reply_to: resolvedReply ? {
                     id: resolvedReply.id,
                     content: resolvedReply.content,
@@ -618,6 +684,19 @@ export default function ChatWindow() {
                             <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: "6px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{peerName}</span>
                                 <span className="badge-tactical badge-tactical-cyan" style={{ fontSize: "0.62rem", padding: "1px 6px", flexShrink: 0 }}>NOISE E2E</span>
+                                {isVerified && (
+                                    <span
+                                        onClick={() => setIsSafetyModalOpen(true)}
+                                        className="badge-tactical"
+                                        style={{
+                                            fontSize: "0.62rem", padding: "1px 6px", flexShrink: 0, cursor: "pointer",
+                                            background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)"
+                                        }}
+                                        title="Identidad Criptográfica Verificada (Toca para ver Safety Number)"
+                                    >
+                                        🛡️ VERIFICADO
+                                    </span>
+                                )}
                             </div>
                             <div style={{
                                 fontSize: "0.68rem",
@@ -638,7 +717,73 @@ export default function ChatWindow() {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, position: "relative" }}>
+                    {/* Ephemeral / Auto-Destruct Timer Button */}
+                    <button
+                        onClick={() => setBurnMenuOpen(v => !v)}
+                        className="btn-icon"
+                        title="Mensajes Efímeros / Auto-destrucción"
+                        style={{
+                            width: 36, height: 36,
+                            color: burnTimer ? "var(--accent-red, #FF5252)" : "var(--text-secondary)",
+                            background: burnTimer ? "rgba(255, 82, 82, 0.15)" : "transparent",
+                            borderRadius: "10px",
+                            border: burnTimer ? "1px solid rgba(255, 82, 82, 0.4)" : "none",
+                            fontSize: "0.95rem"
+                        }}
+                    >
+                        {burnTimer ? "🔥" : "⏱️"}
+                    </button>
+
+                    {/* Ephemeral Timer Dropdown Menu */}
+                    {burnMenuOpen && (
+                        <>
+                            <div onClick={() => setBurnMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 120 }} />
+                            <div style={{
+                                position: "absolute", top: "44px", right: "0px", zIndex: 130,
+                                background: "rgba(18, 22, 38, 0.98)", backdropFilter: "blur(16px)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                borderRadius: "14px", padding: "8px", width: "190px",
+                                boxShadow: "0 8px 32px rgba(0, 0, 0, 0.8)",
+                                animation: "fadeIn 0.15s ease"
+                            }}>
+                                <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--accent-red, #FF5252)", padding: "4px 8px 8px 8px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    ⏳ AUTO-DESTRUCCIÓN
+                                </div>
+                                {[
+                                    { label: "Desactivado", sec: undefined },
+                                    { label: "5 segundos", sec: 5 },
+                                    { label: "10 segundos", sec: 10 },
+                                    { label: "30 segundos", sec: 30 },
+                                    { label: "1 minuto", sec: 60 },
+                                    { label: "5 minutos", sec: 300 },
+                                    { label: "1 hora", sec: 3600 },
+                                    { label: "24 horas", sec: 86400 }
+                                ].map((opt) => (
+                                    <button
+                                        key={opt.label}
+                                        onClick={() => {
+                                            setBurnTimer(opt.sec);
+                                            setBurnMenuOpen(false);
+                                            toast.info(opt.sec ? `🔥 Auto-destrucción fijada en ${opt.label}` : "⏱️ Mensajes persistentes (normal)");
+                                        }}
+                                        style={{
+                                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                                            width: "100%", padding: "8px 10px", borderRadius: "8px",
+                                            background: burnTimer === opt.sec ? "rgba(255, 82, 82, 0.18)" : "transparent",
+                                            border: "none", color: burnTimer === opt.sec ? "#FF5252" : "#FFFFFF",
+                                            fontSize: "0.82rem", fontWeight: burnTimer === opt.sec ? 800 : 500,
+                                            cursor: "pointer", textAlign: "left", transition: "background 0.1s"
+                                        }}
+                                    >
+                                        <span>{opt.label}</span>
+                                        {burnTimer === opt.sec && <span style={{ fontSize: "0.75rem" }}>✓</span>}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+
                     <button
                         onClick={() => setSearchOpen(v => !v)}
                         className="btn-icon"
@@ -715,15 +860,96 @@ export default function ChatWindow() {
                     </button>
 
                     <button
-                        onClick={() => navigate("walkie")}
+                        onClick={() => setIsSafetyModalOpen(true)}
                         className="btn-icon"
-                        title="Walkie Talkie PTT"
-                        style={{ width: 36, height: 36, color: "var(--accent-amber)" }}
+                        title={isVerified ? "Identidad Verificada — Ver Safety Number" : "Verificar Safety Number (Criptografía Signal-Class)"}
+                        style={{
+                            width: 36, height: 36,
+                            color: isVerified ? "var(--accent-emerald, #00E676)" : "var(--text-secondary)",
+                            background: isVerified ? "rgba(0, 230, 118, 0.12)" : "transparent",
+                            borderRadius: "10px",
+                            fontSize: "0.95rem"
+                        }}
                     >
-                        🎙️
+                        🛡️
                     </button>
+
+                    {/* Security & Remote Wipe Dropdown Menu */}
+                    <div style={{ position: "relative" }}>
+                        <button
+                            onClick={() => setIsSecurityMenuOpen(v => !v)}
+                            className="btn-icon"
+                            title="Opciones de Seguridad Avanzada"
+                            style={{ width: 36, height: 36, color: "var(--text-secondary)" }}
+                        >
+                            ⋮
+                        </button>
+                        {isSecurityMenuOpen && (
+                            <>
+                                <div onClick={() => setIsSecurityMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 120 }} />
+                                <div style={{
+                                    position: "absolute", top: "44px", right: "0px", zIndex: 130,
+                                    background: "rgba(18, 22, 38, 0.98)", backdropFilter: "blur(16px)",
+                                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                                    borderRadius: "14px", padding: "6px", width: "230px",
+                                    boxShadow: "0 8px 32px rgba(0, 0, 0, 0.8)",
+                                    animation: "fadeIn 0.15s ease", display: "flex", flexDirection: "column", gap: "2px"
+                                }}>
+                                    <button
+                                        onClick={() => {
+                                            setIsSecurityMenuOpen(false);
+                                            setIsSafetyModalOpen(true);
+                                        }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "8px",
+                                            padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                            border: "none", color: "#FFFFFF", fontSize: "0.82rem", fontWeight: 600,
+                                            cursor: "pointer", textAlign: "left"
+                                        }}
+                                    >
+                                        <span>🛡️</span>
+                                        <span>Safety Number (60 dígitos)</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsSecurityMenuOpen(false);
+                                            setIsWipeConfirmOpen(true);
+                                        }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "8px",
+                                            padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                            border: "none", color: "var(--accent-crimson, #FF3C5F)", fontSize: "0.82rem", fontWeight: 700,
+                                            cursor: "pointer", textAlign: "left"
+                                        }}
+                                    >
+                                        <span>💣</span>
+                                        <span>Borrado Remoto P2P</span>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </header>
+
+            {/* Key-Change Warning Banner */}
+            {isKeyChanged && (
+                <div
+                    onClick={() => setIsSafetyModalOpen(true)}
+                    style={{
+                        padding: "10px 14px", margin: "8px 12px 0px 12px", borderRadius: "10px",
+                        background: "rgba(255, 171, 0, 0.15)", border: "1px solid rgba(255, 171, 0, 0.4)",
+                        color: "#FFD54F", fontSize: "0.78rem", fontWeight: 700,
+                        display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer"
+                    }}
+                >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span>⚠️</span>
+                        <span>La clave pública de este contacto ha cambiado. Toca para verificar su Safety Number.</span>
+                    </div>
+                    <span style={{ textDecoration: "underline", fontSize: "0.72rem", flexShrink: 0 }}>Verificar →</span>
+                </div>
+            )}
 
             {/* In-Chat Search Bar Overlay */}
             {searchOpen && (
@@ -831,8 +1057,7 @@ export default function ChatWindow() {
                             msg.sender === "me" ||
                             (identity?.identity_hash && (
                                 msg.sender?.toLowerCase() === identity.identity_hash.toLowerCase() ||
-                                identity.identity_hash.toLowerCase().startsWith(msg.sender?.toLowerCase() || "_____") ||
-                                (msg.sender && msg.sender.toLowerCase().startsWith(identity.identity_hash.toLowerCase()))
+                                (msg.sender && (msg.sender.length >= 8 && msg.sender.length < identity.identity_hash.length) && identity.identity_hash.toLowerCase().startsWith(msg.sender.toLowerCase()))
                             )) ||
                             (identity?.short_id && msg.sender?.toLowerCase() === identity.short_id.toLowerCase())
                         );
@@ -871,7 +1096,7 @@ export default function ChatWindow() {
                                 isMine={isMine}
                                 isFirst={isFirst}
                                 isLast={isLast}
-                                showDate={index === 0 || !prevMsg || Math.abs(msg.timestamp - prevMsg.timestamp) > 3600}
+                                showDate={index === 0 || !prevMsg || (() => { const a = msg.timestamp > 1e11 ? msg.timestamp / 1000 : msg.timestamp; const b = prevMsg.timestamp > 1e11 ? prevMsg.timestamp / 1000 : prevMsg.timestamp; const sameDay = new Date(a*1000).toDateString() === new Date(b*1000).toDateString(); return !sameDay; })()}
                                 peerName={peerName}
                                 starredMessages={starredMessages || []}
                                 searchQuery={searchQuery}
@@ -886,13 +1111,66 @@ export default function ChatWindow() {
                                 onVote={handleVote}
                                 onPin={handlePinMessage}
                                 onReply={(m) => setReplyTo(m)}
+                                onForward={(m) => setForwardingMsg(m)}
                                 onEdit={(m) => setEditingMsg(m)}
                                 onDeleteForEveryone={(id) => deleteMessageForEveryone(id)}
                                 onOpenMediaGallery={(m) => setSelectedViewerMedia(m)}
+                                isSelectionMode={isSelectionMode}
+                                isSelected={selectedMsgIds.has(msg.id)}
+                                onToggleSelect={toggleMsgSelect}
+                                onSelectMode={enterSelectionMode}
                             />
                         );
                     })
                 )}
+                {/* Multi-Selection Toolbar */}
+                {isSelectionMode && (
+                    <div style={{
+                        position: "sticky", bottom: 0,
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 16px",
+                        background: "rgba(14,16,30,0.98)", backdropFilter: "blur(16px)",
+                        borderTop: "1px solid rgba(0,229,255,0.2)",
+                        gap: "10px", zIndex: 50
+                    }}>
+                        <button
+                            onClick={exitSelectionMode}
+                            style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "0.82rem", cursor: "pointer", padding: "6px 10px" }}
+                        >
+                            ✕ Cancelar
+                        </button>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#fff" }}>
+                            {selectedMsgIds.size} seleccionado{selectedMsgIds.size !== 1 ? "s" : ""}
+                        </span>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                onClick={forwardSelected}
+                                disabled={selectedMsgIds.size === 0}
+                                style={{
+                                    padding: "7px 14px", borderRadius: "20px",
+                                    background: "rgba(0,229,255,0.12)", border: "1px solid rgba(0,229,255,0.3)",
+                                    color: "var(--accent-cyan, #00E5FF)", fontSize: "0.8rem", fontWeight: 700,
+                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer"
+                                }}
+                            >
+                                ➡️ Reenviar
+                            </button>
+                            <button
+                                onClick={deleteSelected}
+                                disabled={selectedMsgIds.size === 0}
+                                style={{
+                                    padding: "7px 14px", borderRadius: "20px",
+                                    background: "rgba(232,33,58,0.14)", border: "1px solid rgba(232,33,58,0.4)",
+                                    color: "#FF4B6B", fontSize: "0.8rem", fontWeight: 700,
+                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer"
+                                }}
+                            >
+                                🗑️ Eliminar
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Typing Indicator */}
                 {peerTyping && (
                     <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", marginTop: "4px" }}>
@@ -1138,6 +1416,79 @@ export default function ChatWindow() {
                     allMessages={convMessages}
                     onClose={() => setSelectedViewerMedia(null)}
                 />
+            )}
+
+            {/* Message Forward Modal */}
+            {forwardingMsg && (
+                <MessageForwardModal
+                    msg={forwardingMsg}
+                    onClose={() => setForwardingMsg(null)}
+                />
+            )}
+
+            {/* Signal-Class Safety Number Modal (Sprint 4) */}
+            {isSafetyModalOpen && (
+                <SafetyNumberModal
+                    peerHash={peerHash}
+                    peerName={peerName}
+                    peerPublicKey={peerContact?.public_key}
+                    isVerified={isVerified}
+                    onClose={() => setIsSafetyModalOpen(false)}
+                    onVerifiedChange={(verified) => {
+                        if (peerContact) peerContact.is_verified = verified;
+                    }}
+                />
+            )}
+
+            {/* Remote Wipe Confirmation Modal */}
+            {isWipeConfirmOpen && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 10000,
+                        background: "rgba(4, 6, 14, 0.88)", backdropFilter: "blur(18px)",
+                        display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+                    }}
+                    onClick={() => setIsWipeConfirmOpen(false)}
+                >
+                    <div
+                        className="card-tactical animate-enter"
+                        style={{
+                            width: "100%", maxWidth: "420px", padding: "20px",
+                            boxShadow: "0 24px 64px rgba(0,0,0,0.85)",
+                            display: "flex", flexDirection: "column", gap: "14px"
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "1.3rem" }}>💣</span>
+                            <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "var(--accent-crimson, #FF3C5F)" }}>
+                                Confirmar Borrado Remoto P2P
+                            </h2>
+                        </div>
+                        <div style={{ fontSize: "0.8rem", lineHeight: 1.5, color: "var(--text-secondary)" }}>
+                            Esta acción enviará una orden criptográfica firmada a <strong>{peerName}</strong> para purgar inmediatamente todo el historial de chat en ambos dispositivos. Esta acción es <strong>irreversible</strong>.
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                            <button
+                                onClick={handleRemoteWipe}
+                                className="btn-tactical-primary"
+                                style={{
+                                    flex: 1, padding: "10px", fontSize: "0.82rem", fontWeight: 800,
+                                    background: "var(--accent-crimson, #FF3C5F)", borderColor: "rgba(255,60,95,0.6)"
+                                }}
+                            >
+                                Sí, Purgar en Ambos Lados
+                            </button>
+                            <button
+                                onClick={() => setIsWipeConfirmOpen(false)}
+                                className="btn-secondary"
+                                style={{ padding: "10px 16px", fontSize: "0.82rem" }}
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

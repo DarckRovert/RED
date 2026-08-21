@@ -623,15 +623,27 @@ export default function NodeMap() {
                                         </div>
                                     </div>
 
-                                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                                        {peer.rssi != null && (
-                                            <div style={{
-                                                fontSize: "0.70rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
-                                                color: peer.rssi > -70 ? "var(--accent-emerald)" : peer.rssi > -85 ? "var(--accent-amber)" : "var(--accent-crimson)"
-                                            }}>
-                                                {peer.rssi} dBm
-                                            </div>
-                                        )}
+                                    <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                                        {peer.rssi != null && (() => {
+                                            const lqs = Math.max(5, Math.min(100, Math.round(((Math.max(-100, Math.min(-40, peer.rssi)) + 100) / 60) * 100)));
+                                            const lqsColor = lqs >= 75 ? "var(--accent-emerald, #00E676)" : lqs >= 45 ? "var(--accent-amber, #FFB300)" : "var(--accent-crimson, #FF3C5F)";
+                                            return (
+                                                <>
+                                                    <div style={{
+                                                        fontSize: "0.70rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
+                                                        color: peer.rssi > -70 ? "var(--accent-emerald)" : peer.rssi > -85 ? "var(--accent-amber)" : "var(--accent-crimson)"
+                                                    }}>
+                                                        {peer.rssi} dBm
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: "0.58rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
+                                                        color: lqsColor, background: "rgba(255,255,255,0.06)", padding: "1px 4px", borderRadius: "4px"
+                                                    }}>
+                                                        LQS {lqs}%
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
                                         {peer.batteryLevel != null && (
                                             <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                                 🔋 {peer.batteryLevel}%

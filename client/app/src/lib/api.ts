@@ -546,6 +546,87 @@ class RedAPIClient {
         }
     }
 
+    // ── Group Admin API — Sprint 3 (v42.0.0) ────────────────────────────────────
+
+    /** Promote or demote a member's role in a group (caller must be Admin) */
+    async setGroupMemberRole(
+        groupId: string,
+        memberHash: string,
+        role: 'Admin' | 'Moderator' | 'Member' | 'ReadOnly'
+    ): Promise<void> {
+        try {
+            await this.req(`/groups/${groupId}/members/${memberHash}/role`, {
+                method: 'PUT',
+                body: JSON.stringify({ role })
+            });
+        } catch {
+            // Fallback: update locally via PUT on the whole group record
+            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+            if (g && g.members) {
+                const m = g.members.find((m: any) => m.identity_hash === memberHash);
+                if (m) { m.role = role; this.setWebStore('red_web_groups', groups); }
+            }
+        }
+    }
+
+    /** Mute or unmute a group member (caller must be Admin or Moderator) */
+    async muteGroupMember(groupId: string, memberHash: string, muted: boolean): Promise<void> {
+        try {
+            await this.req(`/groups/${groupId}/members/${memberHash}/mute`, {
+                method: 'PUT',
+                body: JSON.stringify({ muted })
+            });
+        } catch {
+            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+            if (g && g.members) {
+                const m = g.members.find((m: any) => m.identity_hash === memberHash);
+                if (m) { m.muted = muted; this.setWebStore('red_web_groups', groups); }
+            }
+        }
+    }
+
+    /** Toggle broadcast-only mode on a group (only Admins) */
+    async setGroupBroadcastMode(groupId: string, broadcastOnly: boolean): Promise<void> {
+        try {
+            await this.req(`/groups/${groupId}/broadcast`, {
+                method: 'PUT',
+                body: JSON.stringify({ broadcast_only: broadcastOnly })
+            });
+        } catch {
+            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+            if (g) { g.broadcast_only = broadcastOnly; this.setWebStore('red_web_groups', groups); }
+        }
+    }
+
+    /** Request DTN history sync from peers — broadcast to group over mesh */
+    async requestGroupHistory(groupId: string, sinceTimestamp: number, limit = 50): Promise<void> {
+        const myHash = localStorage.getItem('red_identity_hash') || 'me';
+        const payload = {
+            msg_type: 'group_history_request',
+            group_id: groupId,
+            requester_hash: myHash,
+            since_timestamp: sinceTimestamp,
+            limit
+        };
+        try {
+            // Try Rust node first
+            await this.req('/groups/history/request', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+        } catch {
+            // Fallback: broadcast over mesh
+            try {
+                const { meshRouter } = await import('./mesh/meshRouter');
+                const encoded = new TextEncoder().encode(JSON.stringify(payload));
+                await meshRouter.send(groupId, encoded);
+            } catch { /* non-fatal */ }
+        }
+    }
+
     async addContact(identity_hash: string, display_name: string, public_key?: string | null): Promise<void> {
         let cleanHash = identity_hash.trim();
         if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
@@ -579,7 +660,31 @@ class RedAPIClient {
     }
 
     async verifyContact(identity_hash: string): Promise<void> {
-        await this.req(`/contacts/${identity_hash}/verify`, { method: 'POST' });
+        let cleanHash = identity_hash.trim().toLowerCase();
+        if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
+        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const idx = contacts.findIndex(c => c.identity_hash === cleanHash || c.identity_hash?.startsWith(cleanHash.slice(0, 8)));
+        if (idx >= 0) {
+            contacts[idx] = { ...contacts[idx], is_verified: true, verified_at: Date.now() };
+            this.setWebStore('red_web_contacts', contacts);
+        }
+        try {
+            await this.req(`/contacts/${cleanHash}/verify`, { method: 'POST' });
+        } catch {}
+    }
+
+    async unverifyContact(identity_hash: string): Promise<void> {
+        let cleanHash = identity_hash.trim().toLowerCase();
+        if (cleanHash.startsWith('did:red:')) cleanHash = cleanHash.replace(/^did:red:/i, '');
+        const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+        const idx = contacts.findIndex(c => c.identity_hash === cleanHash || c.identity_hash?.startsWith(cleanHash.slice(0, 8)));
+        if (idx >= 0) {
+            contacts[idx] = { ...contacts[idx], is_verified: false, verified_at: null };
+            this.setWebStore('red_web_contacts', contacts);
+        }
+        try {
+            await this.req(`/contacts/${cleanHash}/unverify`, { method: 'POST' });
+        } catch {}
     }
 
     async markRead(conversationId: string): Promise<void> {

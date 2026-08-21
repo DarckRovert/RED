@@ -11,11 +11,66 @@ export interface RedDevice {
     rssi: number;
 }
 
+export interface LinkQualityMetrics {
+    deviceId: string;
+    rssi: number;
+    lqs: number; // 0 to 100%
+    packetsSent: number;
+    packetsAcked: number;
+    lossRate: number;
+    lastSeen: number;
+}
+
 class BluetoothTransport {
     private isInitialized = false;
     private messageListeners: ((msg: {from: string, payload: Uint8Array}) => void)[] = [];
     private connectedDevices: Set<string> = new Set();
     private incomingBuffer: Map<string, Uint8Array> = new Map();
+    private linkMetrics: Map<string, LinkQualityMetrics> = new Map();
+    private negotiatedMtu: Map<string, number> = new Map();
+
+    /** Calculate Link Quality Score (LQS 0-100%) from RSSI and packet delivery */
+    public calculateLqs(rssi: number, lossRate = 0): number {
+        // RSSI range: -40 dBm (perfect) to -100 dBm (barely readable)
+        const clampedRssi = Math.max(-100, Math.min(-40, rssi));
+        const rssiScore = Math.round(((clampedRssi + 100) / 60) * 100);
+        const lqs = Math.max(0, Math.min(100, Math.round(rssiScore * (1 - lossRate))));
+        return lqs;
+    }
+
+    public isDeviceConnected(deviceId: string): boolean {
+        return this.connectedDevices.has(deviceId);
+    }
+
+    public getLinkMetrics(deviceId: string): LinkQualityMetrics | undefined {
+        return this.linkMetrics.get(deviceId);
+    }
+
+    public getLinkQuality(deviceId: string): number {
+        const metrics = this.linkMetrics.get(deviceId);
+        if (metrics) return metrics.lqs;
+        return 70;
+    }
+
+    public getAllLinkMetrics(): LinkQualityMetrics[] {
+        return Array.from(this.linkMetrics.values());
+    }
+
+    private recordRssi(deviceId: string, rssi: number) {
+        const existing = this.linkMetrics.get(deviceId) || {
+            deviceId,
+            rssi,
+            lqs: this.calculateLqs(rssi),
+            packetsSent: 0,
+            packetsAcked: 0,
+            lossRate: 0,
+            lastSeen: Date.now()
+        };
+        existing.rssi = rssi;
+        existing.lastSeen = Date.now();
+        existing.lqs = this.calculateLqs(rssi, existing.lossRate);
+        this.linkMetrics.set(deviceId, existing);
+    }
 
     async init() {
         if (this.isInitialized) return;
@@ -53,10 +108,12 @@ class BluetoothTransport {
                     );
 
                     if (devName.startsWith('RED-') || hasRedService) {
+                        const rssi = result.rssi ?? -85;
+                        this.recordRssi(result.device.deviceId, rssi);
                         onDeviceFound({
                             id: result.device.deviceId,
                             name: devName || 'Dispositivo RED',
-                            rssi: result.rssi ?? -100
+                            rssi
                         });
                     }
                 }
@@ -79,6 +136,18 @@ class BluetoothTransport {
 
         try {
             await BleClient.connect(deviceId).catch(() => {});
+            // Request adaptive MTU (512 bytes for maximum throughput)
+            try {
+                if (typeof (BleClient as any).requestMtu === 'function') {
+                    await (BleClient as any).requestMtu(deviceId, 512);
+                    this.negotiatedMtu.set(deviceId, 500);
+                } else {
+                    this.negotiatedMtu.set(deviceId, 480);
+                }
+            } catch {
+                this.negotiatedMtu.set(deviceId, 240); // Safe fallback
+            }
+
             await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_NOTIFY_CHAR, (value) => {
                 this.handleIncomingChunk(deviceId, new Uint8Array(value.buffer));
             }).catch(() => {});
@@ -94,6 +163,7 @@ class BluetoothTransport {
         if (!this.connectedDevices.has(deviceId)) return;
         await BleClient.disconnect(deviceId);
         this.connectedDevices.delete(deviceId);
+        this.negotiatedMtu.delete(deviceId);
     }
 
     async send(deviceId: string, payload: Uint8Array): Promise<boolean> {
@@ -101,9 +171,20 @@ class BluetoothTransport {
             await this.connect(deviceId);
         }
 
+        const metrics = this.linkMetrics.get(deviceId) || {
+            deviceId,
+            rssi: -75,
+            lqs: 70,
+            packetsSent: 0,
+            packetsAcked: 0,
+            lossRate: 0,
+            lastSeen: Date.now()
+        };
+        metrics.packetsSent += 1;
+
         try {
-            // BLE Payload fragmentation (512 bytes MTU assumed, sending 500 byte chunks safely)
-            const CHUNK_SIZE = 500;
+            // Adaptive MTU chunk size (240 to 500 bytes depending on negotiation)
+            const CHUNK_SIZE = this.negotiatedMtu.get(deviceId) || 480;
             const totalLength = payload.length;
 
             // Simple protocol: [4 bytes total length] [chunk data]
@@ -133,11 +214,19 @@ class BluetoothTransport {
                 offset += sliceLength;
                 
                 // Small delay to prevent GATT buffer overflow
-                await new Promise(r => setTimeout(r, 20));
+                await new Promise(r => setTimeout(r, 16));
             }
+
+            metrics.packetsAcked += 1;
+            metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
+            metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
+            this.linkMetrics.set(deviceId, metrics);
             return true;
         } catch (e) {
             console.error("BLE Send failed:", e);
+            metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
+            metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
+            this.linkMetrics.set(deviceId, metrics);
             return false;
         }
     }

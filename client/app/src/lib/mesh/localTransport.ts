@@ -117,11 +117,32 @@ class LocalTransport {
           // Register newly found BLE device in the mesh router with its advertised name
           meshRouter.addBlePeer(device.id, device.rssi, undefined, device.name);
           console.log(`[LocalTransport] BLE peer discovered: ${device.name} (RSSI ${device.rssi})`);
+          
+          // Proactive background auto-connect & MTU negotiation for warm zero-latency mesh link
+          this.autoAssociateBlePeer(device.id).catch(() => {});
         }
       }, 5000);
     } catch (e) {
       // BLE not available (e.g. web browser or permission denied) — non-fatal
       console.warn('[LocalTransport] BLE scan unavailable:', e);
+    }
+  }
+
+  private connectingBleDevices: Set<string> = new Set();
+
+  private async autoAssociateBlePeer(deviceId: string) {
+    if (this.connectingBleDevices.has(deviceId) || bluetoothTransport.isDeviceConnected(deviceId)) return;
+    this.connectingBleDevices.add(deviceId);
+    try {
+      await bluetoothTransport.connect(deviceId);
+      meshRouter.addBlePeer(deviceId);
+      // Immediately exchange IDENTITY_ANNOUNCE packet to bind hardware ID <-> 64-char canonical DID
+      await meshRouter.sendIdentityAnnounce(deviceId, 'ble').catch(() => {});
+      console.log(`[LocalTransport] ⚡ Proactive warm BLE link established with ${deviceId.slice(0, 8)}`);
+    } catch (err) {
+      // Non-fatal if device is transient or busy
+    } finally {
+      this.connectingBleDevices.delete(deviceId);
     }
   }
 

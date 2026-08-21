@@ -352,6 +352,9 @@ export default function Sidebar() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-cyan)" }} title="Escanear Código QR de Contacto">
+                        📷
+                    </button>
                     <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-crimson)" }} title="Agregar nuevo contacto">
                         ➕
                     </button>
