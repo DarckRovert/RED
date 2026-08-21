@@ -1,5 +1,41 @@
 # Changelog
 
+## [52.0.0-autonomous-mesh] - 2026-08-21
+
+### Autonomous Mesh & P2P Live Sync Edition — Sincronización Dinámica de Identidad y Enrutamiento Inteligente
+
+**Sincronización Dinámica de Perfiles en Vivo (Multi-Nodo)**
+- `useRedStore.ts`: Al editar nickname, bio o teléfono en la Bóveda de Identidad (`setProfile`), se emite un paquete estructurado `msg_type: 'profile_update'` por broadcast mesh (`ffffffff...`) y se envía directamente a todos los contactos registrados.
+- `meshRouter.ts`: Incluye `bio` y `phone_number` dentro de las balizas `IDENTITY_ANNOUNCE` y sincroniza reactivamente la caché de contactos de `localStorage` al recibir anuncios y respuestas de identidad.
+- `Sidebar.tsx` & `ChatWindow.tsx`: Función `resolvePeerName` consulta el registro de pares en caliente de `meshRouter` si el contacto tiene un nombre genérico o desactualizado.
+- `ContactProfileModal.tsx`: Visualización de la Biografía/Estado y el Teléfono de Emergencia sincronizados.
+
+**Optimizaciones de Compilación y Rendimiento**
+- `gradle.properties`: Asignación de 4GB de heap a la JVM de Gradle (`-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+UseG1GC`) para compilación estable con modelos neuronales ONNX y pesos WASM.
+- `build.gradle`: `aaptOptions.noCompress` optimizado para `onnx`, `wasm`, `gguf`, `bin`.
+- `PqcCryptoEngine.ts`: Criptografía híbrida post-cuántica ML-KEM-768 + ECDH P-256 integrada y validada en tiempo real.
+
+---
+
+## [51.1.0-profile-sync] - 2026-08-21
+
+### Sincronización Dinámica de Perfiles & Difusión de Identidad Multi-Nodo
+- Difusión estructurada de identidad con `msg_type: 'profile_update'`.
+- Actualización reactiva de `contacts`, `conversations` y `meshRouter.peers`.
+- Notificaciones tácticas en pantalla al actualizar perfil.
+
+---
+
+## [51.0.0-smart-mesh] - 2026-08-21
+
+### Smart Dynamic Mesh & Enrutamiento Autónomo Multi-Transporte LQS
+- Fast-Path Unicast vía WebRTC DataChannel (54 Mbps, <30ms) con cancelación reactiva de emisiones redundantes por BLE/LoRa.
+- Conmutación por fallo y multi-hop flood filtrado por calidad de enlace LQS (`LQS >= 20%`).
+- Auto-asociación proactiva de enlaces BLE en caliente (warm links) con balizas `RED-`.
+- Cola de almacenamiento DTN clasificada por 5 niveles de prioridad QoS.
+
+---
+
 ## [40.0.0-resilient-mesh] - 2026-08-20
 
 ### Malla Resiliente — Persistencia ACID + Blindaje Antikill Android 16

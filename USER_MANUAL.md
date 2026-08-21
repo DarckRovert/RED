@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v38.0.0 Sovereign Master
+# 📘 Manual Operativo del Usuario — RED v52.0.0 Autonomous Mesh & P2P Live Sync Edition
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura o censura.
 
