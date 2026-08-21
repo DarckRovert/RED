@@ -1,8 +1,8 @@
-# 🛡️ RED — Sovereign Mesh OS v53.0.0
+# 🛡️ RED — Sovereign Mesh OS v54.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet.
 
-[![Descargar APK Oficial RED v53.0.0](https://img.shields.io/badge/Descargar_APK_v53.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v53.0.0)
+[![Descargar APK Oficial RED v54.0.0](https://img.shields.io/badge/Descargar_APK_v54.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v54.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
@@ -29,10 +29,11 @@
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v53.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v54.0.0 |
 |---|---|---|
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
+| **IA 100% Offline** | Requiere APIs de servidores en la nube | **RAG Semántico Acelerado (<120ms), Clasificador de 8 Dominios y Guardian Hamming 64-bit locales** |
 | **Interoperabilidad Web PC** | Limitada a clientes cerrados | **Web App SPA en PC interoperable en tiempo real con nodos móviles Android** |
 | **Conectividad Global** | Centralizada en servidores corporativos | **P2P Kademlia DHT + Bootstrap Peers + Auto-Relay Circuit v2 + DoH Tunnels** |
 | **Respaldo & Recuperación** | Dependiente de cuentas de usuario / SMS | **1-Toque Zero-Friction: Cifrado AES-256-GCM + Google Drive + IPFS + Frase Semilla BIP-39** |

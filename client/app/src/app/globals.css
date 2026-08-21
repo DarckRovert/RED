@@ -964,6 +964,27 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   100% { top: 5%; opacity: 0.8; }
 }
 
+@keyframes contextMenuIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.85); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 /* ─── Tactical Button System & Interactive States ───────────────────────────── */
 .btn-tactical-primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-bright) 100%);

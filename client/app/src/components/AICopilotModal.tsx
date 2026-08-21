@@ -114,6 +114,18 @@ export const AICopilotModal: React.FC = () => {
         }
     }, [messages]);
 
+    // Check for incoming quick queries from Chat context
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const quickQuery = localStorage.getItem("red_copilot_quick_query");
+            if (quickQuery) {
+                setInput(`Analiza y asísteme con este mensaje: "${quickQuery}"`);
+                localStorage.removeItem("red_copilot_quick_query");
+                setActiveTab("chat");
+            }
+        }
+    }, []);
+
     // Load Models on Mount
     const refreshModels = useCallback(async () => {
         const models = await ModelManager.checkLocalModelsStatus();

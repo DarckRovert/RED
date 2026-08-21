@@ -290,6 +290,9 @@ class LocalAIEngineClass {
         };
     }
 
+    /** Caché en memoria de vectores 384-D de la base de conocimiento para búsqueda O(1) */
+    private static kbVectorCache = new Map<string, number[]>();
+
     /** RAG Táctico Offline: Búsqueda Semántica Vectorial Híbrida (Léxica + Embeddings 384-D) */
     public async findTacticalContext(query: string): Promise<{ matchedFragment: KnowledgeFragment | null; similarity: number }> {
         try {
@@ -306,11 +309,21 @@ class LocalAIEngineClass {
                 const queryVec = emb.fullVector;
                 if (queryVec && queryVec.length > 0) {
                     for (const frag of EMERGENCY_KNOWLEDGE_BASE) {
-                        const fragEmb = await this.extractEmbeddings(`${frag.title} ${frag.summary}`);
-                        const sim = cosineSimilarity(queryVec, fragEmb.fullVector);
-                        if (sim > highestSim) {
-                            highestSim = sim;
-                            bestVecMatch = frag;
+                        const fragKey = frag.id || frag.title;
+                        let fragVec = LocalAIEngineClass.kbVectorCache.get(fragKey);
+                        if (!fragVec) {
+                            const fragEmb = await this.extractEmbeddings(`${frag.title} ${frag.summary}`);
+                            fragVec = fragEmb.fullVector;
+                            if (fragVec && fragVec.length > 0) {
+                                LocalAIEngineClass.kbVectorCache.set(fragKey, fragVec);
+                            }
+                        }
+                        if (fragVec && fragVec.length > 0) {
+                            const sim = cosineSimilarity(queryVec, fragVec);
+                            if (sim > highestSim) {
+                                highestSim = sim;
+                                bestVecMatch = frag;
+                            }
                         }
                     }
                 }
@@ -478,28 +491,116 @@ class LocalAIEngineClass {
                 `  • 🧠 Modelos de Lenguaje: Soporte GGUF ARM64 (Qwen 0.5B/1.5B, SmolLM 360M) descargables a voluntad en la pestaña [Modelos].\n\n` +
                 `💬 Escribe tu consulta de emergencia o explora el catálogo de modelos para activar inferencia libre.`;
         } else {
-            synthesizedAnswer = `🤖 COPILOTO TÁCTICO RED (Inferencia Neuronal Local Off-Grid)\n\n` +
-                `He procesado tu consulta: "${cleanQuery}".\n\n` +
-                `• Modo Operativo: Soberano 100% Offline (Sin dependencia de nubes externas).\n` +
-                `• Malla Mesh: Protocolo descentralizado Gossipsub y transporte BLE/WiFi.\n` +
-                `• Motor de Inferencia: RAG Táctico Vectorial MiniLM 384-D.\n\n` +
-                `💡 Puedes consultar directamente protocolos operativos de:\n` +
-                `  - Triage START en masa y clasificación de heridos\n` +
-                `  - Control de hemorragias arteriales y colocación de torniquete\n` +
-                `  - Reanimación Cardiopulmonar (RCP) y uso de DEA\n` +
-                `  - Manejo de fracturas, quemaduras e hipotermia\n` +
-                `  - Potabilización de agua por filtración o ebullición\n` +
-                `  - Supervivencia en sismos, derrumbes, incendios o inundaciones\n` +
-                `  - Descontaminación QBRN y evasión electromagnética RF (EMCON)\n` +
-                `  - Códigos de auxilio Morse SOS y silbato de montaña.\n\n` +
-                `⚡ *Tip:* Para habilitar generación de texto libre sobre cualquier tema, descarga un micro-modelo (ej: SmolLM 360M o Qwen 0.5B) en la pestaña [Modelos].`;
+            // ── Semantic Categorization Fallback (v2.0) ────────────────────────
+            // Analyzes the query domain to provide a contextually-varied, non-generic response.
+            // Each domain has a specific response that addresses the question asked.
+
+            // Extract top keywords from query for contextual response
+            const stopwords = new Set(['de','la','el','que','en','y','a','los','del','se','las','por','un','para','con','no','una','su','al','lo','como','más','pero','sus','le','ya','o','me','si','hay','qué','cómo','cuál','cuáles','es','son','fue','ser','está','están','esto','eso','estos','esas']);
+            const queryKeywords = cleanQuery
+                .toLowerCase()
+                .replace(/[¿?¡!.,;:]/g, '')
+                .split(/\s+/)
+                .filter(w => w.length > 2 && !stopwords.has(w))
+                .slice(0, 5);
+            const kwStr = queryKeywords.length > 0 ? `"${queryKeywords.join('", "')}"` : `"${cleanQuery.slice(0, 40)}"`;
+
+            // Domain detection — ordered by specificity
+            const isSecurity = /cifrado|encriptar|privacidad|vpn|tor|firewall|hack|intrus|seguridad|contraseña|password|pin|2fa|autenticación|noise.*xk|ed25519|curve25519|blockchain|clave.*pública|clave.*privada/i.test(lowerQ);
+            const isMedical = /medicamento|pastilla|dosis|fármaco|antibiótico|analgésico|paracetamol|ibuprofeno|herida|sangre|hospital|doctor|médico|enfermedad|síntoma|diagnóstico|dolor|fiebre|presión.*arterial|diabetes|covid|vacuna/i.test(lowerQ);
+            const isCommunications = /frecuencia|radio|vhf|uhf|canal|antena|señal|satélite|comunicación|morse|walkie|bluetooth|wifi|mesh|p2p|nodo|enrutamiento|dtn|gossip/i.test(lowerQ);
+            const isNavigation = /coordenada|gps|mapa|ruta|norte|brújula|latitud|longitud|altitud|terreno|orientación|navegación|cartografía/i.test(lowerQ);
+            const isCrypto = /bitcoin|ethereum|cripto|token|nft|wallet|blockchain|transacción|contrato.*inteligente|defi|web3|vale|voucher/i.test(lowerQ);
+            const isGeneral = /historia|cultura|política|economía|arte|ciencia|tecnología|filosofía|deporte|cocina|viaje|idioma|matemática|física|química|biología/i.test(lowerQ);
+            const isREDApp = /red|aplicación|app|función|característica|pantalla|configuración|ajuste|perfil|contacto|grupo|canal|chat|mensaje|llamada|videollamada/i.test(lowerQ);
+
+            if (isSecurity) {
+                synthesizedAnswer = `🔐 COPILOTO RED — Módulo de Seguridad & Criptografía\n\n` +
+                    `Consulta recibida sobre: ${kwStr}\n\n` +
+                    `Sobre seguridad y cifrado en RED, puedo explicarte:\n` +
+                    `  • El protocolo Noise XK con llaves efímeras Curve25519 que protege cada sesión de chat.\n` +
+                    `  • ChaCha20-Poly1305 para cifrado simétrico AEAD de mensajes en tránsito.\n` +
+                    `  • Ed25519 para firmas de identidad y autenticación de nodos en la malla.\n` +
+                    `  • El esquema PQC (criptografía post-cuántica) disponible en la pestaña de Seguridad.\n` +
+                    `  • PIN de Pánico y PIN Señuelo para escenarios de coacción.\n\n` +
+                    `💡 Para análisis avanzado o preguntas más específicas sobre ${queryKeywords[0] || 'este tema'}, descarga un modelo GGUF (pestaña [Modelos]) para habilitar razonamiento libre sin conexión.`;
+            } else if (isMedical) {
+                synthesizedAnswer = `⚕️ COPILOTO RED — Módulo de Medicina de Campo\n\n` +
+                    `Consulta sobre: ${kwStr}\n\n` +
+                    `Mi base de conocimiento médica incluye protocolos TCCC/PHTLS:\n` +
+                    `  • Control de hemorragias con torniquete CAT/SOF-T (3 pasos críticos).\n` +
+                    `  • Reanimación Cardiopulmonar (RCP) adulto, niño y lactante.\n` +
+                    `  • Triage START: clasificación de víctimas en masa (Rojo/Amarillo/Verde/Negro).\n` +
+                    `  • Manejo de fracturas, quemaduras, hipotermia e intoxicaciones.\n` +
+                    `  • Parto de emergencia y shock anafiláctico.\n\n` +
+                    `⚠️ Para indicaciones farmacológicas específicas (dosis de medicamentos), requiero un modelo generativo. Descarga SmolLM 360M o Qwen 0.5B en la pestaña [Modelos].`;
+            } else if (isCommunications) {
+                synthesizedAnswer = `📡 COPILOTO RED — Módulo de Comunicaciones Tácticas\n\n` +
+                    `Consulta sobre: ${kwStr}\n\n` +
+                    `Sobre comunicaciones y la malla RED:\n` +
+                    `  • La red opera sobre BLE 5.0, Wi-Fi Direct y relés MQTT sin internet.\n` +
+                    `  • Protocolo Gossipsub para broadcast resiliente con tolerancia a cortes (DTN).\n` +
+                    `  • Frecuencias de emergencia: VHF 156.8 MHz (Canal 16 marítimo), 121.5 MHz (emergencia aérea), 155.340 MHz (INTEROP).\n` +
+                    `  • Código Morse SOS: · · · — — — · · · (3 cortas, 3 largas, 3 cortas).\n` +
+                    `  • DNS sobre HTTPS y tunel SNI para evasión de censura disponibles en Configuración > Red.\n\n` +
+                    `¿Necesitas detalles específicos sobre ${queryKeywords[0] || 'frecuencias o protocolos'}? Pregunta directamente.`;
+            } else if (isNavigation) {
+                synthesizedAnswer = `🧭 COPILOTO RED — Módulo de Navegación Off-Grid\n\n` +
+                    `Consulta sobre: ${kwStr}\n\n` +
+                    `Navegación sin GPS ni internet en RED:\n` +
+                    `  • La brújula táctica usa el magnetómetro del dispositivo — sin satélites.\n` +
+                    `  • Coordenadas GPS capturadas localmente (sin transmitir a servidores).\n` +
+                    `  • Mapa de nodos en tiempo real: cada nodo transmite su posición por malla.\n` +
+                    `  • Orientación por estrellas: Polaris (Norte) y Cruz del Sur (Hemisferio Sur).\n` +
+                    `  • Cálculo de azimut y triangulación con 3+ nodos activos disponible en el panel Off-Grid Compass.\n\n` +
+                    `Accede a la sección [Brújula Off-Grid] para activar navegación táctica en vivo.`;
+            } else if (isCrypto) {
+                synthesizedAnswer = `💰 COPILOTO RED — Módulo Cripto & Web3\n\n` +
+                    `Consulta sobre: ${kwStr}\n\n` +
+                    `El módulo cripto de RED opera completamente offline:\n` +
+                    `  • Vales P2P firmados con Ed25519 — transferencias soberanas sin banco ni internet.\n` +
+                    `  • Web3 Bridge para firmar transacciones Ethereum/Polygon localmente.\n` +
+                    `  • Bóveda de claves privadas cifrada con AES-256-GCM y protegida por biometría.\n` +
+                    `  • Esquema Shamir Secret Sharing: distribuye tu frase semilla entre N contactos de confianza.\n\n` +
+                    `Accede a [Bóveda Cripto] o [Red P2P Pay] para operaciones en vivo.`;
+            } else if (isREDApp) {
+                synthesizedAnswer = `📱 COPILOTO RED — Guía de la Aplicación\n\n` +
+                    `Consulta sobre: ${kwStr}\n\n` +
+                    `Resumen de funcionalidades de RED relacionadas con tu consulta:\n` +
+                    `  • Chat E2E: mensajes de texto, voz, video y documentos cifrados Noise XK.\n` +
+                    `  • Grupos: administración descentralizada, historial sincronizado DTN.\n` +
+                    `  • Llamadas: audio/video WebRTC P2P sin servidor central.\n` +
+                    `  • Red Mesh: topología visualizable en el panel [Red] y el [Radar].\n` +
+                    `  • Configuración: biometría, PIN de pánico, modo disfraz, Eco-Mesh y temas.\n\n` +
+                    `¿Sobre cuál función quieres saber más? Escribe directamente.`;
+            } else if (isGeneral) {
+                synthesizedAnswer = `🤖 COPILOTO RED — Consulta General\n\n` +
+                    `Has preguntado sobre: ${kwStr}\n\n` +
+                    `Esta consulta está fuera de mi base RAG táctica especializada en emergencias, seguridad y comunicaciones mesh.\n\n` +
+                    `Para responder preguntas de conocimiento general (historia, ciencias, cultura, etc.) con razonamiento libre, necesito un modelo de lenguaje descargado localmente.\n\n` +
+                    `📥 Modelos disponibles en la pestaña [Modelos]:\n` +
+                    `  • SmolLM2 360M — Ligero, ideal para preguntas cortas (~400MB).\n` +
+                    `  • Qwen 2.5 0.5B — Mayor capacidad de razonamiento (~600MB).\n` +
+                    `  • Qwen 2.5 1.5B — Alta calidad de respuesta (~1.2GB).\n\n` +
+                    `Una vez descargado, podré responder cualquier consulta directamente en tu dispositivo sin internet.`;
+            } else {
+                synthesizedAnswer = `🤖 COPILOTO RED — Análisis de Consulta\n\n` +
+                    `Has preguntado: "${cleanQuery.slice(0, 120)}${cleanQuery.length > 120 ? '…' : ''}"\n\n` +
+                    `No he encontrado un protocolo táctico exacto para esta consulta en mi base de conocimiento de emergencias. Mis dominios especializados offline son:\n` +
+                    `  🏥 Medicina de campo: Triage START, RCP, torniquete, trauma.\n` +
+                    `  📡 Comunicaciones: Malla P2P, frecuencias VHF/UHF, Morse.\n` +
+                    `  🔐 Seguridad: Cifrado Noise XK, PIN de pánico, bóveda cripto.\n` +
+                    `  🧭 Navegación: Off-Grid Compass, GPS sin servidor, orientación.\n` +
+                    `  🌊 Supervivencia: Potabilización, derrumbes, sismos, incendios.\n\n` +
+                    `💡 Si tu consulta es de conocimiento general, descarga un modelo (pestaña [Modelos]) para activar razonamiento libre sin límites temáticos.`;
+            }
         }
 
         return {
             answer: synthesizedAnswer,
             topicCategory: ragTitle ? `RAG Táctico: ${ragTitle}` : (isGreeting || isSystemQuery ? 'Asistente Táctico RED' : 'IA Neuronal Local Off-Grid'),
-            confidence: matchedFrag ? 0.98 : (isGreeting || isSystemQuery ? 0.99 : 0.94),
-            modelInfo: 'RED Native Off-Grid RAG Engine v38.0',
+            confidence: matchedFrag ? 0.98 : (isGreeting || isSystemQuery ? 0.99 : 0.90),
+            modelInfo: 'RED Native Off-Grid RAG Engine v39.0',
             executionTimeMs: Math.round(performance.now() - start),
         };
     }

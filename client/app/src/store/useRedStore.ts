@@ -1742,9 +1742,10 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         const peerHash = meshRouter.getCanonicalId(idData.identity_hash);
                         const peerName = idData.display_name || `Operador ${peerHash.slice(0, 6)}`;
                         const peerPk = idData.public_key;
+                        // Only update P2P routing topology — contact isolation: never auto-add to contacts list
                         meshRouter.bindDeviceToCanonical(item.sender, peerHash, peerName, peerPk);
                         meshRouter.updatePeer(peerHash, 'ble', undefined, peerHash, peerName, peerPk);
-                        RedAPI.addContact(peerHash, peerName, peerPk).catch(() => {});
+                        // RedAPI.addContact removed: discovery ≠ consent. Contact list is user-curated only.
                     }
                 }
             } catch {}
@@ -1919,6 +1920,7 @@ export const useRedStore = create<RedStore>((set, get) => ({
 
                 let updatedContacts = [...existingContacts];
                 if (idx >= 0) {
+                    // Contact isolation: only update metadata for EXISTING contacts
                     updatedContacts[idx] = {
                         ...updatedContacts[idx],
                         display_name: newName || updatedContacts[idx].display_name,
@@ -1926,21 +1928,14 @@ export const useRedStore = create<RedStore>((set, get) => ({
                         phone_number: newPhone !== undefined ? newPhone : updatedContacts[idx].phone_number,
                         public_key: newPk || updatedContacts[idx].public_key,
                     };
-                } else if (newName) {
-                    updatedContacts.push({
-                        identity_hash: senderHash,
-                        display_name: newName,
-                        bio: newBio,
-                        phone_number: newPhone,
-                        public_key: newPk
-                    });
+                    set({ contacts: updatedContacts });
+                    RedAPI.setWebStore('red_web_contacts', updatedContacts);
+                    if (newName) {
+                        RedAPI.addContact(senderHash, newName, newPk).catch(() => {});
+                    }
                 }
-
-                set({ contacts: updatedContacts });
-                RedAPI.setWebStore('red_web_contacts', updatedContacts);
-                if (newName) {
-                    RedAPI.addContact(senderHash, newName, newPk).catch(() => {});
-                }
+                // idx === -1: unknown peer broadcast their profile — stays in meshRouter.peers only.
+                // Mesh presence ≠ user consent. No auto-insertion into contacts.
 
                 // 3. Update Conversation item in Sidebar
                 const currentConvs = get().conversations || [];
@@ -2049,20 +2044,8 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     get().fetchData();
                 });
             } catch {
-                const senderHash = meshRouter.getCanonicalId(item.sender);
-                const myHash = get().identity?.identity_hash?.toLowerCase();
-                if (senderHash && senderHash !== 'me' && senderHash !== 'local' && (!myHash || senderHash.toLowerCase() !== myHash)) {
-                    const existingContacts = get().contacts || [];
-                    const existing = existingContacts.find((c: any) => 
-                        c.identity_hash?.toLowerCase() === senderHash.toLowerCase() ||
-                        (senderHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(senderHash.substring(0, 8).toLowerCase()))
-                    );
-                    if (!existing) {
-                        const senderName = `Operador ${senderHash.substring(0, 6)}`;
-                        set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: senderName }] });
-                        get().fetchData();
-                    }
-                }
+                // Parse error: do NOT create a phantom contact — silently discard
+                console.warn('[RED] isHandshakePacket parse error: discarding silently, no contact created.');
             }
             return;
         }
@@ -2548,6 +2531,21 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        // ── Last-Resort JSON Signaling Filter: catches packets that escaped all msg_type handlers ──
+        // A message with an unknown or absent msg_type whose content is a JSON object containing
+        // known signaling keys is treated as a control packet and discarded silently.
+        if (!item.msg_type && typeof item.content === 'string' && item.content.startsWith('{')) {
+            try {
+                const c = JSON.parse(item.content);
+                const SIGNAL_KEYS = ['read_up_to', 'reader_hash', 'delivery_ack', 'offer', 'answer', 'candidate', 'hangup', 'beacon_id', 'group_id'];
+                const hitCount = SIGNAL_KEYS.filter(k => k in c).length;
+                if (hitCount >= 1) return; // discard silently — signaling packet without proper msg_type
+                if (c.type && typeof c.type === 'string' && (
+                    c.type.startsWith('IDENTITY_') || c.type.startsWith('SHAKE_') || c.type.startsWith('RED_PAIR')
+                )) return;
+            } catch {}
+        }
+
         const myHash = get().identity?.identity_hash;
         const resolvedIsMine = Boolean(
             item.is_mine ||
@@ -2590,6 +2588,16 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     )
                 )
             );
+
+            // ── Guardian IA Incoming Protection: Filter incoming threats/CSAM in strict mode ──
+            if (!resolvedIsMine && item.content && (!item.msg_type || item.msg_type === 'text')) {
+                const incomingVerdict = GuardianEngine.evaluateText(item.content);
+                if (!incomingVerdict.allowed && GuardianEngine.getConfig().mode === 'strict') {
+                    console.warn('[RED Guardian] Intercepted hostile incoming packet:', incomingVerdict.reason);
+                    return;
+                }
+            }
+
             const normalizedItem: MessageItem = {
                 ...(item as MessageItem),
                 timestamp: normTimestamp,

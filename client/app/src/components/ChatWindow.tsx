@@ -133,25 +133,59 @@ export default function ChatWindow() {
     const docInputRef = useRef<HTMLInputElement | null>(null);
 
     const convMessages = useMemo(() => {
+        // ── Comprehensive Protocol Packet Filter ─────────────────────────────────
+        // This is the LAST defensive line in the rendering pipeline.
+        // Any packet that escaped addIncomingMessage handlers must be stopped here.
+        const PROTOCOL_MSG_TYPES = new Set([
+            'read_receipt', 'read_up_to', 'delivery_ack', 'ack',
+            'typing', 'typing_status',
+            'contact_request', 'contact_response',
+            'profile_update',
+            'group_history_request', 'group_history_response',
+            'webrtc_signal',
+            'voice_burst', 'voice_burst_ack',
+            'live_announce', 'live_frame', 'live_end', 'live_comment',
+            'social_react',
+            'message_edit', 'message_delete',
+            'conversation_wipe', 'message_wipe',
+            'emergency_beacon_cancel',
+            'channel_msg', 'channel_post',
+            'group_invite', 'group_kick', 'group_leave', 'group_admin',
+        ]);
+
+        // Detects JSON objects that are signaling packets by structure (content-based heuristic)
+        const isJsonSignaling = (content: string): boolean => {
+            if (!content.startsWith('{')) return false;
+            try {
+                const c = JSON.parse(content);
+                // Type-tagged mesh packets
+                if (c.type && typeof c.type === 'string' && (
+                    c.type.startsWith('IDENTITY_') ||
+                    c.type.startsWith('SHAKE_') ||
+                    c.type.startsWith('RED_PAIR') ||
+                    c.type === 'DELIVERY_ACK' ||
+                    c.type === 'PROFILE_UPDATE' ||
+                    c.type === 'NODE_LOCATION_UPDATE'
+                )) return true;
+                // Presence of ≥2 signaling-specific keys (WebRTC / read-receipt / handshake)
+                const SIGNAL_KEYS = ['read_up_to', 'reader_hash', 'offer', 'answer', 'candidate', 'hangup', 'sender_hash', 'sender_pk'];
+                if (SIGNAL_KEYS.filter(k => k in c).length >= 2) return true;
+                // Remote wipe
+                if (c.reason === 'user_remote_wipe') return true;
+            } catch {}
+            return false;
+        };
+
+        const isProtocolPacket = (m: MessageItem): boolean => {
+            if (m.msg_type && PROTOCOL_MSG_TYPES.has(m.msg_type)) return true;
+            if (typeof m.content === 'string' && m.content.startsWith('{') && isJsonSignaling(m.content)) return true;
+            return false;
+        };
+
         const list: MessageItem[] = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
         return list.filter((m: MessageItem) => {
             if (!m || !m.content) return false;
-            // Filter out system control JSON packets from chat bubbles
-            if (typeof m.content === 'string' && m.content.startsWith('{')) {
-                if (
-                    m.content.includes('"type":"IDENTITY_ANNOUNCE"') ||
-                    m.content.includes('"type":"IDENTITY_RESPONSE"') ||
-                    m.content.includes('"type":"IDENTITY_REQUEST"') ||
-                    m.content.includes('"type":"SHAKE_PAIR_') ||
-                    m.content.includes('"type":"DELIVERY_ACK"') ||
-                    m.content.includes('"type":"PROFILE_UPDATE"') ||
-                    m.content.includes('"type":"RED_PAIR') ||
-                    (m.content.includes('"sender_hash"') && m.content.includes('"sender_pk"')) ||
-                    (m.content.includes('"reason":"user_remote_wipe"'))
-                ) {
-                    return false;
-                }
-            }
+            if (isProtocolPacket(m)) return false;
             return true;
         });
     }, [messages, activeConversationId]);
@@ -876,6 +910,15 @@ export default function ChatWindow() {
                         style={{ width: 36, height: 36, color: "var(--accent-cyan)" }}
                     >
                         📹
+                    </button>
+
+                    <button
+                        onClick={() => navigate("p2pCompass", fullPeerHash || peerHash)}
+                        className="btn-icon"
+                        title="🧭 Brújula Táctica P2P (Apuntar rumbo al contacto)"
+                        style={{ width: 36, height: 36, color: "var(--accent-amber)" }}
+                    >
+                        🧭
                     </button>
 
                     <button

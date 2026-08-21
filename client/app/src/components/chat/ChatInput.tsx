@@ -1,6 +1,8 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from "react";
 import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
+import { LocalAIEngine } from "../../lib/localAiEngine";
+import { toast } from "../Toast";
 
 export interface ChatInputProps {
     inputText?: string;
@@ -73,6 +75,42 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const setText = setInputText || setLocalText;
     const isAttachOpen = attachOpen !== undefined ? attachOpen : localAttachOpen;
     const setIsAttachOpen = setAttachOpen || setLocalAttachOpen;
+
+    const [aiMenuOpen, setAiMenuOpen] = useState(false);
+
+    const handleAiRephraseTactical = () => {
+        if (!text.trim()) return;
+        const raw = text.trim();
+        const tactical = `[SITREP TÁCTICO] ${raw} // FIN DE TRANSMISIÓN`;
+        setText(tactical);
+        setAiMenuOpen(false);
+        toast.success("✨ Mensaje transformado a formato táctico");
+    };
+
+    const handleAiTranslateEn = async () => {
+        if (!text.trim()) return;
+        try {
+            const res = await LocalAIEngine.translateText(text.trim(), 'en');
+            setText(res.translatedText);
+            setAiMenuOpen(false);
+            toast.success("🌐 Mensaje traducido al inglés con IA Local");
+        } catch {
+            toast.error("Error al traducir mensaje");
+        }
+    };
+
+    const handleAiCamouflage = () => {
+        if (!text.trim()) return;
+        const camouflaged = text
+            .replace(/a/gi, '4')
+            .replace(/e/gi, '3')
+            .replace(/i/gi, '1')
+            .replace(/o/gi, '0')
+            .replace(/s/gi, '5');
+        setText(camouflaged);
+        setAiMenuOpen(false);
+        toast.success("🛡️ Mensaje ofuscado con camuflaje militar");
+    };
 
     // insertMention declared AFTER setText so the dependency is satisfied
     const insertMention = useCallback((name: string) => {
@@ -204,6 +242,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 }}>
                     {[
                         { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
+                        { icon: "🫀", label: "Ficha VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
                         { icon: "💸", label: "Pagar RED", action: () => { setIsAttachOpen(false); handlePay(); } },
                         { icon: "📷", label: "Cámara", action: () => { setIsAttachOpen(false); handleCamera(); } },
                         { icon: "🖼️", label: "Galería", action: () => { setIsAttachOpen(false); handleGallery(); } },
@@ -394,6 +433,85 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                         </button>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {/* ── AI Assist Popover & Trigger Button ── */}
+                        {text.trim().length > 0 && (
+                            <div style={{ position: "relative" }}>
+                                <button
+                                    onClick={() => setAiMenuOpen(!aiMenuOpen)}
+                                    className="btn-icon"
+                                    style={{
+                                        width: 38, height: 38, borderRadius: "50%",
+                                        fontSize: "1rem", color: "var(--accent-cyan)",
+                                        background: aiMenuOpen ? "rgba(0,229,255,0.2)" : "rgba(255,255,255,0.06)",
+                                        flexShrink: 0, border: "1px solid rgba(0,229,255,0.3)",
+                                        transition: "all 0.2s ease"
+                                    }}
+                                    title="Asistente de Redacción IA"
+                                >
+                                    ✨
+                                </button>
+                                {aiMenuOpen && (
+                                    <>
+                                        <div onClick={() => setAiMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 120 }} />
+                                        <div style={{
+                                            position: "absolute", bottom: "46px", right: 0, zIndex: 130,
+                                            background: "rgba(14, 18, 34, 0.98)", backdropFilter: "blur(20px)",
+                                            border: "1px solid rgba(0, 229, 255, 0.3)",
+                                            borderRadius: "14px", padding: "6px", width: "220px",
+                                            boxShadow: "0 -8px 32px rgba(0, 0, 0, 0.7)",
+                                            animation: "fadeIn 0.15s ease", display: "flex", flexDirection: "column", gap: "2px"
+                                        }}>
+                                            <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--accent-cyan)", padding: "4px 8px", fontFamily: "JetBrains Mono, monospace" }}>
+                                                ✨ ASISTENTE IA DE REDACCIÓN
+                                            </div>
+                                            <button
+                                                onClick={handleAiRephraseTactical}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                            >
+                                                <span>🎯</span>
+                                                <span>Formato Táctico Militar</span>
+                                            </button>
+                                            <button
+                                                onClick={handleAiTranslateEn}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                            >
+                                                <span>🌐</span>
+                                                <span>Traducir a Inglés</span>
+                                            </button>
+                                            <button
+                                                onClick={handleAiCamouflage}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                                    border: "none", color: "var(--accent-amber)", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,179,0,0.1)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                            >
+                                                <span>🛡️</span>
+                                                <span>Camuflaje Leetspeak</span>
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
 

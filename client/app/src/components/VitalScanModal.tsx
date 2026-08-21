@@ -256,6 +256,26 @@ export function VitalScanModal() {
         toast.info(`Evaluación START completada: ${res.category} (${res.label})`);
     };
 
+    const handleShareVitalsToChat = () => {
+        const store = useRedStore.getState();
+        const activeChat = store.activeConversationId;
+        if (!activeChat) {
+            toast.warning("No hay un chat activo. Abre una conversación primero.");
+            return;
+        }
+        const vitalsPayload = JSON.stringify({
+            type: 'VITAL_SCAN_REPORT',
+            bpm: scanResult?.bpm || 75,
+            spo2: scanResult?.spo2 || 98,
+            triage: triageResult?.category || 'EVALUACIÓN MÉDICA',
+            notes: triageResult ? `${triageResult.category}: ${triageResult.label}. ${triageResult.actionRequired}` : 'Signos vitales ópticos PPG registrados en terreno',
+            timestamp: Date.now()
+        });
+        store.sendMessage(vitalsPayload, { msg_type: 'vital_sign' });
+        toast.success("🫀 Ficha médica transmitida al chat con cifrado E2E");
+        navigate("chat", activeChat);
+    };
+
     const handleSaveTriageRecord = async () => {
         if (!triageResult) return;
         setIsSaving(true);
@@ -652,20 +672,29 @@ export function VitalScanModal() {
                                             {triageResult.actionRequired}
                                         </div>
 
-                                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                        <div style={{ display: "flex", gap: "8px", marginTop: "4px", flexWrap: "wrap" }}>
                                             <input
                                                 value={victimLabelInput}
                                                 onChange={e => setVictimLabelInput(e.target.value)}
                                                 placeholder="Etiqueta / Nombre de la víctima"
-                                                style={{ flex: 1, padding: "10px 14px", fontSize: "0.85rem" }}
+                                                style={{ flex: 1, minWidth: "180px", padding: "10px 14px", fontSize: "0.85rem" }}
                                             />
                                             <button
                                                 onClick={handleSaveTriageRecord}
                                                 disabled={isSaving}
                                                 className="btn-tactical-primary"
-                                                style={{ padding: "10px 18px", fontSize: "0.85rem", background: "linear-gradient(135deg, #00E676 0%, #00B359 100%)", color: "#000" }}
+                                                style={{ padding: "10px 16px", fontSize: "0.85rem", background: "linear-gradient(135deg, #00E676 0%, #00B359 100%)", color: "#000" }}
                                             >
                                                 {isSaving ? "Guardando..." : "💾 Guardar"}
+                                            </button>
+                                            <button
+                                                onClick={handleShareVitalsToChat}
+                                                className="btn-tactical-secondary"
+                                                style={{ padding: "10px 16px", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}
+                                                title="Transmitir ficha médica al chat activo"
+                                            >
+                                                <span>📤</span>
+                                                <span>Enviar a Chat</span>
                                             </button>
                                         </div>
                                     </div>

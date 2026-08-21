@@ -8,6 +8,8 @@ import { toast } from "../Toast";
 import { VoiceMessage } from "./VoiceMessage";
 import { PollMessage } from "./PollMessage";
 import { ImageViewerModal } from "./ImageViewerModal";
+import { LocalAIEngine } from "../../lib/localAiEngine";
+import { useRedStore } from "../../store/useRedStore";
 
 interface MessageBubbleProps {
     msg: MessageItem;
@@ -119,12 +121,13 @@ const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
 function ContextMenu({
-    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onClose
+    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onClose
 }: {
     x: number; y: number; isMine: boolean; isDeleted: boolean;
     onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void;
     onEdit?: () => void; onDeleteForEveryone?: () => void; onDeleteLocal: () => void;
-    onSelect?: () => void; onReact: (e: string) => void; onClose: () => void;
+    onSelect?: () => void; onReact: (e: string) => void;
+    onTranslate?: () => void; onAskCopilot?: () => void; onClose: () => void;
 }) {
     return (
         <>
@@ -134,15 +137,15 @@ function ContextMenu({
             {!isDeleted && (
                 <div style={{
                     position: "fixed",
-                    left: Math.min(x, window.innerWidth - 240),
-                    top: Math.max(y - 60, 10),
+                    left: Math.max(12, Math.min(x - 40, typeof window !== "undefined" ? window.innerWidth - 260 : 100)),
+                    top: Math.max(12, Math.min(y - 60, typeof window !== "undefined" ? window.innerHeight - 100 : 100)),
                     zIndex: 1000,
                     display: "flex", gap: "6px",
                     background: "rgba(18,20,36,0.97)", backdropFilter: "blur(16px)",
                     borderRadius: "40px", padding: "8px 14px",
                     border: "1px solid rgba(255,255,255,0.12)",
                     boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-                    animation: "contextMenuIn 0.15s ease"
+                    animation: "contextMenuIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
                 }}>
                     {REACTIONS.map(e => (
                         <button key={e} onClick={() => { onReact(e); onClose(); }}
@@ -156,17 +159,19 @@ function ContextMenu({
             {/* Action menu */}
             <div style={{
                 position: "fixed",
-                left: Math.min(x, window.innerWidth - 190),
-                top: Math.max(y - 10, 70),
+                left: Math.max(12, Math.min(x - 20, typeof window !== "undefined" ? window.innerWidth - 220 : 100)),
+                top: Math.max(60, Math.min(y - 10, typeof window !== "undefined" ? window.innerHeight - 380 : 200)),
                 zIndex: 1000,
                 background: "rgba(18,20,36,0.97)", backdropFilter: "blur(16px)",
-                borderRadius: "14px", overflow: "hidden", minWidth: "170px",
+                borderRadius: "14px", overflow: "hidden", minWidth: "190px",
                 border: "1px solid rgba(255,255,255,0.12)",
                 boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-                animation: "contextMenuIn 0.15s ease"
+                animation: "contextMenuIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
             }}>
                 {[
                     ...(!isDeleted ? [{ label: "Responder", icon: "↩️", action: onReply }] : []),
+                    ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: "🌐", action: onTranslate }] : []),
+                    ...(!isDeleted && onAskCopilot ? [{ label: "Consultar a Copiloto", icon: "🤖", action: onAskCopilot }] : []),
                     ...(!isDeleted && onForward ? [{ label: "Reenviar", icon: "➡️", action: onForward }] : []),
                     ...(!isDeleted ? [{ label: "Copiar", icon: "📋", action: onCopy }] : []),
                     ...(!isDeleted && onSelect ? [{ label: "Seleccionar", icon: "☑️", action: onSelect }] : []),
@@ -390,6 +395,41 @@ export const MessageBubble = memo(({
     const documentName = (msg as any).file_name || "Documento Adjunto";
     const documentSize = (msg as any).file_size || 0;
 
+    const [translatedText, setTranslatedText] = useState<string | null>(null);
+    const [isTranslating, setIsTranslating] = useState(false);
+
+    const handleTranslate = async () => {
+        if (!msg.content) return;
+        setIsTranslating(true);
+        try {
+            const res = await LocalAIEngine.translateText(msg.content, 'es');
+            setTranslatedText(res.translatedText);
+            toast.success("🌐 Traducción táctica generada con IA Local");
+        } catch {
+            toast.error("Error al traducir mensaje");
+        } finally {
+            setIsTranslating(false);
+        }
+    };
+
+    const handleAskCopilot = () => {
+        if (!msg.content) return;
+        if (typeof window !== "undefined") {
+            try {
+                localStorage.setItem("red_copilot_quick_query", msg.content);
+            } catch {}
+            useRedStore.getState().navigate("aiCopilot");
+            toast.info("🤖 Contexto del mensaje enviado al Copiloto");
+        }
+    };
+
+    // Vital Sign / Triage Medical Card detector
+    const isVitalSignMessage = msg.msg_type === "vital_sign" || (typeof msg.content === "string" && msg.content.includes("🫀 FICHA MÉDICA"));
+    let vitalData: any = null;
+    if (isVitalSignMessage && typeof msg.content === "string" && msg.content.startsWith("{")) {
+        try { vitalData = JSON.parse(msg.content); } catch {}
+    }
+
     if (isSystem) {
         return (
             <div style={{ textAlign: "center", padding: "6px 12px", fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
@@ -421,6 +461,8 @@ export const MessageBubble = memo(({
                     onDeleteLocal={() => onLongPress({} as any, msg)}
                     onSelect={onSelectMode ? () => onSelectMode(msg) : undefined}
                     onReact={(e) => onReaction(msg.id, e)}
+                    onTranslate={msg.content && !msg.content.startsWith("data:") ? handleTranslate : undefined}
+                    onAskCopilot={msg.content && !msg.content.startsWith("data:") ? handleAskCopilot : undefined}
                 />
             )}
 
@@ -745,15 +787,77 @@ export const MessageBubble = memo(({
                                 </div>
                             )}
 
-                            {/* Poll */}
-                            {!isPaymentMessage && msg.msg_type === "poll" && (
-                                <PollMessage msg={msg} onVote={optIdx => onVote(msg.id, optIdx)} />
+                            {/* Medical VitalScan / START Triage Card */}
+                            {!isPaymentMessage && isVitalSignMessage && (
+                                <div style={{
+                                    borderRadius: "12px", padding: "10px 12px",
+                                    background: isMine ? "linear-gradient(135deg, rgba(232,33,58,0.2) 0%, rgba(170,18,40,0.35) 100%)" : "rgba(10, 14, 28, 0.95)",
+                                    border: "1.5px solid var(--accent-crimson, #FF3355)",
+                                    boxShadow: "0 0 14px rgba(255,51,85,0.25)",
+                                    display: "flex", flexDirection: "column", gap: "6px", minWidth: "220px"
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.76rem", fontWeight: 900, color: "#FF5252", fontFamily: "JetBrains Mono, monospace" }}>
+                                            <span>🫀</span>
+                                            <span>FICHA MÉDICA TRIAJE</span>
+                                        </div>
+                                        <span className="badge-tactical" style={{
+                                            fontSize: "0.62rem", fontWeight: 900,
+                                            background: vitalData?.triage === "ROJO" || (msg.content && msg.content.includes("ROJO")) ? "#FF3355" :
+                                                (vitalData?.triage === "AMARILLO" || (msg.content && msg.content.includes("AMARILLO")) ? "#FFB300" :
+                                                (vitalData?.triage === "VERDE" || (msg.content && msg.content.includes("VERDE")) ? "#00E676" : "#2A2E3D")),
+                                            color: vitalData?.triage === "AMARILLO" || (msg.content && msg.content.includes("AMARILLO")) ? "#000" : "#FFF"
+                                        }}>
+                                            {vitalData?.triage || "START TRIAJE"}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "16px", margin: "4px 0" }}>
+                                        {vitalData?.bpm && (
+                                            <div>
+                                                <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Frecuencia</div>
+                                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFF", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {vitalData.bpm} <span style={{ fontSize: "0.7rem", color: "#FF5252" }}>BPM</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {vitalData?.spo2 && (
+                                            <div>
+                                                <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Oxígeno</div>
+                                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {vitalData.spo2}% <span style={{ fontSize: "0.7rem", color: "var(--accent-cyan)" }}>SpO2</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.9)", fontStyle: "italic", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "4px" }}>
+                                        {vitalData?.notes || (msg.content && !msg.content.startsWith("{") ? msg.content : "Evaluación médica táctica registrada en la malla.")}
+                                    </div>
+                                </div>
                             )}
 
                             {/* Standard Text content — with URL & mention highlighting */}
-                            {!isPaymentMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
+                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
                                     {renderFormattedContent(msg.content)}
+                                </div>
+                            )}
+
+                            {/* Inline AI Translation Pill Box */}
+                            {translatedText && (
+                                <div style={{
+                                    marginTop: "4px", padding: "6px 10px", borderRadius: "8px",
+                                    background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                    fontSize: "0.82rem", color: "#E0F7FA", animation: "fadeIn 0.2s ease"
+                                }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
+                                        <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            🌐 TRADUCCIÓN IA LOCAL
+                                        </span>
+                                        <button onClick={() => setTranslatedText(null)} style={{ background: "none", border: "none", color: "var(--accent-cyan)", cursor: "pointer", fontSize: "0.7rem", padding: 0 }}>
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <div>{translatedText}</div>
                                 </div>
                             )}
                         </>

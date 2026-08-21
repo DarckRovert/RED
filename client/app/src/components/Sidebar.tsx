@@ -473,8 +473,22 @@ export default function Sidebar() {
                                 else if (msgType === "location" || content?.includes("Ubicación Táctica")) snippet = prefix + "📍 Ubicación";
                                 else if (msgType === "poll") snippet = prefix + "📊 Encuesta";
                                 else if (content && !content.startsWith("data:") && !content.startsWith("[")) {
-                                    const truncated = content.length > 38 ? content.substring(0, 38) + "…" : content;
-                                    snippet = prefix + truncated;
+                                    // Block JSON signaling packets from appearing as conversation preview
+                                    let isSignalingJson = false;
+                                    if (content.startsWith("{")) {
+                                        try {
+                                            const c = JSON.parse(content);
+                                            const SIGNAL_TYPES = ['IDENTITY_ANNOUNCE','IDENTITY_RESPONSE','IDENTITY_REQUEST','SHAKE_PAIR_BROADCAST','SHAKE_PAIR_ACCEPT','DELIVERY_ACK','PROFILE_UPDATE','NODE_LOCATION_UPDATE'];
+                                            const SIGNAL_KEYS = ['read_up_to','reader_hash','offer','answer','candidate','hangup','sender_hash','sender_pk','beacon_id'];
+                                            if (c.type && SIGNAL_TYPES.some(t => c.type.startsWith(t.split('_')[0]))) isSignalingJson = true;
+                                            else if (SIGNAL_KEYS.filter(k => k in c).length >= 2) isSignalingJson = true;
+                                            else if (c.reason === 'user_remote_wipe') isSignalingJson = true;
+                                        } catch {}
+                                    }
+                                    if (!isSignalingJson) {
+                                        const truncated = content.length > 38 ? content.substring(0, 38) + "…" : content;
+                                        snippet = prefix + truncated;
+                                    }
                                 }
                             }
                             return (
@@ -567,6 +581,53 @@ export default function Sidebar() {
                     </div>
                 )}
             </div>
+
+            {/* ── Fixed Bottom Tactical HUD Dock (5 Key Modules) ── */}
+            <nav style={{
+                position: "sticky", bottom: 0, left: 0, right: 0,
+                minHeight: "58px",
+                background: "linear-gradient(180deg, rgba(14, 16, 30, 0.95) 0%, rgba(6, 8, 16, 0.98) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                borderTop: "1px solid var(--glass-border)",
+                display: "flex", alignItems: "center", justifyContent: "space-around",
+                padding: "4px 8px max(6px, env(safe-area-inset-bottom, 6px)) 8px",
+                zIndex: 40, flexShrink: 0
+            }}>
+                {[
+                    { id: "chats", icon: "💬", label: "Chats", action: () => setActiveTab("chats"), active: activeTab === "chats" },
+                    { id: "radar", icon: "📡", label: "Radar", action: () => navigate("radar"), count: meshRouter.peers.size },
+                    { id: "ai", icon: "🤖", label: "Copiloto IA", action: () => navigate("aiCopilot"), highlight: true },
+                    { id: "compass", icon: "🧭", label: "Brújula", action: () => navigate("offGridCompass") },
+                    { id: "vault", icon: "🪪", label: "Bóveda", action: () => navigate("idVault") },
+                ].map(item => (
+                    <button
+                        key={item.id}
+                        onClick={item.action}
+                        style={{
+                            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                            gap: "2px", background: "transparent", border: "none",
+                            color: item.active ? "var(--accent-crimson)" : (item.highlight ? "var(--accent-cyan)" : "var(--text-secondary)"),
+                            cursor: "pointer", padding: "4px 10px", borderRadius: "10px",
+                            transition: "all 0.15s ease", position: "relative"
+                        }}
+                    >
+                        <span style={{ fontSize: "1.2rem", filter: item.active ? "drop-shadow(0 0 8px rgba(232,33,58,0.6))" : "none" }}>
+                            {item.icon}
+                        </span>
+                        <span style={{ fontSize: "0.62rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.2px" }}>
+                            {item.label}
+                        </span>
+                        {typeof item.count === "number" && item.count > 0 && (
+                            <span style={{
+                                position: "absolute", top: 2, right: 8,
+                                width: 7, height: 7, borderRadius: "50%",
+                                background: "var(--accent-emerald)", boxShadow: "0 0 6px var(--accent-emerald)"
+                            }} />
+                        )}
+                    </button>
+                ))}
+            </nav>
 
             {/* Modal para Agregar Contacto */}
             {addContactOpen && (

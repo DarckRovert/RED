@@ -856,7 +856,9 @@ class MeshRouter {
             this.bindDeviceToCanonical(packet.sender, peerHash, peerName, peerPk);
             this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk, isGateway, hasInternet);
 
-            // Auto-update contacts cache in localStorage if peer sent real display name
+            // Mesh contact isolation: ONLY update metadata if the peer already exists in contacts.
+            // If the peer is unknown, they are registered exclusively in meshRouter.peers (Radar/topology).
+            // Adding a contact is an EXPLICIT user action (QR, DID, "Add Contact" button) — never automatic.
             if (typeof window !== 'undefined' && peerName && !peerName.startsWith('RED-') && !peerName.startsWith('Operador ')) {
               try {
                 const cachedConts = JSON.parse(localStorage.getItem('red_web_contacts') || '[]') as any[];
@@ -865,6 +867,7 @@ class MeshRouter {
                   (peerHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(peerHash.slice(0, 8).toLowerCase()))
                 );
                 if (cIdx >= 0) {
+                  // Peer is an existing contact — refresh their identity metadata only
                   cachedConts[cIdx] = {
                     ...cachedConts[cIdx],
                     display_name: peerName,
@@ -872,16 +875,9 @@ class MeshRouter {
                     phone_number: idData.phone_number || cachedConts[cIdx].phone_number,
                     public_key: peerPk || cachedConts[cIdx].public_key
                   };
-                } else {
-                  cachedConts.push({
-                    identity_hash: peerHash,
-                    display_name: peerName,
-                    bio: idData.bio,
-                    phone_number: idData.phone_number,
-                    public_key: peerPk
-                  });
+                  localStorage.setItem('red_web_contacts', JSON.stringify(cachedConts));
                 }
-                localStorage.setItem('red_web_contacts', JSON.stringify(cachedConts));
+                // cIdx === -1: unknown peer — stays in meshRouter.peers only. Do NOT push to contacts.
               } catch {}
             }
 

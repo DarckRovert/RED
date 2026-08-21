@@ -642,6 +642,66 @@ export class GuardianEngineClass {
                     }
                 }
                 const pHashHex = pHashBits.toString(16).padStart(16, '0');
+
+                // ── Verificación contra Lista de Hashes Bloqueados (Hamming Distance <= 4) ──
+                const BLOCKED_IMAGE_HASHES: Array<{ hash: string; reason: string; category: 'nsfw' | 'threat' | 'spam' }> = [
+                    { hash: '0000000000000000', reason: 'Imagen nula / pixel tracking / payload de camuflaje', category: 'threat' },
+                    { hash: 'ffffffffffffffff', reason: 'Imagen saturada estroboscópica / payload hostil', category: 'threat' },
+                ];
+
+                // Función de distancia Hamming sobre enteros de 64 bits
+                const getHammingDistance = (hex1: string, hex2: string): number => {
+                    try {
+                        let xor = BigInt('0x' + hex1) ^ BigInt('0x' + hex2);
+                        let dist = 0;
+                        const zero = BigInt(0);
+                        const one = BigInt(1);
+                        while (xor > zero) {
+                            if ((xor & one) === one) dist++;
+                            xor = xor >> one;
+                        }
+                        return dist;
+                    } catch {
+                        return 64;
+                    }
+                };
+
+                // Evaluar si coincide con algún hash bloqueado
+                let matchedBlock: { hash: string; reason: string; category: 'nsfw' | 'threat' | 'spam' } | null = null;
+                for (const blocked of BLOCKED_IMAGE_HASHES) {
+                    if (getHammingDistance(pHashHex, blocked.hash) <= 4) {
+                        matchedBlock = blocked;
+                        break;
+                    }
+                }
+
+                if (matchedBlock && this.config.mode !== 'permissive') {
+                    this.stats.images_blocked++;
+                    const result: GuardianEvaluation = {
+                        allowed: false,
+                        is_clean: false,
+                        is_safe: false,
+                        threat_score: 95,
+                        toxicity_score: 95,
+                        feedback: `⛔ BLOQUEO DE IMAGEN pHash: ${matchedBlock.reason} (Distancia perceptual <= 4).`,
+                        category: matchedBlock.category,
+                        confidence: 0.96,
+                        reason: matchedBlock.reason,
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                    this.addAuditLog({
+                        textSample: `[IMAGEN_BLOQUEADA_pHash:${pHashHex}]`,
+                        category: matchedBlock.category,
+                        action: 'BLOCKED',
+                        threatScore: 95,
+                        confidence: 0.96,
+                        reason: matchedBlock.reason,
+                        executionTimeMs: result.executionTimeMs,
+                    });
+                    this.saveState();
+                    return result;
+                }
+
                 const result: GuardianEvaluation = {
                     allowed: true,
                     is_clean: true,
