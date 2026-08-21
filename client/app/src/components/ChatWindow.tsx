@@ -133,8 +133,27 @@ export default function ChatWindow() {
     const docInputRef = useRef<HTMLInputElement | null>(null);
 
     const convMessages = useMemo(() => {
-        const list = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
-        return [...list];
+        const list: MessageItem[] = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
+        return list.filter((m: MessageItem) => {
+            if (!m || !m.content) return false;
+            // Filter out system control JSON packets from chat bubbles
+            if (typeof m.content === 'string' && m.content.startsWith('{')) {
+                if (
+                    m.content.includes('"type":"IDENTITY_ANNOUNCE"') ||
+                    m.content.includes('"type":"IDENTITY_RESPONSE"') ||
+                    m.content.includes('"type":"IDENTITY_REQUEST"') ||
+                    m.content.includes('"type":"SHAKE_PAIR_') ||
+                    m.content.includes('"type":"DELIVERY_ACK"') ||
+                    m.content.includes('"type":"PROFILE_UPDATE"') ||
+                    m.content.includes('"type":"RED_PAIR') ||
+                    (m.content.includes('"sender_hash"') && m.content.includes('"sender_pk"')) ||
+                    (m.content.includes('"reason":"user_remote_wipe"'))
+                ) {
+                    return false;
+                }
+            }
+            return true;
+        });
     }, [messages, activeConversationId]);
 
     // Keep ref in sync with latest convMessages

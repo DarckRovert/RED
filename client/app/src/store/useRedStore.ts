@@ -1720,6 +1720,37 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        // ── Protocol & Handshake Control Packets: never append to user chat bubbles ──
+        if (
+            typeof item.content === 'string' && item.content.startsWith('{') && (
+                item.content.includes('"type":"IDENTITY_ANNOUNCE"') ||
+                item.content.includes('"type":"IDENTITY_RESPONSE"') ||
+                item.content.includes('"type":"IDENTITY_REQUEST"') ||
+                item.content.includes('"type":"SHAKE_PAIR_') ||
+                item.content.includes('"type":"DELIVERY_ACK"') ||
+                item.content.includes('"type":"PROFILE_UPDATE"') ||
+                item.content.includes('"type":"RED_PAIR') ||
+                (item.content.includes('"sender_hash"') && item.content.includes('"sender_pk"')) ||
+                (item.content.includes('"reason":"user_remote_wipe"'))
+            )
+        ) {
+            try {
+                const parsed = JSON.parse(item.content);
+                if (parsed.type === 'IDENTITY_ANNOUNCE' || parsed.type === 'IDENTITY_RESPONSE') {
+                    const idData = parsed.payload;
+                    if (idData?.identity_hash) {
+                        const peerHash = meshRouter.getCanonicalId(idData.identity_hash);
+                        const peerName = idData.display_name || `Operador ${peerHash.slice(0, 6)}`;
+                        const peerPk = idData.public_key;
+                        meshRouter.bindDeviceToCanonical(item.sender, peerHash, peerName, peerPk);
+                        meshRouter.updatePeer(peerHash, 'ble', undefined, peerHash, peerName, peerPk);
+                        RedAPI.addContact(peerHash, peerName, peerPk).catch(() => {});
+                    }
+                }
+            } catch {}
+            return; // strictly do NOT add system protocol JSON to chat message bubbles
+        }
+
         // ── Real-Time Typing & Recording Indicator: never append to message list ──
         if (
             item.msg_type === 'typing' ||

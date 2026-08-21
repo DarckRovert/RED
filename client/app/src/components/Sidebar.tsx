@@ -371,8 +371,11 @@ export default function Sidebar() {
                     <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 38, height: 38 }} title="Búsqueda global">
                         🔍
                     </button>
-                    <button onClick={() => navigate("radar")} className="btn-icon" style={{ width: 38, height: 38 }} title="Radar de pares">
+                    <button onClick={() => navigate("radar")} className="btn-icon" style={{ width: 38, height: 38 }} title="Radar de pares y escáner QR">
                         📡
+                    </button>
+                    <button onClick={() => navigate("webCompanionLink")} className="btn-icon" style={{ width: 38, height: 38, color: "var(--accent-emerald)" }} title="💻 Vincular con RED Web (PC)">
+                        💻
                     </button>
                     <button onClick={() => setMenuOpen(m => !m)} className="btn-icon" style={{ width: 38, height: 38 }} title="Centro de control">
                         ☰
@@ -594,6 +597,20 @@ export default function Sidebar() {
                         <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
                             Pega el DID Soberano, Hash (64 hex) o Identificador de tu contacto (Web, Móvil o Nodo Malla).
                         </div>
+                        <button
+                            onClick={() => {
+                                setAddContactOpen(false);
+                                navigate("radar");
+                            }}
+                            className="btn-tactical-secondary"
+                            style={{
+                                width: "100%", padding: "12px", fontSize: "0.82rem", fontWeight: 800,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                borderColor: "var(--accent-emerald)", color: "var(--accent-emerald)"
+                            }}
+                        >
+                            📷 ABRIR ESCÁNER QR DE CÁMARA / VINCULAR WEB
+                        </button>
                         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div>
                                 <label style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-secondary)", marginBottom: "4px", display: "block", letterSpacing: "0.5px" }}>
