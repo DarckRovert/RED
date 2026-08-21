@@ -1,3 +1,4 @@
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    RED v6.0 — SOVEREIGN TACTICAL DESIGN SYSTEM
    International-grade UI/UX foundation: OLED Deep, Neo-Glassmorphism, P2P Mesh
@@ -983,6 +984,64 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
 @keyframes popIn {
   0% { opacity: 0; transform: scale(0.85); }
   100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes beaconPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0, 230, 118, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0); }
+}
+
+@keyframes cyberShieldGlow {
+  0%, 100% { filter: drop-shadow(0 0 12px rgba(0, 229, 255, 0.45)); }
+  50% { filter: drop-shadow(0 0 24px rgba(0, 229, 255, 0.85)); }
+}
+
+@keyframes storyRingSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ─── Cyber Tactical Hologram & Interactive Chips ────────────────────────────── */
+.cyber-hologram-shield {
+  background: radial-gradient(circle at 50% 30%, rgba(0, 229, 255, 0.08) 0%, rgba(12, 14, 28, 0.85) 100%);
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(0, 229, 255, 0.04);
+  backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.tactical-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-spring);
+  backdrop-filter: blur(10px);
+}
+
+.tactical-action-chip:hover {
+  background: rgba(0, 229, 255, 0.15);
+  border-color: rgba(0, 229, 255, 0.45);
+  color: #00E5FF;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 229, 255, 0.25);
+}
+
+.tactical-action-chip:active {
+  transform: scale(0.96);
 }
 
 /* ─── Tactical Button System & Interactive States ───────────────────────────── */

@@ -351,12 +351,21 @@ export default function Sidebar() {
                         {(identity?.short_id || "O").charAt(0).toUpperCase()}
                     </div>
                     <div>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px" }}>
-                            {identity?.nickname || "Operador RED"}
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>{identity?.nickname || "Operador RED"}</span>
+                            <span className="badge-tactical" style={{ fontSize: "0.58rem", padding: "1px 5px", background: "rgba(232, 33, 58, 0.2)", color: "#FF3355", border: "1px solid rgba(232,33,58,0.4)" }}>
+                                v54.0
+                            </span>
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "4px" }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", display: "inline-block", boxShadow: nodeOnline ? "0 0 6px var(--accent-emerald)" : "none" }} />
-                            {nodeOnline ? "MALLA ACTIVA" : "OFFLINE"}
+                        <div style={{ fontSize: "0.68rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px" }}>
+                            <span style={{
+                                width: 7, height: 7, borderRadius: "50%",
+                                background: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)",
+                                display: "inline-block",
+                                boxShadow: nodeOnline ? "0 0 8px var(--accent-emerald)" : "none",
+                                animation: nodeOnline ? "beaconPulse 2s infinite" : "none"
+                            }} />
+                            {nodeOnline ? `MALLA ACTIVA • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "OFFLINE"}
                         </div>
                     </div>
                 </div>
@@ -428,34 +437,46 @@ export default function Sidebar() {
                 {/* Search Bar Input */}
                 <div style={{
                     display: "flex", alignItems: "center", gap: "8px",
-                    background: "rgba(255,255,255,0.04)", border: "1px solid var(--glass-border)",
-                    borderRadius: "var(--radius-md)", padding: "7px 12px"
+                    background: "rgba(18,20,36,0.8)", border: "1px solid var(--glass-border)",
+                    borderRadius: "var(--radius-full)", padding: "7px 12px"
                 }}>
-                    <span style={{ fontSize: "0.85rem", opacity: 0.5 }}>🔍</span>
+                    <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>🔍</span>
                     <input
                         type="text"
+                        placeholder="Filtrar por nombre o clave pública..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Filtrar mensajes o identificadores..."
                         style={{
-                            flex: 1, background: "transparent", border: "none", outline: "none",
-                            color: "var(--text-primary)", fontSize: "0.84rem"
+                            flex: 1, background: "transparent", border: "none",
+                            color: "#fff", fontSize: "0.82rem", outline: "none"
                         }}
                     />
                     {searchQuery && (
-                        <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}>✕</button>
+                        <button
+                            onClick={() => setSearchQuery("")}
+                            style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
+                        >
+                            ✕
+                        </button>
                     )}
                 </div>
             </div>
 
-            {/* Main List */}
-            <div className="scroll-container" style={{ flex: 1, padding: "8px 12px 80px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            {/* Listado Principal con Scroll */}
+            <div className="scroll-container" style={{ flex: 1, padding: "8px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
                 {activeTab === "chats" ? (
                     filteredConvs.length === 0 ? (
                         <div className="empty-state-tactical">
-                            <div className="empty-state-icon">💬</div>
-                            <div className="empty-state-title">{searchQuery ? "Sin resultados" : "Sin Conversaciones Activas"}</div>
-                            <div className="empty-state-desc">{searchQuery ? `No hay coincidencias para "${searchQuery}".` : "Usa el radar o escanea un código QR para iniciar un chat Noise E2E cifrado."}</div>
+                            <div className="empty-state-icon">📡</div>
+                            <div className="empty-state-title">Sin Transmisiones en Malla</div>
+                            <div className="empty-state-desc">Escanea un código QR o descubre nodos vecinos en el Radar táctico.</div>
+                            <button
+                                onClick={() => navigate("radar")}
+                                className="btn-tactical-primary"
+                                style={{ marginTop: "12px", padding: "8px 16px", fontSize: "0.8rem" }}
+                            >
+                                Abrir Radar P2P
+                            </button>
                         </div>
                     ) : (
                         filteredConvs.map(c => {
@@ -491,26 +512,53 @@ export default function Sidebar() {
                                     }
                                 }
                             }
+                            const isPeerOnline = meshRouter.peers.has(c.peer) || Array.from(meshRouter.peers.values()).some(p => p.id === c.peer);
                             return (
 
                             <div
                                 key={c.peer}
                                 onClick={() => navigate("chat", c.peer)}
                                 className="card-tactical-interactive"
-                                style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px" }}
+                                style={{
+                                    padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px",
+                                    border: isPeerOnline ? "1px solid rgba(0, 230, 118, 0.2)" : "1px solid var(--glass-border)",
+                                    background: isPeerOnline ? "linear-gradient(135deg, rgba(0,230,118,0.03) 0%, rgba(18,18,32,0.85) 100%)" : undefined
+                                }}
                             >
-                                <div style={{
-                                    width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: "1.1rem", fontWeight: 800, color: "#fff",
-                                    ...avatarStyle(c.peer)
-                                }}>
-                                    {resolvePeerName(c.peer).charAt(0).toUpperCase()}
+                                <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
+                                    <div style={{
+                                        width: 44, height: 44, borderRadius: "50%",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: "1.1rem", fontWeight: 800, color: "#fff",
+                                        ...avatarStyle(c.peer),
+                                        boxShadow: isPeerOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
+                                        border: isPeerOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
+                                    }}>
+                                        {resolvePeerName(c.peer).charAt(0).toUpperCase()}
+                                    </div>
+                                    {isPeerOnline && (
+                                        <span
+                                            title="En línea en la Malla"
+                                            style={{
+                                                position: "absolute", bottom: -1, right: -1,
+                                                width: 12, height: 12, borderRadius: "50%",
+                                                background: "#00E676",
+                                                border: "2px solid #06060c",
+                                                boxShadow: "0 0 6px #00E676",
+                                                animation: "beaconPulse 2s infinite"
+                                            }}
+                                        />
+                                    )}
                                 </div>
                                 <div style={{ flex: 1, overflow: "hidden" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                            {resolvePeerName(c.peer)}
+                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <span>{resolvePeerName(c.peer)}</span>
+                                            {isPeerOnline && (
+                                                <span style={{ fontSize: "0.55rem", padding: "1px 4px", borderRadius: "4px", background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    EN VIVO
+                                                </span>
+                                            )}
                                         </div>
                                         <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                             {rawTs ? formatTime(rawTs) : ""}
@@ -521,7 +569,7 @@ export default function Sidebar() {
                                     </div>
                                 </div>
                                 {(c.unread_count || 0) > 0 && (
-                                    <span className="badge-tactical badge-tactical-cyan" style={{ borderRadius: "var(--radius-full)", padding: "2px 8px" }}>
+                                    <span className="badge-tactical badge-tactical-cyan" style={{ borderRadius: "var(--radius-full)", padding: "2px 8px", boxShadow: "0 0 10px rgba(0, 229, 255, 0.4)" }}>
                                         {c.unread_count}
                                     </span>
                                 )}
@@ -549,7 +597,9 @@ export default function Sidebar() {
                                 <div className="empty-state-desc">Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E.</div>
                             </div>
                         ) : (
-                            filteredContacts.map(ct => (
+                            filteredContacts.map(ct => {
+                                const isCtOnline = meshRouter.peers.has(ct.identity_hash) || Array.from(meshRouter.peers.values()).some(p => p.id === ct.identity_hash);
+                                return (
                                 <div
                                     key={ct.identity_hash}
                                     onClick={() => {
@@ -557,26 +607,52 @@ export default function Sidebar() {
                                         navigate("chat", ct.identity_hash);
                                     }}
                                     className="card-tactical-interactive"
-                                    style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px" }}
+                                    style={{
+                                        padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px",
+                                        border: isCtOnline ? "1px solid rgba(0, 230, 118, 0.2)" : "1px solid var(--glass-border)"
+                                    }}
                                 >
-                                    <div style={{
-                                        width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "1.1rem", fontWeight: 800, color: "#fff",
-                                        ...avatarStyle(ct.identity_hash)
-                                    }}>
-                                        {(ct.display_name || "O").charAt(0).toUpperCase()}
+                                    <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
+                                        <div style={{
+                                            width: 44, height: 44, borderRadius: "50%",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontSize: "1.1rem", fontWeight: 800, color: "#fff",
+                                            ...avatarStyle(ct.identity_hash),
+                                            boxShadow: isCtOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
+                                            border: isCtOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
+                                        }}>
+                                            {(ct.display_name || "O").charAt(0).toUpperCase()}
+                                        </div>
+                                        {isCtOnline && (
+                                            <span
+                                                title="En línea en la Malla"
+                                                style={{
+                                                    position: "absolute", bottom: -1, right: -1,
+                                                    width: 12, height: 12, borderRadius: "50%",
+                                                    background: "#00E676",
+                                                    border: "2px solid #06060c",
+                                                    boxShadow: "0 0 6px #00E676",
+                                                    animation: "beaconPulse 2s infinite"
+                                                }}
+                                            />
+                                        )}
                                     </div>
                                     <div style={{ flex: 1, overflow: "hidden" }}>
-                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff" }}>
-                                            {ct.display_name || ct.identity_hash.substring(0, 8)}
+                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <span>{ct.display_name || ct.identity_hash.substring(0, 8)}</span>
+                                            {isCtOnline && (
+                                                <span style={{ fontSize: "0.55rem", padding: "1px 4px", borderRadius: "4px", background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    MALLA
+                                                </span>
+                                            )}
                                         </div>
                                         <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                             {ct.identity_hash.substring(0, 16)}…
                                         </div>
                                     </div>
                                 </div>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 )}

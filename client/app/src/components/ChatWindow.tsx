@@ -1115,11 +1115,51 @@ export default function ChatWindow() {
                 style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "4px", position: "relative" }}
             >
                 {convMessages.length === 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-muted)", gap: "10px" }}>
-                        <span style={{ fontSize: "2.4rem" }}>🔐</span>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>Canal Cifrado Noise Handshake</div>
-                        <div style={{ fontSize: "0.75rem", maxWidth: "260px", textAlign: "center", lineHeight: 1.4 }}>
-                            Los mensajes viajan cifrados de extremo a extremo y se guardan únicamente en la base local Sled DB.
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "24px 16px" }}>
+                        <div className="cyber-hologram-shield" style={{ maxWidth: "340px", width: "100%", textAlign: "center" }}>
+                            <div style={{
+                                width: 64, height: 64, borderRadius: "20px",
+                                background: "linear-gradient(135deg, rgba(0, 229, 255, 0.2) 0%, rgba(232, 33, 58, 0.2) 100%)",
+                                border: "1px solid rgba(0, 229, 255, 0.4)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "2rem",
+                                animation: "cyberShieldGlow 3s ease-in-out infinite",
+                                boxShadow: "0 0 24px rgba(0, 229, 255, 0.35)"
+                            }}>
+                                🛡️
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
+                                    CANAL TÁCTICO CIFRADO
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "2px" }}>
+                                    NOISE XK • KYBER-768 PQC • SLED DB
+                                </div>
+                            </div>
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                                Este canal está blindado contra interceptación. Los mensajes viajan de par a par sin intermediarios centrales.
+                            </div>
+
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginTop: "6px" }}>
+                                <button
+                                    onClick={() => setIsSafetyModalOpen(true)}
+                                    className="tactical-action-chip"
+                                >
+                                    <span>🛡️</span> Safety Number
+                                </button>
+                                <button
+                                    onClick={() => navigate("compass")}
+                                    className="tactical-action-chip"
+                                >
+                                    <span>🧭</span> Brújula Táctica
+                                </button>
+                                <button
+                                    onClick={() => navigate("radar")}
+                                    className="tactical-action-chip"
+                                >
+                                    <span>📡</span> Radar Malla
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ) : (
