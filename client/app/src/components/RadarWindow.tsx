@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { toast } from "./Toast";
 
 type RadarTab = "qr" | "radar" | "manual";
@@ -13,6 +14,7 @@ export default function RadarWindow() {
     const [activeTab, setActiveTab] = useState<RadarTab>("qr");
     const [scanning, setScanning] = useState(false);
     const [nearbyPeers, setNearbyPeers] = useState<any[]>([]);
+    const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
 
     // Manual Entry State
     const [manualHash, setManualHash] = useState("");
@@ -27,7 +29,7 @@ export default function RadarWindow() {
     useEffect(() => {
         if (identity?.identity_hash) {
             const pk = identity.public_key || identity.identity_hash;
-            const nameParam = encodeURIComponent(identity.nickname || 'Operador RED');
+            const nameParam = encodeURIComponent(identity.nickname || "Operador RED");
             const qrText = `did:red:${identity.identity_hash}:${pk}:${nameParam}`;
             import("qrcode").then(QRCode => {
                 QRCode.toDataURL(qrText, {
@@ -39,31 +41,34 @@ export default function RadarWindow() {
         }
     }, [identity]);
 
-    // Live BLE Peer discovery with canonical resolution
+    // BLE Peers Discovery Poll
     useEffect(() => {
         const updatePeers = () => {
-            const peers = localTransport.allPeers
-                .filter((p: any) => p.transport === "ble" || p.transports?.includes('ble'))
-                .map((p: any) => {
-                    const canonical = p.canonicalId || meshRouter.getCanonicalId(p.id) || p.id;
-                    return {
-                        id: canonical,
-                        name: p.name || `RED-${canonical.substring(0, 8)}`,
-                        rssi: p.rssi || -85
-                    };
-                });
+            const peers = localTransport.discoveredBluetoothPeers || [];
             setNearbyPeers(peers);
         };
-
-        const interval = setInterval(updatePeers, 2000);
         updatePeers();
+        const interval = setInterval(updatePeers, 3000);
         return () => clearInterval(interval);
     }, []);
 
-    // Stop camera scanning when unmounting
-    useEffect(() => {
-        return () => { stopScan(); };
-    }, []);
+    const handleRefreshNearby = () => {
+        const peers = localTransport.discoveredBluetoothPeers || [];
+        setNearbyPeers(peers);
+        toast.info("Actualizando lista de balizas BLE cercanas...");
+    };
+
+    const handleAddPeer = async (peer: any) => {
+        const targetId = meshRouter.getCanonicalId(peer.id || peer.address || "");
+        const finalName = peer.name && !peer.name.startsWith("Nodo ") ? peer.name : `Nodo ${targetId.slice(0, 6)}`;
+        try {
+            await addContact(targetId, finalName);
+            toast.success(`Añadido ${finalName}`);
+            navigate("chat", targetId);
+        } catch (e: any) {
+            toast.error(e?.message || "Error al conectar con el par");
+        }
+    };
 
     const startScan = async () => {
         try {
@@ -95,6 +100,14 @@ export default function RadarWindow() {
 
             if (result.hasContent) {
                 const raw = result.content.trim();
+
+                // 0. Detección Inteligente de Vinculación Web Companion (WhatsApp Web style)
+                if (raw.startsWith("RED_PAIR:1:")) {
+                    await stopScan();
+                    setWebPairingCode(raw);
+                    return;
+                }
+
                 let cleanHash = "";
                 let pubKey: string | null = null;
                 let scannedName = "Operador RED";
@@ -188,7 +201,7 @@ export default function RadarWindow() {
                     textAlign: "center",
                     boxShadow: "0 4px 20px rgba(0,229,255,0.3)"
                 }}>
-                    📷 APUNTA AL CÓDIGO QR DE UN NODO RED
+                    📷 APUNTA AL CÓDIGO QR DE UN NODO O PANTALLA WEB
                 </div>
 
                 <div className="scanner-target-box">
@@ -324,6 +337,20 @@ export default function RadarWindow() {
                                 )}
                             </div>
 
+                            {/* Botón de Escáner Directo */}
+                            <button
+                                onClick={startScan}
+                                className="btn-tactical-primary"
+                                style={{
+                                    width: "100%", padding: "16px",
+                                    background: "linear-gradient(135deg, #00E676 0%, #00B0FF 100%)",
+                                    fontSize: "0.95rem", fontWeight: 900,
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "10px"
+                                }}
+                            >
+                                📷 ABRIR ESCÁNER QR DE CÁMARA
+                            </button>
+
                             {/* DID y Botón de Copiar */}
                             <div style={{ width: "100%", display: "flex", gap: "8px" }}>
                                 <input
@@ -422,32 +449,36 @@ export default function RadarWindow() {
                             >
                                 <span style={{ fontSize: "2.4rem" }}>📷</span>
                                 <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-emerald)" }}>ABRIR ESCÁNER QR DE CÁMARA</span>
-                                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>Apunta al código QR de otro par para agregarlo al instante</span>
+                                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>Apunta al código QR de otro par o de la pantalla de RED Web</span>
                             </button>
 
                             {/* Entrada Manual de ID */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>O ingresa el identificador manualmente:</div>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>O ingresa el identificador o código de vinculación:</div>
 
                                 <input
                                     value={manualHash}
                                     onChange={e => setManualHash(e.target.value)}
-                                    placeholder="Hash SHA-256 (64 hex) o did:red:..."
+                                    placeholder="Hash SHA-256 (64 hex), did:red:... o RED_PAIR:..."
                                     style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem" }}
                                 />
 
                                 <input
                                     value={manualName}
                                     onChange={e => setManualName(e.target.value)}
-                                    placeholder="Alias o nombre para el contacto"
+                                    placeholder="Alias o nombre para el contacto (opcional)"
                                 />
 
                                 <button
                                     disabled={!manualHash.trim() || isAdding}
                                     onClick={async () => {
+                                        const hashToSent = manualHash.trim();
+                                        if (hashToSent.startsWith("RED_PAIR:1:")) {
+                                            setWebPairingCode(hashToSent);
+                                            return;
+                                        }
                                         setIsAdding(true);
                                         setAddingStatus("Verificando nodo...");
-                                        const hashToSent = manualHash.trim();
                                         const nameToSend = manualName.trim() || "Nuevo Par";
                                         try {
                                             await addContact(hashToSent, nameToSend);
@@ -464,13 +495,21 @@ export default function RadarWindow() {
                                     className="btn-tactical-primary"
                                     style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
                                 >
-                                    {isAdding ? addingStatus || "Añadiendo..." : "➕ AÑADIR A LA LISTA DE CONTACTOS"}
+                                    {isAdding ? addingStatus || "Añadiendo..." : "➕ AÑADIR CONTACTO O VINCULAR"}
                                 </button>
                             </div>
                         </div>
                     )}
                 </div>
             </div>
+
+            {/* Modal de Confirmación de Vinculación Web Companion */}
+            {webPairingCode && (
+                <WebCompanionPairConfirmationModal
+                    qrData={webPairingCode}
+                    onClose={() => setWebPairingCode(null)}
+                />
+            )}
         </div>
     );
 }

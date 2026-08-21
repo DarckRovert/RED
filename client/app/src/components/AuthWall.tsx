@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { CalculatorScreen } from "./CalculatorScreen";
 import { BackupRestoreModal } from "./BackupRestoreModal";
+import { WebCompanionQRModal } from "./WebCompanionQRModal";
 import { toast } from "./Toast";
 
 /**
@@ -84,6 +85,18 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const [disguiseEnabled, setDisguiseEnabled] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const [showRestoreModal, setShowRestoreModal] = useState(false);
+    const [showCompanionQR, setShowCompanionQR] = useState(false);
+    const [failedAttempts, setFailedAttempts] = useState(0);
+    const [lockoutRemaining, setLockoutRemaining] = useState(0);
+
+    // Rate-limiting lockout timer
+    useEffect(() => {
+        if (lockoutRemaining <= 0) return;
+        const timer = setInterval(() => {
+            setLockoutRemaining(prev => Math.max(0, prev - 1));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, [lockoutRemaining]);
 
     useEffect(() => {
         let isMounted = true;
@@ -159,6 +172,11 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     }, [login]);
 
     const doLogin = useCallback(async (pwd: string) => {
+        if (lockoutRemaining > 0) {
+            setError(`⛔ Bloqueado temporalmente. Espera ${lockoutRemaining}s.`);
+            return;
+        }
+
         setLoading(true);
         setError("");
 
@@ -195,11 +213,20 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         // 3. REAL LOGIN
         const success = await login(pwd);
         if (!success) {
-            setError("PIN incorrecto. Intenta de nuevo.");
+            const nextAttempts = failedAttempts + 1;
+            setFailedAttempts(nextAttempts);
+            if (nextAttempts >= 5) {
+                setLockoutRemaining(30);
+                setError("⛔ Demasiados intentos fallidos. Bóveda bloqueada por 30s.");
+            } else {
+                setError(`PIN incorrecto (${nextAttempts}/5). Intenta de nuevo.`);
+            }
             setLoading(false);
             setPin("");
+        } else {
+            setFailedAttempts(0);
         }
-    }, [login]);
+    }, [login, failedAttempts, lockoutRemaining]);
 
     const handleBiometricUnlock = async () => {
         try {
@@ -219,7 +246,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     // Digit press handler for the tactical keypad
     const handleDigitPress = (digit: string) => {
-        if (loading) return;
+        if (loading || lockoutRemaining > 0) return;
         setError("");
 
         if (mode === "onboarding") {
@@ -241,7 +268,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     };
 
     const handleBackspace = () => {
-        if (loading) return;
+        if (loading || lockoutRemaining > 0) return;
         setError("");
         if (mode === "onboarding") {
             if (step === "enter") setPin(prev => prev.slice(0, -1));
@@ -347,7 +374,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                         <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "3px" }}>
                             {mode === "onboarding"
                                 ? (step === "enter" ? "Define tu clave de acceso (mínimo 6 dígitos)" : "Confirma tu PIN maestro")
-                                : "Ingresa tu PIN de seguridad"}
+                                : (lockoutRemaining > 0 ? `Bóveda bloqueada (${lockoutRemaining}s)` : "Ingresa tu PIN de seguridad")}
                         </div>
                     </div>
                 </div>
@@ -385,14 +412,15 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                         <button
                             key={num}
                             onClick={() => handleDigitPress(num)}
-                            disabled={loading}
+                            disabled={loading || lockoutRemaining > 0}
                             className="card-tactical-interactive"
                             style={{
                                 height: "64px", borderRadius: "18px",
                                 display: "flex", alignItems: "center", justifyContent: "center",
                                 fontSize: "1.4rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
                                 color: "#fff", background: "rgba(255,255,255,0.03)",
-                                border: "1px solid rgba(255,255,255,0.08)"
+                                border: "1px solid rgba(255,255,255,0.08)",
+                                opacity: lockoutRemaining > 0 ? 0.4 : 1
                             }}
                         >
                             {num}
@@ -403,7 +431,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     {biometryAvailable && mode === "unlock" ? (
                         <button
                             onClick={handleBiometricUnlock}
-                            disabled={loading}
+                            disabled={loading || lockoutRemaining > 0}
                             className="card-tactical-interactive"
                             style={{
                                 height: "64px", borderRadius: "18px",
@@ -422,14 +450,15 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     {/* Botón 0 */}
                     <button
                         onClick={() => handleDigitPress("0")}
-                        disabled={loading}
+                        disabled={loading || lockoutRemaining > 0}
                         className="card-tactical-interactive"
                         style={{
                             height: "64px", borderRadius: "18px",
                             display: "flex", alignItems: "center", justifyContent: "center",
                             fontSize: "1.4rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace",
                             color: "#fff", background: "rgba(255,255,255,0.03)",
-                            border: "1px solid rgba(255,255,255,0.08)"
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            opacity: lockoutRemaining > 0 ? 0.4 : 1
                         }}
                     >
                         0
@@ -438,7 +467,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     {/* Botón Backspace */}
                     <button
                         onClick={handleBackspace}
-                        disabled={loading}
+                        disabled={loading || lockoutRemaining > 0}
                         className="card-tactical-interactive"
                         style={{
                             height: "64px", borderRadius: "18px",
@@ -452,16 +481,30 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     </button>
                 </div>
 
-                {/* Botón de Siguiente en Onboarding */}
+                {/* Acciones en Onboarding */}
                 {mode === "onboarding" && (
-                    <>
+                    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "8px", marginTop: "6px" }}>
                         <button
                             onClick={handleOnboardingNext}
-                            disabled={loading || currentDigits.length < 6}
+                            disabled={loading || currentDigits.length < 6 || lockoutRemaining > 0}
                             className="btn-tactical-primary"
-                            style={{ width: "100%", padding: "14px", marginTop: "8px" }}
+                            style={{ width: "100%", padding: "14px" }}
                         >
                             {loading ? "Derivando claves..." : (step === "enter" ? "Continuar ➔" : "Confirmar y Entrar")}
+                        </button>
+
+                        <button
+                            onClick={() => setShowCompanionQR(true)}
+                            className="card-tactical-interactive"
+                            style={{
+                                width: "100%", padding: "12px", borderRadius: "14px",
+                                background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                color: "var(--accent-cyan)", fontSize: "12px", fontWeight: 800,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                cursor: "pointer"
+                            }}
+                        >
+                            🔗 Vincular con App Móvil (Escanear QR)
                         </button>
 
                         <button
@@ -469,20 +512,45 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                             style={{
                                 background: "transparent",
                                 border: "none",
-                                color: "var(--accent-cyan)",
-                                fontSize: "12px",
+                                color: "var(--text-muted)",
+                                fontSize: "11px",
                                 fontWeight: 700,
                                 cursor: "pointer",
-                                marginTop: "6px",
                                 textDecoration: "underline",
-                                padding: "6px"
+                                padding: "4px"
                             }}
                         >
-                            ☁️ ¿Tienes una copia o cuenta previa? Restaurar aquí
+                            ☁️ Restaurar copia de seguridad previa
                         </button>
-                    </>
+                    </div>
+                )}
+
+                {/* Acciones en Unlock (Opción de vincular nuevo dispositivo web) */}
+                {mode === "unlock" && (
+                    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+                        <button
+                            onClick={() => setShowCompanionQR(true)}
+                            style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "var(--accent-cyan)",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                                textDecoration: "underline",
+                                padding: "4px"
+                            }}
+                        >
+                            💻 ¿Cambiar cuenta? Vincular con App Móvil
+                        </button>
+                    </div>
                 )}
             </div>
+
+            {/* Modal de Vinculación Companion QR */}
+            {showCompanionQR && (
+                <WebCompanionQRModal onClose={() => setShowCompanionQR(false)} />
+            )}
 
             {/* Modal de Restauración en Onboarding */}
             {showRestoreModal && (

@@ -50,6 +50,7 @@ const NodeLogsModal        = dynamic(() => import("../components/NodeLogsModal")
 const CalculatorScreen     = dynamic(() => import("../components/CalculatorScreen").then(m => ({ default: m.CalculatorScreen })),     { ssr: false, loading: () => <AppLoader /> });
 const SecurityReportModal  = dynamic(() => import("../components/SecurityReportModal").then(m => ({ default: m.SecurityReportModal })),  { ssr: false, loading: () => <AppLoader /> });
 const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreModal").then(m => ({ default: m.BackupRestoreModal })),   { ssr: false, loading: () => <AppLoader /> });
+const WebCompanionLinkModal = dynamic(() => import("../components/WebCompanionLinkModal").then(m => ({ default: m.WebCompanionLinkModal })), { ssr: false, loading: () => <AppLoader /> });
 const SettingsModal        = dynamic(() => import("../components/SettingsModal").then(m => ({ default: m.SettingsModal })),        { ssr: false, loading: () => <AppLoader /> });
 const UpdateModal          = dynamic(() => import("../components/UpdateModal").then(m => ({ default: m.UpdateModal })),          { ssr: false, loading: () => <AppLoader /> });
 const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
@@ -471,6 +472,7 @@ export default function AppRouter() {
                 {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
                 {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
                 {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
+                {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && <WebCompanionLinkModal onClose={goBack} />}
                 {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
                 {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
                 {currentScreen === "globalShield" && <GlobalShieldPanel />}
@@ -527,6 +529,7 @@ export default function AppRouter() {
               {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
               {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
               {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
+              {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && <WebCompanionLinkModal onClose={goBack} />}
               {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
               {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
               {currentScreen === "globalShield" && <GlobalShieldPanel />}

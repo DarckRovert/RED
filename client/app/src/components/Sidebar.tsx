@@ -10,6 +10,7 @@ import StoryViewer from "./stories/StoryViewer";
 import { LiveStreamViewer } from "./LiveStreamViewer";
 import { RED_VERSION, RED_APK_NAME } from "../lib/version";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 
 const AVATAR_COLORS = [
     ["#FF3355","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
@@ -82,6 +83,7 @@ export default function Sidebar() {
     const [newContactAlias, setNewContactAlias] = useState("");
     const [isSubmittingContact, setIsSubmittingContact] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
 
     const filteredConvs = useMemo(() => {
@@ -135,6 +137,7 @@ export default function Sidebar() {
                 { icon: "💳", label: "Pagos & Vouchers P2P", action: "p2pPay" },
                 { icon: "🔐", label: "Bóveda Criptográfica PQC", action: "crypto" },
                 { icon: "⛓️", label: "Explorador Blockchain", action: "explorer" },
+                { icon: "💻", label: "Vincular Dispositivo Web (PC)", action: "webCompanionLink" },
                 { icon: "🖼️", label: "Bóveda Esteganográfica", action: "stegoVault" },
                 { icon: "💾", label: "Respaldos & Restauración", action: "backup" },
             ]
@@ -628,6 +631,16 @@ export default function Sidebar() {
                                     onClick={async () => {
                                         const input = newContactInput.trim();
                                         const alias = newContactAlias.trim();
+
+                                        // Detección Inteligente de Vinculación RED Web Companion
+                                        if (input.startsWith("RED_PAIR:1:")) {
+                                            setAddContactOpen(false);
+                                            setNewContactInput("");
+                                            setNewContactAlias("");
+                                            setWebPairingCode(input);
+                                            return;
+                                        }
+
                                         setIsSubmittingContact(true);
                                         try {
                                             const cleanHash = await addContact(input, alias);
@@ -647,7 +660,7 @@ export default function Sidebar() {
                                     className="btn-tactical-primary"
                                     style={{ flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900 }}
                                 >
-                                    {isSubmittingContact ? "Conectando..." : "⚡ CREAR CHAT"}
+                                    {isSubmittingContact ? "Conectando..." : "⚡ CREAR CHAT O VINCULAR"}
                                 </button>
                             </div>
                         </div>
@@ -657,6 +670,14 @@ export default function Sidebar() {
 
             {/* Global Search Modal */}
             {globalSearchOpen && <GlobalSearchModal onClose={() => setGlobalSearchOpen(false)} />}
+
+            {/* Modal de Confirmación de Vinculación Web Companion */}
+            {webPairingCode && (
+                <WebCompanionPairConfirmationModal
+                    qrData={webPairingCode}
+                    onClose={() => setWebPairingCode(null)}
+                />
+            )}
 
             {/* Story Modals */}
             {storyModal === "creator" && <StoryCreator onClose={() => setStoryModal(null)} />}

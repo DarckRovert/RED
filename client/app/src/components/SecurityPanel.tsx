@@ -8,6 +8,7 @@ import { registerPlugin } from "@capacitor/core";
 import { SystemHealthModal } from "./SystemHealthModal";
 import { SecurityReportModal } from "./SecurityReportModal";
 import { BackupRestoreModal } from "./BackupRestoreModal";
+import { WebCompanionLinkModal } from "./WebCompanionLinkModal";
 import { RED_VERSION_NAME } from "../lib/version";
 
 const RedDisguise = registerPlugin<any>("RedDisguise");
@@ -46,6 +47,7 @@ export default function SecurityPanel() {
     const [healthModalOpen, setHealthModalOpen] = useState(false);
     const [reportModalOpen, setReportModalOpen] = useState(false);
     const [backupModalOpen, setBackupModalOpen] = useState(false);
+    const [companionModalOpen, setCompanionModalOpen] = useState(false);
 
     useEffect(() => {
         const savedPrivacy = localStorage.getItem("red_privacy_screen") === "true";
@@ -239,35 +241,45 @@ export default function SecurityPanel() {
                 <div style={{ maxWidth: "720px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
                     {/* Acciones Rápidas Superiores */}
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
                         <button
                             onClick={() => setHealthModalOpen(true)}
                             className="card-tactical-interactive"
-                            style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "4px" }}
+                            style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "3px" }}
                         >
-                            <span style={{ fontSize: "1.2rem" }}>💚</span>
-                            <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)" }}>Diagnóstico</span>
-                            <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Health & I/O</span>
+                            <span style={{ fontSize: "1.1rem" }}>💚</span>
+                            <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-emerald)" }}>Health</span>
+                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>I/O</span>
                         </button>
 
                         <button
                             onClick={() => setReportModalOpen(true)}
                             className="card-tactical-interactive"
-                            style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "4px" }}
+                            style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "3px" }}
                         >
-                            <span style={{ fontSize: "1.2rem" }}>📋</span>
-                            <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>Auditoría</span>
-                            <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Forense & SHA-256</span>
+                            <span style={{ fontSize: "1.1rem" }}>📋</span>
+                            <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-cyan)" }}>Auditoría</span>
+                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>Forense</span>
                         </button>
 
                         <button
                             onClick={() => setBackupModalOpen(true)}
                             className="card-tactical-interactive"
-                            style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "4px" }}
+                            style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "3px" }}
                         >
-                            <span style={{ fontSize: "1.2rem" }}>💾</span>
-                            <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-amber)" }}>Bóveda</span>
-                            <span style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Respaldo AES-256</span>
+                            <span style={{ fontSize: "1.1rem" }}>💾</span>
+                            <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-amber)" }}>Bóveda</span>
+                            <span style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>Respaldo</span>
+                        </button>
+
+                        <button
+                            onClick={() => setCompanionModalOpen(true)}
+                            className="card-tactical-interactive"
+                            style={{ padding: "10px", display: "flex", flexDirection: "column", gap: "3px", border: "1px solid rgba(0, 229, 255, 0.4)", background: "rgba(0, 229, 255, 0.06)" }}
+                        >
+                            <span style={{ fontSize: "1.1rem" }}>💻</span>
+                            <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-cyan)" }}>Vincular</span>
+                            <span style={{ fontSize: "0.62rem", color: "var(--accent-cyan)" }}>Web PC</span>
                         </button>
                     </div>
 
@@ -488,6 +500,7 @@ export default function SecurityPanel() {
             {reportModalOpen && <SecurityReportModal onClose={() => setReportModalOpen(false)} />}
             {backupModalOpen && <BackupRestoreModal onClose={() => setBackupModalOpen(false)} />}
             {healthModalOpen && <SystemHealthModal onClose={() => setHealthModalOpen(false)} />}
+            {companionModalOpen && <WebCompanionLinkModal onClose={() => setCompanionModalOpen(false)} />}
         </div>
     );
 }

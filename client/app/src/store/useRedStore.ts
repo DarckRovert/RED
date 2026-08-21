@@ -73,7 +73,7 @@ const _processedHandshakes = new Set<string>();
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault';
+export type ScreenView = 'sidebar' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault' | 'webCompanionLink' | 'companionLink';
 
 interface RedStore {
     // 0. User Preferences & UI Customization
@@ -99,6 +99,7 @@ interface RedStore {
     
     // 4. Actions
     login: (password: string) => Promise<boolean>;
+    restoreCompanionVault: (payload: any) => Promise<boolean>;
     initNodeConnection: () => Promise<boolean>;
     fetchData: () => Promise<void>;
     
@@ -202,7 +203,7 @@ const OVERLAY_SCREENS = new Set<ScreenView>([
     'proximitySettings', 'radar', 'contacts', 'settings', 'updater', 'nodemap',
     'compass', 'idVault', 'amber', 'guardian', 'channels', 'crypto',
     'network', 'explorer', 'nearby', 'liveStream', 'status', 'broadcast', 'call',
-    'security', 'groups', 'p2pCompass', 'socialFeed', 'shakePair', 'p2pPay', 'blackout', 'health', 'nodeLogs', 'calculator', 'secReport', 'backup', 'commercialHub', 'hub'
+    'security', 'groups', 'p2pCompass', 'socialFeed', 'shakePair', 'p2pPay', 'blackout', 'health', 'nodeLogs', 'calculator', 'secReport', 'backup', 'commercialHub', 'hub', 'webCompanionLink', 'companionLink'
 ]);
 
 export const useRedStore = create<RedStore>((set, get) => ({
@@ -562,6 +563,36 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 return false;
             } else {
                 // Web Browser Platform (GitHub Pages SPA)
+                const masterPin = typeof window !== 'undefined' ? (localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin")) : null;
+                const panicPin = typeof window !== 'undefined' ? localStorage.getItem("panic_pin") : null;
+                const decoyPin = typeof window !== 'undefined' ? localStorage.getItem("decoy_pin") : null;
+
+                // 1. PROTOCOLO DE PÁNICO (Purga y reinicio seguro)
+                if (panicPin && password === panicPin) {
+                    if (typeof window !== 'undefined') {
+                        localStorage.clear();
+                        sessionStorage.clear();
+                    }
+                    toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
+                    window.location.reload();
+                    return false;
+                }
+
+                // 2. BÓVEDA DE SEÑUELO (Modo encubierto)
+                const isDecoy = Boolean(decoyPin && password === decoyPin);
+                set({ isDecoyMode: isDecoy });
+
+                // 3. VALIDACIÓN ESTRICTA DE PIN MAESTRO
+                if (masterPin && password !== masterPin && !isDecoy) {
+                    console.warn("[RED Web Auth] Acceso denegado: PIN maestro incorrecto.");
+                    return false;
+                }
+
+                // Si no había master_pin guardado aún, lo establecemos con el PIN ingresado
+                if (!masterPin && password && password.length >= 6 && typeof window !== 'undefined') {
+                    localStorage.setItem("master_pin", password);
+                }
+
                 let localHash = typeof window !== 'undefined' ? localStorage.getItem("red_identity_hash") : null;
                 let shortId = typeof window !== 'undefined' ? localStorage.getItem("red_short_id") : null;
                 const savedNick = typeof window !== 'undefined' ? (localStorage.getItem("red_displayName") || localStorage.getItem("user_nickname")) : null;
@@ -633,6 +664,40 @@ export const useRedStore = create<RedStore>((set, get) => ({
             console.error("[RED] Login Error:", e);
             // Do NOT authenticate on error — fail clearly so the user can retry.
             set({ isAuthenticated: false, nodeOnline: false });
+            return false;
+        }
+    },
+    restoreCompanionVault: async (payload: any) => {
+        try {
+            if (!payload || !payload.identity || !payload.identity.identity_hash) {
+                throw new Error("Payload de vinculación inválido");
+            }
+            if (typeof window !== 'undefined') {
+                localStorage.setItem("red_identity_hash", payload.identity.identity_hash);
+                localStorage.setItem("red_short_id", payload.identity.short_id || `red_${payload.identity.identity_hash.slice(0, 8)}`);
+                if (payload.identity.nickname) {
+                    localStorage.setItem("red_displayName", payload.identity.nickname);
+                    localStorage.setItem("user_nickname", payload.identity.nickname);
+                }
+                if (payload.masterPin) {
+                    localStorage.setItem("master_pin", payload.masterPin);
+                }
+                if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
+                    localStorage.setItem("red_web_contacts", JSON.stringify(payload.contacts));
+                }
+                if (Array.isArray(payload.conversations) && payload.conversations.length > 0) {
+                    localStorage.setItem("red_web_conversations", JSON.stringify(payload.conversations));
+                }
+            }
+
+            const pinToUse = payload.masterPin || "123456";
+            await get().login(pinToUse);
+            await get().fetchData();
+            toast.success(`🎉 ¡Dispositivo vinculado con éxito! Bienvenido ${payload.identity.nickname || 'Operador'}`);
+            return true;
+        } catch (err: any) {
+            console.error("[RED] Error restaurando bóveda compañera:", err);
+            toast.error(err?.message || "Error restaurando bóveda vinculada");
             return false;
         }
     },
