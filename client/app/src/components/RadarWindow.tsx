@@ -190,31 +190,36 @@ export default function RadarWindow() {
         return (
             <div className="scanner-viewfinder-overlay">
                 <div style={{
-                    padding: "12px 20px",
-                    borderRadius: "14px",
-                    background: "rgba(4,6,10,0.85)",
-                    border: "1px solid var(--accent-cyan)",
-                    color: "var(--accent-cyan)",
-                    fontWeight: 800,
-                    fontSize: "0.92rem",
-                    letterSpacing: "0.5px",
+                    padding: "14px 20px",
+                    borderRadius: "16px",
+                    background: "rgba(6, 12, 20, 0.92)",
+                    border: "1.5px solid #00E676",
+                    color: "#FFFFFF",
                     textAlign: "center",
-                    boxShadow: "0 4px 20px rgba(0,229,255,0.3)"
+                    boxShadow: "0 4px 25px rgba(0, 230, 118, 0.35)",
+                    maxWidth: "340px",
+                    width: "90%"
                 }}>
-                    📷 APUNTA AL CÓDIGO QR DE UN NODO O PANTALLA WEB
+                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                        <span>🤝</span> ESCÁNER DE CONTACTO P2P
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.75)", marginTop: "4px", lineHeight: 1.3 }}>
+                        Apunta al código QR del perfil o bóveda de otro usuario para iniciar chat cifrado
+                    </div>
                 </div>
 
-                <div className="scanner-target-box">
-                    <div className="scanner-laser-line" />
+                <div className="scanner-target-box" style={{ borderColor: "#00E676", boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 24px rgba(0, 230, 118, 0.45)" }}>
+                    <div className="scanner-laser-line" style={{ background: "linear-gradient(90deg, transparent, #00E676, #00E5FF, transparent)", boxShadow: "0 0 12px #00E676" }} />
                 </div>
 
                 <button
                     onClick={stopScan}
                     className="btn-tactical-primary"
                     style={{
-                        padding: "14px 32px",
+                        padding: "14px 36px",
                         fontSize: "0.95rem",
-                        boxShadow: "0 4px 25px rgba(232,33,58,0.5)"
+                        boxShadow: "0 4px 25px rgba(232,33,58,0.5)",
+                        borderRadius: "var(--radius-md)"
                     }}
                 >
                     ✕ Cancelar Escaneo

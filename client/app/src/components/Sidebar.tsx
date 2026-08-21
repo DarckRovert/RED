@@ -726,14 +726,17 @@ export default function Sidebar() {
                         onClick={e => e.stopPropagation()}
                     >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff" }}>
-                                ➕ Agregar Contacto / Nuevo Chat
+                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span>➕</span>
+                                <span>Agregar Contacto / Nuevo Chat</span>
                             </div>
                             <button onClick={() => setAddContactOpen(false)} className="btn-icon" style={{ width: 32, height: 32 }}>✕</button>
                         </div>
                         <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
-                            Pega el DID Soberano, Hash (64 hex) o Identificador de tu contacto (Web, Móvil o Nodo Malla).
+                            Pega el DID Soberano, Hash (64 hex) o escanea el código QR del perfil de otro usuario para iniciar un canal cifrado.
                         </div>
+
+                        {/* Botón Principal: Escáner QR de Contacto */}
                         <button
                             onClick={() => {
                                 setAddContactOpen(false);
@@ -741,22 +744,47 @@ export default function Sidebar() {
                             }}
                             className="btn-tactical-secondary"
                             style={{
-                                width: "100%", padding: "12px", fontSize: "0.82rem", fontWeight: 800,
-                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                borderColor: "var(--accent-emerald)", color: "var(--accent-emerald)"
+                                width: "100%", padding: "12px 14px", fontSize: "0.85rem", fontWeight: 800,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+                                borderColor: "rgba(0, 230, 118, 0.6)", color: "#00E676",
+                                background: "rgba(0, 230, 118, 0.08)",
+                                borderRadius: "var(--radius-md)"
                             }}
                         >
-                            📷 ABRIR ESCÁNER QR DE CÁMARA / VINCULAR WEB
+                            <span>📷</span>
+                            <span>ESCANEAR QR DE CONTACTO (CÁMARA)</span>
                         </button>
+
+                        {/* Enlace Directo a Vinculación con PC */}
+                        <div
+                            onClick={() => {
+                                setAddContactOpen(false);
+                                navigate("webCompanionLink");
+                            }}
+                            style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                padding: "8px 12px", borderRadius: "8px",
+                                background: "rgba(0, 229, 255, 0.06)", border: "1px dashed rgba(0, 229, 255, 0.3)",
+                                cursor: "pointer", fontSize: "0.76rem", color: "var(--accent-cyan)",
+                                transition: "all 0.2s ease"
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span>💻</span>
+                                <span>¿Quieres vincular tu cuenta con tu PC?</span>
+                            </div>
+                            <span style={{ fontWeight: 800 }}>Vincular Web →</span>
+                        </div>
+
                         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div>
                                 <label style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-secondary)", marginBottom: "4px", display: "block", letterSpacing: "0.5px" }}>
-                                    IDENTIFICADOR / DID / HASH
+                                    O INGRESA DID / CLAVE PÚBLICA MANUALMENTE
                                 </label>
                                 <input
                                     value={newContactInput}
                                     onChange={e => setNewContactInput(e.target.value)}
-                                    placeholder="Ej: did:red:af10... o red_a1b2c3d4"
+                                    placeholder="Ej: did:red:af10... o 3a7f8b9c..."
                                     style={{ width: "100%", fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem", padding: "10px 12px" }}
                                     autoFocus
                                 />

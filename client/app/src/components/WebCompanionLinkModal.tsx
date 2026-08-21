@@ -163,25 +163,27 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
             <div className="scanner-viewfinder-overlay" style={{ zIndex: 100000 }}>
                 {/* Header Superior del Visor */}
                 <div style={{
-                    padding: "12px 20px",
-                    borderRadius: "14px",
-                    background: "rgba(4,6,10,0.88)",
-                    border: "1px solid var(--accent-cyan)",
-                    color: "var(--accent-cyan)",
-                    fontWeight: 900,
-                    fontSize: "0.92rem",
-                    letterSpacing: "0.5px",
+                    padding: "14px 20px",
+                    borderRadius: "16px",
+                    background: "rgba(8, 12, 28, 0.92)",
+                    border: "1.5px solid var(--accent-cyan)",
+                    color: "#FFFFFF",
                     textAlign: "center",
                     boxShadow: "0 4px 25px rgba(0,229,255,0.35)",
                     maxWidth: "340px",
                     width: "90%"
                 }}>
-                    💻 APUNTA AL CÓDIGO QR EN TU PC
+                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan)", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+                        <span>💻</span> VINCULAR SESIÓN RED WEB (PC)
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.75)", marginTop: "4px", lineHeight: 1.3 }}>
+                        Apunta al código QR generado en tu PC (darckrovert.github.io/RED/) para clonar tu cuenta
+                    </div>
                 </div>
 
                 {/* Caja de Visor con Línea Láser Animada */}
-                <div className="scanner-target-box" style={{ width: "260px", height: "260px" }}>
-                    <div className="scanner-laser-line" />
+                <div className="scanner-target-box" style={{ width: "260px", height: "260px", borderColor: "var(--accent-cyan)", boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 24px rgba(0, 229, 255, 0.5)" }}>
+                    <div className="scanner-laser-line" style={{ background: "linear-gradient(90deg, transparent, #00E5FF, #B388FF, transparent)", boxShadow: "0 0 12px #00E5FF" }} />
                 </div>
 
                 {/* Botonera Inferior */}
@@ -195,7 +197,8 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                         style={{
                             width: "100%", padding: "12px",
                             fontSize: "0.85rem", background: "rgba(0,0,0,0.75)",
-                            borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)"
+                            borderColor: "var(--accent-cyan)", color: "var(--accent-cyan)",
+                            borderRadius: "var(--radius-md)"
                         }}
                     >
                         ⌨️ Ingresar código manualmente
@@ -206,7 +209,8 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                         style={{
                             width: "100%", padding: "14px",
                             fontSize: "0.92rem",
-                            boxShadow: "0 4px 25px rgba(232,33,58,0.5)"
+                            boxShadow: "0 4px 25px rgba(232,33,58,0.5)",
+                            borderRadius: "var(--radius-md)"
                         }}
                     >
                         ✕ Cancelar
