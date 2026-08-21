@@ -369,10 +369,14 @@ class MeshRouter {
       let pubKey = '';
       let shortId = this.myIdentityHash.slice(0, 8);
 
+      let bio = '';
+      let phone = '';
       if (typeof window !== 'undefined') {
         displayName = localStorage.getItem('red_displayName') || localStorage.getItem('user_nickname') || 'Operador RED';
         pubKey = localStorage.getItem('red_public_key') || this.myIdentityHash;
         shortId = localStorage.getItem('red_short_id') || this.myIdentityHash.slice(0, 8);
+        bio = localStorage.getItem('red_bio') || localStorage.getItem('user_bio') || '';
+        phone = localStorage.getItem('red_phoneNumber') || localStorage.getItem('user_phone_number') || '';
       }
 
       const payloadObj = {
@@ -382,12 +386,14 @@ class MeshRouter {
           display_name: displayName,
           public_key: pubKey,
           short_id: shortId,
+          bio: bio,
+          phone_number: phone,
           timestamp: Date.now(),
           capabilities: {
             is_gateway: this.hasInternetAccess,
             has_internet: this.hasInternetAccess,
             gateway_metric: this.hasInternetAccess ? 100 : 0,
-            version: '31.1.0'
+            version: '51.1.0'
           }
         }
       };
@@ -717,6 +723,35 @@ class MeshRouter {
             this.bindDeviceToCanonical(packet.sender, peerHash, peerName, peerPk);
             this.updatePeer(peerHash, transportType || 'ble', undefined, peerHash, peerName, peerPk, isGateway, hasInternet);
 
+            // Auto-update contacts cache in localStorage if peer sent real display name
+            if (typeof window !== 'undefined' && peerName && !peerName.startsWith('RED-') && !peerName.startsWith('Operador ')) {
+              try {
+                const cachedConts = JSON.parse(localStorage.getItem('red_web_contacts') || '[]') as any[];
+                const cIdx = cachedConts.findIndex((c: any) =>
+                  c.identity_hash?.toLowerCase() === peerHash.toLowerCase() ||
+                  (peerHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(peerHash.slice(0, 8).toLowerCase()))
+                );
+                if (cIdx >= 0) {
+                  cachedConts[cIdx] = {
+                    ...cachedConts[cIdx],
+                    display_name: peerName,
+                    bio: idData.bio || cachedConts[cIdx].bio,
+                    phone_number: idData.phone_number || cachedConts[cIdx].phone_number,
+                    public_key: peerPk || cachedConts[cIdx].public_key
+                  };
+                } else {
+                  cachedConts.push({
+                    identity_hash: peerHash,
+                    display_name: peerName,
+                    bio: idData.bio,
+                    phone_number: idData.phone_number,
+                    public_key: peerPk
+                  });
+                }
+                localStorage.setItem('red_web_contacts', JSON.stringify(cachedConts));
+              } catch {}
+            }
+
             // Auto-respond to new announcements so neighbor binds us symmetrically
             if (parsed.type === 'IDENTITY_ANNOUNCE' && peerHash !== this.myIdentityHash) {
               this.sendIdentityResponse(peerHash, fromTransportId, transportType).catch(() => {});
@@ -1008,7 +1043,7 @@ class MeshRouter {
     }
   }
 
-  private updatePeer(
+  public updatePeer(
     id: string,
     transport: 'wifi' | 'ble' | 'lora',
     rssi?: number,

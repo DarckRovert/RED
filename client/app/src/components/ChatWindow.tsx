@@ -67,7 +67,12 @@ export default function ChatWindow() {
             )
         )
     );
-    const peerName = peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido");
+    const meshPeer = meshRouter.getPeerByAnyId(peerHash) || (canonicalFromMesh ? meshRouter.getPeerByAnyId(canonicalFromMesh) : undefined);
+    const peerName = (peerContact?.display_name && !peerContact.display_name.startsWith('Operador ') && !peerContact.display_name.startsWith('Nodo '))
+        ? peerContact.display_name
+        : (meshPeer?.name && !meshPeer.name.startsWith('RED-') && !meshPeer.name.startsWith('Operador ') && !meshPeer.name.startsWith('Dispositivo RED')
+            ? meshPeer.name
+            : (peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido")));
 
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");

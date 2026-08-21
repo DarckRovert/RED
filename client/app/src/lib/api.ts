@@ -30,6 +30,7 @@ export interface StatusResponse {
 export interface ConversationItem {
     id: string;
     peer: string;
+    peer_name?: string;
     last_message?: string | { timestamp?: number; msg_type?: string; content?: string; is_mine?: boolean; [key: string]: any; };
     last_timestamp?: number;
     unread_count?: number;

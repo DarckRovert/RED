@@ -63,7 +63,14 @@ export default function Sidebar() {
             (canonical.length >= 8 && c.identity_hash?.startsWith(canonical.substring(0, 8))) ||
             (c.identity_hash?.length >= 8 && canonical.startsWith(c.identity_hash.substring(0, 8)))
         ));
-        return c?.display_name || `${peerHash.substring(0, 8)}…`;
+        if (c?.display_name && !c.display_name.startsWith('Operador ') && !c.display_name.startsWith('Nodo ') && !c.display_name.startsWith('Par Escaneado')) {
+            return c.display_name;
+        }
+        const meshPeer = meshRouter.getPeerByAnyId(peerHash) || (canonical ? meshRouter.getPeerByAnyId(canonical) : undefined);
+        if (meshPeer?.name && !meshPeer.name.startsWith('RED-') && !meshPeer.name.startsWith('Operador ') && !meshPeer.name.startsWith('Dispositivo RED')) {
+            return meshPeer.name;
+        }
+        return c?.display_name || meshPeer?.name || `${peerHash.substring(0, 8)}…`;
     }
 
     const [activeTab, setActiveTab] = useState<"chats" | "contacts">("chats");

@@ -184,6 +184,16 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                         >
                             did:red:{peerHash.substring(0, 16)}...{peerHash.substring(peerHash.length - 8)} 📋
                         </div>
+                        {contact?.bio && (
+                            <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "6px", fontStyle: "italic" }}>
+                                "{contact.bio}"
+                            </div>
+                        )}
+                        {contact?.phone_number && (
+                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                                <span>📱</span> {contact.phone_number}
+                            </div>
+                        )}
                     </div>
 
                     {/* Quick Call Action Buttons */}

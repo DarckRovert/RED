@@ -112,13 +112,14 @@ export const IdentityVaultModal: React.FC = () => {
         if (setProfile) {
             setProfile({
                 nickname: nickname.trim(),
-                phone_number: phoneNumber.trim() || undefined
+                phone_number: phoneNumber.trim() || undefined,
+                bio: bio.trim() || undefined
             });
         }
 
         setIsProfileSaved(true);
         setTimeout(() => setIsProfileSaved(false), 2500);
-        toast.success("✅ Perfil de Operador actualizado");
+        toast.success("✅ Perfil de Operador actualizado y sincronizado");
     };
 
     const handleSaveMedical = () => {

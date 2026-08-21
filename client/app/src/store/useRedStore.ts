@@ -645,14 +645,22 @@ export const useRedStore = create<RedStore>((set, get) => ({
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_displayName', cleanName);
             localStorage.setItem('user_nickname', cleanName);
-            if (phone) localStorage.setItem('red_phoneNumber', phone);
-            if (bio) localStorage.setItem('red_bio', bio);
+            if (phone) {
+                localStorage.setItem('red_phoneNumber', phone);
+                localStorage.setItem('user_phone_number', phone);
+            }
+            if (bio) {
+                localStorage.setItem('red_bio', bio);
+                localStorage.setItem('user_bio', bio);
+            }
             try {
                 import('@capacitor/core').then(({ Capacitor }) => {
                     if (Capacitor.isNativePlatform()) {
                         import('capacitor-secure-storage-plugin').then(({ SecureStoragePlugin }) => {
                             SecureStoragePlugin.set({ key: "red_displayName", value: cleanName }).catch(() => null);
                             SecureStoragePlugin.set({ key: "user_nickname", value: cleanName }).catch(() => null);
+                            if (phone) SecureStoragePlugin.set({ key: "red_phoneNumber", value: phone }).catch(() => null);
+                            if (bio) SecureStoragePlugin.set({ key: "red_bio", value: bio }).catch(() => null);
                         });
                     }
                 });
@@ -674,7 +682,37 @@ export const useRedStore = create<RedStore>((set, get) => ({
                 }
             });
         }
-        RedAPI.setProfile(cleanName).catch(() => {});
+        RedAPI.setProfile(cleanName, bio).catch(() => {});
+
+        // ── BROADCAST PROFILE UPDATE OVER MESH & TO ALL CONTACTS ─────────
+        meshRouter.sendIdentityAnnounce().catch(() => {});
+
+        const myIdentity = get().identity;
+        if (myIdentity?.identity_hash) {
+            const profilePayload = {
+                sender_hash: myIdentity.identity_hash,
+                sender_name: cleanName,
+                nickname: cleanName,
+                display_name: cleanName,
+                phone_number: phone,
+                bio: bio,
+                public_key: myIdentity.public_key || null,
+                timestamp: Date.now()
+            };
+            const payloadJson = JSON.stringify(profilePayload);
+
+            // 1. Broadcast over mesh
+            RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadJson, { msg_type: 'profile_update' }).catch(() => {});
+
+            // 2. Direct message to every registered contact
+            const currentContacts = get().contacts || [];
+            for (const c of currentContacts) {
+                if (c.identity_hash && c.identity_hash !== myIdentity.identity_hash && !c.identity_hash.startsWith('00000000')) {
+                    RedAPI.sendMessage(c.identity_hash, payloadJson, { msg_type: 'profile_update' }).catch(() => {});
+                }
+            }
+            console.log(`[Store] 📡 Profile update broadcasted for ${cleanName} to ${currentContacts.length} contacts.`);
+        }
     },
 
     enableDecoyVault: () => {
@@ -1706,6 +1744,87 @@ export const useRedStore = create<RedStore>((set, get) => ({
             return;
         }
 
+        // ── Real-Time Profile Update Mesh Synchronization (v51.1.0) ────────────
+        if (item.msg_type === 'profile_update') {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item as any;
+                const senderHash = meshRouter.getCanonicalId(parsed.sender_hash || item.sender);
+                const newName = parsed.nickname || parsed.display_name || parsed.sender_name;
+                const newBio = parsed.bio;
+                const newPhone = parsed.phone_number;
+                const newPk = parsed.public_key;
+                const myHash = get().identity?.identity_hash?.toLowerCase();
+
+                if (!senderHash || senderHash === 'me' || senderHash === 'local' || (myHash && senderHash.toLowerCase() === myHash)) {
+                    return;
+                }
+
+                // 1. Update MeshRouter peer registry with the latest identity data
+                meshRouter.bindDeviceToCanonical(item.sender, senderHash, newName, newPk);
+                meshRouter.updatePeer(senderHash, 'ble', undefined, senderHash, newName, newPk);
+
+                // 2. Update Contacts list in Store & LocalStorage
+                const existingContacts = get().contacts || [];
+                const idx = existingContacts.findIndex((c: any) =>
+                    c.identity_hash?.toLowerCase() === senderHash.toLowerCase() ||
+                    (senderHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(senderHash.slice(0, 8).toLowerCase())) ||
+                    (c.identity_hash?.length >= 8 && senderHash.toLowerCase().startsWith(c.identity_hash.slice(0, 8).toLowerCase()))
+                );
+
+                let updatedContacts = [...existingContacts];
+                if (idx >= 0) {
+                    updatedContacts[idx] = {
+                        ...updatedContacts[idx],
+                        display_name: newName || updatedContacts[idx].display_name,
+                        bio: newBio !== undefined ? newBio : updatedContacts[idx].bio,
+                        phone_number: newPhone !== undefined ? newPhone : updatedContacts[idx].phone_number,
+                        public_key: newPk || updatedContacts[idx].public_key,
+                    };
+                } else if (newName) {
+                    updatedContacts.push({
+                        identity_hash: senderHash,
+                        display_name: newName,
+                        bio: newBio,
+                        phone_number: newPhone,
+                        public_key: newPk
+                    });
+                }
+
+                set({ contacts: updatedContacts });
+                RedAPI.setWebStore('red_web_contacts', updatedContacts);
+                if (newName) {
+                    RedAPI.addContact(senderHash, newName, newPk).catch(() => {});
+                }
+
+                // 3. Update Conversation item in Sidebar
+                const currentConvs = get().conversations || [];
+                const cIdx = currentConvs.findIndex(c =>
+                    c && (
+                        c.id === senderHash ||
+                        c.peer === senderHash ||
+                        (senderHash.length >= 8 && c.peer?.startsWith(senderHash.slice(0, 8))) ||
+                        (c.peer?.length >= 8 && senderHash.startsWith(c.peer.slice(0, 8)))
+                    )
+                );
+                if (cIdx >= 0) {
+                    const updatedConvs = [...currentConvs];
+                    updatedConvs[cIdx] = {
+                        ...updatedConvs[cIdx],
+                        peer_name: newName || updatedConvs[cIdx].peer_name,
+                    };
+                    set({ conversations: updatedConvs });
+                    RedAPI.setWebStore('red_web_conversations', updatedConvs);
+                }
+
+                if (newName && !newName.startsWith('Operador ') && !newName.startsWith('Nodo ')) {
+                    toast.info(`👤 ${newName} actualizó su perfil`);
+                }
+            } catch (e) {
+                console.warn('[Profile Update Ingest Error]', e);
+            }
+            return;
+        }
+
         // ── Identity Handshake Protocol (contact_request / contact_response) ─────
         const isHandshakePacket = 
             item.msg_type === 'contact_request' || 
@@ -1736,30 +1855,33 @@ export const useRedStore = create<RedStore>((set, get) => ({
                     existing.display_name.startsWith('Nodo ') ||
                     existing.display_name.startsWith('Par Escaneado') ||
                     existing.display_name === 'Nuevo Par';
-                const finalName = (existing && !isGenericName) ? existing.display_name : senderName;
+                const finalName = (senderName && !senderName.startsWith('Operador ') && !senderName.startsWith('Nodo ')) 
+                    ? senderName 
+                    : ((existing && !isGenericName) ? existing.display_name : senderName);
 
                 const handshakeKey = `${senderHash.toLowerCase()}_${item.msg_type || (parsed.sender_pk ? 'req' : 'res')}`;
                 const alreadyHandshaked = _processedHandshakes.has(handshakeKey);
                 _processedHandshakes.add(handshakeKey);
 
                 // ── IMMEDIATE LOCAL PERSISTENCE (zero-loss guarantee) ─────────────
-                // Write the new P2P contact to localStorage BEFORE the async Rust call.
-                // If HyperOS kills the process during the Rust write, the contact is already
-                // in localStorage and will be merged back into Rust on the next cold boot.
                 try {
                     const cachedConts = JSON.parse(localStorage.getItem('red_web_contacts') || '[]') as any[];
-                    const alreadyCached = cachedConts.some((c: any) =>
+                    const existingIdx = cachedConts.findIndex((c: any) =>
                         c.identity_hash?.toLowerCase().startsWith(senderHash.substring(0, 8).toLowerCase())
                     );
-                    if (!alreadyCached) {
+                    if (existingIdx >= 0) {
+                        cachedConts[existingIdx] = { ...cachedConts[existingIdx], display_name: finalName, public_key: senderPk || cachedConts[existingIdx].public_key };
+                    } else {
                         cachedConts.push({ identity_hash: senderHash, display_name: finalName, public_key: senderPk });
-                        localStorage.setItem('red_web_contacts', JSON.stringify(cachedConts));
                     }
+                    localStorage.setItem('red_web_contacts', JSON.stringify(cachedConts));
                 } catch { /* quota exceeded — not fatal */ }
                 // ─────────────────────────────────────────────────────────────────
                 RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {
                     if (!existing) {
                         set({ contacts: [...existingContacts, { identity_hash: senderHash, display_name: finalName, public_key: senderPk }] });
+                    } else {
+                        set({ contacts: existingContacts.map(c => c.identity_hash === senderHash ? { ...c, display_name: finalName, public_key: senderPk || c.public_key } : c) });
                     }
                 }).finally(() => {
                     if (!alreadyHandshaked) {
