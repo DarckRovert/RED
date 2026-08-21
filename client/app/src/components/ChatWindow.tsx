@@ -198,6 +198,7 @@ export default function ChatWindow() {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const recordTimerRef = useRef<any>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const recordedMimeTypeRef = useRef<string>("audio/webm");
     // Voice preview state
     const [voicePreviewBlob, setVoicePreviewBlob] = useState<Blob | null>(null);
     const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
@@ -273,7 +274,7 @@ export default function ChatWindow() {
             const reader = new FileReader();
             reader.onload = async () => {
                 const b64 = reader.result as string;
-                await sendMessage(b64, { msg_type: "voice", duration_ms: recordSec * 1000 });
+                await sendMessage(b64, { msg_type: "voice", mime_type: recordedMimeTypeRef.current, duration_ms: recordSec * 1000 });
             };
             reader.readAsDataURL(blob);
             toast.success("Nota de voz enviada");
@@ -308,6 +309,7 @@ export default function ChatWindow() {
             if (mimeType) {
                 recorderOptions.mimeType = mimeType;
             }
+            recordedMimeTypeRef.current = mimeType || "audio/webm";
 
             const mr = new MediaRecorder(stream, recorderOptions);
             mediaRecorderRef.current = mr;
@@ -338,7 +340,7 @@ export default function ChatWindow() {
             mr.stop();
             mr.stream.getTracks().forEach(t => t.stop());
             await new Promise(resolve => { mr.onstop = resolve; });
-            const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+            const blob = new Blob(audioChunksRef.current, { type: recordedMimeTypeRef.current });
             if (blob.size > 100) {
                 // Show preview instead of sending directly
                 const url = URL.createObjectURL(blob);
@@ -365,7 +367,7 @@ export default function ChatWindow() {
             const reader = new FileReader();
             reader.onload = async () => {
                 const b64 = reader.result as string;
-                await sendMessage(b64, { msg_type: "voice", duration_ms: dur * 1000 });
+                await sendMessage(b64, { msg_type: "voice", mime_type: recordedMimeTypeRef.current, duration_ms: dur * 1000 });
                 TacticalAudioEngine.playMessageSent();
             };
             reader.readAsDataURL(blob);
