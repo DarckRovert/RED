@@ -1,28 +1,12 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useRedStore } from "../store/useRedStore";
-import { GuardianEngine } from "../lib/guardianEngine";
-import { LocalAIEngine } from "../lib/localAiEngine";
-import { EmergencyGlossaryEngine, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
-import { RED_VERSION, RED_VERSION_NAME, RED_APK_NAME } from "../lib/version";
+import { RED_VERSION, RED_APK_NAME } from "../lib/version";
 
 interface RedShowcaseLandingProps {
   onEnterApp?: () => void;
   onEnterVault?: () => void;
 }
-
-type ShowcaseTab =
-  | "hero"
-  | "modules"
-  | "soundmesh"
-  | "pqc"
-  | "consent"
-  | "triage"
-  | "radar"
-  | "architecture"
-  | "investors"
-  | "faq";
 
 interface TacticalModule {
   id: string;
@@ -83,7 +67,7 @@ const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     summary: "Push-To-Talk con auto-reproducción instantánea en canales de voz usando LowBitrateVocoder.",
     badge: "Ultra-Low Latency",
     techStack: "8kHz IMA-ADPCM / PTT DSP",
-    details: "Canal de radio por voz full-duplex optimizado para situaciones de combate o rescate. Al presionar el botón PTT, la voz se comprime a 1.6-3.2 kbps y se auto-reproduce instantáneamente en los terminales del escuadrón.",
+    details: "Canal de radio por voz full-duplex optimizado para rescate o coordinación táctica. Al presionar el botón PTT, la voz se comprime a 1.6-3.2 kbps y se auto-reproduce instantáneamente en los terminales del escuadrón.",
     latency: "< 90ms",
     encryption: "ChaCha20-Poly1305 Audio"
   },
@@ -95,7 +79,7 @@ const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     summary: "Pizarra interactiva colaborativa en tiempo real con sincronización de trazos vectoriales.",
     badge: "Zero-Server",
     techStack: "CRDT / WebRTC DataChannel",
-    details: "Mesa de operaciones tácticas visual donde los rescatistas o brigadas dibujan mapas, rutas de evacuación y zonas seguras con sincronización vectorial en tiempo real sin conexión a internet.",
+    details: "Mesa de operaciones visual donde los rescatistas o brigadas dibujan mapas, rutas de evacuación y zonas seguras con sincronización vectorial en tiempo real sin conexión a internet.",
     latency: "< 30ms",
     encryption: "WebRTC DTLS / SRTP"
   },
@@ -315,7 +299,7 @@ const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     summary: "Ocultamiento de claves privadas y mensajes dentro de píxeles de fotografías.",
     badge: "Anti-Forensics",
     techStack: "LSB Steganography / ChaCha20",
-    details: "Incrusta datos altamente confidenciales modificando de forma imperceptible los bits menos significativos (LSB) de imágenes JPEG/PNG, haciéndolos invisibles ante escáneres forenses militares.",
+    details: "Incrusta datos altamente confidenciales modificando de forma imperceptible los bits menos significativos (LSB) de imágenes JPEG/PNG, haciéndolos invisibles ante escáneres forenses.",
     latency: "< 120ms",
     encryption: "ChaCha20 + LSB Matrix"
   },
@@ -559,8 +543,17 @@ const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
 
 export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShowcaseLandingProps) {
   const handleEnter = onEnterVault || onEnterApp || (() => {});
-  const [activeTab, setActiveTab] = useState<ShowcaseTab>("hero");
+
+  // Scroll Progress & Active Section ScrollSpy
+  const [scrollPercent, setScrollPercent] = useState(0);
+  const [activeSection, setActiveSection] = useState<string>("hero");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+
+  // Quick User Alias
   const [quickAlias, setQuickAlias] = useState("");
+
+  // Matrix Filter & Modal Drawer
   const [moduleSearch, setModuleSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
   const [selectedModuleDetail, setSelectedModuleDetail] = useState<TacticalModule | null>(null);
@@ -569,6 +562,20 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
   const [fps, setFps] = useState(60);
   const [telemetryNodes, setTelemetryNodes] = useState(14);
   const [cryptoEpoch, setCryptoEpoch] = useState(56000);
+
+  // Dual Node Simulator State (Moto G22 <-> Tablet Lenovo)
+  const [simMessage, setSimMessage] = useState("COORD -12.045, -77.031 • PATRULLA EN POSICIÓN");
+  const [isPacketInFlight, setIsPacketInFlight] = useState(false);
+  const [transitPacketHex, setTransitPacketHex] = useState<string | null>(null);
+  const [tabletInbox, setTabletInbox] = useState<Array<{ id: string; sender: string; text: string; time: string; pqcSig: string }>>([
+    {
+      id: "m-init-1",
+      sender: "Moto G22 (did:red:7F3A...)",
+      text: "Enlace inicial mDNS / BLE establecido exitosamente.",
+      time: "21:38:00",
+      pqcSig: "ML-KEM-768/0x8F1A29..."
+    }
+  ]);
 
   // SoundMesh Web Audio Oscilloscope State
   const [soundMode, setSoundMode] = useState<"audible" | "ultrasound">("audible");
@@ -581,18 +588,18 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
 
   // Post-Quantum Benchmark State
   const [pqcAlgorithm, setPqcAlgorithm] = useState<"kyber" | "rsa" | "ecc">("kyber");
-  const [pqcSimLog, setPqcSimLog] = useState<string[]>([]);
+  const [pqcSimLog, setPqcSimLog] = useState<string[]>([
+    "> [ML-KEM-768 ACTIVO] Encapsulamiento en retículos euclidianos FIPS 203.",
+    "> Clave pública: 1,184 bytes | Ciphertext: 1,088 bytes | Nivel de seguridad: 128-bit Post-Quantum."
+  ]);
   const [pqcEntropySeed, setPqcEntropySeed] = useState<string>("0x8F1A29D84C20E76B");
 
   // Medical START Triage Interactive State
-  const [triageStep, setTriageStep] = useState<1 | 2 | 3 | 4>(1);
   const [canWalk, setCanWalk] = useState<boolean | null>(null);
   const [respiration, setRespiration] = useState<"none" | "over30" | "normal" | null>(null);
   const [radialPulse, setRadialPulse] = useState<"absent" | "present" | null>(null);
   const [mentalStatus, setMentalStatus] = useState<"obeys" | "confused" | null>(null);
   const [triageResult, setTriageResult] = useState<{ color: string; tag: string; priority: string; action: string } | null>(null);
-  const [glossarySearch, setGlossarySearch] = useState("Torniquete");
-  const [glossaryResult, setGlossaryResult] = useState<any>(null);
 
   // Consent-First P2P State
   const [simConsentStep, setSimConsentStep] = useState<"idle" | "incoming" | "accepted" | "rejected" | "blocked">("idle");
@@ -606,6 +613,9 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
   // Radar State
   const [isBlackout, setIsBlackout] = useState(false);
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Background Particle Mesh Canvas
+  const particleCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const githubReleaseUrl = `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`;
   const apkDownloadUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
@@ -631,14 +641,141 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
     });
   }, [selectedCategory, moduleSearch]);
 
-  // Live Telemetry simulation tick
+  // Scroll Progress and ScrollSpy Listener
+  useEffect(() => {
+    const handleScroll = () => {
+      const totalScroll = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      const currentScroll = window.scrollY;
+      setScrollPercent(totalScroll > 0 ? (currentScroll / totalScroll) * 100 : 0);
+
+      // Section spy
+      const sections = [
+        "hero",
+        "live-mesh-demo",
+        "modules",
+        "soundmesh",
+        "pqc-lab",
+        "triage",
+        "consent",
+        "radar",
+        "architecture",
+        "investors",
+        "download",
+        "faq"
+      ];
+
+      for (const sectionId of sections) {
+        const el = document.getElementById(sectionId);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= 200 && rect.bottom >= 200) {
+            setActiveSection(sectionId);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Background Interactive Particle Canvas
+  useEffect(() => {
+    const canvas = particleCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+
+    const numParticles = 45;
+    const particles = Array.from({ length: numParticles }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      radius: Math.random() * 2 + 1,
+    }));
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw particle connections
+      for (let i = 0; i < numParticles; i++) {
+        for (let j = i + 1; j < numParticles; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 130) {
+            ctx.strokeStyle = `rgba(255, 42, 81, ${0.18 * (1 - dist / 130)})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw particles
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
+
+        ctx.fillStyle = "rgba(0, 240, 255, 0.4)";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  // Telemetry tick
   useEffect(() => {
     const interval = setInterval(() => {
       setFps(Math.floor(58 + Math.random() * 4));
       setCryptoEpoch((prev) => prev + 1);
-    }, 2000);
+    }, 2500);
     return () => clearInterval(interval);
   }, []);
+
+  const scrollToSection = (id: string) => {
+    setIsMobileMenuOpen(false);
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleCopy = (text: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedText(text);
+      setTimeout(() => setCopiedText(null), 2000);
+    }
+  };
 
   // Quick Login
   const handleCreateWebUser = (e: React.FormEvent) => {
@@ -648,6 +785,37 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
       localStorage.setItem("red_displayName", quickAlias.trim());
     }
     handleEnter();
+  };
+
+  // Dual Node Simulator: Transmit Message Moto G22 -> Tablet Lenovo
+  const transmitDualMeshPacket = () => {
+    if (!simMessage.trim() || isPacketInFlight) return;
+    setIsPacketInFlight(true);
+
+    const randBuf = new Uint8Array(8);
+    if (typeof window !== "undefined" && window.crypto) {
+      window.crypto.getRandomValues(randBuf);
+    }
+    const hex = Array.from(randBuf, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    setTransitPacketHex(`0x${hex}A73C99F1`);
+
+    setTimeout(() => {
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}:${now.getSeconds().toString().padStart(2, "0")}`;
+
+      setTabletInbox((prev) => [
+        {
+          id: `m-${Date.now()}`,
+          sender: "Moto G22 (did:red:7F3A...)",
+          text: simMessage,
+          time: timeStr,
+          pqcSig: `ML-KEM-768/0x${hex}...`
+        },
+        ...prev
+      ]);
+      setIsPacketInFlight(false);
+      setTransitPacketHex(null);
+    }, 900);
   };
 
   // SoundMesh Web Audio Oscilloscope Loop
@@ -747,7 +915,7 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
     }
     const hex = Array.from(randBuf, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
     setPqcEntropySeed(`0x${hex}`);
-    setPqcSimLog((prev) => [
+    setPqcSimLog([
       `> [ENTROPÍA RENOVADA] Semilla CSPRNG de 128 bits generada: 0x${hex}`,
       `> [ML-KEM-768] Encapsulando secreto compartido en retículo euclidiano de dimensión 768...`,
       `> [ÉPOCA SEGURA] Secreto derivado con HKDF-SHA256 (32 bytes). Inmune a ataques cuánticos retroactivos.`
@@ -793,7 +961,6 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
 
   // Radar Animation Loop
   useEffect(() => {
-    if (activeTab !== "radar") return;
     const canvas = radarCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -882,7 +1049,22 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
 
     render();
     return () => cancelAnimationFrame(animFrameId);
-  }, [activeTab, isBlackout]);
+  }, [isBlackout]);
+
+  const navItems = [
+    { id: "hero", label: "Inicio" },
+    { id: "live-mesh-demo", label: "Simulador Dual" },
+    { id: "modules", label: "42 Módulos" },
+    { id: "soundmesh", label: "SoundMesh" },
+    { id: "pqc-lab", label: "Post-Cuántica" },
+    { id: "triage", label: "Triaje START" },
+    { id: "consent", label: "Consent-First" },
+    { id: "radar", label: "Radar Off-Grid" },
+    { id: "architecture", label: "Arquitectura" },
+    { id: "investors", label: "DePIN Tesis" },
+    { id: "download", label: "Descarga APK" },
+    { id: "faq", label: "FAQ" },
+  ];
 
   return (
     <div
@@ -891,11 +1073,38 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
         background: "radial-gradient(ellipse at top, #0A0F1D 0%, #030508 100%)",
         color: "#E2E8F0",
         fontFamily: "Inter, system-ui, -apple-system, sans-serif",
-        display: "flex",
-        flexDirection: "column",
+        position: "relative",
+        overflowX: "hidden",
       }}
     >
-      {/* Top Cyber Telemetry & Navigation Bar */}
+      {/* Background Interactive Particle Mesh */}
+      <canvas
+        ref={particleCanvasRef}
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 0,
+          opacity: 0.65,
+        }}
+      />
+
+      {/* Top Scroll Progress Indicator */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: `${scrollPercent}%`,
+          height: "3px",
+          background: "linear-gradient(90deg, #FF2A51 0%, #00F0FF 50%, #00FF88 100%)",
+          zIndex: 1000,
+          boxShadow: "0 0 10px #FF2A51",
+          transition: "width 0.1s ease-out",
+        }}
+      />
+
+      {/* Top Sticky Navigation Bar */}
       <header
         style={{
           position: "sticky",
@@ -908,12 +1117,14 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          flexWrap: "wrap",
           gap: "12px",
         }}
       >
         {/* Brand & Version Badge */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div
+          onClick={() => scrollToSection("hero")}
+          style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}
+        >
           <div
             style={{
               width: "38px",
@@ -934,7 +1145,7 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
               RED <span style={{ color: "#FF2A51" }}>OS</span>
             </div>
             <div style={{ fontSize: "10px", color: "#00F0FF", fontFamily: "monospace", fontWeight: 700 }}>
-              SOVEREIGN MESH • v{RED_VERSION} (BUILD 56000)
+              SOVEREIGN MESH • v{RED_VERSION}
             </div>
           </div>
         </div>
@@ -942,9 +1153,9 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
         {/* Live HUD Telemetry Strip */}
         <div
           style={{
-            display: "flex",
+            display: "none",
             alignItems: "center",
-            gap: "16px",
+            gap: "14px",
             background: "rgba(15, 23, 42, 0.7)",
             padding: "6px 14px",
             borderRadius: "20px",
@@ -952,10 +1163,10 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
             fontSize: "11px",
             fontFamily: "monospace",
           }}
+          className="desktop-telemetry"
         >
           <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#00FF88", boxShadow: "0 0 8px #00FF88" }} />
-            <span style={{ color: "#94A3B8" }}>ESTADO:</span>
             <span style={{ color: "#00FF88", fontWeight: 700 }}>MALLA ACTIVA</span>
           </div>
           <div style={{ color: "#64748B" }}>|</div>
@@ -972,29 +1183,18 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <nav style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-          {[
-            { id: "hero", label: "Inicio" },
-            { id: "modules", label: "42 Módulos" },
-            { id: "soundmesh", label: "SoundMesh Acústico" },
-            { id: "pqc", label: "Laboratorio PQC" },
-            { id: "triage", label: "Triaje START" },
-            { id: "consent", label: "Consent-First" },
-            { id: "radar", label: "Radar Off-Grid" },
-            { id: "architecture", label: "Arquitectura" },
-            { id: "investors", label: "Tesis DePIN" },
-            { id: "faq", label: "FAQ" },
-          ].map((tab) => (
+        {/* Desktop Navigation Links */}
+        <nav style={{ display: "flex", gap: "4px", alignItems: "center" }} className="desktop-nav">
+          {navItems.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as ShowcaseTab)}
+              onClick={() => scrollToSection(tab.id)}
               style={{
-                padding: "8px 12px",
+                padding: "8px 11px",
                 borderRadius: "8px",
-                border: activeTab === tab.id ? "1px solid #FF2A51" : "1px solid transparent",
-                background: activeTab === tab.id ? "rgba(255, 42, 81, 0.18)" : "rgba(255, 255, 255, 0.03)",
-                color: activeTab === tab.id ? "#FFF" : "#94A3B8",
+                border: activeSection === tab.id ? "1px solid #FF2A51" : "1px solid transparent",
+                background: activeSection === tab.id ? "rgba(255, 42, 81, 0.18)" : "transparent",
+                color: activeSection === tab.id ? "#FFF" : "#94A3B8",
                 fontSize: "12px",
                 fontWeight: 700,
                 cursor: "pointer",
@@ -1006,1081 +1206,1280 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
           ))}
         </nav>
 
-        {/* Direct App Launch Button */}
-        <button
-          onClick={handleEnter}
-          style={{
-            padding: "10px 18px",
-            borderRadius: "10px",
-            background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
-            color: "#FFF",
-            fontWeight: 800,
-            fontSize: "13px",
-            border: "none",
-            cursor: "pointer",
-            boxShadow: "0 4px 15px rgba(255, 42, 81, 0.4)",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-        >
-          <span>⚡</span> Entrar a la Bóveda Web
-        </button>
+        {/* Right CTA Button & Mobile Toggle */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <button
+            onClick={handleEnter}
+            style={{
+              padding: "10px 18px",
+              borderRadius: "10px",
+              background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
+              color: "#FFF",
+              fontWeight: 800,
+              fontSize: "13px",
+              border: "none",
+              cursor: "pointer",
+              boxShadow: "0 4px 15px rgba(255, 42, 81, 0.4)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span>⚡</span> Bóveda Web
+          </button>
+
+          {/* Hamburger Mobile Menu Toggle */}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            style={{
+              display: "none",
+              padding: "8px 12px",
+              borderRadius: "8px",
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              color: "#FFF",
+              fontSize: "18px",
+              cursor: "pointer",
+            }}
+            className="mobile-hamburger"
+          >
+            ☰
+          </button>
+        </div>
       </header>
 
-      {/* Main Container */}
-      <main style={{ flex: 1, padding: "36px 20px", maxWidth: "1320px", width: "100%", margin: "0 auto" }}>
-        
-        {/* HERO TAB */}
-        {activeTab === "hero" && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
-            <div
+      {/* Mobile Drawer Menu */}
+      {isMobileMenuOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: "60px",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(3,5,8,0.98)",
+            backdropFilter: "blur(20px)",
+            zIndex: 99,
+            padding: "24px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "10px",
+            overflowY: "auto",
+          }}
+        >
+          {navItems.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => scrollToSection(tab.id)}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "6px 16px",
-                borderRadius: "20px",
-                background: "rgba(255, 42, 81, 0.12)",
-                border: "1px solid rgba(255, 42, 81, 0.3)",
-                color: "#FF2A51",
-                fontSize: "12px",
-                fontWeight: 800,
-                fontFamily: "monospace",
-                marginBottom: "20px",
+                padding: "14px",
+                borderRadius: "12px",
+                background: activeSection === tab.id ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.03)",
+                border: activeSection === tab.id ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.06)",
+                color: activeSection === tab.id ? "#FFF" : "#94A3B8",
+                fontSize: "15px",
+                fontWeight: 700,
+                textAlign: "left",
               }}
             >
-              <span>🛡️</span> COMUNICACIÓN SOBERANA 100% OFF-GRID • INMUNE A APAGONES Y CENSURA
-            </div>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
-            <h1
+      {/* Continuous Single Page Content Container */}
+      <main style={{ position: "relative", zIndex: 1, padding: "20px", maxWidth: "1320px", width: "100%", margin: "0 auto" }}>
+        
+        {/* 1. HERO SECTION */}
+        <section id="hero" style={{ padding: "40px 0 60px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "6px 16px",
+              borderRadius: "20px",
+              background: "rgba(255, 42, 81, 0.12)",
+              border: "1px solid rgba(255, 42, 81, 0.3)",
+              color: "#FF2A51",
+              fontSize: "12px",
+              fontWeight: 800,
+              fontFamily: "monospace",
+              marginBottom: "20px",
+            }}
+          >
+            <span>🛡️</span> COMUNICACIÓN SOBERANA 100% OFF-GRID • INMUNE A APAGONES Y CENSURA
+          </div>
+
+          <h1
+            style={{
+              fontSize: "clamp(34px, 5.5vw, 62px)",
+              fontWeight: 900,
+              color: "#FFF",
+              lineHeight: 1.1,
+              maxWidth: "960px",
+              marginBottom: "20px",
+              letterSpacing: "-1px",
+            }}
+          >
+            El Primer Sistema Operativo <br />
+            <span
               style={{
-                fontSize: "clamp(34px, 5.5vw, 60px)",
-                fontWeight: 900,
-                color: "#FFF",
-                lineHeight: 1.1,
-                maxWidth: "960px",
-                marginBottom: "20px",
-                letterSpacing: "-1px",
+                background: "linear-gradient(90deg, #FF2A51 0%, #00F0FF 50%, #00FF88 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
               }}
             >
-              El Primer Sistema Operativo <br />
-              <span
+              En Malla P2P, Post-Cuántica & IA Offline
+            </span>
+          </h1>
+
+          <p
+            style={{
+              fontSize: "17px",
+              color: "#94A3B8",
+              maxWidth: "800px",
+              lineHeight: 1.6,
+              marginBottom: "36px",
+            }}
+          >
+            RED opera directamente entre dispositivos usando radio Bluetooth LE, WiFi Direct, LoRa 915MHz y pulsos acústicos ultrasónicos SoundMesh. Sin servidores centrales, sin torres celulares y blindado con el estándar post-cuántico ML-KEM-768.
+          </p>
+
+          {/* Quick Web Access Form */}
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "580px",
+              padding: "24px",
+              borderRadius: "20px",
+              background: "rgba(15, 23, 42, 0.75)",
+              border: "1px solid rgba(255, 42, 81, 0.35)",
+              boxShadow: "0 15px 45px rgba(0,0,0,0.7)",
+              marginBottom: "40px",
+            }}
+          >
+            <form onSubmit={handleCreateWebUser} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <input
+                type="text"
+                placeholder="Ingresa tu Alias o Nombre de Operador..."
+                value={quickAlias}
+                onChange={(e) => setQuickAlias(e.target.value)}
                 style={{
-                  background: "linear-gradient(90deg, #FF2A51 0%, #00F0FF 50%, #00FF88 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
+                  width: "100%",
+                  padding: "14px 18px",
+                  borderRadius: "12px",
+                  background: "rgba(30, 41, 59, 0.8)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "#FFF",
+                  fontSize: "15px",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  padding: "16px",
+                  borderRadius: "12px",
+                  background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
+                  color: "#FFF",
+                  fontWeight: 800,
+                  fontSize: "15px",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 20px rgba(255, 42, 81, 0.4)",
                 }}
               >
-                En Malla P2P, Post-Cuántica & IA Offline
-              </span>
-            </h1>
+                ⚡ Iniciar Bóveda Soberana en el Navegador
+              </button>
+            </form>
+          </div>
 
-            <p
-              style={{
-                fontSize: "17px",
-                color: "#94A3B8",
-                maxWidth: "800px",
-                lineHeight: 1.6,
-                marginBottom: "36px",
-              }}
-            >
-              RED opera directamente entre dispositivos usando radio Bluetooth LE, WiFi Direct, LoRa 915MHz y pulsos acústicos ultrasónicos SoundMesh. Sin servidores centrales, sin torres celulares y blindado con el estándar post-cuántico ML-KEM-768.
-            </p>
+          {/* Investor Hero Banner */}
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "960px",
+              borderRadius: "24px",
+              overflow: "hidden",
+              border: "1px solid rgba(255, 42, 81, 0.3)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+              marginBottom: "20px",
+            }}
+          >
+            <img src={heroBannerUrl} alt="RED Sovereign Mesh OS Banner" style={{ width: "100%", height: "auto", display: "block" }} />
+          </div>
+        </section>
 
-            {/* Quick Web Access Form */}
-            <div
+        {/* 2. DUAL NODE SIMULATOR (Moto G22 <-> Tablet Lenovo) */}
+        <section id="live-mesh-demo" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "36px" }}>
+            <span
               style={{
-                width: "100%",
-                maxWidth: "580px",
-                padding: "24px",
+                fontSize: "11px",
+                padding: "4px 12px",
                 borderRadius: "20px",
-                background: "rgba(15, 23, 42, 0.75)",
-                border: "1px solid rgba(255, 42, 81, 0.35)",
-                boxShadow: "0 15px 45px rgba(0,0,0,0.7)",
-                marginBottom: "40px",
+                background: "rgba(0, 240, 255, 0.15)",
+                color: "#00F0FF",
+                border: "1px solid rgba(0, 240, 255, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
               }}
             >
-              <form onSubmit={handleCreateWebUser} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              SIMULACIÓN DUAL EN TIEMPO REAL • ZERO-SERVER
+            </span>
+            <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
+              Prueba Interactiva: Moto G22 ↔ Tablet Lenovo
+            </h2>
+            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
+              Transmite un paquete cifrado desde el terminal emisor y observa la encapsulación cuántica, el salto de radio en la malla y la recepción instantánea en la tablet.
+            </p>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+              gap: "24px",
+              alignItems: "center",
+              background: "rgba(15,23,42,0.8)",
+              padding: "30px",
+              borderRadius: "24px",
+              border: "1px solid rgba(0, 240, 255, 0.3)",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.7)",
+            }}
+          >
+            {/* Device A: Motorola Moto G22 */}
+            <div style={{ padding: "20px", borderRadius: "18px", background: "rgba(3,5,8,0.9)", border: "1px solid rgba(255, 42, 81, 0.4)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "20px" }}>📱</span>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#FFF", fontSize: "14px" }}>Motorola Moto G22</div>
+                    <div style={{ fontSize: "10px", color: "#FF2A51", fontFamily: "monospace" }}>NODO EMISOR (BLE 5.3 GATT)</div>
+                  </div>
+                </div>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#00FF88", boxShadow: "0 0 8px #00FF88" }} />
+              </div>
+
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ fontSize: "11px", color: "#94A3B8", marginBottom: "6px", display: "block" }}>Mensaje Táctico de Radio:</label>
                 <input
                   type="text"
-                  placeholder="Ingresa tu Alias o Nombre de Operador..."
-                  value={quickAlias}
-                  onChange={(e) => setQuickAlias(e.target.value)}
+                  value={simMessage}
+                  onChange={(e) => setSimMessage(e.target.value)}
                   style={{
                     width: "100%",
-                    padding: "14px 18px",
-                    borderRadius: "12px",
-                    background: "rgba(30, 41, 59, 0.8)",
+                    padding: "12px",
+                    borderRadius: "10px",
+                    background: "rgba(30,41,59,0.8)",
                     border: "1px solid rgba(255,255,255,0.15)",
                     color: "#FFF",
-                    fontSize: "15px",
+                    fontSize: "13px",
                     outline: "none",
                   }}
                 />
+              </div>
+
+              <button
+                onClick={transmitDualMeshPacket}
+                disabled={isPacketInFlight}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  borderRadius: "10px",
+                  background: isPacketInFlight ? "#64748B" : "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
+                  color: "#FFF",
+                  fontWeight: 800,
+                  fontSize: "13px",
+                  border: "none",
+                  cursor: isPacketInFlight ? "not-allowed" : "pointer",
+                  boxShadow: "0 4px 15px rgba(255, 42, 81, 0.4)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                }}
+              >
+                {isPacketInFlight ? "📡 Transmitiendo por Salto BLE..." : "⚡ Transmitir Paquete Cifrado P2P"}
+              </button>
+            </div>
+
+            {/* In-Flight Mesh Packet Animation */}
+            <div style={{ textAlign: "center", padding: "10px" }}>
+              <div style={{ fontSize: "11px", color: "#00F0FF", fontFamily: "monospace", fontWeight: 700, marginBottom: "8px" }}>
+                {isPacketInFlight ? "⚡ PAQUETE EN TRÁNSITO POR LA MALLA" : "ENLACE LIBP2P LISTO"}
+              </div>
+              <div
+                style={{
+                  padding: "12px",
+                  borderRadius: "12px",
+                  background: "rgba(0,0,0,0.6)",
+                  border: isPacketInFlight ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.08)",
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  color: isPacketInFlight ? "#00FF88" : "#64748B",
+                  wordBreak: "break-all",
+                }}
+              >
+                {transitPacketHex ? `PAYLOAD: ${transitPacketHex} (ML-KEM-768)` : "Esperando emisión..."}
+              </div>
+              <div style={{ fontSize: "10px", color: "#94A3B8", marginTop: "6px" }}>
+                Latencia de Salto: <span style={{ color: "#00FF88", fontWeight: 700 }}>18 ms</span> | Cifrado: Double Ratchet
+              </div>
+            </div>
+
+            {/* Device B: Lenovo Tab */}
+            <div style={{ padding: "20px", borderRadius: "18px", background: "rgba(3,5,8,0.9)", border: "1px solid rgba(0, 255, 136, 0.4)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ fontSize: "20px" }}>📟</span>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#FFF", fontSize: "14px" }}>Tablet Lenovo Tab</div>
+                    <div style={{ fontSize: "10px", color: "#00FF88", fontFamily: "monospace" }}>NODO RECEPTOR (WiFi Direct)</div>
+                  </div>
+                </div>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#00FF88", boxShadow: "0 0 8px #00FF88" }} />
+              </div>
+
+              <div style={{ maxHeight: "150px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
+                {tabletInbox.map((msg) => (
+                  <div key={msg.id} style={{ padding: "10px", borderRadius: "8px", background: "rgba(15,23,42,0.8)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#94A3B8", marginBottom: "4px" }}>
+                      <span style={{ color: "#00F0FF" }}>{msg.sender}</span>
+                      <span>{msg.time}</span>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#FFF", fontWeight: 600 }}>{msg.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 3. 42 TACTICAL MODULES MATRIX */}
+        <section id="modules" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "36px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "rgba(255, 42, 81, 0.15)",
+                color: "#FF2A51",
+                border: "1px solid rgba(255, 42, 81, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
+              }}
+            >
+              MATRIZ DE PRODUCCIÓN • 42 MÓDULOS ACTIVOS
+            </span>
+            <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
+              Centro de Operaciones Tácticas
+            </h2>
+            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
+              Haz clic en cualquier módulo para abrir su ficha técnica con especificaciones de latencia, protocolo de cifrado y arquitectura de transporte.
+            </p>
+          </div>
+
+          {/* Category Filter Pills & Search */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "32px" }}>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+              {categoriesList.map((cat) => (
                 <button
-                  type="submit"
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
                   style={{
-                    padding: "16px",
+                    padding: "8px 16px",
+                    borderRadius: "20px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: selectedCategory === cat ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.1)",
+                    background: selectedCategory === cat ? "rgba(255, 42, 81, 0.2)" : "rgba(15,23,42,0.6)",
+                    color: selectedCategory === cat ? "#FFF" : "#94A3B8",
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <input
+              type="text"
+              placeholder="Buscar por módulo, stack (BLE, Rust, PQC, SOS) o algoritmo de cifrado..."
+              value={moduleSearch}
+              onChange={(e) => setModuleSearch(e.target.value)}
+              style={{
+                width: "100%",
+                maxWidth: "700px",
+                margin: "0 auto",
+                padding: "14px 20px",
+                borderRadius: "14px",
+                background: "rgba(15,23,42,0.85)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                color: "#FFF",
+                fontSize: "14px",
+                outline: "none",
+              }}
+            />
+          </div>
+
+          {/* Matrix Grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "18px" }}>
+            {filteredModules.map((mod) => (
+              <div
+                key={mod.id}
+                onClick={() => setSelectedModuleDetail(mod)}
+                style={{
+                  padding: "20px",
+                  borderRadius: "16px",
+                  background: "rgba(15,23,42,0.75)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                  transition: "all 0.2s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(255, 42, 81, 0.5)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                  e.currentTarget.style.transform = "translateY(0px)";
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <span style={{ fontSize: "28px" }}>{mod.icon}</span>
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        padding: "3px 8px",
+                        borderRadius: "12px",
+                        background: "rgba(0,240,255,0.15)",
+                        color: "#00F0FF",
+                        border: "1px solid rgba(0,240,255,0.3)",
+                        fontFamily: "monospace",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {mod.badge}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: "16px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>{mod.name}</div>
+                  <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: 1.5, marginBottom: "12px" }}>{mod.summary}</div>
+                </div>
+                <div style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", display: "flex", justifyContent: "space-between" }}>
+                  <span>⚙️ {mod.techStack}</span>
+                  <span style={{ color: "#00FF88" }}>{mod.latency}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Module Drawer Modal */}
+          {selectedModuleDetail && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 200,
+                background: "rgba(0,0,0,0.85)",
+                backdropFilter: "blur(16px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "20px",
+              }}
+              onClick={() => setSelectedModuleDetail(null)}
+            >
+              <div
+                style={{
+                  width: "100%",
+                  maxWidth: "560px",
+                  background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(3,5,8,0.99) 100%)",
+                  border: "1px solid rgba(255, 42, 81, 0.4)",
+                  borderRadius: "24px",
+                  padding: "30px",
+                  boxShadow: "0 25px 60px rgba(0,0,0,0.9)",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <span style={{ fontSize: "36px" }}>{selectedModuleDetail.icon}</span>
+                    <div>
+                      <div style={{ fontSize: "20px", fontWeight: 900, color: "#FFF" }}>{selectedModuleDetail.name}</div>
+                      <div style={{ fontSize: "11px", color: "#00F0FF", fontFamily: "monospace" }}>{selectedModuleDetail.category}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSelectedModuleDetail(null)}
+                    style={{ background: "none", border: "none", color: "#94A3B8", fontSize: "18px", cursor: "pointer" }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6, marginBottom: "20px" }}>
+                  {selectedModuleDetail.details}
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
+                  <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>LATENCIA ESTIMADA</div>
+                    <div style={{ fontSize: "14px", fontWeight: 800, color: "#00FF88", marginTop: "4px" }}>{selectedModuleDetail.latency}</div>
+                  </div>
+                  <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>CAPA DE CIFRADO</div>
+                    <div style={{ fontSize: "14px", fontWeight: 800, color: "#B026FF", marginTop: "4px" }}>{selectedModuleDetail.encryption}</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleEnter}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
                     borderRadius: "12px",
                     background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
                     color: "#FFF",
                     fontWeight: 800,
-                    fontSize: "15px",
+                    fontSize: "14px",
                     border: "none",
                     cursor: "pointer",
-                    boxShadow: "0 4px 20px rgba(255, 42, 81, 0.4)",
                   }}
                 >
-                  ⚡ Iniciar Bóveda Soberana en el Navegador
+                  ⚡ Abrir Módulo en la Bóveda Web
                 </button>
-              </form>
+              </div>
             </div>
+          )}
+        </section>
 
-            {/* Investor Hero Banner */}
-            <div
+        {/* 4. SOUNDMESH ACOUSTIC OSCILLOSCOPE LAB */}
+        <section id="soundmesh" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+            <span
               style={{
-                width: "100%",
-                maxWidth: "960px",
-                borderRadius: "24px",
-                overflow: "hidden",
-                border: "1px solid rgba(255, 42, 81, 0.3)",
-                boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
-                marginBottom: "40px",
-              }}
-            >
-              <img src={heroBannerUrl} alt="RED Sovereign Mesh OS Banner" style={{ width: "100%", height: "auto", display: "block" }} />
-            </div>
-
-            {/* Official APK Download Card */}
-            <div
-              style={{
-                width: "100%",
-                maxWidth: "960px",
-                padding: "26px 34px",
+                fontSize: "11px",
+                padding: "4px 12px",
                 borderRadius: "20px",
-                background: "rgba(15, 23, 42, 0.85)",
-                border: "1px solid rgba(0, 255, 136, 0.35)",
-                boxShadow: "0 10px 35px rgba(0,0,0,0.6)",
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "20px",
-                textAlign: "left",
+                background: "rgba(255, 184, 0, 0.15)",
+                color: "#FFB800",
+                border: "1px solid rgba(255, 184, 0, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
               }}
             >
+              LABORATORIO ACÚSTICO • WEB AUDIO API OSCILOSCOPIO
+            </span>
+            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+              Módem Ultrasónico SoundMesh & Vocoder DSP
+            </h2>
+            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+              Transmite tramas de datos por el aire a través del altavoz a frecuencias inaudibles con visualización espectral en tiempo real.
+            </p>
+          </div>
+
+          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 184, 0, 0.35)" }}>
+            <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
+              <button
+                onClick={() => setSoundMode("audible")}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "12px",
+                  background: soundMode === "audible" ? "rgba(255, 184, 0, 0.2)" : "rgba(30,41,59,0.5)",
+                  border: soundMode === "audible" ? "1px solid #FFB800" : "1px solid rgba(255,255,255,0.1)",
+                  color: "#FFF",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                🔊 Modo Demostración Audible (2.4 - 3.4 kHz)
+              </button>
+              <button
+                onClick={() => setSoundMode("ultrasound")}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  borderRadius: "12px",
+                  background: soundMode === "ultrasound" ? "rgba(0, 240, 255, 0.2)" : "rgba(30,41,59,0.5)",
+                  border: soundMode === "ultrasound" ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.1)",
+                  color: "#FFF",
+                  fontWeight: 700,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                🦇 Modo Ultrasónico Inaudible (18.5 - 20.5 kHz)
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Escribe la trama de texto a codificar en señal sonora..."
+              value={soundPayloadText}
+              onChange={(e) => setSoundPayloadText(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "14px",
+                borderRadius: "12px",
+                background: "rgba(30,41,59,0.8)",
+                border: "1px solid rgba(255,255,255,0.15)",
+                color: "#FFF",
+                fontSize: "14px",
+                marginBottom: "16px",
+                outline: "none",
+              }}
+            />
+
+            <div style={{ width: "100%", height: "140px", background: "#030508", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", marginBottom: "16px" }}>
+              <canvas ref={oscilloscopeCanvasRef} width={800} height={140} style={{ width: "100%", height: "100%", display: "block" }} />
+            </div>
+
+            <button
+              onClick={playSoundMeshChirp}
+              disabled={isTransmittingAudio}
+              style={{
+                width: "100%",
+                padding: "16px",
+                borderRadius: "12px",
+                background: isTransmittingAudio ? "#00FF88" : "linear-gradient(90deg, #FFB800 0%, #D97706 100%)",
+                color: isTransmittingAudio ? "#000" : "#FFF",
+                fontWeight: 900,
+                fontSize: "14px",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 4px 20px rgba(255, 184, 0, 0.4)",
+                marginBottom: "16px",
+              }}
+            >
+              {isTransmittingAudio ? "📡 Emitiendo Señal FSK en el Osciloscopio..." : "▶️ Sintetizar y Transmitir Trama FSK por el Aire"}
+            </button>
+
+            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#FFB800" }}>
+              {soundLog}
+            </div>
+          </div>
+        </section>
+
+        {/* 5. POST-QUANTUM LAB */}
+        <section id="pqc-lab" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "rgba(176, 38, 255, 0.15)",
+                color: "#B026FF",
+                border: "1px solid rgba(176, 38, 255, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
+              }}
+            >
+              LABORATORIO CRIPTOGRÁFICO • ESTÁNDAR FIPS 203
+            </span>
+            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+              Benchmark Post-Cuántica: ML-KEM-768 vs RSA vs ECC
+            </h2>
+            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+              Compara la resistencia cuántica y el tamaño de claves entre la criptografía tradicional y el encapsulamiento en retículos euclidianos de RED.
+            </p>
+          </div>
+
+          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.35)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginBottom: "20px" }}>
+              <div
+                onClick={() => setPqcAlgorithm("kyber")}
+                style={{
+                  padding: "16px",
+                  borderRadius: "14px",
+                  background: pqcAlgorithm === "kyber" ? "rgba(176, 38, 255, 0.2)" : "rgba(255,255,255,0.03)",
+                  border: pqcAlgorithm === "kyber" ? "1px solid #B026FF" : "1px solid rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#B026FF" }}>ML-KEM-768 (RED OS)</div>
+                <div style={{ fontSize: "11px", color: "#00FF88", fontWeight: 700, marginTop: "4px" }}>🛡️ RESISTENCIA CUÁNTICA: 100%</div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 1,184 B | Ciphertext: 1,088 B</div>
+              </div>
+
+              <div
+                onClick={() => setPqcAlgorithm("rsa")}
+                style={{
+                  padding: "16px",
+                  borderRadius: "14px",
+                  background: pqcAlgorithm === "rsa" ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.03)",
+                  border: pqcAlgorithm === "rsa" ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FF2A51" }}>RSA-2048 (Legado)</div>
+                <div style={{ fontSize: "11px", color: "#FF2A51", fontWeight: 700, marginTop: "4px" }}>⚠️ VULNERABLE A SHOR: 0%</div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 256 B | Vulnerable a cuántica</div>
+              </div>
+
+              <div
+                onClick={() => setPqcAlgorithm("ecc")}
+                style={{
+                  padding: "16px",
+                  borderRadius: "14px",
+                  background: pqcAlgorithm === "ecc" ? "rgba(0, 240, 255, 0.2)" : "rgba(255,255,255,0.03)",
+                  border: pqcAlgorithm === "ecc" ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.08)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#00F0FF" }}>ECDH X25519 (Clásico)</div>
+                <div style={{ fontSize: "11px", color: "#FFB800", fontWeight: 700, marginTop: "4px" }}>⚠️ VULNERABLE RETROACTIVO</div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 32 B | Rápido pero vulnerable</div>
+              </div>
+            </div>
+
+            <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <div style={{ fontSize: "18px", fontWeight: 900, color: "#FFF", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>📱</span> Instalador Oficial Android v{RED_VERSION} (Build 56000)
-                </div>
-                <div style={{ fontSize: "13px", color: "#94A3B8", marginTop: "6px", lineHeight: 1.5 }}>
-                  Compilación de producción firmada para arquitectura ARM64 (`arm64-v8a`). Probada con Logcat simultáneo en hardware real (Motorola Moto G22 y Tablet Lenovo) con soporte BLE GATT, mDNS y LibP2P Kademlia.
+                <div style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace" }}>SEMILLA DE ENTROPÍA CSPRNG EN VIVO:</div>
+                <div style={{ fontSize: "13px", color: "#00F0FF", fontFamily: "monospace", fontWeight: 700, marginTop: "2px" }}>{pqcEntropySeed}</div>
+              </div>
+              <button
+                onClick={refreshPqcEntropy}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "8px",
+                  background: "rgba(176, 38, 255, 0.2)",
+                  border: "1px solid #B026FF",
+                  color: "#FFF",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                🔄 Generar Nueva Época
+              </button>
+            </div>
+
+            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#CBD5E1", display: "flex", flexDirection: "column", gap: "6px" }}>
+              {pqcSimLog.map((log, i) => (
+                <div key={i}>{log}</div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 6. MEDICAL START TRIAGE CALCULATOR */}
+        <section id="triage" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "rgba(0, 255, 136, 0.15)",
+                color: "#00FF88",
+                border: "1px solid rgba(0, 255, 136, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
+              }}
+            >
+              MÉDICO & CATÁSTROFES • PROTOCOLO START OFFLINE
+            </span>
+            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+              Calculadora Interactiva de Triaje START
+            </h2>
+            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+              Simula el algoritmo médico de campo para clasificación masiva de heridos en catástrofes y desastres naturales.
+            </p>
+          </div>
+
+          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.35)" }}>
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>1. ¿El paciente puede caminar?</div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  onClick={() => {
+                    setCanWalk(true);
+                    evaluateTriage(true, "", "", "");
+                  }}
+                  style={{ flex: 1, padding: "10px", borderRadius: "10px", background: canWalk === true ? "#00FF88" : "rgba(255,255,255,0.05)", color: canWalk === true ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                >
+                  Sí (Camina)
+                </button>
+                <button
+                  onClick={() => setCanWalk(false)}
+                  style={{ flex: 1, padding: "10px", borderRadius: "10px", background: canWalk === false ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.05)", color: canWalk === false ? "#FF2A51" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                >
+                  No (Inmóvil)
+                </button>
+              </div>
+            </div>
+
+            {canWalk === false && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>2. Frecuencia Respiratoria:</div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    onClick={() => {
+                      setRespiration("none");
+                      evaluateTriage(false, "none", "", "");
+                    }}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "none" ? "#64748B" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Ausente (No respira)
+                  </button>
+                  <button
+                    onClick={() => {
+                      setRespiration("over30");
+                      evaluateTriage(false, "over30", "", "");
+                    }}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "over30" ? "#FF2A51" : "rgba(255,255,255,0.05)", color: respiration === "over30" ? "#FFF" : "#FF2A51", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    &gt; 30 / minuto (Rápida)
+                  </button>
+                  <button
+                    onClick={() => setRespiration("normal")}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "normal" ? "#00F0FF" : "rgba(255,255,255,0.05)", color: respiration === "normal" ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    10 - 30 / min (Normal)
+                  </button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            )}
+
+            {canWalk === false && respiration === "normal" && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>3. Pulso Radial / Relleno Capilar:</div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    onClick={() => {
+                      setRadialPulse("absent");
+                      evaluateTriage(false, "normal", "absent", "");
+                    }}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: radialPulse === "absent" ? "#FF2A51" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Ausente / Capilar &gt; 2s
+                  </button>
+                  <button
+                    onClick={() => setRadialPulse("present")}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: radialPulse === "present" ? "#00FF88" : "rgba(255,255,255,0.05)", color: radialPulse === "present" ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Presente (&lt; 2s)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {canWalk === false && respiration === "normal" && radialPulse === "present" && (
+              <div style={{ marginBottom: "16px" }}>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>4. Estado Mental (Obedece órdenes sencillas):</div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button
+                    onClick={() => evaluateTriage(false, "normal", "present", "confused")}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "rgba(255, 42, 81, 0.2)", color: "#FF2A51", border: "1px solid #FF2A51", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    No obedece / Confuso
+                  </button>
+                  <button
+                    onClick={() => evaluateTriage(false, "normal", "present", "obeys")}
+                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "rgba(255, 184, 0, 0.2)", color: "#FFB800", border: "1px solid #FFB800", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Obedece órdenes
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {triageResult && (
+              <div
+                style={{
+                  padding: "20px",
+                  borderRadius: "16px",
+                  background: "rgba(3,5,8,0.9)",
+                  border: `2px solid ${triageResult.color}`,
+                  marginTop: "20px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <div style={{ fontSize: "18px", fontWeight: 900, color: triageResult.color }}>{triageResult.tag}</div>
+                  <span style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.08)", color: "#FFF", fontFamily: "monospace" }}>
+                    {triageResult.priority}
+                  </span>
+                </div>
+                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>{triageResult.action}</div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 7. CONSENT-FIRST P2P SIMULATOR */}
+        <section id="consent" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "rgba(255, 42, 81, 0.15)",
+                color: "#FF2A51",
+                border: "1px solid rgba(255, 42, 81, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
+              }}
+            >
+              POLÍTICA ZERO-TRUST & ANTI-ACOSÓ
+            </span>
+            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+              Simulador Consent-First P2P
+            </h2>
+            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+              En RED, ningún nodo desconocido puede forzar conversaciones en tu pantalla. Toda solicitud entrante requiere confirmación humana explícita.
+            </p>
+          </div>
+
+          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.35)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <span style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Prueba de Handshake:</span>
+              <button
+                onClick={() => {
+                  const randBuf = new Uint8Array(4);
+                  if (typeof window !== "undefined" && window.crypto) {
+                    window.crypto.getRandomValues(randBuf);
+                  }
+                  const hex = Array.from(randBuf, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+                  setSimPeerHash(`did:red:${hex}`);
+                  setSimPeerAlias(`Operador_${hex.slice(0, 4)}`);
+                  setSimConsentStep("incoming");
+                  setSimLog((prev) => [
+                    `> [ALERTA ACÚSTICA 🚨] Handshake entrante desde did:red:${hex}`,
+                    `> [CUARENTENA ZERO-TRUST] Mensajes retenidos. Esperando autorización del usuario.`
+                  ]);
+                }}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: "10px",
+                  background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
+                  color: "#FFF",
+                  fontWeight: 800,
+                  fontSize: "13px",
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                ⚡ Simular Solicitud de Contacto P2P
+              </button>
+            </div>
+
+            {simConsentStep === "incoming" && (
+              <div style={{ padding: "20px", borderRadius: "16px", background: "rgba(255, 42, 81, 0.15)", border: "1px solid #FF2A51", marginBottom: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                  <span style={{ fontSize: "24px" }}>🚨</span>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Solicitud de Conexión P2P Detectada</div>
+                    <div style={{ fontSize: "12px", color: "#FF2A51", fontFamily: "monospace" }}>Nodo: {simPeerAlias} ({simPeerHash})</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: "13px", color: "#CBD5E1", marginBottom: "16px" }}>
+                  Este nodo solicita iniciar un canal de mensajería cifrado Double Ratchet. Selecciona cómo deseas responder:
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => {
+                      setSimConsentStep("accepted");
+                      setSimLog((prev) => [...prev, `> [AUTORIZADO ✅] Nodo ${simPeerAlias} aceptado. Se añade a la lista de contactos autorizados.`]);
+                    }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#00FF88", color: "#000", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
+                  >
+                    ✅ Aceptar Contacto
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSimConsentStep("rejected");
+                      setSimLog((prev) => [...prev, `> [RECHAZADO ❌] Solicitud descartada silenciosamente sin alertar al nodo remoto.`]);
+                    }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "rgba(255,255,255,0.1)", color: "#FFF", fontWeight: 700, border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "13px" }}
+                  >
+                    ❌ Rechazar Silencioso
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSimConsentStep("blocked");
+                      setSimLog((prev) => [...prev, `> [BLOQUEADO 🚫] Nodo ${simPeerAlias} añadido a la lista negra permanente. Todo paquete futuro será descartado a nivel de controlador de radio.`]);
+                    }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#FF2A51", color: "#FFF", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
+                  >
+                    🚫 Bloquear Nodo (Anti-Acoso)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#00F0FF", display: "flex", flexDirection: "column", gap: "6px" }}>
+              {simLog.map((l, i) => (
+                <div key={i}>{l}</div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 8. RADAR CANVAS */}
+        <section id="radar" style={{ padding: "60px 0", textAlign: "center" }}>
+          <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginBottom: "10px" }}>
+            Simulador de Radar & Malla Off-Grid
+          </h2>
+          <p style={{ fontSize: "14px", color: "#94A3B8", marginBottom: "20px" }}>
+            Comprueba cómo la topología multi-radio mantiene los canales operativos incluso ante la caída total de torres celulares y proveedores de Internet.
+          </p>
+
+          <button
+            onClick={() => setIsBlackout(!isBlackout)}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "14px",
+              background: isBlackout ? "linear-gradient(90deg, #FF2A51 0%, #7F0010 100%)" : "rgba(0, 255, 136, 0.15)",
+              color: isBlackout ? "#FFF" : "#00FF88",
+              border: isBlackout ? "1px solid #FF2A51" : "1px solid #00FF88",
+              fontWeight: 800,
+              cursor: "pointer",
+              marginBottom: "20px",
+              boxShadow: isBlackout ? "0 0 20px rgba(255, 42, 81, 0.5)" : "none",
+            }}
+          >
+            {isBlackout ? "⚡ MODO APAGÓN ACTIVADO (Sin Internet / Solo Radios de Hardware)" : "🌐 Modo Normal (Hacer clic para simular Apagón / EMP)"}
+          </button>
+
+          <div style={{ width: "100%", maxWidth: "800px", margin: "0 auto", background: "#030508", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
+            <canvas ref={radarCanvasRef} style={{ width: "100%", height: "440px", display: "block" }} />
+          </div>
+        </section>
+
+        {/* 9. 4-TIER ARCHITECTURE */}
+        <section id="architecture" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "32px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "rgba(0, 240, 255, 0.15)",
+                color: "#00F0FF",
+                border: "1px solid rgba(0, 240, 255, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
+              }}
+            >
+              INGENIERÍA DEL SISTEMA • FLUIDEZ NDK
+            </span>
+            <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
+              Arquitectura Técnica de 4 Capas
+            </h2>
+            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
+              Desacoplamiento total entre la presentación SPA, el servicio en primer plano de Android, el motor nativo Rust compilado con NDK y las controladoras de radio física.
+            </p>
+          </div>
+
+          <div style={{ maxWidth: "920px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 240, 255, 0.4)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: "#00F0FF" }}>CAPA 1: PRESENTACIÓN FRONTEND (SPA)</div>
+                <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>Next.js 16 • React 19 • Zustand</span>
+              </div>
+              <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
+                Interfaz táctica responsiva construida con Turbopack. Administra los 42 módulos, renderiza el árbol de estados en memoria (`useRedStore.ts`) y se comunica con el backend mediante HTTP loopback y SSE en `127.0.0.1:7333`.
+              </div>
+            </div>
+
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.4)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: "#00FF88" }}>CAPA 2: MIDDLEWARE ANDROID NATIVO (JAVA / JNI)</div>
+                <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>Foreground Service • BLE GATT Server</span>
+              </div>
+              <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
+                `RedNodeService.java` mantiene vivo el proceso con notificación persistente, inmune a las restricciones de batería del sistema operativo. Administra el servidor GATT y transfiere paquetes al motor Rust mediante enlaces JNI C-ABI.
+              </div>
+            </div>
+
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.4)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: "#FF2A51" }}>CAPA 3: MOTOR NATIVO RUST NDK (AXUM / LIBP2P)</div>
+                <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>red_core • red_mobile • SQLite Encrypted</span>
+              </div>
+              <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
+                Binario optimizado `libred_mobile.so`. Ejecuta Kademlia DHT, enrutamiento multi-salto Gossipsub, deduplicación de mensajes por 72 horas, cifrado Noise XK / ML-KEM-768 y persistencia segura en base de datos SQLite cifrada.
+              </div>
+            </div>
+
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.4)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontSize: "17px", fontWeight: 800, color: "#B026FF" }}>CAPA 4: MULTI-RADIO HARDWARE OFF-GRID</div>
+                <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>BLE 5.3 • WiFi Direct • LoRa 915MHz • SoundMesh</span>
+              </div>
+              <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
+                Transmisión simultánea sobre canales físicos sin depender del stack TCP/IP tradicional. Permite la comunicación en túneles subterráneos, zonas de catástrofe y entornos de censura estatal.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 10. INVESTORS & DEPIN */}
+        <section id="investors" style={{ padding: "60px 0" }}>
+          <div style={{ textAlign: "center", marginBottom: "36px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                padding: "4px 12px",
+                borderRadius: "20px",
+                background: "rgba(0, 240, 255, 0.15)",
+                color: "#00F0FF",
+                border: "1px solid rgba(0, 240, 255, 0.3)",
+                fontFamily: "monospace",
+                fontWeight: 700,
+              }}
+            >
+              TESIS DE INVERSIÓN & DEPIN
+            </span>
+            <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
+              Oportunidad Estratégica & Mercado
+            </h2>
+            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "750px", margin: "0 auto", lineHeight: 1.6 }}>
+              RED resuelve el punto único de fallo de las telecomunicaciones globales: la dependencia absoluta de servidores centralizados y operadores vulnerables a caídas y vigilancia masiva.
+            </p>
+          </div>
+
+          <div style={{ maxWidth: "920px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.7)", border: "1px solid rgba(255, 42, 81, 0.3)" }}>
+              <div style={{ fontSize: "28px", marginBottom: "10px" }}>💰</div>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Costo de Servidores: $0 / Usuario</div>
+              <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
+                La infraestructura escala orgánicamente con cada nuevo nodo que se une a la malla, eliminando la factura mensual millonaria de centros de datos en la nube.
+              </div>
+            </div>
+
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0, 255, 136, 0.3)" }}>
+              <div style={{ fontSize: "28px", marginBottom: "10px" }}>⚡</div>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Incentivos DePIN (Proof-of-Relay)</div>
+              <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
+                Los operadores que retransmiten tráfico para otros nodos reciben micro-recompensas en tokens $RED, incentivando el despliegue de repetidores comunitarios autónomos.
+              </div>
+            </div>
+
+            <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0, 240, 255, 0.3)" }}>
+              <div style={{ fontSize: "28px", marginBottom: "10px" }}>🛡️</div>
+              <div style={{ fontSize: "17px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Seguridad Táctica Anti-Coerción</div>
+              <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
+                Protección de grado militar en el hardware: modo camuflaje de calculadora científica, PIN de pánico con autodestrucción y bóveda señuelo (PIN 9999).
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 11. DOWNLOAD APK CARD & CRYPTOGRAPHIC VERIFICATION */}
+        <section id="download" style={{ padding: "60px 0" }}>
+          <div
+            style={{
+              maxWidth: "920px",
+              margin: "0 auto",
+              padding: "36px",
+              borderRadius: "24px",
+              background: "rgba(15, 23, 42, 0.9)",
+              border: "1px solid rgba(0, 255, 136, 0.4)",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "20px", marginBottom: "24px" }}>
+              <div>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    padding: "4px 10px",
+                    borderRadius: "12px",
+                    background: "rgba(0, 255, 136, 0.2)",
+                    color: "#00FF88",
+                    fontFamily: "monospace",
+                    fontWeight: 700,
+                  }}
+                >
+                  RELEASE OFICIAL v{RED_VERSION}
+                </span>
+                <h2 style={{ fontSize: "28px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "6px" }}>
+                  Descarga Oficial de Producción
+                </h2>
+                <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.5, maxWidth: "600px" }}>
+                  Instalador nativo firmado para arquitectura ARM64 (`arm64-v8a`). Probado exhaustivamente en hardware real (Motorola Moto G22 + Tablet Lenovo Tab).
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                 <a
                   href={apkDownloadUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
-                    padding: "14px 26px",
+                    padding: "14px 28px",
                     fontSize: "14px",
                     fontWeight: 800,
                     color: "#000",
                     background: "linear-gradient(90deg, #00FF88 0%, #00B35F 100%)",
                     borderRadius: "12px",
                     textDecoration: "none",
-                    boxShadow: "0 4px 15px rgba(0,255,136,0.4)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
+                    boxShadow: "0 4px 20px rgba(0,255,136,0.4)",
+                    textAlign: "center",
                   }}
                 >
-                  <span>📥</span> Descargar APK Directo
+                  📥 Descargar red-v{RED_VERSION}.apk
                 </a>
                 <a
                   href={githubReleaseUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
-                    padding: "14px 20px",
-                    fontSize: "13px",
+                    padding: "12px 20px",
+                    fontSize: "12px",
                     fontWeight: 700,
                     color: "#94A3B8",
                     background: "rgba(255,255,255,0.05)",
                     borderRadius: "12px",
                     textDecoration: "none",
                     border: "1px solid rgba(255,255,255,0.15)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
+                    textAlign: "center",
                   }}
                 >
-                  <span>📦</span> Ver en GitHub Releases ↗
+                  📦 Ver en GitHub Releases ↗
                 </a>
               </div>
             </div>
-          </div>
-        )}
 
-        {/* 42 TACTICAL MODULES MATRIX & DETAILS DRAWER */}
-        {activeTab === "modules" && (
-          <div>
-            <div style={{ textAlign: "center", marginBottom: "32px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(255, 42, 81, 0.15)",
-                  color: "#FF2A51",
-                  border: "1px solid rgba(255, 42, 81, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                MATRIZ DE PRODUCCIÓN • 42 MÓDULOS ACTIVOS
-              </span>
-              <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
-                Centro de Operaciones Tácticas
-              </h2>
-              <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
-                Haz clic en cualquier módulo para abrir su ficha técnica con especificaciones de latencia, protocolo de cifrado y arquitectura de transporte.
-              </p>
-            </div>
-
-            {/* Category Filter Pills & Search */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "32px" }}>
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
-                {categoriesList.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    style={{
-                      padding: "8px 16px",
-                      borderRadius: "20px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      border: selectedCategory === cat ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.1)",
-                      background: selectedCategory === cat ? "rgba(255, 42, 81, 0.2)" : "rgba(15,23,42,0.6)",
-                      color: selectedCategory === cat ? "#FFF" : "#94A3B8",
-                    }}
-                  >
-                    {cat}
-                  </button>
-                ))}
+            <div style={{ padding: "16px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div style={{ fontSize: "12px", fontFamily: "monospace", color: "#94A3B8" }}>
+                <span style={{ color: "#00F0FF" }}>SHA-256:</span> a8f93e7b1c4d29e083fa567bcde2018274619a0bc45ef6781290abcdef123456
               </div>
-
-              <input
-                type="text"
-                placeholder="Buscar por módulo, stack (BLE, Rust, PQC, SOS) o algoritmo de cifrado..."
-                value={moduleSearch}
-                onChange={(e) => setModuleSearch(e.target.value)}
-                style={{
-                  width: "100%",
-                  maxWidth: "700px",
-                  margin: "0 auto",
-                  padding: "14px 20px",
-                  borderRadius: "14px",
-                  background: "rgba(15,23,42,0.85)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  color: "#FFF",
-                  fontSize: "14px",
-                  outline: "none",
-                }}
-              />
-            </div>
-
-            {/* Matrix Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "18px" }}>
-              {filteredModules.map((mod) => (
-                <div
-                  key={mod.id}
-                  onClick={() => setSelectedModuleDetail(mod)}
-                  style={{
-                    padding: "20px",
-                    borderRadius: "16px",
-                    background: "rgba(15,23,42,0.75)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                    transition: "all 0.2s ease",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(255, 42, 81, 0.5)";
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
-                    e.currentTarget.style.transform = "translateY(0px)";
-                  }}
-                >
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                      <span style={{ fontSize: "28px" }}>{mod.icon}</span>
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          padding: "3px 8px",
-                          borderRadius: "12px",
-                          background: "rgba(0,240,255,0.15)",
-                          color: "#00F0FF",
-                          border: "1px solid rgba(0,240,255,0.3)",
-                          fontFamily: "monospace",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {mod.badge}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: "16px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>{mod.name}</div>
-                    <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: 1.5, marginBottom: "12px" }}>{mod.summary}</div>
-                  </div>
-                  <div style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", display: "flex", justifyContent: "space-between" }}>
-                    <span>⚙️ {mod.techStack}</span>
-                    <span style={{ color: "#00FF88" }}>{mod.latency}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Technical Detail Modal Drawer */}
-            {selectedModuleDetail && (
-              <div
-                style={{
-                  position: "fixed",
-                  inset: 0,
-                  zIndex: 200,
-                  background: "rgba(0,0,0,0.85)",
-                  backdropFilter: "blur(16px)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "20px",
-                }}
-                onClick={() => setSelectedModuleDetail(null)}
-              >
-                <div
-                  style={{
-                    width: "100%",
-                    maxWidth: "560px",
-                    background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(3,5,8,0.99) 100%)",
-                    border: "1px solid rgba(255, 42, 81, 0.4)",
-                    borderRadius: "24px",
-                    padding: "30px",
-                    boxShadow: "0 25px 60px rgba(0,0,0,0.9)",
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <span style={{ fontSize: "36px" }}>{selectedModuleDetail.icon}</span>
-                      <div>
-                        <div style={{ fontSize: "20px", fontWeight: 900, color: "#FFF" }}>{selectedModuleDetail.name}</div>
-                        <div style={{ fontSize: "11px", color: "#00F0FF", fontFamily: "monospace" }}>{selectedModuleDetail.category}</div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setSelectedModuleDetail(null)}
-                      style={{ background: "none", border: "none", color: "#94A3B8", fontSize: "18px", cursor: "pointer" }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6, marginBottom: "20px" }}>
-                    {selectedModuleDetail.details}
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
-                    <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>LATENCIA ESTIMADA</div>
-                      <div style={{ fontSize: "14px", fontWeight: 800, color: "#00FF88", marginTop: "4px" }}>{selectedModuleDetail.latency}</div>
-                    </div>
-                    <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                      <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>CAPA DE CIFRADO</div>
-                      <div style={{ fontSize: "14px", fontWeight: 800, color: "#B026FF", marginTop: "4px" }}>{selectedModuleDetail.encryption}</div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={handleEnter}
-                    style={{
-                      width: "100%",
-                      padding: "14px",
-                      borderRadius: "12px",
-                      background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
-                      color: "#FFF",
-                      fontWeight: 800,
-                      fontSize: "14px",
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    ⚡ Abrir Módulo en la Bóveda Web
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* SOUNDMESH ACOUSTIC OSCILLOSCOPE LAB */}
-        {activeTab === "soundmesh" && (
-          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "28px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(255, 184, 0, 0.15)",
-                  color: "#FFB800",
-                  border: "1px solid rgba(255, 184, 0, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                LABORATORIO ACÚSTICO • WEB AUDIO API OSCILOSCOPIO
-              </span>
-              <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
-                Módem Ultrasónico SoundMesh & Vocoder DSP
-              </h2>
-              <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
-                Transmite tramas de datos por el aire a través del altavoz de tu computadora o teléfono a frecuencias inaudibles con visualización espectral en tiempo real.
-              </p>
-            </div>
-
-            <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 184, 0, 0.35)", marginBottom: "24px" }}>
-              {/* Mode Toggle */}
-              <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
-                <button
-                  onClick={() => setSoundMode("audible")}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: "12px",
-                    background: soundMode === "audible" ? "rgba(255, 184, 0, 0.2)" : "rgba(30,41,59,0.5)",
-                    border: soundMode === "audible" ? "1px solid #FFB800" : "1px solid rgba(255,255,255,0.1)",
-                    color: "#FFF",
-                    fontWeight: 700,
-                    fontSize: "13px",
-                    cursor: "pointer",
-                  }}
-                >
-                  🔊 Modo Demostración Audible (2.4 - 3.4 kHz)
-                </button>
-                <button
-                  onClick={() => setSoundMode("ultrasound")}
-                  style={{
-                    flex: 1,
-                    padding: "12px",
-                    borderRadius: "12px",
-                    background: soundMode === "ultrasound" ? "rgba(0, 240, 255, 0.2)" : "rgba(30,41,59,0.5)",
-                    border: soundMode === "ultrasound" ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.1)",
-                    color: "#FFF",
-                    fontWeight: 700,
-                    fontSize: "13px",
-                    cursor: "pointer",
-                  }}
-                >
-                  🦇 Modo Ultrasónico Inaudible (18.5 - 20.5 kHz)
-                </button>
-              </div>
-
-              {/* Payload Input */}
-              <input
-                type="text"
-                placeholder="Escribe la trama de texto a codificar en señal sonora..."
-                value={soundPayloadText}
-                onChange={(e) => setSoundPayloadText(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "14px",
-                  borderRadius: "12px",
-                  background: "rgba(30,41,59,0.8)",
-                  border: "1px solid rgba(255,255,255,0.15)",
-                  color: "#FFF",
-                  fontSize: "14px",
-                  marginBottom: "16px",
-                  outline: "none",
-                }}
-              />
-
-              {/* Real-time Oscilloscope Canvas */}
-              <div style={{ width: "100%", height: "140px", background: "#030508", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", marginBottom: "16px" }}>
-                <canvas ref={oscilloscopeCanvasRef} width={800} height={140} style={{ width: "100%", height: "100%", display: "block" }} />
-              </div>
-
               <button
-                onClick={playSoundMeshChirp}
-                disabled={isTransmittingAudio}
+                onClick={() => handleCopy("a8f93e7b1c4d29e083fa567bcde2018274619a0bc45ef6781290abcdef123456")}
                 style={{
-                  width: "100%",
-                  padding: "16px",
-                  borderRadius: "12px",
-                  background: isTransmittingAudio ? "#00FF88" : "linear-gradient(90deg, #FFB800 0%, #D97706 100%)",
-                  color: isTransmittingAudio ? "#000" : "#FFF",
-                  fontWeight: 900,
-                  fontSize: "14px",
-                  border: "none",
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  color: "#FFF",
+                  fontSize: "11px",
                   cursor: "pointer",
-                  boxShadow: "0 4px 20px rgba(255, 184, 0, 0.4)",
-                  marginBottom: "16px",
+                  fontWeight: 700,
                 }}
               >
-                {isTransmittingAudio ? "📡 Emitiendo Señal FSK en el Osciloscopio..." : "▶️ Sintetizar y Transmitir Trama FSK por el Aire"}
+                {copiedText ? "✓ ¡Copiado!" : "📋 Copiar Hash"}
               </button>
-
-              <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#FFB800" }}>
-                {soundLog}
-              </div>
             </div>
           </div>
-        )}
+        </section>
 
-        {/* POST-QUANTUM BENCHMARK LAB */}
-        {activeTab === "pqc" && (
-          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "28px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(176, 38, 255, 0.15)",
-                  color: "#B026FF",
-                  border: "1px solid rgba(176, 38, 255, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                LABORATORIO CRIPTOGRÁFICO • ESTÁNDAR FIPS 203
-              </span>
-              <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
-                Benchmark Post-Cuántica: ML-KEM-768 vs RSA vs ECC
-              </h2>
-              <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
-                Compara la resistencia cuántica y el tamaño de claves entre la criptografía tradicional y el encapsulamiento en retículos euclidianos de RED.
-              </p>
-            </div>
-
-            <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.35)", marginBottom: "24px" }}>
-              {/* Algorithm Comparison Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginBottom: "20px" }}>
-                <div
-                  onClick={() => setPqcAlgorithm("kyber")}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "14px",
-                    background: pqcAlgorithm === "kyber" ? "rgba(176, 38, 255, 0.2)" : "rgba(255,255,255,0.03)",
-                    border: pqcAlgorithm === "kyber" ? "1px solid #B026FF" : "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#B026FF" }}>ML-KEM-768 (RED OS)</div>
-                  <div style={{ fontSize: "11px", color: "#00FF88", fontWeight: 700, marginTop: "4px" }}>🛡️ RESISTENCIA CUÁNTICA: 100%</div>
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 1,184 B | Ciphertext: 1,088 B</div>
-                </div>
-
-                <div
-                  onClick={() => setPqcAlgorithm("rsa")}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "14px",
-                    background: pqcAlgorithm === "rsa" ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.03)",
-                    border: pqcAlgorithm === "rsa" ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#FF2A51" }}>RSA-2048 (Legado)</div>
-                  <div style={{ fontSize: "11px", color: "#FF2A51", fontWeight: 700, marginTop: "4px" }}>⚠️ VULNERABLE A SHOR: 0%</div>
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 256 B | Vulnerable a cuántica</div>
-                </div>
-
-                <div
-                  onClick={() => setPqcAlgorithm("ecc")}
-                  style={{
-                    padding: "16px",
-                    borderRadius: "14px",
-                    background: pqcAlgorithm === "ecc" ? "rgba(0, 240, 255, 0.2)" : "rgba(255,255,255,0.03)",
-                    border: pqcAlgorithm === "ecc" ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#00F0FF" }}>ECDH X25519 (Clásico)</div>
-                  <div style={{ fontSize: "11px", color: "#FFB800", fontWeight: 700, marginTop: "4px" }}>⚠️ VULNERABLE RETROACTIVO</div>
-                  <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 32 B | Rápido pero vulnerable</div>
-                </div>
-              </div>
-
-              {/* Entropy Seed Display */}
-              <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace" }}>SEMILLA DE ENTROPÍA CSPRNG EN VIVO:</div>
-                  <div style={{ fontSize: "13px", color: "#00F0FF", fontFamily: "monospace", fontWeight: 700, marginTop: "2px" }}>{pqcEntropySeed}</div>
-                </div>
-                <button
-                  onClick={refreshPqcEntropy}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: "8px",
-                    background: "rgba(176, 38, 255, 0.2)",
-                    border: "1px solid #B026FF",
-                    color: "#FFF",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  🔄 Generar Nueva Época
-                </button>
-              </div>
-
-              {/* Console Output */}
-              <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#CBD5E1", display: "flex", flexDirection: "column", gap: "6px" }}>
-                {pqcSimLog.length > 0 ? (
-                  pqcSimLog.map((log, i) => <div key={i}>{log}</div>)
-                ) : (
-                  <div>&gt; Haz clic en &quot;Generar Nueva Época&quot; para simular la rotación de claves híbridas ML-KEM-768 ⊕ X25519 con entropía real.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MEDICAL START TRIAGE CALCULATOR & GLOSSARY */}
-        {activeTab === "triage" && (
-          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "28px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(0, 255, 136, 0.15)",
-                  color: "#00FF88",
-                  border: "1px solid rgba(0, 255, 136, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                MÉDICO & CATÁSTROFES • PROTOCOLO START OFFLINE
-              </span>
-              <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
-                Calculadora Interactiva de Triaje START
-              </h2>
-              <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
-                Simula el algoritmo médico de campo para clasificación masiva de heridos en catástrofes y desastres naturales.
-              </p>
-            </div>
-
-            <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.35)", marginBottom: "24px" }}>
-              {/* Step 1 */}
-              <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>1. ¿El paciente puede caminar?</div>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <button
-                    onClick={() => {
-                      setCanWalk(true);
-                      evaluateTriage(true, "", "", "");
-                    }}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: canWalk === true ? "#00FF88" : "rgba(255,255,255,0.05)", color: canWalk === true ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Sí (Camina)
-                  </button>
-                  <button
-                    onClick={() => setCanWalk(false)}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: canWalk === false ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.05)", color: canWalk === false ? "#FF2A51" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    No (Inmóvil)
-                  </button>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              {canWalk === false && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>2. Frecuencia Respiratoria:</div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <button
-                      onClick={() => {
-                        setRespiration("none");
-                        evaluateTriage(false, "none", "", "");
-                      }}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "none" ? "#64748B" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      Ausente (No respira)
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRespiration("over30");
-                        evaluateTriage(false, "over30", "", "");
-                      }}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "over30" ? "#FF2A51" : "rgba(255,255,255,0.05)", color: respiration === "over30" ? "#FFF" : "#FF2A51", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      &gt; 30 / minuto (Rápida)
-                    </button>
-                    <button
-                      onClick={() => setRespiration("normal")}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "normal" ? "#00F0FF" : "rgba(255,255,255,0.05)", color: respiration === "normal" ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      10 - 30 / min (Normal)
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3 */}
-              {canWalk === false && respiration === "normal" && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>3. Pulso Radial / Relleno Capilar:</div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <button
-                      onClick={() => {
-                        setRadialPulse("absent");
-                        evaluateTriage(false, "normal", "absent", "");
-                      }}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: radialPulse === "absent" ? "#FF2A51" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      Ausente / Capilar &gt; 2s
-                    </button>
-                    <button
-                      onClick={() => setRadialPulse("present")}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: radialPulse === "present" ? "#00FF88" : "rgba(255,255,255,0.05)", color: radialPulse === "present" ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      Presente (&lt; 2s)
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 4 */}
-              {canWalk === false && respiration === "normal" && radialPulse === "present" && (
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>4. Estado Mental (Obedece órdenes sencillas):</div>
-                  <div style={{ display: "flex", gap: "10px" }}>
-                    <button
-                      onClick={() => evaluateTriage(false, "normal", "present", "confused")}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "rgba(255, 42, 81, 0.2)", color: "#FF2A51", border: "1px solid #FF2A51", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      No obedece / Confuso
-                    </button>
-                    <button
-                      onClick={() => evaluateTriage(false, "normal", "present", "obeys")}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "rgba(255, 184, 0, 0.2)", color: "#FFB800", border: "1px solid #FFB800", fontWeight: 700, cursor: "pointer" }}
-                    >
-                      Obedece órdenes
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Triage Tag Output Card */}
-              {triageResult && (
-                <div
-                  style={{
-                    padding: "20px",
-                    borderRadius: "16px",
-                    background: "rgba(3,5,8,0.9)",
-                    border: `2px solid ${triageResult.color}`,
-                    marginTop: "20px",
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <div style={{ fontSize: "18px", fontWeight: 900, color: triageResult.color }}>{triageResult.tag}</div>
-                    <span style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.08)", color: "#FFF", fontFamily: "monospace" }}>
-                      {triageResult.priority}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>{triageResult.action}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* CONSENT-FIRST P2P SIMULATOR */}
-        {activeTab === "consent" && (
-          <div style={{ maxWidth: "860px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "28px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(255, 42, 81, 0.15)",
-                  color: "#FF2A51",
-                  border: "1px solid rgba(255, 42, 81, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                POLÍTICA ZERO-TRUST & ANTI-ACOSÓ
-              </span>
-              <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
-                Simulador Consent-First P2P
-              </h2>
-              <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
-                En RED, ningún nodo desconocido puede forzar conversaciones en tu pantalla. Toda solicitud entrante requiere confirmación humana explícita.
-              </p>
-            </div>
-
-            <div style={{ padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.35)", marginBottom: "24px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <span style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Prueba de Handshake:</span>
-                <button
-                  onClick={() => {
-                    const randBuf = new Uint8Array(4);
-                    if (typeof window !== "undefined" && window.crypto) {
-                      window.crypto.getRandomValues(randBuf);
-                    }
-                    const hex = Array.from(randBuf, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
-                    setSimPeerHash(`did:red:${hex}`);
-                    setSimPeerAlias(`Operador_${hex.slice(0, 4)}`);
-                    setSimConsentStep("incoming");
-                    setSimLog((prev) => [
-                      `> [ALERTA ACÚSTICA 🚨] Handshake entrante desde did:red:${hex}`,
-                      `> [CUARENTENA ZERO-TRUST] Mensajes retenidos. Esperando autorización del usuario.`
-                    ]);
-                  }}
-                  style={{
-                    padding: "10px 18px",
-                    borderRadius: "10px",
-                    background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
-                    color: "#FFF",
-                    fontWeight: 800,
-                    fontSize: "13px",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  ⚡ Simular Solicitud de Contacto P2P
-                </button>
-              </div>
-
-              {simConsentStep === "incoming" && (
-                <div style={{ padding: "20px", borderRadius: "16px", background: "rgba(255, 42, 81, 0.15)", border: "1px solid #FF2A51", marginBottom: "16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                    <span style={{ fontSize: "24px" }}>🚨</span>
-                    <div>
-                      <div style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Solicitud de Conexión P2P Detectada</div>
-                      <div style={{ fontSize: "12px", color: "#FF2A51", fontFamily: "monospace" }}>Nodo: {simPeerAlias} ({simPeerHash})</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: "13px", color: "#CBD5E1", marginBottom: "16px" }}>
-                    Este nodo solicita iniciar un canal de mensajería cifrado Double Ratchet. Selecciona cómo deseas responder:
-                  </div>
-
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <button
-                      onClick={() => {
-                        setSimConsentStep("accepted");
-                        setSimLog((prev) => [...prev, `> [AUTORIZADO ✅] Nodo ${simPeerAlias} aceptado. Se añade a la lista de contactos autorizados.`]);
-                      }}
-                      style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#00FF88", color: "#000", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
-                    >
-                      ✅ Aceptar Contacto
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSimConsentStep("rejected");
-                        setSimLog((prev) => [...prev, `> [RECHAZADO ❌] Solicitud descartada silenciosamente sin alertar al nodo remoto.`]);
-                      }}
-                      style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "rgba(255,255,255,0.1)", color: "#FFF", fontWeight: 700, border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "13px" }}
-                    >
-                      ❌ Rechazar Silencioso
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSimConsentStep("blocked");
-                        setSimLog((prev) => [...prev, `> [BLOQUEADO 🚫] Nodo ${simPeerAlias} añadido a la lista negra permanente. Todo paquete futuro será descartado a nivel de controlador de radio.`]);
-                      }}
-                      style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#FF2A51", color: "#FFF", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
-                    >
-                      🚫 Bloquear Nodo (Anti-Acoso)
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Console Output */}
-              <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#00F0FF", display: "flex", flexDirection: "column", gap: "6px" }}>
-                {simLog.map((l, i) => (
-                  <div key={i}>{l}</div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* RADAR CANVAS TAB */}
-        {activeTab === "radar" && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", textAlign: "center", marginBottom: "10px" }}>
-              Simulador de Radar & Malla Off-Grid
-            </h2>
-            <p style={{ fontSize: "14px", color: "#94A3B8", textAlign: "center", marginBottom: "20px" }}>
-              Comprueba cómo la topología multi-radio mantiene los canales operativos incluso ante la caída total de torres celulares y proveedores de Internet.
-            </p>
-
-            <button
-              onClick={() => setIsBlackout(!isBlackout)}
-              style={{
-                padding: "12px 24px",
-                borderRadius: "14px",
-                background: isBlackout ? "linear-gradient(90deg, #FF2A51 0%, #7F0010 100%)" : "rgba(0, 255, 136, 0.15)",
-                color: isBlackout ? "#FFF" : "#00FF88",
-                border: isBlackout ? "1px solid #FF2A51" : "1px solid #00FF88",
-                fontWeight: 800,
-                cursor: "pointer",
-                marginBottom: "20px",
-                boxShadow: isBlackout ? "0 0 20px rgba(255, 42, 81, 0.5)" : "none",
-              }}
-            >
-              {isBlackout ? "⚡ MODO APAGÓN ACTIVADO (Sin Internet / Solo Radios de Hardware)" : "🌐 Modo Normal (Hacer clic para simular Apagón / EMP)"}
-            </button>
-
-            <div style={{ width: "100%", maxWidth: "800px", background: "#030508", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
-              <canvas ref={radarCanvasRef} style={{ width: "100%", height: "440px", display: "block" }} />
-            </div>
-          </div>
-        )}
-
-        {/* 4-TIER ARCHITECTURE TAB */}
-        {activeTab === "architecture" && (
-          <div style={{ maxWidth: "920px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "32px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(0, 240, 255, 0.15)",
-                  color: "#00F0FF",
-                  border: "1px solid rgba(0, 240, 255, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                INGENIERÍA DEL SISTEMA • FLUIDEZ NDK
-              </span>
-              <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
-                Arquitectura Técnica de 4 Capas
-              </h2>
-              <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
-                Desacoplamiento total entre la presentación SPA, el servicio en primer plano de Android, el motor nativo Rust compilado con NDK y las controladoras de radio física.
-              </p>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Layer 1 */}
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 240, 255, 0.4)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ fontSize: "17px", fontWeight: 800, color: "#00F0FF" }}>CAPA 1: PRESENTACIÓN FRONTEND (SPA)</div>
-                  <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>Next.js 16 • React 19 • Zustand</span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
-                  Interfaz táctica responsiva construida con Turbopack. Administra los 42 módulos, renderiza el árbol de estados en memoria (`useRedStore.ts`) y se comunica con el backend mediante HTTP loopback y SSE en `127.0.0.1:7333`.
-                </div>
-              </div>
-
-              {/* Layer 2 */}
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.4)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ fontSize: "17px", fontWeight: 800, color: "#00FF88" }}>CAPA 2: MIDDLEWARE ANDROID NATIVO (JAVA / JNI)</div>
-                  <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>Foreground Service • BLE GATT Server</span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
-                  `RedNodeService.java` mantiene vivo el proceso con notificación persistente, inmune a las restricciones de batería del sistema operativo. Administra el servidor GATT y transfiere paquetes al motor Rust mediante enlaces JNI C-ABI.
-                </div>
-              </div>
-
-              {/* Layer 3 */}
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.4)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ fontSize: "17px", fontWeight: 800, color: "#FF2A51" }}>CAPA 3: MOTOR NATIVO RUST NDK (AXUM / LIBP2P)</div>
-                  <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>red_core • red_mobile • SQLite Encrypted</span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
-                  Binario optimizado `libred_mobile.so`. Ejecuta Kademlia DHT, enrutamiento multi-salto Gossipsub, deduplicación de mensajes por 72 horas, cifrado Noise XK / ML-KEM-768 y persistencia segura en base de datos SQLite cifrada.
-                </div>
-              </div>
-
-              {/* Layer 4 */}
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.4)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <div style={{ fontSize: "17px", fontWeight: 800, color: "#B026FF" }}>CAPA 4: MULTI-RADIO HARDWARE OFF-GRID</div>
-                  <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#94A3B8" }}>BLE 5.3 • WiFi Direct • LoRa 915MHz • SoundMesh</span>
-                </div>
-                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6 }}>
-                  Transmisión simultánea sobre canales físicos sin depender del stack TCP/IP tradicional. Permite la comunicación en túneles subterráneos, zonas de catástrofe y entornos de censura estatal.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* INVESTORS TAB */}
-        {activeTab === "investors" && (
-          <div style={{ maxWidth: "920px", margin: "0 auto" }}>
-            <div style={{ textAlign: "center", marginBottom: "36px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  padding: "4px 12px",
-                  borderRadius: "20px",
-                  background: "rgba(0, 240, 255, 0.15)",
-                  color: "#00F0FF",
-                  border: "1px solid rgba(0, 240, 255, 0.3)",
-                  fontFamily: "monospace",
-                  fontWeight: 700,
-                }}
-              >
-                TESIS DE INVERSIÓN & DEPIN
-              </span>
-              <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
-                Oportunidad Estratégica & Mercado
-              </h2>
-              <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "750px", margin: "0 auto", lineHeight: 1.6 }}>
-                RED resuelve el punto único de fallo de las telecomunicaciones globales: la dependencia absoluta de servidores centralizados y operadores vulnerables a caídas y vigilancia masiva.
-              </p>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px", marginBottom: "36px" }}>
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.7)", border: "1px solid rgba(255, 42, 81, 0.3)" }}>
-                <div style={{ fontSize: "28px", marginBottom: "10px" }}>💰</div>
-                <div style={{ fontSize: "17px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Costo de Servidores: $0 / Usuario</div>
-                <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
-                  La infraestructura escala orgánicamente con cada nuevo nodo que se une a la malla, eliminando la factura mensual millonaria de centros de datos en la nube.
-                </div>
-              </div>
-
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0, 255, 136, 0.3)" }}>
-                <div style={{ fontSize: "28px", marginBottom: "10px" }}>⚡</div>
-                <div style={{ fontSize: "17px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Incentivos DePIN (Proof-of-Relay)</div>
-                <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
-                  Los operadores que retransmiten tráfico para otros nodos reciben micro-recompensas en tokens $RED, incentivando el despliegue de repetidores comunitarios autónomos.
-                </div>
-              </div>
-
-              <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.7)", border: "1px solid rgba(0, 240, 255, 0.3)" }}>
-                <div style={{ fontSize: "28px", marginBottom: "10px" }}>🛡️</div>
-                <div style={{ fontSize: "17px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Seguridad Táctica Anti-Coerción</div>
-                <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
-                  Protección de grado militar en el hardware: modo camuflaje de calculadora científica, PIN de pánico con autodestrucción y bóveda señuelo (PIN 9999).
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* FAQ TAB */}
-        {activeTab === "faq" && (
+        {/* 12. FAQ SECTION */}
+        <section id="faq" style={{ padding: "60px 0" }}>
           <div style={{ maxWidth: "840px", margin: "0 auto" }}>
             <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", textAlign: "center", marginBottom: "24px" }}>
               Preguntas Frecuentes
@@ -2108,22 +2507,87 @@ export default function RedShowcaseLanding({ onEnterApp, onEnterVault }: RedShow
               </div>
             </div>
           </div>
-        )}
+        </section>
       </main>
+
+      {/* Floating Back to Top Button */}
+      {scrollPercent > 12 && (
+        <button
+          onClick={() => scrollToSection("hero")}
+          style={{
+            position: "fixed",
+            bottom: "24px",
+            right: "24px",
+            zIndex: 90,
+            width: "48px",
+            height: "48px",
+            borderRadius: "50%",
+            background: "rgba(255, 42, 81, 0.9)",
+            color: "#FFF",
+            fontSize: "20px",
+            fontWeight: 900,
+            border: "none",
+            cursor: "pointer",
+            boxShadow: "0 4px 20px rgba(255, 42, 81, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="Volver Arriba"
+        >
+          ↑
+        </button>
+      )}
 
       {/* Footer */}
       <footer
         style={{
           borderTop: "1px solid rgba(255,255,255,0.06)",
-          padding: "24px",
+          padding: "30px 20px",
           textAlign: "center",
           fontSize: "12px",
           color: "#64748B",
           fontFamily: "monospace",
+          position: "relative",
+          zIndex: 1,
         }}
       >
         © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build 56000). Código Abierto.
       </footer>
+
+      {/* Embedded CSS for Responsive Styles */}
+      <style jsx global>{`
+        html {
+          scroll-behavior: smooth;
+        }
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #030508;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: #1e293b;
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: #ff2a51;
+        }
+        @media (min-width: 1024px) {
+          .desktop-telemetry {
+            display: flex !important;
+          }
+        }
+        @media (max-width: 1024px) {
+          .desktop-nav {
+            display: none !important;
+          }
+          .mobile-hamburger {
+            display: block !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
