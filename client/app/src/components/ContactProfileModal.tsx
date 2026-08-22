@@ -14,6 +14,7 @@ interface ContactProfileModalProps {
     onStartCall?: (type: "audio" | "video") => void;
     onClearChat?: () => void;
     onDeleteContact?: () => void;
+    onBlockNode?: () => void;
 }
 
 type MediaTab = "media" | "docs" | "audio" | "links";
@@ -26,6 +27,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
     onStartCall,
     onClearChat,
     onDeleteContact,
+    onBlockNode,
 }) => {
     const [activeTab, setActiveTab] = useState<MediaTab>("media");
     const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
@@ -424,6 +426,54 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             style={{ flex: 1, padding: "10px", fontSize: "0.75rem", color: "var(--accent-crimson)", borderColor: "rgba(232,33,58,0.3)" }}
                         >
                             🧹 Vaciar Chat
+                        </button>
+                    </div>
+
+                    <hr style={{ borderColor: "var(--glass-border)", margin: 0 }} />
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <button
+                            onClick={() => {
+                                if (window.confirm(`¿Estás seguro de eliminar a ${displayName} de tus contactos?`)) {
+                                    onDeleteContact?.();
+                                    onClose();
+                                }
+                            }}
+                            style={{
+                                width: "100%", padding: "12px",
+                                background: "rgba(245,0,87,0.08)",
+                                border: "1px solid rgba(245,0,87,0.25)",
+                                borderRadius: "10px",
+                                color: "#FF5A7E",
+                                fontSize: "0.82rem",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                            }}
+                        >
+                            <span>🗑️</span> Eliminar Contacto
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                if (window.confirm(`¿Bloquear a ${displayName}? No podrá enviarte mensajes ni solicitudes P2P.`)) {
+                                    onBlockNode?.();
+                                    onClose();
+                                }
+                            }}
+                            style={{
+                                width: "100%", padding: "12px",
+                                background: "rgba(255,51,85,0.12)",
+                                border: "1px solid rgba(255,51,85,0.4)",
+                                borderRadius: "10px",
+                                color: "#FF3355",
+                                fontSize: "0.82rem",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                            }}
+                        >
+                            <span>🚫</span> Bloquear Nodo (Anti-Acoso)
                         </button>
                     </div>
                 </div>

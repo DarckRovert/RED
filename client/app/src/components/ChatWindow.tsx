@@ -37,7 +37,7 @@ export default function ChatWindow() {
         activeConversationId, conversations, contacts, groups, messages,
         sendMessage, sendTyping, sendTypingStatus, sendReaction, goBack, navigate, peerTyping, peerTypingStatus, addContact,
         deleteMessage, deleteMessageForEveryone, editMessage, clearConversation, starMessage, starredMessages,
-        identity, peerPresence, markAsRead, preferences, setActiveCallType,
+        identity, peerPresence, markAsRead, preferences, setActiveCallType, deleteContact, blockNode,
     } = useRedStore();
 
     const canonicalFromMesh = activeConversationId ? meshRouter.getCanonicalId(activeConversationId) : '';
@@ -58,6 +58,9 @@ export default function ChatWindow() {
         if (parts[0].length >= 16) cleanRaw = parts[0].trim();
     }
     const peerHash = cleanRaw.toLowerCase();
+    const currentGroup = groups.find((g: any) => g && (g.id === activeConversationId || g.id === peerHash || g.id === canonicalFromMesh));
+    const isGroupChat = Boolean(currentGroup);
+
     const peerContact = contacts.find((c: any) => 
         c.identity_hash === peerHash ||
         (canonicalFromMesh && c.identity_hash === canonicalFromMesh) ||
@@ -73,11 +76,13 @@ export default function ChatWindow() {
         )
     );
     const meshPeer = meshRouter.getPeerByAnyId(peerHash) || (canonicalFromMesh ? meshRouter.getPeerByAnyId(canonicalFromMesh) : undefined);
-    const peerName = (peerContact?.display_name && !peerContact.display_name.startsWith('Operador ') && !peerContact.display_name.startsWith('Nodo '))
-        ? peerContact.display_name
-        : (meshPeer?.name && !meshPeer.name.startsWith('RED-') && !meshPeer.name.startsWith('Operador ') && !meshPeer.name.startsWith('Dispositivo RED')
-            ? meshPeer.name
-            : (peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido")));
+    const peerName = isGroupChat
+        ? (currentGroup.name || "Escuadrón Cifrado")
+        : (peerContact?.display_name && !peerContact.display_name.startsWith('Operador ') && !peerContact.display_name.startsWith('Nodo '))
+            ? peerContact.display_name
+            : (meshPeer?.name && !meshPeer.name.startsWith('RED-') && !meshPeer.name.startsWith('Operador ') && !meshPeer.name.startsWith('Dispositivo RED')
+                ? meshPeer.name
+                : (peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido")));
 
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -1518,6 +1523,18 @@ export default function ChatWindow() {
                         navigate("call", target);
                     }}
                     onClearChat={clearConversation}
+                    onDeleteContact={() => {
+                        const target = fullPeerHash || peerHash;
+                        deleteContact(target);
+                        setIsContactProfileOpen(false);
+                        goBack();
+                    }}
+                    onBlockNode={() => {
+                        const target = fullPeerHash || peerHash;
+                        blockNode(target);
+                        setIsContactProfileOpen(false);
+                        goBack();
+                    }}
                 />
             )}
 

@@ -1,3 +1,4 @@
+
 /**
  * RED Guardian IA — Engine de Moderación Off-Grid Real v31.0.0
  * 
