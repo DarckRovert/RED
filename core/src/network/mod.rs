@@ -17,6 +17,7 @@ pub mod dummy_traffic;
 pub mod gossip;
 pub mod libp2p_transport;
 pub mod lora_bridge;
+pub mod fec;
 
 pub use config::NetworkConfig;
 pub use peer::{Peer, PeerId, PeerInfo};
@@ -24,6 +25,7 @@ pub use routing::{OnionRouter, Route};
 pub use transport::Transport;
 pub use libp2p_transport::Libp2pTransport;
 pub use node::Node;
+pub use fec::{FecEncoder, FecDecoder, FecChunk};
 
 use thiserror::Error;
 

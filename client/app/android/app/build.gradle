@@ -21,7 +21,6 @@ android {
     aaptOptions {
         // Force AAPT to not ignore the _next Javascript chunks folder!
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        noCompress 'onnx', 'wasm', 'gguf', 'bin'
     }
 
     buildTypes {

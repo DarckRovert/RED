@@ -65,6 +65,13 @@ class LocalTransport {
     // Hook WiFi peer discovery events into MeshRouter
     this.hookWifiPeerEvents();
 
+    // Dynamic Sensor-Aware Battery & RF Duty Cycling
+    import('../sensors/KineticDutyGovernor').then(({ KineticDutyGovernor }) => {
+        KineticDutyGovernor.getInstance().subscribe((telemetry) => {
+            this.setScanInterval(telemetry.bleScanIntervalMs);
+        });
+    }).catch(() => {});
+
     if (typeof window !== 'undefined') {
         Object.defineProperty(window, 'meshPeerCounts', {
             get: () => this.peerCounts,
