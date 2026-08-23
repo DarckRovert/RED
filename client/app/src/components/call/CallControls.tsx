@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface CallControlsProps {
     micMuted: boolean;
@@ -27,6 +28,8 @@ export const CallControls: React.FC<CallControlsProps> = ({
     toggleScreenShare,
     handleUserEndCall,
 }) => {
+    const { t } = useTranslation();
+
     return (
             <div style={{
                 position: "absolute", bottom: "calc(32px + var(--safe-bottom, 0px))", left: "50%",
@@ -51,12 +54,12 @@ export const CallControls: React.FC<CallControlsProps> = ({
                             boxShadow: micMuted ? "0 4px 16px rgba(255,51,85,0.4)" : "none",
                             transition: "all 0.2s"
                         }}
-                        title={micMuted ? "Activar Micrófono" : "Silenciar Micrófono"}
+                        title={micMuted ? (t.calls_extended?.mic_on || "Activar Micrófono") : (t.calls_extended?.mic_off || "Silenciar Micrófono")}
                     >
                         {micMuted ? "🔇" : "🎤"}
                     </button>
                     <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                        {micMuted ? "Mute" : "Mic"}
+                        {micMuted ? (t.calls?.mute || "Mute") : "Mic"}
                     </span>
                 </div>
 
@@ -74,7 +77,7 @@ export const CallControls: React.FC<CallControlsProps> = ({
                                 boxShadow: camMuted ? "0 4px 16px rgba(255,51,85,0.4)" : "none",
                                 transition: "all 0.2s"
                             }}
-                            title={camMuted ? "Activar Cámara" : "Apagar Cámara"}
+                            title={camMuted ? (t.calls_extended?.cam_on || "Activar Cámara") : (t.calls_extended?.cam_off || "Apagar Cámara")}
                         >
                             {camMuted ? "🚫" : "📹"}
                         </button>
@@ -97,11 +100,13 @@ export const CallControls: React.FC<CallControlsProps> = ({
                                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                                 transition: "all 0.2s"
                             }}
-                            title="Cambiar Cámara Frontal / Trasera"
+                            title={t.calls_extended?.switch_cam || "Cambiar Cámara Frontal / Trasera"}
                         >
                             🔄
                         </button>
-                        <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>Girar</span>
+                        <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
+                            {t.calls?.camera_switch || "Girar"}
+                        </span>
                     </div>
                 )}
 
@@ -118,12 +123,12 @@ export const CallControls: React.FC<CallControlsProps> = ({
                             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                             transition: "all 0.2s"
                         }}
-                        title={isSpeakerOn ? "Altavoz Activado" : "Auricular / Volumen Normal"}
+                        title={isSpeakerOn ? (t.calls_extended?.speaker_on || "Altavoz Activado") : (t.calls_extended?.speaker_off || "Auricular")}
                     >
                         {isSpeakerOn ? "🔊" : "🔈"}
                     </button>
                     <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                        {isSpeakerOn ? "Altavoz" : "Auricular"}
+                        {isSpeakerOn ? (t.calls?.speaker || "Altavoz") : "Ear"}
                     </span>
                 </div>
 
@@ -141,12 +146,12 @@ export const CallControls: React.FC<CallControlsProps> = ({
                                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                                 transition: "all 0.2s"
                             }}
-                            title={isScreenSharing ? "Detener Pantalla" : "Compartir Pantalla"}
+                            title={isScreenSharing ? (t.calls_extended?.stop_share_screen || "Detener Pantalla") : (t.calls_extended?.share_screen || "Compartir Pantalla")}
                         >
                             💻
                         </button>
                         <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                            {isScreenSharing ? "Compartiendo" : "Pantalla"}
+                            {isScreenSharing ? "Cast" : "Screen"}
                         </span>
                     </div>
                 )}
@@ -165,11 +170,13 @@ export const CallControls: React.FC<CallControlsProps> = ({
                             transform: "rotate(135deg)",
                             transition: "all 0.15s active"
                         }}
-                        title="Finalizar Llamada"
+                        title={t.calls_extended?.end_call || "Finalizar Llamada"}
                     >
                         📞
                     </button>
-                    <span style={{ fontSize: "0.60rem", color: "var(--accent-crimson)", fontWeight: 800 }}>Colgar</span>
+                    <span style={{ fontSize: "0.60rem", color: "var(--accent-crimson)", fontWeight: 800 }}>
+                        {t.calls?.reject || "Colgar"}
+                    </span>
                 </div>
             </div>
 

@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI, MessageItem } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import StoryViewer from "./stories/StoryViewer";
 import StoryCreator from "./stories/StoryCreator";
 import { LiveStreamBroadcaster } from "./LiveStreamBroadcaster";
@@ -43,6 +44,7 @@ type Modal =
     | { type: "liveViewer"; streamId: string };
 
 export default function StatusView() {
+    const { t } = useTranslation();
     const {
         contacts, identity, goBack, peerStories,
         myStories, liveStreams, navigate,
@@ -206,7 +208,7 @@ export default function StatusView() {
                                         setModal({
                                             type: "viewer",
                                             senderHash: identity?.identity_hash || "",
-                                            senderName: "Mi Estado",
+                                            senderName: t.stories_module?.my_story || "Mi Estado",
                                             stories: myValidStories.map(s => ({
                                                 id: s.id, sender: identity?.identity_hash || "",
                                                 is_mine: true,
@@ -230,9 +232,9 @@ export default function StatusView() {
                                     {myValidStories.length > 0 ? "✨" : "+"}
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: "0.92rem", fontWeight: 800 }}>Mi Estado</div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 800 }}>{t.stories_module?.my_story || "Mi Estado"}</div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                        {myValidStories.length > 0 ? `${myValidStories.length} actualización(es) activa(s)` : "Toca para publicar una historia de 24h"}
+                                        {myValidStories.length > 0 ? `${myValidStories.length} 24h` : (t.stories_module?.caption_placeholder || "Toca para publicar una historia de 24h")}
                                     </div>
                                 </div>
                             </div>
@@ -243,14 +245,14 @@ export default function StatusView() {
                                     className="btn-tactical-secondary"
                                     style={{ padding: "8px 12px", fontSize: "0.78rem" }}
                                 >
-                                    📷 Foto / Texto
+                                    📷 {t.stories_module?.add_story || "Publicar"}
                                 </button>
                                 <button
                                     onClick={() => setModal({ type: "broadcaster" })}
                                     className="btn-tactical-primary"
                                     style={{ padding: "8px 12px", fontSize: "0.78rem" }}
                                 >
-                                    🔴 Emitir LIVE
+                                    🔴 LIVE
                                 </button>
                             </div>
                         </div>
@@ -259,14 +261,14 @@ export default function StatusView() {
                     {/* Actualizaciones de Contactos */}
                     <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                         <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                            ACTUALIZACIONES DE CONTACTOS ({peerSenders.length})
+                            {t.stories_module?.recent_updates || "ACTUALIZACIONES DE CONTACTOS"} ({peerSenders.length})
                         </div>
 
                         {peerSenders.length === 0 ? (
                             <EmptyState
                                 icon="✨"
-                                title="Sin Actualizaciones Recientes"
-                                description="Las historias de tus contactos de la malla aparecerán aquí durante 24 horas."
+                                title={t.stories_module?.no_stories || "Sin Actualizaciones Recientes"}
+                                description={t.stories_module?.no_stories || "Las historias de tus contactos de la malla aparecerán aquí durante 24 horas."}
                             />
                         ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

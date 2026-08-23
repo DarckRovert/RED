@@ -15,17 +15,19 @@ export const CallsTab: React.FC = () => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Parámetros de Voz & Videollamadas WebRTC P2P
+                                {t.settings?.tab_calls || "Parámetros de Voz & Videollamadas WebRTC P2P"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Calidad de video adaptativa, códecs de audio y servidores de enlace STUN.
+                                {t.settings?.call_quality_desc || "Calidad de video adaptativa, códecs de audio y servidores de enlace STUN."}
                             </p>
                         </div>
 
                         {/* Calidad de Video */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div>
-                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Resolución de Cámara en Videollamadas</div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>
+                                    {t.settings?.call_quality || "Resolución de Cámara en Videollamadas"}
+                                </div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
                                     Ajusta la resolución de captura en caliente para equilibrar nitidez y ancho de banda.
                                 </div>

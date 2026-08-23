@@ -91,10 +91,10 @@ export const StorageTab: React.FC = () => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Uso de Almacenamiento & Gestión de Caché
+                                {t.settings?.tab_storage || "Uso de Almacenamiento & Gestión de Caché"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Diagnóstico en tiempo real de la base de datos cifrada local en el dispositivo.
+                                {t.settings?.storage_breakdown || "Diagnóstico en tiempo real de la base de datos cifrada local en el dispositivo."}
                             </p>
                         </div>
 

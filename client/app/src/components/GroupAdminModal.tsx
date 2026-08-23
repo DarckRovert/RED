@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 type GroupRole = "Admin" | "Moderator" | "Member" | "ReadOnly";
@@ -45,6 +46,7 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
     myRole = "Admin",
     onClose,
 }) => {
+    const { t } = useTranslation();
     const { contacts, fetchData } = useRedStore();
 
     // Normalize incoming members (may be string[] or GroupMemberInfo[])

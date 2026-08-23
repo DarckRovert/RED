@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 const FRAME_INTERVAL_MS = 500;
 const FRAME_QUALITY = 0.35;
@@ -12,6 +13,7 @@ const FRAME_HEIGHT = 320;
 
 export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
     const { contacts, identity } = useRedStore();
+    const { t } = useTranslation();
 
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);

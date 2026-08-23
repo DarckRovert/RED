@@ -6,6 +6,7 @@ import { RedAPI, RustLogEntry, getNodeLogs } from "../lib/api";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { RED_VERSION_NAME } from "../lib/version";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface NodeLogsModalProps {
     onClose?: () => void;
@@ -15,6 +16,7 @@ type LogFilter = "ALL" | "INFO" | "WARN" | "ERROR" | "P2P" | "CRYPTO" | "CONSENS
 
 export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
     const { goBack } = useRedStore();
+    const { t } = useTranslation();
     const handleClose = onClose || goBack;
     const [logs, setLogs] = useState<RustLogEntry[]>([]);
     const [filter, setFilter] = useState<LogFilter>("ALL");
@@ -255,10 +257,10 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                     }}>📋</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Terminal de Logs & Streaming SSE
+                            {t.logs_module?.title || "Terminal de Logs & Streaming SSE"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: isConnected ? "var(--accent-emerald)" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {RED_VERSION_NAME} · {isConnected ? "● SSE STREAM EN VIVO (:7333)" : "○ MODO AUTÓNOMO LOCAL"}
+                            {RED_VERSION_NAME} · {isConnected ? (t.logs_module?.subtitle || "● SSE STREAM EN VIVO (:7333)") : "○ MODO AUTÓNOMO LOCAL"}
                         </div>
                     </div>
                 </div>
@@ -275,7 +277,7 @@ export const NodeLogsModal: React.FC<NodeLogsModalProps> = ({ onClose }) => {
                     <button
                         onClick={handleClose}
                         className="btn-icon"
-                        title="Cerrar terminal"
+                        title={t.common?.close || "Cerrar terminal"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕

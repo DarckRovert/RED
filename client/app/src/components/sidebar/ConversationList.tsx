@@ -120,17 +120,14 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                 )}
             </div>
 
-            {/* ── Separador visual ──────────────────────────────────── */}
-            <div style={{
-                display: "flex", alignItems: "center", gap: "8px",
-                padding: "4px 2px", marginTop: "2px"
-            }}>
+            {/* ── Divisor ────────────────────────────────────────── */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "4px 0" }}>
                 <div style={{ flex: 1, height: 1, background: "var(--glass-border)" }} />
                 <span style={{
                     fontSize: "0.60rem", color: "var(--text-muted)",
                     fontFamily: "JetBrains Mono, monospace", fontWeight: 700, whiteSpace: "nowrap"
                 }}>
-                    CONVERSACIONES P2P
+                    {t('nav.chats') || "CONVERSACIONES P2P"}
                 </span>
                 <div style={{ flex: 1, height: 1, background: "var(--glass-border)" }} />
             </div>
@@ -139,14 +136,14 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             {filteredConvs.length === 0 ? (
                 <div className="empty-state-tactical">
                     <div className="empty-state-icon">📡</div>
-                    <div className="empty-state-title">Sin Transmisiones en Malla</div>
-                    <div className="empty-state-desc">Escanea un código QR o descubre nodos vecinos en el Radar táctico.</div>
+                    <div className="empty-state-title">{t('sidebar.no_contacts') || "Sin Transmisiones en Malla"}</div>
+                    <div className="empty-state-desc">{t('sidebar.no_contacts_desc') || "Escanea un código QR o descubre nodos vecinos en el Radar táctico."}</div>
                     <button
                         onClick={() => navigate("radar")}
                         className="btn-tactical-primary"
                         style={{ marginTop: "12px", padding: "8px 16px", fontSize: "0.8rem" }}
                     >
-                        Abrir Radar P2P
+                        {t('dock.radar') || "Abrir Radar P2P"}
                     </button>
                 </div>
             ) : (
@@ -183,7 +180,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                             }
                         }
                     }
-                    const isPeerOnline = meshRouter.peers.has(c.peer) || Array.from(meshRouter.peers.values()).some(p => p.id === c.peer);
+                    const peerRecord = meshRouter.getPeerByAnyId(c.peer);
+                    const isPeerOnline = !!peerRecord;
                     return (
                         <div
                             key={c.peer}

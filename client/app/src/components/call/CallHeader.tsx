@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface CallHeaderProps {
     isAudioOnly: boolean;
@@ -23,6 +24,8 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
     setShowStats,
     statsData,
 }) => {
+    const { t } = useTranslation();
+
     return (
             <div style={{
                 position: "absolute", top: "calc(16px + var(--safe-top, 0px))", left: "16px", right: "16px",
@@ -35,7 +38,7 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                     border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.6)"
                 }}>
                     <span style={{ color: "var(--accent-emerald)", fontSize: "0.75rem", fontWeight: 900, letterSpacing: "0.5px" }}>
-                        🔒 {isAudioOnly ? "VOZ E2E" : "HD VIDEO E2E"}
+                        🔒 {isAudioOnly ? (t.calls_extended?.audio_only || "VOZ E2E") : (t.calls_extended?.video_call || "HD VIDEO E2E")}
                     </span>
                     {callActive && (
                         <span style={{ color: "white", fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
@@ -67,7 +70,7 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                             alignItems: "center",
                             gap: "6px"
                         }}
-                        title="Minimizar llamada a PIP flotante para chatear"
+                        title={t.calls_extended?.pip_return || "PIP"}
                     >
                         🗗 PIP
                     </button>
@@ -91,6 +94,7 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                             alignItems: "center",
                             gap: "6px"
                         }}
+                        title={t.calls_extended?.stats_title || "Telemetría WebRTC"}
                     >
                         📊 {statsData.rttMs}ms
                     </button>

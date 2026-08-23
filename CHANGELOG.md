@@ -1,5 +1,28 @@
 # Changelog
 
+## [58.0.0-canonical-mesh-dedup] - 2026-08-23
+
+### Sovereign Tactical Master Edition — Universal Canonical Node Deduplication, Multi-Transport Consolidation & Production Verification
+
+**Deduplicación Canónica Universal de Nodos & Normalización de Identidades**
+- `meshRouter.ts`: Normalización integral de identificadores (`clean.toLowerCase()`, prefijos `did:red:` y hardware MACs). Implementación de la heurística `isNameSimilar` para correlacionar nombres Bluetooth de fabricante (ej. "Lenovo Tab One") con alias de perfil táctico (ej. "Tab").
+- `localTransport.ts`: Deduplicación case-insensitive de balizas BLE en `performBleScan()`, vinculación proactiva `autoAssociateBlePeer()` y resolución de pares con `getPeerByAnyId()`.
+- `NearbyDevicesPanel.tsx`: Sustitución de listas separadas por `UnifiedDeviceMap` de pase único. Los dispositivos detectados simultáneamente por BLE y WiFi Direct ahora renderizan **una sola tarjeta táctica consolidada** con insignias `[BLE]` y `[WIFI]`, botón `💬 Chat` y navegación directa al DID canónico.
+- `RadarWindow.tsx`: Enrutamiento estricto al DID canónico de 64 caracteres SHA-256 en `handleAddPeer`.
+
+**Prevención de Bifurcación de Mensajería & Migración en Caliente**
+- `contactsSlice.ts`: Deduplicación en `addContact()` por hash canónico y similitud de nombres. Auto-migración en tiempo real de conversaciones y almacenes de mensajes locales huérfanos creados con direcciones MAC (`red_web_messages_${oldHash}` -> `red_web_messages_${canonicalHash}`).
+- `authSlice.ts`: Saneamiento y consolidación de conversaciones y contactos en `fetchData()`, purgando duplicados en `localStorage`.
+- `chatSlice.ts` & `messageDispatcher.ts`: Enrutamiento estricto a través de `getCanonicalId()` en mensajes entrantes y salientes, asegurando que ninguna interacción bifurque un chat.
+- `ConversationList.tsx` & `ContactList.tsx`: Detección en vivo de presencia online usando `meshRouter.getPeerByAnyId()`.
+- `Sidebar.tsx`: Deduplicación canónica en listas filtradas de chats y contactos.
+
+**Sincronización en Base de Datos Sled & Validación en Hardware Real**
+- `discovery.rs`: Sanitización y forzado a minúsculas del `identity_hash` en el árbol nativo Sled `discovery_nodes`.
+- `RedNodeService` (Android): Despliegue limpio y verificación activa en hardware físico (Tablet Lenovo `TB305XU` y Motorola Moto G22 `hawaiip`) con descubrimiento mDNS y enlace Gossipsub P2P en vivo sin errores.
+
+---
+
 ## [57.0.0-modular-architecture] - 2026-08-22
 
 ### Sovereign Tactical Master Edition — Clean Modular Architecture, Zero-Bloat & Universal Multi-Device Synergy

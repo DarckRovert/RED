@@ -15,17 +15,19 @@ export const MeshTab: React.FC = () => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Parámetros de Red Mesh & Eficiencia Energética
+                                {t.settings?.tab_mesh || "Parámetros de Red Mesh & Eficiencia Energética"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Optimización del tráfico mDNS, BLE y perfiles de escaneo en operaciones de campo.
+                                {t.settings?.mesh_profile_desc || "Optimización del tráfico mDNS, BLE y perfiles de escaneo en operaciones de campo."}
                             </p>
                         </div>
 
                         {/* Perfil Energético */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div>
-                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Perfil de Descubrimiento de Pares</div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>
+                                    {t.settings?.mesh_profile || "Perfil de Descubrimiento de Pares"}
+                                </div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
                                     Frecuencia de escaneo BLE y descubrimiento de nodos cercanos.
                                 </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 
 interface ImageViewerModalProps {
@@ -10,6 +11,7 @@ interface ImageViewerModalProps {
 }
 
 export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, onClose }) => {
+    const { t } = useTranslation();
     const [zoom, setZoom] = useState(1);
 
     const handleDownload = () => {
@@ -19,7 +21,7 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        toast.success("📥 Imagen guardada en almacenamiento local");
+        toast.success("📥 Imagen guardada");
     };
 
     return (
@@ -51,12 +53,13 @@ export const ImageViewerModal: React.FC<ImageViewerModalProps> = ({ src, alt, on
                     className="btn-tactical-primary"
                     style={{ padding: "8px 14px", fontSize: "0.78rem" }}
                 >
-                    📥 Guardar
+                    📥 {t.common?.save || "Guardar"}
                 </button>
                 <button
                     onClick={onClose}
                     className="btn-icon"
                     style={{ width: 36, height: 36 }}
+                    title={t.common?.close || "Cerrar"}
                 >
                     ✕
                 </button>

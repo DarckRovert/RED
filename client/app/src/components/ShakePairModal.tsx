@@ -5,9 +5,11 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { RedAPI } from "../lib/api";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export const ShakePairModal: React.FC = () => {
     const { navigate, identity, addContact, contacts, fetchData } = useRedStore();
+    const { t } = useTranslation();
     const [isListening, setIsListening] = useState(false);
     const [accMagnitude, setAccMagnitude] = useState<number>(0);
     const [shakeDetected, setShakeDetected] = useState<boolean>(false);
@@ -211,7 +213,7 @@ export const ShakePairModal: React.FC = () => {
                     }}>📳</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Shake-to-Pair (Acelerómetro)
+                            {t.modules?.shake_pair || "Shake-to-Pair (Acelerómetro)"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: isListening ? "var(--accent-emerald)" : "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             {isListening ? "● SENSOR INERCIAL ACTIVO" : "SENSOR EN ESPERA"}
@@ -222,7 +224,7 @@ export const ShakePairModal: React.FC = () => {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar shake pair"
+                    title={t.common?.close || "Cerrar"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

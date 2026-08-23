@@ -9,6 +9,7 @@ import {
     createAmberAlert,
     resolveAmberAlert,
 } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 interface AmberAdminPanelProps {
@@ -32,6 +33,7 @@ async function signAuthorityPayload(authorityId: string, payload: string): Promi
 }
 
 export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPanelProps) {
+    const { t } = useTranslation();
     const { goBack } = useRedStore();
     const handleClose = onClose || goBack;
     const nodeId = localNodeId || "node-local";
@@ -182,7 +184,7 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                     }}>🚨</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Centro de Alertas AMBER SAR
+                            {t.diagnostics_module?.amber_admin_title || "Centro de Alertas AMBER SAR"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             SEARCH AND RESCUE · ED25519 AUTHORITY · P2P PROPAGATION
@@ -197,21 +199,21 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                             className={view === "list" ? "glow-pill-active" : "btn-ghost"}
                             style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
                         >
-                            📋 Alertas ({alerts.length})
+                            📋 {t.nav?.amber || "Alertas"} ({alerts.length})
                         </button>
                         <button
                             onClick={() => setView("create")}
                             className={view === "create" ? "glow-pill-active" : "btn-ghost"}
                             style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
                         >
-                            + Emitir
+                            + {t.diagnostics_module?.amber_broadcast ? t.diagnostics_module.amber_broadcast.split(" ")[0] : "Emitir"}
                         </button>
                     </div>
 
                     <button
                         onClick={handleClose}
                         className="btn-icon"
-                        title="Cerrar panel"
+                        title={t.common?.close || "Cerrar panel"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕
@@ -229,9 +231,9 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                             {alerts.length === 0 ? (
                                 <div className="empty-state-tactical">
                                     <div className="empty-state-icon">🛡️</div>
-                                    <div className="empty-state-title">Sin Alertas AMBER Activas</div>
+                                    <div className="empty-state-title">{t.sidebar?.no_contacts || "Sin Alertas AMBER Activas"}</div>
                                     <div className="empty-state-desc">
-                                        No hay reportes de búsqueda y rescate en este momento en la malla.
+                                        {t.sidebar?.no_contacts_desc || "No hay reportes de búsqueda y rescate en este momento en la malla."}
                                     </div>
                                 </div>
                             ) : (
@@ -241,7 +243,7 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
                                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                 <div>
                                                     <div style={{ fontSize: "1rem", fontWeight: 800, color: (a as any).resolved ? "var(--text-muted)" : "var(--accent-amber)" }}>
-                                                        {a.name} ({a.age} años)
+                                                        {a.name} ({a.age} {t.amber_module?.age ? t.amber_module.age.toLowerCase() : "años"})
                                                     </div>
                                                     <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                                         {a.last_seen_location || "Ubicación desconocida"}

@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { MessageItem, ConversationItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 import { TacticalAudioEngine } from "../../lib/TacticalAudioEngine";
 
@@ -12,6 +13,7 @@ interface MessageForwardModalProps {
 }
 
 export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, onClose }) => {
+    const { t } = useTranslation();
     const { conversations, contacts, groups, sendMessage } = useRedStore();
     const [search, setSearch] = useState("");
     const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
@@ -112,7 +114,7 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <span style={{ fontSize: "1.3rem" }}>↩️</span>
                         <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: "#FFFFFF" }}>
-                            Reenviar Mensaje
+                            {t.chat_extended?.forward_message || "Reenviar Mensaje"}
                         </h3>
                     </div>
                     <button
@@ -142,7 +144,7 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: "0.75rem", color: "var(--accent-red, #E8213A)", fontWeight: 800 }}>
-                            MENSAJE A REENVIAR
+                            {t.chat_extended?.forward_to || "MENSAJE A REENVIAR"}
                         </div>
                         <div style={{
                             fontSize: "0.82rem", color: "#FFFFFF",
@@ -243,7 +245,7 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                             fontSize: "0.88rem", fontWeight: 700, cursor: "pointer"
                         }}
                     >
-                        Cancelar
+                        {t.common?.cancel || "Cancelar"}
                     </button>
                     <button
                         onClick={handleForward}
@@ -258,7 +260,7 @@ export const MessageForwardModal: React.FC<MessageForwardModalProps> = ({ msg, o
                             transition: "all 0.2s"
                         }}
                     >
-                        {isSending ? "Reenviando..." : "Reenviar ↩️"}
+                        {isSending ? "..." : (t.chat_extended?.forward_btn ? `${t.chat_extended.forward_btn} ↩️` : "Reenviar ↩️")}
                     </button>
                 </div>
             </div>

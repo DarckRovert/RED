@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { UpdateManager, UpdateInfo, DownloadProgress } from "../lib/updateManager";
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../lib/version";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 import { SettingsManager } from "../lib/settingsManager";
 
@@ -12,6 +13,7 @@ interface UpdateModalProps {
 }
 
 export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
+    const { t } = useTranslation();
     const { goBack } = useRedStore();
     const handleClose = onClose || goBack;
 
@@ -166,13 +168,13 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({ onClose }) => {
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", background: "rgba(0,0,0,0.3)", padding: "12px", borderRadius: "var(--radius-md)" }}>
                         <div>
-                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Versión Instalada</div>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{t.nav?.update || "Versión Instalada"}</div>
                             <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
                                 v{RED_VERSION}
                             </div>
                         </div>
                         <div>
-                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>Última Versión</div>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", textTransform: "uppercase" }}>{t.nav?.update ? `${t.nav.update} (OTA)` : "Última Versión"}</div>
                             <div style={{ fontSize: "1.05rem", fontWeight: 900, color: updateInfo?.hasUpdate ? "var(--primary-bright)" : "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
                                 v{updateInfo?.latestVersion || RED_VERSION}
                             </div>

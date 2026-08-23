@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../lib/version';
+import { useTranslation } from '../lib/i18n/i18nEngine';
 import { LandingHeader } from './showcase/LandingHeader';
 import { LandingHero } from './showcase/LandingHero';
 import { LandingBentoAndMatrix } from './showcase/LandingBentoAndMatrix';
@@ -18,6 +19,7 @@ interface RedShowcaseLandingProps {
 }
 
 export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShowcaseLandingProps) {
+    const { t } = useTranslation();
     const { navigate, setProfile } = useRedStore();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 

@@ -33,7 +33,7 @@ call npx next build 2>&1
 
 echo.
 echo [4/4] Synchronizing Web Export and release APK binary to workspace root for GitHub Pages...
-powershell -Command "Copy-Item -Path 'd:\PROYECTO RED\client\app\out\*' -Destination 'd:\PROYECTO RED\' -Recurse -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\assets\red-v24.0.0-latest.apk' -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\app-release.apk' -Force"
+powershell -Command "Copy-Item -Path 'd:\PROYECTO RED\client\app\out\*' -Destination 'd:\PROYECTO RED\' -Recurse -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\red-v58.0.0-latest.apk' -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\red-latest.apk' -Force; Copy-Item -Path 'd:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination 'd:\PROYECTO RED\app-release.apk' -Force"
 
 echo.
 echo ====================================

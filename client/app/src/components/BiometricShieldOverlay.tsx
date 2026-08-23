@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import { BiometricLockEngine } from "../lib/BiometricLockEngine";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 export const BiometricShieldOverlay: React.FC = () => {
+    const { t } = useTranslation();
     const [isLocked, setIsLocked] = useState(false);
     const [pinInput, setPinInput] = useState("");
     const [errorMsg, setErrorMsg] = useState("");
@@ -27,7 +29,7 @@ export const BiometricShieldOverlay: React.FC = () => {
         setErrorMsg("");
         const success = await BiometricLockEngine.authenticate();
         if (!success) {
-            setErrorMsg("Autenticación biométrica no completada. Ingrese PIN de seguridad.");
+            setErrorMsg(t.auth?.biometric_btn ? `${t.auth.biometric_btn} Error` : "Error biométrico");
         }
     };
 
@@ -37,9 +39,9 @@ export const BiometricShieldOverlay: React.FC = () => {
         const ok = BiometricLockEngine.verifyPin(pinInput);
         if (ok) {
             setPinInput("");
-            toast.success("Bóveda RED Desbloqueada");
+            toast.success(t.common?.success || "Desbloqueado");
         } else {
-            setErrorMsg("PIN de seguridad incorrecto.");
+            setErrorMsg(t.common?.error || "PIN incorrecto");
             setPinInput("");
         }
     };
@@ -93,10 +95,10 @@ export const BiometricShieldOverlay: React.FC = () => {
 
                 <div>
                     <h2 style={{ fontSize: "1.25rem", fontWeight: 900, color: "#fff", margin: "0 0 6px 0" }}>
-                        BÓVEDA RED BLOQUEADA
+                        {t.auth?.title || "BÓVEDA RED"}
                     </h2>
                     <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", margin: 0 }}>
-                        Protección Criptográfica por Inactividad
+                        {t.auth?.subtitle || "Sistema Operativo Malla Táctico"}
                     </p>
                 </div>
 
@@ -129,12 +131,12 @@ export const BiometricShieldOverlay: React.FC = () => {
                         fontSize: "0.88rem",
                     }}
                 >
-                    <span>👆</span> Usar Biometría / Huella
+                    <span>👆</span> {t.auth?.biometric_btn || "Usar Biometría"}
                 </button>
 
                 <div style={{ display: "flex", alignItems: "center", width: "100%", gap: "10px" }}>
                     <hr style={{ flex: 1, borderColor: "var(--glass-border)" }} />
-                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>O INGRESA PIN</span>
+                    <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>PIN</span>
                     <hr style={{ flex: 1, borderColor: "var(--glass-border)" }} />
                 </div>
 
@@ -144,7 +146,7 @@ export const BiometricShieldOverlay: React.FC = () => {
                         maxLength={8}
                         value={pinInput}
                         onChange={(e) => setPinInput(e.target.value)}
-                        placeholder="PIN de Seguridad"
+                        placeholder={t.auth?.enter_pin || "PIN"}
                         style={{
                             flex: 1,
                             padding: "10px 14px",

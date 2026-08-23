@@ -681,7 +681,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             // Filter out corrupt / self entries: 'me', 'local', myHash, 'Operador me'
             const cleanConvs = (Array.isArray(convs) ? convs : []).filter((c: any) => {
                 if (!c) return false;
-                const peer = (c.peer || c.id || '').toLowerCase();
+                const peer = normalizeIdentity(c.peer || c.id || '');
                 const name = (c.name || c.display_name || '').toLowerCase();
                 if (peer === 'me' || peer === 'local' || peer === 'unknown' || name === 'operador me') return false;
                 if (myHash && (peer === myHash || (peer.length >= 16 && myHash.startsWith(peer)))) return false;
@@ -691,36 +691,47 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 return true;
             });
 
-            // Deduplicate conversations by peer
+            // Deduplicate conversations by canonical peer DID
             const seenPeers = new Set<string>();
             const dedupedConvs: ConversationItem[] = [];
             for (const c of cleanConvs) {
-                const p = (c.peer || c.id || '').toLowerCase();
-                const shortP = p.slice(0, 16);
-                if (!seenPeers.has(shortP)) {
+                const rawP = normalizeIdentity(c.peer || c.id || '');
+                const canonicalP = meshRouter.getCanonicalId(rawP) || rawP;
+                const shortP = canonicalP.slice(0, 16);
+                if (!seenPeers.has(canonicalP) && !seenPeers.has(shortP)) {
+                    seenPeers.add(canonicalP);
                     seenPeers.add(shortP);
-                    dedupedConvs.push(c);
+                    dedupedConvs.push({
+                        ...c,
+                        id: canonicalP,
+                        peer: canonicalP
+                    });
                 }
             }
 
             const cleanConts = (Array.isArray(conts) ? conts : []).filter((c: any) => {
                 if (!c) return false;
-                const hash = (c.identity_hash || '').toLowerCase();
+                const hash = normalizeIdentity(c.identity_hash || '');
                 const name = (c.display_name || '').toLowerCase();
                 if (hash === 'me' || hash === 'local' || hash === 'unknown' || name === 'operador me') return false;
                 if (myHash && (hash === myHash || (hash.length >= 16 && myHash.startsWith(hash)))) return false;
                 return true;
             });
 
-            // Deduplicate contacts by identity_hash
+            // Deduplicate contacts by canonical identity_hash
             const seenContacts = new Set<string>();
             const dedupedConts: any[] = [];
             for (const ct of cleanConts) {
-                const h = (ct.identity_hash || '').toLowerCase();
-                const shortH = h.slice(0, 16);
-                if (!seenContacts.has(shortH)) {
+                const rawH = normalizeIdentity(ct.identity_hash || '');
+                const canonicalH = meshRouter.getCanonicalId(rawH) || rawH;
+                const shortH = canonicalH.slice(0, 16);
+                if (!seenContacts.has(canonicalH) && !seenContacts.has(shortH)) {
+                    seenContacts.add(canonicalH);
                     seenContacts.add(shortH);
-                    dedupedConts.push(ct);
+                    dedupedConts.push({
+                        ...ct,
+                        identity_hash: canonicalH
+                    });
                 }
             }
 
@@ -735,7 +746,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     if (rawWebConvs) {
                         const parsed = JSON.parse(rawWebConvs);
                         const filtered = parsed.filter((c: any) => {
-                            const p = (c.peer || c.id || '').toLowerCase();
+                            const p = normalizeIdentity(c.peer || c.id || '');
                             const n = (c.name || c.display_name || '').toLowerCase();
                             return p !== 'me' && p !== 'local' && n !== 'operador me' && (!myHash || (p !== myHash && !myHash.startsWith(p)));
                         }).map((c: any) => {
@@ -750,7 +761,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     if (rawWebConts) {
                         const parsed = JSON.parse(rawWebConts);
                         const filtered = parsed.filter((c: any) => {
-                            const h = (c.identity_hash || '').toLowerCase();
+                            const h = normalizeIdentity(c.identity_hash || '');
                             const n = (c.display_name || '').toLowerCase();
                             return h !== 'me' && h !== 'local' && n !== 'operador me' && (!myHash || (h !== myHash && !myHash.startsWith(h)));
                         });
@@ -764,17 +775,19 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             const mergedMap = new Map<string, ConversationItem>();
 
             for (const c of dedupedConvs) {
-                const p = (c.peer || c.id || '').toLowerCase();
-                const key = p.slice(0, 16);
-                if (key) mergedMap.set(key, c);
+                const rawP = normalizeIdentity(c.peer || c.id || '');
+                const canonicalP = meshRouter.getCanonicalId(rawP) || rawP;
+                const key = canonicalP.slice(0, 16);
+                if (key) mergedMap.set(key, { ...c, id: canonicalP, peer: canonicalP });
             }
 
             for (const lc of localConvs) {
-                const p = (lc.peer || lc.id || '').toLowerCase();
-                const key = p.slice(0, 16);
+                const rawP = normalizeIdentity(lc.peer || lc.id || '');
+                const canonicalP = meshRouter.getCanonicalId(rawP) || rawP;
+                const key = canonicalP.slice(0, 16);
                 if (!key) continue;
                 if (!mergedMap.has(key)) {
-                    mergedMap.set(key, lc);
+                    mergedMap.set(key, { ...lc, id: canonicalP, peer: canonicalP });
                 } else {
                     const existing = mergedMap.get(key)!;
                     const existingTs = (typeof existing.last_message === 'object' && (existing.last_message as any)?.timestamp) || existing.last_timestamp || 0;
@@ -782,6 +795,8 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     if (localTs > existingTs) {
                         mergedMap.set(key, {
                             ...existing,
+                            id: canonicalP,
+                            peer: canonicalP,
                             last_message: lc.last_message || existing.last_message,
                             last_timestamp: localTs,
                             unread_count: lc.unread_count ?? existing.unread_count

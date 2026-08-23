@@ -207,14 +207,14 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             className="btn-tactical-secondary"
                             style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem" }}
                         >
-                            <span>📞</span> Llamada de Voz
+                            <span>📞</span> {t.chat?.call_btn || "Llamada de Voz"}
                         </button>
                         <button
                             onClick={() => { onClose(); onStartCall?.("video"); }}
                             className="btn-tactical-pill active"
                             style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem" }}
                         >
-                            <span>📹</span> Videollamada HD
+                            <span>📹</span> {t.chat?.video_btn || "Videollamada HD"}
                         </button>
                     </div>
                 </div>
@@ -222,9 +222,9 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                 {/* Shared Media Tabs Header */}
                 <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff" }}>Archivos & Medios Compartidos</span>
+                        <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff" }}>{t.chat_extended?.gallery_title || "Archivos & Medios Compartidos"}</span>
                         <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                            {messages.length} MENSAJES
+                            {messages.length} {t.nav?.chats ? t.nav.chats.toUpperCase() : "MENSAJES"}
                         </span>
                     </div>
 

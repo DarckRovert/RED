@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback } from "react";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 
 export const STORY_THEMES = [
@@ -21,6 +22,7 @@ interface StoryCreatorProps {
 }
 
 export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps) {
+    const { t } = useTranslation();
     const { contacts, publishStatus } = useRedStore();
 
     const [mode, setMode] = useState<"text" | "photo">("text");
@@ -153,7 +155,7 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
                     <textarea
                         value={text}
                         onChange={e => setText(e.target.value)}
-                        placeholder="Escribe tu estado para la malla..."
+                        placeholder={t.stories_module?.caption_placeholder || "Escribe tu estado..."}
                         maxLength={280}
                         autoFocus
                         style={{
@@ -175,13 +177,13 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
             }}>
                 {mode === "text" && (
                     <div style={{ display: "flex", gap: "8px", justifyContent: "center", overflowX: "auto", paddingBottom: "4px" }}>
-                        {STORY_THEMES.map((t, i) => (
+                        {STORY_THEMES.map((th, i) => (
                             <div
-                                key={t.label}
+                                key={th.label}
                                 onClick={() => setTheme(i)}
                                 style={{
                                     width: 28, height: 28, borderRadius: "50%",
-                                    background: `linear-gradient(135deg, ${t.from}, ${t.to})`,
+                                    background: `linear-gradient(135deg, ${th.from}, ${th.to})`,
                                     border: theme === i ? "2px solid #fff" : "2px solid rgba(255,255,255,0.2)",
                                     boxShadow: theme === i ? "0 0 10px #fff" : "none",
                                     cursor: "pointer", flexShrink: 0
@@ -197,7 +199,7 @@ export default function StoryCreator({ onClose, onPublished }: StoryCreatorProps
                     className="btn-tactical-primary"
                     style={{ width: "100%", maxWidth: "420px", margin: "0 auto", padding: "12px 20px", fontSize: "0.95rem" }}
                 >
-                    {isSending ? "Publicando en Malla..." : "PUBLICAR ESTADO (24H)"}
+                    {isSending ? "..." : (t.stories_module?.publish_btn || "PUBLICAR ESTADO (24H)")}
                 </button>
             </div>
         </div>

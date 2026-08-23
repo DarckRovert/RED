@@ -5,11 +5,13 @@ import { useRedStore } from "../store/useRedStore";
 import { StegoEngine, StegoExtractResult } from "../lib/StegoEngine";
 import { RedAPI, StegoCapsuleRecord } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type StegoTab = "embed" | "extract" | "vault";
 
 export function StegoVaultModal() {
     const { navigate, identity } = useRedStore();
+    const { t } = useTranslation();
     const [mode, setMode] = useState<StegoTab>("embed");
 
     // Embed states
@@ -226,10 +228,10 @@ export function StegoVaultModal() {
                     }}>🖼️</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Bóveda Esteganográfica Cifrada
+                            {t.stego_module?.title || "Bóveda Esteganográfica Cifrada"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            LSB CARRIER INJECTION · AES-256-GCM · SLED PERSISTED
+                            {t.stego_module?.subtitle || "LSB CARRIER INJECTION · AES-256-GCM · SLED PERSISTED"}
                         </div>
                     </div>
                 </div>
@@ -237,7 +239,7 @@ export function StegoVaultModal() {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar bóveda"
+                    title={t.common?.close || "Cerrar bóveda"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -257,14 +259,14 @@ export function StegoVaultModal() {
                     className={mode === "embed" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🔒 Ocultar & Cifrar (Embed)
+                    🔒 {t.stego_module?.embed_tab || "Ocultar & Cifrar (Embed)"}
                 </button>
                 <button
                     onClick={() => setMode("extract")}
                     className={mode === "extract" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🔓 Extraer & Revelar (Extract)
+                    🔓 {t.stego_module?.extract_tab || "Extraer & Revelar (Extract)"}
                 </button>
                 <button
                     onClick={() => setMode("vault")}

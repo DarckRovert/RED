@@ -406,10 +406,10 @@ export const WeatherAlertPanel: React.FC = () => {
                     </div>
                     <div>
                         <div style={{ fontSize: "0.98rem", fontWeight: 800, letterSpacing: "0.2px", lineHeight: "1.2" }}>
-                            {t('weather_panel.title')}
+                            {t.weather_panel?.title || "Barómetro Táctico & Alertas Meteorológicas"}
                         </div>
                         <div style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {t('weather_panel.subtitle')}
+                            {t.weather_panel?.subtitle || "DEFENSA CIVIL & PREVENCIÓN DE CATÁSTROFES"}
                         </div>
                     </div>
                 </div>
@@ -427,7 +427,7 @@ export const WeatherAlertPanel: React.FC = () => {
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title={t('common.close')}
+                        title={t.common?.close || "Cerrar"}
                         style={{ width: 34, height: 34, fontSize: "0.9rem" }}
                     >
                         ✕

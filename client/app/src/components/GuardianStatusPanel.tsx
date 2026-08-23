@@ -7,6 +7,7 @@ import { GuardianEngine, GuardianEvaluation, GuardianAuditLogEntry, GuardianConf
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface GuardianStatusPanelProps {
     onClose?: () => void;
@@ -16,6 +17,7 @@ type TabMode = "testing" | "config" | "auditLog";
 
 export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProps) {
     const { goBack } = useRedStore();
+    const { t } = useTranslation();
     const handleClose = onClose || goBack;
 
     const [activeTab, setActiveTab] = useState<TabMode>("testing");
@@ -145,10 +147,10 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                     }}>🛡️</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Centinela Guardián & Firewall IA
+                            {t.guardian_module?.title || "Centinela Guardián & Firewall IA"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            CONTENT MODERATION · ZERO-LEAKAGE FORENSICS
+                            {t.guardian_module?.subtitle || "CONTENT MODERATION · ZERO-LEAKAGE FORENSICS"}
                         </div>
                     </div>
                 </div>
@@ -181,7 +183,7 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
                     <button
                         onClick={handleClose}
                         className="btn-icon"
-                        title="Cerrar panel"
+                        title={t.common?.close || "Cerrar panel"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕

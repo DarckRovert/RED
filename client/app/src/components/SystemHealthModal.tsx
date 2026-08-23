@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
 import { RED_VERSION_NAME } from "../lib/version";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 // Utility to safely fill buffers of arbitrary size using WebCrypto (respecting 64 KiB W3C quota limit)
 function fillCryptoRandom<T extends Uint8Array>(buffer: T): T {
@@ -47,6 +48,7 @@ interface SystemHealthModalProps {
 
 export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose }) => {
     const { goBack, status: nodeStatus, contacts, activeSosBeacons, messages } = useRedStore();
+    const { t } = useTranslation();
     const handleClose = onClose || goBack;
     const [isRunningAll, setIsRunningAll] = useState(false);
     const [overallScore, setOverallScore] = useState<number>(0);
@@ -452,10 +454,10 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
                     }}>💚</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Diagnóstico de Salud & Kernel Telemetry
+                            {t.health_module?.title || "Diagnóstico de Salud & Kernel Telemetry"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {RED_VERSION_NAME} · REAL BENCHMARKS & HARDWARE I/O
+                            {RED_VERSION_NAME} · {t.health_module?.subtitle || "REAL BENCHMARKS & HARDWARE I/O"}
                         </div>
                     </div>
                 </div>
@@ -468,12 +470,12 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
                         style={{ padding: "8px 14px", fontSize: "0.78rem" }}
                         title="Reejecutar todos los benchmarks empíricos"
                     >
-                        {isRunningAll ? "Diagnosticando..." : "⚡ Reejecutar"}
+                        {isRunningAll ? "Diagnosticando..." : `⚡ ${t.health_module?.run_diagnostics || "Reejecutar"}`}
                     </button>
                     <button
                         onClick={handleClose}
                         className="btn-icon"
-                        title="Cerrar"
+                        title={t.common?.close || "Cerrar"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕

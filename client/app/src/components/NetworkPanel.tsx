@@ -7,9 +7,11 @@ import { BlackoutSimulatorModal } from "./BlackoutSimulatorModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
 import { DnsTunnelEngine } from "../lib/dnsTunnelEngine";
 import { SniSpoofEngine } from "../lib/sniSpoofEngine";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 export default function NetworkPanel() {
+    const { t } = useTranslation();
     const { goBack, status, connectPeer } = useRedStore();
     const [localIp, setLocalIp] = useState("…");
     const [loraEnabled, setLoraEnabled] = useState(false);
@@ -197,7 +199,7 @@ export default function NetworkPanel() {
                     {/* Tarjeta de Dirección IP Local */}
                     <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                            <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>DIRECCIÓN IP DE NODO (LAN/MESH)</div>
+                            <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>{t.diagnostics_module?.mesh_network_panel || "DIRECCIÓN IP DE NODO (LAN/MESH)"}</div>
                             <div style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
                                 {localIp}
                             </div>
@@ -207,7 +209,7 @@ export default function NetworkPanel() {
 
                     {/* Conectar a Par Manualmente */}
                     <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                        <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>Conectar Manualmente a Nodo P2P</div>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>{t.sidebar?.add_contact_btn || "Conectar Manualmente a Nodo P2P"}</div>
                         <input
                             value={manualAddress}
                             onChange={e => setManualAddress(e.target.value)}
@@ -220,7 +222,7 @@ export default function NetworkPanel() {
                             className="btn-tactical-primary"
                             style={{ padding: "12px", fontSize: "0.88rem" }}
                         >
-                            {connectingManual ? "Estableciendo enlace..." : "⚡ CONECTAR AL PAR"}
+                            {connectingManual ? (t.common?.loading || "Estableciendo enlace...") : `⚡ ${t.common?.confirm || "CONECTAR AL PAR"}`}
                         </button>
                     </div>
 

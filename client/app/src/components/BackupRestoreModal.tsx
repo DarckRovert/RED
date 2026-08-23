@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { SovereignBackupEngine, CloudUploadResult } from "../lib/SovereignBackupEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface BackupRestoreModalProps {
     onClose?: () => void;
@@ -12,6 +13,7 @@ interface BackupRestoreModalProps {
 
 export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose }) => {
     const { identity, fetchData, goBack } = useRedStore();
+    const { t } = useTranslation();
     const handleClose = onClose || goBack;
 
     const [uiMode, setUiMode] = useState<"one_touch" | "advanced">("one_touch");
@@ -276,16 +278,17 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose 
                     </div>
                     <div>
                         <div style={{ fontSize: "15px", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>
-                            RESPALDO & NUBE AUTOMÁTICA
+                            {t.backup_module?.title || "RESPALDO & NUBE AUTOMÁTICA"}
                         </div>
                         <div style={{ fontSize: "10px", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                            GOOGLE DRIVE · AES-256-GCM · SIN CONFIGURACIONES COMPLEJAS
+                            {t.backup_module?.subtitle || "GOOGLE DRIVE · AES-256-GCM · SIN CONFIGURACIONES COMPLEJAS"}
                         </div>
                     </div>
                 </div>
 
                 <button
                     onClick={handleClose}
+                    title={t.common?.close || "Cerrar"}
                     style={{
                         background: "rgba(255, 255, 255, 0.06)", border: "1px solid var(--border-subtle)",
                         color: "var(--text-muted)", borderRadius: "8px", width: "32px", height: "32px",

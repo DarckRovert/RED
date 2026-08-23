@@ -3,6 +3,7 @@
 import React from "react";
 import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface PollMessageProps {
     msg: MessageItem;
@@ -10,6 +11,7 @@ interface PollMessageProps {
 }
 
 export function PollMessage({ msg, onVote }: PollMessageProps) {
+    const { t } = useTranslation();
     const { identity } = useRedStore();
     const pd = msg.poll_data;
     if (!pd) return null;
@@ -69,8 +71,8 @@ export function PollMessage({ msg, onVote }: PollMessageProps) {
                 );
             })}
             <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 6, display: "flex", justifyContent: "space-between", fontFamily: "JetBrains Mono, monospace" }}>
-                <span>{totalVotes} voto{totalVotes !== 1 ? "s" : ""} auditado{totalVotes !== 1 ? "s" : ""}</span>
-                {myVoteStr !== null && <span style={{ color: "var(--accent-emerald)", fontWeight: 700 }}>Voto Registrado</span>}
+                <span>{totalVotes} {t.chat_extended?.poll_votes || "votos"}</span>
+                {myVoteStr !== null && <span style={{ color: "var(--accent-emerald)", fontWeight: 700 }}>✓ {t.common?.success || "OK"}</span>}
             </div>
         </div>
     );

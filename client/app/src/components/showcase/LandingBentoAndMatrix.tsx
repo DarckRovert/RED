@@ -1,6 +1,8 @@
 import React from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 export const LandingBentoAndMatrix: React.FC = () => {
+    const { t } = useTranslation();
     return (
         <>
         <section id="bento" style={{ padding: "60px 0" }}>
@@ -17,10 +19,10 @@ export const LandingBentoAndMatrix: React.FC = () => {
                 fontWeight: 700,
               }}
             >
-              ARQUITECTURA DE VANGUARDIA • BENTO GRID
+              {t.showcase_landing?.feature_matrix_title || "ARQUITECTURA DE VANGUARDIA • BENTO GRID"}
             </span>
             <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
-              Los 6 Pilares de RED Sovereign Mesh OS
+              {t.showcase_landing?.feature_matrix_subtitle || "Los 6 Pilares de RED Sovereign Mesh OS"}
             </h2>
             <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
               Diseñado desde los primeros principios para garantizar que la comunicación humana sea invulnerable a censura, fallos de infraestructura y computación cuántica.

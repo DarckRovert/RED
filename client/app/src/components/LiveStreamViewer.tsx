@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface LiveStreamViewerProps {
     streamId: string;
@@ -11,6 +12,7 @@ interface LiveStreamViewerProps {
 
 export function LiveStreamViewer({ streamId, onClose }: LiveStreamViewerProps) {
     const { liveStreams, identity, addLiveComment } = useRedStore();
+    const { t } = useTranslation();
 
     const stream = liveStreams[streamId];
     const [comment, setComment] = useState("");

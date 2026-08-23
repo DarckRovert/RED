@@ -359,10 +359,10 @@ export function VitalScanModal() {
                     }}>🫀</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t('vital_scan.title')}
+                            {t.vital_scan?.title || "TRIAJE MÉDICO START & SIGNOS VITALES"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {t('vital_scan.subtitle')}
+                            {t.vital_scan?.subtitle || "Protocolo de Bajas Masivas para Defensa Civil y Militar"}
                         </div>
                     </div>
                 </div>
@@ -370,7 +370,7 @@ export function VitalScanModal() {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title={t('common.close')}
+                    title={t.common?.close || "Cerrar"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

@@ -5,9 +5,11 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
 import { EmptyState } from "./ui/EmptyState";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export default function BroadcastPanel() {
     const { contacts: rawContacts, goBack } = useRedStore();
+    const { t } = useTranslation();
     const contacts = Array.isArray(rawContacts) ? rawContacts : [];
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [message, setMessage] = useState("");
@@ -80,7 +82,7 @@ export default function BroadcastPanel() {
                     }}>📢</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Difusión Privada & Onion Routing
+                            {t.modules?.broadcast || "Difusión Privada & Onion Routing"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-crimson-bright)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             MULTI-HOP GOSSIPSUB · REMITENTE OFUSCADO
@@ -91,7 +93,7 @@ export default function BroadcastPanel() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar panel"
+                    title={t.common?.close || "Cerrar panel"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

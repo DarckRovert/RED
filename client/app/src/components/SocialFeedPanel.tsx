@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { createSocialPost, reactToPost, followUser, deleteSocialPost, SocialPost } from "../lib/api";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 const AVATAR_COLORS = [
     ["#E8213A","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
@@ -42,6 +43,7 @@ export const SocialFeedPanel: React.FC = () => {
         socialPosts, bookmarkedPosts, followingList, loadSocialFeed, 
         identity, contacts, addOptimisticReaction, deleteOptimisticPost, toggleBookmark, hydrateBookmarks, goBack 
     } = useRedStore();
+    const { t } = useTranslation();
     
     const [newPostContent, setNewPostContent] = useState("");
     const [mediaData, setMediaData] = useState<string | null>(null);
@@ -176,10 +178,10 @@ export const SocialFeedPanel: React.FC = () => {
                     }}>🌐</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Feed Social Soberano Off-Grid
+                            {t.social_module?.title || "Feed Social Soberano Off-Grid"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            GOSSIPSUB MICROBLOGGING · ED25519 VERIFIED
+                            {t.social_module?.subtitle || "GOSSIPSUB MICROBLOGGING · ED25519 VERIFIED"}
                         </div>
                     </div>
                 </div>
@@ -197,7 +199,7 @@ export const SocialFeedPanel: React.FC = () => {
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Cerrar Feed"
+                        title={t.common?.close || "Cerrar Feed"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕
@@ -218,7 +220,7 @@ export const SocialFeedPanel: React.FC = () => {
                     className={activeTab === "global" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                 >
-                    🌍 Global ({socialPosts.length})
+                    🌍 {t.social_module?.filter_all || "Global"} ({socialPosts.length})
                 </button>
                 <button
                     onClick={() => setActiveTab("following")}
@@ -254,27 +256,55 @@ export const SocialFeedPanel: React.FC = () => {
                         <textarea
                             ref={textareaRef}
                             value={newPostContent}
-                            onChange={e => setNewPostContent(e.target.value)}
-                            placeholder="¿Qué ocurre en tu sector de la malla? (Usa #hashtags)..."
+                            onChange={(e) => setNewPostContent(e.target.value)}
+                            placeholder={replyingTo ? `Respondiendo a @${replyingTo.author_hash?.slice(0, 6) || "par"}...` : (t.social_module?.composer_placeholder || "¿Qué está ocurriendo en tu sector táctico? Publica un reporte...")}
                             rows={3}
-                            style={{ fontSize: "0.92rem" }}
+                            maxLength={MAX_CHARS}
+                            style={{
+                                width: "100%", background: "transparent",
+                                border: "none", color: "var(--text-primary)",
+                                fontSize: "0.92rem", resize: "none", outline: "none",
+                                lineHeight: "1.5"
+                            }}
                         />
 
                         {mediaData && (
-                            <div style={{ position: "relative", width: "100px", height: "100px" }}>
-                                <img src={mediaData} alt="Adjunto" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "10px", border: "1px solid var(--accent-cyan)" }} />
-                                <button onClick={() => setMediaData(null)} style={{ position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: "50%", background: "#FF3355", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.70rem" }}>✕</button>
+                            <div style={{ position: "relative", width: "fit-content", marginBottom: "8px" }}>
+                                <img
+                                    src={mediaData}
+                                    alt="Adjunto"
+                                    style={{ maxHeight: "160px", borderRadius: "8px", border: "1px solid var(--glass-border)" }}
+                                />
+                                <button
+                                    onClick={() => setMediaData(null)}
+                                    className="btn-icon"
+                                    style={{
+                                        position: "absolute", top: 4, right: 4,
+                                        background: "rgba(0,0,0,0.8)", width: 24, height: 24, fontSize: "0.75rem"
+                                    }}
+                                >
+                                    ✕
+                                </button>
                             </div>
                         )}
 
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <button
-                                onClick={handleTakePhoto}
-                                className="btn-tactical-secondary"
-                                style={{ padding: "8px 14px", fontSize: "0.78rem" }}
-                            >
-                                📷 Cámara / Foto
-                            </button>
+                        <div style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            borderTop: "1px solid var(--glass-border)", paddingTop: "10px", marginTop: "4px"
+                        }}>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                <button
+                                    onClick={handleTakePhoto}
+                                    className="btn-ghost"
+                                    title="Adjuntar Fotografía / Sensor"
+                                    style={{ padding: "6px 10px", fontSize: "0.82rem", color: "var(--accent-cyan)" }}
+                                >
+                                    📷 Foto
+                                </button>
+                                <span style={{ fontSize: "0.70rem", color: newPostContent.length > MAX_CHARS - 50 ? "var(--accent-crimson)" : "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {newPostContent.length}/{MAX_CHARS}
+                                </span>
+                            </div>
 
                             <button
                                 onClick={handlePublish}
@@ -282,7 +312,7 @@ export const SocialFeedPanel: React.FC = () => {
                                 className="btn-tactical-primary"
                                 style={{ padding: "8px 20px", fontSize: "0.85rem" }}
                             >
-                                {isPublishing ? "Emitiendo..." : "⚡ EMITIR POST"}
+                                {isPublishing ? (t.common?.loading || "Emitiendo...") : (t.stories_module?.publish_btn || "⚡ EMITIR POST")}
                             </button>
                         </div>
                     </div>
@@ -291,9 +321,9 @@ export const SocialFeedPanel: React.FC = () => {
                     {topLevel.length === 0 ? (
                         <div className="empty-state-tactical">
                             <div className="empty-state-icon">📡</div>
-                            <div className="empty-state-title">Sin Publicaciones en la Malla</div>
+                            <div className="empty-state-title">{t.stories_module?.no_stories || "Sin Publicaciones en la Malla"}</div>
                             <div className="empty-state-desc">
-                                Sé el primero en emitir una actualización comunitaria o sincroniza tu nodo con otros pares.
+                                {t.sidebar?.no_contacts_desc || "Sé el primero en emitir una actualización comunitaria o sincroniza tu nodo con otros pares."}
                             </div>
                         </div>
                     ) : (

@@ -1,12 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { TacticalModule } from './types';
 import { TACTICAL_MODULES_CATALOG } from './catalogData';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 interface LandingModuleCatalogProps {
     onEnterApp: () => void;
 }
 
 export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEnterApp }) => {
+    const { t } = useTranslation();
     const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
     const [moduleSearch, setModuleSearch] = useState<string>("");
     const [selectedModuleDetail, setSelectedModuleDetail] = useState<TacticalModule | null>(null);
@@ -38,14 +40,14 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                 fontSize: "11px",
                 padding: "4px 12px",
                 borderRadius: "20px",
-                background: "rgba(255, 42, 81, 0.15)",
-                color: "#FF2A51",
-                border: "1px solid rgba(255, 42, 81, 0.3)",
+                background: "rgba(0, 229, 255, 0.15)",
+                color: "#00E5FF",
+                border: "1px solid rgba(0, 229, 255, 0.3)",
                 fontFamily: "monospace",
                 fontWeight: 700,
               }}
             >
-              MATRIZ DE PRODUCCIÓN • 42 MÓDULOS ACTIVOS
+              {t.showcase_landing?.catalog_title || "CATÁLOGO DE MÓDULOS TÁCTICOS"}
             </span>
             <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
               Centro de Operaciones Tácticas

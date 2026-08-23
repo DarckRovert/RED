@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { AmberAlert, getAmberAlerts, reportSighting, RedAPI } from '@/lib/api';
+import { useTranslation } from '@/lib/i18n/i18nEngine';
 
 interface AmberAlertBannerProps {
   /** Callback cuando el usuario minimiza el banner */
@@ -17,6 +18,7 @@ interface AmberAlertBannerProps {
 }
 
 export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) {
+  const { t } = useTranslation();
   const [alerts, setAlerts] = useState<AmberAlert[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [minimized, setMinimized] = useState(false);
@@ -118,7 +120,7 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
         aria-label={`Alerta AMBER activa: ${currentAlert.name}`}
       >
         <span className="amber-pulse-dot" />
-        <span>🟠 AMBER ACTIVA ({alerts.length})</span>
+        <span>🟠 {t.amber_module?.banner_title || "AMBER ACTIVA"} ({alerts.length})</span>
       </button>
     );
   }
@@ -131,8 +133,8 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
           <div className="amber-header-left">
             <span className="amber-pulse-dot amber-pulse-dot--large" />
             <div>
-              <div className="amber-badge">🟠 ALERTA AMBER-RED</div>
-              <div className="amber-subtitle">Sistema RED de Personas Desaparecidas</div>
+              <div className="amber-badge">🟠 {t.amber_module?.banner_title || "ALERTA AMBER-RED"}</div>
+              <div className="amber-subtitle">{t.amber_module?.banner_sub || "Sistema RED de Personas Desaparecidas"}</div>
             </div>
           </div>
           <div className="amber-header-actions">
@@ -185,19 +187,19 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
           {/* Datos */}
           <div className="amber-info">
             <div className="amber-name">{currentAlert.name}</div>
-            <div className="amber-age">Edad: <strong>{currentAlert.age} años</strong></div>
+            <div className="amber-age">{t.amber_module?.age || "Edad"}: <strong>{currentAlert.age}</strong></div>
             <div className="amber-description">{currentAlert.description}</div>
             {currentAlert.last_seen_location && (
               <div className="amber-location">
-                📍 Último avistamiento: <strong>{currentAlert.last_seen_location}</strong>
+                📍 {t.amber_module?.last_seen_loc || "Último avistamiento"}: <strong>{currentAlert.last_seen_location}</strong>
               </div>
             )}
             <div className="amber-issued">
-              Emitida: {new Date(currentAlert.issued_at * 1000).toLocaleString('es-MX')}
+              Emitida: {new Date(currentAlert.issued_at * 1000).toLocaleString()}
             </div>
             {currentAlert.sighting_count > 0 && (
               <div className="amber-sightings">
-                👁 {currentAlert.sighting_count} avistamiento(s) reportado(s)
+                👁 {currentAlert.sighting_count} {t.amber_module?.report_sighting || "avistamiento(s)"}
               </div>
             )}
           </div>
@@ -215,26 +217,24 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
                 <textarea
                   value={sightingNotes}
                   onChange={e => setSightingNotes(e.target.value)}
-                  placeholder="Describe dónde y cuándo viste a esta persona (opcional)..."
+                  placeholder={t.amber_module?.sighting_notes_placeholder || "Describe dónde y cuándo viste a esta persona (opcional)..."}
                   className="amber-sighting-textarea"
                   rows={3}
-                  id="amber-sighting-notes"
                 />
-                <div className="amber-sighting-actions">
+                <div className="amber-form-actions">
                   <button
                     onClick={() => setShowSightingForm(false)}
-                    className="amber-btn amber-btn--secondary"
+                    className="amber-btn amber-btn--cancel"
                     disabled={submitting}
                   >
-                    Cancelar
+                    {t.common?.cancel || "Cancelar"}
                   </button>
                   <button
                     onClick={handleSightingSubmit}
-                    className="amber-btn amber-btn--primary"
+                    className="amber-btn amber-btn--submit"
                     disabled={submitting}
-                    id="amber-submit-sighting"
                   >
-                    {submitting ? 'Enviando...' : 'Reportar Avistamiento'}
+                    {submitting ? '...' : (t.amber_module?.send_report || 'Enviar reporte')}
                   </button>
                 </div>
               </>
@@ -242,22 +242,21 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
           </div>
         )}
 
-        {/* Botones de acción */}
+        {/* Botones de acción principales */}
         {!showSightingForm && (
-          <div className="amber-banner-footer">
+          <div className="amber-banner-actions">
             <button
               onClick={() => setShowSightingForm(true)}
-              className="amber-btn amber-btn--primary"
-              id="amber-report-sighting-btn"
+              className="amber-action-btn amber-action-btn--sighting"
             >
-              📍 Reportar Avistamiento
+              👁 {t.amber_module?.report_sighting || "Reportar Avistamiento"}
             </button>
             <button
               onClick={handleShare}
-              className="amber-btn amber-btn--secondary"
-              id="amber-share-btn"
+              className="amber-action-btn amber-action-btn--share"
+              title="Copiar datos al portapapeles"
             >
-              📢 Compartir Alerta
+              📋 {t.common?.copied || "Compartir"}
             </button>
           </div>
         )}

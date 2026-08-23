@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { companionSyncEngine, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 interface WebCompanionPairConfirmationModalProps {
@@ -12,6 +13,7 @@ interface WebCompanionPairConfirmationModalProps {
 }
 
 export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirmationModalProps> = ({ qrData, onClose }) => {
+    const { t } = useTranslation();
     const { identity, contacts, conversations } = useRedStore();
     const [status, setStatus] = useState<"idle" | "transmitting" | "success" | "error">("idle");
     const [statusMessage, setStatusMessage] = useState<string>("");

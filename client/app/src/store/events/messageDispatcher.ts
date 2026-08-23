@@ -1068,7 +1068,8 @@ export async function dispatchIncomingMessage(
                              normalizedItem.content?.startsWith('data:video') ? '📹 Video' :
                              (normalizedItem.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (normalizedItem.content || 'Mensaje P2P')));
 
-            const convId = item.conversation_id || item.sender;
+            const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
+            const convId = item.conversation_id ? item.conversation_id : (canonicalSender || item.sender);
             const currentConvs = get().conversations || [];
             const idx = currentConvs.findIndex(c => 
                 c && (
@@ -1086,6 +1087,8 @@ export async function dispatchIncomingMessage(
                 const existing = updatedConvs[idx];
                 const updatedObj: ConversationItem = {
                     ...existing,
+                    id: convId,
+                    peer: canonicalSender || existing.peer,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: 0
@@ -1095,7 +1098,7 @@ export async function dispatchIncomingMessage(
             } else {
                 const newObj: ConversationItem = {
                     id: convId,
-                    peer: item.sender,
+                    peer: canonicalSender || item.sender,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: 0
@@ -1141,8 +1144,8 @@ export async function dispatchIncomingMessage(
                              item.content?.startsWith('data:video') ? '📹 Video' :
                              (item.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (item.content || 'Mensaje P2P')));
 
-            const convId = item.conversation_id || item.sender;
-            const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
+            const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
+            const convId = item.conversation_id ? item.conversation_id : (canonicalSender || item.sender);
 
             // Never create conversations for broadcast addresses or control wipe packets
             const isBroadcastId = !convId || convId === 'me' || convId === 'local' ||
@@ -1173,6 +1176,8 @@ export async function dispatchIncomingMessage(
                 const existing = updatedConvs[idx];
                 const updatedObj: ConversationItem = {
                     ...existing,
+                    id: convId,
+                    peer: canonicalSender || existing.peer,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: (existing.unread_count || 0) + 1
@@ -1182,7 +1187,7 @@ export async function dispatchIncomingMessage(
             } else {
                 const newObj: ConversationItem = {
                     id: convId,
-                    peer: item.sender,
+                    peer: canonicalSender || item.sender,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: 1

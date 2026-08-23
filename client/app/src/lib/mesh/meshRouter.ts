@@ -38,18 +38,16 @@ const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000; // 72 hours
 const MAX_DEDUP_CACHE = 50_000;
 
 /**
- * Normalizes any identity format (DID, short-id, with prefixes or uppercase)
+ * Normalizes any identity format (DID, short-id, MAC, with prefixes or uppercase)
  * into a clean lowercase 64-char or canonical identifier.
  */
 export function normalizeIdentity(id: string): string {
   if (!id) return '';
   let clean = id.trim();
   if (clean.startsWith('did:red:')) {
-    const withoutScheme = clean.slice(8);
-    const parts = withoutScheme.split(':');
-    return parts[0].trim().toLowerCase();
+    clean = clean.slice(8).trim();
   }
-  // Check if it's a MAC address (e.g. 58:24:29:4F:33:1B)
+  // Check if it's a MAC address (e.g. 58:24:29:4F:33:1B or 58:24:29:4f:33:1b)
   if (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(clean)) {
     return clean.toLowerCase();
   }
@@ -60,6 +58,26 @@ export function normalizeIdentity(id: string): string {
     }
   }
   return clean.toLowerCase();
+}
+
+/**
+ * Checks if two device names represent the same physical entity (fuzzy / substring matching)
+ * while safely ignoring generic default names.
+ */
+export function isNameSimilar(name1?: string, name2?: string): boolean {
+  if (!name1 || !name2) return false;
+  const n1 = name1.trim().toLowerCase().replace(/^red-/, '');
+  const n2 = name2.trim().toLowerCase().replace(/^red-/, '');
+  if (!n1 || !n2) return false;
+  const generic = ['dispositivo red', 'operador red', 'nodo', 'nuevo par', 'par malla', 'par escaneado', 'off-grid node'];
+  if (generic.some(g => n1.startsWith(g)) || generic.some(g => n2.startsWith(g))) return false;
+  if (n1 === n2) return true;
+  // Substring or token overlap: e.g. "lenovo tab one" contains "tab"
+  const tokens1 = n1.split(/[\s-_]+/).filter(t => t.length >= 3);
+  const tokens2 = n2.split(/[\s-_]+/).filter(t => t.length >= 3);
+  if (tokens1.some(t => tokens2.includes(t))) return true;
+  if (n1.length >= 3 && n2.length >= 3 && (n1.includes(n2) || n2.includes(n1))) return true;
+  return false;
 }
 
 /**
@@ -252,34 +270,36 @@ class MeshRouter {
    * hardware ID (BLE MAC, UUID, WiFi peer ID) or returns the original ID
    * if already canonical.
    */
-   getCanonicalId(id: string): string {
+  getCanonicalId(id: string): string {
     if (!id) return '';
-    let clean = id.trim();
-    if (clean.startsWith('did:red:')) {
-      const withoutScheme = clean.slice(8);
-      const parts = withoutScheme.split(':');
-      clean = parts[0].trim();
-    } else if (clean.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(clean)) {
-      const parts = clean.split(':');
-      if (parts[0].length >= 16) {
-        clean = parts[0].trim();
-      }
-    }
-    const cleanLower = clean.toLowerCase();
+    const clean = normalizeIdentity(id);
+    const rawTrimmed = id.trim();
+
     if (this.deviceToCanonicalMap.has(clean)) {
       return this.deviceToCanonicalMap.get(clean)!;
     }
-    if (this.deviceToCanonicalMap.has(cleanLower)) {
-      return this.deviceToCanonicalMap.get(cleanLower)!;
+    if (this.deviceToCanonicalMap.has(rawTrimmed)) {
+      return this.deviceToCanonicalMap.get(rawTrimmed)!;
     }
-    const peer = this.peers.get(clean) || this.peers.get(cleanLower);
+
+    const peer = this.peers.get(clean) || this.peers.get(rawTrimmed);
     if (peer?.canonicalId && peer.canonicalId.length === 64) {
-      return peer.canonicalId;
+      return peer.canonicalId.toLowerCase();
     }
-    if (cleanLower.length === 64 && /^[0-9a-fA-F]+$/.test(cleanLower)) {
-      return cleanLower;
+
+    // Heuristic lookup: Check if any peer has this as raw ID or matching prefix
+    for (const [k, p] of this.peers.entries()) {
+      if (p.id?.toLowerCase() === clean || p.canonicalId?.toLowerCase() === clean) {
+        if (p.canonicalId && p.canonicalId.length === 64) {
+          return p.canonicalId.toLowerCase();
+        }
+      }
     }
-    return cleanLower;
+
+    if (clean.length === 64 && /^[0-9a-fA-F]+$/.test(clean)) {
+      return clean;
+    }
+    return clean;
   }
 
   /**
@@ -294,12 +314,21 @@ class MeshRouter {
    */
   getPeerByAnyId(id: string): MeshPeer | undefined {
     if (!id) return undefined;
-    const clean = id.trim();
+    const clean = normalizeIdentity(id);
+    const raw = id.trim();
     if (this.peers.has(clean)) return this.peers.get(clean);
+    if (this.peers.has(raw)) return this.peers.get(raw);
     const canonical = this.getCanonicalId(clean);
     if (canonical && this.peers.has(canonical)) return this.peers.get(canonical);
     for (const p of this.peers.values()) {
-      if (p.id === clean || p.canonicalId === clean || p.canonicalId === canonical) return p;
+      if (
+        p.id?.toLowerCase() === clean || 
+        p.id?.toLowerCase() === raw.toLowerCase() || 
+        p.canonicalId?.toLowerCase() === clean || 
+        (canonical && p.canonicalId?.toLowerCase() === canonical.toLowerCase())
+      ) {
+        return p;
+      }
     }
     return undefined;
   }
@@ -391,16 +420,17 @@ class MeshRouter {
    */
   bindDeviceToCanonical(deviceId: string, canonicalId: string, displayName?: string, publicKey?: string) {
     if (!deviceId || !canonicalId) return;
-    const cleanDevice = deviceId.trim();
-    const cleanCanonical = canonicalId.trim();
+    const cleanDevice = normalizeIdentity(deviceId);
+    const cleanCanonical = normalizeIdentity(canonicalId);
 
     this.deviceToCanonicalMap.set(cleanDevice, cleanCanonical);
-    this.deviceToCanonicalMap.set(cleanDevice.toLowerCase(), cleanCanonical.toLowerCase());
+    this.deviceToCanonicalMap.set(deviceId.trim(), cleanCanonical);
 
     // Migrate any temporary peer record under deviceId to canonicalId
-    const tempPeer = this.peers.get(cleanDevice);
+    const tempPeer = this.peers.get(cleanDevice) || this.peers.get(deviceId.trim());
     if (tempPeer && cleanDevice !== cleanCanonical) {
       this.peers.delete(cleanDevice);
+      this.peers.delete(deviceId.trim());
       this.updatePeer(
         cleanCanonical,
         (tempPeer.transport as any) || 'ble',
@@ -414,7 +444,7 @@ class MeshRouter {
     } else if (displayName || publicKey) {
       const existing = this.peers.get(cleanCanonical);
       if (existing) {
-        if (displayName) existing.name = displayName;
+        if (displayName && !existing.name?.startsWith('Operador ')) existing.name = displayName;
         if (publicKey) existing.publicKey = publicKey;
         this.peers.set(cleanCanonical, existing);
       }
@@ -1208,23 +1238,25 @@ class MeshRouter {
     isGateway?: boolean,
     hasInternet?: boolean
   ) {
-    let resolvedCanonical = canonicalId || this.deviceToCanonicalMap.get(id);
+    if (!id) return;
+    const cleanId = normalizeIdentity(id);
+    let resolvedCanonical = canonicalId ? normalizeIdentity(canonicalId) : this.deviceToCanonicalMap.get(cleanId);
 
-    // If no explicit canonical ID, check if a peer with the same unique name already exists
-    if (!resolvedCanonical && name && name !== 'Dispositivo RED' && !name.startsWith('Nodo ') && !name.startsWith('RED-')) {
+    // If no explicit canonical ID, check if a peer with the same or similar name already exists
+    if (!resolvedCanonical && name && !name.startsWith('Dispositivo RED') && !name.startsWith('Nodo ') && !name.startsWith('Operador ')) {
       for (const [k, p] of this.peers.entries()) {
-        if (p.name === name) {
+        if (p.name && isNameSimilar(p.name, name)) {
           resolvedCanonical = k;
-          this.deviceToCanonicalMap.set(id, k);
+          this.deviceToCanonicalMap.set(cleanId, k);
           break;
         }
       }
     }
     if (!resolvedCanonical) {
-      resolvedCanonical = id;
+      resolvedCanonical = cleanId;
     }
 
-    const existing = this.peers.get(resolvedCanonical) || this.peers.get(id);
+    const existing = this.peers.get(resolvedCanonical) || this.peers.get(cleanId) || this.peers.get(id);
 
     const existingTransports = new Set<string>(existing?.transports || (existing?.transport ? [existing.transport] : []));
     existingTransports.add(transport);
@@ -1237,10 +1269,16 @@ class MeshRouter {
     const finalIsGateway = isGateway !== undefined ? isGateway : (existing?.isGateway ?? false);
     const finalHasInternet = hasInternet !== undefined ? hasInternet : (existing?.hasInternet ?? false);
 
+    // Pick best non-generic name
+    let bestName = name || existing?.name;
+    if (existing?.name && (!name || name === 'Dispositivo RED' || name.startsWith('Nodo ') || name.startsWith('Operador '))) {
+      bestName = existing.name;
+    }
+
     const updated: MeshPeer = {
       id: resolvedCanonical,
       canonicalId: resolvedCanonical,
-      name: name || existing?.name,
+      name: bestName,
       publicKey: publicKey || existing?.publicKey,
       transport: newPriority >= existingPriority ? transport : (existing?.transport ?? transport),
       transports: Array.from(existingTransports) as any,
@@ -1253,6 +1291,10 @@ class MeshRouter {
       gatewayMetric: finalHasInternet ? 100 : 0,
     };
 
+    // Clean up duplicate keys in this.peers
+    if (cleanId !== resolvedCanonical && this.peers.has(cleanId)) {
+      this.peers.delete(cleanId);
+    }
     if (id !== resolvedCanonical && this.peers.has(id)) {
       this.peers.delete(id);
     }

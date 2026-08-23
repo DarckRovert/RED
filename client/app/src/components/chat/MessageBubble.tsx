@@ -10,6 +10,7 @@ import { PollMessage } from "./PollMessage";
 import { ImageViewerModal } from "./ImageViewerModal";
 import { LocalAIEngine } from "../../lib/localAiEngine";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface MessageBubbleProps {
     msg: MessageItem;
@@ -129,6 +130,7 @@ function ContextMenu({
     onSelect?: () => void; onReact: (e: string) => void;
     onTranslate?: () => void; onAskCopilot?: () => void; onClose: () => void;
 }) {
+    const { t } = useTranslation();
     return (
         <>
             {/* Backdrop */}
@@ -169,16 +171,16 @@ function ContextMenu({
                 animation: "contextMenuIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
             }}>
                 {[
-                    ...(!isDeleted ? [{ label: "Responder", icon: "↩️", action: onReply }] : []),
+                    ...(!isDeleted ? [{ label: t.chat_extended?.reply_to || "Responder", icon: "↩️", action: onReply }] : []),
                     ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: "🌐", action: onTranslate }] : []),
                     ...(!isDeleted && onAskCopilot ? [{ label: "Consultar a Copiloto", icon: "🤖", action: onAskCopilot }] : []),
-                    ...(!isDeleted && onForward ? [{ label: "Reenviar", icon: "➡️", action: onForward }] : []),
-                    ...(!isDeleted ? [{ label: "Copiar", icon: "📋", action: onCopy }] : []),
+                    ...(!isDeleted && onForward ? [{ label: t.chat_extended?.forward_btn || "Reenviar", icon: "➡️", action: onForward }] : []),
+                    ...(!isDeleted ? [{ label: t.radar?.copy_did || "Copiar", icon: "📋", action: onCopy }] : []),
                     ...(!isDeleted && onSelect ? [{ label: "Seleccionar", icon: "☑️", action: onSelect }] : []),
                     ...(onPin && !isDeleted ? [{ label: "Fijar Mensaje", icon: "📌", action: onPin }] : []),
-                    ...(onEdit && isMine && !isDeleted ? [{ label: "Editar", icon: "✏️", action: onEdit }] : []),
-                    ...(onDeleteForEveryone && isMine && !isDeleted ? [{ label: "Eliminar para todos", icon: "🗑️", action: onDeleteForEveryone, danger: true }] : []),
-                    { label: "Eliminar para mí", icon: "❌", action: onDeleteLocal, danger: true },
+                    ...(onEdit && isMine && !isDeleted ? [{ label: t.profile?.edit_alias || "Editar", icon: "✏️", action: onEdit }] : []),
+                    ...(onDeleteForEveryone && isMine && !isDeleted ? [{ label: t.chat?.wipe_chat || "Eliminar para todos", icon: "🗑️", action: onDeleteForEveryone, danger: true }] : []),
+                    { label: t.chat?.delete_chat || "Eliminar", icon: "❌", action: onDeleteLocal, danger: true },
                 ].map((item: any) => (
                     <button key={item.label} onClick={() => { item.action(); onClose(); }}
                         style={{
@@ -207,6 +209,7 @@ export const MessageBubble = memo(({
     onLongPress, onCancelLongPress, onReaction, onVote, onPin, onReply, onForward, onEdit, onDeleteForEveryone, onOpenMediaGallery,
     isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode
 }: MessageBubbleProps) => {
+    const { t } = useTranslation();
     const [viewingImageSrc, setViewingImageSrc] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const [swipeOffset, setSwipeOffset] = useState<number>(0);
@@ -553,7 +556,7 @@ export const MessageBubble = memo(({
                             fontSize: "0.68rem", color: isMine ? "rgba(255, 255, 255, 0.75)" : "var(--accent-cyan)",
                             fontWeight: 700, fontStyle: "italic", marginBottom: "2px"
                         }}>
-                            <span>↩️ Reenviado</span>
+                            <span>↩️ {t.chat_extended?.forward_btn || "Reenviado"}</span>
                         </div>
                     )}
 
@@ -571,7 +574,7 @@ export const MessageBubble = memo(({
                         }}>
                             <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                                 <span>🔥</span>
-                                <span>Expira en</span>
+                                <span>{t.settings?.burner_title ? "Expira" : "Expira en"}</span>
                             </span>
                             <span>
                                 {Math.floor(burnSecondsLeft / 60)}:{(burnSecondsLeft % 60).toString().padStart(2, '0')}
@@ -594,7 +597,7 @@ export const MessageBubble = memo(({
                             }}
                         >
                             <div style={{ fontWeight: 800, color: isMine ? "#FF8599" : "var(--accent-cyan)", marginBottom: "1px" }}>
-                                {msg.reply_to.sender ? `Operador ${msg.reply_to.sender.substring(0, 8)}` : "Respondiendo a mensaje"}
+                                {msg.reply_to.sender ? `Operador ${msg.reply_to.sender.substring(0, 8)}` : (t.chat_extended?.reply_to || "Respondiendo a mensaje")}
                             </div>
                             <div style={{ color: "rgba(255, 255, 255, 0.88)", opacity: 0.9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                 {msg.reply_to.content || `[${msg.reply_to.msg_type || "Medio"}]`}

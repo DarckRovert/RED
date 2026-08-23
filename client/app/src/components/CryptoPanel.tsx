@@ -9,9 +9,11 @@ import { LocalAIEngine } from "../lib/localAiEngine";
 import { web3Bridge, Web3WalletState } from "../lib/Web3BridgeEngine";
 import { tokenomicsEngine, TokenomicsMetrics } from "../lib/TokenomicsEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export default function CryptoPanel() {
     const { identity, status, goBack, navigate } = useRedStore();
+    const { t } = useTranslation();
     const [vault, setVault] = useState<any>(null);
     const [backupModalOpen, setBackupModalOpen] = useState(false);
     const [logsModalOpen, setLogsModalOpen] = useState(false);
@@ -119,7 +121,7 @@ export default function CryptoPanel() {
                     }}>⚡</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Telemetría de Nodo & Minería P2P
+                            {t.modules?.crypto || "Telemetría de Nodo & Minería P2P"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             POW ENGINE · SOVEREIGN TOKEN VAULT · MULTI-TRANSPORT
@@ -152,7 +154,7 @@ export default function CryptoPanel() {
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Cerrar panel"
+                        title={t.common?.close || "Cerrar panel"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕

@@ -2,6 +2,7 @@ import React from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle } from "./types";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface ContactListProps {
     filteredContacts: any[];
@@ -18,6 +19,7 @@ export const ContactList: React.FC<ContactListProps> = ({
     setActiveTab,
     setAddContactOpen,
 }) => {
+    const { t } = useTranslation();
     const { navigate, deleteContact, blockNode, acceptContactRequest, rejectContactRequest } = useRedStore();
 
     return (
@@ -49,8 +51,8 @@ export const ContactList: React.FC<ContactListProps> = ({
                                             <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#fff" }}>{req.senderName}</div>
                                             <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{req.channel}</div>
                                         </div>
-                                        <button onClick={() => acceptContactRequest(req)} title="Aceptar" style={{ background: "rgba(0,200,83,0.15)", border: "1px solid rgba(0,200,83,0.4)", borderRadius: 8, color: "#00C853", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>✅</button>
-                                        <button onClick={() => rejectContactRequest(req)} title="Rechazar" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "var(--text-muted)", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>❌</button>
+                                        <button onClick={() => acceptContactRequest(req)} title={t.common?.save || "Aceptar"} style={{ background: "rgba(0,200,83,0.15)", border: "1px solid rgba(0,200,83,0.4)", borderRadius: 8, color: "#00C853", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>✅</button>
+                                        <button onClick={() => rejectContactRequest(req)} title={t.common?.cancel || "Rechazar"} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "var(--text-muted)", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>❌</button>
                                         <button onClick={() => blockNode(req.senderHash)} title="Bloquear" style={{ background: "rgba(245,0,87,0.08)", border: "1px solid rgba(245,0,87,0.25)", borderRadius: 8, color: "#FF5A7E", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>🚫</button>
                                     </div>
                                 ))}
@@ -66,17 +68,18 @@ export const ContactList: React.FC<ContactListProps> = ({
                                 borderRadius: "var(--radius-md)"
                             }}
                         >
-                            <span>➕</span> AGREGAR NUEVO CONTACTO P2P
+                            <span>➕</span> {t.sidebar?.add_contact_btn || "AGREGAR NUEVO CONTACTO P2P"}
                         </button>
                         {filteredContacts.length === 0 ? (
                             <div className="empty-state-tactical">
                                 <div className="empty-state-icon">👥</div>
-                                <div className="empty-state-title">Sin Contactos Guardados</div>
-                                <div className="empty-state-desc">Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E.</div>
+                                <div className="empty-state-title">{t.sidebar?.no_contacts || "Sin Contactos Guardados"}</div>
+                                <div className="empty-state-desc">{t.sidebar?.no_contacts_desc || "Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E."}</div>
                             </div>
                         ) : (
                             filteredContacts.map(ct => {
-                                const isCtOnline = meshRouter.peers.has(ct.identity_hash) || Array.from(meshRouter.peers.values()).some(p => p.id === ct.identity_hash);
+                                const peerRecord = meshRouter.getPeerByAnyId(ct.identity_hash);
+                                const isCtOnline = !!peerRecord;
                                 return (
                                 <div
                                     key={ct.identity_hash}
@@ -133,7 +136,7 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                                         <button
                                             id={`btn-delete-contact-${ct.identity_hash.slice(0, 8)}`}
-                                            title="Eliminar contacto"
+                                            title={t.common?.cancel || "Eliminar"}
                                             onClick={async (e) => {
                                                 e.stopPropagation();
                                                 if (confirm(`¿Eliminar a ${ct.display_name}?`)) {

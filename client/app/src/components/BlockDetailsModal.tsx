@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 interface BlockDetailsModalProps {
@@ -16,12 +17,13 @@ interface BlockDetailsModalProps {
 }
 
 export const BlockDetailsModal: React.FC<BlockDetailsModalProps> = ({ block, onClose }) => {
+    const { t } = useTranslation();
     const copyToClipboard = async (text: string, label: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            toast.success(`${label} copiado`);
+            toast.success(t.common?.copied || `${label} copiado`);
         } catch {
-            toast.error("Error al copiar");
+            toast.error(t.common?.error || "Error");
         }
     };
 

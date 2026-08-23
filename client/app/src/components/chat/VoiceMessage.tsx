@@ -4,6 +4,7 @@ import React, { useState, useRef, useMemo, useCallback, useEffect } from "react"
 import { MessageItem } from "../../lib/api";
 import { indexedMediaVault } from "../../lib/indexedMediaVault";
 import { LocalAIEngine } from "../../lib/localAiEngine";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 
 interface VoiceMessageProps {
@@ -12,6 +13,7 @@ interface VoiceMessageProps {
 }
 
 export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
+    const { t } = useTranslation();
     const audioRef = useRef<HTMLAudioElement>(null);
     const waveContainerRef = useRef<HTMLDivElement>(null);
     const [playing, setPlaying] = useState(false);
@@ -252,9 +254,9 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                                         color: "#FFFFFF",
                                         cursor: "pointer"
                                     }}
-                                    title="Transcribir nota de voz con IA Whisper"
+                                    title="Transcribir nota de voz"
                                 >
-                                    {isTranscribing ? "⏳..." : "📝 Transcribir"}
+                                    {isTranscribing ? "⏳..." : "📝 AI"}
                                 </button>
                             )}
 

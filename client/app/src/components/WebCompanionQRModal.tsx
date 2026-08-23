@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { companionSyncEngine, PairingSession, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
 interface WebCompanionQRModalProps {
@@ -11,6 +12,7 @@ interface WebCompanionQRModalProps {
 }
 
 export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClose }) => {
+    const { t } = useTranslation();
     const { restoreCompanionVault } = useRedStore();
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
     const [timeLeft, setTimeLeft] = useState<number>(120);

@@ -65,7 +65,8 @@ impl DiscoveryEngine {
         self.db.as_ref().and_then(|db| db.open_tree("discovery_last_notified").ok())
     }
 
-    pub fn register_discovered_node(&self, node: ProximityNode) {
+    pub fn register_discovered_node(&self, mut node: ProximityNode) {
+        node.identity_hash = node.identity_hash.trim().to_lowercase();
         if let Some(tree) = self.nodes_tree() {
             if let Ok(bytes) = bincode::serialize(&node) {
                 let _ = tree.insert(node.identity_hash.as_bytes(), bytes);

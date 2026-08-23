@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { RedAPI, MessageItem } from "../../lib/api";
 import { STORY_THEMES } from "./StoryCreator";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 const STORY_DURATION_MS = 6000;
 
@@ -15,6 +16,7 @@ interface StoryViewerProps {
 }
 
 export default function StoryViewer({ stories, senderName, senderHash, onClose, onReply }: StoryViewerProps) {
+    const { t } = useTranslation();
     const [idx, setIdx] = useState(0);
     const [progress, setProgress] = useState(0);
     const [paused, setPaused] = useState(false);
@@ -156,7 +158,7 @@ export default function StoryViewer({ stories, senderName, senderHash, onClose, 
                     onFocus={() => setPaused(true)}
                     onBlur={() => setPaused(false)}
                     onKeyDown={e => { if (e.key === "Enter") handleSendReply(); }}
-                    placeholder="Responder a este estado..."
+                    placeholder={t.stories_module?.caption_placeholder || "Responder a este estado..."}
                     style={{ flex: 1, background: "rgba(0,0,0,0.7)", border: "1px solid var(--glass-border)", borderRadius: "var(--radius-full)", padding: "10px 16px", color: "#fff", fontSize: "0.85rem" }}
                 />
                 <button
@@ -165,7 +167,7 @@ export default function StoryViewer({ stories, senderName, senderHash, onClose, 
                     className="btn-tactical-primary"
                     style={{ padding: "10px 18px", borderRadius: "var(--radius-full)", fontSize: "0.85rem" }}
                 >
-                    Enviar
+                    {t.chat_extended?.send_audio || "Enviar"}
                 </button>
             </div>
         </div>

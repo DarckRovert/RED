@@ -5,9 +5,11 @@ import { useRedStore } from "../store/useRedStore";
 import { web3Bridge, Web3WalletState, SUPPORTED_CHAINS } from "../lib/Web3BridgeEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export default function Web3VaultModal() {
     const { identity, goBack } = useRedStore();
+    const { t } = useTranslation();
     const [web3State, setWeb3State] = useState<Web3WalletState>(web3Bridge.getState());
     const [isConnecting, setIsConnecting] = useState(false);
     const [isSigning, setIsSigning] = useState(false);
@@ -114,7 +116,7 @@ export default function Web3VaultModal() {
                     </div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Bóveda Web3 & Integración MetaMask
+                            {t.modules?.web3_vault || "Bóveda Web3 & Integración MetaMask"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             EIP-1193 · EIP-712 ATTESTATIONS · MULTI-CHAIN EVM
@@ -125,7 +127,7 @@ export default function Web3VaultModal() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar Bóveda Web3"
+                    title={t.common?.close || "Cerrar Bóveda Web3"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

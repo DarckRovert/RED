@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { postChannelMessage, getChannelMessages } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 const CANVAS_SYNC_CHANNEL = "canvas-sync";
 const SYNC_INTERVAL_MS = 2000;
@@ -16,6 +17,7 @@ interface PeerFrame {
 
 export const LiveCanvasModal: React.FC = () => {
     const { goBack, identity } = useRedStore();
+    const { t } = useTranslation();
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [color, setColor] = useState("#00E5FF");
@@ -163,10 +165,10 @@ export const LiveCanvasModal: React.FC = () => {
                     }}>🎨</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Pizarra Táctica Colaborativa
+                            {t.canvas_module?.title || "Pizarra Táctica Colaborativa"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            P2P MESH CANVAS SYNC · CANAL {CANVAS_SYNC_CHANNEL}
+                            {t.canvas_module?.subtitle || `P2P MESH CANVAS SYNC · CANAL ${CANVAS_SYNC_CHANNEL}`}
                         </div>
                     </div>
                 </div>
@@ -177,11 +179,12 @@ export const LiveCanvasModal: React.FC = () => {
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
                     >
-                        🗑️ Limpiar
+                        🗑️ {t.canvas_module?.clear_btn || "Limpiar"}
                     </button>
                     <button
                         onClick={goBack}
                         className="btn-icon"
+                        title={t.common?.close || "Cerrar"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕
@@ -211,7 +214,7 @@ export const LiveCanvasModal: React.FC = () => {
                     className={isEraser ? "btn-tactical-primary" : "btn-tactical-secondary"}
                     style={{ padding: "6px 12px", fontSize: "0.76rem" }}
                 >
-                    🧹 Borrador
+                    🧹 {t.canvas_module?.tool_eraser || "Borrador"}
                 </button>
             </div>
 

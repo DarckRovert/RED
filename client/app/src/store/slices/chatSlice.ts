@@ -138,13 +138,11 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             return;
         }
 
-        let cleanPeerHash = peerHash.trim();
-        if (cleanPeerHash.startsWith('did:red:')) cleanPeerHash = cleanPeerHash.replace(/^did:red:/i, '');
-        if (cleanPeerHash.includes(':') && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanPeerHash)) {
-            const parts = cleanPeerHash.split(':');
-            if (parts[0].length >= 16) cleanPeerHash = parts[0].trim();
+        let cleanPeerHash = normalizeIdentity(peerHash);
+        const resolvedCanonical = meshRouter.getCanonicalId(cleanPeerHash);
+        if (resolvedCanonical && resolvedCanonical.length === 64) {
+            cleanPeerHash = resolvedCanonical;
         }
-        cleanPeerHash = cleanPeerHash.toLowerCase();
 
         // ── GROUP ROUTING FIX ──────────────────────────────────────────────────
         // Check if peerHash matches a known group id (hex-encoded GroupId)

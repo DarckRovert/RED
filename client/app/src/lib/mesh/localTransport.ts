@@ -11,7 +11,7 @@
 
 import { bluetoothTransport, RedDevice } from './bluetoothTransport';
 import { WifiDirectTransport } from './wifiDirectTransport';
-import { meshRouter, MeshPeer } from './meshRouter';
+import { meshRouter, MeshPeer, normalizeIdentity, isNameSimilar } from './meshRouter';
 import { createPacket, encode } from './meshProtocol';
 
 const RUST_NODE_URL = 'http://127.0.0.1:7333';
@@ -104,22 +104,28 @@ class LocalTransport {
     this.discoveredBluetoothPeers = [];
     try {
       await bluetoothTransport.scan((device) => {
-        const existing = this.discoveredBluetoothPeers.find(d => 
-          d.id === device.id || 
-          (device.name && device.name !== 'Dispositivo RED' && d.name === device.name)
-        );
+        const normDevId = normalizeIdentity(device.id);
+        const existing = this.discoveredBluetoothPeers.find(d => {
+          const normD = normalizeIdentity(d.id);
+          if (normD === normDevId) return true;
+          if (device.name && d.name && isNameSimilar(d.name, device.name)) return true;
+          return false;
+        });
         if (existing) {
           existing.rssi = device.rssi;
-          existing.id = device.id;
-          meshRouter.addBlePeer(device.id, device.rssi, undefined, device.name);
+          if (device.name && (!existing.name || existing.name === 'Dispositivo RED' || existing.name.startsWith('Nodo '))) {
+            existing.name = device.name;
+          }
+          meshRouter.addBlePeer(normDevId, device.rssi, undefined, existing.name || device.name);
         } else {
-          this.discoveredBluetoothPeers.push(device);
+          const cleanDev = { ...device, id: normDevId };
+          this.discoveredBluetoothPeers.push(cleanDev);
           // Register newly found BLE device in the mesh router with its advertised name
-          meshRouter.addBlePeer(device.id, device.rssi, undefined, device.name);
+          meshRouter.addBlePeer(normDevId, device.rssi, undefined, device.name);
           console.log(`[LocalTransport] BLE peer discovered: ${device.name} (RSSI ${device.rssi})`);
           
           // Proactive background auto-connect & MTU negotiation for warm zero-latency mesh link
-          this.autoAssociateBlePeer(device.id).catch(() => {});
+          this.autoAssociateBlePeer(normDevId).catch(() => {});
         }
       }, 5000);
     } catch (e) {
@@ -131,18 +137,19 @@ class LocalTransport {
   private connectingBleDevices: Set<string> = new Set();
 
   private async autoAssociateBlePeer(deviceId: string) {
-    if (this.connectingBleDevices.has(deviceId) || bluetoothTransport.isDeviceConnected(deviceId)) return;
-    this.connectingBleDevices.add(deviceId);
+    const cleanId = normalizeIdentity(deviceId);
+    if (this.connectingBleDevices.has(cleanId) || bluetoothTransport.isDeviceConnected(cleanId)) return;
+    this.connectingBleDevices.add(cleanId);
     try {
-      await bluetoothTransport.connect(deviceId);
-      meshRouter.addBlePeer(deviceId);
+      await bluetoothTransport.connect(cleanId);
+      meshRouter.addBlePeer(cleanId);
       // Immediately exchange IDENTITY_ANNOUNCE packet to bind hardware ID <-> 64-char canonical DID
-      await meshRouter.sendIdentityAnnounce(deviceId, 'ble').catch(() => {});
-      console.log(`[LocalTransport] ⚡ Proactive warm BLE link established with ${deviceId.slice(0, 8)}`);
+      await meshRouter.sendIdentityAnnounce(cleanId, 'ble').catch(() => {});
+      console.log(`[LocalTransport] ⚡ Proactive warm BLE link established with ${cleanId.slice(0, 8)}`);
     } catch (err) {
       // Non-fatal if device is transient or busy
     } finally {
-      this.connectingBleDevices.delete(deviceId);
+      this.connectingBleDevices.delete(cleanId);
     }
   }
 
@@ -182,7 +189,7 @@ class LocalTransport {
    * Used for legacy compatibility.
    */
   async send(peerId: string, payload: Uint8Array): Promise<'wifi' | 'bluetooth' | 'failed'> {
-    const peer = meshRouter.peers.get(peerId);
+    const peer = meshRouter.getPeerByAnyId(peerId) || meshRouter.peers.get(peerId);
     if (peer?.transport === 'wifi') {
       const wifi = (meshRouter as any).wifi as WifiDirectTransport | null;
       if (wifi) {

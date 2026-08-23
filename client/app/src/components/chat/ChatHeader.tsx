@@ -1,5 +1,6 @@
 import React from "react";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 
 interface ChatHeaderProps {
@@ -54,6 +55,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     avStyle,
 }) => {
     const { navigate } = useRedStore();
+    const { t } = useTranslation();
 
     return (
             <header className="safe-header" style={{
@@ -68,7 +70,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Volver a la lista"
+                        title={t.common?.back || "Volver"}
                         style={{ width: 36, height: 36, flexShrink: 0 }}
                     >
                         ←
@@ -78,7 +80,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                     <div
                         onClick={() => setIsContactProfileOpen(true)}
                         style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, overflow: "hidden", cursor: "pointer" }}
-                        title="Ver info y archivos del contacto"
+                        title={t.chat?.contact_info || "Ver perfil"}
                     >
                         <div style={{ position: "relative", flexShrink: 0 }}>
                             <div style={{
@@ -110,9 +112,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                             fontSize: "0.62rem", padding: "1px 6px", flexShrink: 0, cursor: "pointer",
                                             background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)"
                                         }}
-                                        title="Identidad Criptográfica Verificada (Toca para ver Safety Number)"
+                                        title="Safety Number"
                                     >
-                                        🛡️ VERIFICADO
+                                        🛡️ {t.safety_number?.verified || "VERIFICADO"}
                                     </span>
                                 )}
                             </div>
@@ -126,10 +128,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 fontWeight: (peerTypingStatus?.[peerHash] && peerTypingStatus[peerHash] !== 'idle') || peerTyping ? 800 : 500
                             }}>
                                 {peerTypingStatus?.[peerHash] === 'recording_voice'
-                                    ? '🎙️ Grabando audio...'
+                                    ? `🎙️ ${t.chat_extended?.recording_p2p || 'Grabando audio...'}`
                                     : ((peerTypingStatus?.[peerHash] === 'typing' || peerTyping)
-                                        ? '✍️ Escribiendo...'
-                                        : (isOnline ? "● CONECTADO EN MALLA" : `DID: ${peerHash.substring(0, 10)}…`))}
+                                        ? '✍️ ...'
+                                        : (isOnline ? "● ON-GRID MESH" : `DID: ${peerHash.substring(0, 10)}…`))}
                             </div>
                         </div>
                     </div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 interface LandingHeroProps {
     heroAlias: string;
@@ -25,6 +26,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
     scrollToSection,
     handleEnter
 }) => {
+    const { t } = useTranslation();
     return (
         <section id="hero" style={{ padding: "40px 0 60px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center" }}>
           <div
@@ -43,7 +45,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
               marginBottom: "20px",
             }}
           >
-            <span>🛡️</span> COMUNICACIÓN SOBERANA 100% OFF-GRID • INMUNE A APAGONES Y CENSURA
+            <span>🛡️</span> {t.showcase_landing?.hero_tag || "COMUNICACIÓN SOBERANA 100% OFF-GRID • INMUNE A APAGONES Y CENSURA"}
           </div>
 
           <h1
@@ -57,16 +59,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
               letterSpacing: "-1px",
             }}
           >
-            El Primer Sistema Operativo <br />
-            <span
-              style={{
-                background: "linear-gradient(90deg, #FF2A51 0%, #00F0FF 50%, #00FF88 100%)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              En Malla P2P, Post-Cuántica & IA Offline
-            </span>
+            {t.showcase_landing?.hero_title || "El Primer Sistema Operativo de Comunicación de Emergencia"}
           </h1>
 
           <p

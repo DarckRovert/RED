@@ -5,9 +5,11 @@ import { useRedStore } from "../store/useRedStore";
 import { globalShield, DefconLevel, DEFCON_PROFILES, GlobalShieldTelemetry } from "../lib/GlobalShieldEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export default function GlobalShieldPanel() {
     const { goBack, navigate } = useRedStore();
+    const { t } = useTranslation();
     const [telemetry, setTelemetry] = useState<GlobalShieldTelemetry>(globalShield.getTelemetry());
     const [isTestingTraffic, setIsTestingTraffic] = useState(false);
     const [testResult, setTestResult] = useState<{
@@ -88,10 +90,10 @@ export default function GlobalShieldPanel() {
                     </div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Escudo Global & Ciberdefensa Mesh
+                            {t.shield_module?.title || "Escudo Global & Ciberdefensa Mesh"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: activeProfile.color, fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
-                            DEFCON {telemetry.currentDefcon} · {activeProfile.codename} · ZERO-TRUST
+                            DEFCON {telemetry.currentDefcon} · {activeProfile.codename} · {t.shield_module?.subtitle || "ZERO-TRUST"}
                         </div>
                     </div>
                 </div>
@@ -99,7 +101,7 @@ export default function GlobalShieldPanel() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar Escudo Global"
+                    title={t.common?.close || "Cerrar panel"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

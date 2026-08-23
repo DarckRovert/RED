@@ -5,6 +5,7 @@ import { useRedStore } from '../store/useRedStore';
 import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
 import { toast } from './Toast';
 import { ErrorBanner } from './ui/ErrorBanner';
+import { useTranslation } from '../lib/i18n/i18nEngine';
 
 // NOTE: @capacitor/geolocation is imported dynamically inside getGpsCoords()
 // to guarantee it is always resolved before use, avoiding the race condition
@@ -12,6 +13,7 @@ import { ErrorBanner } from './ui/ErrorBanner';
 
 export const SOSEmergencyBanner: React.FC = () => {
     const { navigate, identity, isAuthenticated, currentScreen, activeSosBeacons, setSosBeacons } = useRedStore();
+    const { t } = useTranslation();
     const beacons = activeSosBeacons || [];
     const [isTriggering, setIsTriggering] = useState(false);
     const [noteText, setNoteText] = useState('Emergencia médica / Auxilio táctico');
@@ -199,7 +201,7 @@ export const SOSEmergencyBanner: React.FC = () => {
                             <span style={{ fontSize: '1.4rem', animation: 'pulse 1s infinite' }}>🚨</span>
                             <div>
                                 <div style={{ fontWeight: 900, fontSize: '0.9rem', letterSpacing: '0.5px' }}>
-                                    ¡ALERTA SOS DE AUXILIO ACTIVA! ({safeBeacons.length})
+                                    {t.sos_module?.active_banner || '¡ALERTA SOS DE AUXILIO ACTIVA!'} ({safeBeacons.length})
                                 </div>
                                 <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>
                                     {active.sender_name || 'Operador'}: {active.note || 'Auxilio'}
@@ -211,7 +213,7 @@ export const SOSEmergencyBanner: React.FC = () => {
                             onClick={() => handleResolve(active.id)}
                             style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
                         >
-                            ✓ Marcar a Salvo
+                            ✓ {t.sos_module?.resolve_btn || 'Marcar a Salvo'}
                         </button>
                     </div>
                 );
@@ -241,9 +243,9 @@ export const SOSEmergencyBanner: React.FC = () => {
                         boxShadow: '0 0 40px rgba(239,68,68,0.3)'
                     }}>
                         <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🚨</div>
-                        <h2 style={{ color: '#ef4444', fontWeight: 900, marginBottom: '8px', fontSize: '1.1rem' }}>EMITIR SOS TÁCTICO</h2>
+                        <h2 style={{ color: '#ef4444', fontWeight: 900, marginBottom: '8px', fontSize: '1.1rem' }}>{t.sos_module?.trigger_btn || 'EMITIR SOS TÁCTICO'}</h2>
                         <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '12px', lineHeight: '1.4' }}>
-                            Se transmitirá una baliza de socorro con tu <strong>ubicación GPS real</strong> a todos los nodos P2P en rango radio.
+                            {t.sos_module?.beacon_active_desc || 'Se transmitirá una baliza de socorro con tu ubicación GPS real a todos los nodos P2P en rango radio.'}
                         </p>
 
                         {/* GPS STATUS INDICATOR */}

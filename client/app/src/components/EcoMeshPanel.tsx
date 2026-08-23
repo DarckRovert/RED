@@ -7,9 +7,11 @@ import { KineticDutyGovernor, KineticTelemetry } from "../lib/KineticDutyGoverno
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export const EcoMeshPanel: React.FC = () => {
     const { goBack } = useRedStore();
+    const { t } = useTranslation();
     const [status, setStatus] = useState<EcoMeshStatus | null>(null);
     const [telemetry, setTelemetry] = useState<KineticTelemetry>(KineticDutyGovernor.getInstance().getTelemetry());
     const [isLoading, setIsLoading] = useState(true);
@@ -112,10 +114,10 @@ export const EcoMeshPanel: React.FC = () => {
                     }}>🔋</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Gobernador Cinemático Eco-Mesh
+                            {t.eco_module?.title || "Gobernador Cinemático Eco-Mesh"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {telemetry.isStationary ? "MODO ESTACIONARIO DETECTADO" : "MOVIMIENTO CINÉTICO ACTIVO"}
+                            {telemetry.isStationary ? (t.eco_module?.subtitle || "MODO ESTACIONARIO DETECTADO") : (t.eco_module?.subtitle || "MOVIMIENTO CINÉTICO ACTIVO")}
                         </div>
                     </div>
                 </div>
@@ -123,7 +125,7 @@ export const EcoMeshPanel: React.FC = () => {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar gobernador"
+                    title={t.common?.close || "Cerrar gobernador"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

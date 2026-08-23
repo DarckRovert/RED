@@ -158,8 +158,8 @@ export const PublicChannelsPanel: React.FC = () => {
                 {messages.length === 0 ? (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, color: "var(--text-muted)", gap: "10px" }}>
                         <span style={{ fontSize: "2rem" }}>📻</span>
-                        <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>Frecuencia Silenciosa</div>
-                        <div style={{ fontSize: "0.75rem" }}>Sé el primero en transmitir en el canal #{channelId}</div>
+                        <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>{t.chat?.no_messages || "Frecuencia Silenciosa"}</div>
+                        <div style={{ fontSize: "0.75rem" }}>{t.public_channels?.composer_placeholder || "Transmitir mensaje a la frecuencia pública…"}</div>
                     </div>
                 ) : (
                     messages.map((m, i) => (

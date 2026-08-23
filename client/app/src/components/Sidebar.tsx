@@ -68,20 +68,44 @@ export default function Sidebar() {
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
 
     const filteredConvs = useMemo(() => {
-        return conversations
-            .filter(c => c && c.peer && !c.peer.startsWith("00000000") && resolvePeerName(c.peer || "").toLowerCase().includes(searchQuery.toLowerCase()))
-            .sort((a: any, b: any) => {
-                const tsA = (typeof a.last_message === "object" && a.last_message?.timestamp) || (a as any).last_timestamp || 0;
-                const tsB = (typeof b.last_message === "object" && b.last_message?.timestamp) || (b as any).last_timestamp || 0;
-                const normA = tsA < 1e10 ? tsA : tsA / 1000;
-                const normB = tsB < 1e10 ? tsB : tsB / 1000;
-                return normB - normA;
-            });
+        const seenCanonical = new Set<string>();
+        const deduped: any[] = [];
+        for (const c of conversations) {
+            if (!c || !c.peer || c.peer.startsWith("00000000")) continue;
+            const canonical = meshRouter.getCanonicalId(c.peer) || c.peer.toLowerCase();
+            if (seenCanonical.has(canonical)) continue;
+            seenCanonical.add(canonical);
+            if (resolvePeerName(c.peer || "").toLowerCase().includes(searchQuery.toLowerCase())) {
+                deduped.push(c);
+            }
+        }
+        return deduped.sort((a: any, b: any) => {
+            const tsA = (typeof a.last_message === "object" && a.last_message?.timestamp) || (a as any).last_timestamp || 0;
+            const tsB = (typeof b.last_message === "object" && b.last_message?.timestamp) || (b as any).last_timestamp || 0;
+            const normA = tsA < 1e10 ? tsA : tsA / 1000;
+            const normB = tsB < 1e10 ? tsB : tsB / 1000;
+            return normB - normA;
+        });
     }, [conversations, searchQuery, groups, contacts]);
-    const filteredContacts = contacts.filter((c: any) =>
-        c && ((c.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (c.identity_hash || "").toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+
+    const filteredContacts = useMemo(() => {
+        const seen = new Set<string>();
+        const deduped: any[] = [];
+        for (const c of contacts) {
+            if (!c || !c.identity_hash) continue;
+            const canonical = meshRouter.getCanonicalId(c.identity_hash) || c.identity_hash.toLowerCase();
+            if (seen.has(canonical)) continue;
+            seen.add(canonical);
+            if (
+                (c.display_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (c.identity_hash || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+                canonical.toLowerCase().includes(searchQuery.toLowerCase())
+            ) {
+                deduped.push(c);
+            }
+        }
+        return deduped;
+    }, [contacts, searchQuery]);
 
     const menuCategories = [
         {
@@ -204,9 +228,9 @@ export default function Sidebar() {
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                 <span style={{ fontSize: "1.4rem" }}>🛡️</span>
                                 <div>
-                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>Centro de Control RED</div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>{t.dock?.modules || "Centro de Control RED"}</div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                                        {totalModules} MÓDULOS ACTIVOS
+                                        {totalModules} {t.dock?.modules ? t.dock.modules.toUpperCase() : "MÓDULOS"}
                                     </div>
                                 </div>
                             </div>
@@ -367,12 +391,12 @@ export default function Sidebar() {
                 zIndex: 40, flexShrink: 0
             }}>
                 {[
-                    { id: "chats", icon: "💬", label: "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen },
-                    { id: "radar", icon: "📡", label: "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
-                    { id: "modules", icon: "⚡", label: "Módulos", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: String(totalModules), isModulesBtn: true },
-                    { id: "ai", icon: "🤖", label: "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
-                    { id: "compass", icon: "🧭", label: "Brújula", action: () => { setMenuOpen(false); navigate("offGridCompass"); } },
-                    { id: "vault", icon: "🪪", label: "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
+                    { id: "chats", icon: "💬", label: t.dock?.chats || "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen },
+                    { id: "radar", icon: "📡", label: t.dock?.radar || "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
+                    { id: "modules", icon: "⚡", label: t.dock?.modules || "Módulos", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: String(totalModules), isModulesBtn: true },
+                    { id: "ai", icon: "🤖", label: t.dock?.ai || "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
+                    { id: "compass", icon: "🧭", label: t.dock?.compass || "Brújula", action: () => { setMenuOpen(false); navigate("offGridCompass"); } },
+                    { id: "vault", icon: "🪪", label: t.dock?.vault || "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
                 ].map(item => (
                     <button
                         key={item.id}
@@ -440,7 +464,7 @@ export default function Sidebar() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
                                 <span>➕</span>
-                                <span>Agregar Contacto / Nuevo Chat</span>
+                                <span>{t.sidebar?.add_contact_btn || "Agregar Contacto / Nuevo Chat"}</span>
                             </div>
                             <button onClick={() => setAddContactOpen(false)} className="btn-icon" style={{ width: 32, height: 32 }}>✕</button>
                         </div>
@@ -464,7 +488,7 @@ export default function Sidebar() {
                             }}
                         >
                             <span>📷</span>
-                            <span>ESCANEAR QR DE CONTACTO (CÁMARA)</span>
+                            <span>{t.radar?.scan_scanner_btn || "ESCANEAR QR DE CONTACTO (CÁMARA)"}</span>
                         </button>
 
                         {/* Enlace Directo a Vinculación con PC */}

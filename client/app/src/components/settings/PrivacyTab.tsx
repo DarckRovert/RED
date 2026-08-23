@@ -17,10 +17,10 @@ export const PrivacyTab: React.FC = () => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Protocolos de Privacidad & Autoprotección
+                                {t.settings?.tab_privacy || "Protocolos de Privacidad & Autoprotección"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Control de fugas visuales, efimeridad de datos y herramientas de coacción.
+                                {t.security_panel?.subtitle || "Control de fugas visuales, efimeridad de datos y herramientas de coacción."}
                             </p>
                         </div>
 
@@ -28,7 +28,9 @@ export const PrivacyTab: React.FC = () => {
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Bloqueo Biométrico / PIN de Bóveda</div>
+                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>
+                                        {t.settings?.autolock_title || "Bloqueo Biométrico / PIN de Bóveda"}
+                                    </div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
                                         Requiere huella dactilar, Face ID o PIN para acceder a la aplicación tras inactividad.
                                     </div>

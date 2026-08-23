@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { getBlackoutStatus, setBlackoutMode, BlackoutStatusResponse } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface BlackoutSimulatorModalProps {
     onClose?: () => void;
@@ -11,6 +12,7 @@ interface BlackoutSimulatorModalProps {
 
 export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ onClose }) => {
     const { goBack } = useRedStore();
+    const { t } = useTranslation();
     const handleClose = onClose || goBack;
     const [status, setStatus] = useState<BlackoutStatusResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
@@ -125,10 +127,10 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
                     }}>⚡</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Consola de Apagón Eléctrico & Aislamiento WAN
+                            {t.blackout_module?.title || "Consola de Apagón Eléctrico & Aislamiento WAN"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: isBlackout ? "var(--accent-crimson-bright)" : "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {isBlackout ? `● CORTE FÍSICO ACTIVO (${formatDuration(blackoutDuration)})` : "RED EN LÍNEA · TOPOLOGÍA HÍBRIDA"}
+                            {isBlackout ? `● ${t.blackout_module?.drill_active || "CORTE FÍSICO ACTIVO"} (${formatDuration(blackoutDuration)})` : (t.blackout_module?.subtitle || "RED EN LÍNEA · TOPOLOGÍA HÍBRIDA")}
                         </div>
                     </div>
                 </div>
@@ -136,7 +138,7 @@ export const BlackoutSimulatorModal: React.FC<BlackoutSimulatorModalProps> = ({ 
                 <button
                     onClick={handleClose}
                     className="btn-icon"
-                    title="Cerrar consola"
+                    title={t.common?.close || "Cerrar consola"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

@@ -22,10 +22,10 @@ export const BackupTab: React.FC<BackupTabProps> = ({ onClose }) => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Respaldo & Nube Automática (Google Drive)
+                                {t.settings?.tab_backup || "Respaldo & Nube Automática (Google Drive)"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Copias de seguridad automáticas en 1 toque, cifradas con AES-256-GCM y derivación de clave maestra.
+                                {t.backup_module?.subtitle || "Copias de seguridad automáticas en 1 toque, cifradas con AES-256-GCM y derivación de clave maestra."}
                             </p>
                         </div>
 

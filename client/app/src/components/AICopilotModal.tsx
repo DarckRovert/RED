@@ -7,6 +7,7 @@ import { LocalAIEngine } from "../lib/localAiEngine";
 import { ModelManager, LocalModelMetaData } from "../lib/modelManager";
 import { EmergencyGlossaryEngine, GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type CopilotTab = "chat" | "translator" | "summarizer" | "models";
 
@@ -41,6 +42,18 @@ export const AICopilotModal: React.FC = () => {
         sendMessage,
         goBack
     } = useRedStore();
+
+    const { t } = useTranslation();
+
+    const tacticalPresets = [
+        { icon: "🚨", label: t.copilot?.preset_triage || "Triage START", query: "Explica el protocolo de Triage START en combate y desastres paso a paso con códigos de color." },
+        { icon: "🩹", label: t.copilot?.preset_tourniquet || "Torniquete & Hemorragias", query: "Protocolo de aplicación de torniquete táctico y control de hemorragia exanguinante en zona caliente." },
+        { icon: "💧", label: t.copilot?.preset_water || "Purificar Agua", query: "¿Cómo potabilizar agua de río o estancada en situación de supervivencia extrema (filtrado, ebullición, cloro)?" },
+        { icon: "📻", label: t.copilot?.preset_morse || "Morse SOS & Frecuencias", query: "Códigos Morse de auxilio SOS (... --- ...) y frecuencias de radio de emergencia internacional VHF/UHF." },
+        { icon: "📡", label: t.copilot?.preset_dtn || "Diagnóstico Mesh P2P", query: "¿Cómo funciona el enrutamiento tolerante a retrasos DTN y los saltos Onion en la red RED?" },
+        { icon: "⚡", label: t.copilot?.preset_blackout || "Apagón Eléctrico", query: "Protocolo de supervivencia inmediata ante un colapso de infraestructura eléctrica y comunicaciones." },
+        { icon: "🛡️", label: t.copilot?.preset_crypto || "Cifrado Noise XK", query: "¿Cómo protegen las llaves efímeras Curve25519 y ChaCha20-Poly1305 los mensajes contra intercepción?" }
+    ];
 
     const effectiveChannels = conversations.length > 0
         ? conversations.map(c => ({
@@ -421,7 +434,7 @@ export const AICopilotModal: React.FC = () => {
                     }}>🤖</div>
                     <div>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ fontSize: "0.92rem", fontWeight: 800, letterSpacing: "0.5px" }}>COPILOTO IA SOBERANO</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 800, letterSpacing: "0.5px" }}>{t.copilot?.title?.toUpperCase() || "COPILOTO IA SOBERANO"}</span>
                             <span className="badge-live-cyan" style={{ fontSize: "0.62rem", padding: "2px 6px" }}>100% OFFLINE</span>
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
@@ -436,9 +449,9 @@ export const AICopilotModal: React.FC = () => {
                             onClick={handleClearChat}
                             className="btn-ghost"
                             style={{ padding: "4px 8px", fontSize: "0.72rem", color: "var(--text-muted)" }}
-                            title="Limpiar Conversación"
+                            title={t.common?.cancel || "Limpiar"}
                         >
-                            🗑️ Limpiar
+                            🗑️ {t.common?.cancel || "Limpiar"}
                         </button>
                     )}
                 </div>
@@ -452,10 +465,10 @@ export const AICopilotModal: React.FC = () => {
                 padding: "4px 8px", gap: "4px", overflowX: "auto"
             }}>
                 {([
-                    { id: "chat", icon: "💬", label: "Copiloto" },
-                    { id: "translator", icon: "🌐", label: "Traductor & Glosario" },
-                    { id: "summarizer", icon: "📋", label: "Resumidor" },
-                    { id: "models", icon: "🧠", label: `Modelos ${totalStorageMb > 0 ? `(${totalStorageMb} MB)` : ""}` }
+                    { id: "chat", icon: "💬", label: t.copilot?.tab_chat || "Copiloto" },
+                    { id: "translator", icon: "🌐", label: t.copilot?.tab_translator || "Traductor & Glosario" },
+                    { id: "summarizer", icon: "📋", label: t.copilot?.tab_summarizer || "Resumidor" },
+                    { id: "models", icon: "🧠", label: `${t.copilot?.tab_models || "Modelos"} ${totalStorageMb > 0 ? `(${totalStorageMb} MB)` : ""}` }
                 ] as const).map(tab => (
                     <button
                         key={tab.id}
@@ -483,7 +496,7 @@ export const AICopilotModal: React.FC = () => {
                         borderBottom: "1px solid var(--glass-border)",
                         scrollbarWidth: "none"
                     }}>
-                        {TACTICAL_PRESETS.map((p, idx) => (
+                        {tacticalPresets.map((p, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => handleSend(p.query)}
@@ -626,7 +639,7 @@ export const AICopilotModal: React.FC = () => {
                             value={input}
                             onChange={e => setInput(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                            placeholder={isListening ? "Escuchando dictado..." : "Formula una consulta de emergencia, medicina o táctica..."}
+                            placeholder={isListening ? (t.copilot?.listening || "Escuchando dictado...") : (t.copilot?.input_placeholder || "Formula una consulta de emergencia, medicina o táctica...")}
                             style={{ flex: 1, fontSize: "0.85rem", padding: "10px 14px" }}
                             disabled={loading}
                         />
@@ -637,7 +650,7 @@ export const AICopilotModal: React.FC = () => {
                             className="btn-tactical-primary"
                             style={{ padding: "10px 16px", fontSize: "0.85rem", opacity: (!input.trim() || loading) ? 0.5 : 1 }}
                         >
-                            {loading ? "..." : "Enviar ➔"}
+                            {loading ? "..." : (t.copilot?.send_btn || "Enviar ➔")}
                         </button>
                     </div>
                 </div>

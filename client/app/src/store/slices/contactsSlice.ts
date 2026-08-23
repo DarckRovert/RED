@@ -1,8 +1,8 @@
 import { StateCreator } from 'zustand';
 import { RedStore, PendingContactRequest } from '../types';
-import { ContactItem, GroupItem } from '../../api/types';
+import { ContactItem, GroupItem, ConversationItem } from '../../api/types';
 import { RedAPI } from '../../api/client';
-import { meshRouter } from '../../lib/mesh/meshRouter';
+import { meshRouter, normalizeIdentity, isNameSimilar } from '../../lib/mesh/meshRouter';
 import { toast } from '../../components/Toast';
 
 const _processedHandshakes = new Set<string>();
@@ -98,10 +98,10 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
     },
 
     deleteContact: async (hash: string) => {
-        const target = hash.toLowerCase();
+        const target = normalizeIdentity(hash);
         const existing = get().contacts || [];
         const next = existing.filter((c: any) => {
-            const cHash = (c.identity_hash || '').toLowerCase();
+            const cHash = normalizeIdentity(c.identity_hash || '');
             if (cHash === target) return false;
             if (target.length >= 8 && cHash.startsWith(target.slice(0, 8))) return false;
             if (cHash.length >= 8 && target.startsWith(cHash.slice(0, 8))) return false;
@@ -112,8 +112,8 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         // Also purge conversation
         const convs = get().conversations || [];
         const nextConvs = convs.filter(c => {
-            const cPeer = (c.peer || '').toLowerCase();
-            const cId = (c.id || '').toLowerCase();
+            const cPeer = normalizeIdentity(c.peer || '');
+            const cId = normalizeIdentity(c.id || '');
             if (cPeer === target || cId === target) return false;
             if (target.length >= 8 && (cPeer.startsWith(target.slice(0, 8)) || cId.startsWith(target.slice(0, 8)))) return false;
             if (cPeer.length >= 8 && target.startsWith(cPeer.slice(0, 8))) return false;
@@ -133,21 +133,21 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         const inputStr = identity_hash.trim();
         let cleanName = display_name ? display_name.trim() : '';
 
-        let cleanHash = inputStr;
+        let cleanHash = normalizeIdentity(inputStr);
         let pubKey: string | null = public_key ?? null;
 
         // 1. Parse did:red:<hash>:<pk> or did:red:<hash> or <hash>:<pk> or red_<shortId>
         if (inputStr.startsWith("did:red:")) {
             const withoutScheme = inputStr.slice(8);
             const parts = withoutScheme.split(":");
-            cleanHash = parts[0].trim();
+            cleanHash = normalizeIdentity(parts[0].trim());
             if (parts.length >= 2 && parts[1] && !pubKey) {
                 pubKey = parts[1].trim();
             }
         } else if (inputStr.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(inputStr)) {
             const parts = inputStr.split(":");
             if (parts[0].length >= 16) {
-                cleanHash = parts[0].trim();
+                cleanHash = normalizeIdentity(parts[0].trim());
                 if (parts[1] && !pubKey) {
                     pubKey = parts[1].trim();
                 }
@@ -196,25 +196,23 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         const currentContacts = get().contacts || [];
         const existingIdx = currentContacts.findIndex(c => {
             if (!c) return false;
-            const cHash = (c.identity_hash || '').toLowerCase();
-            const targetHash = cleanHash.toLowerCase();
-            const rawTarget = inputStr.toLowerCase();
+            const cHash = normalizeIdentity(c.identity_hash || '');
+            const targetHash = cleanHash;
+            const rawTarget = normalizeIdentity(inputStr);
 
             // A. Exact hash match
             if (cHash === targetHash || cHash === rawTarget) return true;
 
             // B. Mesh canonical equivalence
             const cCanonical = meshRouter.getCanonicalId(cHash);
-            if (cCanonical && targetHash && cCanonical.toLowerCase() === targetHash) return true;
+            if (cCanonical && targetHash && cCanonical === targetHash) return true;
 
             // C. Prefix match for 64-char hashes
             if (cHash.length === 64 && targetHash.length === 64 && cHash.slice(0, 16) === targetHash.slice(0, 16)) return true;
 
             // D. Non-generic display name match (e.g. "Tab", "Moto G22", "Lenovo")
             if (!isGenericName(cleanName) && !isGenericName(c.display_name)) {
-                const cName = c.display_name.trim().toLowerCase();
-                const nName = cleanName.trim().toLowerCase();
-                if (cName === nName || cName === `red-${nName}` || `red-${cName}` === nName) {
+                if (isNameSimilar(c.display_name, cleanName)) {
                     return true;
                 }
             }
@@ -250,11 +248,33 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     }
                     return conv;
                 });
+                // Migrate localStorage message store
+                if (typeof window !== 'undefined') {
+                    try {
+                        const oldMsgs = localStorage.getItem(`red_web_messages_${oldHash}`);
+                        if (oldMsgs && !localStorage.getItem(`red_web_messages_${resolvedHash}`)) {
+                            localStorage.setItem(`red_web_messages_${resolvedHash}`, oldMsgs);
+                        }
+                    } catch {}
+                }
             }
             cleanHash = resolvedHash;
         } else {
             updatedContacts.push(localContact);
         }
+
+        // Deduplicate conversations list
+        const seenPeers = new Set<string>();
+        const dedupedConvs: ConversationItem[] = [];
+        for (const c of updatedConvs) {
+            const p = normalizeIdentity(c.peer || c.id || '');
+            const canonicalP = meshRouter.getCanonicalId(p) || p;
+            if (!seenPeers.has(canonicalP)) {
+                seenPeers.add(canonicalP);
+                dedupedConvs.push(c);
+            }
+        }
+        updatedConvs = dedupedConvs;
 
         // 4. Ensure conversation entry exists in active chat list
         if (!updatedConvs.some(c => c.id === cleanHash || c.peer === cleanHash)) {

@@ -69,11 +69,14 @@ export type NestedKeyOf<ObjectType extends object> = {
 
 export type TranslationKey = NestedKeyOf<I18nSchema>;
 
+export type TranslationFunction = ((key: TranslationKey | string, params?: Record<string, string | number>) => string) & I18nSchema;
+
 interface I18nContextValue {
     lang: SupportedLanguage;
     langMode: LanguageMode;
     setLanguage: (mode: LanguageMode) => void;
-    t: (key: TranslationKey | string, params?: Record<string, string | number>) => string;
+    t: TranslationFunction;
+    dict: I18nSchema;
     langInfo: LanguageInfo;
     allLanguages: LanguageInfo[];
 }
@@ -133,22 +136,43 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         } catch {}
     }, []);
 
-    const t = useCallback((key: TranslationKey | string, params?: Record<string, string | number>): string => {
+    const t = useMemo(() => {
         const primaryDict = DICTIONARIES[activeLang] || DICTIONARIES.es;
         const fallbackDict = DICTIONARIES.es;
 
-        let translation = getNestedTranslation(primaryDict, key);
-        if (!translation) {
-            translation = getNestedTranslation(fallbackDict, key) || key;
-        }
+        const fn = (key: TranslationKey | string, params?: Record<string, string | number>): string => {
+            let translation = getNestedTranslation(primaryDict, key);
+            if (!translation) {
+                translation = getNestedTranslation(fallbackDict, key) || key;
+            }
 
-        if (params && translation) {
-            Object.entries(params).forEach(([paramKey, val]) => {
-                translation = translation!.replace(new RegExp(`{${paramKey}}`, 'g'), String(val));
-            });
-        }
+            if (params && translation) {
+                Object.entries(params).forEach(([paramKey, val]) => {
+                    translation = translation!.replace(new RegExp(`{${paramKey}}`, 'g'), String(val));
+                });
+            }
 
-        return translation || key;
+            return translation || key;
+        };
+
+        return new Proxy(fn, {
+            get(target, prop, receiver) {
+                if (prop in target) {
+                    return (target as any)[prop];
+                }
+                if (typeof prop === 'string' && prop in primaryDict) {
+                    return (primaryDict as any)[prop];
+                }
+                if (typeof prop === 'string' && prop in fallbackDict) {
+                    return (fallbackDict as any)[prop];
+                }
+                return Reflect.get(target, prop, receiver);
+            }
+        }) as TranslationFunction;
+    }, [activeLang]);
+
+    const activeDict = useMemo(() => {
+        return DICTIONARIES[activeLang] || DICTIONARIES.es;
     }, [activeLang]);
 
     const langInfo = useMemo(() => {
@@ -160,9 +184,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         langMode,
         setLanguage,
         t,
+        dict: activeDict,
         langInfo,
         allLanguages: SUPPORTED_LANGUAGES_INFO,
-    }), [activeLang, langMode, setLanguage, t, langInfo]);
+    }), [activeLang, langMode, setLanguage, t, activeDict, langInfo]);
 
     return (
         <I18nContext.Provider value={value}>
@@ -179,20 +204,34 @@ export function useTranslation() {
     if (!context) {
         // Fallback for SSR or non-context components
         const detected = detectSystemLanguage();
-        const dict = DICTIONARIES[detected] || DICTIONARIES.es;
+        const primaryDict = DICTIONARIES[detected] || DICTIONARIES.es;
+        const fallbackDict = DICTIONARIES.es;
+
+        const fn = (key: string, params?: Record<string, string | number>) => {
+            let res = getNestedTranslation(primaryDict, key) || getNestedTranslation(fallbackDict, key) || key;
+            if (params && res) {
+                Object.entries(params).forEach(([pk, v]) => {
+                    res = res.replace(new RegExp(`{${pk}}`, 'g'), String(v));
+                });
+            }
+            return res;
+        };
+
+        const t = new Proxy(fn, {
+            get(target, prop, receiver) {
+                if (prop in target) return (target as any)[prop];
+                if (typeof prop === 'string' && prop in primaryDict) return (primaryDict as any)[prop];
+                if (typeof prop === 'string' && prop in fallbackDict) return (fallbackDict as any)[prop];
+                return Reflect.get(target, prop, receiver);
+            }
+        }) as TranslationFunction;
+
         return {
             lang: detected,
             langMode: 'auto' as LanguageMode,
             setLanguage: () => {},
-            t: (key: string, params?: Record<string, string | number>) => {
-                let res = getNestedTranslation(dict, key) || getNestedTranslation(DICTIONARIES.es, key) || key;
-                if (params && res) {
-                    Object.entries(params).forEach(([pk, v]) => {
-                        res = res.replace(new RegExp(`{${pk}}`, 'g'), String(v));
-                    });
-                }
-                return res;
-            },
+            t,
+            dict: primaryDict,
             langInfo: SUPPORTED_LANGUAGES_INFO.find(l => l.id === detected) || SUPPORTED_LANGUAGES_INFO[0],
             allLanguages: SUPPORTED_LANGUAGES_INFO,
         };

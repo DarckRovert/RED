@@ -27,15 +27,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const [activeTab, setActiveTab] = useState<SettingsTab>("appearance");
 
     const tabs: { id: SettingsTab; label: string; icon: string }[] = [
-        { id: "appearance", label: "Apariencia", icon: "🎨" },
-        { id: "calls", label: "Llamadas", icon: "📞" },
-        { id: "audio", label: "Audio", icon: "🔊" },
-        { id: "storage", label: "Almacenamiento", icon: "💾" },
-        { id: "privacy", label: "Privacidad", icon: "🛡️" },
-        { id: "mesh", label: "Red Mesh", icon: "📡" },
-        { id: "identity", label: "Identidad", icon: "🆔" },
-        { id: "backup", label: "Bóveda", icon: "🔐" },
-        { id: "updates", label: "Actualizaciones", icon: "🔄" },
+        { id: "appearance", label: t('settings.tab_appearance'), icon: "🎨" },
+        { id: "calls", label: t('settings.tab_calls'), icon: "📞" },
+        { id: "audio", label: t('settings.tab_audio'), icon: "🔊" },
+        { id: "storage", label: t('settings.tab_storage'), icon: "💾" },
+        { id: "privacy", label: t('settings.tab_privacy'), icon: "🛡️" },
+        { id: "mesh", label: t('settings.tab_mesh'), icon: "📡" },
+        { id: "identity", label: t('settings.tab_identity'), icon: "🆔" },
+        { id: "backup", label: t('settings.tab_backup'), icon: "🔐" },
+        { id: "updates", label: t('settings.tab_updates'), icon: "🔄" },
     ];
 
     return (
@@ -61,7 +61,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                         <span style={{ fontSize: "1.3rem" }}>⚙️</span>
                         <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#FFF" }}>
-                            Configuración del Sistema
+                            {t('settings.master_title')}
                         </h2>
                     </div>
                     <button

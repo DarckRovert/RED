@@ -14,10 +14,10 @@ export const IdentityTab: React.FC = () => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Identidad Criptográfica & Credenciales Soberanas
+                                {t.settings?.tab_identity || "Identidad Criptográfica & Credenciales Soberanas"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Par de claves asimétricas de curva elíptica Curve25519 / Dilithium y DID Soberano.
+                                {t.settings?.key_export_desc || "Par de claves asimétricas de curva elíptica Curve25519 / Dilithium y DID Soberano."}
                             </p>
                         </div>
 

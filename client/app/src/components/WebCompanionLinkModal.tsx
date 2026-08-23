@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { companionSyncEngine, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface WebCompanionLinkModalProps {
     onClose: () => void;
@@ -12,6 +13,7 @@ interface WebCompanionLinkModalProps {
 
 export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ onClose }) => {
     const { identity, contacts, conversations } = useRedStore();
+    const { t } = useTranslation();
     const [status, setStatus] = useState<"camera" | "manual" | "encrypting" | "success" | "error">("camera");
     const [statusMessage, setStatusMessage] = useState<string>("Apunta la cámara al código QR de RED Web en tu PC…");
     const [manualCode, setManualCode] = useState<string>("");

@@ -4,11 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher, P2PVoucher } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type WalletTab = "emit" | "redeem" | "ledger";
 
 export const RedP2PPayModal: React.FC = () => {
     const { navigate } = useRedStore();
+    const { t } = useTranslation();
     const [balance, setBalance] = useState<number>(0);
     const [totalSpent, setTotalSpent] = useState<number>(0);
     const [vouchers, setVouchers] = useState<P2PVoucher[]>([]);
@@ -241,21 +243,21 @@ export const RedP2PPayModal: React.FC = () => {
                     className={activeTab === "emit" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    💳 Emitir Vale
+                    💳 {t.pay_module?.issue_voucher || "Emitir Vale"}
                 </button>
                 <button
                     onClick={() => setActiveTab("redeem")}
                     className={activeTab === "redeem" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📥 Canjear Vale
+                    📥 {t.pay_module?.redeem_voucher || "Canjear Vale"}
                 </button>
                 <button
                     onClick={() => setActiveTab("ledger")}
                     className={activeTab === "ledger" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📜 Libro Contable ({vouchers.length})
+                    📜 {t.pay_module?.tx_history || "Libro Contable"} ({vouchers.length})
                 </button>
             </div>
 

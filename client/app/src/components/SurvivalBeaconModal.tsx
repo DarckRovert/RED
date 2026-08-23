@@ -6,11 +6,13 @@ import { useRedStore } from "../store/useRedStore";
 import { SoundMeshEngine, SoundMeshPacket } from "../lib/SoundMeshEngine";
 import { RedAPI, EmergencyBeaconRecord } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type BeaconTab = "sos" | "actuators" | "soundmesh" | "feed";
 
 export function SurvivalBeaconModal() {
     const { navigate, identity } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<BeaconTab>("sos");
 
     // Hardware SOS States
@@ -322,10 +324,10 @@ export function SurvivalBeaconModal() {
                     }}>🚨</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Baliza Táctica SOS & Rescate
+                            {t.sos_module?.title || "Baliza Táctica SOS & Rescate"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: meshSosActive ? "var(--accent-crimson-bright)" : "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {meshSosActive ? "● TRANSMISIÓN SOS ACTIVA EN MALLA" : "MODO GUARDIA · STANDBY"}
+                            {meshSosActive ? `● ${t.sos_module?.active_banner || "TRANSMISIÓN SOS ACTIVA EN MALLA"}` : "MODO GUARDIA · STANDBY"}
                         </div>
                     </div>
                 </div>
@@ -333,7 +335,7 @@ export function SurvivalBeaconModal() {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar baliza"
+                    title={t.common?.close || "Cerrar baliza"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -353,28 +355,28 @@ export function SurvivalBeaconModal() {
                     className={activeTab === "sos" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🚨 Baliza SOS Mesh
+                    🚨 {t.sos_module?.tab_sos || "Baliza SOS Mesh"}
                 </button>
                 <button
                     onClick={() => setActiveTab("actuators")}
                     className={activeTab === "actuators" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🔦 Actuadores Hardware
+                    🔦 {t.sos_module?.tab_actuators || "Actuadores Hardware"}
                 </button>
                 <button
                     onClick={() => setActiveTab("soundmesh")}
                     className={activeTab === "soundmesh" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🔊 Módem SoundMesh
+                    🔊 {t.sos_module?.tab_soundmesh || "Módem SoundMesh"}
                 </button>
                 <button
                     onClick={() => setActiveTab("feed")}
                     className={activeTab === "feed" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📡 Balizas en Malla ({nearbyBeacons.length})
+                    📡 {t.sos_module?.tab_feed || "Balizas en Malla"} ({nearbyBeacons.length})
                 </button>
             </div>
 

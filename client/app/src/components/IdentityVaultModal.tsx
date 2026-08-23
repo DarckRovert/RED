@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { ShamirSecretSharingEngine, SecretShare } from "../lib/ShamirSecretSharingEngine";
 import { PqcCryptoEngine, HybridKeyPair } from "../lib/PqcCryptoEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 const STORAGE_KEY = "red_identity_vault_v1";
 
@@ -18,6 +19,7 @@ type IdentityTab = "profile" | "pqc" | "shamir" | "medical";
 
 export const IdentityVaultModal: React.FC = () => {
     const { navigate, identity, setProfile } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<IdentityTab>("profile");
 
     // Profile State
@@ -283,7 +285,7 @@ export const IdentityVaultModal: React.FC = () => {
                     }}>🔐</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Bóveda de Identidad & Soberanía
+                            {t.modules?.id_vault || "Bóveda de Identidad & Soberanía"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                             ED25519 · NOISE PROTOCOL · SHAMIR SSS VAULT
@@ -294,7 +296,7 @@ export const IdentityVaultModal: React.FC = () => {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar bóveda"
+                    title={t.common?.close || "Cerrar bóveda"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -314,7 +316,7 @@ export const IdentityVaultModal: React.FC = () => {
                     className={activeTab === "profile" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    👤 Perfil Operador
+                    👤 {t.profile?.title || "Perfil Operador"}
                 </button>
                 <button
                     onClick={() => setActiveTab("pqc")}
@@ -335,7 +337,7 @@ export const IdentityVaultModal: React.FC = () => {
                     className={activeTab === "medical" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🚑 Ficha Médica
+                    🚑 {t.vital_scan?.title ? "Ficha Médica" : "Ficha Médica"}
                 </button>
             </div>
 

@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { getProximityNodes, triggerWaveHandshake, ProximityNode, getDiscoveryConfig } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export const ProximityWaveModal: React.FC = () => {
     const { navigate, goBack, addContact } = useRedStore();
+    const { t } = useTranslation();
     const [nodes, setNodes] = useState<ProximityNode[]>([]);
     const [wavingId, setWavingId] = useState<string | null>(null);
     const [config, setConfig] = useState<any>(null);
@@ -91,10 +93,10 @@ export const ProximityWaveModal: React.FC = () => {
                     }}>👋</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Proximidad Zero-Touch P2P
+                            {t.proximity_module?.title || "Proximidad Zero-Touch P2P"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            BLE PROXIMITY WAVE · INSTANT HANDSHAKE
+                            {t.proximity_module?.subtitle || "BLE PROXIMITY WAVE · INSTANT HANDSHAKE"}
                         </div>
                     </div>
                 </div>
@@ -110,6 +112,7 @@ export const ProximityWaveModal: React.FC = () => {
                     <button
                         onClick={goBack}
                         className="btn-icon"
+                        title={t.common?.close || "Cerrar"}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕

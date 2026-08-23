@@ -3,6 +3,7 @@ import { useRedStore } from "../../store/useRedStore";
 import { RED_VERSION } from "../../lib/version";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle } from "./types";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface SidebarHeaderProps {
     activeTab: "chats" | "contacts";
@@ -36,6 +37,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     pendingCount,
 }) => {
     const { identity, nodeOnline, navigate } = useRedStore();
+    const { t } = useTranslation();
 
     return (
         <>
@@ -131,7 +133,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                             boxShadow: activeTab === "chats" ? "0 2px 10px rgba(232,33,58,0.4)" : "none"
                         }}
                     >
-                        CHATS ({filteredConvsCount})
+                        {t('dock.chats').toUpperCase()} ({filteredConvsCount})
                     </button>
                     <button
                         onClick={() => setActiveTab("contacts")}
@@ -145,7 +147,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                             position: "relative",
                         }}
                     >
-                        CONTACTOS ({filteredContactsCount})
+                        {t('sidebar.contacts_header').split(' ')[0] || 'CONTACTOS'} ({filteredContactsCount})
                         {pendingCount > 0 && (
                             <span style={{
                                 position: "absolute", top: 2, right: 6,
@@ -172,7 +174,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>🔍</span>
                     <input
                         type="text"
-                        placeholder="Filtrar por nombre o clave pública..."
+                        placeholder={t('sidebar.search_placeholder')}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         style={{

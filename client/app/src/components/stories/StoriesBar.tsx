@@ -2,6 +2,7 @@
 
 import React, { useMemo } from "react";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 const AVATAR_COLORS = [
     ["#E8213A","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
@@ -110,6 +111,7 @@ function StoryBubble({
 }
 
 export default function StoriesBar({ onMyStory, onContactStory, onLiveStream }: StoriesBarProps) {
+    const { t } = useTranslation();
     const { messages, contacts, identity, myStories, liveStreams } = useRedStore();
     const now = Date.now();
 
@@ -144,7 +146,7 @@ export default function StoriesBar({ onMyStory, onContactStory, onLiveStream }: 
         }}>
             {/* Mi Estado */}
             <StoryBubble
-                label="Mi Estado"
+                label={t.stories_module?.my_story || "Mi Estado"}
                 initials={(identity?.short_id || "M").charAt(0).toUpperCase()}
                 seed={identity?.identity_hash || "me"}
                 hasStory={hasMyStory}

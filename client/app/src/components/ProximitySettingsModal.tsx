@@ -3,11 +3,13 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { getDiscoveryConfig, setDiscoveryConfig, ProximityFilterConfig } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
 
 export const ProximitySettingsModal: React.FC = () => {
+    const { t } = useTranslation();
     const { goBack } = useRedStore();
     const [config, setConfig] = useState<ProximityFilterConfig | null>(null);
     const [isLoading, setIsLoading] = useState(true);

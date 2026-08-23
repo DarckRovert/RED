@@ -3,8 +3,10 @@
 import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export const FloatingCallPIP: React.FC = () => {
+    const { t } = useTranslation();
     const {
         isCallPipMinimized,
         setCallPipMinimized,
@@ -113,7 +115,7 @@ export const FloatingCallPIP: React.FC = () => {
                         fontSize: "0.75rem",
                         cursor: "pointer",
                     }}
-                    title="Maximizar"
+                    title={t.calls_extended?.pip_return || "Maximizar"}
                 >
                     ⛶
                 </button>
@@ -192,7 +194,7 @@ export const FloatingCallPIP: React.FC = () => {
                         justifyContent: "center",
                         transform: "rotate(135deg)",
                     }}
-                    title="Colgar"
+                    title={t.calls?.reject || "Colgar"}
                 >
                     📞
                 </button>

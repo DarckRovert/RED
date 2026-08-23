@@ -12,8 +12,10 @@ import { CallConnectingOverlay } from "./call/CallConnectingOverlay";
 import { CallHeader } from "./call/CallHeader";
 import { CallStatsModal } from "./call/CallStatsModal";
 import { CallControls } from "./call/CallControls";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export default function CallScreen() {
+    const { t } = useTranslation();
     const {
         identity,
         activeConversationId,

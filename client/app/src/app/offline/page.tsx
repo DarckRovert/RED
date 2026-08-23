@@ -2,9 +2,11 @@
 
 import React from "react";
 import NearbyDevicesPanel from "../../components/NearbyDevicesPanel";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { useRouter } from "next/navigation";
 
 export default function OfflinePage() {
+    const { t } = useTranslation();
     const router = useRouter();
 
     return (
@@ -25,13 +27,14 @@ export default function OfflinePage() {
                 <button 
                     onClick={() => router.push("/")}
                     className="btn-icon"
+                    title={t.common?.back || "Volver"}
                     style={{ width: 38, height: 38 }}
                 >
                     ←
                 </button>
                 <div>
                     <h1 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text-primary)", margin: 0 }}>
-                        Modo Offline P2P Store-and-Forward
+                        {t.offline_page?.title || "Modo Offline P2P Store-and-Forward"}
                     </h1>
                     <p style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", margin: 0, fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
                         MALLA DESCENTRALIZADA SIN ACCESO A INTERNET
@@ -48,7 +51,7 @@ export default function OfflinePage() {
                 }}>
                     <span style={{ fontSize: "1.5rem" }}>⚡</span>
                     <span style={{ fontSize: "0.82rem", color: "#fff", lineHeight: 1.4 }}>
-                        Sin conexión a Internet detectada. Los mensajes se enrutan mediante saltos celular por celular a través de Bluetooth LE y WiFi Direct.
+                        {t.offline_page?.desc || "Sin conexión a Internet detectada. Los mensajes se enrutan mediante saltos celular por celular a través de Bluetooth LE y WiFi Direct."}
                     </span>
                 </div>
 

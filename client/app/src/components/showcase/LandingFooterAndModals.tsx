@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../../lib/version';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 interface LandingFooterAndModalsProps {
     handleCopy: (text: string) => void;
@@ -12,6 +13,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
     copiedText,
     onEnterApp
 }) => {
+    const { t } = useTranslation();
     const [openFaq, setOpenFaq] = useState<number | null>(null);
 
     const githubReleaseUrl = `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`;

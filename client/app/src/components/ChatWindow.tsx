@@ -779,17 +779,17 @@ export default function ChatWindow() {
                 }}>
                     <div style={{ fontSize: "0.78rem", color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
                         <span>👤</span>
-                        <span>Este interlocutor no está en tu lista de contactos.</span>
+                        <span>{t.sidebar?.no_contacts_desc || "Este interlocutor no está en tu lista de contactos."}</span>
                     </div>
                     <button
                         onClick={async () => {
                             await addContact(peerHash, peerName, peerPk);
-                            toast.success(`🤝 Contacto guardado: ${peerName}`);
+                            toast.success(`🤝 ${peerName}`);
                         }}
                         className="btn-tactical-primary"
                         style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}
                     >
-                        ➕ GUARDAR CONTACTO
+                        ➕ {t.sidebar?.add_contact_btn || "GUARDAR CONTACTO"}
                     </button>
                 </div>
             )}
@@ -807,9 +807,9 @@ export default function ChatWindow() {
                 >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <span>⚠️</span>
-                        <span>La clave pública de este contacto ha cambiado. Toca para verificar su Safety Number.</span>
+                        <span>{t.safety_number?.unverified || "La clave pública de este contacto ha cambiado. Toca para verificar su Safety Number."}</span>
                     </div>
-                    <span style={{ textDecoration: "underline", fontSize: "0.72rem", flexShrink: 0 }}>Verificar →</span>
+                    <span style={{ textDecoration: "underline", fontSize: "0.72rem", flexShrink: 0 }}>{t.safety_number?.verify_action || "Verificar →"}</span>
                 </div>
             )}
 

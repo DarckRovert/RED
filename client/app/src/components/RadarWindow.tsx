@@ -61,13 +61,16 @@ export default function RadarWindow() {
     };
 
     const handleAddPeer = async (peer: any) => {
-        const targetId = meshRouter.getCanonicalId(peer.id || peer.address || "");
-        const finalName = peer.name && !peer.name.startsWith("Nodo ") ? peer.name : `Nodo ${targetId.slice(0, 6)}`;
-        const pk = peer.publicKey || peer.public_key || null;
+        const rawId = peer.id || peer.address || "";
+        const targetId = meshRouter.getCanonicalId(rawId) || rawId;
+        const peerRecord = meshRouter.getPeerByAnyId(targetId) || meshRouter.getPeerByAnyId(rawId);
+        const resolvedId = (peerRecord?.canonicalId && peerRecord.canonicalId.length === 64) ? peerRecord.canonicalId : targetId;
+        const finalName = peer.name && !peer.name.startsWith("Nodo ") ? peer.name : (peerRecord?.name || `Nodo ${resolvedId.slice(0, 6)}`);
+        const pk = peer.publicKey || peer.public_key || peerRecord?.publicKey || null;
         try {
-            const resolvedHash = await addContact(targetId, finalName, pk);
+            const resolvedHash = await addContact(resolvedId, finalName, pk);
             toast.success(`Añadido ${finalName}`);
-            navigate("chat", resolvedHash || targetId);
+            navigate("chat", resolvedHash || resolvedId);
         } catch (e: any) {
             toast.error(e?.message || "Error al conectar con el par");
         }

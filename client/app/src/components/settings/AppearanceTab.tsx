@@ -24,14 +24,120 @@ export const AppearanceTab: React.FC = () => {
         updatePreferences({ fontSize: size });
     };
 
+    const handleLanguageChange = (selectedMode: 'auto' | typeof allLanguages[number]['id']) => {
+        SettingsManager.triggerHaptic("medium");
+        setLanguage(selectedMode);
+        const name = selectedMode === 'auto' ? t('settings.auto_detect') : (allLanguages.find(l => l.id === selectedMode)?.nativeName || selectedMode);
+        toast.success(`🌐 ${name}`);
+    };
+
     return (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                        {/* ── SECCIÓN 1: IDIOMA DEL SISTEMA & LOCALIZACIÓN ── */}
                         <div>
-                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Paleta Táctica de Color (Theme Accent)
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span>🌐</span> {t('settings.language_title')}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Modifica el acento cromático, resplandores y burbujas de cifrado en tiempo real.
+                                {t('settings.language_desc')}
+                            </p>
+                        </div>
+
+                        {/* Botón Modo Automático */}
+                        <div
+                            onClick={() => handleLanguageChange('auto')}
+                            className="card-tactical-interactive"
+                            style={{
+                                padding: "14px 16px",
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                border: langMode === 'auto' ? "2px solid var(--accent-cyan, #00E5FF)" : "1px solid var(--glass-border)",
+                                background: langMode === 'auto' ? "rgba(0, 229, 255, 0.08)" : "var(--glass-bg)",
+                                boxShadow: langMode === 'auto' ? "0 0 16px rgba(0, 229, 255, 0.2)" : "none",
+                                cursor: "pointer", borderRadius: "14px"
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <span style={{ fontSize: "1.4rem" }}>🤖</span>
+                                <div>
+                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <span>{t('settings.auto_detect')}</span>
+                                        {langMode === 'auto' && (
+                                            <span style={{ fontSize: "0.62rem", padding: "2px 6px", borderRadius: "6px", background: "rgba(0, 229, 255, 0.2)", color: "var(--accent-cyan)", fontWeight: 900, fontFamily: "JetBrains Mono, monospace" }}>
+                                                {langInfo.flag} {langInfo.nativeName}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                        Detección dinámica según la configuración regional de tu dispositivo
+                                    </div>
+                                </div>
+                            </div>
+                            {langMode === 'auto' && (
+                                <span style={{
+                                    width: 22, height: 22, borderRadius: "50%",
+                                    background: "var(--accent-cyan)", color: "#000",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: "0.75rem", fontWeight: 900
+                                }}>
+                                    ✓
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Grid de 12 Idiomas Nativos */}
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "8px" }}>
+                            {allLanguages.map((l) => {
+                                const isSelected = langMode === l.id;
+                                return (
+                                    <div
+                                        key={l.id}
+                                        onClick={() => handleLanguageChange(l.id)}
+                                        className="card-tactical-interactive"
+                                        style={{
+                                            padding: "10px 12px",
+                                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                                            border: isSelected ? "2px solid var(--accent-emerald, #00E676)" : "1px solid var(--glass-border)",
+                                            background: isSelected ? "rgba(0, 230, 118, 0.08)" : "var(--glass-bg)",
+                                            boxShadow: isSelected ? "0 0 14px rgba(0, 230, 118, 0.25)" : "none",
+                                            cursor: "pointer", borderRadius: "12px",
+                                            transition: "all 0.15s ease"
+                                        }}
+                                    >
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, overflow: "hidden" }}>
+                                            <span style={{ fontSize: "1.25rem", flexShrink: 0 }}>{l.flag}</span>
+                                            <div style={{ minWidth: 0, overflow: "hidden" }}>
+                                                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                    {l.nativeName}
+                                                </div>
+                                                <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                                    {l.name}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {isSelected && (
+                                            <span style={{
+                                                width: 18, height: 18, borderRadius: "50%",
+                                                background: "#00E676", color: "#000",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                fontSize: "0.70rem", fontWeight: 900, flexShrink: 0
+                                            }}>
+                                                ✓
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <hr style={{ borderColor: "var(--glass-border)", margin: "4px 0" }} />
+
+                        {/* ── SECCIÓN 2: PALETA TÁCTICA DE COLOR ── */}
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span>🎨</span> {t('settings.theme_title')}
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                {t('settings.theme_desc')}
                             </p>
                         </div>
 

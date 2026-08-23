@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { MessageItem } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { EmptyState } from "./ui/EmptyState";
 
 interface GlobalSearchModalProps {
@@ -10,6 +11,7 @@ interface GlobalSearchModalProps {
 }
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose }) => {
+    const { t } = useTranslation();
     const { messages, contacts, groups, navigate } = useRedStore();
     const [query, setQuery] = useState("");
 
@@ -45,15 +47,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
             >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexShrink: 0 }}>
                     <div style={{ fontSize: "1.05rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span>🔍</span> Búsqueda Global en Malla
+                        <span>🔍</span> {t.sidebar?.search_placeholder ? t.sidebar.search_placeholder.split("...")[0] : "Búsqueda Global"}
                     </div>
-                    <button onClick={onClose} className="btn-icon" style={{ width: 34, height: 34 }}>✕</button>
+                    <button onClick={onClose} className="btn-icon" style={{ width: 34, height: 34 }} title={t.common?.close || "Cerrar"}>✕</button>
                 </div>
 
                 <input
                     autoFocus
                     type="text"
-                    placeholder="Buscar en todos los mensajes y canales cifrados..."
+                    placeholder={t.sidebar?.search_placeholder || "Buscar mensajes y canales..."}
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     style={{
@@ -68,8 +70,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ onClose })
                 <div className="scroll-container" style={{ flex: 1, maxHeight: "min(420px, 50vh)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "8px" }}>
                     {query.trim().length >= 2 && results.length === 0 && (
                         <EmptyState 
-                            title="Sin coincidencias" 
-                            description={`No se encontraron mensajes para "${query}"`} 
+                            title={t.sidebar?.no_contacts || "Sin coincidencias"} 
+                            description={`"${query}"`} 
                             icon="🔍" 
                         />
                     )}

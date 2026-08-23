@@ -4,9 +4,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { OffGridNavigationEngine, Landmark, Waypoint, TriangulatedPosition } from "../lib/OffGridNavigationEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export function OffGridCompassModal() {
     const { navigate } = useRedStore();
+    const { t } = useTranslation();
 
     const [heading, setHeading] = useState<number>(0);
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
@@ -456,11 +458,11 @@ export function OffGridCompassModal() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ width: 38, height: 38, borderRadius: '12px', background: 'linear-gradient(135deg, #00E676, #00A859)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🧭</div>
                         <div>
-                            <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>Radar Topográfico Off-Grid</div>
+                            <div style={{ fontSize: '1.1rem', fontWeight: 800 }}>{t.modules?.off_grid_compass || "Radar Topográfico Off-Grid"}</div>
                             <div style={{ fontSize: '0.7rem', color: '#00E676' }}>Navegación Táctica Sin Conexión & Geodesia</div>
                         </div>
                     </div>
-                    <button onClick={() => navigate('sidebar')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>✕ Cerrar</button>
+                    <button onClick={() => navigate('sidebar')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem' }}>✕ {t.common?.close || "Cerrar"}</button>
                 </div>
 
                 {/* Compass Radar Canvas Card */}

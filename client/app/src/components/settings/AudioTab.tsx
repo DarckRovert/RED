@@ -15,17 +15,17 @@ export const AudioTab: React.FC = () => {
                     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Retroalimentación Acústica & Tonos de Alerta
+                                {t.settings?.tab_audio || "Retroalimentación Acústica & Tonos de Alerta"}
                             </h3>
                             <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                                Personaliza los timbres de llamada sintetizados en tiempo real mediante Web Audio API.
+                                {t.settings?.ringtone_desc || "Personaliza los timbres de llamada sintetizados en tiempo real mediante Web Audio API."}
                             </p>
                         </div>
 
                         {/* Selector de Tonos de Llamada */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>
-                                Tono de Llamada Entrante
+                                {t.settings?.ringtone_title || "Tono de Llamada Entrante"}
                             </div>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                 {RINGTONE_OPTIONS.map((tone) => {

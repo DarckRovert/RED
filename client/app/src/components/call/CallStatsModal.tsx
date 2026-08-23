@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface CallStatsModalProps {
     statsData: {
@@ -16,6 +17,8 @@ export const CallStatsModal: React.FC<CallStatsModalProps> = ({
     statsData,
     isAudioOnly,
 }) => {
+    const { t } = useTranslation();
+
     return (
                 <div style={{
                     position: "absolute", top: "calc(70px + var(--safe-top, 0px))", left: "16px",
@@ -26,35 +29,35 @@ export const CallStatsModal: React.FC<CallStatsModalProps> = ({
                     display: "flex", flexDirection: "column", gap: "6px", width: "240px"
                 }}>
                     <div style={{ color: "var(--accent-cyan)", fontWeight: 900, borderBottom: "1px solid rgba(0,229,255,0.2)", paddingBottom: "4px" }}>
-                        TELEMETRÍA WEBRTC
+                        {t.calls_extended?.stats_title || "TELEMETRÍA WEBRTC"}
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Latencia (RTT):</span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t.calls_extended?.stats_rtt || "Latencia (RTT)"}:</span>
                         <span style={{ color: "var(--accent-emerald)", fontWeight: 800 }}>{statsData.rttMs} ms</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Pérdida Paquetes:</span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t.calls_extended?.stats_packets_lost || "Pérdida Paquetes"}:</span>
                         <span style={{ color: statsData.packetLossPct > 2 ? "var(--accent-crimson)" : "var(--accent-emerald)", fontWeight: 800 }}>
                             {statsData.packetLossPct}%
                         </span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Bitrate Audio:</span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t.calls_extended?.stats_bitrate || "Bitrate"} Audio:</span>
                         <span>{statsData.audioBitrateKbps} kbps</span>
                     </div>
                     {!isAudioOnly && (
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255,255,255,0.6)" }}>Bitrate Video:</span>
+                            <span style={{ color: "rgba(255,255,255,0.6)" }}>{t.calls_extended?.stats_bitrate || "Bitrate"} Video:</span>
                             <span>{statsData.videoBitrateKbps} kbps</span>
                         </div>
                     )}
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Códec Audio:</span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>{t.calls_extended?.stats_codec || "Códec"} Audio:</span>
                         <span style={{ color: "var(--accent-amber)" }}>{statsData.audioCodec}</span>
                     </div>
                     {!isAudioOnly && (
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255,255,255,0.6)" }}>Códec Video:</span>
+                            <span style={{ color: "rgba(255,255,255,0.6)" }}>{t.calls_extended?.stats_codec || "Códec"} Video:</span>
                             <span style={{ color: "var(--accent-cyan)" }}>{statsData.videoCodec}</span>
                         </div>
                     )}

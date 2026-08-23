@@ -5,8 +5,10 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export function IncomingCallBanner() {
+    const { t } = useTranslation();
     const { incomingCall, setIncomingCall, navigate, setActiveCallType, preferences, currentScreen } = useRedStore();
 
     const isVideo = incomingCall?.callType === 'video';
@@ -105,7 +107,7 @@ export function IncomingCallBanner() {
                         fontWeight: 800, 
                         fontFamily: "JetBrains Mono, monospace" 
                     }}>
-                        {isVideo ? "VIDEOLAMADA HD ENTRANTE…" : "LLAMADA DE VOZ P2P ENTRANTE…"}
+                        {isVideo ? "VIDEOLAMADA HD ENTRANTE…" : (t.calls?.incoming || "LLAMADA DE VOZ P2P ENTRANTE…")}
                     </div>
                 </div>
             </div>
@@ -115,7 +117,7 @@ export function IncomingCallBanner() {
                     onClick={handleReject}
                     className="btn-icon"
                     style={{ width: 38, height: 38, background: "rgba(255,51,85,0.2)", border: "1px solid var(--accent-crimson)", color: "var(--accent-crimson)" }}
-                    title="Rechazar"
+                    title={t.calls?.reject || "Rechazar"}
                 >
                     ✕
                 </button>
@@ -133,7 +135,7 @@ export function IncomingCallBanner() {
                         fontSize: "0.82rem" 
                     }}
                 >
-                    Contestar
+                    {t.calls?.accept || "Contestar"}
                 </button>
             </div>
         </div>

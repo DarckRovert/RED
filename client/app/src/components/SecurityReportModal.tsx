@@ -6,6 +6,7 @@ import { toast } from "./Toast";
 import { LocalAIEngine } from "../lib/localAiEngine";
 import { SecureStoragePlugin } from "capacitor-secure-storage-plugin";
 import { RED_VERSION_NAME } from "../lib/version";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface SecurityReportModalProps {
     onClose?: () => void;
@@ -27,6 +28,7 @@ interface AuditData {
 }
 
 export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClose }) => {
+    const { t } = useTranslation();
     const { identity, goBack } = useRedStore();
     const handleClose = onClose || goBack;
     const [copied, setCopied] = useState(false);

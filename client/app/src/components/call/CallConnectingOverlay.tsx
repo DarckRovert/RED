@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 interface CallConnectingOverlayProps {
     isAudioOnly: boolean;
@@ -23,7 +24,16 @@ export const CallConnectingOverlay: React.FC<CallConnectingOverlayProps> = ({
     vadLevel,
     waveformCanvasRef,
 }) => {
+    const { t } = useTranslation();
     if (!isAudioOnly && callActive) return null;
+
+    const displayStatus = callActive
+        ? (t.calls?.connected || "LLAMADA CIFRADA E2E")
+        : (status.includes("P2P WebRTC")
+            ? (t.calls_extended?.connecting || "Iniciando capa P2P WebRTC...")
+            : (status.includes("señalización") || status.includes("signaling")
+                ? (t.calls_extended?.signaling || "Estableciendo enlace de señalización...")
+                : status));
 
     return (
                 <div style={{
@@ -86,7 +96,7 @@ export const CallConnectingOverlay: React.FC<CallConnectingOverlayProps> = ({
                                     fontWeight: 700,
                                     letterSpacing: "1.5px"
                                 }}>
-                                    {status.toUpperCase()}
+                                    {displayStatus.toUpperCase()}
                                 </span>
                             </div>
 

@@ -3,8 +3,10 @@ import { UpdateManager, UpdateInfo, DownloadProgress } from "../../lib/updateMan
 import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from "../../lib/version";
 import { SettingsManager } from "../../lib/settingsManager";
 import { toast } from "../Toast";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 export const UpdatesTab: React.FC = () => {
+    const { t } = useTranslation();
     const [permissionNeeded, setPermissionNeeded] = useState(false);
     const [checkingUpdates, setCheckingUpdates] = useState(false);
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
@@ -73,10 +75,10 @@ export const UpdatesTab: React.FC = () => {
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <div>
                 <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                    Motor Autónomo de Actualizaciones OTA
+                    {t.settings?.tab_updates || "Motor Autónomo de Actualizaciones OTA"}
                 </h3>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                    Detección semántica de versiones, descarga directa en streaming e instalación sin salir de la app.
+                    {t.settings?.updates_check || "Detección semántica de versiones, descarga directa en streaming e instalación sin salir de la app."}
                 </p>
             </div>
 
@@ -93,7 +95,7 @@ export const UpdatesTab: React.FC = () => {
                         <span style={{ fontSize: "1.4rem" }}>{updateInfo?.hasUpdate ? "🚀" : "🛡️"}</span>
                         <div>
                             <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#fff" }}>
-                                {updateInfo?.hasUpdate ? "Nueva Versión Disponible" : "Nodo RED Actualizado"}
+                                {updateInfo?.hasUpdate ? (t.settings?.updates_available || "Nueva Versión Disponible") : (t.settings?.updates_current || "Nodo RED Actualizado")}
                             </div>
                             <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
                                 Build Code: {RED_BUILD_CODE}

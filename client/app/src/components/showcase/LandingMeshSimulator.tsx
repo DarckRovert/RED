@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 export const LandingMeshSimulator: React.FC = () => {
+    const { t } = useTranslation();
     const [simMessage, setSimMessage] = useState("COORD -12.045, -77.031 • PATRULLA EN POSICIÓN");
     const [isPacketInFlight, setIsPacketInFlight] = useState(false);
     const [transitPacketHex, setTransitPacketHex] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export const LandingMeshSimulator: React.FC = () => {
                 fontWeight: 700,
               }}
             >
-              SIMULACIÓN DUAL EN TIEMPO REAL • ZERO-SERVER
+              {t.showcase_landing?.mesh_simulator_title || "SIMULACIÓN DUAL EN TIEMPO REAL • ZERO-SERVER"}
             </span>
             <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
               Prueba Interactiva: Moto G22 ↔ Tablet Lenovo

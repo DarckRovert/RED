@@ -11,11 +11,13 @@ import {
 import { bluetoothTransport, RedDevice } from "../lib/mesh/bluetoothTransport";
 import { getRfMetrics, triggerChannelHop, setRfFecMode, RfMetricsResponse } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type RfTab = "spectrum" | "jamming" | "devices";
 
 export function RfSpectrumModal() {
     const { navigate } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<RfTab>("spectrum");
 
     const [bandMode, setBandMode] = useState<RfBandMode>("BLE_2_4GHZ");
@@ -305,10 +307,10 @@ export function RfSpectrumModal() {
                     }}>📊</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Analizador de Espectro RF & Anti-Jamming
+                            {t.rf_module?.title || "Analizador de Espectro RF & Anti-Jamming"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: metrics.isJammingSuspected ? "var(--accent-crimson-bright)" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {metrics.isJammingSuspected ? "⚠️ ALERTA DE INHIBICIÓN DETECTADA" : "ESPECTRO NOMINAL · ESCANEANDO"}
+                            {metrics.isJammingSuspected ? "⚠️ ALERTA DE INHIBICIÓN DETECTADA" : (t.rf_module?.subtitle || "ESPECTRO NOMINAL · ESCANEANDO")}
                         </div>
                     </div>
                 </div>
@@ -316,7 +318,7 @@ export function RfSpectrumModal() {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar analizador"
+                    title={t.common?.close || "Cerrar analizador"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -336,7 +338,7 @@ export function RfSpectrumModal() {
                     className={activeTab === "spectrum" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📊 Espectro Waterfall
+                    📊 {t.rf_module?.waterfall || "Espectro Waterfall"}
                 </button>
                 <button
                     onClick={() => setActiveTab("jamming")}
@@ -350,7 +352,7 @@ export function RfSpectrumModal() {
                     className={activeTab === "devices" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📡 Dispositivos RF ({scannedBleDevices.size})
+                    📡 {t.rf_module?.signals_detected || "Dispositivos RF"} ({scannedBleDevices.size})
                 </button>
             </div>
 

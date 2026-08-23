@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 export const LandingInteractiveLabs: React.FC = () => {
+    const { t } = useTranslation();
     const [customPacketPayload, setCustomPacketPayload] = useState("ALERTA EVACUACIÓN ZONA NORTE");
     const [packetTtl, setPacketTtl] = useState(7);
 

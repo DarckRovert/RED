@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { MessageItem } from "../../lib/api";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 
 interface MediaGalleryViewerProps {
@@ -15,6 +16,7 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     allMessages = [],
     onClose,
 }) => {
+    const { t } = useTranslation();
     // Filter all media messages (images, videos)
     const mediaItems = React.useMemo(() => {
         return allMessages.filter(

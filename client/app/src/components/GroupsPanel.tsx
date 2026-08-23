@@ -5,9 +5,11 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { GroupAdminModal } from "./GroupAdminModal";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export default function GroupsPanel() {
     const { contacts: rawContacts, groups: rawGroups, goBack, navigate, fetchData } = useRedStore();
+    const { t } = useTranslation();
     const contacts = Array.isArray(rawContacts) ? rawContacts : [];
     const groups = Array.isArray(rawGroups) ? rawGroups : [];
     const [groupName, setGroupName] = useState("");
@@ -76,10 +78,10 @@ export default function GroupsPanel() {
                     }}>👥</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Escuadrones & Canales P2P
+                            {t.squads_module?.title || "Escuadrones & Canales P2P"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-purple, #B388FF)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            SIGNAL SENDERKEY · CIFRADO MULTI-PAR
+                            {t.squads_module?.subtitle || "SIGNAL SENDERKEY · CIFRADO MULTI-PAR"}
                         </div>
                     </div>
                 </div>
@@ -87,7 +89,7 @@ export default function GroupsPanel() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar panel"
+                    title={t.common?.close || "Cerrar panel"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -101,12 +103,12 @@ export default function GroupsPanel() {
                     {/* Creador de Nuevo Grupo */}
                     <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                            ⚡ CREAR NUEVO ESCUADRÓN CIFRADO
+                            ⚡ {t.squads_module?.create_title?.toUpperCase() || "CREAR NUEVO ESCUADRÓN CIFRADO"}
                         </div>
 
                         <input
                             type="text"
-                            placeholder="Nombre del Escuadrón (Ej: Brigada Alfa, Rescate Norte)..."
+                            placeholder={t.squads_module?.name_placeholder || "Nombre del Escuadrón (Ej: Brigada Alfa, Rescate Norte)..."}
                             value={groupName}
                             onChange={e => setGroupName(e.target.value)}
                             style={{ fontSize: "0.92rem" }}
@@ -114,13 +116,13 @@ export default function GroupsPanel() {
 
                         <div>
                             <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: "8px" }}>
-                                AÑADIR MIEMBROS ({selectedContacts.length}/{contacts.length})
+                                {t.squads_module?.members_label?.toUpperCase() || "AÑADIR MIEMBROS"} ({selectedContacts.length}/{contacts.length})
                             </div>
 
                             {contacts.length === 0 ? (
                                 <div className="empty-state-tactical" style={{ padding: "16px" }}>
                                     <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                                        No hay contactos disponibles. Añade pares desde Radar P2P.
+                                        {t.sidebar?.no_contacts_desc || "No hay contactos disponibles. Añade pares desde Radar P2P."}
                                     </div>
                                 </div>
                             ) : (
@@ -155,22 +157,22 @@ export default function GroupsPanel() {
                             className="btn-tactical-primary"
                             style={{ width: "100%", padding: "14px", fontSize: "0.95rem", background: "linear-gradient(135deg, #7C4DFF 0%, #5E35B1 100%)" }}
                         >
-                            {creationStatus || "FEDERAR CONTRATO DE GRUPO"}
+                            {creationStatus || t.squads_module?.create_btn || "FEDERAR CONTRATO DE GRUPO"}
                         </button>
                     </div>
 
                     {/* Lista de Grupos Activos */}
                     <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
                         <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                            GRUPOS & ESCUADRONES ACTIVOS ({groups.length})
+                            {t.sidebar?.squads_title || "GRUPOS & ESCUADRONES ACTIVOS"} ({groups.length})
                         </div>
 
                         {groups.length === 0 ? (
                             <div className="empty-state-tactical">
                                 <div className="empty-state-icon">👥</div>
-                                <div className="empty-state-title">Sin Grupos Federados</div>
+                                <div className="empty-state-title">{t.sidebar?.no_squads || "Sin Grupos Federados"}</div>
                                 <div className="empty-state-desc">
-                                    Crea un escuadrón con tus contactos para chatear en canales multi-par cifrados.
+                                    {t.sidebar?.no_squads_desc || "Crea un escuadrón con tus contactos para chatear en canales multi-par cifrados."}
                                 </div>
                             </div>
                         ) : (

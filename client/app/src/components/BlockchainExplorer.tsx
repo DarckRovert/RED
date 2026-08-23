@@ -6,6 +6,7 @@ import { RedAPI } from "../lib/api";
 import { BlockDetailsModal } from "./BlockDetailsModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface BlockItem {
     height: number;
@@ -49,6 +50,7 @@ function timeAgo(ts: number, isGenesis = false): string {
 
 export default function BlockchainExplorer() {
     const { identity, status, goBack } = useRedStore();
+    const { t } = useTranslation();
     const [blocks, setBlocks] = useState<BlockItem[]>([]);
     const [validators, setValidators] = useState<ValidatorItem[]>([]);
     const [consensus, setConsensus] = useState<ConsensusStatus | null>(null);
@@ -154,10 +156,10 @@ export default function BlockchainExplorer() {
                     }}>⛓️</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Explorador Blockchain Soberano
+                            {t.blockchain_module?.title || "Explorador Blockchain Soberano"}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            DAG CONSENSUS · MERKLE AUDITOR · PROOF-OF-STAKE
+                            {t.blockchain_module?.subtitle || "DAG CONSENSUS · MERKLE AUDITOR · PROOF-OF-STAKE"}
                         </div>
                     </div>
                 </div>
@@ -165,7 +167,7 @@ export default function BlockchainExplorer() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar explorador"
+                    title={t.common?.close || "Cerrar explorador"}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -185,28 +187,28 @@ export default function BlockchainExplorer() {
                     className={tab === "blocks" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                 >
-                    ⛓️ Bloques ({blocks.length})
+                    ⛓️ {t.blockchain_module?.tab_blocks || "Bloques"} ({blocks.length})
                 </button>
                 <button
                     onClick={() => setTab("validators")}
                     className={tab === "validators" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                 >
-                    🛡️ Validadores
+                    🛡️ {t.blockchain_module?.tab_validators || "Validadores"}
                 </button>
                 <button
                     onClick={() => setTab("consensus")}
                     className={tab === "consensus" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                 >
-                    ⚙️ Consenso
+                    ⚙️ {t.blockchain_module?.tab_consensus || "Consenso"}
                 </button>
                 <button
                     onClick={() => setTab("stake")}
                     className={tab === "stake" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)" }}
                 >
-                    🥩 Staking PoS
+                    🥩 {t.blockchain_module?.tab_stake || "Staking PoS"}
                 </button>
             </div>
 
