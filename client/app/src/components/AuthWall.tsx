@@ -253,16 +253,16 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
         if (mode === "onboarding") {
             if (step === "enter") {
-                if (pin.length < 8) setPin(prev => prev + digit);
+                if (pin.length < 6) setPin(prev => prev + digit);
             } else {
-                if (confirmPin.length < 8) setConfirmPin(prev => prev + digit);
+                if (confirmPin.length < 6) setConfirmPin(prev => prev + digit);
             }
         } else {
-            if (pin.length < 8) {
+            if (pin.length < 6) {
                 const nextPin = pin + digit;
                 setPin(nextPin);
-                if (nextPin.length >= 6) {
-                    // Auto-attempt login on reaching 6 digits
+                if (nextPin.length === 6) {
+                    // Auto-attempt login on reaching exactly 6 digits
                     doLogin(nextPin);
                 }
             }
