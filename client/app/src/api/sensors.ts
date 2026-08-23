@@ -326,14 +326,7 @@ export async function panicWipe(): Promise<{ success: boolean; wiped: boolean }>
 export async function getNodeLogs(count?: number): Promise<RustLogEntry[]> {
     return fetchWithFallback('/api/logs?count=' + (count || 100), undefined, () => {
         const logs = getStored<RustLogEntry[]>(STORAGE_KEYS.NODE_LOGS, []);
-        if (logs.length > 0) return logs.slice(-(count || 100));
-        const now = Date.now();
-        return [
-            { timestamp: now - 3500, level: 'INFO', target: 'red_core::runtime', message: 'Nodo RED inicializado en modo soberano.' },
-            { timestamp: now - 2500, level: 'CRYPTO', target: 'red_core::crypto', message: 'Bóveda ML-KEM-768 y Ed25519 activa.' },
-            { timestamp: now - 1500, level: 'MESH', target: 'red_core::network', message: 'Transportes BLE, WiFi Direct y SoundMesh listos.' },
-            { timestamp: now - 500, level: 'INFO', target: 'red_core::events', message: 'Bucle de eventos SSE sincronizado.' }
-        ];
+        return logs.slice(-(count || 100));
     });
 }
 
@@ -346,10 +339,10 @@ export async function getRfMetrics(): Promise<RfMetricsResponse> {
         return {
             active_channel: ch,
             frequency_mhz: 915.0 + (ch - 1) * 0.5,
-            noise_floor_dbm: -114 + Math.floor(Math.random() * 6),
+            noise_floor_dbm: -114,
             fec_mode: cfg.fec_mode || '4/8 (Reed-Solomon)',
-            packets_transmitted: 54,
-            packets_received: 51,
+            packets_transmitted: 0,
+            packets_received: 0,
             crc_errors: 0,
             current_channel_mhz: 915.0 + (ch - 1) * 0.5,
             total_hops_count: cfg.total_hops || 0
@@ -423,14 +416,12 @@ export async function getNativeBarometerReading(): Promise<NativeBarometerResult
         }
     } catch {}
 
-    // Fallback: Real atmospheric calculation from baseline
-    const standardPressure = 1013.25;
     return {
-        value: standardPressure,
+        value: 0,
         unit: 'hPa',
-        available: true,
-        pressure_hpa: standardPressure,
-        sensor_name: 'Barómetro Barométrico Estándar'
+        available: false,
+        pressure_hpa: 0,
+        sensor_name: 'Sensor Barométrico No Disponible'
     };
 }
 
@@ -454,10 +445,10 @@ export async function getNativeThermometerReading(): Promise<any> {
     } catch {}
 
     return {
-        value: 22.5,
+        value: null,
         unit: '°C',
-        available: true,
-        sensor_name: 'Sensor Térmico Ambiental'
+        available: false,
+        sensor_name: 'Sensor Térmico No Disponible'
     };
 }
 
@@ -481,10 +472,10 @@ export async function getNativeHygrometerReading(): Promise<any> {
     } catch {}
 
     return {
-        value: 55.0,
+        value: null,
         unit: '%',
-        available: true,
-        sensor_name: 'Higrómetro Relativo'
+        available: false,
+        sensor_name: 'Higrómetro No Disponible'
     };
 }
 
@@ -508,8 +499,8 @@ export async function getNativeCompassReading(): Promise<any> {
 
     return {
         azimuth: 0,
-        available: true,
-        sensor_name: 'Brújula Digital Orientación'
+        available: false,
+        sensor_name: 'Brújula No Disponible'
     };
 }
 

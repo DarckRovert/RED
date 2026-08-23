@@ -209,12 +209,12 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     let api_log_dir = data_dir.clone();
 
     tokio::spawn(async move {
-        let http_addr = "0.0.0.0:7333";
-        append_log(&api_log_dir, &format!("Binding Axum server on {}...", http_addr));
+        let http_addr = "127.0.0.1:7333";
+        append_log(&api_log_dir, &format!("Binding Axum server on {} (Loopback Local Only)...", http_addr));
         let app = api::build_router_async(api_state_clone, msg_tx_clone);
         match tokio::net::TcpListener::bind(http_addr).await {
             Ok(listener) => {
-                append_log(&api_log_dir, "Axum server BOUND and LISTENING OK");
+                append_log(&api_log_dir, "Axum server BOUND and LISTENING on 127.0.0.1:7333 OK");
                 if let Err(e) = axum::serve(listener, app).await {
                     let msg = format!("Axum serve error: {}", e);
                     append_log(&api_log_dir, &msg);
@@ -245,14 +245,27 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     append_log(&data_dir, "Storage opened OK");
     let storage_arc = Arc::new(Mutex::new(storage_result));
 
-    append_log(&data_dir, "Loading or generating identity (spawn_blocking)...");
+    append_log(&data_dir, "Loading or validating identity (spawn_blocking)...");
     let identity = {
         let s = storage_arc.lock().await;
-        if let Some(id) = s.get_identity() {
-            append_log(&data_dir, &format!("Existing identity loaded: {}", id.identity_hash().short()));
-            id
+        let has_saved_identity = s.has_raw_entry("identity", b"user_identity");
+        if has_saved_identity {
+            match s.try_get_identity() {
+                Ok(Some(id)) => {
+                    append_log(&data_dir, &format!("Existing identity authenticated & loaded: {}", id.identity_hash().short()));
+                    id
+                }
+                Ok(None) => {
+                    return Err(anyhow::anyhow!("Storage corruption: Identity entry exists but returned empty."));
+                }
+                Err(err) => {
+                    let msg = format!("FATAL: Storage decryption failed ({:?}) — Incorrect PIN / Master Password.", err);
+                    append_log(&data_dir, &msg);
+                    return Err(anyhow::anyhow!(msg));
+                }
+            }
         } else {
-            append_log(&data_dir, "No identity found — generating via PoW (this takes time)...");
+            append_log(&data_dir, "No identity found — generating fresh identity via PoW (First Boot)...");
             drop(s); // Release lock before blocking
             let id = tokio::task::spawn_blocking(|| {
                 red_core::identity::Identity::generate()

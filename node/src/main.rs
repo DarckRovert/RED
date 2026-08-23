@@ -494,11 +494,11 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
 
         let router = build_router(state).layer(axum::middleware::from_fn(auth::auth_middleware));
 
-        let http_addr = "0.0.0.0:7333";
+        let http_addr = "127.0.0.1:7333";
         let listener = tokio::net::TcpListener::bind(http_addr)
             .await
             .expect("Failed to bind HTTP API port 7333");
-        info!("Web UI + HTTP API listening on http://{}", http_addr);
+        info!("Web UI + HTTP API listening locally on http://{}", http_addr);
         axum::serve(
             listener,
             router.into_make_service_with_connect_info::<std::net::SocketAddr>(),

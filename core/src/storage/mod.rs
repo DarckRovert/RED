@@ -340,6 +340,19 @@ impl Storage {
     pub fn get_identity(&self) -> Option<Identity> {
         self.fetch("identity", b"user_identity").unwrap_or(None)
     }
+    pub fn try_get_identity(&self) -> StorageResult<Option<Identity>> {
+        self.fetch("identity", b"user_identity")
+    }
+    pub fn has_raw_entry(&self, tree_name: &str, key: &[u8]) -> bool {
+        if let Some(db) = self.db.as_ref() {
+            if let Ok(tree) = db.open_tree(tree_name) {
+                if let Ok(Some(_)) = tree.get(key) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 
     pub fn path(&self) -> &PathBuf { &self.path }
     pub fn is_open(&self) -> bool { self.is_open }

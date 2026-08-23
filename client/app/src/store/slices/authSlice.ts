@@ -28,13 +28,74 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
 
     login: async (password: string) => {
         try {
-            const isDecoy = password === '9999';
-            set({ isDecoyMode: isDecoy });
-
             const { Capacitor, registerPlugin } = await import('@capacitor/core');
             const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
 
             if (isNative) {
+                // 1. Check master_pin / panic_pin / decoy_pin in hardware Keystore & local storage
+                let storedMasterPin: string | null = null;
+                let storedPanicPin: string | null = null;
+                let storedDecoyPin: string | null = null;
+
+                try {
+                    const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                    const masterRes = await SecureStoragePlugin.get({ key: 'master_pin' }).catch(() => null);
+                    const panicRes = await SecureStoragePlugin.get({ key: 'panic_pin' }).catch(() => null);
+                    const decoyRes = await SecureStoragePlugin.get({ key: 'decoy_pin' }).catch(() => null);
+                    storedMasterPin = masterRes?.value?.trim() || null;
+                    storedPanicPin = panicRes?.value?.trim() || null;
+                    storedDecoyPin = decoyRes?.value?.trim() || null;
+                } catch {}
+
+                if (!storedMasterPin && typeof window !== 'undefined') {
+                    storedMasterPin = localStorage.getItem('master_pin') || sessionStorage.getItem('master_pin');
+                }
+                if (!storedPanicPin && typeof window !== 'undefined') {
+                    storedPanicPin = localStorage.getItem('panic_pin');
+                }
+                if (!storedDecoyPin && typeof window !== 'undefined') {
+                    storedDecoyPin = localStorage.getItem('decoy_pin');
+                }
+
+                // PANIC WIPE
+                if (storedPanicPin && password === storedPanicPin) {
+                    try {
+                        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                        await SecureStoragePlugin.clear().catch(() => {});
+                        const RedNode = registerPlugin<any>('RedNode');
+                        await RedNode.destroy().catch(() => {});
+                    } catch {}
+                    if (typeof window !== 'undefined') {
+                        localStorage.clear();
+                        sessionStorage.clear();
+                    }
+                    toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
+                    window.location.reload();
+                    return false;
+                }
+
+                // DECOY VAULT
+                const isDecoy = (storedDecoyPin && password === storedDecoyPin) || password === '9999';
+                set({ isDecoyMode: isDecoy });
+
+                // STRICT MASTER PIN CHECK (If a master PIN has been registered, password MUST match)
+                if (storedMasterPin && password !== storedMasterPin && !isDecoy) {
+                    console.warn("[RED Native Auth] Acceso denegado: PIN maestro no coincide.");
+                    return false;
+                }
+
+                // FIRST ONBOARDING: If no master_pin yet exists, store this password as master_pin
+                if (!storedMasterPin && password && password.length >= 6) {
+                    try {
+                        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                        await SecureStoragePlugin.set({ key: 'master_pin', value: password }).catch(() => null);
+                    } catch {}
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('master_pin', password);
+                        sessionStorage.setItem('master_pin', password);
+                    }
+                }
+
                 const RedNode = registerPlugin<any>('RedNode');
                 await RedNode.start({ password, decoyMode: isDecoy });
                 console.log("[RED] Requested Rust Node boot via JNI (Decoy:", isDecoy, ")");
@@ -107,6 +168,9 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 // Si no había master_pin guardado aún, lo establecemos con el PIN ingresado
                 if (!masterPin && password && password.length >= 6 && typeof window !== 'undefined') {
                     localStorage.setItem("master_pin", password);
+                    sessionStorage.setItem("master_pin", password);
+                } else if (!masterPin) {
+                    return false;
                 }
 
                 let localHash = typeof window !== 'undefined' ? localStorage.getItem("red_identity_hash") : null;

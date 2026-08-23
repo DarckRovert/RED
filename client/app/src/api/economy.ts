@@ -7,7 +7,7 @@ import { RedAPI } from './client';
 export async function getP2PWallet(): Promise<any> {
     return fetchWithFallback('/api/p2p/wallet', undefined, () => {
         const wallet = getStored<any>(STORAGE_KEYS.P2P_WALLET, {
-            balance: 100.0,
+            balance: 0.0,
             address: 'RED-SOVEREIGN-VAULT',
             pending_vouchers: [],
             transactions_count: 0,

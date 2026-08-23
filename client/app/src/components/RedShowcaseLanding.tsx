@@ -28,9 +28,9 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [copiedText, setCopiedText] = useState<string | null>(null);
 
-    const [heroAlias, setHeroAlias] = useState("Vanguard_Leader");
-    const [heroDidHash, setHeroDidHash] = useState("did:red:7F3A91BC2E844D0F81E73A6B4C20E76B91A23D8E5F7C1B4A90D2E6F83C1A7B5D");
-    const [heroMnemonicSeed, setHeroMnemonicSeed] = useState("shield quantum radar mesh beacon sovereign pulse acoustic cipher horizon rescue citadel");
+    const [heroAlias, setHeroAlias] = useState("");
+    const [heroDidHash, setHeroDidHash] = useState("did:red:A90D2E6F83C1A7B5D7F3A91BC2E844D0F81E73A6B4C20E76B91A23D8E5F7C1B4");
+    const [heroMnemonicSeed, setHeroMnemonicSeed] = useState("beacon sovereign pulse acoustic cipher horizon rescue citadel shield quantum radar mesh");
 
     const [fps, setFps] = useState(60);
     const [telemetryNodes, setTelemetryNodes] = useState(14);

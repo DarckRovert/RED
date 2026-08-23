@@ -826,7 +826,8 @@ class MeshRouter {
                   const msgs = JSON.parse(rawMsgs);
                   let updated = false;
                   for (const m of msgs) {
-                    if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
+                    const matchesAck = (ackMessageId && m.id === ackMessageId) || (ackNonce && (m.id === ackNonce || m.nonce === ackNonce));
+                    if (matchesAck) {
                       m.status = 'Delivered';
                       m.delivered = true;
                       updated = true;
@@ -843,7 +844,8 @@ class MeshRouter {
                 const currentMsgs = useRedStore.getState().messages;
                 let storeUpdated = false;
                 const updatedStoreMsgs = currentMsgs.map(m => {
-                  if (m.id === ackMessageId || m.id === ackNonce || (m.status === 'Sent' && m.is_mine)) {
+                  const matchesAck = (ackMessageId && m.id === ackMessageId) || (ackNonce && (m.id === ackNonce || m.nonce === ackNonce));
+                  if (matchesAck) {
                     storeUpdated = true;
                     return { ...m, status: 'Delivered' as const, delivered: true };
                   }
