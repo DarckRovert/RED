@@ -395,10 +395,20 @@ export default function RadarWindow() {
                                 <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--accent-emerald)", boxShadow: "0 0 14px var(--accent-emerald)", zIndex: 5 }} />
                             </div>
 
-                            {/* Lista de Nodos Detectados */}
+                            {/* Lista de Nodos Detectados + Botón Refresh */}
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>{t('radar.ble_active_nodes')} ({nearbyPeers.length})</div>
-                                <span className="badge-tactical badge-tactical-emerald">SWARM ACTIVE</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span className="badge-tactical badge-tactical-emerald">SWARM ACTIVE</span>
+                                    <button
+                                        onClick={handleRefreshNearby}
+                                        className="btn-tactical-secondary"
+                                        style={{ padding: "4px 10px", fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "4px" }}
+                                        title={t('radar.ble_refresh')}
+                                    >
+                                        🔄 {t('radar.ble_refresh')}
+                                    </button>
+                                </div>
                             </div>
 
                             {nearbyPeers.length === 0 ? (

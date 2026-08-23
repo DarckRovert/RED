@@ -85,80 +85,80 @@ export default function Sidebar() {
 
     const menuCategories = [
         {
-            title: "💬 Mensajería P2P & Canales",
+            title: t('modules.cat_messaging'),
             items: [
-                { icon: "📻", label: "Canales Mesh Locales", action: "channels" },
-                { icon: "🌍", label: "RED Social Feed P2P", action: "socialFeed" },
-                { icon: "📢", label: "Difusión Privada", action: "broadcast" },
-                { icon: "🎙️", label: "Walkie-Talkie Mesh HQ", action: "walkie" },
-                { icon: "🎨", label: "Canvas Táctico P2P", action: "canvas" },
-                { icon: "📺", label: "Live Broadcast Stream", action: "liveStream" },
+                { icon: "📻", label: t('modules.channels'), action: "channels" },
+                { icon: "🌍", label: t('modules.social_feed'), action: "socialFeed" },
+                { icon: "📢", label: t('modules.broadcast'), action: "broadcast" },
+                { icon: "🎙️", label: t('modules.walkie'), action: "walkie" },
+                { icon: "🎨", label: t('modules.canvas'), action: "canvas" },
+                { icon: "📺", label: t('modules.live_stream'), action: "liveStream" },
             ]
         },
         {
-            title: "📡 Red Malla & Radar Off-Grid",
+            title: t('modules.cat_mesh_radar'),
             items: [
-                { icon: "📳", label: "Shake & Pair (Acelerómetro)", action: "shakePair" },
-                { icon: "🧭", label: "Radar Topográfico GPS", action: "offGridCompass" },
-                { icon: "🗺️", label: "Mapa de Nodos P2P", action: "nodemap" },
-                { icon: "📡", label: "Radar Hardware BLE/WiFi", action: "nearby" },
-                { icon: "🛡️", label: "Analizador Espectro RF / EW", action: "rfSpectrum" },
-                { icon: "🌊", label: "Ondas de Proximidad", action: "proximity" },
-                { icon: "🌤️", label: "Clima & Barómetro CAP", action: "weather" },
-                { icon: "🔋", label: "Batería Eco-Mesh", action: "ecoMesh" },
-                { icon: "🌐", label: "Topología de Red", action: "network" },
+                { icon: "📳", label: t('modules.shake_pair'), action: "shakePair" },
+                { icon: "🧭", label: t('modules.off_grid_compass'), action: "offGridCompass" },
+                { icon: "🗺️", label: t('modules.nodemap'), action: "nodemap" },
+                { icon: "📡", label: t('modules.nearby'), action: "nearby" },
+                { icon: "🛡️", label: t('modules.rf_spectrum'), action: "rfSpectrum" },
+                { icon: "🌊", label: t('modules.proximity'), action: "proximity" },
+                { icon: "🌤️", label: t('modules.weather'), action: "weather" },
+                { icon: "🔋", label: t('modules.eco_mesh'), action: "ecoMesh" },
+                { icon: "🌐", label: t('modules.network'), action: "network" },
             ]
         },
         {
-            title: "🪪 Identidad, Pagos & Soberanía",
+            title: t('modules.cat_identity_web3'),
             items: [
-                { icon: "⚡", label: "Hub Comercial & Recompensas", action: "commercialHub" },
-                { icon: "🦊", label: "Bóveda Web3 & MetaMask", action: "web3Vault" },
-                { icon: "🪪", label: "Perfil & Bóveda DID", action: "idVault" },
-                { icon: "💳", label: "Pagos & Vouchers P2P", action: "p2pPay" },
-                { icon: "🔐", label: "Bóveda Criptográfica PQC", action: "crypto" },
-                { icon: "⛓️", label: "Explorador Blockchain", action: "explorer" },
-                { icon: "💻", label: "Vincular Dispositivo Web (PC)", action: "webCompanionLink" },
-                { icon: "🖼️", label: "Bóveda Esteganográfica", action: "stegoVault" },
-                { icon: "💾", label: "Respaldos & Restauración", action: "backup" },
+                { icon: "⚡", label: t('modules.commercial_hub'), action: "commercialHub" },
+                { icon: "🦊", label: t('modules.web3_vault'), action: "web3Vault" },
+                { icon: "🪪", label: t('modules.id_vault'), action: "idVault" },
+                { icon: "💳", label: t('modules.p2p_pay'), action: "p2pPay" },
+                { icon: "🔐", label: t('modules.crypto'), action: "crypto" },
+                { icon: "⛓️", label: t('modules.explorer'), action: "explorer" },
+                { icon: "💻", label: t('modules.companion_link'), action: "webCompanionLink" },
+                { icon: "🖼️", label: t('modules.stego_vault'), action: "stegoVault" },
+                { icon: "💾", label: t('modules.backup'), action: "backup" },
             ]
         },
         {
-            title: "🛡️ Ciberdefensa & Escudo Global",
+            title: t('modules.cat_defense_shield'),
             items: [
-                { icon: "🛡️", label: "Escudo Global (DEFCON Matrix)", action: "globalShield" },
-                { icon: "⚡", label: "Simulador Apagón Blackout", action: "blackout" },
-                { icon: "💀", label: "Hombre Muerto DMS", action: "dms" },
-                { icon: "🛡️", label: "Seguridad Zero-Trust", action: "security" },
+                { icon: "🛡️", label: t('modules.global_shield'), action: "globalShield" },
+                { icon: "⚡", label: t('modules.blackout'), action: "blackout" },
+                { icon: "💀", label: t('modules.dms'), action: "dms" },
+                { icon: "🛡️", label: t('modules.security'), action: "security" },
             ]
         },
         {
-            title: "🫀 Emergencias, Salud & Rescate",
+            title: t('modules.cat_emergency_health'),
             items: [
-                { icon: "🫀", label: "Signos Vitales & Triaje START", action: "vitalScan" },
-                { icon: "🚨", label: "Baliza Ultrasonido SOS", action: "survivalBeacon" },
-                { icon: "🟠", label: "Sistema Alerta AMBER", action: "amber" },
-                { icon: "💀", label: "Hombre Muerto DMS", action: "dms" },
-                { icon: "⚡", label: "Simulador Apagón Blackout", action: "blackout" },
+                { icon: "🫀", label: t('modules.vital_scan'), action: "vitalScan" },
+                { icon: "🚨", label: t('modules.survival_beacon'), action: "survivalBeacon" },
+                { icon: "🟠", label: t('modules.amber'), action: "amber" },
+                { icon: "💀", label: t('modules.dms'), action: "dms" },
+                { icon: "⚡", label: t('modules.blackout'), action: "blackout" },
             ]
         },
         {
-            title: "🤖 Inteligencia Artificial Neuronal",
+            title: t('modules.cat_ai'),
             items: [
-                { icon: "🤖", label: "Copiloto IA Offline", action: "aiCopilot" },
-                { icon: "🛡️", label: "Guardian IA (Firewall)", action: "guardian" },
+                { icon: "🤖", label: t('modules.ai_copilot'), action: "aiCopilot" },
+                { icon: "🛡️", label: t('modules.guardian'), action: "guardian" },
             ]
         },
         {
-            title: "⚙️ Herramientas, Sistema & Camuflaje",
+            title: t('modules.cat_tools_system'),
             items: [
-                { icon: "⚙️", label: "Ajustes & Personalización", action: "settings" },
-                { icon: "🚀", label: "Actualizador de Software (OTA)", action: "updater" },
-                { icon: "📊", label: "Diagnóstico Salud Sistema", action: "health" },
-                { icon: "📋", label: "Logs del Nodo Rust SSE", action: "nodeLogs" },
-                { icon: "🧮", label: "Calculadora Señuelo", action: "calculator" },
-                { icon: "📑", label: "Reporte Auditoría Seguridad", action: "secReport" },
-                { icon: "🛡️", label: "Seguridad Zero-Trust", action: "security" },
+                { icon: "⚙️", label: t('modules.settings'), action: "settings" },
+                { icon: "🚀", label: t('modules.updater'), action: "updater" },
+                { icon: "📊", label: t('modules.health'), action: "health" },
+                { icon: "📋", label: t('modules.node_logs'), action: "nodeLogs" },
+                { icon: "🧮", label: t('modules.calculator'), action: "calculator" },
+                { icon: "📑", label: t('modules.sec_report'), action: "secReport" },
+                { icon: "🛡️", label: t('modules.security'), action: "security" },
             ]
         }
     ];
