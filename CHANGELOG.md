@@ -2,7 +2,20 @@
 
 ## [58.0.0-canonical-mesh-dedup] - 2026-08-23
 
-### Sovereign Tactical Master Edition — Universal Canonical Node Deduplication, Multi-Transport Consolidation & Production Verification
+### Sovereign Tactical Master Edition — Universal Biometric Sentinel, Zero-Trust Hardening & Canonical Mesh Deduplication
+
+**Sistema Universal de Llaves Biométricas & Passkeys Multiplataforma**
+- `BiometricLockEngine.ts`: Detección en vivo de hardware biométrico (Huella dactilar, Reconocimiento facial, Escáner de iris, Windows Hello, Touch ID / Face ID y Passkeys WebAuthn). Integración con Web Crypto API (`navigator.credentials`) y retos criptográficos locales.
+- `AuthWall.tsx`: Teclado táctico inteligente con botón biométrico dedicado, auto-disparo configurable, asistente de enrolamiento post-onboarding en 1 clic y conmutación fluida al PIN de 6 dígitos ante cancelaciones o bloqueos del OS.
+- `PrivacyTab.tsx`: Insignia de hardware en vivo, selector de tiempo de auto-bloqueo por inactividad (`Inmediato`, `1m`, `5m`, `15m`) e interruptor para deshabilitar auto-prompt como medida anti-coacción.
+- `AndroidManifest.xml`: Declaración de permisos `USE_BIOMETRIC` y `USE_FINGERPRINT` con características de hardware opcionales (`fingerprint`, `biometrics.face`, `biometrics.iris`).
+
+**Seguridad Zero-Trust & Blindaje de Almacén Criptográfico en Rust**
+- `core/src/storage/mod.rs` & `red_mobile/src/lib.rs`: Implementación de `try_get_identity` y `has_raw_entry`. Si la base de datos Sled contiene una identidad y la clave derivada del PIN no la desencripta, el nodo aborta con error fatal (`FATAL: Storage decryption failed — Incorrect PIN`), erradicando la creación de identidades efímeras.
+- `red_mobile/src/lib.rs` & `node/src/main.rs`: Enlace estricto del servidor Axum a Loopback `127.0.0.1:7333`, imposibilitando accesos externos desde la red LAN.
+- `network_security_config.xml`: Restricción global de tráfico en texto plano exclusivamente a `127.0.0.1` y `localhost`.
+- `meshRouter.ts`: Exigencia de coincidencia estricta de `message_id` y `nonce` en el procesamiento de confirmaciones de entrega (`DELIVERY_ACK`).
+- `sensors.ts` & `economy.ts`: Erradicación total de valores simulados/mocks en lecturas de sensores y saldos de billetera.
 
 **Deduplicación Canónica Universal de Nodos & Normalización de Identidades**
 - `meshRouter.ts`: Normalización integral de identificadores (`clean.toLowerCase()`, prefijos `did:red:` y hardware MACs). Implementación de la heurística `isNameSimilar` para correlacionar nombres Bluetooth de fabricante (ej. "Lenovo Tab One") con alias de perfil táctico (ej. "Tab").

@@ -1,162 +1,146 @@
-# 📘 Manual Operativo del Usuario — RED v53.0.0 Autonomous Mesh & P2P Live Sync Edition
+# 📘 Manual Operativo del Usuario — RED v58.0.0 Sovereign Tactical Master Edition
 
-Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura o censura.
+Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura, apagones o censura.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 1. [Primer Inicio & Autenticación Soberana](#1-primer-inicio--autenticación-soberana)
-2. [Respaldo en 1 Toque & Restauración Instantánea](#2-respaldo-en-1-toque--restauración-instantánea)
-3. [Gestión de Seguridad & Modo Señuelo](#3-gestión-de-seguridad--modo-señuelo)
-4. [Manual Operativo de los 38 Módulos Tácticos](#4-manual-operativo-de-los-38-módulos-tácticos)
-5. [Tokenomics DePIN, Vouchers Offline & Conversión a Soles](#5-tokenomics-depin-vouchers-offline--conversión-a-soles)
-6. [Actuadores de Hardware: Flash LED Morse SOS & Triaje START](#6-actuadores-de-hardware-flash-led-morse-sos--triaje-start)
-7. [Interruptor del Hombre Muerto (DMS) & Purga](#7-interruptor-del-hombre-muerto-dms--purga)
-8. [Uso de la Versión Web en PC & Comunicación con Celulares](#8-uso-de-la-versión-web-en-pc--comunicación-con-celulares)
+2. [Llaves Biométricas Universales & Passkeys](#2-llaves-biométricas-universales--passkeys)
+3. [Gestión de Seguridad, Modo Señuelo & Anti-Coacción](#3-gestión-de-seguridad-modo-señuelo--anti-coacción)
+4. [Respaldo en 1 Toque & Restauración Instantánea](#4-respaldo-en-1-toque--restauración-instantánea)
+5. [Manual Operativo de los 42 Módulos Tácticos](#5-manual-operativo-de-los-42-módulos-tácticos)
+6. [Tokenomics DePIN, Vales Criptográficos & Paridad PEN](#6-tokenomics-depin-vales-criptográficos--paridad-pen)
+7. [Actuadores de Hardware: Triaje START, SOS & SoundMesh](#7-actuadores-de-hardware-triaje-start-sos--soundmesh)
+8. [Uso de la Versión Web en PC & Vinculación con Celulares](#8-uso-de-la-versión-web-en-pc--vinculación-con-celulares)
 9. [Preguntas Frecuentes & Solución de Problemas](#9-preguntas-frecuentes--solución-de-problemas)
 
 ---
 
 ## 1. Primer Inicio & Autenticación Soberana
 
-1. Al abrir la aplicación RED por primera vez, el sistema te solicitará configurar tu **PIN Maestro de 6 dígitos**.
-2. Este PIN protege tu **Bóveda de Claves Criptográficas** en la memoria segura por hardware del dispositivo (Android KeyStore / StrongBox TEE).
-3. Tras la verificación, el motor nativo en Rust genera tu Identidad Soberana única (`did:red:<identity_hash>:<public_key>`).
+1. Al abrir la aplicación RED por primera vez, el sistema te solicitará configurar tu **PIN Maestro de exactamente 6 dígitos**.
+2. Este PIN protege tu **Bóveda Criptográfica** en la memoria segura por hardware del dispositivo (Android KeyStore / StrongBox TEE o almacenamiento seguro en navegador).
+3. Tras confirmar el PIN, el motor nativo en Rust genera localmente tu Identidad Soberana única (`did:red:<identity_hash>:<public_key>`).
+4. **Cero Dependencia de Servidores:** Tu cuenta no se crea en ningún servidor remoto ni requiere números de teléfono ni correos electrónicos.
 
 ---
 
-## 2. Respaldo en 1 Toque & Restauración Instantánea
+## 2. Llaves Biométricas Universales & Passkeys
 
-- **⚡ Respaldar a Google Drive:** Entra a Ajustes $\rightarrow$ *Respaldo & Nube* o al menú lateral y presiona `⚡ Respaldar a Google Drive en 1 Toque`. No requiere contraseñas adicionales; la clave se deriva de tu PIN Maestro de forma automática bajo cifrado militar **AES-256-GCM**.
-- **🔄 Auto-Sync en Segundo Plano:** Activa el interruptor para que la app mantenga una copia actualizada en tu nube personal cada vez que añadas contactos o chats.
-- **☁️ Restauración en Teléfono Nuevo:** En la pantalla de bienvenida, toca `☁️ ¿Tienes una copia previa? Restaurar aquí`, introduce tu PIN de 6 dígitos, selecciona el archivo `.redvault` de Google Drive y recupera tu cuenta en 3 segundos sin registrarte de nuevo.
+RED v58.0.0 te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
 
----
-
-## 3. Gestión de Seguridad & Modo Señuelo
-
-- **PIN Maestro:** Acceso a la bóveda principal con todos los chats, contactos e historial cifrado.
-- **PIN Señuelo (`decoy_pin`):** Iniciar sesión con el PIN señuelo abre un entorno totalmente limpio y verosímil con contactos y mensajes simulados sin dejar rastro de tus comunicaciones reales.
-- **PIN de Pánico (`panic_pin`) / Agitación Destructiva:** Activa el protocolo de autodestrucción nativo (`RedNodePlugin.destroyNode`), purgando las llaves y la base de datos en menos de 500 ms.
-
----
-
-## 4. Manual Operativo de los 38 Módulos Tácticos
-
-1. **Canales Mesh Locales:** Explora temas abiertos en `PublicChannelsPanel.tsx` con moderación automática por Guardian IA.
-2. **RED Social Feed P2P:** Publicaciones descentralizadas resistentes a censura en `SocialFeedPanel.tsx`.
-3. **Difusión Privada (Broadcast):** Envía comunicados simultáneos cifrados en `BroadcastPanel.tsx`.
-4. **Walkie-Talkie Mesh Push-To-Talk:** Presiona en `P2PWalkieTalkieModal.tsx` para hablar por radio digital en tiempo real.
-5. **Canvas Táctico P2P en Vivo:** En `LiveCanvasModal.tsx`, dibuja planos tácticos sincronizados en tiempo real por la red malla.
-6. **Live Broadcast Stream:** Emite o recibe video local en tiempo real con `LiveStreamBroadcaster.tsx` y `LiveStreamViewer.tsx`.
-7. **Shake & Pair (Acelerómetro):** En `ShakePairModal.tsx`, sacude tu teléfono (>15 m/s²) cerca de otro operador para emparejarte al instante.
-8. **Radar Topográfico GPS & UTM:** Abre `OffGridCompassModal.tsx` para orientación con magnetómetro, declinación WMM2025 y altímetro barométrico.
-9. **Mapa de Nodos P2P:** Visualiza nodos cercanos, distancias estimadas y telemetría en `NodeMap.tsx`.
-10. **Radar Hardware BLE / WiFi:** Escaneo de dispositivos de radio en `NearbyDevicesPanel.tsx`.
-11. **Analizador Espectro RF / EW:** Monitorea interferencias en `RfSpectrumModal.tsx`.
-12. **Ondas de Proximidad:** En `ProximityWaveModal.tsx`, detecta pares físicamente cercanos mediante firmas de radio.
-13. **Clima & Barómetro CAP:** Revisa el barómetro e informes meteorológicos en `WeatherAlertPanel.tsx`.
-14. **Batería Eco-Mesh:** Ajusta el consumo energético en `EcoMeshPanel.tsx` adaptando el intervalo de beaconing.
-15. **Topología de Red:** Supervisa la salud del enjambre libp2p en `NetworkPanel.tsx`.
-16. **Perfil & Bóveda DID:** Gestiona tu identidad soberana y esquema de fragmentación Shamir en `IdentityVaultModal.tsx`.
-17. **Pagos & Vouchers P2P:** Genera y transfiere vouchers de valor fuera de línea firmados con Ed25519 en `RedP2PPayModal.tsx`.
-18. **Bóveda Criptográfica PQC:** Inspecciona claves Post-Cuánticas ML-KEM-768 en `CryptoPanel.tsx`.
-19. **Explorador Blockchain RED:** Verifica bloques y transacciones inmutables en `BlockchainExplorer.tsx`.
-20. **Bóveda Esteganográfica:** Oculta mensajes cifrados en fotos usando `StegoVaultModal.tsx`.
-21. **Respaldos & Restauración:** Suite completa de 1-toque, Google Drive, IPFS y BIP-39 en `BackupRestoreModal.tsx`.
-22. **Signos Vitales & Triaje START:** En `VitalScanModal.tsx`, coloca el dedo sobre la cámara trasera y el flash LED para medir pulso cardíaco, SpO2 y evaluar el triaje de víctimas.
-23. **Baliza SOS & Módem SoundMesh:** En `SurvivalBeaconModal.tsx`, emite alertas de socorro GPS, activa el flash LED SOS en código Morse y transmite por ultrasonido en 18–20 kHz BFSK.
-24. **Sistema Alerta AMBER:** Gestiona emergencias comunitarias en `AmberAdminPanel.tsx` con avisos de alta prioridad.
-25. **Escudo Global DEFCON Matrix:** Control centralizado de ciberdefensa en `GlobalShieldPanel.tsx`.
-26. **Bóveda Web3 & MetaMask:** Conecta tu wallet EVM y gestiona tus tokens en `Web3VaultModal.tsx`.
-25. **Hombre Muerto DMS:** Configura el temporizador de inactividad de seguridad en `DMSSettings.tsx`.
-26. **Simulador Apagón Blackout:** Realiza pruebas de estrés desconectando la WAN en `BlackoutSimulatorModal.tsx`.
-27. **Copiloto IA Offline:** Invocación de `AICopilotModal.tsx` para consultas tácticas mediante LLM en memoria.
-28. **Guardian IA (Firewall):** Supervisa el firewall cognitivo en `GuardianStatusPanel.tsx`.
-29. **Diagnóstico Salud Sistema:** Evalúa el rendimiento de CPU, memoria y almacenamiento en `SystemHealthModal.tsx`.
-30. **Logs del Nodo Rust SSE:** Visualiza la consola de eventos en tiempo real en `NodeLogsModal.tsx`.
-31. **Calculadora Señuelo (Camuflaje):** Accede al camuflaje de calculadora en `CalculatorScreen.tsx`.
-32. **Reporte Auditoría Seguridad:** Revisa el informe de integridad Zero-Trust en `SecurityReportModal.tsx`.
-33. **Seguridad Zero-Trust:** Configura tus PINs de acceso y políticas de purga en `SecurityPanel.tsx`.
-34. **Llamadas Tácticas P2P:** Inicia videollamadas cifradas en `CallScreen.tsx`.
-35. **Centro de Mensajería E2EE:** Chatea de forma privada con Double Ratchet en `ChatWindow.tsx`.
+- **En Celulares y Tablets Android:**
+  - **Huella Dactilar:** Reconocimiento instantáneo mediante sensores capacitivos, ópticos o ultrasónicos en pantalla.
+  - **Reconocimiento Facial & Escáner de Iris:** Verificación facial segura mediante hardware compatible.
+- **En Computadoras (Web & Desktop):**
+  - **Windows Hello:** Desbloqueo mediante cámara infrarroja o lector de huellas de tu PC.
+  - **Apple Touch ID / Face ID:** En computadoras Mac y dispositivos Apple.
+  - **Passkeys WebAuthn:** Credenciales criptográficas de plataforma.
+- **Enrolamiento en 1 Clic:** Al configurar tu PIN de 6 dígitos en el primer uso, la app te preguntará si deseas activar tu sensor biométrico. Acepta para vincular tu huella o rostro de inmediato.
+- **Acceso Rápido en la Pantalla de Bloqueo:** Toca el botón `🖐️ BIOMETRÍA` en el teclado numérico para disparar el sensor en cualquier momento.
 
 ---
 
-## 4. Actuadores de Hardware: Flash LED Morse SOS & Triaje START
+## 3. Gestión de Seguridad, Modo Señuelo & Anti-Coacción
 
-### Flash LED Morse SOS
-Al activar la función en la Baliza de Supervivencia (`SurvivalBeaconModal.tsx`):
-- El sistema toma control directo del hardware mediante `CameraManager.setTorchMode()`.
-- Un hilo nativo genera pulsos luminosos de emergencia con el patrón internacional SOS:
-  - 3 pulsos cortos (150ms)
-  - 3 pulsos largos (450ms)
-  - 3 pulsos cortos (150ms)
-- El flash opera incluso si la pantalla se apaga o la interfaz cambia de pestaña.
+RED está diseñada bajo la premisa de que un operador puede encontrarse en situaciones de coacción física o inspección forzada:
 
-### Triaje START & Escáner Fotopletismográfico (PPG)
-En `VitalScanModal.tsx`:
-1. Coloca la yema del dedo cubriendo completamente el lente de la cámara trasera y el flash LED.
-2. El flash LED se encenderá a máxima intensidad para iluminar el lecho capilar.
-3. El algoritmo extraerá la curva de pulso hemodinámico rojo/verde calculando BPM y SpO2% reales.
-4. Responde las 5 preguntas del protocolo START para clasificar a la víctima con código de color internacional.
+- **PIN Maestro (6 dígitos):** Acceso a tu bóveda real con todos los contactos, mensajes y archivos cifrados.
+- **PIN Señuelo (`decoy_pin`):** Abre la **Bóveda Señuelo**, un entorno totalmente limpio y verosímil con conversaciones civiles inocentes, sin dejar rastro de tus comunicaciones operativas reales.
+- **PIN de Pánico (`panic_pin`):** Destrucción instantánea (*Panic Wipe*) de todas las bases de datos y claves del dispositivo en menos de 500 ms.
+- **Medida Anti-Coacción (Desactivar Auto-Prompt):** En *Ajustes $\rightarrow$ Privacidad*, puedes desactivar el auto-disparo de huella dactilar. Si te encuentras en una zona hostil, la app solo mostrará el teclado numérico, permitiéndote ingresar discretamente el PIN Señuelo si alguien te obliga a desbloquear el teléfono.
+- **Auto-Bloqueo de Inactividad:** La app detecta cuándo se minimiza o bloquea la pantalla, exigiendo reingreso de huella o PIN tras el tiempo establecido (`Inmediato`, `1 min`, `5 min`, `15 min`).
 
 ---
 
-## 5. Interruptor del Hombre Muerto (DMS) & Purga
+## 4. Respaldo en 1 Toque & Restauración Instantánea
 
-- Si el operador entra en estado de incapacitación o arresto, el motor `evaluateLocalDMS` detecta la inactividad.
-- Al expirar el temporizador, se emite una última baliza de socorro y se limpian las bases de datos y la Keystore.
-
----
-
-## 5. Inmunidad a VPNs & Red Mesh Off-Grid
-
-- El transporte **Bluetooth LE (BLE)** funciona a nivel de hardware HCI y no pasa por la pila TCP/IP de Android.
-- La aplicación permanece 100% operativa incluso si una VPN activa bloquea el tráfico de red comercial.
+- **⚡ Respaldar a Google Drive:** Entra a Ajustes $\rightarrow$ *Respaldo & Nube* y presiona `⚡ Respaldar a Google Drive en 1 Toque`. El respaldo se genera bajo cifrado de grado militar **AES-256-GCM** derivado de tu PIN.
+- **🔄 Auto-Sync en Segundo Plano:** Activa el interruptor para mantener actualizada tu copia en la nube cada vez que recibas nuevos contactos o mensajes.
+- **☁️ Restauración en Teléfono Nuevo:** En la pantalla de bienvenida, presiona `☁️ Restaurar copia de seguridad previa`, introduce tu PIN de 6 dígitos, selecciona el archivo `.redvault` y recupera todo en 3 segundos sin registrarte de nuevo.
 
 ---
 
+## 5. Manual Operativo de los 42 Módulos Tácticos
+
+1. **Canales Mesh Locales:** Salas temáticas abiertas para operadores cercanos con moderación por IA.
+2. **RED Social Feed P2P:** Microblogging descentralizado y resistente a la censura.
+3. **Difusión Privada (Broadcast):** Envío simultáneo de comunicados cifrados a múltiples contactos.
+4. **Walkie-Talkie Push-To-Talk:** Radio digital de voz con bajísimo consumo de ancho de banda (códec Vocoder 1.6–3.2 kbps).
+5. **Canvas Táctico P2P:** Pizarra colaborativa para dibujar planos tácticos y mapas sincronizados en vivo.
+6. **Live Broadcast Stream:** Emisión y recepción de video local en tiempo real sin internet.
+7. **Shake & Pair:** Agita tu teléfono fuertemente (>15 m/s²) junto a otro operador para emparejarte en 1 segundo.
+8. **Radar Topográfico GPS & UTM:** Brújula de alta precisión con declinación magnética WMM2025 y altímetro.
+9. **Mapa de Nodos P2P:** Visualización geoespacial de la topología de la malla y métricas de enlace.
+10. **Radar Hardware BLE / WiFi:** Detección de dispositivos electromagnéticos cercanos en tiempo real.
+11. **Analizador Espectro RF / EW:** Monitoreo de emisiones de radio y niveles de ruido/interferencia.
+12. **Ondas de Proximidad:** Detección de pares cercanos mediante firmas de radiofrecuencia.
+13. **Clima & Barómetro CAP:** Reportes meteorológicos y alertas de presión atmosférica local.
+14. **Batería Eco-Mesh:** Gobernador cinemático que optimiza el consumo de batería (hasta 48h continuas).
+15. **Consenso Blockchain PoS:** Validación de bloques y participación en el consenso de la red.
+16. **Vales Criptográficos P2P:** Pagos soberanos fuera de línea con paridad 1:1 en Soles (PEN).
+17. **Cápsula de Esteganografía:** Oculta archivos sensibles dentro de imágenes aparentemente inocuas.
+18. **Interruptor del Hombre Muerto (DMS):** Purga automática si el usuario no introduce un ping de vida en el tiempo fijado.
+19. **Triaje Médico START:** Clasificación rápida de heridos en catástrofes (Verde, Amarillo, Rojo, Negro).
+20. **Baliza de Emergencia SOS:** Transmisión continua de socorro por radiofrecuencia y destellos Morse.
+21. **SoundMesh Ultrasónico:** Transmisión de datos acústicos por altavoz (18–20 kHz) sin antenas de radio.
+22. **Auditoría de Seguridad OPSEC:** Verificación continua de puertos abiertos y aislamiento de red.
+23. **Calculadora Señuelo:** Camufla la app como una calculadora funcional real.
+24. **Bóveda Señuelo (Decoy Vault):** Espacio alternativo con datos simulados inocentes.
+25. **Almacén Cifrado Sled:** Base de datos nativa ultrarrápida con cifrado simétrico AES-256-GCM.
+26. **Árbol Merkle State Integrity:** Verificación automática de la integridad de los datos en disco.
+27. **Guardian IA Firewall:** Filtro neuronal que neutraliza intentos de inyección y contenido malicioso.
+28. **RAG Semántico Vectorial:** Base de conocimiento de táctica y primeros auxilios 100% offline.
+29. **IA Copilot Táctico:** Asistente conversacional neuronal que opera sin conexión a internet.
+30. **LowBitrateVocoder DSP:** Procesamiento de audio comprimido al -97.9% para radios lentas.
+31. **Mesh Proof-of-Work:** Sistema Hashcash que evita la saturación de la red por spam o denegación.
+32. **Web Companion QR:** Vinculación directa entre navegadores web de PC y la app del celular.
+33. **Respaldo Soberano 1-Toque:** Exportación e importación rápida de bovedas cifradas.
+34. **MetaMask EIP-712:** Vinculación de identidades soberanas con firmas criptográficas de Ethereum.
+35. **Gestor de Contactos Consent-First:** Control estricto de quién puede comunicarse contigo.
+36. **Transmisión de Archivos Fragmentados:** Envío de fotos y documentos divididos en fragmentos por la malla.
+37. **Llamadas de Voz Cifradas WebRTC:** Audio bidireccional punto a punto con cifrado de extremo a extremo.
+38. **Videollamadas de Baja Latencia:** Video P2P cifrado mediante DTLS-SRTP.
+39. **Gobernador de Canal RF:** Salto de frecuencias adaptativo para evadir congestión o bloqueo.
+40. **Telemetría de Enlace LQS:** Monitoreo continuo de la calidad de señal (RSSI y SNR).
+41. **Autenticación Biométrica Universal:** Huella, rostro, iris o Passkeys integrados al hardware.
+42. **Auto-Bloqueo por Inactividad:** Cierre automático de la sesión al minimizar la aplicación.
+
 ---
 
-## 6. Suite de Inteligencia Artificial (IA) Soberana 100% Offline
+## 6. Tokenomics DePIN, Vales Criptográficos & Paridad PEN
 
-### Copiloto Táctico RAG (Retrieval-Augmented Generation)
-- **Modelos Compatibles:** LaMini-Flan-T5 (ONNX WASM en proceso), Qwen 2.5 1.5B, Llama 3.2 1B, Gemma 2B, Phi-3 Mini 3.8B (GGUF cuantizado Q4 ejecutado nativamente en ARM64 vía Candle Rust).
-- **Base de Conocimiento Táctica Integrada (16 Protocolos):**
-  - Triage START en masa
-  - Control de hemorragias arteriales exanguinantes y torniquete táctico
-  - Reanimación Cardiopulmonar (RCP) y manejo de DEA
-  - Quemaduras térmicas, químicas y eléctricas
-  - Inmovilización de fracturas y trauma raquimedular
-  - Potabilización de agua (ebullición, cloración y filtro multicapa de carbón)
-  - Hipotermia severa y golpe de calor
-  - Protocolo de autoprotección y repliegue QBRN / HazMat
-  - Terremotos, derrumbes y localización acústica bajo escombros
-  - Incendios forestales y repliegue hacia zonas negras
-  - Rescate en inundaciones y escape de vehículos sumergidos
-  - Control de emisiones electromagnéticas (EMCON) y evasión RF
-  - Manejo de mordeduras de serpientes venenosas (vendaje compresivo)
-  - Señalización de rescate óptico Morse SOS y silbato de montaña
-  - Interruptor del Hombre Muerto y purga criptográfica anti-forense.
-
-### Traductor Táctico Determinista (6 Idiomas)
-- Diccionario determinista de emergencia sin alucinaciones disponible en **Español, English, Português, Français, Deutsch y Quechua (Runa Simi)** con soporte para pronunciación fonética.
-
-### Centinela Guardian IA S4 & Moderación en el Emisor
-- Clasificación semántica de vectores en espacio latente y red neuronal `toxic-bert`.
-- De-ofuscador leetspeak automático y detector de imágenes mediante pHash diferencial de 64 bits.
+- **Proof-of-Relay:** Tu nodo gana recompensas en tokens RED automáticamente al retransmitir paquetes para otros usuarios en la red malla.
+- **Vales Offline:** Crea vales de transferencia firmados criptográficamente con Ed25519 para pagar bienes y servicios en zonas sin internet ni bancos.
+- **Paridad 1:1:** Cada token RED equivale a **S/. 1.00 PEN**, permitiendo economía circular en situaciones de colapso monetario o bancario.
 
 ---
 
-## 7. Preguntas Frecuentes & Solución de Problemas
+## 7. Actuadores de Hardware: Triaje START, SOS & SoundMesh
 
-- **¿Dónde se guardan los mensajes?**  
-  Exclusivamente en la base de datos cifrada SQLite local de tu dispositivo.
-- **¿Cómo me conecto con otros nodos?**  
-  Automáticamente mediante BLE, WiFi Direct, LoRa o SoundMesh al abrir la aplicación.
-- **¿La IA envía mis consultas a servidores externos?**  
-  No. Todo el procesamiento corre 100% de manera local en el procesador de tu dispositivo o se delega opcionalmente a nodos vecinos con mayor capacidad en la red malla (Mente Colmena P2P).
+- **Linterna Flash Morse SOS:** El actuador nativo modula el flash de la cámara para emitir el código Morse internacional de socorro (`... --- ...`).
+- **Triaje START:** Genera reportes médicos estructurados con geolocalización GPS y los transmite como balizas prioritarias a todos los médicos en un radio de 15 km.
+- **SoundMesh:** Si las radios Bluetooth o WiFi son inhibidas por inhibidores de señal (*jammers*), activa SoundMesh para enviar mensajes mediante ultrasonido inaudible entre micrófonos y altavoces.
 
+---
 
+## 8. Uso de la Versión Web en PC & Vinculación con Celulares
+
+- **Acceso Web:** Ingresa a [https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/) desde Chrome, Edge o Firefox en tu computadora.
+- **Vinculación con Celular:** Abre RED en tu teléfono, ve a *Ajustes $\rightarrow$ Dispositivos Vinculados*, escanea el código QR que aparece en la PC y tu computadora se sincronizará inmediatamente como un nodo espejo sin usar servidores centrales.
+- **Windows Hello / Touch ID en PC:** En la versión web de la PC, puedes registrar tu huella o rostro de Windows Hello para desbloquear la sesión en 1 segundo.
+
+---
+
+## 9. Preguntas Frecuentes & Solución de Problemas
+
+**¿Por qué la app pide permisos de Bluetooth y Ubicación?**
+Android requiere el permiso de ubicación para permitir el escaneo de antenas Bluetooth LE y WiFi Direct. RED **nunca** envía tu ubicación a ningún servidor; solo se utiliza internamente para calcular distancias entre nodos en la malla.
+
+**¿Qué hago si mi huella no es reconocida?**
+El sistema operativo permite hasta 5 intentos. Si el sensor se bloquea o no reconoce tu dedo, el teclado táctico de 6 dígitos permanecerá activo para que ingreses tu PIN Maestro.
+
+**¿Cómo sé si mi mensaje fue entregado en la malla?**
+Cuando el destinatario recibe y desencripta el paquete, su nodo emite un acuse de recibo criptográfico (`DELIVERY_ACK`). Tu mensaje pasará del estado `Enviado` (un check) a `Entregado` (doble check neón) automáticamente.

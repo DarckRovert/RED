@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio Rápido (v53.0.0 Autonomous Mesh & P2P Live Sync Edition)
+# 🔴 RED — Guía de Inicio Rápido (v58.0.0 Sovereign Tactical Master Edition)
 
 RED es el sistema de comunicaciones tácticas, descentralizadas y cifradas de grado militar más avanzado del mundo, diseñado para operar tanto en redes globales descentralizadas como en aislamiento total fuera de línea (Off-Grid).
 
@@ -6,37 +6,50 @@ RED es el sistema de comunicaciones tácticas, descentralizadas y cifradas de gr
 
 ## 🛠️ Requisitos del Sistema
 
-- **Node.js**: v20+
+- **Node.js**: v20+ (con npm)
 - **Rust Toolchain**: 1.80+ y Cargo
-- **Android SDK**: 35 con OpenJDK 21
+- **Android SDK & NDK**: Android SDK 35, NDK r27+, OpenJDK 21
+- **Capacitor CLI**: 8.2+
 
 ---
 
 ## 🚀 Inicio Rápido
 
-### 1. Compilación Web y de Nodo Rust
+### 1. Compilación del Frontend y Servidor Web
 ```bash
-# Instalar dependencias del cliente
+# Navegar al directorio del cliente
 cd client/app
+
+# Instalar dependencias de Node
 npm install
 
-# Compilación de producción estricta
+# Compilación estricta de producción (Next.js 16 con Turbopack)
 npm run build
 ```
 
-### 2. Sincronización y Compilación Android
+### 2. Compilación del Núcleo Rust y Pruebas Unitarias
 ```bash
-# Sincronizar assets con Capacitor
-npx cap sync android
+# Compilar todo el espacio de trabajo en modo Release
+cargo build --release
 
-# Compilar APK con Gradle
-cd android
-./gradlew assembleDebug
+# Ejecutar las 81 pruebas unitarias y de integración del workspace
+cargo test --workspace
 ```
 
-### 3. Instalación en Dispositivos
+### 3. Sincronización y Compilación Android
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+# Sincronizar assets estáticos con el proyecto nativo de Android
+cd client/app
+npx cap sync android
+
+# Compilar APK de Release firmado
+cd android
+./gradlew assembleRelease
+```
+
+### 4. Instalación en Dispositivos Físicos mediante ADB
+```bash
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
 ---
@@ -44,9 +57,9 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ## 🔑 Primeros Pasos en la Aplicación
 
 1. **Creación de PIN Maestro**: Al abrir la app, establece tu PIN seguro de 6 dígitos.
-2. **Generación de Identidad Soberana**: El motor Rust genera localmente tu `did:red:<identity_hash>`.
-3. **Selección de Canales**: Accede a canales locales o chatea punto a punto mediante la red de malla.
-4. **Comunicaciones Tácticas**:
-   - **Walkie-Talkie HQ**: Activa el códec Vocoder (1.6–3.2 kbps) para hablar con bajísimo consumo de ancho de banda.
-   - **Batería Eco-Mesh**: Deja que el gobernador cinemático optimice la batería de tu dispositivo (hasta 48h).
+2. **Vinculación Biométrica (Opcional)**: Acepta la vinculación de tu huella o rostro en 1 clic para acceso rápido.
+3. **Generación de Identidad Soberana**: El motor Rust genera localmente tu `did:red:<identity_hash>`.
+4. **Comunicaciones Tácticas Off-Grid**:
+   - **Walkie-Talkie Push-To-Talk**: Activa el códec Vocoder (1.6–3.2 kbps) para hablar con mínimo consumo de banda.
+   - **Batería Eco-Mesh**: El gobernador cinemático optimiza el consumo de batería de tu dispositivo (hasta 48h).
    - **Conectividad Global**: Al conectarte a internet, el nodo se enlaza automáticamente a los bootstrap peers de libp2p.

@@ -1,45 +1,56 @@
-# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v30.0.0
+# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v58.0.0
 
-Plataforma de interfaz táctica soberana e integración con motor nativo de Rust.
+Plataforma de interfaz táctica soberana, gestión de estado modular con Zustand Slices, llaves biométricas universales e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
 
-## Getting Started
+---
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-## 🛠️ Comandos de Compilación & Sincronización
+## 🛠️ Comandos de Desarrollo & Compilación
 
 ```bash
-# 1. Instalar dependencias del cliente
+# 1. Instalar dependencias
 npm install
 
-# 2. Servidor de desarrollo SPA
+# 2. Servidor de desarrollo SPA local (Turbopack)
 npm run dev
 
-# 3. Exportación estática e integración con Capacitor Android
+# 3. Verificación de tipado estricto
+npx tsc --noEmit
+
+# 4. Compilación estática optimizada para producción
 npm run build
+
+# 5. Sincronización de assets con Capacitor Android
 npx cap sync android
 ```
 
-## 📱 Arquitectura de Componentes de Interfaz
+---
 
-- **`src/app/page.tsx`**: Enrutador principal SPA e hidratación dinámica de componentes tácticos.
-- **`src/components/Sidebar.tsx`**: Panel principal de chat y acceso prominente a `⚡ MÓDULOS`.
-- **`src/components/SecurityPanel.tsx`**: Módulo de Seguridad Táctica Zero-Trust y `FLAG_SECURE`.
-- **`src/components/SecurityReportModal.tsx`**: Ficha de auditoría con dictamen de **IA Neuronal ONNX WASM** (`LaMini-Flan-T5`).
-- **`src/components/NodeLogsModal.tsx`**: Consola de logs en vivo conectada al stream SSE del motor de Rust.
-- **`src/lib/localAiEngine.ts`**: Motor de IA local 100% offline basado en `onnxruntime-web`.
-- **`src/lib/api.ts`**: Cliente REST/SSE de comunicación local con `http://127.0.0.1:7333`.
+## 🏗️ Arquitectura Modular del Frontend
+
+```
+client/app/src/
+├── app/
+│   ├── layout.tsx         # Contenedor raíz y metadatos SEO
+│   └── page.tsx           # Enrutador táctico SPA principal
+├── store/
+│   ├── slices/            # Zustand Slices atómicos
+│   │   ├── authSlice.ts       # Sesión, PIN y bóveda
+│   │   ├── chatSlice.ts       # Mensajes, hilos y estados
+│   │   ├── contactsSlice.ts   # Directorio canónico y deduplicación
+│   │   ├── emergencySlice.ts  # Triaje START y balizas SOS
+│   │   └── socialSlice.ts     # Feed P2P y canales
+│   ├── messageDispatcher.ts   # Enrutador desacoplado de eventos
+│   └── useRedStore.ts         # Hook unificado con compatibilidad retroactiva
+├── api/                   # Cliente HTTP Axum modularizado (http://127.0.0.1:7333)
+│   ├── types.ts, core.ts, client.ts, emergency.ts, channels.ts, ai.ts, sensors.ts, economy.ts
+├── lib/                   # Motores de dominio desacoplados
+│   ├── crypto/            # BiometricLockEngine (Huella/Rostro/WebAuthn), PqcCryptoEngine
+│   ├── ai/                # LocalAIEngine (ONNX WASM), GuardianEngine (64-bit Hamming)
+│   ├── audio/             # LowBitrateVocoder, SoundMesh
+│   ├── sensors/           # Hardware GPS, Barómetro, Brújula WMM2025
+│   └── storage/           # DtnStorage, StateIntegrityEngine
+└── components/            # 42 Módulos tácticos y componentes UI
+    ├── AuthWall.tsx       # Teclado táctico de 6 dígitos y biométrica universal
+    ├── Sidebar.tsx        # Panel de conversaciones y contactos
+    └── settings/          # Pestañas de configuración modular (PrivacyTab, MeshTab, etc.)
+```
