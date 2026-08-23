@@ -166,9 +166,21 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
               border: "1px solid rgba(255, 42, 81, 0.3)",
               boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
               marginBottom: "20px",
+              background: "linear-gradient(135deg, rgba(232, 33, 58, 0.15) 0%, rgba(10, 15, 30, 0.9) 100%)",
+              minHeight: "180px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <img src={heroBannerUrl} alt="RED Sovereign Mesh OS Banner" style={{ width: "100%", height: "auto", display: "block" }} />
+            <img 
+              src={heroBannerUrl} 
+              alt="RED Sovereign Mesh OS Banner" 
+              style={{ width: "100%", height: "auto", display: "block", objectFit: "cover" }} 
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = "none";
+              }}
+            />
           </div>
         </section>
     );

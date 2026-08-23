@@ -1174,3 +1174,40 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
+
+/* ─── Showcase Landing Responsive Utilities ──────────────────────────────── */
+.desktop-telemetry {
+  display: none !important;
+}
+
+.desktop-nav {
+  display: flex !important;
+}
+
+.mobile-hamburger {
+  display: none !important;
+}
+
+@media (min-width: 1280px) {
+  .desktop-telemetry {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 1080px) {
+  .desktop-nav {
+    display: none !important;
+  }
+  .mobile-hamburger {
+    display: block !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .showcase-bento-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .showcase-bento-grid > div {
+    grid-column: span 1 !important;
+  }
+}

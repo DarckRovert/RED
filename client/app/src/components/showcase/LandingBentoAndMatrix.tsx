@@ -30,6 +30,7 @@ export const LandingBentoAndMatrix: React.FC = () => {
           </div>
 
           <div
+            className="showcase-bento-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(12, 1fr)",

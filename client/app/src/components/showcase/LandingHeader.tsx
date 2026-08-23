@@ -163,7 +163,6 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
           <button
             onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             style={{
-              display: "none",
               padding: "8px 12px",
               borderRadius: "8px",
               background: "rgba(255,255,255,0.05)",
@@ -174,9 +173,52 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
             }}
             className="mobile-hamburger"
           >
-            ☰
+            {isMobileMenuOpen ? "✕" : "☰"}
           </button>
         </div>
+
+        {/* Mobile Navigation Drawer */}
+        {isMobileMenuOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: "100%",
+              left: 0,
+              right: 0,
+              background: "rgba(6, 10, 18, 0.98)",
+              backdropFilter: "blur(24px)",
+              borderBottom: "1px solid rgba(255, 42, 81, 0.3)",
+              padding: "16px 20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "8px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.9)",
+            }}
+          >
+            {navItems.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => {
+                  scrollToSection(tab.id);
+                  setIsMobileMenuOpen(false);
+                }}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  border: activeSection === tab.id ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.05)",
+                  background: activeSection === tab.id ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.02)",
+                  color: activeSection === tab.id ? "#FFF" : "#94A3B8",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  textAlign: "left",
+                  cursor: "pointer",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
     );
 };

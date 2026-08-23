@@ -1,0 +1,3 @@
+﻿8a02f417562f252d2b493a17faceda3fc6bdb6ea34be62a0f7b7a39eee0815f9  red-latest.apk
+a6cc20eb8caf99b5a8dc97e7bb0ebadc5afe2550725f74d035661681b464a650  red-node.exe
+8a02f417562f252d2b493a17faceda3fc6bdb6ea34be62a0f7b7a39eee0815f9  red-v58.0.0-latest.apk

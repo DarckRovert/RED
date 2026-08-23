@@ -36,9 +36,9 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     const [telemetryNodes, setTelemetryNodes] = useState(14);
     const [cryptoEpoch, setCryptoEpoch] = useState(RED_BUILD_CODE);
 
-    const heroBannerUrl = typeof window !== "undefined" && window.location.pathname.includes("/RED")
-        ? "/RED/banner.jpg"
-        : "/banner.jpg";
+    const isGhPages = typeof window !== "undefined" && window.location.pathname.includes("/RED");
+    const basePath = isGhPages ? "/RED" : "";
+    const heroBannerUrl = `${basePath}/assets/red_investor_hero_banner.png`;
 
     const handleEnter = onEnterVault || onEnterApp || (() => {
         navigate('chat');
