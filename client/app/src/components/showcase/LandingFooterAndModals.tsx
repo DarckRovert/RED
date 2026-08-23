@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RED_VERSION, RED_APK_NAME } from '../../lib/version';
+import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../../lib/version';
 
 interface LandingFooterAndModalsProps {
     handleCopy: (text: string) => void;
@@ -16,7 +16,6 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
 
     const githubReleaseUrl = `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`;
     const apkDownloadUrl = `https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`;
-    const handleEnter = onEnterApp;
 
     return (
         <>
@@ -59,38 +58,43 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                 <a
                   href={apkDownloadUrl}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                   style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "10px",
                     padding: "14px 28px",
-                    fontSize: "14px",
-                    fontWeight: 800,
+                    borderRadius: "14px",
+                    background: "linear-gradient(135deg, #00FF88 0%, #00F0FF 100%)",
                     color: "#000",
-                    background: "linear-gradient(90deg, #00FF88 0%, #00B35F 100%)",
-                    borderRadius: "12px",
+                    fontWeight: 900,
                     textDecoration: "none",
-                    boxShadow: "0 4px 20px rgba(0,255,136,0.4)",
-                    textAlign: "center",
+                    boxShadow: "0 0 25px rgba(0, 255, 136, 0.4)",
+                    fontSize: "15px",
                   }}
                 >
-                  📥 Descargar red-v{RED_VERSION}.apk
+                  📥 Descargar APK (v{RED_VERSION})
                 </a>
                 <a
                   href={githubReleaseUrl}
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noreferrer"
                   style={{
-                    padding: "12px 20px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#94A3B8",
-                    background: "rgba(255,255,255,0.05)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    padding: "10px 20px",
                     borderRadius: "12px",
-                    textDecoration: "none",
+                    background: "rgba(255,255,255,0.06)",
                     border: "1px solid rgba(255,255,255,0.15)",
-                    textAlign: "center",
+                    color: "#CBD5E1",
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    fontSize: "13px",
                   }}
                 >
-                  📦 Ver en GitHub Releases ↗
+                  🐙 Ver Release en GitHub
                 </a>
               </div>
             </div>

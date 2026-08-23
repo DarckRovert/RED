@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRedStore } from '../store/useRedStore';
-import { RED_VERSION, RED_APK_NAME } from '../lib/version';
+import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../lib/version';
 import { LandingHeader } from './showcase/LandingHeader';
 import { LandingHero } from './showcase/LandingHero';
 import { LandingBentoAndMatrix } from './showcase/LandingBentoAndMatrix';
@@ -32,7 +32,7 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
 
     const [fps, setFps] = useState(60);
     const [telemetryNodes, setTelemetryNodes] = useState(14);
-    const [cryptoEpoch, setCryptoEpoch] = useState(56000);
+    const [cryptoEpoch, setCryptoEpoch] = useState(RED_BUILD_CODE);
 
     const heroBannerUrl = typeof window !== "undefined" && window.location.pathname.includes("/RED")
         ? "/RED/banner.jpg"
