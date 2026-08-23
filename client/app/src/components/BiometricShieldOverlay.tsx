@@ -27,17 +27,20 @@ export const BiometricShieldOverlay: React.FC = () => {
 
     const handleBiometricClick = async () => {
         setErrorMsg("");
-        const success = await BiometricLockEngine.authenticate();
-        if (!success) {
-            setErrorMsg(t.auth?.biometric_btn ? `${t.auth.biometric_btn} Error` : "Error biométrico");
+        const res = await BiometricLockEngine.authenticate();
+        if (res.success) {
+            toast.success(t.common?.success || "Desbloqueado");
+        } else {
+            setErrorMsg(t.auth?.biometric_btn ? `${t.auth.biometric_btn} Cancelado` : "Biometría no reconocida");
         }
     };
 
     const handlePinSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setErrorMsg("");
-        const ok = BiometricLockEngine.verifyPin(pinInput);
-        if (ok) {
+        const masterPin = typeof window !== "undefined" ? (localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin")) : null;
+        if (masterPin && pinInput === masterPin) {
+            BiometricLockEngine.unlock();
             setPinInput("");
             toast.success(t.common?.success || "Desbloqueado");
         } else {

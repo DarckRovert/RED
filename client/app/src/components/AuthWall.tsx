@@ -7,14 +7,15 @@ import { BackupRestoreModal } from "./BackupRestoreModal";
 import { WebCompanionQRModal } from "./WebCompanionQRModal";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { BiometricLockEngine } from "../lib/crypto/BiometricLockEngine";
 
 /**
- * Authentication Wall — RED Unified Tactical Lockscreen
+ * Authentication Wall — RED Unified Tactical Lockscreen & Biometric Sentinel
  * 
  * Modes:
- *  - "checking"   : Reading Keystore, showing tactical loading state
- *  - "onboarding" : First time — user creates their master PIN (at least 6 digits)
- *  - "unlock"     : Returning user — enter PIN or use hardware biometrics
+ *  - "checking"   : Reading Keystore, checking hardware biometrics
+ *  - "onboarding" : First time — user creates master PIN (6 digits) & optional biometric enrollment
+ *  - "unlock"     : Returning user — enter PIN or authenticate with Biometrics / Windows Hello / Passkeys
  */
 
 type AuthMode = "checking" | "onboarding" | "unlock";
@@ -84,10 +85,13 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
     const [biometryAvailable, setBiometryAvailable] = useState(false);
+    const [biometryType, setBiometryType] = useState("Biometría");
     const [disguiseEnabled, setDisguiseEnabled] = useState(false);
     const [isLoaded, setIsLoaded] = useState(false);
     const [showRestoreModal, setShowRestoreModal] = useState(false);
     const [showCompanionQR, setShowCompanionQR] = useState(false);
+    const [showOnboardingBioPrompt, setShowOnboardingBioPrompt] = useState(false);
+    const [createdPinTemp, setCreatedPinTemp] = useState("");
     const [failedAttempts, setFailedAttempts] = useState(0);
     const [lockoutRemaining, setLockoutRemaining] = useState(0);
 
@@ -99,79 +103,6 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
         }, 1000);
         return () => clearInterval(timer);
     }, [lockoutRemaining]);
-
-    useEffect(() => {
-        let isMounted = true;
-
-        const init = async () => {
-            try {
-                if (typeof window !== "undefined") {
-                    setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
-                }
-
-                // 1. Query master PIN with solid fallback
-                const masterPin = await getSecurePin("master_pin");
-
-                if (!isMounted) return;
-
-                if (masterPin) {
-                    setMode("unlock");
-                } else {
-                    setMode("onboarding");
-                }
-                setIsLoaded(true);
-
-                // 2. Biometrics check and auto-prompt if available
-                try {
-                    const { Capacitor } = await import("@capacitor/core");
-                    if (Capacitor.isNativePlatform()) {
-                        const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
-                        const bioPromise = BiometricAuth.checkBiometry();
-                        const bioTimeout = new Promise<{ isAvailable: boolean }>(r => setTimeout(() => r({ isAvailable: false }), 2000));
-                        const info = await Promise.race([bioPromise, bioTimeout]);
-                        if (isMounted) setBiometryAvailable(info.isAvailable);
-
-                        if (masterPin && info.isAvailable && localStorage.getItem("red_disguise_mode") !== "true") {
-                            try {
-                                const authPromise = BiometricAuth.authenticate({ reason: "RED Neural Sync: Identidad Requerida" });
-                                const authTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Biometric timeout")), 5000));
-                                await Promise.race([authPromise, authTimeout]);
-                                if (!isMounted) return;
-                                setMode("unlock");
-                                setIsLoaded(true);
-                                const decoyPin = await getSecurePin("decoy_pin");
-                                if (masterPin === decoyPin) {
-                                    login(decoyPin);
-                                } else {
-                                    login(masterPin);
-                                }
-                                return;
-                            } catch {
-                                // Biometric cancelled or failed — user can enter PIN manually
-                            }
-                        }
-                    } else {
-                        if (isMounted) setBiometryAvailable(false);
-                    }
-                } catch {
-                    if (isMounted) setBiometryAvailable(false);
-                }
-            } catch (e) {
-                console.error("[AuthWall] Init error:", e);
-                if (isMounted) {
-                    // Fallback check
-                    const fallbackPin = typeof window !== "undefined" ? localStorage.getItem("master_pin") : null;
-                    setMode(fallbackPin ? "unlock" : "onboarding");
-                    setIsLoaded(true);
-                }
-            }
-        };
-
-        init();
-        return () => {
-            isMounted = false;
-        };
-    }, [login]);
 
     const doLogin = useCallback(async (pwd: string) => {
         if (lockoutRemaining > 0) {
@@ -227,24 +158,79 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             setPin("");
         } else {
             setFailedAttempts(0);
+            BiometricLockEngine.unlock();
         }
     }, [login, failedAttempts, lockoutRemaining]);
 
-    const handleBiometricUnlock = async () => {
+    const handleBiometricUnlock = useCallback(async () => {
+        if (lockoutRemaining > 0 || loading) return;
+        setError("");
+
         try {
-            const { Capacitor } = await import("@capacitor/core");
-            if (Capacitor.isNativePlatform()) {
-                const { BiometricAuth } = await import("@aparajita/capacitor-biometric-auth");
-                await BiometricAuth.authenticate({ reason: "Desbloquear Bóveda RED" });
+            const res = await BiometricLockEngine.authenticate("Desbloquear Bóveda Criptográfica RED");
+            if (res.success && res.masterPin) {
+                await doLogin(res.masterPin);
+            } else {
+                // If cancelled or failed, keep keypad accessible without intrusive error
+                console.log("[AuthWall] Biometric check completed without match / dismissed.");
+            }
+        } catch (e) {
+            console.warn("[AuthWall] Biometric error:", e);
+        }
+    }, [doLogin, lockoutRemaining, loading]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const init = async () => {
+            try {
+                if (typeof window !== "undefined") {
+                    setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
+                }
+
+                // 1. Query master PIN
                 const masterPin = await getSecurePin("master_pin");
+
+                if (!isMounted) return;
+
                 if (masterPin) {
-                    await doLogin(masterPin);
+                    setMode("unlock");
+                } else {
+                    setMode("onboarding");
+                }
+                setIsLoaded(true);
+
+                // 2. Query Biometric Hardware Status
+                const bioStatus = await BiometricLockEngine.checkAvailability();
+                if (isMounted) {
+                    setBiometryAvailable(bioStatus.isAvailable);
+                    setBiometryType(bioStatus.biometryType);
+                }
+
+                // 3. Auto-Prompt on start if configured and not in disguise mode
+                const status = BiometricLockEngine.getStatus();
+                if (masterPin && bioStatus.isAvailable && status.isEnabled && status.autoPrompt && localStorage.getItem("red_disguise_mode") !== "true") {
+                    setTimeout(() => {
+                        if (isMounted && !isAuthenticated) {
+                            handleBiometricUnlock();
+                        }
+                    }, 350);
+                }
+            } catch (e) {
+                console.error("[AuthWall] Init error:", e);
+                if (isMounted) {
+                    const fallbackPin = typeof window !== "undefined" ? localStorage.getItem("master_pin") : null;
+                    setMode(fallbackPin ? "unlock" : "onboarding");
+                    setIsLoaded(true);
                 }
             }
-        } catch {
-            setError("Biometría no reconocida. Usa tu PIN maestro.");
-        }
-    };
+        };
+
+        init();
+        return () => {
+            isMounted = false;
+        };
+    }, [handleBiometricUnlock, isAuthenticated]);
 
     // Digit press handler for the tactical keypad
     const handleDigitPress = (digit: string) => {
@@ -283,7 +269,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const handleOnboardingNext = async () => {
         if (step === "enter") {
             if (pin.length < 6) {
-                setError("El PIN maestro debe tener al menos 6 dígitos.");
+                setError("El PIN maestro debe tener exactamente 6 dígitos.");
                 return;
             }
             setError("");
@@ -298,7 +284,32 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             }
             setLoading(true);
             await setSecurePin("master_pin", pin);
-            await doLogin(pin);
+
+            // If device supports biometrics, offer 1-click biometric setup
+            if (biometryAvailable) {
+                setCreatedPinTemp(pin);
+                setShowOnboardingBioPrompt(true);
+                setLoading(false);
+            } else {
+                await doLogin(pin);
+            }
+        }
+    };
+
+    const handleEnrollBiometricsOnboarding = async (enable: boolean) => {
+        setShowOnboardingBioPrompt(false);
+        if (enable && createdPinTemp) {
+            BiometricLockEngine.setEnabled(true);
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (!Capacitor.isNativePlatform()) {
+                    await BiometricLockEngine.registerWebAuthnPasskey(createdPinTemp);
+                }
+                toast.success(`🛡️ ${biometryType} vinculada con éxito`);
+            } catch {}
+        }
+        if (createdPinTemp) {
+            await doLogin(createdPinTemp);
         }
     };
 
@@ -375,13 +386,13 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "3px" }}>
                             {mode === "onboarding"
-                                ? (step === "enter" ? "Define tu clave de acceso (mínimo 6 dígitos)" : "Confirma tu PIN maestro")
+                                ? (step === "enter" ? "Define tu clave de acceso (6 dígitos)" : "Confirma tu PIN maestro de 6 dígitos")
                                 : (lockoutRemaining > 0 ? `Bóveda bloqueada (${lockoutRemaining}s)` : t('auth.enter_pin'))}
                         </div>
                     </div>
                 </div>
 
-                {/* Indicador de Dígitos (Puntos Neón) */}
+                {/* Indicador de Dígitos (6 Puntos Neón) */}
                 <div style={{ display: "flex", gap: "12px", alignItems: "center", height: "24px" }}>
                     {[0, 1, 2, 3, 4, 5].map((idx) => {
                         const filled = currentDigits.length > idx;
@@ -429,7 +440,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                         </button>
                     ))}
 
-                    {/* Botón Biométrica / Vacío */}
+                    {/* Botón Biométrica Universal */}
                     {biometryAvailable && mode === "unlock" ? (
                         <button
                             onClick={handleBiometricUnlock}
@@ -437,13 +448,15 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                             className="card-tactical-interactive"
                             style={{
                                 height: "64px", borderRadius: "18px",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "1.4rem", color: "var(--accent-cyan)",
-                                background: "rgba(0,229,255,0.06)", border: "1px solid rgba(0,229,255,0.2)"
+                                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.3rem", color: "var(--accent-cyan)",
+                                background: "rgba(0,229,255,0.08)", border: "1px solid rgba(0,229,255,0.3)",
+                                cursor: "pointer", gap: "2px"
                             }}
-                            title="Desbloqueo Biométrico"
+                            title={`Desbloqueo con ${biometryType}`}
                         >
-                            🖐️
+                            <span>🖐️</span>
+                            <span style={{ fontSize: "9px", fontWeight: 800, letterSpacing: "0.5px" }}>BIOMETRÍA</span>
                         </button>
                     ) : (
                         <div />
@@ -527,7 +540,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     </div>
                 )}
 
-                {/* Acciones en Unlock (Opción de vincular nuevo dispositivo web) */}
+                {/* Acciones en Unlock */}
                 {mode === "unlock" && (
                     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
                         <button
@@ -548,6 +561,62 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     </div>
                 )}
             </div>
+
+            {/* Modal de Enrolamiento Biométrico Post-Onboarding */}
+            {showOnboardingBioPrompt && (
+                <div style={{
+                    position: "fixed", inset: 0, zIndex: 100000,
+                    background: "rgba(0, 0, 0, 0.85)", backdropFilter: "blur(12px)",
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: "20px"
+                }}>
+                    <div className="card-tactical animate-pop" style={{
+                        maxWidth: "380px", width: "100%", padding: "24px",
+                        background: "#0F172A", border: "1px solid rgba(0, 229, 255, 0.4)",
+                        borderRadius: "20px", display: "flex", flexDirection: "column", gap: "16px",
+                        boxShadow: "0 20px 50px rgba(0,0,0,0.8)"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{
+                                width: "44px", height: "44px", borderRadius: "14px",
+                                background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem"
+                            }}>🖐️</div>
+                            <div>
+                                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#fff", margin: 0 }}>
+                                    Activar Llave Biométrica
+                                </h3>
+                                <p style={{ fontSize: "0.75rem", color: "var(--accent-cyan)", margin: "2px 0 0 0" }}>
+                                    {biometryType} detectada
+                                </p>
+                            </div>
+                        </div>
+
+                        <p style={{ fontSize: "0.82rem", color: "#94A3B8", lineHeight: 1.5, margin: 0 }}>
+                            ¿Deseas activar el desbloqueo instantáneo con tu sensor biométrico? Podrás acceder a tu bóveda sin tener que ingresar manualmente el PIN de 6 dígitos cada vez.
+                        </p>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                            <button
+                                onClick={() => handleEnrollBiometricsOnboarding(true)}
+                                className="btn-tactical-primary"
+                                style={{ width: "100%", padding: "12px", background: "linear-gradient(135deg, #00E5FF 0%, #0077B6 100%)", color: "#000", fontWeight: 900 }}
+                            >
+                                ⚡ Activar {biometryType}
+                            </button>
+                            <button
+                                onClick={() => handleEnrollBiometricsOnboarding(false)}
+                                style={{
+                                    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                                    color: "var(--text-muted)", padding: "10px", borderRadius: "12px",
+                                    fontSize: "0.8rem", fontWeight: 700, cursor: "pointer"
+                                }}
+                            >
+                                Ahora no, usar solo PIN
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Vinculación Companion QR */}
             {showCompanionQR && (
