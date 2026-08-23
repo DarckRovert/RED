@@ -5,6 +5,7 @@
  */
 
 import { RingtoneType } from "./CallRingtoneEngine";
+import type { LanguageMode } from "./i18n/i18nEngine";
 
 export type TacticalThemeId = 'void-crimson' | 'cyber-cyan' | 'emerald-recon' | 'ghost-purple' | 'solar-amber' | 'stealth-dark';
 export type FontSizeScale = 'compact' | 'normal' | 'large';
@@ -116,6 +117,7 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
 };
 
 export interface UserPreferences {
+    language: LanguageMode;
     themeId: TacticalThemeId;
     fontSize: FontSizeScale;
     pureOled: boolean;
@@ -139,6 +141,7 @@ export interface UserPreferences {
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
+    language: 'auto',
     themeId: 'void-crimson',
     fontSize: 'normal',
     pureOled: false,

@@ -223,8 +223,8 @@ export const AICopilotModal: React.FC = () => {
 
             recognitionRef.current = recognition;
             recognition.start();
-        } catch (e) {
-            console.error(e);
+        } catch (e: any) {
+            console.warn('[AICopilot] Speech recognition error:', e?.message || e);
             setIsListening(false);
         }
     };

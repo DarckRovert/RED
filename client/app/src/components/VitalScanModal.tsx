@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { VitalScanEngine, PPGScanResult, StartTriageResult } from "../lib/VitalScanEngine";
 import { RedAPI, TriageReportRecord } from "../lib/api";
 import { toast } from "./Toast";
@@ -10,6 +11,7 @@ type MedicalTab = "ppg" | "triage" | "records" | "water";
 
 export function VitalScanModal() {
     const { navigate } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<MedicalTab>("ppg");
 
     // PPG Scanner States
@@ -357,10 +359,10 @@ export function VitalScanModal() {
                     }}>🫀</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Estación Médica & Triaje START
+                            {t('vital_scan.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            RUST SLED DB · GOSSIPSUB BROADCAST · GPS ENCRYPTED
+                            {t('vital_scan.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -368,7 +370,7 @@ export function VitalScanModal() {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar módulo"
+                    title={t('common.close')}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

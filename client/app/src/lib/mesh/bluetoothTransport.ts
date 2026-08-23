@@ -72,58 +72,32 @@ class BluetoothTransport {
         this.linkMetrics.set(deviceId, existing);
     }
 
+    private unsupportedDevices: Map<string, number> = new Map();
+
     async init() {
         if (this.isInitialized) return;
         try {
             const { registerPlugin } = await import('@capacitor/core');
             const RedNode = registerPlugin<any>('RedNode');
-            const receiveBuffers = new Map<string, { buffer: Uint8Array; timer: any }>();
+            
             RedNode.addListener('bleMessageReceived', (data: any) => {
                 if (data && data.data) {
                     const chunk = new Uint8Array(data.data);
                     const fromDevice = data.device || 'ble_peer';
-
-                    let entry = receiveBuffers.get(fromDevice);
-                    if (!entry) {
-                        entry = { buffer: new Uint8Array(0), timer: null };
-                        receiveBuffers.set(fromDevice, entry);
-                    }
-
-                    if (entry.timer) clearTimeout(entry.timer);
-                    const merged = new Uint8Array(entry.buffer.length + chunk.length);
-                    merged.set(entry.buffer);
-                    merged.set(chunk, entry.buffer.length);
-                    entry.buffer = merged;
-
-                    // 1. Direct check if complete RED packet is already assembled
-                    if (entry.buffer.length >= 96) {
-                        const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
-                        if (view.getUint32(0, false) === 0x52454401) {
-                            const expectedPayloadLen = view.getUint16(70, true);
-                            const totalRequired = 96 + expectedPayloadLen;
-                            if (expectedPayloadLen < 0xFFFF && entry.buffer.length >= totalRequired) {
-                                const fullPacket = entry.buffer.slice(0, totalRequired);
-                                entry.buffer = entry.buffer.slice(totalRequired);
-                                this.messageListeners.forEach(cb => cb({ from: fromDevice, payload: fullPacket }));
-                                return;
-                            }
-                        }
-                    }
-
-                    // 2. Debounced flush for non-standard payloads or final chunk
-                    entry.timer = setTimeout(() => {
-                        if (entry && entry.buffer.length > 0) {
-                            const payload = entry.buffer;
-                            entry.buffer = new Uint8Array(0);
-                            this.messageListeners.forEach(cb => cb({ from: fromDevice, payload }));
-                        }
-                    }, 120);
+                    this.processIncomingChunk(fromDevice, chunk);
                 }
             });
+
+            // Ensure native GATT server and BLE advertising are active
+            await RedNode.startBleServer().catch(() => {});
         } catch (e) {
             console.warn('[BLE] Native listener attach failed:', e);
         }
-        await BleClient.initialize();
+        try {
+            await BleClient.initialize();
+        } catch (e) {
+            console.warn('[BLE] BleClient init warning:', e);
+        }
         this.isInitialized = true;
     }
 
@@ -143,7 +117,7 @@ class BluetoothTransport {
                         (uuid) => uuid.toLowerCase() === RED_BLE_SERVICE.toLowerCase()
                     );
 
-                    if (devName.startsWith('RED-') || hasRedService) {
+                    if (devName.startsWith('RED-') || hasRedService || (result.serviceData && Object.keys(result.serviceData).some(k => k.includes('1818') || k.includes('5246')))) {
                         const rssi = result.rssi ?? -85;
                         this.recordRssi(result.device.deviceId, rssi);
                         onDeviceFound({
@@ -166,12 +140,25 @@ class BluetoothTransport {
         }
     }
 
-    async connect(deviceId: string) {
-        await this.init();
-        if (this.connectedDevices.has(deviceId)) return;
+    private connectingSet: Set<string> = new Set();
 
+    async connect(deviceId: string): Promise<boolean> {
+        await this.init();
+        if (this.connectedDevices.has(deviceId)) return true;
+        if (this.connectingSet.has(deviceId)) {
+            // Wait for existing connection attempt
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 100));
+                if (this.connectedDevices.has(deviceId)) return true;
+                if (!this.connectingSet.has(deviceId)) break;
+            }
+        }
+
+        this.connectingSet.add(deviceId);
         try {
-            await BleClient.connect(deviceId).catch(() => {});
+            await BleClient.connect(deviceId);
+            this.connectedDevices.add(deviceId);
+
             // Request adaptive MTU (512 bytes for maximum throughput)
             try {
                 if (typeof (BleClient as any).requestMtu === 'function') {
@@ -184,27 +171,43 @@ class BluetoothTransport {
                 this.negotiatedMtu.set(deviceId, 240); // Safe fallback
             }
 
-            await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_NOTIFY_CHAR, (value) => {
-                this.handleIncomingChunk(deviceId, new Uint8Array(value.buffer));
-            }).catch(() => {});
-        } catch (e) {
-            console.warn('[BLE] Direct GATT connect fallback:', e);
-        }
+            try {
+                await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_NOTIFY_CHAR, (value) => {
+                    this.processIncomingChunk(deviceId, new Uint8Array(value.buffer));
+                });
+            } catch (notifErr) {
+                console.warn('[BLE] startNotifications non-fatal:', notifErr);
+            }
 
-        // Always register deviceId in connectedDevices so meshRouter can send packets
-        this.connectedDevices.add(deviceId);
+            console.log(`[BLE] Successfully connected GATT to ${deviceId.slice(0, 8)}`);
+            return true;
+        } catch (e) {
+            console.warn(`[BLE] Direct GATT connect failed for ${deviceId.slice(0, 8)}:`, e);
+            this.connectedDevices.delete(deviceId);
+            return false;
+        } finally {
+            this.connectingSet.delete(deviceId);
+        }
     }
 
     async disconnect(deviceId: string) {
         if (!this.connectedDevices.has(deviceId)) return;
-        await BleClient.disconnect(deviceId);
+        try {
+            await BleClient.disconnect(deviceId);
+        } catch {}
         this.connectedDevices.delete(deviceId);
         this.negotiatedMtu.delete(deviceId);
     }
 
     async send(deviceId: string, payload: Uint8Array): Promise<boolean> {
-        if (!this.connectedDevices.has(deviceId)) {
-            await this.connect(deviceId);
+        const unsuppUntil = this.unsupportedDevices.get(deviceId);
+        if (unsuppUntil && Date.now() < unsuppUntil) {
+            return false;
+        }
+
+        let isConnected = this.connectedDevices.has(deviceId);
+        if (!isConnected) {
+            isConnected = await this.connect(deviceId);
         }
 
         const metrics = this.linkMetrics.get(deviceId) || {
@@ -218,15 +221,19 @@ class BluetoothTransport {
         };
         metrics.packetsSent += 1;
 
-        try {
-            // Adaptive MTU chunk size (240 to 500 bytes depending on negotiation)
-            const CHUNK_SIZE = this.negotiatedMtu.get(deviceId) || 480;
-            const totalLength = payload.length;
+        if (!isConnected) {
+            metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
+            metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
+            this.linkMetrics.set(deviceId, metrics);
+            return false;
+        }
 
-            // Simple protocol: [4 bytes total length] [chunk data]
+        try {
+            const CHUNK_SIZE = this.negotiatedMtu.get(deviceId) || 128;
+            const totalLength = payload.length;
             const header = new Uint8Array(4);
-            header[0] = (totalLength >> 24) & 0xFF;
-            header[1] = (totalLength >> 16) & 0xFF;
+            header[0] = 0xAA;
+            header[1] = 0x55;
             header[2] = (totalLength >> 8) & 0xFF;
             header[3] = totalLength & 0xFF;
 
@@ -245,8 +252,11 @@ class BluetoothTransport {
                 }
 
                 const dataView = new DataView(chunk.buffer);
-                await BleClient.write(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView)
-                    .catch(() => BleClient.writeWithoutResponse(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView));
+                try {
+                    await BleClient.write(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                } catch {
+                    await BleClient.writeWithoutResponse(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                }
                 offset += sliceLength;
                 
                 // Small delay to prevent GATT buffer overflow
@@ -258,8 +268,13 @@ class BluetoothTransport {
             metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
             this.linkMetrics.set(deviceId, metrics);
             return true;
-        } catch (e) {
+        } catch (e: any) {
+            const errMsg = String(e?.message || e || '');
+            if (errMsg.includes('Characteristic not found') || errMsg.includes('Service not found')) {
+                this.unsupportedDevices.set(deviceId, Date.now() + 45000);
+            }
             console.error("BLE Send failed:", e);
+            this.connectedDevices.delete(deviceId);
             metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
             metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
             this.linkMetrics.set(deviceId, metrics);
@@ -267,54 +282,108 @@ class BluetoothTransport {
         }
     }
 
-    private incomingBufferTimers: Map<string, any> = new Map();
+    private incomingBuffers: Map<string, { buffer: Uint8Array; expectedLen: number; timer: any }> = new Map();
 
     onMessage(callback: (msg: {from: string, payload: Uint8Array}) => void) {
         this.messageListeners.push(callback);
     }
 
-    private handleIncomingChunk(deviceId: string, chunk: Uint8Array) {
-        // Reset 10s reassembly timer
-        if (this.incomingBufferTimers.has(deviceId)) {
-            clearTimeout(this.incomingBufferTimers.get(deviceId));
-        }
-        this.incomingBufferTimers.set(deviceId, setTimeout(() => {
-            if (this.incomingBuffer.has(deviceId)) {
-                console.warn(`[BluetoothTransport] Reassembly timeout for device ${deviceId} — clearing incomplete buffer`);
-                this.incomingBuffer.delete(deviceId);
-                this.incomingBufferTimers.delete(deviceId);
-            }
-        }, 10000));
+    /**
+     * Unified Frame Reassembler for both GATT Server and Client incoming packets
+     */
+    private processIncomingChunk(deviceId: string, chunk: Uint8Array) {
+        if (!chunk || chunk.length === 0) return;
 
-        let buffer = this.incomingBuffer.get(deviceId);
-        if (!buffer || buffer.length === 0) {
-            if (chunk.length < 4) return;
-            const totalLength = ((chunk[0] << 24) >>> 0) + (chunk[1] << 16) + (chunk[2] << 8) + chunk[3];
-            if (totalLength <= 0 || totalLength > 10 * 1024 * 1024) return; // Sanity check: max 10MB
-            buffer = new Uint8Array(totalLength);
-            buffer.set(chunk.slice(4), 0);
-            (buffer as any)._bytesWritten = chunk.length - 4;
-            (buffer as any)._totalLength = totalLength;
-            this.incomingBuffer.set(deviceId, buffer);
-        } else {
-            const written = (buffer as any)._bytesWritten || 0;
-            const remaining = buffer.length - written;
-            const toWrite = Math.min(chunk.length, remaining);
-            buffer.set(chunk.slice(0, toWrite), written);
-            (buffer as any)._bytesWritten = written + toWrite;
+        let entry = this.incomingBuffers.get(deviceId);
+        if (!entry) {
+            entry = { buffer: new Uint8Array(0), expectedLen: 0, timer: null };
+            this.incomingBuffers.set(deviceId, entry);
         }
 
-        const currentWritten = (buffer as any)._bytesWritten;
-        const targetLength = (buffer as any)._totalLength;
+        if (entry.timer) clearTimeout(entry.timer);
 
-        if (currentWritten >= targetLength) {
-            if (this.incomingBufferTimers.has(deviceId)) {
-                clearTimeout(this.incomingBufferTimers.get(deviceId));
-                this.incomingBufferTimers.delete(deviceId);
+        // Reset buffer if not completed within 8s
+        entry.timer = setTimeout(() => {
+            if (entry && entry.buffer.length > 0) {
+                console.warn(`[BluetoothTransport] Reassembly timeout for ${deviceId.slice(0, 8)} — clearing partial buffer (${entry.buffer.length} bytes)`);
+                entry.buffer = new Uint8Array(0);
+                entry.expectedLen = 0;
             }
-            this.incomingBuffer.delete(deviceId);
-            // Complete message received! Bubble it up!
-            this.messageListeners.forEach(cb => cb({ from: deviceId, payload: buffer as Uint8Array }));
+        }, 8000);
+
+        // Append incoming chunk
+        const merged = new Uint8Array(entry.buffer.length + chunk.length);
+        merged.set(entry.buffer, 0);
+        merged.set(chunk, entry.buffer.length);
+        entry.buffer = merged;
+
+        // Process frames from accumulated buffer
+        while (entry.buffer.length >= 4) {
+            if (entry.expectedLen === 0) {
+                // Check if buffer starts with 4-byte length prefix
+                const totalLen = ((entry.buffer[0] << 24) >>> 0) + (entry.buffer[1] << 16) + (entry.buffer[2] << 8) + entry.buffer[3];
+                const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
+
+                // If magic starts at offset 0 (raw RED packet without 4-byte prefix)
+                if (view.getUint32(0, false) === 0x52454401) {
+                    if (entry.buffer.length >= 96) {
+                        const payloadLen = view.getUint16(70, true);
+                        entry.expectedLen = 96 + payloadLen;
+                    } else {
+                        break; // Wait for full 96-byte header
+                    }
+                } else if (totalLen > 0 && totalLen <= 10 * 1024 * 1024) {
+                    // Standard 4-byte prefixed packet
+                    entry.expectedLen = totalLen;
+                } else {
+                    // Check if magic starts at offset 4
+                    if (entry.buffer.length >= 8 && view.getUint32(4, false) === 0x52454401) {
+                        if (entry.buffer.length >= 100) {
+                            const payloadLen = view.getUint16(74, true);
+                            entry.expectedLen = 96 + payloadLen;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        // Resync buffer: scan for magic 0x52454401
+                        let syncIdx = -1;
+                        for (let i = 1; i < entry.buffer.length - 3; i++) {
+                            if (view.getUint32(i, false) === 0x52454401) {
+                                syncIdx = i;
+                                break;
+                            }
+                        }
+                        if (syncIdx > 0) {
+                            entry.buffer = entry.buffer.slice(syncIdx);
+                            continue;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
+            const startsWithMagic = view.getUint32(0, false) === 0x52454401;
+            const hasHeaderPrefix = !startsWithMagic && entry.buffer.length >= 4;
+            const requiredBytes = (hasHeaderPrefix ? 4 : 0) + entry.expectedLen;
+
+            if (entry.buffer.length >= requiredBytes && entry.expectedLen > 0) {
+                const packetSlice = hasHeaderPrefix
+                    ? entry.buffer.slice(4, 4 + entry.expectedLen)
+                    : entry.buffer.slice(0, entry.expectedLen);
+
+                entry.buffer = entry.buffer.slice(requiredBytes);
+                entry.expectedLen = 0;
+
+                // Emit assembled packet
+                console.log(`[BluetoothTransport] ✅ Assembled packet from ${deviceId.slice(0, 8)} (${packetSlice.length} bytes)`);
+                this.messageListeners.forEach(cb => {
+                    try { cb({ from: deviceId, payload: packetSlice }); } catch (err) { console.error('[BluetoothTransport] Listener error:', err); }
+                });
+            } else {
+                break; // Incomplete, wait for more chunks
+            }
         }
     }
 }

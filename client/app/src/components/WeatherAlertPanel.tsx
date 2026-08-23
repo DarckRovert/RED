@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import {
     getWeatherReports,
     postWeatherReport,
@@ -45,6 +46,7 @@ const CAP_SEVERITIES = [
 
 export const WeatherAlertPanel: React.FC = () => {
     const { identity, goBack, activeWeatherReports } = useRedStore();
+    const { t } = useTranslation();
     const myNickname = identity?.nickname || "Estación Táctica RED";
 
     // View state
@@ -404,10 +406,10 @@ export const WeatherAlertPanel: React.FC = () => {
                     </div>
                     <div>
                         <div style={{ fontSize: "0.98rem", fontWeight: 800, letterSpacing: "0.2px", lineHeight: "1.2" }}>
-                            Clima & Barómetro CAP
+                            {t('weather_panel.title')}
                         </div>
                         <div style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            OASIS CAP v1.2 · ZAMBRETTI EARLY WARNING
+                            {t('weather_panel.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -420,12 +422,12 @@ export const WeatherAlertPanel: React.FC = () => {
                         title="Re-escanear sensores"
                         style={{ padding: "6px 10px", fontSize: "0.74rem", height: "34px" }}
                     >
-                        {detecting ? "Escaneando..." : "📡 Sincronizar"}
+                        {detecting ? "..." : "📡 Sincronizar"}
                     </button>
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Regresar"
+                        title={t('common.close')}
                         style={{ width: 34, height: 34, fontSize: "0.9rem" }}
                     >
                         ✕

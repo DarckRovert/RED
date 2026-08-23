@@ -52,6 +52,16 @@ public class RedNodeService extends Service {
     private static final String RED_BLE_RX_CHAR_UUID = "00002a6e-0000-1000-8000-00805f9b34fb";
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
 
+    private static volatile RedNodeService activeInstance = null;
+
+    public static void restartBleIfPermitted() {
+        if (activeInstance != null) {
+            Log.i(TAG, "[BLE] Explicit request to start/restart BLE GATT and Advertising");
+            activeInstance.startGattServer();
+            activeInstance.startBleAdvertising();
+        }
+    }
+
     private static boolean isNodeRunning = false;
     private BluetoothLeAdvertiser bleAdvertiser = null;
     private AdvertiseCallback advertiseCallback = null;
@@ -67,6 +77,7 @@ public class RedNodeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        activeInstance = this;
         createNotificationChannel();
         createMsgNotificationChannel(); // v41: message heads-up channel
         
@@ -360,6 +371,9 @@ public class RedNodeService extends Service {
      * This allows the Capacitor BLE plugin on other devices to discover this device.
      */
     private void startBleAdvertising() {
+        if (bleAdvertiser != null && advertiseCallback != null) {
+            return;
+        }
         // Check permissions before advertising (Android 12+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_ADVERTISE) != PackageManager.PERMISSION_GRANTED) {
@@ -477,6 +491,9 @@ public class RedNodeService extends Service {
     }
 
     private void startGattServer() {
+        if (gattServer != null) {
+            return;
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
             if (checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
                 return;

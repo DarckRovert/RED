@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 interface OnboardingProfileProps {
     onDone?: () => void;
@@ -11,6 +12,7 @@ interface OnboardingProfileProps {
 }
 
 export default function OnboardingProfile({ onDone, onComplete }: OnboardingProfileProps) {
+    const { t } = useTranslation();
     const handleFinish = onComplete || onDone || (() => {});
     const { identity, fetchData, navigate } = useRedStore();
 
@@ -150,10 +152,10 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
 
                     <div>
                         <h1 style={{ fontSize: "1.35rem", fontWeight: 900, margin: 0, letterSpacing: "0.4px" }}>
-                            RED SOBERANA P2P
+                            {t('auth.welcome')}
                         </h1>
                         <div style={{ fontSize: "0.74rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", marginTop: "4px", fontWeight: 700 }}>
-                            INFRAESTRUCTURA CERO · 100% OFF-GRID
+                            {t('auth.welcome_sub')}
                         </div>
                     </div>
 
@@ -178,7 +180,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                         className="btn-tactical-primary"
                         style={{ width: "100%", padding: "12px", fontSize: "0.88rem", fontWeight: 900 }}
                     >
-                        Comenzar Configuración →
+                        {t('common.confirm')} →
                     </button>
                 </div>
             )}
@@ -198,17 +200,17 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
 
                     <div style={{ textAlign: "center" }}>
                         <h2 style={{ fontSize: "1.25rem", fontWeight: 900, margin: 0 }}>
-                            Crea tu Alias Táctico
+                            {t('auth.welcome_sub')}
                         </h2>
                         <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                            Tu identificador visible para otros nodos en la malla
+                            {t('auth.nickname_placeholder')}
                         </div>
                     </div>
 
                     <div style={{ width: "100%" }}>
                         <input
                             type="text"
-                            placeholder="Ej. Operador Bravo, Centinela..."
+                            placeholder={t('auth.nickname_placeholder')}
                             value={displayName}
                             onChange={(e) => setDisplayName(e.target.value)}
                             maxLength={24}

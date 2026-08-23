@@ -445,6 +445,7 @@ mod tests {
             public_key: KeyPair::generate().public,
             joined_at: 0,
             role: MemberRole::Member,
+            muted: false,
         }
     }
 
@@ -455,6 +456,7 @@ mod tests {
             public_key: KeyPair::generate().public,
             joined_at: 0,
             role: MemberRole::Admin,
+            muted: false,
         };
 
         let group = Group::create("Test Group".to_string(), creator);
@@ -470,6 +472,7 @@ mod tests {
             public_key: KeyPair::generate().public,
             joined_at: 0,
             role: MemberRole::Admin,
+            muted: false,
         };
 
         let mut group = Group::create("Test Group".to_string(), creator);
@@ -479,6 +482,7 @@ mod tests {
             public_key: KeyPair::generate().public,
             joined_at: 0,
             role: MemberRole::Member,
+            muted: false,
         };
         let member_hash = member.identity_hash.clone();
 

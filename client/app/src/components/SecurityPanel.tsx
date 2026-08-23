@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { SecureStoragePlugin } from "capacitor-secure-storage-plugin";
 import { toast } from "./Toast";
 import { registerPlugin } from "@capacitor/core";
@@ -25,6 +26,7 @@ async function getSecurePin(key: string): Promise<string> {
 
 export default function SecurityPanel() {
     const { goBack } = useRedStore();
+    const { t } = useTranslation();
     const [privacyScreenEnabled, setPrivacyScreenEnabled] = useState(false);
     const [disguiseEnabled, setDisguiseEnabled] = useState(false);
     const [burnerChatsEnabled, setBurnerChatsEnabled] = useState(false);
@@ -218,10 +220,10 @@ export default function SecurityPanel() {
                     }}>🛡️</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Consola de Seguridad & Zero-Trust
+                            {t('security_panel.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-crimson-bright)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {RED_VERSION_NAME} · HARDWARE KEYSTORE & ZERO-KNOWLEDGE
+                            {t('security_panel.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -229,7 +231,7 @@ export default function SecurityPanel() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Cerrar panel"
+                    title={t('common.close')}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕

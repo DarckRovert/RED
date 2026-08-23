@@ -24,7 +24,7 @@ export function PollMessage({ msg, onVote }: PollMessageProps) {
             <div style={{ fontWeight: 800, fontSize: "0.92rem", marginBottom: 8, display: "flex", alignItems: "center", gap: 6, color: "#fff" }}>
                 <span>📊</span> {pd.question}
             </div>
-            {pd.options.map((opt, i) => {
+            {pd.options.map((opt: any, i: number) => {
                 const optStr = String(i);
                 const votesCount = Object.values(votesMap).filter((v: any) => String(v) === optStr).length;
                 const pct = totalVotes > 0 ? Math.round((votesCount / totalVotes) * 100) : 0;

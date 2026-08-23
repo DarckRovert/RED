@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { MessageItem, ConversationItem } from "../lib/api";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
 import { toast } from "./Toast";
 import { SettingsManager } from "../lib/settingsManager";
@@ -29,6 +30,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
     onDeleteContact,
     onBlockNode,
 }) => {
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<MediaTab>("media");
     const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -451,7 +453,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                             }}
                         >
-                            <span>🗑️</span> Eliminar Contacto
+                            <span>🗑️</span> {t('profile.delete_contact')}
                         </button>
 
                         <button
@@ -473,7 +475,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
                             }}
                         >
-                            <span>🚫</span> Bloquear Nodo (Anti-Acoso)
+                            <span>🚫</span> {t('profile.block_contact')}
                         </button>
                     </div>
                 </div>

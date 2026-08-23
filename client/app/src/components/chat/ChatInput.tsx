@@ -3,6 +3,7 @@ import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
 import { LocalAIEngine } from "../../lib/localAiEngine";
 import { toast } from "../Toast";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 
 export interface ChatInputProps {
     inputText?: string;
@@ -41,6 +42,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     handleCamera = () => {}, handleGallery = () => {}, handleDocument = () => {},
     handleLocation = () => {}, handlePay = () => {}, setShowPollModal = () => {}
 }) => {
+    const { t } = useTranslation();
     const { contacts } = useRedStore();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [localText, setLocalText] = useState("");
@@ -365,7 +367,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     }
                                 }}
                                 onKeyDown={handleKeyDown}
-                                placeholder={burnTimer ? `Mensaje autodestructible (${burnTimer}s)...` : "Escribe un mensaje cifrado o /pay <monto>..."}
+                                placeholder={burnTimer ? `Burn message (${burnTimer}s)...` : t('chat.type_message')}
                                 rows={1}
                                 style={{
                                     width: "100%",

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 /* ── Carga dinámica con ssr:false — previene crash de hidratación SSR ── */
 const Sidebar               = dynamic(() => import("../components/Sidebar"),               { ssr: false, loading: () => <AppLoader /> });
@@ -139,6 +140,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
 
 function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => void }) {
   const { identity } = useRedStore();
+  const { t } = useTranslation();
   return (
     <div style={{
       flex: 1, height: "100%", display: "flex", flexDirection: "column",
@@ -157,10 +159,10 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
 
       <div style={{ maxWidth: "480px" }}>
         <h2 style={{ fontSize: "1.4rem", fontWeight: 900, color: "var(--text-primary)", letterSpacing: "0.2px" }}>
-          Centro de Comando Malla P2P
+          {t('tablet.title')}
         </h2>
         <p style={{ fontSize: "0.84rem", color: "var(--text-muted)", marginTop: "8px", lineHeight: 1.5 }}>
-          Selecciona una conversación del panel lateral o lanza una herramienta táctica para operar fuera de red.
+          {t('tablet.subtitle')}
         </p>
       </div>
 
@@ -175,8 +177,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
         >
           <span style={{ fontSize: "1.8rem" }}>🗺️</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Mapa GPS Táctico</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>Haversine Radio</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.map_title')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.map_sub')}</span>
         </div>
 
         <div
@@ -185,8 +187,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
         >
           <span style={{ fontSize: "1.8rem" }}>📡</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Radar BLE & QR</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>Swarm Discovery</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.radar_title')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.radar_sub')}</span>
         </div>
 
         <div
@@ -195,8 +197,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
         >
           <span style={{ fontSize: "1.8rem" }}>🎨</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Pizarra Táctica</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-purple)", fontFamily: "JetBrains Mono, monospace" }}>Canvas Sync P2P</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.canvas_title')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-purple)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.canvas_sub')}</span>
         </div>
 
         <div
@@ -205,8 +207,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
         >
           <span style={{ fontSize: "1.8rem" }}>📻</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Canales Mesh</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>Frecuencias Locales</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.channels_title')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.channels_sub')}</span>
         </div>
 
         <div
@@ -215,8 +217,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
         >
           <span style={{ fontSize: "1.8rem" }}>⚙️</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Ajustes & Temas</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>UI Customization</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.settings_title')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.settings_sub')}</span>
         </div>
 
         <div
@@ -225,8 +227,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(232,33,58,0.12) 0%, rgba(255,51,85,0.06) 100%)", border: "1px solid rgba(255,60,95,0.3)" }}
         >
           <span style={{ fontSize: "1.8rem" }}>⚡</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FF8599" }}>Hub Comercial</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>AdMob & Hardware P2P</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FF8599" }}>{t('tablet.hub_title')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.hub_sub')}</span>
         </div>
 
         <div
@@ -235,8 +237,8 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
         >
           <span style={{ fontSize: "1.8rem" }}>🚀</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>Actualizador OTA</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>In-App Installer</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('modules.updater')}</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>OTA</span>
         </div>
       </div>
 

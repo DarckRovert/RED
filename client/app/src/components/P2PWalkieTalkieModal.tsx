@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { sendVoiceBurst, getVoiceBursts, deleteVoiceBurst, VoiceBurst } from "../lib/api";
 import { PayloadCompressor } from "../lib/PayloadCompressor";
 import { LowBitrateVocoder } from "../lib/LowBitrateVocoder";
@@ -15,6 +16,7 @@ type WalkieTab = "ptt" | "bursts";
 
 export const P2PWalkieTalkieModal: React.FC = () => {
     const { navigate, identity } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<WalkieTab>("ptt");
     const [isRecording, setIsRecording] = useState(false);
     const [isProcessingStop, setIsProcessingStop] = useState(false);
@@ -401,10 +403,10 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                     }}>🎙️</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Walkie-Talkie Mesh HQ (PTT)
+                            {t('walkie.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            HALF-DUPLEX PTT · OPUS COMPRESSION · SLED DB
+                            {t('walkie.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -412,7 +414,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar walkie-talkie"
+                    title={t('common.close')}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -432,14 +434,14 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                     className={activeTab === "ptt" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    🎙️ Transmisor PTT
+                    🎙️ {t('walkie.live_tab')}
                 </button>
                 <button
                     onClick={() => setActiveTab("bursts")}
                     className={activeTab === "bursts" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📻 Ráfagas en Malla ({bursts.length})
+                    📻 {t('walkie.bursts_tab')} ({bursts.length})
                 </button>
             </div>
 

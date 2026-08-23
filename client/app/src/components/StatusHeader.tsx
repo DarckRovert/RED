@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { RedAPI } from "../lib/api";
 
 export default function StatusHeader() {
     const { nodeOnline, status, identity, navigate } = useRedStore();
+    const { t } = useTranslation();
     const [meshCounts, setMeshCounts] = useState({ wifi: 0, ble: 0, lora: 0, total: 0 });
     const [loraActive, setLoraActive] = useState(false);
 
@@ -69,7 +71,7 @@ export default function StatusHeader() {
                 flexShrink: 0
             }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: "white", display: "inline-block", animation: "pulse 1s infinite" }} />
-                NODO CRIPTOGRÁFICO INACCESIBLE
+                {t('status_header.node_inaccessible')}
             </div>
         );
     }
@@ -123,9 +125,9 @@ export default function StatusHeader() {
                         fontSize: "0.66rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
                         boxShadow: "0 0 8px rgba(0,229,255,0.3)"
                     }}
-                    title="Abrir Copiloto IA Soberano"
+                    title={t('status_header.ai_tooltip')}
                 >
-                    🤖 IA
+                    {t('status_header.ai_btn')}
                 </button>
 
                 <button
@@ -138,7 +140,7 @@ export default function StatusHeader() {
                         boxShadow: "0 0 8px rgba(232,33,58,0.3)"
                     }}
                 >
-                    ⚡ HUB
+                    {t('status_header.hub_btn')}
                 </button>
 
                 <button
@@ -149,7 +151,7 @@ export default function StatusHeader() {
                         fontSize: "0.66rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap"
                     }}
                 >
-                    🗺️ MAPA
+                    {t('status_header.map_btn')}
                 </button>
             </div>
         </div>

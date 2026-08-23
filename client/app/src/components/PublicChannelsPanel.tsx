@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { getChannelMessages, postChannelMessage, summarizeChannelAI, ChannelMessage } from "../lib/api";
 import { toast } from "./Toast";
 
 export const PublicChannelsPanel: React.FC = () => {
     const { navigate, identity, goBack } = useRedStore();
+    const { t } = useTranslation();
     const [channelId, setChannelId] = useState("red-local-general");
     const [channels, setChannels] = useState<string[]>(["red-local-general", "emergencias-tacticas", "anuncios-comunitarios"]);
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
@@ -103,10 +105,10 @@ export const PublicChannelsPanel: React.FC = () => {
                     }}>📻</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Canales Públicos & Frecuencias
+                            {t('public_channels.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            OPEN MESH FREQUENCIES · BROADCAST CHAT
+                            {t('public_channels.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -118,12 +120,12 @@ export const PublicChannelsPanel: React.FC = () => {
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
                     >
-                        {isSummarizing ? "..." : "🤖 Resumen"}
+                        {isSummarizing ? "..." : `🤖 ${t('public_channels.ai_summary')}`}
                     </button>
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Cerrar panel"
+                        title={t('common.close')}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕

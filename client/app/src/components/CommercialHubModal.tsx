@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../lib/i18n/i18nEngine';
 import { MonetizationEngine, ProPerkStatus, TACTICAL_CATALOG, TacticalProduct } from '../lib/MonetizationEngine';
 
 interface CommercialHubModalProps {
@@ -9,6 +10,7 @@ interface CommercialHubModalProps {
 }
 
 export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, onClose }) => {
+    const { t } = useTranslation();
     const [proStatus, setProStatus] = useState<ProPerkStatus>({
         isPro: false,
         expiresAt: 0,
@@ -112,10 +114,10 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         </div>
                         <div>
                             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, letterSpacing: '0.5px' }}>
-                                HUB COMERCIAL SOBERANO
+                                {t('hub.title')}
                             </h2>
                             <p style={{ margin: 0, fontSize: '11px', color: 'rgba(255, 255, 255, 0.65)' }}>
-                                Recompensas Tácticas & Hardware Homologado
+                                {t('hub.subtitle')}
                             </p>
                         </div>
                     </div>

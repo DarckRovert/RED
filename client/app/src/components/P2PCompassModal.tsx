@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { getProximityNodes, ProximityNode } from "../lib/api";
 
 export const P2PCompassModal: React.FC = () => {
     const { navigate } = useRedStore();
+    const { t } = useTranslation();
     const [heading, setHeading] = useState<number>(0);
     const [headingSource, setHeadingSource] = useState<"sensor" | "manual">("manual");
     const [nodes, setNodes] = useState<ProximityNode[]>([]);
@@ -109,10 +111,10 @@ export const P2PCompassModal: React.FC = () => {
                     }}>🧭</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Brújula Táctica 360° & Radar
+                            {t('compass.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {headingSource === "sensor" ? "● GIROSCOPIO ACTIVO · 60 FPS" : "CALIBRACIÓN MANUAL"}
+                            {headingSource === "sensor" ? `● ${t('compass.subtitle')}` : t('compass.calibrate_hint')}
                         </div>
                     </div>
                 </div>
@@ -120,7 +122,7 @@ export const P2PCompassModal: React.FC = () => {
                 <button
                     onClick={() => navigate("sidebar")}
                     className="btn-icon"
-                    title="Cerrar brújula"
+                    title={t('common.close')}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -285,7 +287,7 @@ export const P2PCompassModal: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {n.bearing_deg !== undefined && (
+                                            {n.bearing_deg != null && (
                                                 <div style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace", fontSize: "0.85rem", color: "var(--accent-cyan)", fontWeight: 800 }}>
                                                     {n.bearing_deg}° {getCardinal(n.bearing_deg)}
                                                 </div>

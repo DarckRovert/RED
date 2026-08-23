@@ -100,6 +100,19 @@ public class RedNodePlugin extends Plugin {
         }
     }
 
+    /** Permite al frontend reiniciar / asegurar el servidor GATT y publicidad BLE una vez otorgados los permisos. */
+    @PluginMethod
+    public void startBleServer(PluginCall call) {
+        try {
+            RedNodeService.restartBleIfPermitted();
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("success", true);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to start BLE server: " + e.getMessage());
+        }
+    }
+
     /** Expone el estado de carga de la librería nativa al frontend (Capacitor JS). */
     @PluginMethod
     public void isNativeReady(PluginCall call) {

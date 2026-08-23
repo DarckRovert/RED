@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import type { PendingContactRequest } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 function AvatarInitial({ name, hash }: { name: string; hash: string }) {
     const colors = ["#7C4DFF", "#00E5FF", "#FF6D00", "#00C853", "#F50057", "#FFD600"];
@@ -33,6 +34,7 @@ function formatTime(ts: number) {
 }
 
 export function IncomingContactRequestModal() {
+    const { t } = useTranslation();
     const {
         activeContactRequestModal: req,
         pendingContactRequests,
@@ -118,7 +120,7 @@ export function IncomingContactRequestModal() {
                         animation: "pulse 1.5s infinite",
                     }} />
                     <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "#FF9E40", fontFamily: "JetBrains Mono, monospace" }}>
-                        SOLICITUD DE CONTACTO ENTRANTE · {req.channel.toUpperCase()}
+                        {t('incoming_req.title')} · {req.channel.toUpperCase()}
                     </span>
                 </div>
 
@@ -147,7 +149,7 @@ export function IncomingContactRequestModal() {
                             color: "var(--text-muted)",
                             fontFamily: "JetBrains Mono, monospace",
                         }}>
-                            Recibida · {formatTime(req.timestamp)}
+                            {formatTime(req.timestamp)}
                         </div>
                     </div>
                     {pendingCount > 1 && (
@@ -169,8 +171,7 @@ export function IncomingContactRequestModal() {
                     lineHeight: 1.55, textAlign: "center",
                     padding: "0 8px",
                 }}>
-                    Este operador quiere agregarte como contacto a través de la malla P2P.
-                    Tu información <strong style={{ color: "#fff" }}>no se comparte</strong> hasta que aceptes.
+                    {t('incoming_req.desc')}
                 </div>
 
                 {/* Action Buttons */}
@@ -193,7 +194,7 @@ export function IncomingContactRequestModal() {
                         onMouseUp={e => (e.currentTarget.style.transform = "scale(1)")}
                     >
                         <span style={{ fontSize: "1.2rem" }}>✅</span>
-                        Aceptar y Agregar Contacto
+                        {t('incoming_req.accept_btn')}
                     </button>
 
                     {/* Reject */}
@@ -214,7 +215,7 @@ export function IncomingContactRequestModal() {
                         onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
                     >
                         <span style={{ fontSize: "1rem" }}>❌</span>
-                        Rechazar / Ignorar
+                        {t('incoming_req.reject_btn')}
                     </button>
 
                     {/* Block */}
@@ -235,7 +236,7 @@ export function IncomingContactRequestModal() {
                         onMouseLeave={e => (e.currentTarget.style.background = "rgba(245,0,87,0.08)")}
                     >
                         <span style={{ fontSize: "1rem" }}>🚫</span>
-                        Bloquear Nodo (Anti-Acoso)
+                        {t('incoming_req.block_btn')}
                     </button>
                 </div>
             </div>

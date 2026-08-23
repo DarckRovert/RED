@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { localTransport } from "../lib/mesh/localTransport";
 import { RedAPI } from "../lib/api";
 import { meshRouter } from "../lib/mesh/meshRouter";
@@ -73,6 +74,7 @@ export interface CanonicalNode {
 
 export default function NodeMap() {
     const { status, contacts, identity, goBack, navigate, addContact } = useRedStore();
+    const { t } = useTranslation();
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const leafletMapRef = useRef<any>(null);
     const markersGroupRef = useRef<any>(null);
@@ -431,10 +433,10 @@ export default function NodeMap() {
                     }}>🗺️</div>
                     <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: "0.92rem", fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            Mapa Táctico GPS
+                            {t('map.title')}
                         </div>
                         <div style={{ fontSize: "0.62rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {realGPS ? `GPS FIJADO (±${gpsData.accuracy ? gpsData.accuracy.toFixed(0) : "3"}m)` : "BUSCANDO SATÉLITES…"}
+                            {realGPS ? `${t('map.gps_fixed')} (±${gpsData.accuracy ? gpsData.accuracy.toFixed(0) : "3"}m)` : t('map.gps_searching')}
                         </div>
                     </div>
                 </div>
@@ -444,7 +446,7 @@ export default function NodeMap() {
                         onClick={() => setShowTelemetryDrawer(!showTelemetryDrawer)}
                         className={`btn-tactical-${showTelemetryDrawer ? "primary" : "secondary"}`}
                         style={{ padding: "6px 10px", fontSize: "0.74rem", whiteSpace: "nowrap" }}
-                        title="Ver lista de telemetría"
+                        title={t('map.telemetry_btn')}
                     >
                         📊 {peers.length}
                     </button>
@@ -452,14 +454,14 @@ export default function NodeMap() {
                         onClick={recenterMap}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 9px", fontSize: "0.74rem" }}
-                        title="Centrar en mi ubicación"
+                        title={t('map.recenter')}
                     >
                         🎯
                     </button>
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Cerrar mapa"
+                        title={t('common.close')}
                         style={{ width: 34, height: 34 }}
                     >
                         ✕

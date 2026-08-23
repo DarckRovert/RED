@@ -6,6 +6,7 @@ import { CalculatorScreen } from "./CalculatorScreen";
 import { BackupRestoreModal } from "./BackupRestoreModal";
 import { WebCompanionQRModal } from "./WebCompanionQRModal";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 /**
  * Authentication Wall — RED Unified Tactical Lockscreen
@@ -73,6 +74,7 @@ async function setSecurePin(key: string, value: string): Promise<void> {
 }
 
 export default function AuthWall({ children }: { children: React.ReactNode }) {
+    const { t } = useTranslation();
     const { isAuthenticated, login } = useRedStore();
 
     const [mode, setMode] = useState<AuthMode>("checking");
@@ -369,12 +371,12 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
                     <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: "1.25rem", fontWeight: 900, letterSpacing: "0.5px" }}>
-                            {mode === "onboarding" ? "Crear PIN Maestro" : "Bóveda Criptográfica RED"}
+                            {mode === "onboarding" ? "Crear PIN Maestro" : t('auth.title')}
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "3px" }}>
                             {mode === "onboarding"
                                 ? (step === "enter" ? "Define tu clave de acceso (mínimo 6 dígitos)" : "Confirma tu PIN maestro")
-                                : (lockoutRemaining > 0 ? `Bóveda bloqueada (${lockoutRemaining}s)` : "Ingresa tu PIN de seguridad")}
+                                : (lockoutRemaining > 0 ? `Bóveda bloqueada (${lockoutRemaining}s)` : t('auth.enter_pin'))}
                         </div>
                     </div>
                 </div>

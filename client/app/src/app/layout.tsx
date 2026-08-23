@@ -4,6 +4,7 @@ import React, { useEffect } from "react";
 import "./globals.css";
 import AmberAlertBanner from "@/components/AmberAlertBanner";
 import { SOSEmergencyBanner } from "@/components/SOSEmergencyBanner";
+import { I18nProvider } from "@/lib/i18n/i18nEngine";
 
 export default function RootLayout({
   children,
@@ -50,11 +51,13 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <AmberAlertBanner />
-        <SOSEmergencyBanner />
-        <div className="app-container">
-          {children}
-        </div>
+        <I18nProvider>
+          <AmberAlertBanner />
+          <SOSEmergencyBanner />
+          <div className="app-container">
+            {children}
+          </div>
+        </I18nProvider>
       </body>
     </html>
   );

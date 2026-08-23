@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { GlobalSearchModal } from "./GlobalSearchModal";
@@ -11,36 +11,14 @@ import { LiveStreamViewer } from "./LiveStreamViewer";
 import { RED_VERSION, RED_APK_NAME } from "../lib/version";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
-
-const AVATAR_COLORS = [
-    ["#FF3355","#C0152A"], ["#FF7043","#E64A19"], ["#FFA726","#F57C00"],
-    ["#00E5FF","#00ACC1"], ["#29B6F6","#0288D1"], ["#7E57C2","#5E35B1"],
-    ["#00E676","#00897B"], ["#EC407A","#C2185B"],
-];
-
-function getAvatarIdx(seed: string): number {
-    let h = 0;
-    for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-    return h % 8;
-}
-
-function avatarStyle(seed: string) {
-    const [a, b] = AVATAR_COLORS[getAvatarIdx(seed)];
-    return { background: `linear-gradient(135deg, ${a}, ${b})`, boxShadow: `0 2px 10px ${a}50` };
-}
-
-function formatTime(ts?: number): string {
-    if (!ts) return "";
-    const ms = ts < 10_000_000_000 ? ts * 1000 : ts;
-    const d = new Date(ms);
-    const now = new Date();
-    if (d.toDateString() === now.toDateString()) {
-        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    }
-    return d.toLocaleDateString([], { month: "short", day: "numeric" });
-}
+import { useTranslation } from "../lib/i18n/i18nEngine";
+import { avatarStyle, formatTime } from "./sidebar/types";
+import { SidebarHeader } from "./sidebar/SidebarHeader";
+import { ConversationList } from "./sidebar/ConversationList";
+import { ContactList } from "./sidebar/ContactList";
 
 export default function Sidebar() {
+    const { t } = useTranslation();
     const { 
         identity, conversations: rawConvs, contacts: rawConts, groups: rawGrps, nodeOnline, navigate, fetchData,
         pinnedChatIds: rawPinned, archivedChatIds: rawArchived, togglePinChat, toggleArchiveChat, peerStories,
@@ -92,7 +70,7 @@ export default function Sidebar() {
     const filteredConvs = useMemo(() => {
         return conversations
             .filter(c => c && c.peer && !c.peer.startsWith("00000000") && resolvePeerName(c.peer || "").toLowerCase().includes(searchQuery.toLowerCase()))
-            .sort((a, b) => {
+            .sort((a: any, b: any) => {
                 const tsA = (typeof a.last_message === "object" && a.last_message?.timestamp) || (a as any).last_timestamp || 0;
                 const tsB = (typeof b.last_message === "object" && b.last_message?.timestamp) || (b as any).last_timestamp || 0;
                 const normA = tsA < 1e10 ? tsA : tsA / 1000;
@@ -199,6 +177,7 @@ export default function Sidebar() {
 
     return (
         <aside style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "var(--bg-void)", position: "relative", overflow: "hidden" }}>
+
 
             {/* Tactical Slide-Over Command Drawer */}
             {menuOpen && (
@@ -333,79 +312,22 @@ export default function Sidebar() {
                 </div>
             )}
 
-            {/* Header Táctico Principal */}
-            <header style={{
-                padding: "0 12px",
-                height: "var(--header-h)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0, overflow: "hidden"
-            }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", minWidth: 0, flex: "1 1 auto", marginRight: "8px", overflow: "hidden" }} onClick={() => navigate("idVault")}>
-                    <div style={{
-                        width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontWeight: 900, color: "#fff", fontSize: "1rem",
-                        border: "2px solid var(--glass-border)",
-                        ...avatarStyle(identity?.identity_hash || "me")
-                    }}>
-                        {(identity?.short_id || "O").charAt(0).toUpperCase()}
-                    </div>
-                    <div style={{ minWidth: 0, overflow: "hidden" }}>
-                        <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "#fff", letterSpacing: "0.2px", display: "flex", alignItems: "center", gap: "6px", overflow: "hidden" }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{identity?.nickname || "Operador RED"}</span>
-                            <span className="badge-tactical" style={{ fontSize: "0.56rem", padding: "1px 4px", background: "rgba(232, 33, 58, 0.2)", color: "#FF3355", border: "1px solid rgba(232,33,58,0.4)", flexShrink: 0 }}>
-                                v{RED_VERSION}
-                            </span>
-                        </div>
-                        <div style={{ fontSize: "0.66rem", color: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, display: "flex", alignItems: "center", gap: "5px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            <span style={{
-                                width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                                background: nodeOnline ? "var(--accent-emerald)" : "var(--accent-crimson)",
-                                display: "inline-block",
-                                boxShadow: nodeOnline ? "0 0 8px var(--accent-emerald)" : "none",
-                                animation: nodeOnline ? "beaconPulse 2s infinite" : "none"
-                            }} />
-                            {nodeOnline ? `MALLA • ${meshRouter.peers.size} ${meshRouter.peers.size === 1 ? 'NODO' : 'NODOS'}` : "OFFLINE"}
-                        </div>
-                    </div>
-                </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
-                    <button onClick={() => setStoryModal("creator")} className="btn-icon" style={{ width: 34, height: 34, color: "var(--accent-cyan)", flexShrink: 0 }} title="Publicar Historia / Foto">
-                        📷
-                    </button>
-                    <button onClick={() => setAddContactOpen(true)} className="btn-icon" style={{ width: 34, height: 34, color: "var(--accent-crimson)", flexShrink: 0 }} title="Agregar nuevo contacto">
-                        ➕
-                    </button>
-                    <button onClick={() => setGlobalSearchOpen(true)} className="btn-icon" style={{ width: 34, height: 34, flexShrink: 0 }} title="Búsqueda global">
-                        🔍
-                    </button>
-                    <button onClick={() => navigate("webCompanionLink")} className="btn-icon" style={{ width: 34, height: 34, color: "var(--accent-emerald)", flexShrink: 0 }} title="💻 Vincular con RED Web (PC)">
-                        💻
-                    </button>
-                    <button 
-                        onClick={() => setMenuOpen(m => !m)} 
-                        className="btn-icon" 
-                        style={{ 
-                            width: 36, height: 36, 
-                            background: menuOpen ? "var(--accent-cyan)" : "rgba(0, 229, 255, 0.15)", 
-                            border: "1px solid rgba(0, 229, 255, 0.45)", 
-                            color: menuOpen ? "#000" : "var(--accent-cyan)", 
-                            borderRadius: "10px", 
-                            fontWeight: 900, 
-                            fontSize: "1.1rem",
-                            boxShadow: "0 0 12px rgba(0, 229, 255, 0.25)",
-                            flexShrink: 0
-                        }} 
-                        title={`Centro de Control (${totalModules} Módulos Tácticos)`}
-                    >
-                        ☰
-                    </button>
-                </div>
-            </header>
+            <SidebarHeader
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                setStoryModal={setStoryModal}
+                setAddContactOpen={setAddContactOpen}
+                setGlobalSearchOpen={setGlobalSearchOpen}
+                menuOpen={menuOpen}
+                setMenuOpen={setMenuOpen}
+                totalModules={totalModules}
+                filteredConvsCount={filteredConvs.length}
+                filteredContactsCount={filteredContacts.length}
+                pendingCount={pendingCount}
+            />
 
             {/* Stories Bar (24h Ephemeral & Live Video Streams) */}
             <StoriesBar
@@ -414,339 +336,21 @@ export default function Sidebar() {
                 onLiveStream={id => setStoryModal({ type: "live", id })}
             />
 
-            {/* Barra de Segmented Control & Búsqueda Integrada */}
-            <div style={{ padding: "10px 14px 6px 14px", background: "rgba(8,10,20,0.95)", display: "flex", flexDirection: "column", gap: "8px" }}>
-                {/* Segmented Switcher */}
-                <div style={{
-                    display: "flex", background: "rgba(20,22,38,0.85)", borderRadius: "var(--radius-full)",
-                    padding: "3px", border: "1px solid var(--glass-border)"
-                }}>
-                    <button
-                        onClick={() => setActiveTab("chats")}
-                        style={{
-                            flex: 1, padding: "8px 12px", background: activeTab === "chats" ? "var(--accent-crimson)" : "transparent",
-                            color: activeTab === "chats" ? "#FFF" : "var(--text-secondary)",
-                            border: "none", borderRadius: "var(--radius-full)",
-                            fontWeight: 800, fontSize: "0.80rem", letterSpacing: "0.4px",
-                            cursor: "pointer", transition: "all 0.2s ease",
-                            boxShadow: activeTab === "chats" ? "0 2px 10px rgba(232,33,58,0.4)" : "none"
-                        }}
-                    >
-                        CHATS ({filteredConvs.length})
-                    </button>
-                    <button
-                        onClick={() => setActiveTab("contacts")}
-                        style={{
-                            flex: 1, padding: "8px 12px", background: activeTab === "contacts" ? "var(--accent-crimson)" : "transparent",
-                            color: activeTab === "contacts" ? "#FFF" : "var(--text-secondary)",
-                            border: "none", borderRadius: "var(--radius-full)",
-                            fontWeight: 800, fontSize: "0.80rem", letterSpacing: "0.4px",
-                            cursor: "pointer", transition: "all 0.2s ease",
-                            boxShadow: activeTab === "contacts" ? "0 2px 10px rgba(232,33,58,0.4)" : "none",
-                            position: "relative",
-                        }}
-                    >
-                        CONTACTOS ({filteredContacts.length})
-                        {pendingCount > 0 && (
-                            <span style={{
-                                position: "absolute", top: 2, right: 6,
-                                minWidth: 16, height: 16, borderRadius: 8,
-                                background: "#FF6B00",
-                                color: "#fff", fontSize: "0.60rem", fontWeight: 900,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                padding: "0 3px",
-                                boxShadow: "0 0 6px #FF6B00",
-                                animation: "pulse 1.5s infinite",
-                            }}>
-                                {pendingCount}
-                            </span>
-                        )}
-                    </button>
-                </div>
-
-                {/* Search Bar Input */}
-                <div style={{
-                    display: "flex", alignItems: "center", gap: "8px",
-                    background: "rgba(18,20,36,0.8)", border: "1px solid var(--glass-border)",
-                    borderRadius: "var(--radius-full)", padding: "7px 12px"
-                }}>
-                    <span style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>🔍</span>
-                    <input
-                        type="text"
-                        placeholder="Filtrar por nombre o clave pública..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        style={{
-                            flex: 1, background: "transparent", border: "none",
-                            color: "#fff", fontSize: "0.82rem", outline: "none"
-                        }}
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery("")}
-                            style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
-                        >
-                            ✕
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {/* Listado Principal con Scroll */}
+            {/* Main Scrollable Content */}
             <div className="scroll-container" style={{ flex: 1, padding: "8px 12px 28px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
                 {activeTab === "chats" ? (
-                    filteredConvs.length === 0 ? (
-                        <div className="empty-state-tactical">
-                            <div className="empty-state-icon">📡</div>
-                            <div className="empty-state-title">Sin Transmisiones en Malla</div>
-                            <div className="empty-state-desc">Escanea un código QR o descubre nodos vecinos en el Radar táctico.</div>
-                            <button
-                                onClick={() => navigate("radar")}
-                                className="btn-tactical-primary"
-                                style={{ marginTop: "12px", padding: "8px 16px", fontSize: "0.8rem" }}
-                            >
-                                Abrir Radar P2P
-                            </button>
-                        </div>
-                    ) : (
-                        filteredConvs.map(c => {
-                            const rawTs = (typeof c.last_message === "object" && c.last_message?.timestamp) || (c as any).last_timestamp;
-                            const lm = c.last_message;
-                            let snippet = "Mensaje cifrado";
-                            if (lm) {
-                                const msgType = typeof lm === "object" ? lm.msg_type : null;
-                                const content = typeof lm === "object" ? lm.content : lm;
-                                const isOwn = typeof lm === "object" && (lm as any).is_mine;
-                                const prefix = isOwn ? "Tú: " : "";
-                                if (msgType === "image" || content?.startsWith("data:image")) snippet = prefix + "📷 Foto";
-                                else if (msgType === "voice" || msgType === "audio" || content?.startsWith("data:audio")) snippet = prefix + "🎤 Nota de voz";
-                                else if (msgType === "video" || content?.startsWith("data:video")) snippet = prefix + "📹 Video";
-                                else if (msgType === "location" || content?.includes("Ubicación Táctica")) snippet = prefix + "📍 Ubicación";
-                                else if (msgType === "poll") snippet = prefix + "📊 Encuesta";
-                                else if (content && !content.startsWith("data:") && !content.startsWith("[")) {
-                                    // Block JSON signaling packets from appearing as conversation preview
-                                    let isSignalingJson = false;
-                                    if (content.startsWith("{")) {
-                                        try {
-                                            const c = JSON.parse(content);
-                                            const SIGNAL_TYPES = ['IDENTITY_ANNOUNCE','IDENTITY_RESPONSE','IDENTITY_REQUEST','SHAKE_PAIR_BROADCAST','SHAKE_PAIR_ACCEPT','DELIVERY_ACK','PROFILE_UPDATE','NODE_LOCATION_UPDATE'];
-                                            const SIGNAL_KEYS = ['read_up_to','reader_hash','offer','answer','candidate','hangup','sender_hash','sender_pk','beacon_id'];
-                                            if (c.type && SIGNAL_TYPES.some(t => c.type.startsWith(t.split('_')[0]))) isSignalingJson = true;
-                                            else if (SIGNAL_KEYS.filter(k => k in c).length >= 2) isSignalingJson = true;
-                                            else if (c.reason === 'user_remote_wipe') isSignalingJson = true;
-                                        } catch {}
-                                    }
-                                    if (!isSignalingJson) {
-                                        const truncated = content.length > 38 ? content.substring(0, 38) + "…" : content;
-                                        snippet = prefix + truncated;
-                                    }
-                                }
-                            }
-                            const isPeerOnline = meshRouter.peers.has(c.peer) || Array.from(meshRouter.peers.values()).some(p => p.id === c.peer);
-                            return (
-
-                            <div
-                                key={c.peer}
-                                onClick={() => navigate("chat", c.peer)}
-                                className="card-tactical-interactive"
-                                style={{
-                                    padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px",
-                                    border: isPeerOnline ? "1px solid rgba(0, 230, 118, 0.2)" : "1px solid var(--glass-border)",
-                                    background: isPeerOnline ? "linear-gradient(135deg, rgba(0,230,118,0.03) 0%, rgba(18,18,32,0.85) 100%)" : undefined
-                                }}
-                            >
-                                <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
-                                    <div style={{
-                                        width: 44, height: 44, borderRadius: "50%",
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "1.1rem", fontWeight: 800, color: "#fff",
-                                        ...avatarStyle(c.peer),
-                                        boxShadow: isPeerOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
-                                        border: isPeerOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
-                                    }}>
-                                        {resolvePeerName(c.peer).charAt(0).toUpperCase()}
-                                    </div>
-                                    {isPeerOnline && (
-                                        <span
-                                            title="En línea en la Malla"
-                                            style={{
-                                                position: "absolute", bottom: -1, right: -1,
-                                                width: 12, height: 12, borderRadius: "50%",
-                                                background: "#00E676",
-                                                border: "2px solid #06060c",
-                                                boxShadow: "0 0 6px #00E676",
-                                                animation: "beaconPulse 2s infinite"
-                                            }}
-                                        />
-                                    )}
-                                </div>
-                                <div style={{ flex: 1, overflow: "hidden" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}>
-                                            <span>{resolvePeerName(c.peer)}</span>
-                                            {isPeerOnline && (
-                                                <span style={{ fontSize: "0.55rem", padding: "1px 4px", borderRadius: "4px", background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    EN VIVO
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                            {rawTs ? formatTime(rawTs) : ""}
-                                        </div>
-                                    </div>
-                                    <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "2px" }}>
-                                        {snippet}
-                                    </div>
-                                </div>
-                                {(c.unread_count || 0) > 0 && (
-                                    <span className="badge-tactical badge-tactical-cyan" style={{ borderRadius: "var(--radius-full)", padding: "2px 8px", boxShadow: "0 0 10px rgba(0, 229, 255, 0.4)" }}>
-                                        {c.unread_count}
-                                    </span>
-                                )}
-                            </div>
-                            );
-                        })
-                    )
+                    <ConversationList
+                        filteredConvs={filteredConvs}
+                        resolvePeerName={resolvePeerName}
+                    />
                 ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                        {/* Pending Contact Requests Section */}
-                        {pendingCount > 0 && (
-                            <div style={{
-                                padding: "10px 14px",
-                                background: "rgba(255,107,0,0.08)",
-                                border: "1px solid rgba(255,107,0,0.25)",
-                                borderRadius: 12,
-                                display: "flex", flexDirection: "column", gap: 8,
-                            }}>
-                                <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "#FF9E40", fontFamily: "JetBrains Mono, monospace", display: "flex", alignItems: "center", gap: 6 }}>
-                                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#FF6B00", boxShadow: "0 0 6px #FF6B00", display: "inline-block", animation: "beaconPulse 1.5s infinite" }} />
-                                    SOLICITUDES PENDIENTES ({pendingCount})
-                                </div>
-                                {pendingContactRequests.map(req => (
-                                    <div key={req.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                        <div style={{
-                                            width: 36, height: 36, borderRadius: "50%",
-                                            background: "linear-gradient(135deg,#FF6B00,#E64A19)",
-                                            display: "flex", alignItems: "center", justifyContent: "center",
-                                            fontSize: "0.9rem", fontWeight: 900, color: "#fff", flexShrink: 0
-                                        }}>
-                                            {(req.senderName || "?")[0].toUpperCase()}
-                                        </div>
-                                        <div style={{ flex: 1, overflow: "hidden" }}>
-                                            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#fff" }}>{req.senderName}</div>
-                                            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>{req.channel}</div>
-                                        </div>
-                                        <button onClick={() => acceptContactRequest(req)} title="Aceptar" style={{ background: "rgba(0,200,83,0.15)", border: "1px solid rgba(0,200,83,0.4)", borderRadius: 8, color: "#00C853", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>✅</button>
-                                        <button onClick={() => rejectContactRequest(req)} title="Rechazar" style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "var(--text-muted)", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>❌</button>
-                                        <button onClick={() => blockNode(req.senderHash)} title="Bloquear" style={{ background: "rgba(245,0,87,0.08)", border: "1px solid rgba(245,0,87,0.25)", borderRadius: 8, color: "#FF5A7E", cursor: "pointer", padding: "4px 8px", fontSize: "0.8rem" }}>🚫</button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <button
-                            onClick={() => setAddContactOpen(true)}
-                            className="btn-tactical-primary"
-                            style={{
-                                width: "100%", padding: "10px 12px", fontSize: "0.82rem", fontWeight: 800,
-                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                borderRadius: "var(--radius-md)"
-                            }}
-                        >
-                            <span>➕</span> AGREGAR NUEVO CONTACTO P2P
-                        </button>
-                        {filteredContacts.length === 0 ? (
-                            <div className="empty-state-tactical">
-                                <div className="empty-state-icon">👥</div>
-                                <div className="empty-state-title">Sin Contactos Guardados</div>
-                                <div className="empty-state-desc">Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E.</div>
-                            </div>
-                        ) : (
-                            filteredContacts.map(ct => {
-                                const isCtOnline = meshRouter.peers.has(ct.identity_hash) || Array.from(meshRouter.peers.values()).some(p => p.id === ct.identity_hash);
-                                return (
-                                <div
-                                    key={ct.identity_hash}
-                                    className="card-tactical-interactive"
-                                    style={{
-                                        padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px",
-                                        border: isCtOnline ? "1px solid rgba(0, 230, 118, 0.2)" : "1px solid var(--glass-border)"
-                                    }}
-                                >
-                                    <div
-                                        onClick={() => { setActiveTab("chats"); navigate("chat", ct.identity_hash); }}
-                                        style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, cursor: "pointer" }}
-                                    >
-                                        <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
-                                            <div style={{
-                                                width: 44, height: 44, borderRadius: "50%",
-                                                display: "flex", alignItems: "center", justifyContent: "center",
-                                                fontSize: "1.1rem", fontWeight: 800, color: "#fff",
-                                                ...avatarStyle(ct.identity_hash),
-                                                boxShadow: isCtOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
-                                                border: isCtOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
-                                            }}>
-                                                {(ct.display_name || "O").charAt(0).toUpperCase()}
-                                            </div>
-                                            {isCtOnline && (
-                                                <span
-                                                    title="En línea en la Malla"
-                                                    style={{
-                                                        position: "absolute", bottom: -1, right: -1,
-                                                        width: 12, height: 12, borderRadius: "50%",
-                                                        background: "#00E676",
-                                                        border: "2px solid #06060c",
-                                                        boxShadow: "0 0 6px #00E676",
-                                                        animation: "beaconPulse 2s infinite"
-                                                    }}
-                                                />
-                                            )}
-                                        </div>
-                                        <div style={{ flex: 1, overflow: "hidden" }}>
-                                            <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
-                                                <span>{ct.display_name || ct.identity_hash.substring(0, 8)}</span>
-                                                {isCtOnline && (
-                                                    <span style={{ fontSize: "0.55rem", padding: "1px 4px", borderRadius: "4px", background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                        MALLA
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                {ct.identity_hash.substring(0, 16)}…
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {/* Delete & Block quick actions */}
-                                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                                        <button
-                                            id={`btn-delete-contact-${ct.identity_hash.slice(0, 8)}`}
-                                            title="Eliminar contacto"
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (confirm(`¿Eliminar a ${ct.display_name}?`)) {
-                                                    await deleteContact(ct.identity_hash);
-                                                }
-                                            }}
-                                            style={{
-                                                width: 30, height: 30, borderRadius: 8,
-                                                background: "rgba(245,0,87,0.08)",
-                                                border: "1px solid rgba(245,0,87,0.2)",
-                                                color: "#FF5A7E", cursor: "pointer",
-                                                display: "flex", alignItems: "center", justifyContent: "center",
-                                                fontSize: "0.82rem",
-                                                transition: "background 0.15s",
-                                            }}
-                                            onMouseEnter={e => (e.currentTarget.style.background = "rgba(245,0,87,0.18)")}
-                                            onMouseLeave={e => (e.currentTarget.style.background = "rgba(245,0,87,0.08)")}
-                                        >
-                                            🗑️
-                                        </button>
-                                    </div>
-                                </div>
-                                );
-                            })
-                        )}
-                    </div>
+                    <ContactList
+                        filteredContacts={filteredContacts}
+                        pendingContactRequests={pendingContactRequests}
+                        pendingCount={pendingCount}
+                        setActiveTab={setActiveTab}
+                        setAddContactOpen={setAddContactOpen}
+                    />
                 )}
             </div>
 
@@ -979,12 +583,7 @@ export default function Sidebar() {
                     onClose={() => setStoryModal(null)}
                 />
             )}
-            {typeof storyModal === "object" && storyModal?.type === "live" && (
-                <LiveStreamViewer
-                    streamId={storyModal.id}
-                    onClose={() => setStoryModal(null)}
-                />
-            )}
         </aside>
     );
 }
+

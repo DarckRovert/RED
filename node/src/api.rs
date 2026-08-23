@@ -1276,6 +1276,7 @@ async fn handle_create_group(
                             .unwrap()
                             .as_secs(),
                         role: red_core::protocol::MemberRole::Member,
+                        muted: false,
                     };
                     let _ = group.add_member(member);
                 }
@@ -2065,6 +2066,7 @@ async fn handle_add_group_member(
         public_key: red_core::crypto::keys::PublicKey::from_bytes(public_key_bytes),
         joined_at: 0,
         role: red_core::protocol::MemberRole::Member,
+        muted: false,
     };
     match node
         .add_group_member(red_core::protocol::GroupId(group_id_bytes), new_member)

@@ -97,6 +97,7 @@ export class WifiDirectTransport {
         }
 
         const isHttps = window.location.protocol === 'https:';
+        const isNative = typeof window !== 'undefined' && !!(window as any).Capacitor?.isNativePlatform?.();
 
         // 1. User-customized signaling URL in localStorage
         const custom = localStorage.getItem('red_signaling_url');
@@ -118,7 +119,7 @@ export class WifiDirectTransport {
         candidates.push('wss://red-signaling.onrender.com');
         candidates.push('wss://signaling.yjs.dev');
 
-        // 4. Dynamic host / LAN candidates
+        // 4. Dynamic host / LAN candidates (only if not on native device loopback)
         const proto = isHttps ? 'wss:' : 'ws:';
         const hostname = window.location.hostname;
 
@@ -126,8 +127,8 @@ export class WifiDirectTransport {
             candidates.push(`${proto}//${hostname}:3001`);
         }
 
-        // 5. Local loopback candidates (only for HTTP / dev mode)
-        if (!isHttps) {
+        // 5. Local loopback candidates (strictly for desktop browser development, never on native Android/iOS)
+        if (!isHttps && !isNative) {
             candidates.push('ws://localhost:3001');
             candidates.push('ws://127.0.0.1:3001');
         }
@@ -138,7 +139,7 @@ export class WifiDirectTransport {
 
     public getSignalingUrl(): string {
         const list = this.getSignalingCandidates();
-        return list[this.currentCandidateIndex % list.length] || 'ws://localhost:3001';
+        return list[this.currentCandidateIndex % list.length] || 'wss://red-signaling.onrender.com';
     }
 
     async connectToLocalSignaling(): Promise<void> {

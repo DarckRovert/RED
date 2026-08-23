@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { RedAPI, DmsStatusResponse, SaveDmsConfigRequest } from "../lib/api";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
@@ -9,6 +10,7 @@ import { ErrorBanner } from "./ui/ErrorBanner";
 
 export default function DMSSettings() {
     const { goBack } = useRedStore();
+    const { t } = useTranslation();
     const [config, setConfig] = useState<SaveDmsConfigRequest>({
         enabled: false,
         trigger_hours: 72,
@@ -52,48 +54,56 @@ export default function DMSSettings() {
 
     useEffect(() => {
         loadDmsStatus();
+    }, [loadDmsStatus]);
+
+    // Reloj Regresivo en Vivo
+    useEffect(() => {
+        if (!config.enabled) return;
         const interval = setInterval(() => {
             setSecondsLeft(prev => Math.max(0, prev - 1));
         }, 1000);
         return () => clearInterval(interval);
-    }, [loadDmsStatus]);
+    }, [config.enabled]);
 
+    // ── 1. Guardar Configuración ────────────────────────────────────────────────────
     const handleSave = async () => {
         setSaving(true);
         try {
             await RedAPI.saveDmsConfig(config);
-            await loadDmsStatus();
-            toast.success("💾 Protocolo Dead Man's Switch guardado en Sled DB.");
-        } catch {
-            toast.error("Error al guardar la configuración en Rust.");
+            toast.success("✅ Configuración DMS actualizada.");
+            loadDmsStatus();
+        } catch (err: any) {
+            toast.error(`❌ Error guardando DMS: ${err.message || err}`);
         } finally {
             setSaving(false);
         }
     };
 
+    // ── 2. Check-in de Presencia ───────────────────────────────────────────────────
     const handlePingPresence = async () => {
         setPinging(true);
         try {
             await RedAPI.pingDmsActivity();
-            await loadDmsStatus();
-            toast.success("🔄 Check-In confirmado: Temporizador de inactividad reiniciado.");
-        } catch {
-            toast.error("Error al registrar presencia en el nodo.");
+            toast.success("🛡️ Check-in exitoso. Temporizador reiniciado.");
+            loadDmsStatus();
+        } catch (err: any) {
+            toast.error(`❌ Error en Check-In: ${err.message || err}`);
         } finally {
             setPinging(false);
         }
     };
 
-    const handleExecutePanicWipe = async () => {
+    // ── 3. Purga Inmediata (Panic Wipe) ─────────────────────────────────────────────
+    const handleImmediateWipe = async () => {
         setIsWiping(true);
         try {
             await RedAPI.panicWipe();
-            toast.error("🚨 PURGA EJECUTADA: Todos los datos y claves han sido destruidos.");
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
-        } catch {
-            toast.error("Error durante la purga de emergencia.");
+            toast.success("⚠️ Bóveda criptográfica purgada por completo.");
+            setShowPanicModal(false);
+            goBack();
+        } catch (err: any) {
+            toast.error(`❌ Error en purga: ${err.message || err}`);
+        } finally {
             setIsWiping(false);
         }
     };
@@ -165,10 +175,10 @@ export default function DMSSettings() {
                     }}>💀</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Interruptor de Hombre Muerto (DMS)
+                            {t('dms.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: config.enabled ? "var(--accent-crimson-bright)" : "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {config.enabled ? "● PROTOCOLO ARMADO · PURGA AUTOMÁTICA" : "STANDBY · PROTOCOLO DESACTIVADO"}
+                            {config.enabled ? `● ${t('dms.status_armed')}` : `● ${t('dms.status_disarmed')}`}
                         </div>
                     </div>
                 </div>
@@ -176,7 +186,7 @@ export default function DMSSettings() {
                 <button
                     onClick={goBack}
                     className="btn-icon"
-                    title="Volver"
+                    title={t('common.close')}
                     style={{ width: 38, height: 38 }}
                 >
                     ✕
@@ -198,7 +208,7 @@ export default function DMSSettings() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div>
                                 <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", fontWeight: 700 }}>
-                                    Tiempo Restante Antes de Purga Automática
+                                    {t('dms.timer_label')}
                                 </div>
                                 <div style={{
                                     fontSize: "2.4rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace",
@@ -210,7 +220,7 @@ export default function DMSSettings() {
                             </div>
 
                             <span className={`badge-tactical ${config.enabled ? "badge-tactical-crimson" : "badge-tactical"}`}>
-                                {config.enabled ? "ARMADO" : "DESACTIVADO"}
+                                {config.enabled ? t('dms.status_armed') : t('dms.status_disarmed')}
                             </span>
                         </div>
 
@@ -233,7 +243,7 @@ export default function DMSSettings() {
                                 background: "linear-gradient(135deg, #00E676 0%, #00B359 100%)", color: "#000"
                             }}
                         >
-                            {pinging ? "Registrando presencia..." : "🔄 REGISTRAR PRESENCIA (CHECK-IN AHORA)"}
+                            {pinging ? t('common.loading') : `🔄 ${t('dms.check_in_btn')}`}
                         </button>
                     </div>
 
@@ -358,15 +368,15 @@ export default function DMSSettings() {
                                 className="btn-tactical-secondary"
                                 style={{ flex: 1, padding: "12px" }}
                             >
-                                Cancelar
+                                {t('common.cancel')}
                             </button>
                             <button
-                                onClick={handleExecutePanicWipe}
+                                onClick={handleImmediateWipe}
                                 disabled={isWiping}
                                 className="btn-tactical-primary"
                                 style={{ flex: 1, padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #990000 100%)" }}
                             >
-                                {isWiping ? "Purgando..." : "💥 Sí, Destruir Todo"}
+                                {isWiping ? t('common.loading') : "💥 Destruir Todo"}
                             </button>
                         </div>
                     </div>

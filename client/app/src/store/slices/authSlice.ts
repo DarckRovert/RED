@@ -1,0 +1,834 @@
+import { StateCreator } from 'zustand';
+import { RedStore } from '../types';
+import { IdentityResponse, StatusResponse, ConversationItem } from '../../api/types';
+import { RedAPI } from '../../api/client';
+import { localTransport } from '../../lib/mesh/localTransport';
+import { meshRouter, normalizeIdentity } from '../../lib/mesh/meshRouter';
+import { toast } from '../../components/Toast';
+import { RED_VERSION } from '../../lib/version';
+import { StateIntegrityEngine } from '../../lib/storage/StateIntegrityEngine';
+import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
+
+let _fetchInterval: ReturnType<typeof setInterval> | null = null;
+let _mainSSE: EventSource | null = null;
+let _outboundSSE: EventSource | null = null;
+let _sseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let _identityResolvedUnsub: (() => void) | null = null;
+
+export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
+    isAuthenticated: false,
+
+    isDecoyMode: false,
+
+    identity: null,
+
+    status: null,
+
+    nodeOnline: false,
+
+    login: async (password: string) => {
+        try {
+            const isDecoy = password === '9999';
+            set({ isDecoyMode: isDecoy });
+
+            const { Capacitor, registerPlugin } = await import('@capacitor/core');
+            const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+
+            if (isNative) {
+                const RedNode = registerPlugin<any>('RedNode');
+                await RedNode.start({ password, decoyMode: isDecoy });
+                console.log("[RED] Requested Rust Node boot via JNI (Decoy:", isDecoy, ")");
+                await new Promise(r => setTimeout(r, 1000));
+                const connected = await get().initNodeConnection();
+                if (connected) {
+                    set({ isAuthenticated: true });
+                    // ── Request notification permissions and register action listener ──────
+                    try {
+                        const { LocalNotifications } = await import('@capacitor/local-notifications');
+                        const perm = await LocalNotifications.checkPermissions();
+                        if (perm.display !== 'granted') {
+                            await LocalNotifications.requestPermissions();
+                        }
+                        LocalNotifications.removeAllListeners().catch(() => {});
+                        LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+                            try {
+                                const extra = notificationAction.notification?.extra;
+                                const targetPeer = extra?.peer || extra?.conversation_id || extra?.sender;
+                                if (targetPeer) {
+                                    if (get().isAuthenticated) {
+                                        get().navigate('chat', targetPeer);
+                                    } else {
+                                        set({ pendingChatNavigation: targetPeer });
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('[RED] Failed to handle notification click:', e);
+                            }
+                        });
+                    } catch (notifErr) {
+                        console.warn('[RED] LocalNotifications setup error:', notifErr);
+                    }
+
+                    const pending = get().pendingChatNavigation;
+                    if (pending) {
+                        set({ pendingChatNavigation: null });
+                        get().navigate('chat', pending);
+                    }
+                    return true;
+                }
+                return false;
+            } else {
+                // Web Browser Platform (GitHub Pages SPA)
+                const masterPin = typeof window !== 'undefined' ? (localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin")) : null;
+                const panicPin = typeof window !== 'undefined' ? localStorage.getItem("panic_pin") : null;
+                const decoyPin = typeof window !== 'undefined' ? localStorage.getItem("decoy_pin") : null;
+
+                // 1. PROTOCOLO DE PÁNICO (Purga y reinicio seguro)
+                if (panicPin && password === panicPin) {
+                    if (typeof window !== 'undefined') {
+                        localStorage.clear();
+                        sessionStorage.clear();
+                    }
+                    toast.error("🔥 BÓVEDA DESTRUIDA POR PROTOCOLO DE PÁNICO");
+                    window.location.reload();
+                    return false;
+                }
+
+                // 2. BÓVEDA DE SEÑUELO (Modo encubierto)
+                const isDecoy = Boolean(decoyPin && password === decoyPin);
+                set({ isDecoyMode: isDecoy });
+
+                // 3. VALIDACIÓN ESTRICTA DE PIN MAESTRO
+                if (masterPin && password !== masterPin && !isDecoy) {
+                    console.warn("[RED Web Auth] Acceso denegado: PIN maestro incorrecto.");
+                    return false;
+                }
+
+                // Si no había master_pin guardado aún, lo establecemos con el PIN ingresado
+                if (!masterPin && password && password.length >= 6 && typeof window !== 'undefined') {
+                    localStorage.setItem("master_pin", password);
+                }
+
+                let localHash = typeof window !== 'undefined' ? localStorage.getItem("red_identity_hash") : null;
+                let shortId = typeof window !== 'undefined' ? localStorage.getItem("red_short_id") : null;
+                const savedNick = typeof window !== 'undefined' ? (localStorage.getItem("red_displayName") || localStorage.getItem("user_nickname")) : null;
+                if (!localHash || !shortId) {
+                    const randomBytes = new Uint8Array(32);
+                    if (typeof window !== 'undefined' && window.crypto) {
+                        window.crypto.getRandomValues(randomBytes);
+                    }
+                    localHash = Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('') || "af10d57e5a4179e83b24f1c900e5";
+                    shortId = "red_" + localHash.substring(0, 10);
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem("red_identity_hash", localHash);
+                        localStorage.setItem("red_short_id", shortId);
+                    }
+                }
+                set({
+                    identity: { identity_hash: localHash, short_id: shortId, public_key: localHash, nickname: savedNick || 'Operador RED' },
+                    status: { is_running: true, peer_count: 0, identity_hash: localHash, version: `${RED_VERSION}-web`, chain_height: 1 },
+                    nodeOnline: true,
+                    isAuthenticated: true
+                });
+
+                const pending = get().pendingChatNavigation;
+                if (pending) {
+                    set({ pendingChatNavigation: null });
+                    get().navigate('chat', pending);
+                }
+
+                // Initialize Global WebRTC P2P Mesh & Blind Relay
+                localTransport.init(localHash).catch(e =>
+                    console.warn('[RED Web] Mesh init failed:', e)
+                );
+
+                // Load initial data (conversations, contacts from web storage)
+                await get().fetchData();
+
+                // Wire meshRouter local packet delivery
+                meshRouter.onLocalDelivery((packet) => {
+                    try {
+                        const payloadStr = new TextDecoder().decode(packet.payload);
+                        let parsed: any;
+                        const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
+                        try {
+                            parsed = JSON.parse(payloadStr);
+                        } catch {
+                            parsed = {
+                                id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
+                                content: payloadStr,
+                                sender: packet.sender,
+                                timestamp: normTs,
+                                is_mine: false,
+                                msg_type: 'text'
+                            };
+                        }
+                        if (parsed) {
+                            if (!parsed.sender) parsed.sender = packet.sender;
+                            if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
+                            if (!parsed.timestamp) parsed.timestamp = normTs;
+                            get().addIncomingMessage(parsed);
+                        }
+                    } catch (deliveryErr) {
+                        console.warn('[RED Web] Error handling mesh packet delivery:', deliveryErr);
+                    }
+                });
+
+                return true;
+            }
+        } catch (e) {
+            console.error("[RED] Login Error:", e);
+            // Do NOT authenticate on error — fail clearly so the user can retry.
+            set({ isAuthenticated: false, nodeOnline: false });
+            return false;
+        }
+    },
+
+    restoreCompanionVault: async (payload: any) => {
+        try {
+            if (!payload || !payload.identity || !payload.identity.identity_hash) {
+                throw new Error("Payload de vinculación inválido");
+            }
+            if (typeof window !== 'undefined') {
+                localStorage.setItem("red_identity_hash", payload.identity.identity_hash);
+                localStorage.setItem("red_short_id", payload.identity.short_id || `red_${payload.identity.identity_hash.slice(0, 8)}`);
+                if (payload.identity.nickname) {
+                    localStorage.setItem("red_displayName", payload.identity.nickname);
+                    localStorage.setItem("user_nickname", payload.identity.nickname);
+                }
+                if (payload.masterPin) {
+                    localStorage.setItem("master_pin", payload.masterPin);
+                }
+                if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
+                    localStorage.setItem("red_web_contacts", JSON.stringify(payload.contacts));
+                }
+                if (Array.isArray(payload.conversations) && payload.conversations.length > 0) {
+                    localStorage.setItem("red_web_conversations", JSON.stringify(payload.conversations));
+                }
+            }
+
+            const pinToUse = payload.masterPin || "123456";
+            await get().login(pinToUse);
+            await get().fetchData();
+            toast.success(`🎉 ¡Dispositivo vinculado con éxito! Bienvenido ${payload.identity.nickname || 'Operador'}`);
+            return true;
+        } catch (err: any) {
+            console.error("[RED] Error restaurando bóveda compañera:", err);
+            toast.error(err?.message || "Error restaurando bóveda vinculada");
+            return false;
+        }
+    },
+
+    setProfile: async (profile: string | { nickname?: string; phone_number?: string; bio?: string }) => {
+        const nickname = typeof profile === 'string' ? profile : (profile.nickname || "");
+        const phone = typeof profile === 'string' ? undefined : profile.phone_number;
+        const bio = typeof profile === 'string' ? undefined : profile.bio;
+        const cleanName = nickname.trim();
+        if (!cleanName) return;
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_displayName', cleanName);
+            localStorage.setItem('user_nickname', cleanName);
+            if (phone) {
+                localStorage.setItem('red_phoneNumber', phone);
+                localStorage.setItem('user_phone_number', phone);
+            }
+            if (bio) {
+                localStorage.setItem('red_bio', bio);
+                localStorage.setItem('user_bio', bio);
+            }
+            try {
+                import('@capacitor/core').then(({ Capacitor }) => {
+                    if (Capacitor.isNativePlatform()) {
+                        import('capacitor-secure-storage-plugin').then(({ SecureStoragePlugin }) => {
+                            SecureStoragePlugin.set({ key: "red_displayName", value: cleanName }).catch(() => null);
+                            SecureStoragePlugin.set({ key: "user_nickname", value: cleanName }).catch(() => null);
+                            if (phone) SecureStoragePlugin.set({ key: "red_phoneNumber", value: phone }).catch(() => null);
+                            if (bio) SecureStoragePlugin.set({ key: "red_bio", value: bio }).catch(() => null);
+                        });
+                    }
+                });
+            } catch {}
+        }
+        const currentIdentity = get().identity;
+        if (currentIdentity) {
+            set({ identity: { ...currentIdentity, nickname: cleanName, phone_number: phone, bio } });
+        } else {
+            const randBytes = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(16)) : new Uint8Array(16);
+            const hex = Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            set({
+                identity: {
+                    identity_hash: 'local_' + hex,
+                    short_id: cleanName.substring(0, 8).toLowerCase(),
+                    nickname: cleanName,
+                    phone_number: phone,
+                    bio
+                }
+            });
+        }
+        RedAPI.setProfile(cleanName, bio).catch(() => {});
+
+        // ── BROADCAST PROFILE UPDATE OVER MESH & TO ALL CONTACTS ─────────
+        meshRouter.sendIdentityAnnounce().catch(() => {});
+
+        const myIdentity = get().identity;
+        if (myIdentity?.identity_hash) {
+            const profilePayload = {
+                sender_hash: myIdentity.identity_hash,
+                sender_name: cleanName,
+                nickname: cleanName,
+                display_name: cleanName,
+                phone_number: phone,
+                bio: bio,
+                public_key: myIdentity.public_key || null,
+                timestamp: Date.now()
+            };
+            const payloadJson = JSON.stringify(profilePayload);
+
+            // 1. Broadcast over mesh
+            RedAPI.sendMessage('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadJson, { msg_type: 'profile_update' }).catch(() => {});
+
+            // 2. Direct message to every registered contact
+            const currentContacts = get().contacts || [];
+            for (const c of currentContacts) {
+                if (c.identity_hash && c.identity_hash !== myIdentity.identity_hash && !c.identity_hash.startsWith('00000000')) {
+                    RedAPI.sendMessage(c.identity_hash, payloadJson, { msg_type: 'profile_update' }).catch(() => {});
+                }
+            }
+            console.log(`[Store] 📡 Profile update broadcasted for ${cleanName} to ${currentContacts.length} contacts.`);
+        }
+    },
+
+    enableDecoyVault: () => {
+        const getCryptoHex = (bytes = 16) => {
+            const buf = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(bytes)) : new Uint8Array(bytes);
+            return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+        const decoySeed = (typeof window !== 'undefined' && localStorage.getItem('red_decoy_identity_seed')) || getCryptoHex(32);
+        if (typeof window !== 'undefined' && !localStorage.getItem('red_decoy_identity_seed')) {
+            try { localStorage.setItem('red_decoy_identity_seed', decoySeed); } catch {}
+        }
+        const myHash = decoySeed.slice(0, 32);
+        const contact1Hash = getCryptoHex(16);
+        const contact2Hash = getCryptoHex(16);
+        const contact3Hash = getCryptoHex(16);
+
+        const decoyIdentity = {
+            identity_hash: myHash,
+            short_id: myHash.substring(0, 8),
+            public_key: getCryptoHex(32),
+            nickname: 'Usuario Civil',
+            pow_score: 12,
+        };
+        const decoyContacts = [
+            { identity_hash: contact1Hash, display_name: 'Mamá', online: true, public_key: getCryptoHex(32) },
+            { identity_hash: contact2Hash, display_name: 'Carlos Trabajo', online: false, public_key: getCryptoHex(32) },
+            { identity_hash: contact3Hash, display_name: 'Central Servicios', online: true, public_key: getCryptoHex(32) },
+        ];
+        const decoyConvs = [
+            {
+                id: `conv_${contact1Hash.slice(0, 8)}`,
+                peer: contact1Hash,
+                unread_count: 0,
+                last_message: 'Acuérdate de comprar el pan al regresar a casa',
+                last_timestamp: Date.now() - 3600000,
+            },
+            {
+                id: `conv_${contact2Hash.slice(0, 8)}`,
+                peer: contact2Hash,
+                unread_count: 0,
+                last_message: 'Confirmado el informe para la reunión de mañana',
+                last_timestamp: Date.now() - 86400000,
+            }
+        ];
+        set({
+            isAuthenticated: true,
+            isDecoyMode: true,
+            identity: decoyIdentity,
+            nodeOnline: true,
+            contacts: decoyContacts,
+            conversations: decoyConvs,
+            messages: [
+                {
+                    id: `msg_${contact1Hash.slice(0, 6)}_1`,
+                    sender: contact1Hash,
+                    content: 'Acuérdate de comprar el pan al regresar a casa',
+                    timestamp: Date.now() - 3600000,
+                    is_mine: false,
+                    status: 'Delivered',
+                    msg_type: 'text'
+                }
+            ]
+        });
+    },
+
+    initNodeConnection: async (): Promise<boolean> => {
+        let retries = 60; // 60 retries × 1s = up to 1 minute for mobile PoW / slow boots
+        if (process.env.NODE_ENV === 'development') console.log("[RED] Initializing Node Connection...");
+        while (retries > 0) {
+            try {
+                if (process.env.NODE_ENV === 'development' && retries % 5 === 0) {
+                    console.log(`[RED] Polling Rust API... (${60 - retries}s elapsed)`);
+                }
+                const [identity, status] = await Promise.all([
+                    RedAPI.getIdentity(),
+                    RedAPI.getStatus(),
+                ]);
+
+                let savedNick = typeof window !== 'undefined' ? localStorage.getItem("red_displayName") : null;
+                if (!savedNick) {
+                    try {
+                        const { Capacitor } = await import('@capacitor/core');
+                        if (Capacitor.isNativePlatform()) {
+                            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                            const res = await SecureStoragePlugin.get({ key: "red_displayName" }).catch(() => null);
+                            if (res?.value) {
+                                savedNick = res.value;
+                                if (typeof window !== 'undefined') localStorage.setItem("red_displayName", savedNick);
+                            }
+                        }
+                    } catch {}
+                }
+
+                const finalIdentity = {
+                    ...identity,
+                    nickname: savedNick || identity.nickname || 'Operador RED'
+                };
+                
+                if (!status.is_running || status.identity_hash === 'INITIALIZING') {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.log("[RED] Node online but still in PoW — retrying...");
+                    }
+                    retries--;
+                    await new Promise(r => setTimeout(r, 1000));
+                    continue;
+                }
+
+                if (typeof window !== 'undefined' && identity.identity_hash) {
+                    localStorage.setItem("red_identity_hash", identity.identity_hash);
+                    if (identity.short_id) localStorage.setItem("red_short_id", identity.short_id);
+                }
+                try {
+                    const { Capacitor } = await import('@capacitor/core');
+                    if (Capacitor.isNativePlatform() && identity.identity_hash) {
+                        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+                        SecureStoragePlugin.set({ key: "red_identity_hash", value: identity.identity_hash }).catch(() => null);
+                        if (identity.short_id) SecureStoragePlugin.set({ key: "red_short_id", value: identity.short_id }).catch(() => null);
+                    }
+                } catch {}
+
+                set({ identity: finalIdentity, status, nodeOnline: true });
+                if (process.env.NODE_ENV === 'development') {
+                    console.log("[RED] Attached to Rust Node Natively (PoW complete):", identity.short_id);
+                }
+                
+                await get().fetchData();
+
+                // Subscribe to real-time P2P identity resolution events
+                if (_identityResolvedUnsub) { _identityResolvedUnsub(); _identityResolvedUnsub = null; }
+                _identityResolvedUnsub = meshRouter.onIdentityResolved(({ hardwareId, canonicalId, displayName, publicKey }) => {
+                    if (!canonicalId || canonicalId === get().identity?.identity_hash) return;
+                    const currentContacts = get().contacts || [];
+                    const isGeneric = (name?: string) => !name || name.startsWith('Operador ') || name.startsWith('Nodo ') || name.startsWith('Par Escaneado') || name === 'Nuevo Par' || name === 'Par Malla';
+                    const idx = currentContacts.findIndex(c => {
+                        if (!c) return false;
+                        const cHash = (c.identity_hash || '').toLowerCase();
+                        if (cHash === hardwareId.toLowerCase() || cHash === canonicalId.toLowerCase()) return true;
+                        if (displayName && !isGeneric(displayName) && !isGeneric(c.display_name)) {
+                            if (c.display_name.trim().toLowerCase() === displayName.trim().toLowerCase() ||
+                                c.display_name.trim().toLowerCase() === `red-${displayName.trim().toLowerCase()}`) return true;
+                        }
+                        return false;
+                    });
+                    if (idx >= 0) {
+                        const updated = [...currentContacts];
+                        const oldEntry = updated[idx];
+                        const oldHash = oldEntry.identity_hash;
+                        updated[idx] = {
+                            ...oldEntry,
+                            identity_hash: canonicalId,
+                            display_name: (!isGeneric(displayName)) ? displayName : oldEntry.display_name,
+                            public_key: publicKey || oldEntry.public_key
+                        };
+                        const currentConvs = get().conversations || [];
+                        let updatedConvs = [...currentConvs];
+                        if (oldHash && oldHash !== canonicalId) {
+                            updatedConvs = updatedConvs.map(conv => {
+                                if (conv.id === oldHash || conv.peer === oldHash) {
+                                    return { ...conv, id: canonicalId, peer: canonicalId };
+                                }
+                                return conv;
+                            });
+                            set({ contacts: updated, conversations: updatedConvs });
+                            RedAPI.setWebStore('red_web_conversations', updatedConvs);
+                        } else {
+                            set({ contacts: updated });
+                        }
+                        RedAPI.setWebStore('red_web_contacts', updated);
+                    }
+                });
+
+                // Run storage Merkle self-healing audit
+                StateIntegrityEngine.verifyAndHealStorage().then((audit) => {
+                    if (!audit.isHealthy && audit.corruptedRecordsFound > 0) {
+                        console.warn(`[RED] StateIntegrityEngine auto-healed ${audit.healedRecordsCount} corrupted records.`);
+                    }
+                }).catch(() => {});
+                
+                const connectSSE = () => {
+                    if (_mainSSE) { _mainSSE.close(); _mainSSE = null; }
+                    const es = RedAPI.subscribeToEvents((data) => {
+                        if (data.event_type === 'sos_beacon' && data.sos) {
+                            get().addSosBeacon(data.sos);
+                        }
+                        if (data.event_type === 'sos_resolved' && data.beacon_id) {
+                            get().resolveSosBeacon(data.beacon_id);
+                        }
+                        if (data.event_type === 'weather_alert' && data.weather) {
+                            get().addWeatherReport(data.weather);
+                        }
+                        if (data.event_type === 'channel_message' && data.channel_message) {
+                            get().addChannelMessage(data.channel_message);
+                        }
+                        if (data.event_type === 'voice_burst' && data.voice_burst) {
+                            get().addVoiceBurst(data.voice_burst);
+                        }
+                        if (data.message_item || data.payload || (data.id && data.sender) || data.msg_type || data.content) {
+                            get().addIncomingMessage(data);
+                        }
+                        if (data.event_type === 'conv_update' || data.event_type === 'contact_update') {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.log('[RED] SSE conv_update — refreshing sidebar (debounced)');
+                            }
+                            if (_sseDebounceTimer) clearTimeout(_sseDebounceTimer);
+                            _sseDebounceTimer = setTimeout(() => get().fetchData(), 500);
+                        }
+                    });
+                    _mainSSE = es;
+                    if (es) {
+                        es.onerror = () => {
+                            if (process.env.NODE_ENV === 'development') {
+                                console.warn('[RED] SSE connection lost — reconnecting in 3s...');
+                            }
+                            es.close();
+                            _mainSSE = null;
+                            setTimeout(connectSSE, 3000);
+                        };
+                    }
+                };
+                connectSSE();
+
+                if (_fetchInterval) clearInterval(_fetchInterval);
+                _fetchInterval = setInterval(() => {
+                    if (get().nodeOnline) get().fetchData();
+                    else { if (_fetchInterval) { clearInterval(_fetchInterval); _fetchInterval = null; } }
+                }, 30000);
+
+                const connectOutboundSSE = () => {
+                    if (_outboundSSE) { _outboundSSE.close(); _outboundSSE = null; }
+                    const es = new EventSource(`${RedAPI.getBaseURL()}/network/outbound`);
+                    _outboundSSE = es;
+                    es.addEventListener('mesh_payload', (e: any) => {
+                        try {
+                            const data = JSON.parse(e.data);
+                            if (data && data.payload_hex) {
+                                const hex = data.payload_hex;
+                                const buf = new Uint8Array(hex.match(/.{1,2}/g)?.map((byte: string) => parseInt(byte, 16)) || []);
+                                meshRouter.broadcast(buf).catch(() => {});
+                            }
+                        } catch (err) {
+                            console.error('[MeshRouter] Failed to parse outbound SSE payload', err);
+                        }
+                    });
+                    es.onerror = () => {
+                        console.warn('[RED] Outbound Radio SSE lost — reconnecting in 3s...');
+                        es.close();
+                        _outboundSSE = null;
+                        setTimeout(connectOutboundSSE, 3000);
+                    };
+                };
+                connectOutboundSSE();
+
+                localTransport.init(identity.identity_hash).then(() => {
+                    meshRouter.onLocalDelivery((packet) => {
+                        try {
+                            const payloadStr = new TextDecoder().decode(packet.payload);
+                            let parsed: any;
+                            const normTs = packet.timestamp ? (packet.timestamp > 1e11 ? packet.timestamp / 1000 : packet.timestamp) : Date.now() / 1000;
+                            try {
+                                parsed = JSON.parse(payloadStr);
+                            } catch {
+                                parsed = {
+                                    id: packet.nonce || `msg_${packet.sender.slice(0, 8)}_${Math.floor(normTs)}`,
+                                    content: payloadStr,
+                                    sender: packet.sender,
+                                    timestamp: normTs,
+                                    is_mine: false,
+                                    msg_type: 'text'
+                                };
+                            }
+                            if (parsed) {
+                                if (!parsed.sender) parsed.sender = packet.sender;
+                                if (parsed.timestamp && parsed.timestamp > 1e11) parsed.timestamp = parsed.timestamp / 1000;
+                                if (!parsed.timestamp) parsed.timestamp = normTs;
+                                get().addIncomingMessage(parsed);
+                            }
+                        } catch (deliveryErr) {
+                            console.warn('[RED Native] Error handling mesh packet delivery:', deliveryErr);
+                        }
+                    });
+                }).catch(err => {
+                    console.warn('[RED Native] LocalTransport init failed:', err);
+                });
+
+                return true;
+            } catch (err) {
+                retries--;
+                if (retries > 0) {
+                    await new Promise(r => setTimeout(r, 1000));
+                } else {
+                    console.warn("[RED] Rust Node unreachable after retries.");
+                    set({ nodeOnline: false });
+                    return false;
+                }
+            }
+        }
+        return false;
+    },
+
+    evaluateLocalDMS: async () => {
+        if (typeof window === 'undefined') return;
+        try {
+            const dms = RedAPI.getDmsConfig ? await RedAPI.getDmsConfig().catch(() => null) : null;
+            if (!dms || !dms.enabled) {
+                localStorage.setItem('red_last_activity', Date.now().toString());
+                return;
+            }
+
+            const lastActivityStr = localStorage.getItem('red_last_activity');
+            const now = Date.now();
+            const lastActivity = lastActivityStr ? parseInt(lastActivityStr) : now;
+
+            // Update activity timestamp on interaction
+            localStorage.setItem('red_last_activity', now.toString());
+
+            const triggerMs = (dms.trigger_hours || 72) * 3600 * 1000;
+            if (now - lastActivity > triggerMs) {
+                console.warn("[DMS] Dead Man's Switch triggered! Initiating emergency purge protocol...");
+                
+                // Broadcast posthumous message if configured
+                if (dms.dead_message && dms.dead_message.trim()) {
+                    try {
+                        await RedAPI.sendMessage('broadcast', dms.dead_message.trim(), { msg_type: 'text' }).catch(() => {});
+                    } catch {}
+                }
+
+                // Execute wipe options
+                if (dms.wipe_messages) {
+                    localStorage.removeItem('red_messages');
+                    localStorage.removeItem('red_conversations');
+                    set({ messages: [], conversations: [] });
+                }
+
+                if (dms.wipe_identity) {
+                    localStorage.clear();
+                    set({
+                        identity: null,
+                        isAuthenticated: false,
+                        messages: [],
+                        contacts: [],
+                        groups: [],
+                        conversations: []
+                    });
+                }
+            }
+        } catch (err) {
+            console.error("[DMS] Evaluation error:", err);
+        }
+    },
+
+    fetchData: async () => {
+        if (get().isDecoyMode) return;
+
+        // ── COLD BOOT INSTANT RESTORE ──────────────────────────────────────────────
+        // Immediately seed the UI from localStorage BEFORE awaiting the Rust backend.
+        // This guarantees zero perceived data loss during the seconds the native node takes to boot.
+        // The Rust response will merge on top via the bidirectional merge in api.ts.
+        if (typeof window !== 'undefined') {
+            try {
+                const snapConvs = localStorage.getItem('red_web_conversations');
+                const snapConts = localStorage.getItem('red_web_contacts');
+                const parsedConvs: ConversationItem[] = snapConvs ? JSON.parse(snapConvs) : [];
+                const parsedConts: any[] = snapConts ? JSON.parse(snapConts) : [];
+                const { conversations: currentConvs, contacts: currentConts } = get();
+                // Only populate if the in-memory store is empty (true cold boot)
+                if ((!currentConvs || currentConvs.length === 0) && parsedConvs.length > 0) {
+                    set({ conversations: parsedConvs });
+                }
+                if ((!currentConts || currentConts.length === 0) && parsedConts.length > 0) {
+                    set({ contacts: parsedConts });
+                }
+            } catch { /* ignore parse errors on corrupt localStorage */ }
+        }
+        get().evaluateLocalDMS().catch(() => {});
+        try {
+            const [convs, conts, grps] = await Promise.all([
+                RedAPI.getConversations(),
+                RedAPI.getContacts(),
+                RedAPI.getGroups()
+            ]);
+            const myHash = get().identity?.identity_hash?.toLowerCase();
+
+            // Filter out corrupt / self entries: 'me', 'local', myHash, 'Operador me'
+            const cleanConvs = (Array.isArray(convs) ? convs : []).filter((c: any) => {
+                if (!c) return false;
+                const peer = (c.peer || c.id || '').toLowerCase();
+                const name = (c.name || c.display_name || '').toLowerCase();
+                if (peer === 'me' || peer === 'local' || peer === 'unknown' || name === 'operador me') return false;
+                if (myHash && (peer === myHash || (peer.length >= 16 && myHash.startsWith(peer)))) return false;
+                if (c.last_message && (c.last_message.startsWith('{"') || c.last_message.includes('"sender_hash"') || c.last_message.includes('contact_request') || c.last_message.includes('contact_response'))) {
+                    c.last_message = 'Contacto P2P establecido';
+                }
+                return true;
+            });
+
+            // Deduplicate conversations by peer
+            const seenPeers = new Set<string>();
+            const dedupedConvs: ConversationItem[] = [];
+            for (const c of cleanConvs) {
+                const p = (c.peer || c.id || '').toLowerCase();
+                const shortP = p.slice(0, 16);
+                if (!seenPeers.has(shortP)) {
+                    seenPeers.add(shortP);
+                    dedupedConvs.push(c);
+                }
+            }
+
+            const cleanConts = (Array.isArray(conts) ? conts : []).filter((c: any) => {
+                if (!c) return false;
+                const hash = (c.identity_hash || '').toLowerCase();
+                const name = (c.display_name || '').toLowerCase();
+                if (hash === 'me' || hash === 'local' || hash === 'unknown' || name === 'operador me') return false;
+                if (myHash && (hash === myHash || (hash.length >= 16 && myHash.startsWith(hash)))) return false;
+                return true;
+            });
+
+            // Deduplicate contacts by identity_hash
+            const seenContacts = new Set<string>();
+            const dedupedConts: any[] = [];
+            for (const ct of cleanConts) {
+                const h = (ct.identity_hash || '').toLowerCase();
+                const shortH = h.slice(0, 16);
+                if (!seenContacts.has(shortH)) {
+                    seenContacts.add(shortH);
+                    dedupedConts.push(ct);
+                }
+            }
+
+            const safeGrps = Array.isArray(grps) ? grps : [];
+
+            // Purge dirty entries from Web storage
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.removeItem('red_web_messages_me');
+                    localStorage.removeItem('red_web_messages_local');
+                    const rawWebConvs = localStorage.getItem('red_web_conversations');
+                    if (rawWebConvs) {
+                        const parsed = JSON.parse(rawWebConvs);
+                        const filtered = parsed.filter((c: any) => {
+                            const p = (c.peer || c.id || '').toLowerCase();
+                            const n = (c.name || c.display_name || '').toLowerCase();
+                            return p !== 'me' && p !== 'local' && n !== 'operador me' && (!myHash || (p !== myHash && !myHash.startsWith(p)));
+                        }).map((c: any) => {
+                            if (c.last_message && (c.last_message.startsWith('{"') || c.last_message.includes('contact_request') || c.last_message.includes('contact_response'))) {
+                                c.last_message = 'Contacto P2P establecido';
+                            }
+                            return c;
+                        });
+                        localStorage.setItem('red_web_conversations', JSON.stringify(filtered));
+                    }
+                    const rawWebConts = localStorage.getItem('red_web_contacts');
+                    if (rawWebConts) {
+                        const parsed = JSON.parse(rawWebConts);
+                        const filtered = parsed.filter((c: any) => {
+                            const h = (c.identity_hash || '').toLowerCase();
+                            const n = (c.display_name || '').toLowerCase();
+                            return h !== 'me' && h !== 'local' && n !== 'operador me' && (!myHash || (h !== myHash && !myHash.startsWith(h)));
+                        });
+                        localStorage.setItem('red_web_contacts', JSON.stringify(filtered));
+                    }
+                } catch {}
+            }
+
+            // Merge backend dedupedConvs with local / in-memory conversations
+            const localConvs = get().conversations || [];
+            const mergedMap = new Map<string, ConversationItem>();
+
+            for (const c of dedupedConvs) {
+                const p = (c.peer || c.id || '').toLowerCase();
+                const key = p.slice(0, 16);
+                if (key) mergedMap.set(key, c);
+            }
+
+            for (const lc of localConvs) {
+                const p = (lc.peer || lc.id || '').toLowerCase();
+                const key = p.slice(0, 16);
+                if (!key) continue;
+                if (!mergedMap.has(key)) {
+                    mergedMap.set(key, lc);
+                } else {
+                    const existing = mergedMap.get(key)!;
+                    const existingTs = (typeof existing.last_message === 'object' && (existing.last_message as any)?.timestamp) || existing.last_timestamp || 0;
+                    const localTs = (typeof lc.last_message === 'object' && (lc.last_message as any)?.timestamp) || lc.last_timestamp || 0;
+                    if (localTs > existingTs) {
+                        mergedMap.set(key, {
+                            ...existing,
+                            last_message: lc.last_message || existing.last_message,
+                            last_timestamp: localTs,
+                            unread_count: lc.unread_count ?? existing.unread_count
+                        });
+                    }
+                }
+            }
+
+            const finalSortedConvs = Array.from(mergedMap.values())
+                .filter(c => c && !c.id.startsWith('ffffffff') && !c.peer?.startsWith('ffffffff') && !c.id.startsWith('00000000') && !c.peer?.startsWith('00000000'))
+                .sort((a, b) => {
+                const tsA = (typeof a.last_message === 'object' && (a.last_message as any)?.timestamp) || a.last_timestamp || 0;
+                const tsB = (typeof b.last_message === 'object' && (b.last_message as any)?.timestamp) || b.last_timestamp || 0;
+                const normA = tsA < 1e10 ? tsA : tsA / 1000;
+                const normB = tsB < 1e10 ? tsB : tsB / 1000;
+                return normB - normA;
+            });
+
+            const { currentScreen, activeConversationId } = get();
+            let newActiveId = activeConversationId;
+            if (currentScreen === 'chat' && activeConversationId) {
+                const matched = finalSortedConvs.find((c: any) =>
+                    c && (
+                        c.id === activeConversationId ||
+                        c.peer === activeConversationId ||
+                        (c.peer && activeConversationId.includes(c.peer.substring(0, 8))) ||
+                        (c.id && activeConversationId.includes(c.id.split('-')[1] || '____'))
+                    )
+                );
+                if (matched && matched.id && matched.id !== activeConversationId) {
+                    newActiveId = matched.id;
+                }
+            }
+
+            set({
+                conversations: finalSortedConvs,
+                contacts: dedupedConts,
+                groups: safeGrps,
+                activeConversationId: newActiveId
+            });
+        } catch {
+            // BUG-FIX: Never wipe existing data on transient network errors.
+            // Previously this destroyed all conversations/contacts on every blip.
+            // Only log silently — the UI retains last good state.
+            if (process.env.NODE_ENV === 'development') {
+                console.warn('[RED] fetchData: transient error — retaining cached data.');
+            }
+        }
+    },
+});

@@ -1209,6 +1209,7 @@ impl Node {
                 .unwrap()
                 .as_secs(),
             role: MemberRole::Admin,
+            muted: false,
         };
 
         let group = Group::create(name, creator);
@@ -1410,6 +1411,7 @@ impl Node {
                 .unwrap()
                 .as_secs(),
             role: crate::protocol::MemberRole::Member,
+            muted: false,
         };
         self.add_group_member(group_id, member).await
     }

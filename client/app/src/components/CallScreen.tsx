@@ -7,6 +7,11 @@ import { ErrorBanner } from "./ui/ErrorBanner";
 
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
 import { SettingsManager } from "../lib/settingsManager";
+import { CallVideoGrid } from "./call/CallVideoGrid";
+import { CallConnectingOverlay } from "./call/CallConnectingOverlay";
+import { CallHeader } from "./call/CallHeader";
+import { CallStatsModal } from "./call/CallStatsModal";
+import { CallControls } from "./call/CallControls";
 
 export default function CallScreen() {
     const {
@@ -937,399 +942,61 @@ export default function CallScreen() {
                 }}
             />
 
-            {/* ── VIDEO MODE RENDERING ──────────────────────────────────────── */}
-            {!isAudioOnly && (
-                <>
-                    {/* Remote Video (Full Screen - UNMUTED so remote voice/audio can be heard) */}
-                    <video
-                        ref={remoteVideoRef}
-                        autoPlay
-                        playsInline
-                        style={{
-                            position: "absolute", inset: 0,
-                            width: "100%", height: "100%",
-                            objectFit: "cover",
-                            opacity: callActive ? 1 : 0,
-                            transition: "opacity 0.6s ease-in-out",
-                            zIndex: 1,
-                            backgroundColor: "#05070e"
-                        }}
-                    />
+            {/* Video Mode Video Grid */}
+            <CallVideoGrid
+                isAudioOnly={isAudioOnly}
+                callActive={callActive}
+                facingMode={facingMode}
+                camMuted={camMuted}
+                remoteVideoRef={remoteVideoRef}
+                localVideoRef={localVideoRef}
+            />
 
-                    {/* Local Video (Floating Tactical PIP - MUTED to prevent local acoustic feedback) */}
-                    <video
-                        ref={localVideoRef}
-                        autoPlay playsInline muted
-                        style={{
-                            position: "absolute",
-                            top: "calc(64px + var(--safe-top, 0px))",
-                            right: "16px",
-                            width: "115px",
-                            height: "160px",
-                            borderRadius: "18px",
-                            objectFit: "cover",
-                            border: "2px solid var(--accent-cyan)",
-                            boxShadow: "0 12px 36px rgba(0,0,0,0.85), 0 0 16px rgba(0,229,255,0.3)",
-                            zIndex: 10,
-                            transform: facingMode === "user" ? "scaleX(-1)" : "none",
-                            backgroundColor: "#0a0e1a",
-                            display: camMuted ? "none" : "block"
-                        }}
-                    />
-                </>
-            )}
+            {/* Audio-Only Mode Or Connecting Overlay */}
+            <CallConnectingOverlay
+                isAudioOnly={isAudioOnly}
+                callActive={callActive}
+                status={status}
+                peerDisplayName={peerDisplayName}
+                vadLevel={vadLevel}
+                waveformCanvasRef={waveformCanvasRef}
+            />
 
-            {/* ── AUDIO-ONLY MODE OR CONNECTING OVERLAY ───────────────────────── */}
-            {(isAudioOnly || !callActive) && (
-                <div style={{
-                    position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center",
-                    background: "radial-gradient(circle at center, #0f1426 0%, #05070e 100%)",
-                    zIndex: 5, padding: "24px"
-                }}>
-                    {status.startsWith("Error") ? (
-                        <div style={{ width: "100%", maxWidth: "420px" }}>
-                            <ErrorBanner message={status} />
-                        </div>
-                    ) : (
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", maxWidth: "380px" }}>
-                            {/* Animated Sonar Avatar */}
-                            <div style={{ position: "relative", width: "130px", height: "130px", marginBottom: "28px" }}>
-                                {[1, 2, 3].map(i => (
-                                    <div key={i} style={{
-                                        position: "absolute", inset: 0, borderRadius: "50%",
-                                        border: isAudioOnly ? "2px solid rgba(0,230,118,0.35)" : "2px solid rgba(0,229,255,0.35)",
-                                        animation: `sonar-ring 2.4s ease-out ${i * 0.6}s infinite`
-                                    }} />
-                                ))}
-                                <div style={{
-                                    position: "absolute", inset: "8px", borderRadius: "50%",
-                                    background: isAudioOnly
-                                        ? "linear-gradient(135deg, rgba(0,230,118,0.25) 0%, rgba(0,180,90,0.4) 100%)"
-                                        : "linear-gradient(135deg, rgba(0,229,255,0.25) 0%, rgba(0,150,200,0.4) 100%)",
-                                    border: isAudioOnly ? "2px solid var(--accent-emerald)" : "2px solid var(--accent-cyan)",
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    boxShadow: isAudioOnly ? "0 0 32px rgba(0,230,118,0.4)" : "0 0 32px rgba(0,229,255,0.4)",
-                                    transform: `scale(${1 + (vadLevel / 350)})`,
-                                    transition: "transform 0.08s ease-out"
-                                }}>
-                                    <span style={{ fontSize: "2.6rem", fontWeight: 900, color: "white" }}>
-                                        {peerDisplayName.charAt(0).toUpperCase()}
-                                    </span>
-                                </div>
-                            </div>
+            {/* Top Tactical HUD Bar */}
+            <CallHeader
+                isAudioOnly={isAudioOnly}
+                callActive={callActive}
+                callDuration={callDuration}
+                formatDuration={formatDuration}
+                setCallPipMinimized={setCallPipMinimized}
+                goBack={goBack}
+                showStats={showStats}
+                setShowStats={setShowStats}
+                statsData={statsData}
+            />
 
-                            <h2 style={{ color: "#fff", fontSize: "1.5rem", fontWeight: 900, marginBottom: "8px", textAlign: "center", letterSpacing: "0.5px" }}>
-                                {peerDisplayName}
-                            </h2>
-
-                            <div style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                padding: "4px 12px",
-                                borderRadius: "var(--radius-full)",
-                                background: "rgba(255,255,255,0.05)",
-                                border: "1px solid rgba(255,255,255,0.1)",
-                                marginBottom: "20px"
-                            }}>
-                                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: callActive ? "var(--accent-emerald)" : "var(--accent-amber)", boxShadow: callActive ? "0 0 8px #00E676" : "0 0 8px #FFA726" }} />
-                                <span style={{
-                                    color: callActive ? "var(--accent-emerald)" : "var(--accent-amber)",
-                                    fontSize: "0.75rem",
-                                    fontFamily: "JetBrains Mono, monospace",
-                                    fontWeight: 700,
-                                    letterSpacing: "1.5px"
-                                }}>
-                                    {status.toUpperCase()}
-                                </span>
-                            </div>
-
-                            {/* Tactical Live Audio FFT Waveform */}
-                            {isAudioOnly && callActive && (
-                                <div style={{ width: "100%", marginTop: "10px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                                    <canvas
-                                        ref={waveformCanvasRef}
-                                        width={280}
-                                        height={55}
-                                        style={{ width: "100%", height: "55px", borderRadius: "12px", background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.06)" }}
-                                    />
-                                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginTop: "6px", fontSize: "0.65rem", color: "rgba(255,255,255,0.4)", fontFamily: "JetBrains Mono, monospace" }}>
-                                        <span>MODULACIÓN VOCAL: {vadLevel}%</span>
-                                        <span>OPUS 48kHz STEREO</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* ── TOP TACTICAL HUD BAR ──────────────────────────────────────── */}
-            <div style={{
-                position: "absolute", top: "calc(16px + var(--safe-top, 0px))", left: "16px", right: "16px",
-                zIndex: 20, display: "flex", alignItems: "center", justifyContent: "space-between"
-            }}>
-                <div style={{
-                    display: "flex", alignItems: "center", gap: "10px",
-                    background: "rgba(8,12,24,0.88)", padding: "8px 16px",
-                    borderRadius: "var(--radius-full)", backdropFilter: "blur(20px)",
-                    border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.6)"
-                }}>
-                    <span style={{ color: "var(--accent-emerald)", fontSize: "0.75rem", fontWeight: 900, letterSpacing: "0.5px" }}>
-                        🔒 {isAudioOnly ? "VOZ E2E" : "HD VIDEO E2E"}
-                    </span>
-                    {callActive && (
-                        <span style={{ color: "white", fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
-                            · {formatDuration(callDuration)}
-                        </span>
-                    )}
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {/* PIP Floating Minimize Button */}
-                    <button
-                        onClick={() => {
-                            setCallPipMinimized(true);
-                            goBack();
-                        }}
-                        style={{
-                            background: "rgba(8,12,24,0.88)",
-                            color: "var(--accent-cyan)",
-                            border: "1px solid rgba(0,229,255,0.3)",
-                            borderRadius: "var(--radius-full)",
-                            padding: "8px 14px",
-                            fontSize: "0.75rem",
-                            fontWeight: 800,
-                            fontFamily: "JetBrains Mono, monospace",
-                            cursor: "pointer",
-                            backdropFilter: "blur(20px)",
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px"
-                        }}
-                        title="Minimizar llamada a PIP flotante para chatear"
-                    >
-                        🗗 PIP
-                    </button>
-
-                    {/* Telemetry HUD Toggle Button */}
-                    <button
-                        onClick={() => setShowStats(!showStats)}
-                        style={{
-                            background: showStats ? "var(--accent-cyan)" : "rgba(8,12,24,0.88)",
-                            color: showStats ? "#000" : "white",
-                            border: "1px solid rgba(255,255,255,0.15)",
-                            borderRadius: "var(--radius-full)",
-                            padding: "8px 14px",
-                            fontSize: "0.75rem",
-                            fontWeight: 800,
-                            fontFamily: "JetBrains Mono, monospace",
-                            cursor: "pointer",
-                            backdropFilter: "blur(20px)",
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px"
-                        }}
-                    >
-                        📊 {statsData.rttMs}ms
-                    </button>
-                </div>
-            </div>
-
-            {/* ── LIVE TELEMETRY MODAL / OVERLAY ────────────────────────────── */}
+            {/* Live Telemetry Modal / Overlay */}
             {showStats && (
-                <div style={{
-                    position: "absolute", top: "calc(70px + var(--safe-top, 0px))", left: "16px",
-                    background: "rgba(10,14,28,0.95)", border: "1px solid var(--accent-cyan)",
-                    borderRadius: "16px", padding: "14px 18px", zIndex: 25,
-                    backdropFilter: "blur(24px)", boxShadow: "0 12px 48px rgba(0,0,0,0.8)",
-                    fontFamily: "JetBrains Mono, monospace", fontSize: "0.72rem", color: "white",
-                    display: "flex", flexDirection: "column", gap: "6px", width: "240px"
-                }}>
-                    <div style={{ color: "var(--accent-cyan)", fontWeight: 900, borderBottom: "1px solid rgba(0,229,255,0.2)", paddingBottom: "4px" }}>
-                        TELEMETRÍA WEBRTC
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Latencia (RTT):</span>
-                        <span style={{ color: "var(--accent-emerald)", fontWeight: 800 }}>{statsData.rttMs} ms</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Pérdida Paquetes:</span>
-                        <span style={{ color: statsData.packetLossPct > 2 ? "var(--accent-crimson)" : "var(--accent-emerald)", fontWeight: 800 }}>
-                            {statsData.packetLossPct}%
-                        </span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Bitrate Audio:</span>
-                        <span>{statsData.audioBitrateKbps} kbps</span>
-                    </div>
-                    {!isAudioOnly && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255,255,255,0.6)" }}>Bitrate Video:</span>
-                            <span>{statsData.videoBitrateKbps} kbps</span>
-                        </div>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Códec Audio:</span>
-                        <span style={{ color: "var(--accent-amber)" }}>{statsData.audioCodec}</span>
-                    </div>
-                    {!isAudioOnly && (
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "rgba(255,255,255,0.6)" }}>Códec Video:</span>
-                            <span style={{ color: "var(--accent-cyan)" }}>{statsData.videoCodec}</span>
-                        </div>
-                    )}
-                </div>
+                <CallStatsModal
+                    statsData={statsData}
+                    isAudioOnly={isAudioOnly}
+                />
             )}
 
-            {/* ── FLOATING TACTICAL CONTROL BAR ─────────────────────────────── */}
-            <div style={{
-                position: "absolute", bottom: "calc(32px + var(--safe-bottom, 0px))", left: "50%",
-                transform: "translateX(-50%)",
-                display: "flex", gap: "14px", alignItems: "center",
-                background: "rgba(8,12,24,0.94)",
-                padding: "14px 24px", borderRadius: "var(--radius-full)",
-                backdropFilter: "blur(28px)",
-                boxShadow: "0 16px 56px rgba(0,0,0,0.9)",
-                border: "1px solid rgba(255,255,255,0.15)", zIndex: 20
-            }}>
-                {/* 1. Mute Microphone */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
-                    <button
-                        onClick={toggleMic}
-                        style={{
-                            width: "50px", height: "50px", borderRadius: "50%",
-                            background: micMuted ? "rgba(255,51,85,0.85)" : "rgba(255,255,255,0.08)",
-                            color: "white", fontSize: "1.3rem",
-                            border: `2px solid ${micMuted ? "var(--accent-crimson)" : "rgba(255,255,255,0.18)"}`,
-                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            boxShadow: micMuted ? "0 4px 16px rgba(255,51,85,0.4)" : "none",
-                            transition: "all 0.2s"
-                        }}
-                        title={micMuted ? "Activar Micrófono" : "Silenciar Micrófono"}
-                    >
-                        {micMuted ? "🔇" : "🎤"}
-                    </button>
-                    <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                        {micMuted ? "Mute" : "Mic"}
-                    </span>
-                </div>
-
-                {/* 2. Toggle Camera (Video Mode Only) */}
-                {!isAudioOnly && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
-                        <button
-                            onClick={toggleCam}
-                            style={{
-                                width: "50px", height: "50px", borderRadius: "50%",
-                                background: camMuted ? "rgba(255,51,85,0.85)" : "rgba(255,255,255,0.08)",
-                                color: "white", fontSize: "1.3rem",
-                                border: `2px solid ${camMuted ? "var(--accent-crimson)" : "rgba(255,255,255,0.18)"}`,
-                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                                boxShadow: camMuted ? "0 4px 16px rgba(255,51,85,0.4)" : "none",
-                                transition: "all 0.2s"
-                            }}
-                            title={camMuted ? "Activar Cámara" : "Apagar Cámara"}
-                        >
-                            {camMuted ? "🚫" : "📹"}
-                        </button>
-                        <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                            {camMuted ? "Off" : "Cam"}
-                        </span>
-                    </div>
-                )}
-
-                {/* 3. Switch Front / Rear Camera (Video Mode Only) */}
-                {!isAudioOnly && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
-                        <button
-                            onClick={switchCamera}
-                            style={{
-                                width: "50px", height: "50px", borderRadius: "50%",
-                                background: "rgba(255,255,255,0.08)",
-                                color: "var(--accent-cyan)", fontSize: "1.3rem",
-                                border: "2px solid rgba(0,229,255,0.3)",
-                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                                transition: "all 0.2s"
-                            }}
-                            title="Cambiar Cámara Frontal / Trasera"
-                        >
-                            🔄
-                        </button>
-                        <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>Girar</span>
-                    </div>
-                )}
-
-                {/* 4. Speakerphone Toggle */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
-                    <button
-                        onClick={toggleSpeaker}
-                        style={{
-                            width: "50px", height: "50px", borderRadius: "50%",
-                            background: isSpeakerOn ? "rgba(0,230,118,0.15)" : "rgba(255,255,255,0.08)",
-                            color: isSpeakerOn ? "var(--accent-emerald)" : "white",
-                            fontSize: "1.3rem",
-                            border: `2px solid ${isSpeakerOn ? "var(--accent-emerald)" : "rgba(255,255,255,0.18)"}`,
-                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            transition: "all 0.2s"
-                        }}
-                        title={isSpeakerOn ? "Altavoz Activado" : "Auricular / Volumen Normal"}
-                    >
-                        {isSpeakerOn ? "🔊" : "🔈"}
-                    </button>
-                    <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                        {isSpeakerOn ? "Altavoz" : "Auricular"}
-                    </span>
-                </div>
-
-                {/* 5. Screen Share (Video Mode Only) */}
-                {!isAudioOnly && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
-                        <button
-                            onClick={toggleScreenShare}
-                            style={{
-                                width: "50px", height: "50px", borderRadius: "50%",
-                                background: isScreenSharing ? "rgba(0,229,255,0.25)" : "rgba(255,255,255,0.08)",
-                                color: isScreenSharing ? "var(--accent-cyan)" : "white",
-                                fontSize: "1.3rem",
-                                border: `2px solid ${isScreenSharing ? "var(--accent-cyan)" : "rgba(255,255,255,0.18)"}`,
-                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                                transition: "all 0.2s"
-                            }}
-                            title={isScreenSharing ? "Detener Pantalla" : "Compartir Pantalla"}
-                        >
-                            💻
-                        </button>
-                        <span style={{ fontSize: "0.60rem", color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>
-                            {isScreenSharing ? "Compartiendo" : "Pantalla"}
-                        </span>
-                    </div>
-                )}
-
-                {/* 6. HANG UP CALL — Primary Action */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", marginLeft: "4px" }}>
-                    <button
-                        onClick={handleUserEndCall}
-                        style={{
-                            width: "66px", height: "66px", borderRadius: "50%",
-                            background: "linear-gradient(135deg, #FF3355 0%, #C0152A 100%)",
-                            color: "white", fontSize: "1.8rem",
-                            border: "none",
-                            boxShadow: "0 8px 32px rgba(232,33,58,0.7)",
-                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            transform: "rotate(135deg)",
-                            transition: "all 0.15s active"
-                        }}
-                        title="Finalizar Llamada"
-                    >
-                        📞
-                    </button>
-                    <span style={{ fontSize: "0.60rem", color: "var(--accent-crimson)", fontWeight: 800 }}>Colgar</span>
-                </div>
-            </div>
+            {/* Floating Tactical Control Bar */}
+            <CallControls
+                micMuted={micMuted}
+                toggleMic={toggleMic}
+                camMuted={camMuted}
+                toggleCam={toggleCam}
+                switchCamera={switchCamera}
+                isAudioOnly={isAudioOnly}
+                isSpeakerOn={isSpeakerOn}
+                toggleSpeaker={toggleSpeaker}
+                isScreenSharing={isScreenSharing}
+                toggleScreenShare={toggleScreenShare}
+                handleUserEndCall={handleUserEndCall}
+            />
         </div>
     );
 }

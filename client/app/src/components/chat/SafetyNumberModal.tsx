@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRedStore } from "../../store/useRedStore";
+import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { RedAPI } from "../../lib/api";
 import { toast } from "../Toast";
 
@@ -69,6 +70,7 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
     onVerifiedChange,
 }) => {
     const { identity, contacts, fetchData } = useRedStore();
+    const { t } = useTranslation();
     const [blocks, setBlocks] = useState<string[]>([]);
     const [isVerified, setIsVerified] = useState(initialVerified);
     const [isScanning, setIsScanning] = useState(false);
@@ -150,7 +152,7 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                             <span style={{ fontSize: "1.2rem" }}>🛡️</span>
                             <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#FFFFFF" }}>
-                                Número de Seguridad Criptográfico
+                                {t('safety_number.title')}
                             </h2>
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
@@ -166,7 +168,7 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({
                     background: "rgba(255,255,255,0.03)", padding: "10px 12px",
                     borderRadius: "var(--radius-sm)", border: "1px solid var(--glass-border)"
                 }}>
-                    Compara este número de 60 dígitos o el código de verificación con el dispositivo de <strong>{peerName}</strong> para garantizar que la comunicación E2E es impenetrable y libre de intermediarios (MITM).
+                    {t('safety_number.instructions')}
                 </div>
 
                 {/* 60-digit Matrix Display */}

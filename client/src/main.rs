@@ -613,6 +613,7 @@ async fn handle_group(action: GroupAction) -> anyhow::Result<()> {
                     public_key: [0u8; 32].into(),
                     joined_at: 0,
                     role: MemberRole::Member,
+                    muted: false,
                 },
             };
             

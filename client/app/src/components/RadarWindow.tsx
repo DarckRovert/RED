@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 import { localTransport } from "../lib/mesh/localTransport";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
@@ -11,6 +12,7 @@ type RadarTab = "qr" | "radar" | "manual";
 
 export default function RadarWindow() {
     const { goBack, identity, addContact, navigate } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<RadarTab>("qr");
     const [scanning, setScanning] = useState(false);
     const [nearbyPeers, setNearbyPeers] = useState<any[]>([]);
@@ -61,10 +63,11 @@ export default function RadarWindow() {
     const handleAddPeer = async (peer: any) => {
         const targetId = meshRouter.getCanonicalId(peer.id || peer.address || "");
         const finalName = peer.name && !peer.name.startsWith("Nodo ") ? peer.name : `Nodo ${targetId.slice(0, 6)}`;
+        const pk = peer.publicKey || peer.public_key || null;
         try {
-            await addContact(targetId, finalName);
+            const resolvedHash = await addContact(targetId, finalName, pk);
             toast.success(`Añadido ${finalName}`);
-            navigate("chat", targetId);
+            navigate("chat", resolvedHash || targetId);
         } catch (e: any) {
             toast.error(e?.message || "Error al conectar con el par");
         }
@@ -124,14 +127,16 @@ export default function RadarWindow() {
                     }
                 } else if (raw.startsWith("did:red:")) {
                     try {
-                        const parts = raw.split(":");
-                        cleanHash = meshRouter.getCanonicalId(parts[2] || "");
-                        pubKey = parts[3] || null;
-                        if (parts[4]) {
+                        const withoutScheme = raw.replace(/^did:red:/i, '');
+                        const parts = withoutScheme.split(":");
+                        const rawHash = parts[0] ? parts[0].trim() : "";
+                        cleanHash = meshRouter.getCanonicalId(rawHash) || rawHash;
+                        pubKey = parts[1] ? parts[1].trim() : null;
+                        if (parts[2]) {
                             try {
-                                scannedName = decodeURIComponent(parts[4]);
+                                scannedName = decodeURIComponent(parts[2].trim());
                             } catch {
-                                scannedName = parts[4];
+                                scannedName = parts[2].trim();
                             }
                         } else {
                             scannedName = `Operador ${cleanHash.slice(0, 6)}`;
@@ -141,7 +146,7 @@ export default function RadarWindow() {
                         toast.error(`Error al interpretar QR: ${msg}`);
                     }
                 } else {
-                    cleanHash = meshRouter.getCanonicalId(raw);
+                    cleanHash = meshRouter.getCanonicalId(raw) || raw;
                     scannedName = `Operador ${cleanHash.slice(0, 6)}`;
                 }
 
@@ -180,7 +185,7 @@ export default function RadarWindow() {
     const copyToClipboard = (text: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
-            toast.success("Copiado al portapapeles");
+            toast.success(t('common.copied'));
         }
     };
 
@@ -201,10 +206,10 @@ export default function RadarWindow() {
                     width: "90%"
                 }}>
                     <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
-                        <span>🤝</span> ESCÁNER DE CONTACTO P2P
+                        <span>🤝</span> {t('radar.scanner_title')}
                     </div>
                     <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.75)", marginTop: "4px", lineHeight: 1.3 }}>
-                        Apunta al código QR del perfil o bóveda de otro usuario para iniciar chat cifrado
+                        {t('radar.scanner_desc')}
                     </div>
                 </div>
 
@@ -222,7 +227,7 @@ export default function RadarWindow() {
                         borderRadius: "var(--radius-md)"
                     }}
                 >
-                    ✕ Cancelar Escaneo
+                    {t('radar.cancel_scan')}
                 </button>
             </div>
         );
@@ -254,10 +259,10 @@ export default function RadarWindow() {
                     }}>📡</div>
                     <div>
                         <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Radar de Nodos & Reconocimiento P2P
+                            {t('radar.title')}
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            SWARM DISCOVERY · ED25519 QR INTEROPERABLE
+                            {t('radar.subtitle')}
                         </div>
                     </div>
                 </div>
@@ -268,12 +273,12 @@ export default function RadarWindow() {
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 12px", fontSize: "0.78rem" }}
                     >
-                        🗺️ Mapa
+                        {t('radar.map_btn')}
                     </button>
                     <button
                         onClick={goBack}
                         className="btn-icon"
-                        title="Cerrar radar"
+                        title={t('common.close')}
                         style={{ width: 38, height: 38 }}
                     >
                         ✕
@@ -294,21 +299,21 @@ export default function RadarWindow() {
                     className={activeTab === "qr" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📷 Mi Tarjeta QR
+                    {t('radar.tab_qr')}
                 </button>
                 <button
                     onClick={() => setActiveTab("radar")}
                     className={activeTab === "radar" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    📡 Radar BLE ({nearbyPeers.length})
+                    {t('radar.tab_ble')} ({nearbyPeers.length})
                 </button>
                 <button
                     onClick={() => setActiveTab("manual")}
                     className={activeTab === "manual" ? "glow-pill-active" : "btn-ghost"}
                     style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
                 >
-                    ➕ Agregar Contacto
+                    {t('radar.tab_manual')}
                 </button>
             </div>
 
@@ -337,7 +342,7 @@ export default function RadarWindow() {
                                     <img src={qrDataUrl} alt="Mi QR RED" style={{ width: "240px", height: "240px", display: "block", borderRadius: "8px" }} />
                                 ) : (
                                     <div style={{ width: "240px", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                                        Generando QR...
+                                        {t('common.loading')}
                                     </div>
                                 )}
                             </div>
@@ -353,7 +358,7 @@ export default function RadarWindow() {
                                     display: "flex", alignItems: "center", justifyContent: "center", gap: "10px"
                                 }}
                             >
-                                📷 ABRIR ESCÁNER QR DE CÁMARA
+                                {t('radar.scan_scanner_btn')}
                             </button>
 
                             {/* DID y Botón de Copiar */}
@@ -368,7 +373,7 @@ export default function RadarWindow() {
                                     className="btn-tactical-secondary"
                                     style={{ padding: "8px 14px", fontSize: "0.78rem" }}
                                 >
-                                    📋 Copiar
+                                    {t('radar.copy_did')}
                                 </button>
                             </div>
                         </div>
@@ -392,16 +397,16 @@ export default function RadarWindow() {
 
                             {/* Lista de Nodos Detectados */}
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>Nodos BLE Detectados ({nearbyPeers.length})</div>
+                                <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>{t('radar.ble_active_nodes')} ({nearbyPeers.length})</div>
                                 <span className="badge-tactical badge-tactical-emerald">SWARM ACTIVE</span>
                             </div>
 
                             {nearbyPeers.length === 0 ? (
                                 <div className="empty-state-tactical">
                                     <div className="empty-state-icon">📡</div>
-                                    <div className="empty-state-title">Escaneando Espectro Cercano...</div>
+                                    <div className="empty-state-title">{t('radar.ble_searching')}</div>
                                     <div className="empty-state-desc">
-                                        Buscando balizas Bluetooth Low Energy de otros teléfonos RED.
+                                        {t('radar.scanning')}
                                     </div>
                                 </div>
                             ) : (
@@ -427,13 +432,13 @@ export default function RadarWindow() {
                                                         const finalId = (peerRec?.canonicalId && peerRec.canonicalId.length === 64) ? peerRec.canonicalId : targetId;
                                                         const finalName = p.name && !p.name.startsWith("Nodo ") ? p.name : (peerRec?.name || p.name);
                                                         const resolved = await addContact(finalId, finalName, peerRec?.publicKey);
-                                                        toast.success(`Añadido ${finalName}`);
+                                                        toast.success(t('radar.add_success'));
                                                         navigate("chat", resolved || finalId);
                                                     }}
                                                     className="btn-tactical-secondary"
                                                     style={{ padding: "6px 12px", fontSize: "0.76rem" }}
                                                 >
-                                                    + Añadir
+                                                    {t('radar.ble_pair')}
                                                 </button>
                                             </div>
                                         </div>
@@ -453,25 +458,25 @@ export default function RadarWindow() {
                                 style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", borderColor: "var(--accent-emerald)", background: "rgba(0,230,118,0.06)" }}
                             >
                                 <span style={{ fontSize: "2.4rem" }}>📷</span>
-                                <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-emerald)" }}>ABRIR ESCÁNER QR DE CÁMARA</span>
-                                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>Apunta al código QR de otro par o de la pantalla de RED Web</span>
+                                <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-emerald)" }}>{t('radar.scan_scanner_btn')}</span>
+                                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>{t('radar.manual_desc')}</span>
                             </button>
 
                             {/* Entrada Manual de ID */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>O ingresa el identificador o código de vinculación:</div>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>{t('radar.manual_title')}</div>
 
                                 <input
                                     value={manualHash}
                                     onChange={e => setManualHash(e.target.value)}
-                                    placeholder="Hash SHA-256 (64 hex), did:red:... o RED_PAIR:..."
+                                    placeholder={t('radar.manual_placeholder')}
                                     style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem" }}
                                 />
 
                                 <input
                                     value={manualName}
                                     onChange={e => setManualName(e.target.value)}
-                                    placeholder="Alias o nombre para el contacto (opcional)"
+                                    placeholder={t('radar.alias_placeholder')}
                                 />
 
                                 <button
@@ -483,12 +488,12 @@ export default function RadarWindow() {
                                             return;
                                         }
                                         setIsAdding(true);
-                                        setAddingStatus("Verificando nodo...");
+                                        setAddingStatus(t('radar.adding'));
                                         const nameToSend = manualName.trim() || "Nuevo Par";
                                         try {
-                                            await addContact(hashToSent, nameToSend);
-                                            toast.success("✅ Contacto añadido correctamente.");
-                                            navigate("chat", hashToSent);
+                                            const resolvedHash = await addContact(hashToSent, nameToSend);
+                                            toast.success(t('radar.add_success'));
+                                            navigate("chat", resolvedHash || hashToSent);
                                         } catch (err) {
                                             const msg = err instanceof Error ? err.message : String(err);
                                             toast.error(`❌ ${msg}`);
@@ -500,7 +505,7 @@ export default function RadarWindow() {
                                     className="btn-tactical-primary"
                                     style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
                                 >
-                                    {isAdding ? addingStatus || "Añadiendo..." : "➕ AÑADIR CONTACTO O VINCULAR"}
+                                    {isAdding ? addingStatus || t('common.loading') : t('radar.add_btn')}
                                 </button>
                             </div>
                         </div>
