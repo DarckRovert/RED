@@ -188,6 +188,9 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         localStorage.setItem("red_short_id", shortId);
                     }
                 }
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem("red_landing_dismissed", "true");
+                }
                 set({
                     identity: { identity_hash: localHash, short_id: shortId, public_key: localHash, nickname: savedNick || 'Operador RED' },
                     status: { is_running: true, peer_count: 0, identity_hash: localHash, version: `${RED_VERSION}-web`, chain_height: 1 },
@@ -269,6 +272,9 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 if (Array.isArray(payload.conversations) && payload.conversations.length > 0) {
                     localStorage.setItem("red_web_conversations", JSON.stringify(payload.conversations));
                 }
+                localStorage.setItem("red_landing_dismissed", "true");
+                localStorage.setItem("profile_created", "true");
+                localStorage.setItem("red_onboarding_completed", "true");
             }
 
             const pinToUse = payload.masterPin || "123456";
