@@ -169,12 +169,22 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     storage.open()?;
     let storage = Arc::new(Mutex::new(storage));
 
-    // Get identity
+    // Get identity (auto-generate sovereign identity if first run)
     let identity = {
-        let s = storage.lock().await;
-        s.get_identity().ok_or_else(|| {
-            anyhow::anyhow!("No identity found. Run 'red-node identity generate' first.")
-        })?
+        let mut s = storage.lock().await;
+        match s.get_identity() {
+            Some(id) => {
+                info!("Loaded existing sovereign identity: did:red:{}", id.identity_hash().to_hex());
+                id
+            }
+            None => {
+                info!("No previous identity found. Generating new sovereign identity...");
+                let new_id = Identity::generate().map_err(|e| anyhow::anyhow!("Failed to generate identity: {}", e))?;
+                s.set_identity(new_id.clone())?;
+                info!("Generated and saved new sovereign identity: did:red:{}", new_id.identity_hash().to_hex());
+                new_id
+            }
+        }
     };
 
     // Initialize blockchain
@@ -515,22 +525,23 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     let listener = TcpListener::bind(api_addr).await?;
     info!("Local API server listening on {}", api_addr);
 
-    info!("\n╔════════════════════════════════════════════════╗");
-    info!("║  🔴 RED Node is running                        ║");
-    info!("║                                                ║");
-    info!("║  Port (P2P):  {:5}                           ║", port);
-    info!("║  Port (TCP API): {:5}                        ║", 7332);
-    info!("║  Port (Web UI):  {:5}                        ║", 7333);
-    info!("║                                                ║");
-    info!("║  Abre en tu navegador:                        ║");
-    info!("║  http://localhost:7333                         ║");
-    info!("║                                                ║");
-    info!(
-        "║  Chain height: {:5}                          ║",
-        chain.height()
-    );
-    info!("╚════════════════════════════════════════════════╝");
-    info!("Presiona Ctrl+C para parar.");
+    info!("\n╔═════════════════════════════════════════════════════════════════════════╗");
+    info!("║  🛡️  RED SOVEREIGN NODE v{:<44} ║", env!("CARGO_PKG_VERSION"));
+    info!("║                                                                         ║");
+    info!("║  Identidad:       did:red:{:<43} ║", identity.identity_hash().short());
+    info!("║  Puerto P2P:      {:5} (Malla libp2p & Kademlia DHT)                  ║", port);
+    info!("║  Puerto TCP API:  {:5} (Control de Daemon)                            ║", 7332);
+    info!("║  Puerto Web/SSE:  {:5} (REST API & WebRTC Engine)                     ║", 7333);
+    info!("║                                                                         ║");
+    info!("║  🌐 Interfaz Web Soberana:                                              ║");
+    info!("║     https://darckrovert.github.io/RED/                                  ║");
+    info!("║                                                                         ║");
+    info!("║  🔗 Dashboard Local:                                                    ║");
+    info!("║     http://127.0.0.1:7333/api/status                                    ║");
+    info!("║                                                                         ║");
+    info!("║  Altura de Cadena: {:<5} bloques                                        ║", chain.height());
+    info!("╚═════════════════════════════════════════════════════════════════════════╝");
+    info!("💡 Nodo activo y operando. Presiona Ctrl+C para detener.");
 
     // Simple API loop
     loop {
