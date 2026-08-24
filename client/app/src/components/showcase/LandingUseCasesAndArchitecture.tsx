@@ -38,7 +38,7 @@ export const LandingUseCasesAndArchitecture: React.FC<LandingUseCasesAndArchitec
             </p>
           </div>
 
-          <div style={{ maxWidth: "920px", margin: "0 auto" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto" }}>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center", marginBottom: "24px" }}>
               {[
                 { id: "disasters", label: "🌪️ Desastres Naturales & Sismos" },
@@ -150,7 +150,7 @@ export const LandingUseCasesAndArchitecture: React.FC<LandingUseCasesAndArchitec
             </p>
           </div>
 
-          <div style={{ maxWidth: "920px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px", marginBottom: "40px" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px", marginBottom: "40px" }}>
             <div style={{ padding: "24px", borderRadius: "18px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 240, 255, 0.4)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                 <div style={{ fontSize: "17px", fontWeight: 800, color: "#00F0FF" }}>CAPA 1: PRESENTACIÓN FRONTEND (SPA)</div>
@@ -193,7 +193,7 @@ export const LandingUseCasesAndArchitecture: React.FC<LandingUseCasesAndArchitec
           </div>
 
           {/* Developer Protocol & Code Viewer */}
-          <div id="dev-terminal" style={{ maxWidth: "920px", margin: "0 auto", padding: "26px", borderRadius: "24px", background: "rgba(3,5,8,0.95)", border: "1px solid rgba(255,255,255,0.1)" }}>
+          <div id="dev-terminal" style={{ maxWidth: "1160px", margin: "0 auto", padding: "26px", borderRadius: "24px", background: "rgba(3,5,8,0.95)", border: "1px solid rgba(255,255,255,0.1)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
               <div style={{ fontSize: "16px", fontWeight: 800, color: "#FFF" }}>💻 Protocolos de Código Abierto (Código Real)</div>
               <div style={{ display: "flex", gap: "6px" }}>

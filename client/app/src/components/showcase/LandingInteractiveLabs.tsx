@@ -296,7 +296,7 @@ export const LandingInteractiveLabs: React.FC = () => {
 
           <div
             style={{
-              maxWidth: "920px",
+              maxWidth: "1160px",
               margin: "0 auto",
               padding: "26px",
               borderRadius: "24px",
@@ -401,7 +401,7 @@ export const LandingInteractiveLabs: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 184, 0, 0.35)" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 184, 0, 0.35)" }}>
             <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
               <button
                 onClick={() => setSoundMode("audible")}
@@ -510,7 +510,7 @@ export const LandingInteractiveLabs: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.35)" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.35)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginBottom: "20px" }}>
               <div
                 onClick={() => setPqcAlgorithm("kyber")}
@@ -613,7 +613,7 @@ export const LandingInteractiveLabs: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.35)" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.35)" }}>
             <div style={{ marginBottom: "16px" }}>
               <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>1. ¿El paciente puede caminar?</div>
               <div style={{ display: "flex", gap: "10px" }}>
@@ -757,7 +757,7 @@ export const LandingInteractiveLabs: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ maxWidth: "860px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.35)" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.35)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
               <span style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Prueba de Handshake:</span>
               <button
@@ -869,7 +869,7 @@ export const LandingInteractiveLabs: React.FC = () => {
             {isBlackout ? "⚡ MODO APAGÓN ACTIVADO (Sin Internet / Solo Radios de Hardware)" : "🌐 Modo Normal (Hacer clic para simular Apagón / EMP)"}
           </button>
 
-          <div style={{ width: "100%", maxWidth: "800px", margin: "0 auto", background: "#030508", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: "1160px", margin: "0 auto", background: "#030508", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
             <canvas ref={radarCanvasRef} style={{ width: "100%", height: "440px", display: "block" }} />
           </div>
         </section>

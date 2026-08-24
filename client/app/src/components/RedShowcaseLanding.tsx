@@ -154,10 +154,10 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     }, []);
 
     return (
-        <div style={{ minHeight: "100vh", background: "var(--bg-void, #05050A)", color: "var(--text-primary, #E0E0E6)", fontFamily: "Inter, sans-serif", position: "relative", overflowX: "hidden" }}>
+        <div style={{ width: "100%", minHeight: "100vh", background: "var(--bg-void, #05050A)", color: "var(--text-primary, #E0E0E6)", fontFamily: "Inter, sans-serif", position: "relative", overflowX: "hidden", display: "flex", flexDirection: "column" }}>
             <canvas ref={canvasRef} style={{ position: "fixed", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 0 }} />
 
-            <div style={{ position: "relative", zIndex: 1 }}>
+            <div style={{ position: "relative", zIndex: 1, width: "100%" }}>
                 <LandingHeader
                     activeSection={activeSection}
                     scrollToSection={scrollToSection}
@@ -169,7 +169,7 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
                     onEnterApp={handleEnter}
                 />
 
-                <main style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 24px" }}>
+                <main style={{ maxWidth: "1680px", width: "100%", margin: "0 auto", padding: "0 clamp(20px, 4vw, 56px)" }}>
                     <LandingHero
                         heroAlias={heroAlias}
                         heroDidHash={heroDidHash}

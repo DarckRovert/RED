@@ -153,11 +153,17 @@ svg, .decorative-icon, .pulsing-dot, .pulsing-dot::after {
 /* ─── Core Container ─────────────────────────────────────────────────────────── */
 .app-container {
   display: flex;
-  height: 100svh;
-  width: 100vw;
+  flex-direction: column;
+  min-height: 100svh;
+  width: 100%;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
   background: var(--bg-void);
+}
+
+body.native-app .app-container {
+  height: 100svh;
+  overflow: hidden;
 }
 
 /* ─── Tactical Card System (v6.0 Standard) ───────────────────────────────────── */

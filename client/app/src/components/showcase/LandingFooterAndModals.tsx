@@ -24,7 +24,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
         <section id="download" style={{ padding: "60px 0" }}>
           <div
             style={{
-              maxWidth: "920px",
+              maxWidth: "1160px",
               margin: "0 auto",
               padding: "36px",
               borderRadius: "24px",
@@ -51,7 +51,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                 <h2 style={{ fontSize: "28px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "6px" }}>
                   Descarga Oficial de Producción
                 </h2>
-                <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.5, maxWidth: "600px" }}>
+                <div style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.5, maxWidth: "800px" }}>
                   Instalador nativo firmado para arquitectura ARM64 (`arm64-v8a`). Probado exhaustivamente en hardware real (Motorola Moto G22 + Tablet Lenovo Tab).
                 </div>
               </div>
@@ -103,10 +103,10 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
 
             <div style={{ padding: "16px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
               <div style={{ fontSize: "12px", fontFamily: "monospace", color: "#94A3B8" }}>
-                <span style={{ color: "#00F0FF" }}>SHA-256:</span> a8f93e7b1c4d29e083fa567bcde2018274619a0bc45ef6781290abcdef123456
+                <span style={{ color: "#00F0FF" }}>SHA-256:</span> eac9d59ba3c840d2e306d41a1193d786dcc0fff69495f55d6bf088aac43ff519
               </div>
               <button
-                onClick={() => handleCopy("a8f93e7b1c4d29e083fa567bcde2018274619a0bc45ef6781290abcdef123456")}
+                onClick={() => handleCopy("eac9d59ba3c840d2e306d41a1193d786dcc0fff69495f55d6bf088aac43ff519")}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "8px",
@@ -125,7 +125,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
         </section>
 
         <section id="faq" style={{ padding: "60px 0" }}>
-          <div style={{ maxWidth: "840px", margin: "0 auto" }}>
+          <div style={{ maxWidth: "1160px", margin: "0 auto" }}>
             <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", textAlign: "center", marginBottom: "24px" }}>
               Preguntas Frecuentes
             </h2>

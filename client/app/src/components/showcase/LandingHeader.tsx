@@ -46,7 +46,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
           backdropFilter: "blur(20px)",
           background: "rgba(3, 5, 8, 0.92)",
           borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-          padding: "10px 24px",
+          padding: "10px clamp(20px, 3.5vw, 48px)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",

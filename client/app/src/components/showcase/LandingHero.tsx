@@ -50,11 +50,11 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
 
           <h1
             style={{
-              fontSize: "clamp(34px, 5.5vw, 62px)",
+              fontSize: "clamp(34px, 5vw, 64px)",
               fontWeight: 900,
               color: "#FFF",
               lineHeight: 1.1,
-              maxWidth: "960px",
+              maxWidth: "1180px",
               marginBottom: "20px",
               letterSpacing: "-1px",
             }}
@@ -66,7 +66,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
             style={{
               fontSize: "17px",
               color: "#94A3B8",
-              maxWidth: "800px",
+              maxWidth: "960px",
               lineHeight: 1.6,
               marginBottom: "36px",
             }}
@@ -78,7 +78,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
           <div
             style={{
               width: "100%",
-              maxWidth: "760px",
+              maxWidth: "920px",
               padding: "26px",
               borderRadius: "24px",
               background: "rgba(15, 23, 42, 0.85)",
@@ -160,7 +160,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
           <div
             style={{
               width: "100%",
-              maxWidth: "960px",
+              maxWidth: "1180px",
               borderRadius: "24px",
               overflow: "hidden",
               border: "1px solid rgba(255, 42, 81, 0.3)",
