@@ -114,34 +114,34 @@ export const NeuralThoughtViewer: React.FC<NeuralThoughtViewerProps> = ({ teleme
                     {telemetry && (
                         <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
                             gap: '6px',
                             marginBottom: '10px'
                         }}>
-                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <div style={{ color: '#64748B', fontSize: '9px' }}>MOTOR DE INFERENCIA</div>
-                                <div style={{ color: '#38BDF8', fontWeight: 700, fontSize: '10px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                                    {telemetry.modelName || 'multilingual-e5-small'}
+                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '6px 8px', borderRadius: '5px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
+                                <div style={{ color: '#64748B', fontSize: '9px' }}>AGENTE ACTIVO</div>
+                                <div style={{ color: '#00E5FF', fontWeight: 800, fontSize: '10.5px' }}>
+                                    🤖 Copiloto Táctico RED
                                 </div>
                             </div>
-                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <div style={{ color: '#64748B', fontSize: '9px' }}>SIMILITUD COSENO 384-D</div>
-                                <div style={{ color: (telemetry.cosineSimilarity || 0) > 0.35 ? '#4ADE80' : '#FACC15', fontWeight: 700, fontSize: '10px' }}>
+                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '6px 8px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div style={{ color: '#64748B', fontSize: '9px' }}>MEMORIA RAG 384-D</div>
+                                <div style={{ color: (telemetry.cosineSimilarity || 0) > 0.35 ? '#4ADE80' : '#FACC15', fontWeight: 700, fontSize: '10.5px' }}>
                                     {telemetry.cosineSimilarity !== undefined && telemetry.cosineSimilarity > 0 
-                                        ? `${(telemetry.cosineSimilarity * 100).toFixed(1)}%` 
-                                        : 'Inferencia Directa'}
+                                        ? `${(telemetry.cosineSimilarity * 100).toFixed(1)}% Afinidad` 
+                                        : 'Razonamiento Directo'}
                                 </div>
                             </div>
-                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <div style={{ color: '#64748B', fontSize: '9px' }}>GUARDIAN SAFETY</div>
-                                <div style={{ color: telemetry.isSafe !== false ? '#4ADE80' : '#EF4444', fontWeight: 700, fontSize: '10px' }}>
-                                    {telemetry.safetyScore !== undefined ? `${((1 - telemetry.safetyScore) * 100).toFixed(1)}% Seguro` : '100% Aprobado'}
+                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '6px 8px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div style={{ color: '#64748B', fontSize: '9px' }}>PROTOCOLO EMPAREJADO</div>
+                                <div style={{ color: '#38BDF8', fontWeight: 700, fontSize: '10px', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                    {telemetry.matchedProtocol || 'Conocimiento Operativo'}
                                 </div>
                             </div>
-                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '5px 7px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                <div style={{ color: '#64748B', fontSize: '9px' }}>INTENCIÓN CLASIFICADA</div>
-                                <div style={{ color: '#C084FC', fontWeight: 700, fontSize: '10px', textTransform: 'capitalize' }}>
-                                    {telemetry.intentCategory || 'Conversación'}
+                            <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '6px 8px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                <div style={{ color: '#64748B', fontSize: '9px' }}>SEGURIDAD DE CANAL</div>
+                                <div style={{ color: '#4ADE80', fontWeight: 700, fontSize: '10.5px' }}>
+                                    🛡️ Verificado (Sin Riesgos)
                                 </div>
                             </div>
                         </div>

@@ -443,8 +443,8 @@ export const AICopilotModal: React.FC = () => {
         const initialMsg: ChatMessage = {
             id: "initial_ai_msg",
             sender: "ai",
-            text: "🤖 Historial reiniciado. Copiloto IA listo para nuevas instrucciones.",
-            modelTag: activeModel ? activeModel.name : "Motor RAG MiniLM (100% Offline)",
+            text: "🤖 Historial reiniciado. Copiloto Táctico RED listo para nuevas directivas.",
+            modelTag: activeModel ? activeModel.name : "Copiloto Táctico RED (100% Offline)",
             timestamp: Date.now()
         };
         setMessages([initialMsg]);
@@ -480,11 +480,11 @@ export const AICopilotModal: React.FC = () => {
                     }}>🤖</div>
                     <div>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ fontSize: "0.92rem", fontWeight: 800, letterSpacing: "0.5px" }}>{t.copilot?.title?.toUpperCase() || "COPILOTO IA SOBERANO"}</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 800, letterSpacing: "0.5px" }}>{t.copilot?.title?.toUpperCase() || "COPILOTO TÁCTICO RED"}</span>
                             <span className="badge-live-cyan" style={{ fontSize: "0.62rem", padding: "2px 6px" }}>100% OFFLINE</span>
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                            Motor: <span style={{ color: "var(--accent-cyan)", fontWeight: 700 }}>{activeModel?.name || "RAG Táctico MiniLM"}</span>
+                            Motor: <span style={{ color: "var(--accent-cyan)", fontWeight: 700 }}>{activeModel?.name || "Copiloto Táctico (RAG 384-D + SmolLM2)"}</span>
                         </div>
                     </div>
                 </div>
