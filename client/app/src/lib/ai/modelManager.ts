@@ -468,6 +468,136 @@ class ModelManagerClass {
         }
     }
 
+    /**
+     * Sideloading Offline: Importa un archivo .gguf directamente desde almacenamiento local (SD, USB OTG, Descargas)
+     * sin requerir conexión a internet. Valida el encabezado mágico GGUF (0x46554747).
+     */
+    public async importModelFromLocalFile(
+        file: File,
+        onProgress?: (progress: number, loadedBytes: number, totalBytes: number) => void
+    ): Promise<LocalModelMetaData> {
+        const fileName = file.name;
+        if (!fileName.toLowerCase().endsWith('.gguf')) {
+            throw new Error('El archivo debe tener extensión .gguf');
+        }
+
+        const cleanId = `custom-${fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+        const fileSizeMb = Math.round(file.size / (1024 * 1024));
+
+        try {
+            await Filesystem.mkdir({
+                path: 'models',
+                directory: Directory.Data,
+                recursive: true
+            });
+        } catch {}
+
+        const targetFilePath = `models/${fileName}`;
+        const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
+        const totalBytes = file.size;
+        let offset = 0;
+        let isFirstWrite = true;
+
+        // Validar cabecera mágica GGUF (primeros 4 bytes: 'G', 'G', 'U', 'F')
+        const headerSlice = file.slice(0, 4);
+        const headerBuf = await headerSlice.arrayBuffer();
+        const headerBytes = new Uint8Array(headerBuf);
+        const isGguf = headerBytes[0] === 0x47 && headerBytes[1] === 0x47 && headerBytes[2] === 0x55 && headerBytes[3] === 0x46;
+        if (!isGguf) {
+            throw new Error('El archivo no tiene una cabecera GGUF válida.');
+        }
+
+        while (offset < totalBytes) {
+            const nextOffset = Math.min(offset + CHUNK_SIZE, totalBytes);
+            const slice = file.slice(offset, nextOffset);
+            const arrayBuf = await slice.arrayBuffer();
+            const chunkBytes = new Uint8Array(arrayBuf);
+            const base64Data = uint8ArrayToBase64(chunkBytes);
+
+            if (isFirstWrite) {
+                await Filesystem.writeFile({
+                    path: targetFilePath,
+                    data: base64Data,
+                    directory: Directory.Data
+                });
+                isFirstWrite = false;
+            } else {
+                await Filesystem.appendFile({
+                    path: targetFilePath,
+                    data: base64Data,
+                    directory: Directory.Data
+                });
+            }
+
+            offset = nextOffset;
+            const progress = Math.min(100, Math.round((offset / totalBytes) * 100));
+            if (onProgress) {
+                onProgress(progress, offset, totalBytes);
+            }
+        }
+
+        let localUri = `models/${fileName}`;
+        try {
+            const uriResult = await Filesystem.getUri({
+                path: targetFilePath,
+                directory: Directory.Data
+            });
+            localUri = uriResult.uri;
+        } catch {}
+
+        const newModel: LocalModelMetaData = {
+            id: cleanId,
+            name: fileName.replace(/\.gguf$/i, ''),
+            description: `📂 Modelo importado localmente (${fileSizeMb} MB). Inferencia GGUF ARM64 100% offline.`,
+            parameterCount: fileSizeMb < 400 ? '0.5B' : fileSizeMb < 1200 ? '1.5B' : '3B+',
+            fileSizeMb,
+            downloadUrl: '',
+            fileName,
+            recommendedMinRamMb: Math.round(fileSizeMb * 1.5),
+            isDownloaded: true,
+            downloadProgress: 100,
+            localPath: localUri
+        };
+
+        this.models.set(cleanId, newModel);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(`red_model_${cleanId}_ready`, 'true');
+            localStorage.setItem(`red_model_${cleanId}_path`, localUri);
+            localStorage.setItem('red_active_model_id', cleanId);
+        }
+
+        console.log(`[ModelManager] ✅ Modelo importado con éxito: ${newModel.name} (${fileSizeMb} MB)`);
+        return newModel;
+    }
+
+    /**
+     * Exporta un modelo descargado para compartirlo P2P con otro dispositivo vía Web Share API / Wi-Fi Direct
+     */
+    public async exportModel(modelId: string): Promise<boolean> {
+        const model = this.models.get(modelId);
+        if (!model || !model.isDownloaded) return false;
+
+        try {
+            const targetFilePath = `models/${model.fileName}`;
+            const uriResult = await Filesystem.getUri({
+                path: targetFilePath,
+                directory: Directory.Data
+            });
+
+            const { Share } = await import('@capacitor/share');
+            await Share.share({
+                title: `Modelo Neuronal RED: ${model.name}`,
+                text: `Transferencia P2P de modelo offline ${model.name} (${model.fileSizeMb} MB) para Copiloto IA de RED.`,
+                url: uriResult.uri,
+                dialogTitle: 'Compartir Modelo Neuronal P2P'
+            });
+            return true;
+        } catch (e) {
+            console.warn('[ModelManager] Error exportando modelo P2P:', e);
+            return false;
+        }
+    }
+
     /** Returns total storage used by downloaded models in MB */
     public getTotalStorageUsedMb(): number {
         let total = 0;

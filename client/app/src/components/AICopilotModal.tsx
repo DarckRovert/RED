@@ -142,6 +142,9 @@ export const AICopilotModal: React.FC = () => {
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [downloadProgress, setDownloadProgress] = useState<number>(0);
     const [downloadBytes, setDownloadBytes] = useState<{ loaded: number; total: number }>({ loaded: 0, total: 0 });
+    const [isImportingModel, setIsImportingModel] = useState(false);
+    const [importProgress, setImportProgress] = useState<number>(0);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // Translator State
     const [targetLang, setTargetLang] = useState<GlossaryLanguage>("en");
@@ -390,6 +393,38 @@ export const AICopilotModal: React.FC = () => {
             toast.success("Modelo eliminado para liberar espacio");
         } else {
             toast.error("No se pudo eliminar el archivo");
+        }
+    };
+
+    const handleImportGgufFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        setIsImportingModel(true);
+        setImportProgress(0);
+        try {
+            toast.info(`Importando modelo local: ${file.name}...`);
+            const imported = await ModelManager.importModelFromLocalFile(file, (progress) => {
+                setImportProgress(progress);
+            });
+            await refreshModels();
+            handleSelectModel(imported.id);
+            toast.success(`✅ Modelo ${imported.name} importado y activado`);
+        } catch (err: any) {
+            toast.error(err?.message || "Error al importar archivo GGUF");
+        } finally {
+            setIsImportingModel(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
+    const handleExportModel = async (modelId: string) => {
+        toast.info("Preparando paquete P2P...");
+        const ok = await ModelManager.exportModel(modelId);
+        if (ok) {
+            toast.success("✅ Modelo compartido vía P2P / AirDrop");
+        } else {
+            toast.error("No se pudo iniciar la transferencia P2P");
         }
     };
 
@@ -914,6 +949,55 @@ export const AICopilotModal: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Banner de Sideloading Offline P2P */}
+                            <div style={{
+                                padding: "12px",
+                                background: "rgba(0, 229, 255, 0.05)",
+                                border: "1px dashed rgba(0, 229, 255, 0.3)",
+                                borderRadius: "8px",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "8px"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                            📂 SIDELOADING OFFLINE (USB OTG / SD / P2P)
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                                            Importa cualquier modelo .GGUF desde tu almacenamiento sin conexión a internet.
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isImportingModel}
+                                        className="btn-tactical-primary"
+                                        style={{ padding: "6px 12px", fontSize: "0.74rem" }}
+                                    >
+                                        {isImportingModel ? `Importando ${importProgress}%...` : "📂 Cargar .GGUF"}
+                                    </button>
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".gguf"
+                                        style={{ display: "none" }}
+                                        onChange={handleImportGgufFile}
+                                    />
+                                </div>
+                                {isImportingModel && (
+                                    <div style={{
+                                        height: "4px", width: "100%", background: "rgba(255,255,255,0.1)",
+                                        borderRadius: "2px", overflow: "hidden"
+                                    }}>
+                                        <div style={{
+                                            height: "100%", width: `${importProgress}%`,
+                                            background: "linear-gradient(90deg, #00E5FF, #4ADE80)",
+                                            transition: "width 0.2s"
+                                        }} />
+                                    </div>
+                                )}
+                            </div>
+
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                                 {availableModels.map(model => {
                                     const isActive = activeModel?.id === model.id;
@@ -951,6 +1035,14 @@ export const AICopilotModal: React.FC = () => {
                                                                 style={{ padding: "6px 12px", fontSize: "0.74rem" }}
                                                             >
                                                                 {isActive ? "Activo" : "Seleccionar"}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleExportModel(model.id)}
+                                                                className="btn-ghost"
+                                                                style={{ padding: "6px 8px", fontSize: "0.74rem", color: "var(--accent-cyan)" }}
+                                                                title="Compartir modelo vía P2P / AirDrop"
+                                                            >
+                                                                📤
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteModel(model.id)}
