@@ -278,16 +278,29 @@ export default function AppRouter() {
         const { Capacitor } = await import("@capacitor/core");
         if (Capacitor.isNativePlatform()) {
           setShowLanding(false);
+          return;
+        }
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("showcase") === "true") {
+          setShowLanding(true);
+          return;
+        }
+
+        const isDismissed = typeof window !== "undefined" && localStorage.getItem("red_landing_dismissed") === "true";
+        const hasSession = typeof window !== "undefined" && Boolean(
+          localStorage.getItem("master_pin") || 
+          localStorage.getItem("red_identity_hash") || 
+          localStorage.getItem("user_nickname")
+        );
+
+        if (urlParams.get("app") === "true" || isDismissed || hasSession) {
+          setShowLanding(false);
         } else {
-          const urlParams = new URLSearchParams(window.location.search);
-          if (urlParams.get("app") === "true") {
-            setShowLanding(false);
-          } else {
-            setShowLanding(true);
-          }
+          setShowLanding(true);
         }
       } catch {
-        setShowLanding(true);
+        setShowLanding(false);
       }
     };
 
@@ -401,7 +414,12 @@ export default function AppRouter() {
   if (showLanding) {
     return (
       <ErrorBoundary>
-        <RedShowcaseLanding onEnterVault={() => setShowLanding(false)} />
+        <RedShowcaseLanding onEnterVault={() => {
+          if (typeof window !== "undefined") {
+            localStorage.setItem("red_landing_dismissed", "true");
+          }
+          setShowLanding(false);
+        }} />
       </ErrorBoundary>
     );
   }

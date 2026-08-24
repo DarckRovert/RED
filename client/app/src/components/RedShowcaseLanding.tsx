@@ -56,10 +56,21 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
     };
 
     const handleLaunchWithHeroAlias = async () => {
-        if (heroAlias.trim()) {
-            try {
-                await setProfile(heroAlias.trim());
-            } catch {}
+        const finalAlias = heroAlias.trim() || `Operador_${heroDidHash.slice(8, 14)}`;
+        try {
+            await setProfile(finalAlias);
+            if (typeof window !== "undefined") {
+                const hexOnly = heroDidHash.replace(/^did:red:/i, "").toLowerCase();
+                if (!localStorage.getItem("red_identity_hash")) {
+                    localStorage.setItem("red_identity_hash", hexOnly);
+                    localStorage.setItem("red_short_id", `red_${hexOnly.slice(0, 8)}`);
+                }
+                localStorage.setItem("profile_created", "true");
+                localStorage.setItem("red_onboarding_completed", "true");
+                localStorage.setItem("red_landing_dismissed", "true");
+            }
+        } catch (e) {
+            console.warn("Error setting profile on hero launch:", e);
         }
         handleEnter();
     };

@@ -14,7 +14,7 @@ interface WebCompanionLinkModalProps {
 type ModalMode = "receive_qr" | "send_scan" | "manual" | "encrypting" | "receiving" | "success" | "error";
 
 export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ onClose }) => {
-    const { identity, contacts, conversations, fetchData } = useRedStore();
+    const { identity, contacts, conversations, fetchData, restoreCompanionVault } = useRedStore();
     const { t } = useTranslation();
 
     const [isNativeMobile, setIsNativeMobile] = useState(false);
@@ -43,7 +43,10 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 }
             }
         }).catch(() => {
-            if (isMounted) setMode("receive_qr");
+            if (isMounted) {
+                setIsNativeMobile(false);
+                setMode("receive_qr");
+            }
         });
 
         return () => {
@@ -68,34 +71,25 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                     TacticalAudioEngine.playMessageSent();
 
                     try {
-                        if (typeof window !== "undefined") {
-                            if (payload.identity) {
-                                localStorage.setItem("user_identity_v1", JSON.stringify(payload.identity));
-                            }
-                            if (payload.masterPin) {
-                                localStorage.setItem("master_pin", payload.masterPin);
-                            }
-                            if (payload.contacts) {
-                                localStorage.setItem("red_contacts_v1", JSON.stringify(payload.contacts));
-                            }
-                            if (payload.conversations) {
-                                localStorage.setItem("red_conversations_v1", JSON.stringify(payload.conversations));
-                            }
+                        const ok = await restoreCompanionVault(payload);
+                        if (ok) {
+                            if (fetchData) await fetchData();
+                            toast.success("🎉 ¡Bóveda sincronizada con éxito desde el móvil!");
+                            setMode("success");
+                            setStatusMessage("Sesión Web vinculada y activa.");
+
+                            setTimeout(() => {
+                                if (isMounted) {
+                                    onClose();
+                                }
+                            }, 1500);
+                        } else {
+                            setMode("error");
+                            setStatusMessage("Error al validar datos de la bóveda");
                         }
-
-                        if (fetchData) await fetchData();
-                        toast.success("🎉 ¡Bóveda sincronizada con éxito desde el móvil!");
-                        setMode("success");
-                        setStatusMessage("Sesión Web vinculada y activa.");
-
-                        setTimeout(() => {
-                            if (isMounted) {
-                                onClose();
-                                window.location.reload();
-                            }
-                        }, 1800);
                     } catch (e: any) {
                         toast.error("Error al persistir bóveda en navegador");
+                        setMode("error");
                     }
                 },
                 (err: string) => {

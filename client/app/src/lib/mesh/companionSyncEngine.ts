@@ -102,15 +102,13 @@ async function decryptData(key: CryptoKey, ivHex: string, cipherHex: string): Pr
 
 const MQTT_BROKERS = [
     "wss://broker.emqx.io:8084/mqtt",
-    "wss://broker.hivemq.com:8884/mqtt",
-    "wss://test.mosquitto.org:8081"
+    "wss://broker.hivemq.com:8884/mqtt"
 ];
 
-// Índice de broker codificado en el QR (0-2) para que el móvil use el mismo
+// Índice de broker codificado en el QR (0-1) para que el móvil use el mismo
 const BROKER_INDEX_MAP: Record<string, string> = {
     "0": "wss://broker.emqx.io:8084/mqtt",
-    "1": "wss://broker.hivemq.com:8884/mqtt",
-    "2": "wss://test.mosquitto.org:8081"
+    "1": "wss://broker.hivemq.com:8884/mqtt"
 };
 
 // ── Lightweight Zero-Dependency MQTT v3.1.1 Client ───────────────────────────
@@ -122,6 +120,18 @@ class SimpleMqttClient {
     private onMessageCb: ((topic: string, payload: string) => void) | null = null;
 
     constructor(private brokerUrl: string) {}
+
+    private encodeRemainingLength(len: number): number[] {
+        const lenBytes: number[] = [];
+        let l = len;
+        do {
+            let digit = l % 128;
+            l = Math.floor(l / 128);
+            if (l > 0) digit = digit | 0x80;
+            lenBytes.push(digit);
+        } while (l > 0);
+        return lenBytes;
+    }
 
     public connect(onOpen: () => void, onError: (err: any) => void): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -140,7 +150,7 @@ class SimpleMqttClient {
                     this.close();
                     reject(new Error(`Timeout conectando a broker ${this.brokerUrl}`));
                 }
-            }, 8000);
+            }, 12000);
 
             this.ws.onopen = () => {
                 this.sendConnect();
@@ -194,7 +204,8 @@ class SimpleMqttClient {
         const payload = [(topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes, 0x00];
 
         const remainingLength = varHeader.length + payload.length;
-        const packet = new Uint8Array([0x82, remainingLength, ...varHeader, ...payload]);
+        const lenBytes = this.encodeRemainingLength(remainingLength);
+        const packet = new Uint8Array([0x82, ...lenBytes, ...varHeader, ...payload]);
         this.ws.send(packet);
     }
 
@@ -205,16 +216,7 @@ class SimpleMqttClient {
 
         const varHeader = [(topicBytes.length >> 8) & 0xff, topicBytes.length & 0xff, ...topicBytes];
         const remainingLength = varHeader.length + payloadBytes.length;
-
-        // Encode remaining length
-        const lenBytes: number[] = [];
-        let l = remainingLength;
-        do {
-            let digit = l % 128;
-            l = Math.floor(l / 128);
-            if (l > 0) digit = digit | 0x80;
-            lenBytes.push(digit);
-        } while (l > 0);
+        const lenBytes = this.encodeRemainingLength(remainingLength);
 
         const packet = new Uint8Array([0x30, ...lenBytes, ...varHeader, ...payloadBytes]);
         this.ws.send(packet);
@@ -238,7 +240,8 @@ class SimpleMqttClient {
         const payload = [(clientBytes.length >> 8) & 0xff, clientBytes.length & 0xff, ...clientBytes];
 
         const remainingLength = varHeader.length + payload.length;
-        const packet = new Uint8Array([0x10, remainingLength, ...varHeader, ...payload]);
+        const lenBytes = this.encodeRemainingLength(remainingLength);
+        const packet = new Uint8Array([0x10, ...lenBytes, ...varHeader, ...payload]);
         this.ws.send(packet);
     }
 
@@ -409,8 +412,13 @@ class CompanionSyncEngineClass {
         const sessionId = parts[2];
         const webPubKeyHex = parts[3];
         const expiresAt = parseInt(parts[4], 10);
-        // El broker está en parts[5] si existe (formato v2). Default a 0 si no.
-        const brokerIdx = parts[6] ? parseInt(parts[6], 10) : (parts[5] ? parseInt(parts[5], 10) : -1);
+        let brokerIdx = -1;
+        if (parts.length >= 6 && parts[5] !== undefined && parts[5].trim() !== "") {
+            const parsed = parseInt(parts[5].trim(), 10);
+            if (!isNaN(parsed) && parsed >= 0) {
+                brokerIdx = parsed;
+            }
+        }
 
         if (Date.now() > expiresAt) {
             throw new Error("El código QR ha caducado. Genera uno nuevo en la web.");

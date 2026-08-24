@@ -34,7 +34,6 @@ export class MqttRelayTransport {
   private static readonly BROKER_POOL: string[] = [
     'wss://broker.emqx.io:8084/mqtt',
     'wss://broker.hivemq.com:8884/mqtt',
-    'wss://test.mosquitto.org:8081',
   ];
 
   private cleanId(raw: string): string {
