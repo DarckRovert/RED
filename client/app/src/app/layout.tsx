@@ -11,6 +11,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
+
   useEffect(() => {
     const applyNativeOverrides = async () => {
       try {
@@ -25,7 +27,8 @@ export default function RootLayout({
         } else {
           // Registrar Service Worker para PWA en entorno Web
           if ("serviceWorker" in navigator && window.location.protocol.startsWith("http")) {
-            navigator.serviceWorker.register("/sw.js")
+            const swPath = `${basePath}/sw.js`;
+            navigator.serviceWorker.register(swPath)
               .then((reg) => console.log("[RED PWA] Service Worker registrado con éxito:", reg.scope))
               .catch((err) => console.warn("[RED PWA] Error al registrar Service Worker:", err));
           }
@@ -38,7 +41,7 @@ export default function RootLayout({
     };
     
     applyNativeOverrides();
-  }, []);
+  }, [basePath]);
 
   return (
     <html lang="es" className="dark">
@@ -50,9 +53,9 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="RED" />
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/red_icon.png" />
-        <link rel="apple-touch-icon" href="/red_icon.png" />
+        <link rel="manifest" href={`${basePath}/manifest.json`} />
+        <link rel="icon" href={`${basePath}/red_icon.png`} />
+        <link rel="apple-touch-icon" href={`${basePath}/red_icon.png`} />
         <script
           dangerouslySetInnerHTML={{
             __html: `
