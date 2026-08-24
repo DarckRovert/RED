@@ -82,3 +82,6 @@ wasm-check-log.txt
 scratch/
 git_history*.txt
 implementation_plan.md
+__next.*.txt
+__next.*
+index.txt

@@ -1,5 +1,6 @@
 import { StateCreator } from 'zustand';
 import { RedStore } from '../types';
+import { getSocialPosts } from '../../api';
 
 export const createSocialSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     socialPosts: [],
@@ -10,8 +11,23 @@ export const createSocialSlice: StateCreator<RedStore, [], [], Partial<RedStore>
 
     loadSocialFeed: async () => {
         try {
-            const res = typeof window !== 'undefined' ? localStorage.getItem('red_social_posts') : null;
-            if (res) set({ socialPosts: JSON.parse(res) });
+            // 1. Cargar caché inmediata de almacenamiento
+            const cached = typeof window !== 'undefined' ? localStorage.getItem('red_social_posts') : null;
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    set({ socialPosts: parsed });
+                }
+            }
+
+            // 2. Consultar canal de posts de la malla
+            const remotePosts = await getSocialPosts();
+            if (Array.isArray(remotePosts) && remotePosts.length > 0) {
+                set({ socialPosts: remotePosts });
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem('red_social_posts', JSON.stringify(remotePosts));
+                }
+            }
         } catch {}
     },
 

@@ -1211,3 +1211,145 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
     grid-column: span 1 !important;
   }
 }
+
+/* ─── Tactical Command Center & Navigation Hub System ──────────────────────── */
+.command-center-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: var(--bg-void);
+  overflow: hidden;
+  position: relative;
+}
+
+.card-tactical-glass {
+  background: rgba(14, 18, 28, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: all var(--dur-normal) var(--ease-spring);
+}
+
+.card-tactical-interactive {
+  cursor: pointer;
+}
+
+.card-tactical-interactive:hover {
+  background: rgba(22, 28, 44, 0.85);
+  border-color: rgba(0, 229, 255, 0.35);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 24px rgba(0, 229, 255, 0.12);
+}
+
+.card-tactical-interactive:active {
+  transform: scale(0.98);
+}
+
+.glow-border-cyan {
+  border-color: rgba(0, 229, 255, 0.4) !important;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.15);
+}
+
+.glow-border-crimson {
+  border-color: rgba(255, 42, 81, 0.45) !important;
+  box-shadow: 0 0 20px rgba(255, 42, 81, 0.2);
+}
+
+.glow-border-emerald {
+  border-color: rgba(0, 230, 118, 0.4) !important;
+  box-shadow: 0 0 20px rgba(0, 230, 118, 0.15);
+}
+
+.glow-border-amber {
+  border-color: rgba(255, 184, 0, 0.4) !important;
+  box-shadow: 0 0 20px rgba(255, 184, 0, 0.15);
+}
+
+.glow-border-purple {
+  border-color: rgba(157, 78, 221, 0.4) !important;
+  box-shadow: 0 0 20px rgba(157, 78, 221, 0.15);
+}
+
+.command-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: rgba(10, 12, 20, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  padding: 6px 12px;
+  position: relative;
+  z-index: 50;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+}
+
+.command-dock-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-spring);
+  position: relative;
+}
+
+.command-dock-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.command-dock-btn.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 229, 255, 0.08);
+}
+
+.command-dock-btn.active::after {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 25%;
+  right: 25%;
+  height: 2px;
+  background: var(--accent-cyan);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 8px var(--accent-cyan);
+}
+
+.domain-pill-chip {
+  padding: 8px 16px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--dur-fast) ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.domain-pill-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.domain-pill-chip.active {
+  background: var(--accent-cyan);
+  border-color: var(--accent-cyan);
+  color: #04060A;
+  box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
+  font-weight: 800;
+}

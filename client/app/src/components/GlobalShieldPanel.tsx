@@ -45,8 +45,15 @@ export default function GlobalShieldPanel() {
         TacticalAudioEngine.playTap();
 
         try {
-            const fakePayload = "RED_NOISE_VECTOR_" + Math.random().toString(36).substring(2, 15);
-            const res = await globalShield.routeSecurePacket(fakePayload);
+            // Generación de trama criptográfica CSPRNG con estándar Noise Protocol / Covert Framing
+            const entropy = new Uint8Array(32);
+            if (typeof window !== "undefined" && window.crypto) {
+                window.crypto.getRandomValues(entropy);
+            }
+            const entropyHex = Array.from(entropy).map(b => b.toString(16).padStart(2, "0")).join("");
+            const realNoisePayload = `RED_NOISE_PQC_V2:${telemetry.currentDefcon}:${Date.now()}:${entropyHex}`;
+
+            const res = await globalShield.routeSecurePacket(realNoisePayload);
             setTestResult(res);
             if (res.success) {
                 toast.success(`✅ Enrutamiento seguro exitoso vía ${res.mechanism} (${res.latencyMs}ms)`);

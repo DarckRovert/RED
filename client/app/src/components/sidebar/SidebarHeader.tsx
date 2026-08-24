@@ -120,17 +120,18 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 {/* Segmented Switcher */}
                 <div style={{
                     display: "flex", background: "rgba(20,22,38,0.85)", borderRadius: "var(--radius-full)",
-                    padding: "3px", border: "1px solid var(--glass-border)"
+                    padding: "3px", border: "1px solid var(--glass-border)", gap: "4px"
                 }}>
                     <button
                         onClick={() => setActiveTab("chats")}
                         style={{
-                            flex: 1, padding: "8px 12px", background: activeTab === "chats" ? "var(--accent-crimson)" : "transparent",
+                            flex: 1, padding: "8px 8px", background: activeTab === "chats" ? "var(--accent-crimson)" : "transparent",
                             color: activeTab === "chats" ? "#FFF" : "var(--text-secondary)",
                             border: "none", borderRadius: "var(--radius-full)",
-                            fontWeight: 800, fontSize: "0.80rem", letterSpacing: "0.4px",
+                            fontWeight: 800, fontSize: "0.74rem", letterSpacing: "0.3px",
                             cursor: "pointer", transition: "all 0.2s ease",
-                            boxShadow: activeTab === "chats" ? "0 2px 10px rgba(232,33,58,0.4)" : "none"
+                            boxShadow: activeTab === "chats" ? "0 2px 10px rgba(232,33,58,0.4)" : "none",
+                            whiteSpace: "nowrap"
                         }}
                     >
                         {t('dock.chats').toUpperCase()} ({filteredConvsCount})
@@ -138,30 +139,44 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     <button
                         onClick={() => setActiveTab("contacts")}
                         style={{
-                            flex: 1, padding: "8px 12px", background: activeTab === "contacts" ? "var(--accent-crimson)" : "transparent",
+                            flex: 1, padding: "8px 8px", background: activeTab === "contacts" ? "var(--accent-crimson)" : "transparent",
                             color: activeTab === "contacts" ? "#FFF" : "var(--text-secondary)",
                             border: "none", borderRadius: "var(--radius-full)",
-                            fontWeight: 800, fontSize: "0.80rem", letterSpacing: "0.4px",
+                            fontWeight: 800, fontSize: "0.74rem", letterSpacing: "0.3px",
                             cursor: "pointer", transition: "all 0.2s ease",
                             boxShadow: activeTab === "contacts" ? "0 2px 10px rgba(232,33,58,0.4)" : "none",
                             position: "relative",
+                            whiteSpace: "nowrap"
                         }}
                     >
                         {t('sidebar.contacts_header').split(' ')[0] || 'CONTACTOS'} ({filteredContactsCount})
                         {pendingCount > 0 && (
                             <span style={{
-                                position: "absolute", top: 2, right: 6,
-                                minWidth: 16, height: 16, borderRadius: 8,
+                                position: "absolute", top: 2, right: 4,
+                                minWidth: 14, height: 14, borderRadius: 7,
                                 background: "#FF6B00",
-                                color: "#fff", fontSize: "0.60rem", fontWeight: 900,
+                                color: "#fff", fontSize: "0.55rem", fontWeight: 900,
                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                padding: "0 3px",
+                                padding: "0 2px",
                                 boxShadow: "0 0 6px #FF6B00",
                                 animation: "pulse 1.5s infinite",
                             }}>
                                 {pendingCount}
                             </span>
                         )}
+                    </button>
+                    <button
+                        onClick={() => navigate("commandCenter")}
+                        style={{
+                            flex: "0 0 auto", padding: "8px 12px", background: "rgba(0, 240, 255, 0.12)",
+                            color: "var(--accent-cyan)",
+                            border: "1px solid rgba(0, 240, 255, 0.35)", borderRadius: "var(--radius-full)",
+                            fontWeight: 800, fontSize: "0.74rem", letterSpacing: "0.3px",
+                            cursor: "pointer", transition: "all 0.2s ease",
+                            whiteSpace: "nowrap"
+                        }}
+                    >
+                        ⚡ COMANDO
                     </button>
                 </div>
 

@@ -241,10 +241,20 @@ export function SurvivalBeaconModal() {
             } else {
                 setMeshSosActive(false);
             }
-        } else {
             setIsBroadcasting(true);
             try {
-                const note = customSosNote.trim() || `Alerta SOS: ${distressType}`;
+                let medInfo = "";
+                try {
+                    const rawMed = typeof window !== "undefined" ? localStorage.getItem("red_signed_medical_credential") : null;
+                    if (rawMed) {
+                        const med = JSON.parse(rawMed);
+                        if (med.bloodType && med.bloodType !== "ND") {
+                            medInfo = ` [Sangre: ${med.bloodType} | Alergias: ${med.allergies || "Ninguna"}]`;
+                        }
+                    }
+                } catch {}
+
+                const note = (customSosNote.trim() || `Alerta SOS: ${distressType}`) + medInfo;
                 const res = await RedAPI.broadcastEmergencyBeacon({
                     distress_type: distressType,
                     latitude: coords.lat,

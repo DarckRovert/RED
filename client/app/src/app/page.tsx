@@ -57,6 +57,7 @@ const UpdateModal          = dynamic(() => import("../components/UpdateModal").t
 const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
 const GlobalShieldPanel    = dynamic(() => import("../components/GlobalShieldPanel"),    { ssr: false, loading: () => <AppLoader /> });
 const Web3VaultModal       = dynamic(() => import("../components/Web3VaultModal"),       { ssr: false, loading: () => <AppLoader /> });
+const TacticalCommandCenter = dynamic(() => import("../components/TacticalCommandCenter").then(m => ({ default: m.TacticalCommandCenter })), { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
@@ -439,6 +440,7 @@ export default function AppRouter() {
                 <Sidebar />
               </div>
               <div className="tablet-workspace-pane">
+                {currentScreen === "commandCenter" && <TacticalCommandCenter />}
                 {currentScreen === "chat" && <ChatWindow />}
                 {currentScreen === "sidebar" && <TacticalTabletWorkspace onOpenTool={(s) => navigate(s)} />}
                 {currentScreen === "explorer" && <BlockchainExplorer />}
@@ -493,6 +495,7 @@ export default function AppRouter() {
             /* ── Single-Column Mobile Layout (< 768px) ── */
             <>
               {currentScreen === "sidebar" && <Sidebar />}
+              {currentScreen === "commandCenter" && <TacticalCommandCenter />}
               {currentScreen === "chat" && <ChatWindow />}
               {currentScreen === "security" && <SecurityPanel />}
               {currentScreen === "radar" && <RadarWindow />}

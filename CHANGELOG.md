@@ -1,5 +1,31 @@
 # Changelog
 
+## [59.0.0-tactical-master-release] - 2026-08-24
+
+### Sovereign Tactical Master Edition — Centro de Comando Táctico, PWA Offline Total & Suite Criptográfica Core
+
+**Centro de Comando Táctico Unificado & Reestructuración UX/UI**
+- `TacticalCommandCenter.tsx`: Centro de control táctico que consolida los más de 35 submódulos en **5 Dominios Operativos** (*Comunicaciones*, *Navegación & Sensores*, *Supervivencia & Salud*, *Seguridad & Bóvedas*, *Economía & Sistema*) con filtrado en tiempo real y dock inferior.
+- `globals.css`: Sistema de diseño Glassmorphism Cyberpunk con paleta Obsidian Void (`#06070B`), desenfoques de 20px, acentos neón HSL y tokens de diseño `.card-tactical-glass`.
+- `page.tsx` & `SidebarHeader.tsx`: Enrutamiento dinámico en layouts Split Tablet y Single-Column Móvil con pestaña rápida `⚡ COMANDO`.
+
+**Conexión Real de Módulos & Eliminación de Maquetas**
+- `MonetizationEngine.ts` & `CommercialHubModal.tsx`: Catálogo dinámico descentralizado en memoria local, registro criptográfico de movimientos (`TacticalTransaction`), canje directo de créditos por horas Pro y soporte transparente AdMob/Web.
+- `GlobalShieldPanel.tsx`: Inyección de trama criptográfica CSPRNG de 32 bytes de entropía (`window.crypto.getRandomValues`) con enmarcado Noise Protocol y medición de latencia real.
+- `IdentityVaultModal.tsx` & `SurvivalBeaconModal.tsx`: Ficha médica `RED_TAC_MED_V1` firmada digitalmente con Ed25519/SHA-256, código QR de rescate e inyección automática en la baliza SOS y módem acústico SoundMesh.
+- `SocialFeedPanel.tsx`, `socialSlice.ts` & `economy.ts`: Sincronización bidireccional offline/online del muro social con persistencia en storage.
+- `BlockchainExplorer.tsx`: Herramientas interactivas de forzado de sincronización PoA y auditoría de salud de la cadena.
+
+**PWA Offline Total & Web Companion PC ↔ Móvil**
+- `manifest.json`: Metadatos PWA con modo `standalone`, iconos multi-resolución y atajos tácticos directos.
+- `sw.js`: Service Worker v58 con Cache Storage dual (`red-vault-cache-v58`), precaché de modelos WASM de inferencia IA (`/ort-wasm/`) y estrategia Stale-While-Revalidate con fallback offline nativo.
+- `WebCompanionLinkModal.tsx`: Sincronización P2P directa mediante intercambio de claves ECDH P-256 + AES-256-GCM entre navegador PC y móvil Android.
+
+**Suite Automatizada de Pruebas Criptográficas Core**
+- `test-crypto-core.js` & `npm run test:crypto`: Verificación matemática al 100% de Shamir's Secret Sharing (10/10 combinaciones en $GF(2^8)$), NIST FIPS 203 ML-KEM-768 post-cuántico, Esteganografía LSB y Módem Acústico SoundMesh FSK.
+
+---
+
 ## [58.0.0-canonical-mesh-dedup] - 2026-08-23
 
 ### Sovereign Tactical Master Edition — Universal Biometric Sentinel, Zero-Trust Hardening & Canonical Mesh Deduplication

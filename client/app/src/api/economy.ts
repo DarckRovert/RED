@@ -159,7 +159,11 @@ export async function deleteStegoCapsule(id: string): Promise<{ ok: boolean; del
     });
 }
 
-// --- Emergency Beacons Engine ---
+export async function getSocialPosts(): Promise<SocialPost[]> {
+    return fetchWithFallback('/api/social/posts', undefined, () => {
+        return getStored<SocialPost[]>(STORAGE_KEYS.SOCIAL_POSTS, []);
+    });
+}
 
 export async function createSocialPost(req: any): Promise<SocialPost> {
     return fetchWithFallback('/api/social/posts', {

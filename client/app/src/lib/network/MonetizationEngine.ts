@@ -74,6 +74,15 @@ export const TACTICAL_CATALOG: TacticalProduct[] = [
     }
 ];
 
+export interface TacticalTransaction {
+    id: string;
+    timestamp: number;
+    type: 'reward_ad' | 'redeem_product' | 'transfer' | 'credit_boost';
+    description: string;
+    amount: number; // positive or negative
+    balanceAfter: number;
+}
+
 class MonetizationEngineService {
     // Google AdMob Live Production IDs
     private readonly APP_ID = 'ca-app-pub-9467539804685326~5906975907';
@@ -98,8 +107,122 @@ class MonetizationEngineService {
             localStorage.setItem('red_pro_expires_at', '0');
         }
         if (!localStorage.getItem('red_tactic_credits')) {
-            localStorage.setItem('red_tactic_credits', '0');
+            localStorage.setItem('red_tactic_credits', '250');
         }
+        if (!localStorage.getItem('red_tactical_catalog_custom')) {
+            localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(TACTICAL_CATALOG));
+        }
+    }
+
+    /**
+     * Obtiene el catálogo táctico activo (incluye productos añadidos por el operador o recibidos por la malla).
+     */
+    public getCatalog(): TacticalProduct[] {
+        if (typeof window === 'undefined') return TACTICAL_CATALOG;
+        try {
+            const raw = localStorage.getItem('red_tactical_catalog_custom');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            }
+        } catch {}
+        return TACTICAL_CATALOG;
+    }
+
+    /**
+     * Añade un producto táctico al catálogo del nodo.
+     */
+    public addProduct(product: Omit<TacticalProduct, 'id'>): TacticalProduct {
+        const id = 'prod_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+        const newProd: TacticalProduct = { ...product, id };
+        const current = this.getCatalog();
+        const updated = [newProd, ...current];
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+        }
+        return newProd;
+    }
+
+    /**
+     * Elimina un producto personalizado del catálogo.
+     */
+    public removeProduct(productId: string): boolean {
+        const current = this.getCatalog();
+        const updated = current.filter(p => p.id !== productId);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+        }
+        return true;
+    }
+
+    /**
+     * Restablece el catálogo a los productos tácticos certificados oficiales.
+     */
+    public resetCatalog(): TacticalProduct[] {
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(TACTICAL_CATALOG));
+            window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+        }
+        return TACTICAL_CATALOG;
+    }
+
+    /**
+     * Registra una transacción y actualiza el balance de créditos.
+     */
+    public recordTransaction(type: TacticalTransaction['type'], amount: number, description: string): TacticalTransaction {
+        const currentBal = this.getProStatus().credits;
+        const newBal = Math.max(0, currentBal + amount);
+        
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_tactic_credits', newBal.toString());
+            const txList = this.getTransactions();
+            const tx: TacticalTransaction = {
+                id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                timestamp: Date.now(),
+                type,
+                description,
+                amount,
+                balanceAfter: newBal
+            };
+            const updatedTx = [tx, ...txList].slice(0, 50);
+            localStorage.setItem('red_tactical_txs', JSON.stringify(updatedTx));
+            window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+            return tx;
+        }
+
+        return {
+            id: 'tx_stub',
+            timestamp: Date.now(),
+            type,
+            description,
+            amount,
+            balanceAfter: newBal
+        };
+    }
+
+    public getTransactions(): TacticalTransaction[] {
+        if (typeof window === 'undefined') return [];
+        try {
+            const raw = localStorage.getItem('red_tactical_txs');
+            if (raw) return JSON.parse(raw);
+        } catch {}
+        return [];
+    }
+
+    /**
+     * Canjea créditos tácticos por tiempo Pro u otros beneficios.
+     */
+    public redeemCreditsForPro(hours: number = 24, costCredits: number = 100): { success: boolean; message: string } {
+        const status = this.getProStatus();
+        if (status.credits < costCredits) {
+            return { success: false, message: `Créditos insuficientes (${status.credits}/${costCredits} RED).` };
+        }
+
+        this.recordTransaction('redeem_product', -costCredits, `Canje de +${hours}h Modo Pro`);
+        this.grantProReward(hours);
+        return { success: true, message: `¡Canje exitoso! +${hours} Horas de Modo Pro activadas.` };
     }
 
     /**
@@ -132,8 +255,8 @@ class MonetizationEngineService {
 
         AdMob.addListener(RewardAdPluginEvents.Rewarded, (reward: AdMobRewardItem) => {
             console.log('[MonetizationEngine] User completed Rewarded Video!', reward);
-            this.grantProReward(24); // Grant 24 hours of Pro
-            this.addCredits(100);
+            this.grantProReward(24);
+            this.recordTransaction('reward_ad', 100, 'Recompensa por Transmisión Patrocinada (+24h Pro & +100 RED)');
             this.onRewardCallbacks.forEach(cb => {
                 try { cb(reward); } catch (e: any) { console.warn('[MonetizationEngine] Reward callback error:', e?.message || e); }
             });
@@ -163,21 +286,19 @@ class MonetizationEngineService {
         if (!Capacitor.isNativePlatform()) {
             // Simulación transparente en Web para desarrollo
             this.grantProReward(24);
-            this.addCredits(100);
+            this.recordTransaction('reward_ad', 100, 'Recompensa de Desarrollo Web (+24h Pro & +100 RED)');
             return { 
                 success: true, 
-                message: 'Modo Web: Recompensa de +24h Modo Pro activada correctamente para pruebas.' 
+                message: 'Modo Web: Recompensa de +24h Modo Pro y 100 Créditos acreditada con éxito.' 
             };
         }
 
         await this.initialize();
-
         this.isAdLoading = true;
 
-        // 1. Intentar con el Ad Unit ID de producción
         const liveOptions: RewardAdOptions = {
             adId: this.LIVE_REWARDED_AD_UNIT_ID,
-            npa: true, // Non-Personalized Ads for privacy
+            npa: true,
         };
 
         try {
@@ -186,9 +307,8 @@ class MonetizationEngineService {
             await AdMob.showRewardVideoAd();
             return { success: true, message: 'Transmisión patrocinada iniciada.' };
         } catch (liveErr) {
-            console.warn('[MonetizationEngine] Live ad unit not yet propagated by Google AdMob, using verified test unit fallback:', liveErr);
+            console.warn('[MonetizationEngine] Live ad unit not ready, using verified test unit fallback:', liveErr);
             
-            // 2. Fallback a la unidad de prueba verificada de Google
             try {
                 const testOptions: RewardAdOptions = {
                     adId: this.TEST_REWARDED_AD_UNIT_ID,
@@ -208,9 +328,6 @@ class MonetizationEngineService {
         }
     }
 
-    /**
-     * Otorga horas de Modo Pro al usuario.
-     */
     public grantProReward(hours: number = 24) {
         if (typeof window === 'undefined') return;
         const now = Date.now();
@@ -223,15 +340,9 @@ class MonetizationEngineService {
     }
 
     public addCredits(amount: number = 100) {
-        if (typeof window === 'undefined') return;
-        const current = parseInt(localStorage.getItem('red_tactic_credits') || '0', 10);
-        localStorage.setItem('red_tactic_credits', (current + amount).toString());
-        window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+        this.recordTransaction('credit_boost', amount, `Créditos añadidos manualmente (+${amount} RED)`);
     }
 
-    /**
-     * Consulta el estado del pase Pro del usuario.
-     */
     public getProStatus(): ProPerkStatus {
         if (typeof window === 'undefined') {
             return { isPro: false, expiresAt: 0, remainingHours: 0, credits: 0 };

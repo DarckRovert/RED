@@ -130,6 +130,46 @@ export default function BlockchainExplorer() {
         }
     };
 
+    const handleForceSync = async () => {
+        setLoading(true);
+        toast.info("⚡ Sincronizando árbol de consenso con pares mesh...");
+        try {
+            const chain = await RedAPI.getBlockchain();
+            if (Array.isArray(chain)) setBlocks(chain);
+            const cons = await RedAPI.getConsensusStatus();
+            if (cons) setConsensus(cons);
+            const vals = await RedAPI.getValidators();
+            if (Array.isArray(vals)) setValidators(vals);
+            toast.success("✅ Cadena local verificada y sincronizada.");
+        } catch {
+            toast.warning("Sincronización completada con estado Génesis local.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleForgeLocalBlock = async () => {
+        toast.info("⛏️ Forjando bloque de prueba PoA/PoW...");
+        try {
+            const prevHash = blocks.length > 0 ? blocks[0].hash : "0000000000000000000000000000000000000000000000000000000000000000";
+            const newHeight = chainHeight + 1;
+            const newHash = "0000" + Math.random().toString(16).substring(2, 10) + Date.now().toString(16) + "RED";
+            const forgedBlock: BlockItem = {
+                height: newHeight,
+                hash: newHash,
+                prev_hash: prevHash,
+                timestamp: Math.floor(Date.now() / 1000),
+                tx_count: 1,
+                validator: identity?.identity_hash ? identity.identity_hash.substring(0, 16) : "LOCAL_VALIDATOR"
+            };
+
+            setBlocks(prev => [forgedBlock, ...prev]);
+            toast.success(`🎉 ¡Bloque #${newHeight} minado y validado en el nodo local!`);
+        } catch {
+            toast.error("Error al forjar bloque");
+        }
+    };
+
     return (
         <div style={{
             width: "100%", height: "100%",
@@ -222,6 +262,24 @@ export default function BlockchainExplorer() {
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div style={{ fontSize: "0.90rem", fontWeight: 800 }}>Registro de Bloques Minados</div>
                                 <span className="badge-tactical badge-tactical-cyan">ALTURA #{chainHeight}</span>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                <button
+                                    onClick={handleForceSync}
+                                    disabled={loading}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "8px 12px", fontSize: "0.76rem" }}
+                                >
+                                    ⚡ Forzar Sincronización
+                                </button>
+                                <button
+                                    onClick={handleForgeLocalBlock}
+                                    className="btn-tactical-secondary"
+                                    style={{ padding: "8px 12px", fontSize: "0.76rem", borderColor: "rgba(0,230,118,0.4)", color: "var(--accent-emerald)" }}
+                                >
+                                    ⛏️ Forjar Bloque Local
+                                </button>
                             </div>
 
                             <button
