@@ -39,8 +39,8 @@ Plataforma táctica de comunicaciones descentralizadas y soberanas fuera de red 
 
 | Archivo | Descripción | Plataforma | Suma SHA-256 |
 | :--- | :--- | :--- | :--- |
-| **`red-v58.0.0-latest.apk`** | Instalador Universal Oficial v58.0.0 | Android 7.0+ (ARM64) | `94b6b2526cc9808e0e89299e927fed7af40232a615ef8d301e115618f82c0fab` |
-| **`red-latest.apk`** | Enlace canónico de última versión | Android 7.0+ (ARM64) | `94b6b2526cc9808e0e89299e927fed7af40232a615ef8d301e115618f82c0fab` |
+| **`red-v58.0.0-latest.apk`** | Instalador Universal Oficial v58.0.0 (Neural HUD + NLG) | Android 7.0+ (ARM64) | `e764e4a649bb3977944b7a7b774483ae7430f6cf686080787d258a70f2a4f17d` |
+| **`red-latest.apk`** | Enlace canónico de última versión | Android 7.0+ (ARM64) | `e764e4a649bb3977944b7a7b774483ae7430f6cf686080787d258a70f2a4f17d` |
 | **`red-node.exe`** | Binario de Escritorio (Desktop Node) | Windows x64 | `7c4f5e8666eaab56c4d9a0afb0ca123c150c2662f075d3381bef62ce2d6b902f` |
 
 > **Web App Oficial:** [https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)

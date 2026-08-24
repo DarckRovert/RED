@@ -51,6 +51,8 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
         topic_category: res.topicCategory,
         source: res.modelInfo,
         execution_time_ms: res.executionTimeMs,
+        thoughtChain: res.thoughtChain,
+        thought_chain: res.thoughtChain,
     };
 }
 

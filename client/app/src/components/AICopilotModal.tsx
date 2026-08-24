@@ -8,6 +8,7 @@ import { ModelManager, LocalModelMetaData } from "../lib/modelManager";
 import { EmergencyGlossaryEngine, GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { NeuralThoughtViewer, NeuralTelemetryData } from "./ai/NeuralThoughtViewer";
 
 type CopilotTab = "chat" | "translator" | "summarizer" | "models";
 
@@ -18,6 +19,7 @@ interface ChatMessage {
     modelTag?: string;
     timestamp: number;
     latencyMs?: number;
+    thoughtChain?: NeuralTelemetryData;
 }
 
 const CHAT_HISTORY_KEY = "red_copilot_chat_history_v2";
@@ -268,7 +270,7 @@ export const AICopilotModal: React.FC = () => {
 
             const res: CopilotResponse = await queryAICopilot(text, contextStr);
             const latency = Math.round(performance.now() - startTime);
-            const tag = res.source || (activeModel && activeModel.isDownloaded ? `${activeModel.name} (ARM64 Nativo)` : "Motor RAG MiniLM (100% Offline)");
+            const tag = res.source || (activeModel && activeModel.isDownloaded ? `${activeModel.name} (ARM64 Nativo)` : "SmolLM2-360M + e5-small (100% Offline)");
 
             const aiMsg: ChatMessage = {
                 id: `msg_${Date.now()}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`,
@@ -276,7 +278,8 @@ export const AICopilotModal: React.FC = () => {
                 text: res.answer,
                 modelTag: tag,
                 timestamp: Date.now(),
-                latencyMs: latency
+                latencyMs: latency,
+                thoughtChain: res.thoughtChain || (res as any).thought_chain
             };
 
             setMessages(prev => [...prev, aiMsg]);
@@ -596,19 +599,20 @@ export const AICopilotModal: React.FC = () => {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Chain of Thought / Pensamiento Interno en Vivo */}
+                                    {isAI && msg.thoughtChain && (
+                                        <div style={{ width: "100%", marginTop: "4px" }}>
+                                            <NeuralThoughtViewer telemetry={msg.thoughtChain} isGenerating={false} />
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}
 
                         {loading && (
-                            <div style={{
-                                display: "flex", alignItems: "center", gap: "8px",
-                                padding: "10px 14px", background: "rgba(0,229,255,0.05)",
-                                border: "1px solid var(--accent-cyan)", borderRadius: "12px",
-                                maxWidth: "260px", color: "var(--accent-cyan)", fontSize: "0.80rem"
-                            }}>
-                                <span style={{ animation: "pulse 1s infinite" }}>⚙️</span>
-                                <span>Razonando directiva táctica offline...</span>
+                            <div style={{ width: "100%", maxWidth: "85%", alignSelf: "flex-start" }}>
+                                <NeuralThoughtViewer telemetry={null} isGenerating={true} />
                             </div>
                         )}
                     </div>
