@@ -223,11 +223,38 @@ export default function ChatWindow() {
         };
 
         const list: MessageItem[] = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
-        return list.filter((m: MessageItem) => {
+        const validMsgs = list.filter((m: MessageItem) => {
             if (!m || !m.content) return false;
             if (isProtocolPacket(m)) return false;
             return true;
         });
+
+        // Deterministic deduplication pass (eliminates duplicate bubbles from dual SSE + MeshRouter channels)
+        const deduped: MessageItem[] = [];
+        const seenIds = new Set<string>();
+        for (const m of validMsgs) {
+            if (m.id && seenIds.has(m.id)) continue;
+
+            const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
+            const isDup = deduped.some(d => {
+                if (d.id && m.id && d.id === m.id) return true;
+                const dTs = d.timestamp ? (d.timestamp > 1e11 ? d.timestamp / 1000 : d.timestamp) : 0;
+                const timeDiff = Math.abs(dTs - mTs);
+                const dContent = (d.content || '').trim();
+                const mContent = (m.content || '').trim();
+                if (dContent === mContent && Boolean(d.is_mine) === Boolean(m.is_mine) && timeDiff < 30) {
+                    return true;
+                }
+                return false;
+            });
+
+            if (!isDup) {
+                if (m.id) seenIds.add(m.id);
+                deduped.push(m);
+            }
+        }
+
+        return deduped;
     }, [messages, activeConversationId]);
 
     // Keep ref in sync with latest convMessages

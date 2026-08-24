@@ -36,8 +36,10 @@ export interface PendingContactRequest {
     senderHash: string;
     senderName: string;
     senderPk: string | null;
-    channel: string;      // 'BLE' | 'Mesh' | 'WiFi'
+    channel: string;      // 'BLE' | 'Mesh' | 'WiFi' | 'QR'
     timestamp: number;
+    avatarUrl?: string | null;
+    bio?: string | null;
 }
 
 

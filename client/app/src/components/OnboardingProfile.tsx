@@ -64,7 +64,9 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
 
     // Generar QR real cuando el usuario llega al Step 4
     const generateQr = useCallback(async () => {
-        const qrString = `did:red:${myHash}`;
+        const pk = identity?.public_key || identity?.identity_hash || myHash;
+        const nameParam = encodeURIComponent(displayName.trim() || `Operador ${shortId}`);
+        const qrString = `did:red:${myHash}:${pk}:${nameParam}`;
         try {
             const QRCode = await import('qrcode');
             const url = await QRCode.toDataURL(qrString, {
@@ -76,7 +78,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
             // Fallback: QR server externo
             setQrDataUrl(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrString)}&color=000000&bgcolor=FFFFFF`);
         }
-    }, [myHash]);
+    }, [myHash, identity, displayName, shortId]);
 
     const AVATAR_PALETTE = ["#FF3355", "#00F0FF", "#00E676", "#FFB300", "#7C4DFF", "#FF4081"];
 

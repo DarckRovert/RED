@@ -166,7 +166,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
           zIndex: 1,
         }}
       >
-        © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build 56000). Código Abierto.
+        © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build {RED_BUILD_CODE}). Código Abierto.
       </footer>
         </>
     );

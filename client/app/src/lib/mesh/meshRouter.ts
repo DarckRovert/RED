@@ -973,20 +973,28 @@ class MeshRouter {
       }
     } catch {}
 
+    let myHash = this.myIdentityHash;
+    if (!myHash && typeof window !== 'undefined') {
+      try {
+        myHash = localStorage.getItem('red_identity_hash') || '';
+        if (myHash) this.myIdentityHash = myHash;
+      } catch {}
+    }
+
     const isBroadcast =
       packet.recipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
       packet.recipient === '0000000000000000000000000000000000000000000000000000000000000000';
 
     const isDirectlyToMe =
-      packet.recipient === this.myIdentityHash ||
-      (this.myIdentityHash && packet.recipient.length >= 8 && this.myIdentityHash.toLowerCase().startsWith(packet.recipient.toLowerCase())) ||
-      (this.myIdentityHash && packet.recipient.length >= 8 && packet.recipient.toLowerCase().startsWith(this.myIdentityHash.toLowerCase()));
+      (!!myHash && packet.recipient === myHash) ||
+      (!!myHash && packet.recipient.length >= 8 && myHash.toLowerCase().startsWith(packet.recipient.toLowerCase())) ||
+      (!!myHash && packet.recipient.length >= 8 && packet.recipient.toLowerCase().startsWith(myHash.toLowerCase()));
 
-    const isForMe = isBroadcast || isDirectlyToMe || (isLocationMsg && isBroadcast);
+    const isForMe = isBroadcast || isDirectlyToMe || (isLocationMsg && isBroadcast) || isHandshakeMsg;
 
     if (isForMe) {
       // ── FINAL DELIVERY: packet is for us ──
-      console.log(`[MeshRouter] Packet delivered locally from ${packet.sender.slice(0, 8)}`);
+      console.log(`[MeshRouter] Packet delivered locally from ${packet.sender.slice(0, 8)} (type: ${isHandshakeMsg ? 'handshake' : 'msg'})`);
       
       const isNative = typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.();
       const isJsonPayload = payloadStr.trim().startsWith('{') || payloadStr.trim().startsWith('[');

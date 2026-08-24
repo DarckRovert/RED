@@ -1,5 +1,26 @@
 # Changelog
 
+## [61.0.0-consent-instant-sync-edition] - 2026-08-24
+
+### Consent & Instant Profile Sync Edition — Handshake Bidireccional P2P, Resolución Inmediata y Flujo de Consentimiento
+
+**Resolución Inmediata de Perfil & Cero IDs Internos**
+- `contactsSlice.ts`: Parser universal de esquemas de contacto (`did:red:HASH:PK:NAME`, `RED_ID_VAULT:BASE64`, `HASH:PK:NAME`), extracción y decodificación UTF-8 segura de `parts[2]` (`decodeURIComponent`). Inyección inmediata en caché de topología `meshRouter.updatePeer(...)`, garantizando que las nuevas conversaciones muestren de inmediato el nombre del operador sin parpadear a identificadores hexadecimales o nombres genéricos.
+- `OnboardingProfile.tsx`: Actualización del paso 4 del asistente de configuración para generar códigos QR completos con clave pública y alias del operador en formato estándar `did:red:HASH:PK:NAME`.
+
+**Flujo de Consentimiento Bidireccional (Modal Reactivo & Anti-Acoso)**
+- `messageDispatcher.ts`: Desacople completo entre descubrimiento en malla de transporte y agregación en la libreta de contactos. Las solicitudes entrantes (`contact_request`) de nodos desconocidos ya no se agregan silenciosamente en segundo plano; ahora generan una petición formal en cola `PendingContactRequest`, emiten alerta auditiva táctica y despliegan en primer plano el modal reactivo `IncomingContactRequestModal` con opciones de *Aceptar*, *Rechazar* o *Bloquear*.
+- `IncomingContactRequestModal.tsx`: Visualización del perfil resuelto (avatar, nombre, DID truncado y canal de origen) y gestión de acciones con retroalimentación inmediata.
+
+**Sincronización Simétrica de Libreta y Base de Datos Local**
+- `contactsSlice.ts`: Al aceptar una solicitud (`acceptContactRequest`), se sincronizan de forma atómica los estados de `contacts`, `conversations`, almacenamiento local web (`red_web_contacts`, `red_web_conversations`) y backend nativo SQLite (`RedAPI.addContact`), emitiéndose un paquete de confirmación firmado `contact_response` (`accepted: true`).
+- Al recibir el `contact_response`, el nodo emisor actualiza su libreta simétricamente y recibe notificación Toast en tiempo real.
+
+**Despliegue Limpio y Verificación en Dispositivos Reales**
+- Desinstalación limpia e instalación de `v61.0.0` en `Moto G22` (ZT322B386P) y `Tablet TB305XU` (HA2CHKZ2) con verificación exitosa de logcat en tiempo real.
+
+---
+
 ## [60.0.0-real-connections-master] - 2026-08-24
 
 ### Real Connections Master Edition — 6 Módulos con Lógica Real, Suite Criptográfica 4/4 y Streaming Vectorial P2P

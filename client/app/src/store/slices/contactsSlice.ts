@@ -35,36 +35,48 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
     acceptContactRequest: async (req: PendingContactRequest) => {
         const { pendingContactRequests, identity } = get();
         // Remove from pending
-        const updated = pendingContactRequests.filter(r => r.id !== req.id);
+        const updated = pendingContactRequests.filter(r => r.id !== req.id && r.senderHash !== req.senderHash);
         if (typeof window !== 'undefined') {
             try { localStorage.setItem('red_pending_contact_requests', JSON.stringify(updated)); } catch {}
         }
         set({ pendingContactRequests: updated, activeContactRequestModal: updated[0] || null });
-        // Persist contact
-        try {
-            await RedAPI.addContact(req.senderHash, req.senderName, req.senderPk);
-        } catch {
-            const existing = get().contacts || [];
-            if (!existing.find((c: any) => c.identity_hash === req.senderHash)) {
-                const next = [...existing, { identity_hash: req.senderHash, display_name: req.senderName, public_key: req.senderPk }];
-                set({ contacts: next });
-                RedAPI.setWebStore('red_web_contacts', next);
-            }
-        }
-        // Send contact_response
+        
+        // Persist contact using full addContact workflow (creates conversation + deduplicates + syncs to DB)
+        await get().addContact(req.senderHash, req.senderName, req.senderPk);
+
+        // Send signed contact_response via direct message and local mesh broadcast
         if (identity?.identity_hash) {
-            RedAPI.sendMessage(req.senderHash, JSON.stringify({
+            const respPayload = JSON.stringify({
+                type: 'contact_response',
+                id: `cres_${Date.now()}_${identity.identity_hash.slice(0, 8)}`,
                 sender_hash: identity.identity_hash,
                 sender_name: identity.nickname || 'Operador RED',
-                sender_pk: identity.public_key || null
-            }), { msg_type: 'contact_response' }).catch(() => {});
+                sender_pk: identity.public_key || null,
+                avatar_url: identity.avatar_url || null,
+                channel: req.channel || 'Mesh',
+                accepted: true,
+                timestamp: Date.now()
+            });
+            RedAPI.sendMessage(req.senderHash, respPayload, { msg_type: 'contact_response' }).catch(() => {});
+            try {
+                const { meshRouter } = await import('../../lib/mesh/meshRouter');
+                const rawBytes = new TextEncoder().encode(JSON.stringify({
+                    id: `cres_${Date.now()}`,
+                    content: respPayload,
+                    sender: identity.identity_hash,
+                    recipient: req.senderHash,
+                    msg_type: 'contact_response',
+                    timestamp: Date.now() / 1000
+                }));
+                meshRouter.broadcast(rawBytes).catch(() => {});
+            } catch {}
         }
         toast.success(`✅ ${req.senderName} agregado a tus contactos`);
         await get().fetchData();
     },
 
     rejectContactRequest: (req: PendingContactRequest) => {
-        const updated = get().pendingContactRequests.filter(r => r.id !== req.id);
+        const updated = get().pendingContactRequests.filter(r => r.id !== req.id && r.senderHash !== req.senderHash);
         if (typeof window !== 'undefined') {
             try { localStorage.setItem('red_pending_contact_requests', JSON.stringify(updated)); } catch {}
         }
@@ -127,7 +139,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
 
     dismissContactRequestModal: () => set({ activeContactRequestModal: null }),
 
-    // Real-time Mesh SSE Events State,
+    // Real-time Mesh SSE Events State
 
     addContact: async (identity_hash: string, display_name: string, public_key?: string | null) => {
         const inputStr = identity_hash.trim();
@@ -136,7 +148,16 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         let cleanHash = normalizeIdentity(inputStr);
         let pubKey: string | null = public_key ?? null;
 
-        // 1. Parse did:red:<hash>:<pk> or did:red:<hash> or <hash>:<pk> or red_<shortId>
+        const isGenericName = (name?: string) => !name || 
+            name.startsWith('Operador ') || 
+            name.startsWith('Nodo ') || 
+            name.startsWith('Par Escaneado') || 
+            name.startsWith('Dispositivo RED') ||
+            name === 'Nuevo Par' || 
+            name === 'Par Malla' ||
+            name === 'Contacto P2P';
+
+        // 1. Comprehensive Parsing: did:red:<hash>:<pk>:<name> | RED_ID_VAULT:<base64> | <hash>:<pk>:<name>
         if (inputStr.startsWith("did:red:")) {
             const withoutScheme = inputStr.slice(8);
             const parts = withoutScheme.split(":");
@@ -144,12 +165,34 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             if (parts.length >= 2 && parts[1] && !pubKey) {
                 pubKey = parts[1].trim();
             }
+            if (parts.length >= 3 && parts[2] && isGenericName(cleanName)) {
+                try {
+                    cleanName = decodeURIComponent(parts[2].trim());
+                } catch {
+                    cleanName = parts[2].trim();
+                }
+            }
+        } else if (inputStr.startsWith("RED_ID_VAULT:")) {
+            try {
+                const encoded = inputStr.split(":")[1];
+                const decoded = JSON.parse(atob(encoded));
+                cleanHash = normalizeIdentity(decoded.did || "");
+                if (decoded.pk && !pubKey) pubKey = decoded.pk;
+                if (decoded.name && isGenericName(cleanName)) cleanName = decoded.name;
+            } catch {}
         } else if (inputStr.includes(":") && !/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(inputStr)) {
             const parts = inputStr.split(":");
             if (parts[0].length >= 16) {
                 cleanHash = normalizeIdentity(parts[0].trim());
                 if (parts[1] && !pubKey) {
                     pubKey = parts[1].trim();
+                }
+                if (parts.length >= 3 && parts[2] && isGenericName(cleanName)) {
+                    try {
+                        cleanName = decodeURIComponent(parts[2].trim());
+                    } catch {
+                        cleanName = parts[2].trim();
+                    }
                 }
             }
         }
@@ -169,22 +212,24 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             if (peerInfo.publicKey && !pubKey) {
                 pubKey = peerInfo.publicKey;
             }
-            if (peerInfo.name && (!cleanName || cleanName.startsWith('Nodo ') || cleanName.startsWith('Operador ') || cleanName === 'Par Malla')) {
+            if (peerInfo.name && isGenericName(cleanName)) {
                 cleanName = peerInfo.name;
             }
         }
 
-        const isGenericName = (name?: string) => !name || 
-            name.startsWith('Operador ') || 
-            name.startsWith('Nodo ') || 
-            name.startsWith('Par Escaneado') || 
-            name.startsWith('Dispositivo RED') ||
-            name === 'Nuevo Par' || 
-            name === 'Par Malla';
-
-        if (!cleanName || cleanName === "Nuevo Par" || cleanName === "Operador RED" || cleanName === "Par Malla") {
+        if (isGenericName(cleanName)) {
             cleanName = `Nodo ${cleanHash.slice(0, 8)}`;
         }
+
+        // Cache peer in meshRouter immediately for instant resolution across views
+        meshRouter.updatePeer(
+            cleanHash,
+            'ble',
+            undefined,
+            cleanHash,
+            cleanName,
+            pubKey || undefined
+        );
 
         const localContact = {
             identity_hash: cleanHash,
@@ -210,7 +255,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             // C. Prefix match for 64-char hashes
             if (cHash.length === 64 && targetHash.length === 64 && cHash.slice(0, 16) === targetHash.slice(0, 16)) return true;
 
-            // D. Non-generic display name match (e.g. "Tab", "Moto G22", "Lenovo")
+            // D. Non-generic display name match
             if (!isGenericName(cleanName) && !isGenericName(c.display_name)) {
                 if (isNameSimilar(c.display_name, cleanName)) {
                     return true;
@@ -263,6 +308,26 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             updatedContacts.push(localContact);
         }
 
+        // Final strict deduplication pass on updatedContacts
+        const finalDedupedConts: any[] = [];
+        const seenH = new Set<string>();
+        for (const ct of updatedContacts) {
+            const h = normalizeIdentity(ct.identity_hash || '');
+            if (!h || seenH.has(h)) continue;
+            const isDup = finalDedupedConts.some(f => {
+                const fH = normalizeIdentity(f.identity_hash || '');
+                if (fH === h) return true;
+                if (h.length >= 16 && fH.length >= 16 && (h.startsWith(fH.slice(0, 16)) || fH.startsWith(h.slice(0, 16)))) return true;
+                if (isNameSimilar(f.display_name, ct.display_name)) return true;
+                return false;
+            });
+            if (!isDup) {
+                seenH.add(h);
+                finalDedupedConts.push(ct);
+            }
+        }
+        updatedContacts = finalDedupedConts;
+
         // Deduplicate conversations list
         const seenPeers = new Set<string>();
         const dedupedConvs: ConversationItem[] = [];
@@ -302,16 +367,33 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             console.log(`[addContact] Local P2P contact registered: ${cleanHash.slice(0, 8)}`);
         }
 
-        // 6. Send background contact request to peer so they automatically add us back!
+        // 6. Send background contact request to peer with rich identity metadata
         const myIdentity = get().identity;
         const myName = myIdentity?.nickname || 'Operador RED';
         if (myIdentity?.identity_hash) {
             _processedHandshakes.add(`${cleanHash.toLowerCase()}_res`);
-            RedAPI.sendMessage(cleanHash, JSON.stringify({
+            const reqPayload = JSON.stringify({
+                type: 'contact_request',
+                id: `creq_${Date.now()}_${myIdentity.identity_hash.slice(0, 8)}`,
                 sender_hash: myIdentity.identity_hash,
                 sender_name: myName,
-                sender_pk: myIdentity.public_key || null
-            }), { msg_type: 'contact_request' }).catch(() => {});
+                sender_pk: myIdentity.public_key || null,
+                avatar_url: myIdentity.avatar_url || null,
+                channel: 'QR',
+                timestamp: Date.now()
+            });
+            RedAPI.sendMessage(cleanHash, reqPayload, { msg_type: 'contact_request' }).catch(() => {});
+            try {
+                const rawBytes = new TextEncoder().encode(JSON.stringify({
+                    id: `creq_${Date.now()}`,
+                    content: reqPayload,
+                    sender: myIdentity.identity_hash,
+                    recipient: cleanHash,
+                    msg_type: 'contact_request',
+                    timestamp: Date.now() / 1000
+                }));
+                meshRouter.broadcast(rawBytes).catch(() => {});
+            } catch {}
         }
 
         return cleanHash;

@@ -441,13 +441,16 @@ export async function dispatchIncomingMessage(
         const isHandshakePacket = 
             item.msg_type === 'contact_request' || 
             item.msg_type === 'contact_response' ||
-            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"sender_hash"') && item.content.includes('"sender_pk"'));
+            (typeof item.content === 'string' && item.content.startsWith('{') && (
+                (item.content.includes('"sender_hash"') && item.content.includes('"sender_pk"')) ||
+                item.content.includes('"type":"contact_request"') ||
+                item.content.includes('"type":"contact_response"')
+            ));
 
         if (isHandshakePacket) {
             try {
                 const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : data;
                 const senderHash = meshRouter.getCanonicalId(parsed.sender_hash || item.sender);
-                const senderName = parsed.sender_name || `Operador ${senderHash.substring(0, 6)}`;
                 const senderPk = parsed.sender_pk || null;
                 const myHash = get().identity?.identity_hash?.toLowerCase();
 
@@ -463,78 +466,169 @@ export async function dispatchIncomingMessage(
                 }
 
                 const existingContacts = get().contacts || [];
-                const existing = existingContacts.find((c: any) =>
-                    c.identity_hash?.toLowerCase() === senderHash.toLowerCase() ||
-                    (senderHash.length >= 8 && c.identity_hash?.toLowerCase().startsWith(senderHash.substring(0, 8).toLowerCase())) ||
-                    (c.identity_hash?.length >= 8 && senderHash.toLowerCase().startsWith(c.identity_hash.substring(0, 8).toLowerCase()))
+                const existing = existingContacts.find((c: any) => {
+                    const cHash = normalizeIdentity(c.identity_hash || '');
+                    return cHash === senderHash ||
+                        (senderHash.length >= 8 && cHash.startsWith(senderHash.substring(0, 8))) ||
+                        (cHash.length >= 8 && senderHash.startsWith(cHash.substring(0, 8)));
+                });
+
+                const rawSenderName = parsed.sender_name || (item as any).sender_name || '';
+                const isGenericName = !rawSenderName ||
+                    rawSenderName.startsWith('Operador ') ||
+                    rawSenderName.startsWith('Nodo ') ||
+                    rawSenderName.startsWith('Par Escaneado') ||
+                    rawSenderName === 'Nuevo Par' ||
+                    rawSenderName === 'Par Malla';
+
+                const finalName = !isGenericName 
+                    ? rawSenderName 
+                    : (existing?.display_name || `Operador ${senderHash.substring(0, 6)}`);
+
+                // Register peer metadata in meshRouter
+                meshRouter.updatePeer(
+                    senderHash,
+                    'ble',
+                    undefined,
+                    senderHash,
+                    finalName,
+                    senderPk || undefined
                 );
 
-                const isGenericName = !existing?.display_name ||
-                    existing.display_name.startsWith('Operador ') ||
-                    existing.display_name.startsWith('Nodo ') ||
-                    existing.display_name.startsWith('Par Escaneado') ||
-                    existing.display_name === 'Nuevo Par';
-                const finalName = (senderName && !senderName.startsWith('Operador ') && !senderName.startsWith('Nodo '))
-                    ? senderName
-                    : ((existing && !isGenericName) ? existing.display_name : senderName);
+                const msgType = item.msg_type || parsed.type || (parsed.accepted ? 'contact_response' : 'contact_request');
 
-                const handshakeKey = `${senderHash.toLowerCase()}_${item.msg_type || (parsed.sender_pk ? 'req' : 'res')}`;
-                const alreadyHandshaked = _processedHandshakes.has(handshakeKey);
-                _processedHandshakes.add(handshakeKey);
+                // ── CASO A: SOLICITUD DE CONTACTO ENTRANTE (Requiere Consentimiento) ──
+                if (msgType === 'contact_request') {
+                    if (existing) {
+                        // El contacto ya fue aceptado previamente: actualizamos metadatos y reconfirmamos
+                        const updatedContacts = existingContacts.map(c => {
+                            const cHash = normalizeIdentity(c.identity_hash || '');
+                            if (cHash === senderHash || (senderHash.length >= 8 && cHash.startsWith(senderHash.slice(0, 8)))) {
+                                return {
+                                    ...c,
+                                    identity_hash: senderHash,
+                                    display_name: finalName,
+                                    public_key: senderPk || c.public_key,
+                                    avatar_url: parsed.avatar_url || c.avatar_url
+                                };
+                            }
+                            return c;
+                        });
+                        set({ contacts: updatedContacts });
+                        RedAPI.setWebStore('red_web_contacts', updatedContacts);
 
-                // ── CONSENT-FIRST: If unknown sender & it's a contact_request ──
-                // Do NOT auto-add. Queue it for explicit user authorization.
-                if (item.msg_type === 'contact_request' && !existing && !alreadyHandshaked) {
-                    const reqId = `creq_${senderHash.slice(0, 12)}_${Date.now()}`;
-                    const newReq: PendingContactRequest = {
-                        id: reqId,
-                        senderHash,
-                        senderName: finalName,
-                        senderPk,
-                        channel: (item.channel || 'Malla BLE').toString(),
-                        timestamp: Date.now()
-                    };
-                    const currentPending = get().pendingContactRequests || [];
-                    // Deduplicate: one pending per sender
-                    const alreadyPending = currentPending.some(r => r.senderHash === senderHash);
-                    if (!alreadyPending) {
-                        const updatedPending = [...currentPending, newReq];
+                        // Auto-respondemos con confirmación mutua
+                        const myId = get().identity;
+                        if (myId?.identity_hash) {
+                            const respPayload = JSON.stringify({
+                                type: 'contact_response',
+                                id: `cres_${Date.now()}_${myId.identity_hash.slice(0, 8)}`,
+                                sender_hash: myId.identity_hash,
+                                sender_name: myId.nickname || 'Operador RED',
+                                sender_pk: myId.public_key || null,
+                                avatar_url: myId.avatar_url || null,
+                                accepted: true,
+                                timestamp: Date.now()
+                            });
+                            RedAPI.sendMessage(senderHash, respPayload, { msg_type: 'contact_response' }).catch(() => {});
+                        }
+                    } else {
+                        // Nuevo contacto desconocido: Desplegar Flujo de Consentimiento (Modal de Aceptación)
+                        const reqId = parsed.id || `creq_${Date.now()}_${senderHash.slice(0, 8)}`;
+                        const pendingReq: PendingContactRequest = {
+                            id: reqId,
+                            senderHash,
+                            senderName: finalName,
+                            senderPk,
+                            channel: parsed.channel || (item.channel ? String(item.channel).toUpperCase() : 'QR'),
+                            timestamp: parsed.timestamp ? (parsed.timestamp > 1e11 ? parsed.timestamp : parsed.timestamp * 1000) : Date.now(),
+                            avatarUrl: parsed.avatar_url || null,
+                            bio: parsed.bio || null,
+                        };
+
+                        const currentPending = get().pendingContactRequests || [];
+                        const filteredPending = currentPending.filter(r => r.senderHash !== senderHash && r.id !== reqId);
+                        const updatedPending = [pendingReq, ...filteredPending];
+
                         if (typeof window !== 'undefined') {
                             try { localStorage.setItem('red_pending_contact_requests', JSON.stringify(updatedPending)); } catch {}
                         }
-                        set({ pendingContactRequests: updatedPending, activeContactRequestModal: newReq });
-                        // Tactical audio alert (contact request incoming)
-                        TacticalAudioEngine.playWarning();
+
+                        set({
+                            pendingContactRequests: updatedPending,
+                            activeContactRequestModal: pendingReq
+                        });
+
+                        TacticalAudioEngine.playMessageReceived();
+                        toast.info(`🔔 Solicitud de contacto de ${finalName}`);
                     }
-                    return;
                 }
 
-                // ── Known contact OR contact_response: update metadata ──────────
-                if (existing) {
-                    const updatedContacts = existingContacts.map((c: any) =>
-                        c.identity_hash === existing.identity_hash
-                            ? { ...c, display_name: finalName, public_key: senderPk || c.public_key }
-                            : c
-                    );
-                    set({ contacts: updatedContacts });
-                    RedAPI.setWebStore('red_web_contacts', updatedContacts);
-                    RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {});
-                    if (item.msg_type === 'contact_response' && !alreadyHandshaked) {
-                        toast.success(`🤝 ${finalName} ha aceptado tu invitación.`);
+                // ── CASO B: RESPUESTA DE CONTACTO ACEPTADA (Handshake Bidireccional) ──
+                if (msgType === 'contact_response') {
+                    if (parsed.accepted !== false) {
+                        const currentContacts = get().contacts || [];
+                        const cIdx = currentContacts.findIndex(c => {
+                            if (!c) return false;
+                            const cHash = normalizeIdentity(c.identity_hash || '');
+                            return cHash === senderHash || (senderHash.length >= 8 && cHash.startsWith(senderHash.slice(0, 8)));
+                        });
+
+                        let nextContacts = [...currentContacts];
+                        if (cIdx >= 0) {
+                            nextContacts[cIdx] = {
+                                ...nextContacts[cIdx],
+                                identity_hash: senderHash,
+                                display_name: finalName,
+                                public_key: senderPk || nextContacts[cIdx].public_key,
+                                avatar_url: parsed.avatar_url || nextContacts[cIdx].avatar_url
+                            };
+                        } else {
+                            nextContacts.push({
+                                identity_hash: senderHash,
+                                display_name: finalName,
+                                public_key: senderPk,
+                                avatar_url: parsed.avatar_url || undefined
+                            });
+                        }
+
+                        // Actualizar conversaciones también
+                        const currentConvs = get().conversations || [];
+                        let nextConvs = [...currentConvs];
+                        const convIdx = nextConvs.findIndex(c => c.id === senderHash || c.peer === senderHash);
+                        if (convIdx >= 0) {
+                            nextConvs[convIdx] = {
+                                ...nextConvs[convIdx],
+                                id: senderHash,
+                                peer: senderHash
+                            };
+                        } else {
+                            nextConvs.unshift({
+                                id: senderHash,
+                                peer: senderHash,
+                                last_message: 'Contacto mutuo verificado. Chat P2P cifrado listo.',
+                                last_timestamp: Date.now() / 1000,
+                                unread_count: 0
+                            });
+                        }
+
+                        set({ contacts: nextContacts, conversations: nextConvs });
+                        RedAPI.setWebStore('red_web_contacts', nextContacts);
+                        RedAPI.setWebStore('red_web_conversations', nextConvs);
+                        RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {});
+
+                        const handshakeKey = `${senderHash.toLowerCase()}_confirmed`;
+                        if (!_processedHandshakes.has(handshakeKey)) {
+                            _processedHandshakes.add(handshakeKey);
+                            toast.success(`🤝 ${finalName} aceptó tu solicitud de contacto`);
+                            TacticalAudioEngine.playMessageReceived();
+                        }
                     }
-                } else if (item.msg_type === 'contact_response') {
-                    // They accepted our outbound request: auto-add them
-                    RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {
-                        const next = [...existingContacts, { identity_hash: senderHash, display_name: finalName, public_key: senderPk }];
-                        set({ contacts: next });
-                        RedAPI.setWebStore('red_web_contacts', next);
-                    });
-                    if (!alreadyHandshaked) toast.success(`🤝 ${finalName} ha aceptado tu invitación.`);
                 }
 
                 get().fetchData();
-            } catch {
-                console.warn('[RED] isHandshakePacket parse error: discarding silently, no contact created.');
+            } catch (e) {
+                console.warn('[RED] isHandshakePacket parse error:', e);
             }
             return;
         }
@@ -1282,6 +1376,27 @@ export async function dispatchIncomingMessage(
                     unread_count: 1
                 };
                 updatedConvs.unshift(newObj);
+
+                // Auto-register sender as contact if not present (WhatsApp/Signal/Telegram model)
+                const currentContacts = get().contacts || [];
+                const hasContact = currentContacts.some((c: any) => {
+                    const cHash = normalizeIdentity(c.identity_hash || '');
+                    return cHash === canonicalSender || cHash === item.sender || (canonicalSender.length >= 8 && cHash.startsWith(canonicalSender.slice(0, 8)));
+                });
+                if (!hasContact && canonicalSender && canonicalSender !== 'unknown' && canonicalSender !== 'local') {
+                    const peerMeta = meshRouter.getPeerByAnyId(canonicalSender) || meshRouter.getPeerByAnyId(item.sender);
+                    const newContactName = peerMeta?.name && !peerMeta.name.startsWith('Operador ') ? peerMeta.name : `Operador ${canonicalSender.slice(0, 6)}`;
+                    const newContactPk = peerMeta?.publicKey || (item as any).sender_pk;
+                    const newContact = {
+                        identity_hash: canonicalSender,
+                        display_name: newContactName,
+                        public_key: newContactPk
+                    };
+                    const nextContacts = [...currentContacts, newContact];
+                    set({ contacts: nextContacts });
+                    RedAPI.setWebStore('red_web_contacts', nextContacts);
+                    RedAPI.addContact(canonicalSender, newContactName, newContactPk).catch(() => {});
+                }
             }
             set({ conversations: updatedConvs });
             RedAPI.setWebStore('red_web_conversations', updatedConvs);
