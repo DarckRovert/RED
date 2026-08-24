@@ -260,6 +260,95 @@ export async function dispatchIncomingMessage(
             return;
         }
 
+        // ── Social Feed Mesh Synchronization ──────────────────────────────────
+        if (item.msg_type === 'social_post') {
+            try {
+                const rawPost = (item as any).post || (typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : null);
+                if (rawPost && rawPost.id) {
+                    const currentPosts = get().socialPosts || [];
+                    if (!currentPosts.some(p => p.id === rawPost.id)) {
+                        set((s: any) => ({
+                            socialPosts: [rawPost, ...s.socialPosts]
+                        }));
+                        if (typeof window !== 'undefined') {
+                            try {
+                                const stored = JSON.parse(localStorage.getItem('red_social_posts') || '[]');
+                                if (!stored.some((p: any) => p.id === rawPost.id)) {
+                                    stored.unshift(rawPost);
+                                    localStorage.setItem('red_social_posts', JSON.stringify(stored.slice(0, 100)));
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+            } catch {}
+            return;
+        }
+
+        if (item.msg_type === 'social_react') {
+            try {
+                const rawReact = (item as any) || (typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : null);
+                if (rawReact && rawReact.post_id && rawReact.emoji && rawReact.author_hash) {
+                    set((s: any) => {
+                        const updated = s.socialPosts.map((p: any) => {
+                            if (p.id === rawReact.post_id) {
+                                const reactions = { ...(p.reactions || {}) };
+                                if (!reactions[rawReact.emoji]) reactions[rawReact.emoji] = [];
+                                if (!reactions[rawReact.emoji].includes(rawReact.author_hash)) {
+                                    reactions[rawReact.emoji].push(rawReact.author_hash);
+                                }
+                                return { ...p, reactions };
+                            }
+                            return p;
+                        });
+                        return { socialPosts: updated };
+                    });
+                }
+            } catch {}
+            return;
+        }
+
+        // ── Public Channels Mesh Synchronization ──────────────────────────────
+        if (item.msg_type === 'channel_post') {
+            try {
+                const rawChannelMsg = (item as any).message || (typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : null);
+                if (rawChannelMsg && rawChannelMsg.id) {
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const stored = JSON.parse(localStorage.getItem('red_channel_messages') || '[]');
+                            if (!stored.some((m: any) => m.id === rawChannelMsg.id)) {
+                                stored.push(rawChannelMsg);
+                                localStorage.setItem('red_channel_messages', JSON.stringify(stored.slice(-200)));
+                                window.dispatchEvent(new CustomEvent('red_channel_message_received', { detail: rawChannelMsg }));
+                            }
+                        } catch {}
+                    }
+                }
+            } catch {}
+            return;
+        }
+
+        // ── Live Vectorial Canvas Real-Time Streaming ─────────────────────────
+        if (item.msg_type === 'canvas_stroke' || item.msg_type === 'canvas_clear') {
+            try {
+                if (typeof window !== 'undefined') {
+                    const detail = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : (item as any).payload || item;
+                    window.dispatchEvent(new CustomEvent('red_canvas_remote_event', { detail: { type: item.msg_type, ...detail } }));
+                }
+            } catch {}
+            return;
+        }
+
+        // ── Blockchain Mesh Propagation ───────────────────────────────────────
+        if (item.msg_type === 'blockchain_block' || item.msg_type === 'blockchain_tx') {
+            try {
+                if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('red_blockchain_remote_event', { detail: item }));
+                }
+            } catch {}
+            return;
+        }
+
         // ── Delivery Acknowledgment (ACK) Handling ─────────────────────────────
         if (item.msg_type === 'ack' || item.msg_type === 'delivery_ack') {
             const targetId = (item as any).target_id || item.content;

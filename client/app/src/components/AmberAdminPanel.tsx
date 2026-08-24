@@ -34,9 +34,9 @@ async function signAuthorityPayload(authorityId: string, payload: string): Promi
 
 export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPanelProps) {
     const { t } = useTranslation();
-    const { goBack } = useRedStore();
+    const { goBack, identity } = useRedStore();
     const handleClose = onClose || goBack;
-    const nodeId = localNodeId || "node-local";
+    const nodeId = localNodeId || identity?.identity_hash || "node-local";
     const [view, setView] = useState<PanelView>("list");
     const [alerts, setAlerts] = useState<AmberAlert[]>([]);
     const [loading, setLoading] = useState(true);

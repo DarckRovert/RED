@@ -62,17 +62,16 @@ jobs:
           body: |
             ## RED Sovereign Mesh OS — Release ${{ github.ref_name }}
             
-            ### 🌐 Novedades en esta versión (${{ github.ref_name }}):
-            - **Interoperabilidad WebRTC P2P DataChannels & STUN NAT Traversal:** Comunicación punto a punto directa entre navegadores web (PC / GitHub Pages) y aplicaciones móviles Android a través de Internet.
-            - **Relé Ciego Zero-Knowledge (`mesh-relay`):** Transporte de paquetes cifrados AES-256-GCM para clientes bajo CGNAT simétrico estricto sin acceso a claves ni descifrado de datos en servidores centrales.
-            - **Persistencia Autónoma Web:** Almacenamiento local aislado para usuarios web con entrega de paquetes en tiempo real.
-            - **Motor de Voz Táctica LowBitrateVocoder (1.6–3.2 kbps):** Remuestreo a 8000 Hz, pre-énfasis vocal y compresión IMA-ADPCM de 4 bits (-97.9% de reducción) para transmisión de voz real sobre LoRa y módem acústico ultrasónico SoundMesh (18.5–20.5 kHz).
-            - **Prueba de Trabajo Criptográfica Anti-DDoS (MeshProofOfWork):** Algoritmo Hashcash SHA-256 con dificultad dinámica y tolerancia anti-repetición temporal sin servidores centrales.
-            - **Gobernador Cinemático de Batería (KineticDutyGovernor):** Análisis de acelerómetro RMS y estado de batería para extender la autonomía de red hasta 48 horas continuas.
-            - **Integridad Merkle & Self-Healing (StateIntegrityEngine):** Verificación de raíz Merkle SHA-256 en almacenamiento local con aislamiento automático de registros dañados en cuarentena.
-            - **Criptografía Post-Cuántica (PqcCryptoEngine):** Soporte de retículos ML-KEM-768 (FIPS 203) con intercambio híbrido dual ECDH P-256 / X25519.
-            - **Actuadores de Hardware Nativo:** Control de Flash LED por `CameraManager` para pulsos Morse militares SOS e iluminación capilar en triaje START.
-            - **Catálogo de 35 Módulos Tácticos Verificados:** 0% datos simulados, 100% funcionalidad real operativa.
+            ### 🔗 Real Connections Master Edition — v60.0.0
+            
+            - **Blockchain Local PoS Soberano:** Motor de cadena completo con SHA-256 real, árbol de Merkle, nonce, forja de bloques por ranuras y recompensas de validador. 0% datos simulados.
+            - **Vales P2P Criptográficos Off-Grid:** Emisión de vales firmados con SHA-256 y códigos QR 260×260 px para comercio peer-to-peer sin internet. Doble gasto prevenido con lista local de vales redimidos.
+            - **Live Canvas Vectorial en Tiempo Real:** Streaming de trazos (<40 bytes/trazo) sobre MeshRouter. Paleta táctica con pluma, marcador, borrador y exportación PNG. Sin polling, sin Base64.
+            - **Muro Social & Canales P2P Descentralizados:** Publicaciones y reacciones difundidas sobre MeshRouter con sincronización reactiva en tiempo real entre nodos.
+            - **Brújula Táctica Off-Grid & Resección:** Filtro de paso bajo vectorial, acimut solar dinámico y triangulación de waypoints persistentes.
+            - **Alerta AMBER con Autoridad Criptográfica:** Firma Ed25519/SHA-256 vinculada al DID soberano del operador.
+            - **Suite Criptográfica 4/4 PASS:** Shamir SSS (10/10), ML-KEM-768 post-cuántico, Esteganografía LSB, Módem Acústico SoundMesh FSK.
+            - **Despliegue Limpio:** 3 dispositivos actualizados (Moto G22, Tablet TB305XU, Note14 Xiaomi). Note14 actualizado de v56.0.0 a v60.0.0.
             
             ### 📱 Descarga Directa del APK:
             Descarga el archivo `red-${{ github.ref_name }}-latest.apk` o `red-latest.apk` adjunto abajo para instalar directamente en tu dispositivo Android (ARM64).

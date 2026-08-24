@@ -67,30 +67,70 @@ export default function BlockchainExplorer() {
     const [stakingStatus, setStakingStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
     const [stakingError, setStakingError] = useState("");
 
+    const [searchQuery, setSearchQuery] = useState("");
+
     const chainHeight = consensus?.chain_height || blocks.length || 1;
 
-    useEffect(() => {
-        const fetchChainData = async () => {
-            try {
-                const chain = await RedAPI.getBlockchain();
-                if (Array.isArray(chain)) {
-                    setBlocks(chain);
-                }
-                const cons = await RedAPI.getConsensusStatus();
-                if (cons) setConsensus(cons);
-
-                const vals = await RedAPI.getValidators();
-                if (Array.isArray(vals)) setValidators(vals);
-            } catch {
-                setBlocks([]);
-            } finally {
-                setLoading(false);
+    const fetchChainData = async () => {
+        try {
+            const { localChainLedger } = await import("../lib/blockchain/LocalChainLedger");
+            const chain = localChainLedger.getBlocks();
+            if (Array.isArray(chain) && chain.length > 0) {
+                setBlocks(chain.map(b => ({
+                    height: b.height,
+                    hash: b.hash,
+                    prev_hash: b.prev_hash,
+                    timestamp: b.timestamp,
+                    tx_count: b.tx_count,
+                    validator: b.validator,
+                    merkle_root: b.merkle_root,
+                    transactions: b.transactions
+                } as any)));
+            } else {
+                const apiChain = await RedAPI.getBlockchain();
+                if (Array.isArray(apiChain)) setBlocks(apiChain);
             }
-        };
 
+            const metrics = localChainLedger.getConsensusMetrics();
+            setConsensus({
+                epoch: metrics.epoch,
+                current_slot: metrics.current_slot,
+                total_stake: metrics.total_stake,
+                active_validators: metrics.active_validators,
+                chain_height: metrics.chain_height,
+            });
+
+            const vals = await localChainLedger.getValidators();
+            setValidators(vals.map(v => ({
+                public_key: v.public_key,
+                stake: v.stake,
+                active: v.active,
+                blocks_produced: v.blocks_produced,
+                missed_slots: v.missed_slots,
+                weight: v.weight,
+                display_name: v.display_name
+            } as any)));
+        } catch {
+            // fallback handled
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         fetchChainData();
-        const interval = setInterval(fetchChainData, 3000);
-        return () => clearInterval(interval);
+        let unsubscribeLedger = () => {};
+        import("../lib/blockchain/LocalChainLedger").then(({ localChainLedger }) => {
+            unsubscribeLedger = localChainLedger.subscribe(() => {
+                fetchChainData();
+            });
+        });
+
+        const interval = setInterval(fetchChainData, 4000);
+        return () => {
+            clearInterval(interval);
+            unsubscribeLedger();
+        };
     }, []);
 
     const handleRunAiAudit = async () => {
@@ -120,10 +160,17 @@ export default function BlockchainExplorer() {
         setStakingError("");
 
         try {
-            await RedAPI.stakeTokens(amt);
-            setStakingStatus("success");
-            toast.success(`✅ Has delegado ${amt} RED como validador`);
-            setStakeAmount("");
+            const { localChainLedger } = await import("../lib/blockchain/LocalChainLedger");
+            const ok = await localChainLedger.stake(amt);
+            if (ok) {
+                setStakingStatus("success");
+                toast.success(`✅ Has delegado ${amt} RED como validador PoS`);
+                setStakeAmount("");
+                await fetchChainData();
+            } else {
+                setStakingStatus("error");
+                setStakingError("Saldo insuficiente en la bóveda");
+            }
         } catch (err: any) {
             setStakingStatus("error");
             setStakingError(err?.message || "Error al procesar delegación de stake");
@@ -134,12 +181,7 @@ export default function BlockchainExplorer() {
         setLoading(true);
         toast.info("⚡ Sincronizando árbol de consenso con pares mesh...");
         try {
-            const chain = await RedAPI.getBlockchain();
-            if (Array.isArray(chain)) setBlocks(chain);
-            const cons = await RedAPI.getConsensusStatus();
-            if (cons) setConsensus(cons);
-            const vals = await RedAPI.getValidators();
-            if (Array.isArray(vals)) setValidators(vals);
+            await fetchChainData();
             toast.success("✅ Cadena local verificada y sincronizada.");
         } catch {
             toast.warning("Sincronización completada con estado Génesis local.");
@@ -149,26 +191,27 @@ export default function BlockchainExplorer() {
     };
 
     const handleForgeLocalBlock = async () => {
-        toast.info("⛏️ Forjando bloque de prueba PoA/PoW...");
+        toast.info("⛏️ Forjando bloque real con Merkle Tree y PoS...");
         try {
-            const prevHash = blocks.length > 0 ? blocks[0].hash : "0000000000000000000000000000000000000000000000000000000000000000";
-            const newHeight = chainHeight + 1;
-            const newHash = "0000" + Math.random().toString(16).substring(2, 10) + Date.now().toString(16) + "RED";
-            const forgedBlock: BlockItem = {
-                height: newHeight,
-                hash: newHash,
-                prev_hash: prevHash,
-                timestamp: Math.floor(Date.now() / 1000),
-                tx_count: 1,
-                validator: identity?.identity_hash ? identity.identity_hash.substring(0, 16) : "LOCAL_VALIDATOR"
-            };
-
-            setBlocks(prev => [forgedBlock, ...prev]);
-            toast.success(`🎉 ¡Bloque #${newHeight} minado y validado en el nodo local!`);
-        } catch {
-            toast.error("Error al forjar bloque");
+            const { localChainLedger } = await import("../lib/blockchain/LocalChainLedger");
+            const newBlock = await localChainLedger.forgeNextBlock();
+            await fetchChainData();
+            toast.success(`🎉 ¡Bloque #${newBlock.height} minado y validado (Hash: ${newBlock.hash.slice(0, 10)}…)!`);
+        } catch (e: any) {
+            toast.error("Error al forjar bloque: " + (e?.message || ""));
         }
     };
+
+    const filteredBlocks = blocks.filter(b => {
+        if (!searchQuery.trim()) return true;
+        const q = searchQuery.trim().toLowerCase();
+        return (
+            b.height.toString() === q ||
+            b.hash.toLowerCase().includes(q) ||
+            b.prev_hash.toLowerCase().includes(q) ||
+            b.validator.toLowerCase().includes(q)
+        );
+    });
 
     return (
         <div style={{
@@ -297,28 +340,57 @@ export default function BlockchainExplorer() {
                                 </div>
                             )}
 
-                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                {blocks.map(b => (
-                                    <div
-                                        key={b.height}
-                                        onClick={() => setSelectedBlock(b)}
-                                        className="card-tactical-interactive"
-                                        style={{ padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                            {/* Barra de Búsqueda Táctica */}
+                            <div style={{ position: "relative" }}>
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="🔍 Buscar por altura, hash o validador…"
+                                    className="input-tactical"
+                                    style={{ width: "100%", padding: "10px 14px", fontSize: "0.82rem", borderRadius: "var(--radius-md)" }}
+                                />
+                                {searchQuery && (
+                                    <button
+                                        onClick={() => setSearchQuery("")}
+                                        style={{
+                                            position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)",
+                                            background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer"
+                                        }}
                                     >
-                                        <div>
-                                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                <strong style={{ fontSize: "0.95rem", color: "var(--accent-cyan)" }}>Bloque #{b.height}</strong>
-                                                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>({b.tx_count} txs)</span>
-                                            </div>
-                                            <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", marginTop: "2px" }}>
-                                                Hash: {b.hash.substring(0, 24)}…
-                                            </div>
-                                        </div>
-                                        <div style={{ textAlign: "right", fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                            {timeAgo(b.timestamp)}
-                                        </div>
+                                        ✕
+                                    </button>
+                                )}
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                {filteredBlocks.length === 0 ? (
+                                    <div style={{ padding: "24px", textAlign: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                                        No se encontraron bloques para "{searchQuery}"
                                     </div>
-                                ))}
+                                ) : (
+                                    filteredBlocks.map(b => (
+                                        <div
+                                            key={b.height}
+                                            onClick={() => setSelectedBlock(b)}
+                                            className="card-tactical-interactive"
+                                            style={{ padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                                        >
+                                            <div>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                                    <strong style={{ fontSize: "0.95rem", color: "var(--accent-cyan)" }}>Bloque #{b.height}</strong>
+                                                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>({b.tx_count} txs)</span>
+                                                </div>
+                                                <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", marginTop: "2px" }}>
+                                                    Hash: {b.hash.substring(0, 24)}…
+                                                </div>
+                                            </div>
+                                            <div style={{ textAlign: "right", fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                                {timeAgo(b.timestamp)}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
                     )}

@@ -439,6 +439,19 @@ public class RedNodeService extends Service {
 
     @Override
     public void onDestroy() {
+        // CRITICAL: Call stopForeground FIRST, before any blocking operations.
+        // On Android 14+ (API 34), the OS enforces a strict timeout for dataSync
+        // foreground services. If we block onDestroy for too long without releasing
+        // the foreground state, the OS throws ForegroundServiceDidNotStopInTimeException
+        // and kills the process. This must be the very first call.
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE);
+            } else {
+                stopForeground(true);
+            }
+        } catch (Exception ignored) {}
+
         super.onDestroy();
         
         // Stop the SSE consumer cleanly
@@ -485,6 +498,23 @@ public class RedNodeService extends Service {
         if (gattServer != null) {
             try { gattServer.close(); } catch (Exception ignored) {}
             Log.i(TAG, "[BLE] GATT Server closed.");
+        }
+
+        // Stop Rust node in a background thread with a 3s timeout to avoid
+        // blocking onDestroy past the OS foreground service deadline.
+        if (RedNodePlugin.isNativeLoaded) {
+            final String dataDir = getFilesDir().getAbsolutePath() + "/red_node";
+            Thread stopThread = new Thread(() -> {
+                try {
+                    RedNodePlugin.destroyNode(dataDir);
+                    Log.i(TAG, "Rust node destroyed cleanly.");
+                } catch (Exception e) {
+                    Log.e(TAG, "Error destroying Rust node: " + e.getMessage());
+                }
+            }, "RedNodeStop");
+            stopThread.setDaemon(true);
+            stopThread.start();
+            try { stopThread.join(3000); } catch (InterruptedException ignored) {}
         }
 
         Log.i(TAG, "RedNodeService destroyed — all locks, BLE, and SSE consumer released.");

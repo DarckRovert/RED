@@ -1,6 +1,38 @@
 # Changelog
 
+## [60.0.0-real-connections-master] - 2026-08-24
+
+### Real Connections Master Edition — 6 Módulos con Lógica Real, Suite Criptográfica 4/4 y Streaming Vectorial P2P
+
+**Blockchain Explorer & Staking Real (Motor PoS Soberano)**
+- `LocalChainLedger.ts`: Motor de cadena local completo con cálculo de hashes SHA-256 reales, árbol de Merkle (`merkle_root`), nonce, forja de bloques por ranuras (`slots`), pool de transacciones y recompensas acreditadas a `TokenomicsEngine`. Eliminación total de bloques estáticos y staking visual sin cómputo de cadena.
+
+**Hub Comercial & Vales P2P Off-Grid (Comercio Criptográfico)**
+- `CommercialHubModal.tsx` & `economy.ts`: Botón `💳 Pagar P2P` que emite vales criptográficos firmados con SHA-256 (`createP2PVoucher`), generación de códigos QR de alta resolución (260×260 px) con la librería `qrcode` para intercambio off-grid, registro de cada transacción en el libro contable de la cadena local y difusión del vale firmado a través de `MeshRouter`. Billetera P2P con balance inicial activo (150 RED tácticos) y auto-crédito de respaldo para asegurar fluidez operativa.
+
+**Live Canvas Vectorial en Tiempo Real (Pizarra Táctica P2P)**
+- `LiveCanvasModal.tsx`: Sustitución total del sondeo lento cada 2s de imágenes Base64 completas por un motor de streaming vectorial en tiempo real (<40 bytes por trazo). Paleta táctica (Cian, Esmeralda, Ámbar, Carmesí, Blanco), herramientas de pluma, marcador y borrador, exportación PNG local y recepción reactiva mediante `CustomEvent('red_canvas_remote_event')` sin latencia perceptible.
+
+**Muro Social & Canales Públicos Descentralizados**
+- `SocialFeedPanel.tsx`, `PublicChannelsPanel.tsx` & `messageDispatcher.ts`: Difusión y recepción de publicaciones (`social_post`), reacciones (`social_react`) y mensajes de canales (`channel_post`) enrutados sobre `MeshRouter` con sincronización reactiva en tiempo real entre todos los nodos de la malla. Eliminación total del almacenamiento aislado en memoria local sin propagación.
+
+**Brújula Táctica Off-Grid & Resección de Waypoints**
+- `OffGridCompassModal.tsx`: Filtro de paso bajo vectorial para eliminar saltos angulares bruscos en 0°/360°, cálculo dinámico de acimut solar según geolocalización real, triangulación de waypoints y almacenamiento persistente de puntos de referencia. Landmarks fijos eliminados.
+
+**Alerta AMBER con Firma de Autoridad Criptográfica**
+- `AmberAdminPanel.tsx`: Firma de la carga útil vinculada al DID y clave soberana del operador con SHA-256 y prefijo de protocolo `RED_AMBER_AUTH`. Eliminación de la firma estática basada en substring.
+
+**Suite Automatizada de Pruebas Criptográficas (4/4 PASS)**
+- `test-crypto-core.js`: Validación al 100% de Shamir's Secret Sharing (10/10 combinaciones en GF(2^8)), NIST FIPS 203 ML-KEM-768 post-cuántico, Esteganografía LSB y Módem Acústico SoundMesh FSK. Resultado: **4/4 protocolos PASS**.
+- Compilación Next.js Turbopack y TypeScript sin ningún error.
+
+**Despliegue Limpio en 3 Dispositivos**
+- `Moto G22` (ZT322B386P), `Tablet TB305XU` (HA2CHKZ2) y `Note14 Xiaomi` (6dife65ls485fega): Instalación limpia de v60.0.0, eliminando versiones anteriores (56.0.0 en Note14).
+
+---
+
 ## [59.0.0-tactical-master-release] - 2026-08-24
+
 
 ### Sovereign Tactical Master Edition — Centro de Comando Táctico, PWA Offline Total & Suite Criptográfica Core
 

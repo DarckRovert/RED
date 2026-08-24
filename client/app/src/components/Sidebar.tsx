@@ -228,9 +228,9 @@ export default function Sidebar() {
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                 <span style={{ fontSize: "1.4rem" }}>🛡️</span>
                                 <div>
-                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>{t.dock?.modules || "Centro de Control RED"}</div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>{t('dock.modules') || "Centro de Control RED"}</div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                                        {totalModules} {t.dock?.modules ? t.dock.modules.toUpperCase() : "MÓDULOS"}
+                                        {totalModules} {t('dock.modules')?.toUpperCase() || "MÓDULOS"}
                                     </div>
                                 </div>
                             </div>

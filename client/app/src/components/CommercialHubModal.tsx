@@ -31,6 +31,12 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     const [newIcon, setNewIcon] = useState('📡');
     const [newUrl, setNewUrl] = useState('');
 
+    // P2P Voucher Modal
+    const [p2pModalItem, setP2pModalItem] = useState<TacticalProduct | null>(null);
+    const [p2pQrData, setP2pQrData] = useState<string | null>(null);
+    const [p2pQrUrl, setP2pQrUrl] = useState<string | null>(null);
+    const [isIssuingVoucher, setIsIssuingVoucher] = useState(false);
+
     const refreshData = () => {
         setProStatus(MonetizationEngine.getProStatus());
         setCatalog(MonetizationEngine.getCatalog());
@@ -123,6 +129,60 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
         refreshData();
     };
 
+    const handleBuyWithP2PVoucher = async (item: TacticalProduct) => {
+        const match = item.priceEst.match(/\d+/);
+        const amount = match ? parseInt(match[0], 10) : 25;
+
+        setIsIssuingVoucher(true);
+        try {
+            const { createP2PVoucher } = await import('../api/economy');
+            const { localChainLedger } = await import('../lib/blockchain/LocalChainLedger');
+
+            const res = await createP2PVoucher({
+                amount,
+                recipient: undefined
+            });
+
+            if (res && res.ok && res.voucher) {
+                const qrString = `RED_PAY:${res.voucher.id}:${res.voucher.amount}:${res.voucher.signature}`;
+                setP2pQrData(qrString);
+
+                try {
+                    const QRCode = await import('qrcode');
+                    const qrLib: any = QRCode.default || QRCode;
+                    const url = await qrLib.toDataURL(qrString, {
+                        width: 260, margin: 1,
+                        color: { dark: "#00E676", light: "#04060A" }
+                    });
+                    setP2pQrUrl(url);
+                } catch {
+                    setP2pQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrString)}&color=00e676&bgcolor=04060a`);
+                }
+
+                setP2pModalItem(item);
+
+                // Record in local blockchain ledger
+                await localChainLedger.submitTransaction({
+                    type: 'VOUCHER_ISSUE',
+                    sender: 'did:red:local_buyer',
+                    recipient: 'COMMERCIAL_ESCROW',
+                    amount,
+                    fee: 0,
+                    payload: { itemTitle: item.title, voucherId: res.voucher.id }
+                });
+
+                toast.success(`💳 Vale P2P de ${amount} RED generado para "${item.title}"`);
+                refreshData();
+            } else {
+                toast.error(res?.error || "Saldo insuficiente para emitir vale P2P.");
+            }
+        } catch (e: any) {
+            toast.error("Error al emitir orden P2P: " + (e?.message || ""));
+        } finally {
+            setIsIssuingVoucher(false);
+        }
+    };
+
     const filteredCatalog = useMemo(() => {
         if (activeCategory === 'all') return catalog;
         return catalog.filter(item => item.category === activeCategory);
@@ -143,119 +203,153 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
         }}>
             <div style={{
                 width: '100%',
-                maxWidth: '720px',
-                maxHeight: '92vh',
-                backgroundColor: 'rgba(12, 16, 26, 0.96)',
-                border: '1px solid rgba(255, 42, 81, 0.3)',
+                maxWidth: '680px',
+                maxHeight: '90vh',
+                backgroundColor: 'rgba(12, 16, 28, 0.95)',
+                border: '1px solid rgba(0, 229, 255, 0.2)',
                 borderRadius: '20px',
-                boxShadow: '0 24px 64px rgba(0, 0, 0, 0.9), 0 0 32px rgba(232, 33, 58, 0.15)',
+                boxShadow: '0 20px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 229, 255, 0.1)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
-                color: '#FFFFFF'
+                position: 'relative'
             }}>
-                {/* Header Táctico */}
+                {/* Header */}
                 <div style={{
-                    padding: '18px 24px',
+                    padding: '20px 24px',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    background: 'linear-gradient(90deg, rgba(232, 33, 58, 0.15) 0%, transparent 100%)'
+                    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%)'
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{
                             width: '40px',
                             height: '40px',
                             borderRadius: '12px',
-                            background: 'linear-gradient(135deg, #FF2A51 0%, #B30021 100%)',
+                            background: 'linear-gradient(135deg, rgba(255, 42, 81, 0.2) 0%, rgba(0, 229, 255, 0.2) 100%)',
+                            border: '1px solid rgba(0, 229, 255, 0.4)',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '20px',
-                            boxShadow: '0 0 20px rgba(255, 42, 81, 0.5)'
+                            fontSize: '20px'
                         }}>
-                            ⚡
+                            🪙
                         </div>
                         <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.3px' }}>
-                                    {t('hub.title') || "Hub Comercial & Beneficios Pro"}
-                                </h2>
-                                <span style={{
-                                    fontSize: '10px', padding: '2px 8px', borderRadius: '12px',
-                                    background: proStatus.isPro ? 'rgba(0, 230, 118, 0.2)' : 'rgba(255, 255, 255, 0.08)',
-                                    color: proStatus.isPro ? 'var(--accent-emerald)' : 'var(--text-muted)',
-                                    fontWeight: 800, fontFamily: 'JetBrains Mono, monospace'
-                                }}>
-                                    {proStatus.isPro ? 'PRO ACTIVO' : 'ESTÁNDAR'}
-                                </span>
+                            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.3px' }}>
+                                Hub Comercial & Financiación Mesh
+                            </h2>
+                            <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)', marginTop: '2px' }}>
+                                Micro-recompensas, Billetera Táctica y Catálogo Homologado
                             </div>
-                            <p style={{ margin: 0, fontSize: '0.74rem', color: 'rgba(255, 255, 255, 0.6)', fontFamily: 'JetBrains Mono, monospace' }}>
-                                {proStatus.isPro 
-                                    ? `● ${proStatus.remainingHours}h de autonomía Pro restante · ${proStatus.credits} RED Créditos`
-                                    : `● Balance: ${proStatus.credits} RED Créditos · 100% Descentralizado`}
-                            </p>
                         </div>
                     </div>
-                    <button 
+                    <button
                         onClick={onClose}
                         className="btn-icon"
-                        style={{ width: '36px', height: '36px', borderRadius: '10px' }}
+                        style={{ width: '36px', height: '36px' }}
                     >
                         ✕
                     </button>
                 </div>
 
-                {/* Tabs de Navegación */}
+                {/* Status Bar */}
                 <div style={{
-                    display: 'flex', gap: '8px', padding: '10px 20px',
+                    padding: '12px 24px',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '10px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Modo Táctico:
+                        </span>
+                        <span style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            background: proStatus.isPro ? 'rgba(0, 230, 118, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                            color: proStatus.isPro ? 'var(--accent-emerald)' : 'var(--text-secondary)',
+                            border: proStatus.isPro ? '1px solid rgba(0, 230, 118, 0.4)' : '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                            {proStatus.isPro ? `⚡ PRO ACTIVO (${proStatus.remainingHours}h)` : '🛡️ MODO ESTÁNDAR'}
+                        </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Billetera Local:
+                        </span>
+                        <span style={{
+                            fontSize: '13px',
+                            fontWeight: 800,
+                            color: 'var(--accent-amber)',
+                            fontFamily: 'JetBrains Mono, monospace'
+                        }}>
+                            🪙 {proStatus.credits} RED
+                        </span>
+                    </div>
+                </div>
+
+                {/* Tabs */}
+                <div style={{
+                    display: 'flex',
+                    padding: '0 24px',
                     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                    background: 'rgba(0, 0, 0, 0.25)', overflowX: 'auto'
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    gap: '4px',
+                    overflowX: 'auto'
                 }}>
                     <button
                         onClick={() => setActiveTab('catalog')}
-                        className={`btn-tactical-pill ${activeTab === 'catalog' ? 'active' : ''}`}
-                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        className={activeTab === 'catalog' ? 'glow-pill-active' : 'btn-ghost'}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
-                        🛒 Catálogo Hardware ({filteredCatalog.length})
+                        📦 Catálogo Homologado ({catalog.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('redeem')}
-                        className={`btn-tactical-pill ${activeTab === 'redeem' ? 'active' : ''}`}
-                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        className={activeTab === 'redeem' ? 'glow-pill-active' : 'btn-ghost'}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
-                        🪙 Canje & Bonos
+                        ⚡ Canjear Modo Pro
                     </button>
                     <button
                         onClick={() => setActiveTab('transactions')}
-                        className={`btn-tactical-pill ${activeTab === 'transactions' ? 'active' : ''}`}
-                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        className={activeTab === 'transactions' ? 'glow-pill-active' : 'btn-ghost'}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
-                        📜 Transacciones ({transactions.length})
+                        📑 Transacciones ({transactions.length})
                     </button>
                     <button
                         onClick={() => setActiveTab('create')}
-                        className={`btn-tactical-pill ${activeTab === 'create' ? 'active' : ''}`}
-                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        className={activeTab === 'create' ? 'glow-pill-active' : 'btn-ghost'}
+                        style={{ padding: '10px 14px', fontSize: '0.78rem', fontWeight: 700, borderRadius: '8px 8px 0 0' }}
                     >
                         ➕ Añadir Equipo
                     </button>
                 </div>
 
-                {/* Contenido Dinámico */}
-                <div className="scroll-container" style={{
-                    padding: '20px',
+                {/* Content */}
+                <div style={{
+                    padding: '24px',
                     overflowY: 'auto',
+                    flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '18px',
-                    flex: 1
+                    gap: '18px'
                 }}>
                     {/* TAB: CATALOG */}
                     {activeTab === 'catalog' && (
                         <>
-                            {/* Rewarded Video Card */}
+                            {/* AdMob Banner Box */}
                             <div style={{
                                 padding: '18px',
                                 borderRadius: '14px',
@@ -371,6 +465,20 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                             </div>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                                            <button
+                                                onClick={() => handleBuyWithP2PVoucher(item)}
+                                                disabled={isIssuingVoucher}
+                                                className="btn-tactical-secondary"
+                                                style={{
+                                                    padding: '8px 12px',
+                                                    fontSize: '0.74rem',
+                                                    borderColor: 'rgba(0, 230, 118, 0.4)',
+                                                    color: 'var(--accent-emerald)',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                            >
+                                                💳 Pagar P2P
+                                            </button>
                                             <a
                                                 href={item.affiliateUrl}
                                                 target="_blank"
@@ -624,8 +732,66 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                         Cerrar Panel
                     </button>
                 </div>
+
+                {/* Modal P2P QR Overlay */}
+                {p2pModalItem && (
+                    <div
+                        style={{
+                            position: 'fixed', inset: 0, zIndex: 100000,
+                            background: 'rgba(4, 6, 14, 0.92)', backdropFilter: 'blur(20px)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+                        }}
+                        onClick={() => setP2pModalItem(null)}
+                    >
+                        <div
+                            className="card-tactical animate-enter"
+                            style={{
+                                width: '100%', maxWidth: '420px', padding: '24px',
+                                background: 'linear-gradient(180deg, #0e1222 0%, #080a14 100%)',
+                                border: '1px solid rgba(0, 230, 118, 0.4)',
+                                textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px'
+                            }}
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div style={{ fontSize: '2rem' }}>💳</div>
+                            <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#FFF' }}>
+                                Vale P2P de Pago Generado
+                            </h3>
+                            <div style={{ fontSize: '0.80rem', color: 'var(--text-muted)' }}>
+                                {p2pModalItem.title}
+                            </div>
+
+                            {p2pQrUrl && (
+                                <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+                                    <div style={{ padding: '12px', background: '#04060A', borderRadius: '14px', border: '1px solid rgba(0,230,118,0.3)' }}>
+                                        <img src={p2pQrUrl} alt="QR de Pago P2P" style={{ width: '200px', height: '200px', display: 'block' }} />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div style={{
+                                padding: '10px', borderRadius: '8px', background: 'rgba(0,0,0,0.5)',
+                                border: '1px solid var(--glass-border)', fontSize: '0.72rem',
+                                fontFamily: 'JetBrains Mono, monospace', color: 'var(--accent-emerald)', wordBreak: 'break-all'
+                            }}>
+                                {p2pQrData}
+                            </div>
+
+                            <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                                Muestra este código QR al vendedor o nodo receptor para transferir los créditos de forma 100% off-grid.
+                            </div>
+
+                            <button
+                                onClick={() => setP2pModalItem(null)}
+                                className="btn-tactical-primary"
+                                style={{ padding: '12px', width: '100%', marginTop: '4px' }}
+                            >
+                                Entendido / Cerrar Vale
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
 };
-
