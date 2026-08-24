@@ -3,6 +3,21 @@ chcp 65001 >nul
 title RED Sovereign Mesh — Centro de Control PC
 color 0C
 
+set "SCRIPT_DIR=%~dp0"
+set "NODE_EXE="
+
+if exist "%SCRIPT_DIR%red-node.exe" (
+    set "NODE_EXE=%SCRIPT_DIR%red-node.exe"
+) else if exist "%SCRIPT_DIR%release-assets\red-node.exe" (
+    set "NODE_EXE=%SCRIPT_DIR%release-assets\red-node.exe"
+) else if exist "%SCRIPT_DIR%target\release\red-node.exe" (
+    set "NODE_EXE=%SCRIPT_DIR%target\release\red-node.exe"
+) else if exist "red-node.exe" (
+    set "NODE_EXE=red-node.exe"
+) else if exist "release-assets\red-node.exe" (
+    set "NODE_EXE=release-assets\red-node.exe"
+)
+
 :MENU
 cls
 echo ===============================================================================
@@ -29,13 +44,18 @@ if "%opt%"=="6" goto STOP_NODE
 if "%opt%"=="0" goto EXIT
 goto MENU
 
+:CHECK_EXE
+if "%NODE_EXE%"=="" (
+    echo [ERROR] No se encontró el binario red-node.exe.
+    pause
+    goto MENU
+)
+goto :eof
+
 :START_BG
 cls
+call :CHECK_EXE
 echo [INFO] Iniciando nodo RED en segundo plano...
-set NODE_EXE=release-assets\red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=target\release\red-node.exe
-
 start "RED Node Daemon" /min "%NODE_EXE%" start
 echo [OK] Nodo iniciado en puertos P2P: 7331 ^| API: 7333
 timeout /t 2 >nul
@@ -46,22 +66,16 @@ goto MENU
 
 :START_CONSOLE
 cls
+call :CHECK_EXE
 echo [INFO] Iniciando nodo RED en modo interactivo...
-set NODE_EXE=release-assets\red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=target\release\red-node.exe
-
 "%NODE_EXE%" start
 pause
 goto MENU
 
 :STATUS
 cls
+call :CHECK_EXE
 echo [INFO] Consultando estado del nodo...
-set NODE_EXE=release-assets\red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=target\release\red-node.exe
-
 "%NODE_EXE%" status
 echo.
 pause
@@ -69,6 +83,7 @@ goto MENU
 
 :IDENTITY
 cls
+call :CHECK_EXE
 echo ===============================================================================
 echo   🔑 GESTIÓN DE IDENTIDAD CRIPTOGRÁFICA
 echo ===============================================================================
@@ -78,17 +93,15 @@ echo   [0] Volver al Menú Principal
 echo ===============================================================================
 set /p idopt="Seleccione opción [0-2]: "
 
-set NODE_EXE=release-assets\red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=red-node.exe
-if not exist "%NODE_EXE%" set NODE_EXE=target\release\red-node.exe
-
 if "%idopt%"=="1" (
     "%NODE_EXE%" identity show
+    echo.
     pause
     goto IDENTITY
 )
 if "%idopt%"=="2" (
     "%NODE_EXE%" identity generate
+    echo.
     pause
     goto IDENTITY
 )

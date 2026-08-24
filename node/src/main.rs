@@ -505,16 +505,19 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let router = build_router(state).layer(axum::middleware::from_fn(auth::auth_middleware));
 
         let http_addr = "127.0.0.1:7333";
-        let listener = tokio::net::TcpListener::bind(http_addr)
-            .await
-            .expect("Failed to bind HTTP API port 7333");
+        let listener = match tokio::net::TcpListener::bind(http_addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                error!("❌ Failed to bind HTTP API port 7333: {}. A previous instance may be running.", e);
+                return;
+            }
+        };
         info!("Web UI + HTTP API listening locally on http://{}", http_addr);
-        axum::serve(
+        let _ = axum::serve(
             listener,
             router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
         )
-        .await
-        .expect("HTTP server error");
+        .await;
     });
 
     // We need a separate reference for the TCP API loop
@@ -875,20 +878,23 @@ async fn show_status(data_dir: PathBuf) -> anyhow::Result<()> {
     info!("===============");
     info!("Data directory: {}", data_dir.display());
 
-    if !data_dir.exists() {
-        info!("Status: Not initialized");
-        info!("Run 'red-node init' to initialize.");
-        return Ok(());
-    }
-
-    info!("Status: Initialized");
-
-    // Check config
-    let config_path = data_dir.join("config.toml");
-    if config_path.exists() {
-        info!("Configuration: Found");
+    let storage_path = data_dir.join("storage");
+    if storage_path.exists() {
+        let mut storage = Storage::new(storage_path, get_storage_key());
+        if storage.open().is_ok() {
+            if let Some(id) = storage.get_identity() {
+                info!("Status: Active Sovereign Identity Available");
+                info!("Identity Hash: did:red:{}", id.identity_hash().to_hex());
+                info!("Public Key:    {}", id.public_key().to_hex());
+            } else {
+                info!("Status: Initialized (No identity generated yet)");
+            }
+        } else {
+            info!("Status: Storage database present (Active/Locked)");
+        }
     } else {
-        info!("Configuration: Missing");
+        info!("Status: Not initialized (Storage directory not found)");
+        info!("Tip: Run 'red-node start' or 'red-node init' to initialize automatically.");
     }
 
     Ok(())
