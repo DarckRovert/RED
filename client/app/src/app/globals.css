@@ -122,14 +122,15 @@
 }
 
 html {
-  height: 100%;
+  min-height: 100%;
   font-size: 16px;
   -webkit-text-size-adjust: 100%;
   background-color: var(--bg-void);
+  scroll-behavior: smooth;
 }
 
 body {
-  height: 100%;
+  min-height: 100%;
   width: 100%;
   background: var(--bg-void);
   color: var(--text-primary);
@@ -137,8 +138,8 @@ body {
   font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
-  overscroll-behavior: none;
+  overflow-x: hidden;
+  overflow-y: auto;
   background-image:
     radial-gradient(ellipse 80% 40% at 50% -10%, rgba(232, 33, 58, 0.08) 0%, transparent 60%),
     radial-gradient(ellipse 40% 20% at 80% 100%, rgba(0, 229, 255, 0.03) 0%, transparent 50%);
@@ -159,6 +160,12 @@ svg, .decorative-icon, .pulsing-dot, .pulsing-dot::after {
   position: relative;
   overflow-x: hidden;
   background: var(--bg-void);
+}
+
+body.native-app {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body.native-app .app-container {
