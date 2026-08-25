@@ -1,4 +1,4 @@
-# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v58.0.0
+# 📱 RED Client SPA — Next.js 16 + Capacitor Mobile App v62.0.0
 
 Plataforma de interfaz táctica soberana, gestión de estado modular con Zustand Slices, llaves biométricas universales e integración nativa con el motor de Rust (`red_mobile` y `red_node`).
 

@@ -1,6 +1,6 @@
-# 🔴 RED - Manual del Administrador (Node Ops v58.0.0)
+# 🔴 RED - Manual del Administrador (Node Ops v62.0.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v58.0.0, con soporte para interconexión P2P Web $\leftrightarrow$ Mobile, suite de Respaldo Soberano en 1 Toque, llaves biométricas universales, enrutamiento autónomo multicapa LQS, validación Proof-of-Stake / Staking, actuadores de hardware nativos y arquitectura de eventos en tiempo real SSE unificada sin polling.
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v62.0.0, con soporte para interconexión P2P Web $\leftrightarrow$ Mobile, suite de Respaldo Soberano en 1 Toque, llaves biométricas universales, enrutamiento autónomo multicapa LQS, validación Proof-of-Stake / Staking, actuadores de hardware nativos y arquitectura de eventos en tiempo real SSE unificada sin polling.
 
 ---
 
@@ -26,7 +26,7 @@ npm install
 PORT=3001 node server.js
 ```
 
-### Características del Servidor de Señalización v58.0.0:
+### Características del Servidor de Señalización v62.0.0:
 - **Capacidad de Sala Ampliada:** Soporta hasta **50 pares P2P simultáneos** por sala (`roomId = sort([DID1, DID2]).join("-")`).
 - **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociación de red y relé ciego (`mesh-relay`).
 - **Health Check HTTP:** Monitoreo en vivo vía `GET /health` (`status`, `uptime`, `peers`, `rooms`).

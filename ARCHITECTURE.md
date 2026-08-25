@@ -1,4 +1,4 @@
-# 🏛️ RED OS v58.0.0 — Arquitectura Técnica & Mapa Visual Completo
+# 🏛️ RED OS v62.0.0 — Arquitectura Técnica & Mapa Visual Completo
 
 > Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de capas, los protocolos criptográficos, la matriz de enrutamiento multi-transporte, el sistema de autenticación biométrica y el motor de inferencia neuronal offline.
 
