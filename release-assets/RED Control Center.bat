@@ -1,6 +1,6 @@
 @echo off
-chcp 65001 >nul
-title RED Sovereign Mesh — Centro de Control PC
+setlocal enabledelayedexpansion
+title RED Sovereign Mesh -- Centro de Control PC (v63.0.0)
 color 0C
 
 set "SCRIPT_DIR=%~dp0"
@@ -27,20 +27,20 @@ if exist "%SCRIPT_DIR%red-node.exe" (
 :MENU
 cls
 echo ===============================================================================
-echo   🛡️  RED SOVEREIGN MESH — CENTRO DE CONTROL DE NODO (PC / WINDOWS v63.0.0)
+echo   RED SOVEREIGN MESH -- CENTRO DE CONTROL DE NODO (PC / WINDOWS v63.0.0)
 echo ===============================================================================
 echo.
-echo   [1] 🚀 Iniciar Nodo en Segundo Plano y Abrir Web App
-echo   [2] 🖥️  Iniciar Nodo en Consola (Ver Logs Tácticos en Vivo)
-echo   [3] 📊 Ver Estado del Nodo y Telemetría P2P
-echo   [4] 🔑 Generar o Mostrar Identidad Criptográfica Soberana (DID)
-echo   [5] 🔒 Configurar / Cambiar Contraseña de Seguridad (RED_PASSWORD)
-echo   [6] 🌐 Abrir Web App en Navegador (https://darckrovert.github.io/RED/)
-echo   [7] 🛑 Detener Nodo (Finalizar procesos en ejecución)
-echo   [0] ❌ Salir
+echo   [1] Iniciar Nodo en Segundo Plano y Abrir Web App
+echo   [2] Iniciar Nodo en Consola (Ver Logs Tacticos en Vivo)
+echo   [3] Ver Estado del Nodo y Telemetria P2P
+echo   [4] Generar o Mostrar Identidad Criptografica Soberana (DID)
+echo   [5] Configurar / Cambiar Contrasena de Seguridad (RED_PASSWORD)
+echo   [6] Abrir Web App en Navegador (https://darckrovert.github.io/RED/)
+echo   [7] Detener Nodo (Finalizar procesos en ejecucion)
+echo   [0] Salir
 echo.
 echo ===============================================================================
-set /p opt="Seleccione una opción [0-7] y presione ENTER: "
+set /p opt="Seleccione una opcion [0-7] y presione ENTER: "
 
 if "%opt%"=="1" goto START_BG
 if "%opt%"=="2" goto START_CONSOLE
@@ -54,7 +54,7 @@ goto MENU
 
 :CHECK_EXE
 if "%NODE_EXE%"=="" (
-    echo [ERROR] No se encontró el binario red-node.exe.
+    echo [ERROR] No se encontro el binario red-node.exe.
     pause
     goto MENU
 )
@@ -65,9 +65,9 @@ cls
 call :CHECK_EXE
 echo [INFO] Iniciando nodo RED en segundo plano...
 if defined RED_PASSWORD (
-    echo [SEGURIDAD] Autenticación activa con contraseña personalizada.
+    echo [SEGURIDAD] Autenticacion activa con contrasena personalizada.
 ) else (
-    echo [INFO] Modo desarrollo activo (Clave de bóveda por defecto).
+    echo [INFO] Modo desarrollo activo (Clave de boveda por defecto).
 )
 start "RED Node Daemon" /min "%NODE_EXE%" start
 echo [OK] Nodo iniciado en puertos P2P: 7331 ^| API: 7333
@@ -98,13 +98,13 @@ goto MENU
 cls
 call :CHECK_EXE
 echo ===============================================================================
-echo   🔑 GESTIÓN DE IDENTIDAD CRIPTOGRÁFICA
+echo   GESTION DE IDENTIDAD CRIPTOGRAFICA
 echo ===============================================================================
 echo   [1] Mostrar Identidad Actual
 echo   [2] Generar Nueva Identidad (Rotar Claves)
-echo   [0] Volver al Menú Principal
+echo   [0] Volver al Menu Principal
 echo ===============================================================================
-set /p idopt="Seleccione opción [0-2]: "
+set /p idopt="Seleccione opcion [0-2]: "
 
 if "%idopt%"=="1" (
     "%NODE_EXE%" identity show
@@ -123,22 +123,22 @@ goto MENU
 :SET_PASSWORD
 cls
 echo ===============================================================================
-echo   🔒 CONFIGURACIÓN DE CONTRASEÑA DE SEGURIDAD (RED_PASSWORD)
+echo   CONFIGURACION DE CONTRASENA DE SEGURIDAD (RED_PASSWORD)
 echo ===============================================================================
 echo.
-echo Ingresa tu contraseña personalizada para proteger la API REST y la bóveda.
-echo (Si lo dejas en blanco y presionas ENTER, se borrará la contraseña y volverá al modo por defecto).
+echo Ingresa tu contrasena personalizada para proteger la API REST y la boveda.
+echo (Si lo dejas en blanco y presionas ENTER, se borrara la contrasena y volvera al modo por defecto).
 echo.
-set /p userpwd="Contraseña deseada: "
+set /p userpwd="Contrasena deseada: "
 
 if "%userpwd%"=="" (
     set "RED_PASSWORD="
     if exist "%SCRIPT_DIR%red_config.env" del /f /q "%SCRIPT_DIR%red_config.env"
-    echo [OK] Contraseña eliminada. Se usará el modo por defecto.
+    echo [OK] Contrasena eliminada. Se usara el modo por defecto.
 ) else (
     set "RED_PASSWORD=%userpwd%"
     echo RED_PASSWORD=%userpwd%> "%SCRIPT_DIR%red_config.env"
-    echo [OK] Contraseña guardada correctamente en red_config.env.
+    echo [OK] Contrasena guardada correctamente en red_config.env.
 )
 pause
 goto MENU
