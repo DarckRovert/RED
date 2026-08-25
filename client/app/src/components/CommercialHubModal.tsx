@@ -5,6 +5,8 @@ import { useTranslation } from '../lib/i18n/i18nEngine';
 import { MonetizationEngine, ProPerkStatus, TacticalProduct, TacticalTransaction } from '../lib/network/MonetizationEngine';
 import { toast } from './Toast';
 
+import { useRedStore } from '../store/useRedStore';
+
 interface CommercialHubModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -14,6 +16,7 @@ type HubTab = 'catalog' | 'redeem' | 'transactions' | 'create';
 
 export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, onClose }) => {
     const { t } = useTranslation();
+    const { identity } = useRedStore();
     const [activeTab, setActiveTab] = useState<HubTab>('catalog');
     const [proStatus, setProStatus] = useState<ProPerkStatus>(MonetizationEngine.getProStatus());
     const [catalog, setCatalog] = useState<TacticalProduct[]>([]);
@@ -105,7 +108,9 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             priceEst: newPrice.trim() || "~$0 USD",
             tag: newTag.trim() || "EQUIPO PERSONALIZADO",
             icon: newIcon.trim() || "📦",
-            affiliateUrl: newUrl.trim() || "#"
+            affiliateUrl: newUrl.trim() || "#",
+            authorHash: identity?.identity_hash,
+            authorName: identity?.nickname || "Operador RED"
         });
 
         toast.success(`✅ Producto "${newTitle}" añadido al catálogo`);
@@ -164,7 +169,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                 // Record in local blockchain ledger
                 await localChainLedger.submitTransaction({
                     type: 'VOUCHER_ISSUE',
-                    sender: 'did:red:local_buyer',
+                    sender: identity?.identity_hash || 'did:red:local_buyer',
                     recipient: 'COMMERCIAL_ESCROW',
                     amount,
                     fee: 0,

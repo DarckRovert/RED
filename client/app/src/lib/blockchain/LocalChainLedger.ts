@@ -371,29 +371,28 @@ export class LocalChainLedger {
             last_block_time: this.blocks.length > 0 ? this.blocks[this.blocks.length - 1].timestamp : undefined
         };
 
-        const networkValidators: ChainValidator[] = [
-            userValidator,
-            {
-                public_key: 'did:red:0a8ce26f19d6689c085ae165831e934f',
-                display_name: 'Nodo Centinela Omega (Mesh Relay)',
-                stake: 25000,
-                active: true,
-                blocks_produced: Math.max(1, Math.floor(this.blocks.length * 0.4)),
-                missed_slots: 0,
-                weight: 85,
-                last_block_time: Date.now() / 1000 - 45
-            },
-            {
-                public_key: 'did:red:763ae46a2a6c172b3f1b60a8ce26f19d',
-                display_name: 'Guardián Táctico Delta-4',
-                stake: 12500,
-                active: true,
-                blocks_produced: Math.max(1, Math.floor(this.blocks.length * 0.2)),
-                missed_slots: 1,
-                weight: 70,
-                last_block_time: Date.now() / 1000 - 120
-            }
-        ];
+        const networkValidators: ChainValidator[] = [userValidator];
+
+        try {
+            const peers = await RedAPI.getPeers().catch(() => []);
+            peers.forEach((p, idx) => {
+                if (p && p.id && p.id !== myKey) {
+                    const peerBlocks = this.blocks.filter(b => b.validator === p.id).length;
+                    networkValidators.push({
+                        public_key: p.id,
+                        display_name: p.address ? `Operador Mesh (${p.address})` : `Nodo Par ${p.id.slice(0, 8)}`,
+                        stake: 10000,
+                        active: p.is_connected,
+                        blocks_produced: peerBlocks,
+                        missed_slots: 0,
+                        weight: p.is_connected ? 80 : 0,
+                        last_block_time: Date.now() / 1000 - ((idx + 1) * 30)
+                    });
+                }
+            });
+        } catch (e) {
+            console.warn('[LocalChainLedger] getValidators peer fetch error:', e);
+        }
 
         return networkValidators;
     }

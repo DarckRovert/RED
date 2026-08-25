@@ -29,6 +29,8 @@ export interface TacticalProduct {
     tag: string;
     icon: string;
     affiliateUrl: string;
+    authorHash?: string;
+    authorName?: string;
 }
 
 export const TACTICAL_CATALOG: TacticalProduct[] = [
@@ -130,7 +132,7 @@ class MonetizationEngineService {
     }
 
     /**
-     * Añade un producto táctico al catálogo del nodo.
+     * Añade un producto táctico al catálogo del nodo y lo difunde por la malla P2P.
      */
     public addProduct(product: Omit<TacticalProduct, 'id'>): TacticalProduct {
         const id = 'prod_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
@@ -141,7 +143,34 @@ class MonetizationEngineService {
             localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(updated));
             window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
         }
+        this.broadcastProductToMesh(newProd).catch(() => {});
         return newProd;
+    }
+
+    public async broadcastProductToMesh(product: TacticalProduct): Promise<void> {
+        try {
+            const { RedAPI } = await import('../api');
+            const payload = JSON.stringify({
+                type: 'tactical_product_offer',
+                product,
+                timestamp: Date.now(),
+            });
+            RedAPI.sendMessage('broadcast', payload, { msg_type: 'webrtc_signal' }).catch(() => {});
+        } catch (e) {
+            console.warn('[MonetizationEngine] Broadcast product error:', e);
+        }
+    }
+
+    public receiveMeshProduct(product: TacticalProduct): boolean {
+        if (!product || !product.id || !product.title) return false;
+        const current = this.getCatalog();
+        if (current.some(p => p.id === product.id)) return false;
+        const updated = [product, ...current];
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(updated));
+            window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+        }
+        return true;
     }
 
     /**

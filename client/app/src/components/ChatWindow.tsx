@@ -7,6 +7,7 @@ import { mediaChunker } from "../lib/mesh/mediaChunker";
 import { MessageBubble } from "./chat/MessageBubble";
 import { ChatInput } from "./chat/ChatInput";
 import { ChatHeader } from "./chat/ChatHeader";
+import { SquadVoiceRoom } from "./call/SquadVoiceRoom";
 import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
 import { MessageForwardModal } from "./chat/MessageForwardModal";
 import { SafetyNumberModal } from "./chat/SafetyNumberModal";
@@ -97,6 +98,7 @@ export default function ChatWindow() {
     const [burnMenuOpen, setBurnMenuOpen] = useState(false);
     const [forwardingMsg, setForwardingMsg] = useState<MessageItem | null>(null);
     const [isSummarizing, setIsSummarizing] = useState(false);
+    const [activeSquadCall, setActiveSquadCall] = useState<{ groupId: string; groupName: string; members: string[]; callType: 'audio' | 'video' } | null>(null);
     const [isContactProfileOpen, setIsContactProfileOpen] = useState(false);
     const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
     const [editingMsg, setEditingMsg] = useState<MessageItem | null>(null);
@@ -794,7 +796,29 @@ export default function ChatWindow() {
                 setIsSecurityMenuOpen={setIsSecurityMenuOpen}
                 setIsWipeConfirmOpen={setIsWipeConfirmOpen}
                 avStyle={avStyle}
+                isGroupChat={isGroupChat}
+                onStartGroupCall={(type) => {
+                    if (currentGroup) {
+                        const members = (currentGroup.members || []).map((m: any) => typeof m === 'string' ? m : (m.identity_hash || m.hash || ''));
+                        setActiveSquadCall({
+                            groupId: currentGroup.id,
+                            groupName: currentGroup.name || 'Escuadrón',
+                            members,
+                            callType: type,
+                        });
+                    }
+                }}
             />
+
+            {activeSquadCall && (
+                <SquadVoiceRoom
+                    groupId={activeSquadCall.groupId}
+                    groupName={activeSquadCall.groupName}
+                    memberHashes={activeSquadCall.members}
+                    callType={activeSquadCall.callType}
+                    onClose={() => setActiveSquadCall(null)}
+                />
+            )}
 
 
             {/* Banner táctico de Agregar a Contactos si el interlocutor aún no está en la libreta */}

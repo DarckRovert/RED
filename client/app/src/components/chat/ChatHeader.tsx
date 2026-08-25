@@ -27,6 +27,8 @@ interface ChatHeaderProps {
     setIsSecurityMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsWipeConfirmOpen: (v: boolean) => void;
     avStyle: (hash: string) => any;
+    isGroupChat?: boolean;
+    onStartGroupCall?: (type: 'audio' | 'video') => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -53,6 +55,8 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     setIsSecurityMenuOpen,
     setIsWipeConfirmOpen,
     avStyle,
+    isGroupChat,
+    onStartGroupCall,
 }) => {
     const { navigate } = useRedStore();
     const { t } = useTranslation();
@@ -215,6 +219,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
                     <button
                         onClick={() => {
+                            if (isGroupChat && onStartGroupCall) {
+                                onStartGroupCall('audio');
+                                return;
+                            }
                             try {
                                 const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
                                 if (AudioContextClass) {
@@ -235,7 +243,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                             navigate("call", target);
                         }}
                         className="btn-icon"
-                        title="Llamada de Voz P2P WebRTC"
+                        title={isGroupChat ? "Sala de Voz Grupal del Escuadrón" : "Llamada de Voz P2P WebRTC"}
                         style={{ width: 36, height: 36, color: "var(--accent-emerald)" }}
                     >
                         📞
@@ -243,6 +251,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
                     <button
                         onClick={() => {
+                            if (isGroupChat && onStartGroupCall) {
+                                onStartGroupCall('video');
+                                return;
+                            }
                             try {
                                 const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
                                 if (AudioContextClass) {
@@ -263,7 +275,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                             navigate("call", target);
                         }}
                         className="btn-icon"
-                        title="Videollamada HD P2P WebRTC"
+                        title={isGroupChat ? "Sala de Video Grupal del Escuadrón" : "Videollamada HD P2P WebRTC"}
                         style={{ width: 36, height: 36, color: "var(--accent-cyan)" }}
                     >
                         📹

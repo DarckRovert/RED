@@ -10,6 +10,7 @@ import { MeshProofOfWork } from '../../lib/crypto/MeshProofOfWork';
 import { StateIntegrityEngine } from '../../lib/storage/StateIntegrityEngine';
 import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
 import { toast } from '../../components/Toast';
+import { MonetizationEngine } from '../../lib/network/MonetizationEngine';
 
 // Persistent cross-session message deduplication set
 const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (() => {
@@ -657,6 +658,16 @@ export async function dispatchIncomingMessage(
                 }
 
                 const signal = typeof item.content === 'string' ? JSON.parse(item.content) : item.content;
+
+                // Handle incoming P2P mesh commercial product offers
+                if (signal && signal.type === 'tactical_product_offer' && signal.product) {
+                    const added = MonetizationEngine.receiveMeshProduct(signal.product);
+                    if (added) {
+                        toast.info(`🛒 Nueva oferta táctica en la malla: ${signal.product.title}`);
+                    }
+                    return;
+                }
+
                 const contacts = get().contacts || [];
                 const contact = contacts.find((c: any) => 
                     c.identity_hash === senderHash ||

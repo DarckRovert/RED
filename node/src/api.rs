@@ -155,10 +155,18 @@ pub struct ContactItem {
 }
 
 #[derive(Serialize)]
+pub struct GroupMemberResponse {
+    pub identity_hash: String,
+    pub role: String,
+    pub joined_at: u64,
+}
+
+#[derive(Serialize)]
 pub struct GroupItem {
     pub id: String,
     pub name: String,
     pub member_count: usize,
+    pub members: Vec<GroupMemberResponse>,
 }
 
 // ─── Request types ────────────────────────────────────────────────────────────
@@ -1246,6 +1254,11 @@ async fn handle_list_groups(State(state): State<ApiState>) -> impl IntoResponse 
                     id: hex::encode(g.id.0),
                     name: g.name.clone(),
                     member_count: g.member_count(),
+                    members: g.members().map(|m| GroupMemberResponse {
+                        identity_hash: m.identity_hash.to_hex(),
+                        role: format!("{:?}", m.role),
+                        joined_at: m.joined_at,
+                    }).collect(),
                 })
                 .collect();
             Json(items).into_response()

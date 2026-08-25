@@ -479,14 +479,19 @@ export default function CallScreen() {
                 });
                 peerRef.current = pc;
 
-                // Explicitly add Transceivers to guarantee bi-directional sendrecv media negotiation
-                pc.addTransceiver('audio', { direction: 'sendrecv' });
-                if (!requestedAudioOnly) {
-                    pc.addTransceiver('video', { direction: 'sendrecv' });
+                // Explicitly add local tracks to WebRTC session and ensure sendrecv media direction
+                stream.getTracks().forEach(track => {
+                    const sender = pc.addTrack(track, stream);
+                    const transceiver = pc.getTransceivers().find(t => t.sender === sender);
+                    if (transceiver) {
+                        transceiver.direction = 'sendrecv';
+                    }
+                });
+                // Guarantee audio transceiver direction
+                const audioTransceiver = pc.getTransceivers().find(t => (t.sender.track?.kind === 'audio') || (t.receiver.track?.kind === 'audio'));
+                if (audioTransceiver) {
+                    audioTransceiver.direction = 'sendrecv';
                 }
-
-                // Add local tracks to WebRTC session
-                stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
                 // ICE Connection State Handler
                 pc.oniceconnectionstatechange = () => {
