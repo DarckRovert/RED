@@ -23,6 +23,7 @@ import { bluetoothTransport } from './bluetoothTransport';
 import { WifiDirectTransport } from './wifiDirectTransport';
 import { mqttRelay } from './mqttRelayTransport';
 import { networkWatcher, NetworkState } from './networkWatcher';
+import { RED_VERSION } from '../version';
 import { dtnStorage } from './dtnStorage';
 import {
   MeshPacket,
@@ -586,7 +587,7 @@ class MeshRouter {
             is_gateway: this.hasInternetAccess,
             has_internet: this.hasInternetAccess,
             gateway_metric: this.hasInternetAccess ? 100 : 0,
-            version: '62.0.0'
+            version: RED_VERSION
           }
         }
       };
