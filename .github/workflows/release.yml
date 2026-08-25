@@ -44,15 +44,18 @@ jobs:
         working-directory: client/app/android
         run: chmod +x gradlew
 
-      - name: Build Android Debug APK
+      - name: Build Android Release APK
         working-directory: client/app/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleRelease --no-daemon
 
-      - name: Rename APK for Release
+      - name: Copy and Package Assets for Release
         run: |
           mkdir -p release-assets
-          cp client/app/android/app/build/outputs/apk/debug/app-debug.apk release-assets/red-${{ github.ref_name }}-latest.apk
-          cp client/app/android/app/build/outputs/apk/debug/app-debug.apk release-assets/red-latest.apk
+          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/RED-${{ github.ref_name }}.apk
+          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/red-${{ github.ref_name }}-latest.apk
+          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/red-latest.apk
+          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/app-release.apk
+          cd release-assets && sha256sum * > SHA256SUMS.txt || true
 
       - name: Create Release and Upload APK
         uses: softprops/action-gh-release@v2
@@ -60,23 +63,24 @@ jobs:
         with:
           name: "RED ${{ github.ref_name }} — Sovereign Mesh OS"
           body: |
-            ## RED Sovereign Mesh OS — Release ${{ github.ref_name }}
+            ## 🛡️ RED Sovereign Mesh OS — Release ${{ github.ref_name }}
             
-            ### 🔗 Real Connections Master Edition — v60.0.0
+            ### 🚀 Hardened P2P & Unified Protocol Edition — v62.0.0
             
-            - **Blockchain Local PoS Soberano:** Motor de cadena completo con SHA-256 real, árbol de Merkle, nonce, forja de bloques por ranuras y recompensas de validador. 0% datos simulados.
-            - **Vales P2P Criptográficos Off-Grid:** Emisión de vales firmados con SHA-256 y códigos QR 260×260 px para comercio peer-to-peer sin internet. Doble gasto prevenido con lista local de vales redimidos.
-            - **Live Canvas Vectorial en Tiempo Real:** Streaming de trazos (<40 bytes/trazo) sobre MeshRouter. Paleta táctica con pluma, marcador, borrador y exportación PNG. Sin polling, sin Base64.
-            - **Muro Social & Canales P2P Descentralizados:** Publicaciones y reacciones difundidas sobre MeshRouter con sincronización reactiva en tiempo real entre nodos.
-            - **Brújula Táctica Off-Grid & Resección:** Filtro de paso bajo vectorial, acimut solar dinámico y triangulación de waypoints persistentes.
-            - **Alerta AMBER con Autoridad Criptográfica:** Firma Ed25519/SHA-256 vinculada al DID soberano del operador.
-            - **Suite Criptográfica 4/4 PASS:** Shamir SSS (10/10), ML-KEM-768 post-cuántico, Esteganografía LSB, Módem Acústico SoundMesh FSK.
-            - **Despliegue Limpio:** 3 dispositivos actualizados (Moto G22, Tablet TB305XU, Note14 Xiaomi). Note14 actualizado de v56.0.0 a v60.0.0.
+            - **Despacho Garantizado de Handshakes & Solicitudes de Contacto:** Enrutamiento instantáneo de `contact_request` y `contact_response` sobre libp2p TCP nativo (Wi-Fi) y WebRTC con alerta táctica y modal reactivo `IncomingContactRequestModal`.
+            - **Unificación Canónica y Cero Chats Duplicados:** Resolución universal de claves canónicas de 64 caracteres en Rust y TypeScript. 1 Par = Exactamente 1 Conversación en la barra lateral sin desincronizaciones de perfil.
+            - **Enrutamiento E2E de Señalización WebRTC:** Reenvío en tiempo real de paquetes `webrtc_signal` sobre la malla local, activando timbrado instantáneo (`IncomingCallBanner`) y enlaces DTLS-SRTP para llamadas de voz y videollamadas 1-a-1.
+            - **Deduplicación Estricta E2E e Idempotencia:** Identificadores deterministas libres de colisiones (`generateDeterministicMsgId`) y almacenamiento de medios en `IndexedMediaVault` (IndexedDB).
+            - **Escuadrones Multi-Par (Signal SenderKey) & Walkie-Talkie PTT:** Grupos federados con llaves simétricas rotativas y radio PTT con compresión acústica de ultra-bajo bitrate.
             
-            ### 📱 Descarga Directa del APK:
-            Descarga el archivo `red-${{ github.ref_name }}-latest.apk` o `red-latest.apk` adjunto abajo para instalar directamente en tu dispositivo Android (ARM64).
+            ### 📱 Descarga Directa de Binarios:
+            - **Android APK:** `RED-${{ github.ref_name }}.apk` (o `red-latest.apk`) para dispositivos Android (ARM64).
+            - **Sumas de Verificación:** Consulta `SHA256SUMS.txt` para comprobar la integridad criptográfica.
           files: |
+            release-assets/RED-${{ github.ref_name }}.apk
             release-assets/red-${{ github.ref_name }}-latest.apk
             release-assets/red-latest.apk
+            release-assets/app-release.apk
+            release-assets/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
