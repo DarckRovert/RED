@@ -259,11 +259,11 @@ flowchart TD
 
 | Componente | Lenguaje / Framework | Responsabilidad Principal | Ubicación |
 |---|---|---|---|
-| **`red_core`** | Rust (1.80+) | Criptografía post-cuántica, enrutamiento mesh, base de datos Sled, identidades soberanas. | [core/](file:///d:/PROYECTO%20RED/core) |
-| **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido. | [red_mobile/](file:///d:/PROYECTO%20RED/red_mobile) |
-| **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador y servidor local. | [node/](file:///d:/PROYECTO%20RED/node) |
-| **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores y mempool de transacciones. | [blockchain/](file:///d:/PROYECTO%20RED/blockchain) |
-| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA, Zustand Slices modulares, WebAuthn Passkeys y Capacitor bridge. | [client/app/](file:///d:/PROYECTO%20RED/client/app) |
-| **`signaling`** | Node.js | Servidor de señalización WebRTC zero-knowledge y relé ciego para conexiones P2P. | [signaling/](file:///d:/PROYECTO%20RED/signaling) |
-| **`proofs`** | ProVerif | Modelos matemáticos formales de verificación de seguridad, secreto perfecto y anonimato. | [proofs/](file:///d:/PROYECTO%20RED/proofs) |
-| **`specs`** | TLA+ | Especificación formal del protocolo de consenso y tolerancia a fallos bizantinos. | [specs/](file:///d:/PROYECTO%20RED/specs) |
+| **`red_core`** | Rust (1.80+) | Criptografía post-cuántica, enrutamiento mesh, base de datos Sled, identidades soberanas. | [core/](core/) |
+| **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido. | [red_mobile/](red_mobile/) |
+| **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador y servidor local. | [node/](node/) |
+| **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores y mempool de transacciones. | [blockchain/](blockchain/) |
+| **`client/app`** | Next.js 16 + React 19 | Interfaz táctica SPA, Zustand Slices modulares, WebAuthn Passkeys y Capacitor bridge. | [client/app/](client/app/) |
+| **`signaling`** | Node.js | Servidor de señalización WebRTC zero-knowledge y relé ciego para conexiones P2P. | [signaling/](signaling/) |
+| **`proofs`** | ProVerif | Modelos matemáticos formales de verificación de seguridad, secreto perfecto y anonimato. | [proofs/](proofs/) |
+| **`specs`** | TLA+ | Especificación formal del protocolo de consenso y tolerancia a fallos bizantinos. | [specs/](specs/) |

@@ -11,20 +11,33 @@
 
 ---
 
-## 📋 Tabla de Contenidos
+## 📚 Centro de Documentación & Manuales
 
-1. [Visión General & Filosofía de Diseño](#-visión-general--filosofía-de-diseño)
-2. [Arquitectura del Sistema & Mapa Visual](#-arquitectura-del-sistema--mapa-visual)
-3. [Autenticación Biométrica Universal & Seguridad Zero-Trust](#-autenticación-biométrica-universal--seguridad-zero-trust)
-4. [Conectividad Global & Red Malla Descentralizada](#-conectividad-global--red-malla-descentralizada)
-5. [Catálogo Completo de los 42 Módulos Tácticos](#-catálogo-completo-de-los-42-módulos-tácticos)
-6. [Criptografía Post-Cuántica & Privacidad en Capas](#-criptografía-post-cuántica--privacidad-en-capas)
-7. [Tokenomics & Proof-of-Relay](#-tokenomics--proof-of-relay)
-8. [Guía de Compilación & Despliegue ADB](#-guía-de-compilación--despliegue-adb)
+Accede a la documentación técnica y operativa completa del proyecto:
+
+- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 42 módulos para operadores finales.
+- ⚙️ **[Manual de Administración y Nodos (ADMIN_MANUAL.md)](ADMIN_MANUAL.md)**: Configuración de nodos de escritorio en PC, relays y túneles.
+- 📐 **[Arquitectura de Protocolos (ARCHITECTURE.md)](ARCHITECTURE.md)**: Diagramas formales de ingeniería, stack de capas y matrices criptográficas.
+- 📜 **[Historial de Versiones (CHANGELOG.md)](CHANGELOG.md)**: Registro exhaustivo de cambios y novedades de cada release.
+- 🚀 **[Guía de Inicio Rápido (GETTING_STARTED.md)](GETTING_STARTED.md)**: Instrucciones para desarrolladores y configuración de dependencias.
 
 ---
 
-## 🔭 Visión General & Filosofía de Diseño
+## 📋 Tabla de Contenidos
+
+1. [Visión General & Filosofía de Diseño](#vision-general)
+2. [Arquitectura del Sistema & Mapa Visual](#arquitectura-sistema)
+3. [Autenticación Biométrica Universal & Seguridad Zero-Trust](#autenticacion-biometrica)
+4. [Conectividad Global & Red Malla Descentralizada](#conectividad-global)
+5. [Catálogo Completo de los 42 Módulos Tácticos](#catalogo-modulos)
+6. [Criptografía Post-Cuántica & Privacidad en Capas](#criptografia-post-cuantica)
+7. [Tokenomics & Proof-of-Relay](#tokenomics)
+8. [Guía de Compilación & Despliegue ADB](#guia-compilacion)
+
+---
+
+<a id="vision-general"></a>
+## 🔭 1. Visión General & Filosofía de Diseño
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
@@ -47,9 +60,10 @@ En situaciones de emergencia o denegación de red, las aplicaciones tradicionale
 
 ---
 
-## 📐 Arquitectura del Sistema & Mapa Visual
+<a id="arquitectura-sistema"></a>
+## 📐 2. Arquitectura del Sistema & Mapa Visual
 
-Para una documentación exhaustiva de los 5 diagramas técnicos de ingeniería, consulta [ARCHITECTURE.md](file:///d:/PROYECTO%20RED/ARCHITECTURE.md).
+Para una documentación exhaustiva de los 5 diagramas técnicos de ingeniería, consulta [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
 graph TD
@@ -96,9 +110,10 @@ graph TD
 
 ---
 
-## 🔐 Autenticación Biométrica Universal & Seguridad Zero-Trust
+<a id="autenticacion-biometrica"></a>
+## 🔐 3. Autenticación Biométrica Universal & Seguridad Zero-Trust
 
-RED v58.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
+RED v62.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
 
 1. **Soporte Biométrico Completo:**
    - **Android Nativo:** Sensor de huella dactilar, reconocimiento facial 3D/IR, escáner de iris y credenciales de dispositivo mediante `BiometricPrompt` (`USE_BIOMETRIC` + `USE_FINGERPRINT`).
@@ -108,7 +123,8 @@ RED v58.0.0 incorpora un guardián de hardware que vincula el chip de seguridad 
 
 ---
 
-## 🌐 Conectividad Global & Red Malla Descentralizada
+<a id="conectividad-global"></a>
+## 🌐 4. Conectividad Global & Red Malla Descentralizada
 
 RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 4 niveles con tolerancia absoluta a fallos de infraestructura:
 
@@ -118,7 +134,8 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 4 nive
 
 ---
 
-## 🧰 Catálogo Completo de los 42 Módulos Tácticos
+<a id="catalogo-modulos"></a>
+## 🧰 5. Catálogo Completo de los 42 Módulos Tácticos
 
 1. **Canales Mesh Locales:** Salas temáticas abiertas con moderación por IA.
 2. **RED Social Feed P2P:** Microblogging descentralizado sin censura.
@@ -165,7 +182,37 @@ RED implementa una arquitectura híbrida **Offline-to-Global Gateway** de 4 nive
 
 ---
 
-## 🛠️ Guía de Compilación & Despliegue ADB
+<a id="criptografia-post-cuantica"></a>
+## 🛡️ 6. Criptografía Post-Cuántica & Privacidad en Capas
+
+RED implementa una suite criptográfica híbrida diseñada para resistir tanto adversarios clásicos como ataques de computación cuántica futura:
+
+1. **Intercambio de Claves Híbrido Post-Cuántico (PQ-KEM):**
+   - **NIST FIPS 203 ML-KEM-768 (Kyber):** Encapsulación de clave basada en retículos resistente a ordenadores cuánticos.
+   - **ECDH X25519:** Intercambio clásico de alto rendimiento.
+   - **Combinador HKDF-SHA256:** Deriva claves simétricas que garantizan seguridad si al menos uno de los dos algoritmos permanece seguro.
+2. **Cifrado Simétrico Autenticado:**
+   - **ChaCha20-Poly1305 / AES-256-GCM:** Cifrado AEAD para cargas útiles de mensajes y bases de datos locales.
+3. **Esquema de Secreto Compartido de Shamir (SSS):**
+   - División de claves maestras en umbrales $k$-de-$n$ en el cuerpo finito $GF(2^8)$ para recuperación soberana entre pares de confianza.
+4. **Esteganografía LSB Táctica:**
+   - Inyección discreta de paquetes cifrados en bits menos significativos de imágenes y pistas de audio.
+
+---
+
+<a id="tokenomics"></a>
+## ⚡ 7. Tokenomics & Proof-of-Relay
+
+El sistema integra una economía descentralizada autónoma para incentivar la retransmisión de paquetes y el comercio offline:
+
+1. **Proof-of-Relay (PoR):** Cada nodo que actúa como repetidor de paquetes para la malla acumula créditos de retransmisión computados localmente.
+2. **Consenso Proof-of-Stake Soberano:** Motor de cadena local con árbol de Merkle real, cálculo de nonces y forja de bloques por ranuras de tiempo (`slots`).
+3. **Vales P2P Criptográficos Off-Grid:** Emisión de comprobantes de pago firmados con SHA-256 y códigos QR bidimensionales (260×260 px) para transacciones comerciales sin conexión a Internet, con prevención de doble gasto mediante libro mayor local.
+
+---
+
+<a id="guia-compilacion"></a>
+## 🛠️ 8. Guía de Compilación & Despliegue ADB
 
 ### 1. Compilación del Frontend Web
 ```bash
@@ -176,7 +223,7 @@ npm run build
 
 ### 2. Compilación del Nodo Rust (Workspace)
 ```bash
-cargo build --release
+cargo build --release --bin red-node
 cargo test --workspace
 ```
 
@@ -189,3 +236,10 @@ cd client/app/android
 # Instalar en dispositivo conectado vía ADB
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
+
+---
+
+<a id="licencia"></a>
+## 📄 Licencia
+
+Este proyecto está licenciado bajo la **GNU Affero General Public License v3.0 (AGPL-3.0)**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
