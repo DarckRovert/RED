@@ -1,5 +1,24 @@
 # Changelog
 
+## [63.0.0-sovereign-mesh-final-release] - 2026-08-25
+
+### Sovereign Mesh Final Release — Cero Código Falso, Malla P2P de Mercado, Salas de Voz/Video en Grupo y Despliegue Limpio
+
+**1. Eliminación de Datos Ficticios y Conexión Estricta a Motores Reales**
+- `LocalChainLedger.ts`: Sustitución de validadores PoS estáticos por mapeo dinámico de pares en vivo obtenidos desde `RedAPI.getPeers()`.
+- `MonetizationEngine.ts` & `messageDispatcher.ts`: Implementación de difusión `broadcastProductToMesh()` e intercepción P2P `receiveMeshProduct()` para ofertas comerciales firmadas en la malla.
+- `CommercialHubModal.tsx`: Vinculación de transacciones de compra directamente al `identity_hash` real del operador.
+
+**2. Salas de Voz & Video Tácticas en Grupo (Discord-like Full-Mesh P2P)**
+- `useSquadCallMesh.ts`: Motor WebRTC full-mesh N-way con análisis de espectro de frecuencia VAD (Voice Activity Detection) y estado `isSpeaking` reactivo.
+- `SquadVoiceRoom.tsx`: HUD táctico de sala grupal con tarjetas de participantes, silenciado de mic, modo sordo, cámara y compartir pantalla.
+
+**3. Automatización Limpia de Script de Build y Sincronización de Assets Nativa**
+- `build_apk.bat`: Reconstrucción automatizada de Next.js (`npm run build:mobile`), copia de assets web a Capacitor (`npx cap copy android`) y ensamblado Gradle para garantizar cero versiones desfasadas en APK.
+- `release-assets/`: Actualización completa de binarios `red-node.exe`, APKs v63.0.0 y cálculo de sumas de comprobación SHA-256 (`SHA256SUMS.txt`).
+
+---
+
 ## [62.0.0-hardened-p2p-unified-protocol] - 2026-08-25
 
 ### Hardened P2P & Unified Protocol Edition — Enrutamiento E2E de Señalización WebRTC, Deduplicación Canónica y Handshake Blindado
