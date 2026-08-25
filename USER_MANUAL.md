@@ -129,7 +129,7 @@ RED está diseñada bajo la premisa de que un operador puede encontrarse en situ
 ## 8. Uso de la Versión Web en PC & Vinculación con Celulares
 
 - **Acceso Web:** Ingresa a [https://darckrovert.github.io/RED/](https://darckrovert.github.io/RED/) desde Chrome, Edge o Firefox en tu computadora.
-- **Vinculación con Celular:** Abre RED en tu teléfono, ve a *Ajustes $\rightarrow$ Dispositivos Vinculados*, escanea el código QR que aparece en la PC y tu computadora se sincronizará inmediatamente como un nodo espejo sin usar servidores centrales.
+- **Vinculación con Celular:** Abre RED en tu teléfono, presiona el botón **`💻 Vincular con RED Web (PC)`** en la barra superior o en el menú lateral, escanea el código QR que aparece en la PC y tu computadora se sincronizará inmediatamente como un nodo espejo sin usar servidores centrales.
 - **Windows Hello / Touch ID en PC:** En la versión web de la PC, puedes registrar tu huella o rostro de Windows Hello para desbloquear la sesión en 1 segundo.
 
 ---
