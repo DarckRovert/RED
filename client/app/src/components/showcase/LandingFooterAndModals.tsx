@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../../lib/version';
+import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME, RED_APK_SHA256 } from '../../lib/version';
 import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 interface LandingFooterAndModalsProps {
@@ -103,10 +103,10 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
 
             <div style={{ padding: "16px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
               <div style={{ fontSize: "12px", fontFamily: "monospace", color: "#94A3B8" }}>
-                <span style={{ color: "#00F0FF" }}>SHA-256:</span> eac9d59ba3c840d2e306d41a1193d786dcc0fff69495f55d6bf088aac43ff519
+                <span style={{ color: "#00F0FF" }}>SHA-256:</span> {RED_APK_SHA256}
               </div>
               <button
-                onClick={() => handleCopy("eac9d59ba3c840d2e306d41a1193d786dcc0fff69495f55d6bf088aac43ff519")}
+                onClick={() => handleCopy(RED_APK_SHA256)}
                 style={{
                   padding: "6px 12px",
                   borderRadius: "8px",
