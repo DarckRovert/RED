@@ -74,7 +74,7 @@ impl LoraBridge {
                         }
                     }
                 }
-                Err(e) => error!("Failed to open LoRa serial port: {}", e),
+                Err(e) => info!("LoRa radio hardware COM3 not attached (skipping physical serial port: {})", e),
             }
         });
 
