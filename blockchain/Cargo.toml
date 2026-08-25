@@ -1,6 +1,6 @@
 [package]
 name = "red-blockchain"
-version = "61.0.0"
+version = "62.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "Blockchain for RED identity management"

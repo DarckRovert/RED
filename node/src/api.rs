@@ -169,6 +169,8 @@ pub struct SendMessageRequest {
     pub recipient: String,
     pub content: String,
     #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
     pub conversation_id: Option<String>,
     #[serde(default)]
     pub msg_type: Option<String>,
@@ -641,11 +643,9 @@ async fn handle_send_message(
     // No rompe E2E ni compromete la privacidad del receptor.
     let msg_type_str = req.msg_type.as_deref().unwrap_or("text");
 
-    // Skip storage persistence for ephemeral control signals
+    // Skip network dispatch only for local typing indicators
     if msg_type_str == "typing"
         || msg_type_str == "typing_status"
-        || msg_type_str == "webrtc_signal"
-        || msg_type_str == "location_ping"
         || req.content.starts_with("{\"status\":\"typing\"")
     {
         return (
@@ -841,7 +841,7 @@ async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoRe
                         c.our_identity.to_hex()
                     };
                     ConversationItem {
-                        id: format!("{}-{}", c.our_identity.short(), c.their_identity.short()),
+                        id: peer.clone(),
                         peer,
                         message_count: msgs.len(),
                         last_message: last_msg,

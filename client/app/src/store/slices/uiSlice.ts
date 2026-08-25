@@ -55,14 +55,10 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
             let finalId = canonicalPeer;
             let updatedConvs = [...conversations];
             if (existingConv) {
-                finalId = existingConv.id;
+                finalId = existingConv.id || canonicalPeer;
                 updatedConvs = updatedConvs.map(c => (c.id === finalId || c.peer === canonicalPeer) ? { ...c, unread_count: 0 } : c);
             } else {
-                if (canonicalPeer.length >= 32 || !canonicalPeer.includes('-')) {
-                    finalId = canonicalPeer;
-                } else if (identity) {
-                    finalId = `${identity.short_id}-${canonicalPeer.substring(0, 8)}`;
-                }
+                finalId = canonicalPeer;
                 const newPlaceholder: ConversationItem = {
                     id: finalId,
                     peer: canonicalPeer,

@@ -1,5 +1,25 @@
 # Changelog
 
+## [62.0.0-hardened-p2p-unified-protocol] - 2026-08-25
+
+### Hardened P2P & Unified Protocol Edition — Enrutamiento E2E de Señalización WebRTC, Deduplicación Canónica y Handshake Blindado
+
+**1. Despacho Garantizado de Handshakes & Solicitudes de Contacto (Rust libp2p + WebRTC)**
+- `client.ts` & `node/src/api.rs`: Habilitación del enrutamiento directo por el backend de Rust (`/messages/send`) para paquetes `contact_request`, `contact_response` y `profile_update`. La solicitud de contacto viaja de inmediato por la malla local TCP (Wi-Fi), asegurando que el receptor reciba la notificación y el modal de aceptación `IncomingContactRequestModal` sin depender de que el usuario envíe un primer mensaje de texto.
+
+**2. Unificación Canónica de Identificadores y Cero Chats Duplicados (1 Par = 1 Conversación)**
+- `node/src/api.rs`: `handle_list_conversations` ahora retorna siempre el hash canónico de 64 caracteres (`peer`), eliminando la fragmentación con identificadores legados con guiones (`short1-short2`).
+- `messageDispatcher.ts`, `meshRouter.ts` & `authSlice.ts`: Saneamiento automático en memoria y `localStorage` (`red_web_conversations`) que normaliza cualquier identificador hacia la clave canónica del par, erradicando duplicaciones de tarjetas de chat en la barra lateral y desincronizaciones de perfiles.
+
+**3. Enrutamiento E2E de Señalización WebRTC (Llamadas de Voz y Video 1-a-1)**
+- `node/src/api.rs` & `client.ts`: Desbloqueo del reenvío de paquetes `webrtc_signal` a través de libp2p. Las ofertas SDP, respuestas y candidatos ICE se transmiten en tiempo real sobre la malla local, activando el timbrado inmediato de llamadas (`IncomingCallBanner`) y la negociación P2P DTLS-SRTP.
+
+**4. Idempotencia y Blindaje contra Duplicación Multimedia (Estándar Signal / WhatsApp)**
+- `meshRouter.ts`: Generador de IDs de mensaje determinista e idempotente `generateDeterministicMsgId()` libre de aleatoriedad.
+- `client.ts` & `messageDispatcher.ts`: Deduplicación profunda de paquetes por firma de contenido y almacenamiento de blobs pesados en `IndexedMediaVault` (IndexedDB) para prevenir errores de cuota en `localStorage`.
+
+---
+
 ## [61.0.0-consent-instant-sync-edition] - 2026-08-24
 
 ### Consent & Instant Profile Sync Edition — Handshake Bidireccional P2P, Resolución Inmediata y Flujo de Consentimiento

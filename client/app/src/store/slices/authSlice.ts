@@ -845,10 +845,17 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         staleHashesToPurge.push(staleHash);
                     }
 
+                    const isGeneric = (n?: string) => !n || n.startsWith('Operador ') || n.startsWith('Nodo ') || n.startsWith('Par Escaneado') || n.startsWith('Dispositivo RED');
+                    const existingName = existing.display_name?.trim() || '';
+                    const incomingName = ct.display_name?.trim() || '';
+                    const chosenDisplayName = (!isGeneric(existingName)) 
+                        ? existingName 
+                        : (!isGeneric(incomingName) ? incomingName : (existingName || incomingName));
+
                     dedupedConts[existingIdx] = {
                         ...existing,
                         identity_hash: bestHash,
-                        display_name: (!existing.display_name || existing.display_name.startsWith('Operador ') || existing.display_name.startsWith('Nodo ')) ? (ct.display_name || existing.display_name) : existing.display_name,
+                        display_name: chosenDisplayName,
                         public_key: ct.public_key || existing.public_key
                     };
                 }
@@ -871,7 +878,15 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     const rawWebConvs = localStorage.getItem('red_web_conversations');
                     if (rawWebConvs) {
                         const parsed = JSON.parse(rawWebConvs);
-                        const filtered = parsed.filter((c: any) => {
+                        const filtered = parsed.map((c: any) => {
+                            const rawP = normalizeIdentity(c.peer || c.id || '');
+                            const canonicalP = meshRouter.getCanonicalId(rawP) || rawP;
+                            return {
+                                ...c,
+                                id: canonicalP,
+                                peer: canonicalP
+                            };
+                        }).filter((c: any) => {
                             const p = normalizeIdentity(c.peer || c.id || '');
                             const n = (c.name || c.display_name || '').toLowerCase();
                             if (p === 'me' || p === 'local' || n === 'operador me' || (myHash && (p === myHash || myHash.startsWith(p)))) return false;
@@ -884,7 +899,15 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             }
                             return c;
                         });
-                        localStorage.setItem('red_web_conversations', JSON.stringify(filtered));
+
+                        const seenMap = new Map<string, any>();
+                        for (const fc of filtered) {
+                            const k = (fc.peer || fc.id || '').slice(0, 16);
+                            if (k && !seenMap.has(k)) {
+                                seenMap.set(k, fc);
+                            }
+                        }
+                        localStorage.setItem('red_web_conversations', JSON.stringify(Array.from(seenMap.values())));
                     }
                     const rawWebConts = localStorage.getItem('red_web_contacts');
                     if (rawWebConts) {

@@ -82,11 +82,11 @@ export default function ChatWindow() {
     const peerPk = meshPeer?.publicKey || peerContact?.public_key || null;
     const peerName = isGroupChat
         ? (currentGroup.name || "Escuadrón Cifrado")
-        : (peerContact?.display_name && !peerContact.display_name.startsWith('Operador ') && !peerContact.display_name.startsWith('Nodo '))
+        : (peerContact?.display_name)
             ? peerContact.display_name
             : (meshPeer?.name && !meshPeer.name.startsWith('RED-') && !meshPeer.name.startsWith('Operador ') && !meshPeer.name.startsWith('Dispositivo RED')
                 ? meshPeer.name
-                : (peerContact?.display_name || (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido")));
+                : (peerHash ? `${peerHash.substring(0, 12)}…` : "Desconocido"));
 
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");

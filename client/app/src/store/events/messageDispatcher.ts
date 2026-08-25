@@ -391,18 +391,21 @@ export async function dispatchIncomingMessage(
 
                 let updatedContacts = [...existingContacts];
                 if (idx >= 0) {
+                    const isGeneric = (n?: string) => !n || n.startsWith('Operador ') || n.startsWith('Nodo ') || n.startsWith('Par Escaneado') || n.startsWith('Dispositivo RED');
+                    const resolvedDisplayName = (newName && !isGeneric(newName)) ? newName : updatedContacts[idx].display_name;
+
                     // Contact isolation: only update metadata for EXISTING contacts
                     updatedContacts[idx] = {
                         ...updatedContacts[idx],
-                        display_name: newName || updatedContacts[idx].display_name,
+                        display_name: resolvedDisplayName,
                         bio: newBio !== undefined ? newBio : updatedContacts[idx].bio,
                         phone_number: newPhone !== undefined ? newPhone : updatedContacts[idx].phone_number,
                         public_key: newPk || updatedContacts[idx].public_key,
                     };
                     set({ contacts: updatedContacts });
                     RedAPI.setWebStore('red_web_contacts', updatedContacts);
-                    if (newName) {
-                        RedAPI.addContact(senderHash, newName, newPk).catch(() => {});
+                    if (resolvedDisplayName) {
+                        RedAPI.addContact(senderHash, resolvedDisplayName, newPk).catch(() => {});
                     }
                 }
                 // idx === -1: unknown peer broadcast their profile — stays in meshRouter.peers only.
@@ -1195,23 +1198,35 @@ export async function dispatchIncomingMessage(
                 // 1. Exact ID match
                 if (m.id && item.id && m.id === item.id) return true;
 
-                // 2. Pending optimistic message replacement by content / media / type
-                if (m.id.startsWith('temp_') || m.id.startsWith('msg_pending_')) {
+                // 2. Pending optimistic message replacement
+                if (m.status === 'Pending' || m.id.startsWith('temp_') || m.id.startsWith('msg_pending_') || m.id.startsWith('msg_')) {
                     if (m.content && item.content && m.content === item.content) return true;
                     if (m.media_data && item.media_data && (m.media_data === item.media_data || m.media_data.length === item.media_data.length)) return true;
-                    if (m.msg_type === item.msg_type && timeDiff < 30) return true;
+                    if (m.msg_type === item.msg_type && timeDiff < 60) {
+                        if (m.is_mine && normalizedItem.is_mine) return true;
+                    }
                 }
 
-                // 3. Sender & Content / Media deduplication within 30-second window (prevents duplicate bubbles from dual SSE + MeshRouter channels)
+                // 3. Sender & Content / Media deduplication within 60-second window (prevents duplicate bubbles from dual SSE + MeshRouter channels)
                 const mPayload = m.media_data || m.content;
                 const nPayload = normalizedItem.media_data || normalizedItem.content;
-                if (mPayload && nPayload && (mPayload === nPayload || (mPayload.length > 60 && nPayload.length > 60 && mPayload.slice(0, 60) === nPayload.slice(0, 60))) && timeDiff < 30) {
-                    if (m.is_mine && normalizedItem.is_mine) return true;
-                    if (!m.is_mine && !normalizedItem.is_mine) {
-                        const mSender = (m.sender || '').toLowerCase();
-                        const nSender = (normalizedItem.sender || item.sender || '').toLowerCase();
-                        if (mSender === nSender || mSender.startsWith(nSender.slice(0, 8)) || nSender.startsWith(mSender.slice(0, 8))) {
-                            return true;
+                if (mPayload && nPayload && timeDiff < 60) {
+                    const isMediaVaultMatch = 
+                        (mPayload.startsWith('red_vault://') && nPayload.includes(m.id)) ||
+                        (nPayload.startsWith('red_vault://') && mPayload.includes(normalizedItem.id)) ||
+                        (mPayload.startsWith('red_vault://') && nPayload.startsWith('red_vault://') && mPayload === nPayload);
+                    const isContentMatch = 
+                        mPayload === nPayload ||
+                        (mPayload.length > 60 && nPayload.length > 60 && mPayload.slice(0, 60) === nPayload.slice(0, 60));
+
+                    if (isMediaVaultMatch || isContentMatch || (m.msg_type === normalizedItem.msg_type && (m.msg_type === 'image' || m.msg_type === 'video' || m.msg_type === 'voice'))) {
+                        if (m.is_mine && normalizedItem.is_mine) return true;
+                        if (!m.is_mine && !normalizedItem.is_mine) {
+                            const mSender = (m.sender || '').toLowerCase();
+                            const nSender = (normalizedItem.sender || item.sender || '').toLowerCase();
+                            if (mSender === nSender || mSender.startsWith(nSender.slice(0, 8)) || nSender.startsWith(mSender.slice(0, 8))) {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -1328,7 +1343,7 @@ export async function dispatchIncomingMessage(
                              (item.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (item.content || 'Mensaje P2P')));
 
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
-            const convId = item.conversation_id ? item.conversation_id : (canonicalSender || item.sender);
+            const convId = canonicalSender || normalizeIdentity(item.sender);
 
             // Never create conversations for broadcast addresses or control wipe packets
             const isBroadcastId = !convId || convId === 'me' || convId === 'local' ||
@@ -1359,8 +1374,8 @@ export async function dispatchIncomingMessage(
                 const existing = updatedConvs[idx];
                 const updatedObj: ConversationItem = {
                     ...existing,
-                    id: convId,
-                    peer: canonicalSender || existing.peer,
+                    id: canonicalSender,
+                    peer: canonicalSender,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: (existing.unread_count || 0) + 1
@@ -1369,8 +1384,8 @@ export async function dispatchIncomingMessage(
                 updatedConvs.unshift(updatedObj);
             } else {
                 const newObj: ConversationItem = {
-                    id: convId,
-                    peer: canonicalSender || item.sender,
+                    id: canonicalSender,
+                    peer: canonicalSender,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: 1
@@ -1401,9 +1416,9 @@ export async function dispatchIncomingMessage(
             set({ conversations: updatedConvs });
             RedAPI.setWebStore('red_web_conversations', updatedConvs);
 
-            if (typeof window !== 'undefined' && item.sender) {
+            if (typeof window !== 'undefined' && canonicalSender) {
                 try {
-                    const convKey = `red_web_messages_${convId}`;
+                    const convKey = `red_web_messages_${canonicalSender}`;
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
                     if (!list.some(m => m.id === item.id)) {

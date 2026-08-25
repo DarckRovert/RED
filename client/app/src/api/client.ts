@@ -168,6 +168,15 @@ export class RedAPIClient {
     async getContacts(): Promise<any[]> {
         // Always read local cache first — P2P handshake contacts land here before Rust stores them.
         const localConts = this.getWebStore<any[]>('red_web_contacts', []);
+        const isGenericName = (name?: string) => !name || 
+            name.startsWith('Operador ') || 
+            name.startsWith('Nodo ') || 
+            name.startsWith('Par Escaneado') || 
+            name.startsWith('Dispositivo RED') ||
+            name === 'Nuevo Par' || 
+            name === 'Par Malla' ||
+            name === 'Contacto P2P';
+
         try {
             const rustConts = await this.reqList<any>('/contacts');
             // Bidirectional merge keyed by first 16 chars of identity_hash.
@@ -179,9 +188,21 @@ export class RedAPIClient {
             for (const rc of rustConts) {
                 const key = ((rc.identity_hash || '').toLowerCase()).slice(0, 16);
                 if (!key) continue;
-                // Rust wins but preserve any extra local fields (public_key, avatar, etc.)
                 const existing = mergedMap.get(key);
-                mergedMap.set(key, existing ? { ...existing, ...rc } : rc);
+                if (existing) {
+                    // Local contact display_name wins if it is a curated/custom name (Single Source of Truth)
+                    const chosenName = (existing.display_name && !isGenericName(existing.display_name))
+                        ? existing.display_name
+                        : (rc.display_name && !isGenericName(rc.display_name) ? rc.display_name : (existing.display_name || rc.display_name));
+                    mergedMap.set(key, {
+                        ...existing,
+                        ...rc,
+                        display_name: chosenName,
+                        public_key: existing.public_key || rc.public_key
+                    });
+                } else {
+                    mergedMap.set(key, rc);
+                }
             }
             const merged = Array.from(mergedMap.values());
             // Only write to localStorage if the contact set changed.
@@ -211,11 +232,45 @@ export class RedAPIClient {
                 // Rust returned empty (conversation only exists in local mesh cache) — use local vault
                 return localMsgs;
             }
-            // Merge: use message IDs as deduplication key, local entries fill any gaps
-            const msgMap = new Map<string, MessageItem>();
-            for (const lm of localMsgs) { if (lm.id) msgMap.set(lm.id, lm); }
-            for (const rm of rustMsgs) { if (rm.id) msgMap.set(rm.id, { ...msgMap.get(rm.id), ...rm }); }
-            return Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+            // Merge: deduplicate by exact ID AND by (sender + content/media payload + time window)
+            const mergedList: MessageItem[] = [...localMsgs];
+            for (const rm of rustMsgs) {
+                if (!rm || !rm.id) continue;
+                const rmTs = rm.timestamp ? (rm.timestamp > 1e11 ? rm.timestamp / 1000 : rm.timestamp) : 0;
+                const rmPayload = rm.media_data || rm.content;
+
+                const existingIdx = mergedList.findIndex(lm => {
+                    if (lm.id === rm.id) return true;
+                    const lmTs = lm.timestamp ? (lm.timestamp > 1e11 ? lm.timestamp / 1000 : lm.timestamp) : 0;
+                    const timeDiff = Math.abs(lmTs - rmTs);
+                    const lmPayload = lm.media_data || lm.content;
+                    if (timeDiff < 30 && lm.msg_type === rm.msg_type) {
+                        if (lmPayload && rmPayload && (
+                            lmPayload === rmPayload ||
+                            (lmPayload.startsWith('red_vault://') && rmPayload.startsWith('data:') && lmPayload.includes(rm.id)) ||
+                            (rmPayload.startsWith('red_vault://') && lmPayload.startsWith('data:') && rmPayload.includes(lm.id)) ||
+                            (lmPayload.length > 60 && rmPayload.length > 60 && lmPayload.slice(0, 60) === rmPayload.slice(0, 60))
+                        )) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+
+                if (existingIdx >= 0) {
+                    // Update status / merge properties without duplicating
+                    mergedList[existingIdx] = {
+                        ...mergedList[existingIdx],
+                        ...rm,
+                        // Keep local media vault reference if local has it
+                        media_data: mergedList[existingIdx].media_data || rm.media_data,
+                        content: mergedList[existingIdx].content || rm.content
+                    };
+                } else {
+                    mergedList.push(rm);
+                }
+            }
+            return mergedList.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
         } catch {
             return localMsgs;
         }
@@ -230,7 +285,6 @@ export class RedAPIClient {
         }
         cleanRecipient = cleanRecipient.toLowerCase();
 
-        const msgId = options?.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
         let myDid = (typeof window !== 'undefined' && localStorage.getItem('red_identity_hash')) || '';
         if (!myDid || myDid === 'me' || myDid === 'local') {
             try {
@@ -249,7 +303,8 @@ export class RedAPIClient {
                 }
             } catch {}
         }
-        if (!myDid) myDid = 'me';
+        const { generateDeterministicMsgId } = await import('../lib/mesh/meshRouter');
+        const msgId = options?.id || generateDeterministicMsgId(myDid, cleanRecipient, content);
 
         const msgItem: MessageItem = {
             id: msgId,
@@ -341,8 +396,15 @@ export class RedAPIClient {
             this.setWebStore('red_web_conversations', convs);
         }
 
-        // 2. Dispatch to local Rust node if native (only for real user messages or dedicated endpoints)
-        if (!isControlMessage) {
+        // 2. Dispatch to local Rust node if native (user messages, calls & mesh signals)
+        const shouldSendToRust = !isControlMessage ||
+            options?.msg_type === 'contact_request' ||
+            options?.msg_type === 'contact_response' ||
+            options?.msg_type === 'profile_update' ||
+            options?.msg_type === 'webrtc_signal' ||
+            options?.msg_type === 'location_ping';
+
+        if (shouldSendToRust) {
             const body = { recipient: cleanRecipient, content, ...options, id: msgId };
             try {
                 await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });

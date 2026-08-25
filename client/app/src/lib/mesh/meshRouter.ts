@@ -94,8 +94,7 @@ export function generateDeterministicMsgId(sender: string, recipient: string, co
     hash |= 0;
   }
   const contentCode = Math.abs(hash).toString(36);
-  const rand = Math.random().toString(36).substring(2, 7);
-  return `msg_${ts}_${cleanSender}_${cleanRecipient}_${contentCode}_${rand}`;
+  return `msg_${ts}_${cleanSender}_${cleanRecipient}_${contentCode}`;
 }
 
 export interface MeshPeer {
@@ -299,6 +298,41 @@ class MeshRouter {
     if (clean.length === 64 && /^[0-9a-fA-F]+$/.test(clean)) {
       return clean;
     }
+
+    // Resolve hyphenated conversation IDs (e.g. short1-short2)
+    if (id.includes('-')) {
+      const parts = id.split('-');
+      for (const part of parts) {
+        if (part.length >= 8) {
+          const match = this.getCanonicalId(part);
+          if (match && match.length === 64) return match;
+          for (const [k, p] of this.peers.entries()) {
+            if (k.startsWith(part) || p.canonicalId?.startsWith(part) || p.id?.startsWith(part)) {
+              if (p.canonicalId && p.canonicalId.length === 64) return p.canonicalId.toLowerCase();
+              if (k.length === 64) return k.toLowerCase();
+            }
+          }
+        }
+      }
+    }
+
+    // Resolve short prefixes against local contacts store
+    if (typeof window !== 'undefined' && clean.length < 64) {
+      try {
+        const rawConts = localStorage.getItem('red_web_contacts');
+        if (rawConts) {
+          const conts = JSON.parse(rawConts);
+          const found = conts.find((c: any) => {
+            const cH = normalizeIdentity(c.identity_hash || '');
+            return cH === clean || (clean.length >= 8 && cH.startsWith(clean.slice(0, 8))) || (clean.includes('-') && cH.startsWith(clean.split('-')[1]?.slice(0, 8) || '____'));
+          });
+          if (found?.identity_hash && found.identity_hash.length === 64) {
+            return found.identity_hash.toLowerCase();
+          }
+        }
+      } catch {}
+    }
+
     return clean;
   }
 
@@ -552,7 +586,7 @@ class MeshRouter {
             is_gateway: this.hasInternetAccess,
             has_internet: this.hasInternetAccess,
             gateway_metric: this.hasInternetAccess ? 100 : 0,
-            version: '51.1.0'
+            version: '62.0.0'
           }
         }
       };
@@ -1279,10 +1313,25 @@ class MeshRouter {
     const finalIsGateway = isGateway !== undefined ? isGateway : (existing?.isGateway ?? false);
     const finalHasInternet = hasInternet !== undefined ? hasInternet : (existing?.hasInternet ?? false);
 
-    // Pick best non-generic name
+    // Pick best non-generic name (Contacts & Existing Registry are Single Source of Truth)
     let bestName = name || existing?.name;
-    if (existing?.name && (!name || name === 'Dispositivo RED' || name.startsWith('Nodo ') || name.startsWith('Operador '))) {
+    if (existing?.name && (!name || name === 'Dispositivo RED' || name.startsWith('Nodo ') || name.startsWith('Operador ') || name.startsWith('Par Escaneado'))) {
       bestName = existing.name;
+    }
+    if ((!bestName || bestName.startsWith('Nodo ') || bestName.startsWith('Operador ')) && typeof window !== 'undefined') {
+      try {
+        const rawConts = localStorage.getItem('red_web_contacts');
+        if (rawConts) {
+          const conts = JSON.parse(rawConts);
+          const found = conts.find((c: any) => {
+            const cH = normalizeIdentity(c.identity_hash || '');
+            return cH === resolvedCanonical || cH === cleanId || (resolvedCanonical.length >= 8 && cH.startsWith(resolvedCanonical.slice(0, 8)));
+          });
+          if (found?.display_name && !found.display_name.startsWith('Operador ') && !found.display_name.startsWith('Nodo ') && !found.display_name.startsWith('Par Escaneado')) {
+            bestName = found.display_name;
+          }
+        }
+      } catch {}
     }
 
     const updated: MeshPeer = {
