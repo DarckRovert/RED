@@ -38,7 +38,10 @@ jobs:
 
       - name: Build Next.js for GitHub Pages
         working-directory: client/app
-        run: npm run build:gh
+        run: |
+          npm run build:gh
+          touch out/.nojekyll
+          cp out/index.html out/404.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -51,3 +54,12 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: client/app/out
+          publish_branch: gh-pages
+          force_orphan: true

@@ -27,7 +27,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "bento", label: "Pilares" },
         { id: "live-mesh-demo", label: "Malla en Vivo" },
         { id: "matrix-comparison", label: "Comparativa" },
-        { id: "modules", label: "Módulos (20)" },
+        { id: "modules", label: "Módulos (42)" },
         { id: "packet-inspector", label: "Laboratorio" },
         { id: "use-cases", label: "Escenarios" },
         { id: "architecture", label: "Arquitectura" },
