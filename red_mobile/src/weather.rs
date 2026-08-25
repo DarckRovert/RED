@@ -57,6 +57,12 @@ pub struct WeatherStore {
     reports: Arc<RwLock<HashMap<String, WeatherReport>>>,
 }
 
+impl Default for WeatherStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WeatherStore {
     pub fn new() -> Self {
         Self {

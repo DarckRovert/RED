@@ -18,6 +18,12 @@ pub struct ChannelSummaryResponse {
 
 pub struct AISummarizerEngine;
 
+impl Default for AISummarizerEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AISummarizerEngine {
     pub fn new() -> Self {
         Self

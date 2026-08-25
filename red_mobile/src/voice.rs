@@ -27,6 +27,12 @@ pub struct VoiceStore {
     bursts: Arc<RwLock<HashMap<String, Vec<VoiceBurst>>>>,
 }
 
+impl Default for VoiceStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VoiceStore {
     pub fn new() -> Self {
         Self {

@@ -85,7 +85,7 @@ impl Libp2pTransport {
         blackout_mode: Arc<std::sync::atomic::AtomicBool>,
         blocked_wan_peers: Arc<std::sync::atomic::AtomicUsize>
     ) -> NetworkResult<Self> {
-        let local_key = libp2p::identity::Keypair::ed25519_from_bytes(secret_key_bytes.clone())
+        let local_key = libp2p::identity::Keypair::ed25519_from_bytes(secret_key_bytes)
             .map_err(|e| NetworkError::TransportError(e.to_string()))?;
         let peer_id = local_key.public().to_peer_id();
         
@@ -126,7 +126,7 @@ impl Libp2pTransport {
                     .validation_mode(gossipsub::ValidationMode::Strict)
                     .max_transmit_size(4 * 1024 * 1024)
                     .build()
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(|e| std::io::Error::other(e))?;
 
                 let kad_store = kad::store::MemoryStore::new(key.public().to_peer_id());
                 let mut kademlia = kad::Behaviour::new(key.public().to_peer_id(), kad_store);
@@ -162,7 +162,7 @@ impl Libp2pTransport {
                             ..Default::default()
                         },
                         key.public().to_peer_id(),
-                    ).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?,
+                    ).map_err(|e| std::io::Error::other(e))?,
                 })
             }).map_err(|e| NetworkError::TransportError(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))

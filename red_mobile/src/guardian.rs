@@ -73,7 +73,7 @@ impl GuardianEngine {
             return GuardianVerdict::Allow;
         }
 
-        if let Some(mut st) = self.stats.lock().ok() {
+        if let Ok(mut st) = self.stats.lock() {
             st.messages_analyzed += 1;
         }
 
@@ -96,7 +96,7 @@ impl GuardianEngine {
         ];
         for pat in csam_direct_patterns {
             if msg_lower.contains(pat) {
-                if let Some(mut st) = self.stats.lock().ok() {
+                if let Ok(mut st) = self.stats.lock() {
                     st.messages_blocked += 1;
                 }
                 let verdict = GuardianVerdict::Block {
@@ -126,7 +126,7 @@ impl GuardianEngine {
         ];
         for pat in seed_phishing {
             if msg_lower.contains(pat) {
-                if let Some(mut st) = self.stats.lock().ok() {
+                if let Ok(mut st) = self.stats.lock() {
                     st.messages_blocked += 1;
                 }
                 return GuardianVerdict::Block {

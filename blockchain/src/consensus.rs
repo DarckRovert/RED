@@ -293,7 +293,7 @@ impl Consensus {
         *slot += 1;
 
         // Check for epoch transition
-        if *slot % self.slots_per_epoch == 0 {
+        if (*slot).is_multiple_of(self.slots_per_epoch) {
             let mut epoch = self.epoch.write().unwrap();
             *epoch += 1;
         }

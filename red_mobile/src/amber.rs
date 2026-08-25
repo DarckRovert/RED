@@ -110,6 +110,12 @@ pub struct AmberStore {
     sightings: Arc<RwLock<Vec<AmberSighting>>>,
 }
 
+impl Default for AmberStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AmberStore {
     pub fn new() -> Self {
         Self {

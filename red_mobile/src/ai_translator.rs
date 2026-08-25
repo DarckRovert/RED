@@ -21,6 +21,12 @@ pub struct AITranslatorEngine {
     dict_es_qu: HashMap<&'static str, &'static str>,
 }
 
+impl Default for AITranslatorEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AITranslatorEngine {
     pub fn new() -> Self {
         let mut dict_es_en = HashMap::new();

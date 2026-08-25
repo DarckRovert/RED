@@ -115,7 +115,7 @@ impl AICopilotEngine {
 
         // Cargamos el modelo real
         let device = Device::Cpu;
-        let mut file = match std::fs::File::open(&path) {
+        let mut file = match std::fs::File::open(path) {
             Ok(f) => f,
             Err(e) => {
                 return CopilotResponse {
@@ -230,7 +230,7 @@ impl AICopilotEngine {
             let next_token = logits_processor.sample(&logits).unwrap();
             tokens.push(next_token);
             
-            if let Some(text) = tokenizer.decode(&[next_token], true).ok() {
+            if let Ok(text) = tokenizer.decode(&[next_token], true) {
                 generated_text.push_str(&text);
             }
         }

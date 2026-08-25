@@ -37,19 +37,25 @@ rocksdb/
 database/
 red-node-data/
 
-# Android / Mobile Builds
+# Android / Mobile / Binary Builds
 *.apk
-*.onnx
-*.bin
-
 *.aab
 *.ap_
+*.exe
+*.dll
+*.so
+*.dylib
+*.onnx
+*.bin
+release-assets/*.apk
+release-assets/*.exe
+release-assets/*.so
+
 client/app/android/app/build/
 client/app/ios/App/build/
 client/app/android/.gradle/
 client/app/android/local.properties
 client/app/ios/App/Pods/
-website/red.apk
 
 # Logs and Debug
 *.log

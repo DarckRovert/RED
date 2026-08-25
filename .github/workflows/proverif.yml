@@ -1,0 +1,64 @@
+name: ProVerif Formal Verification
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'proofs/**'
+      - 'core/src/crypto/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'proofs/**'
+      - 'core/src/crypto/**'
+
+jobs:
+  proverif:
+    name: ProVerif Security Proofs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install ProVerif
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ocaml ocaml-findlib make m4
+          wget https://bblanche.gitlabpages.inria.fr/proverif/proverif2.07.tar.gz
+          tar xzf proverif2.07.tar.gz
+          cd proverif2.07
+          ./build
+          sudo cp proverif /usr/local/bin/
+      
+      - name: Verify security model
+        run: |
+          if [ -f "proofs/security_model.pv" ]; then
+            proverif proofs/security_model.pv > proverif_security.log 2>&1
+            if grep -q "Query.*is false" proverif_security.log; then
+              echo "❌ SECURITY PROOF FAILED"
+              cat proverif_security.log
+              exit 1
+            else
+              echo "✅ Security proofs passed"
+            fi
+          fi
+      
+      - name: Verify anonymity proof
+        run: |
+          if [ -f "proofs/anonymity_proof.pv" ]; then
+            proverif proofs/anonymity_proof.pv > proverif_anonymity.log 2>&1
+            if grep -q "Query.*is false" proverif_anonymity.log; then
+              echo "❌ ANONYMITY PROOF FAILED"
+              cat proverif_anonymity.log
+              exit 1
+            else
+              echo "✅ Anonymity proofs passed"
+            fi
+          fi
+      
+      - name: Upload ProVerif logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proverif-logs
+          path: proverif_*.log
+          retention-days: 30

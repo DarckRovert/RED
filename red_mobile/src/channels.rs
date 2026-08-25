@@ -27,6 +27,12 @@ pub struct ChannelStore {
     messages: Arc<RwLock<HashMap<String, Vec<ChannelMessage>>>>,
 }
 
+impl Default for ChannelStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChannelStore {
     pub fn new() -> Self {
         Self {

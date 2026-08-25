@@ -37,7 +37,6 @@ use tracing::{debug, error, info, warn, Level};
 use tracing_subscriber::FmtSubscriber;
 
 use api::{build_router, ApiState};
-use axum;
 use rate_limit::RateLimiter;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

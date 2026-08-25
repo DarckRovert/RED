@@ -57,9 +57,16 @@ pub struct DiscoveryEngine {
     config: Arc<RwLock<ProximityFilterConfig>>,
 }
 
+impl Default for DiscoveryEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DiscoveryEngine {
     pub fn new() -> Self {
-        let engine = Self {
+        
+        Self {
             nearby_nodes: Arc::new(RwLock::new(HashMap::new())),
             last_notified: Arc::new(RwLock::new(HashMap::new())),
             config: Arc::new(RwLock::new(ProximityFilterConfig {
@@ -74,8 +81,7 @@ impl DiscoveryEngine {
                     radius_meters: 150.0,
                 }],
             })),
-        };
-        engine
+        }
     }
 
     pub fn report_node(&self, node: ProximityNode) {

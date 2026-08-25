@@ -162,7 +162,7 @@ impl Node {
     /// Set Dead Man's Switch inactivity period in days
     pub async fn set_dead_mans_days(&mut self, days: u64) {
         let mut storage = self.storage.lock().await;
-        if let Err(e) = storage.set_config("dms_days", &days.to_string()) {
+        if let Err(e) = storage.set_config("dms_days", days.to_string()) {
             tracing::warn!("Failed to persist DMS days config: {}", e);
         }
     }
@@ -219,7 +219,7 @@ impl Node {
     ) {
         let mut storage = self.storage.lock().await;
         let _ = storage.set_config("dms_enabled", if enabled { "true" } else { "false" });
-        let _ = storage.set_config("dms_trigger_hours", &trigger_hours.to_string());
+        let _ = storage.set_config("dms_trigger_hours", trigger_hours.to_string());
         let _ = storage.set_config("dms_wipe_messages", if wipe_messages { "true" } else { "false" });
         let _ = storage.set_config("dms_wipe_identity", if wipe_identity { "true" } else { "false" });
         let _ = storage.set_config("dms_dead_message", &dead_message);
@@ -298,8 +298,7 @@ impl Node {
                                     elapsed_hours, trigger_hours
                                 );
                                 let _ = storage.self_destruct();
-                                return Err(NetworkError::IoError(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
+                                return Err(NetworkError::IoError(std::io::Error::other(
                                     "Dead Man's Switch Triggered. Data Wiped."
                                 )));
                             }
@@ -309,7 +308,7 @@ impl Node {
             }
 
             // Update last active timestamp whether or not DMS fired
-            let _ = storage.set_config("dms_last_active", &now.to_string());
+            let _ = storage.set_config("dms_last_active", now.to_string());
         }
         // ----------------------------------------
 
@@ -1016,7 +1015,7 @@ impl Node {
                     .find(|p| p.identity_hash.as_ref() == Some(recipient) || p.id == peer_id)
                     .unwrap_or_else(|| {
                         let pub_key = contact_pub_key
-                            .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                            .map(crate::crypto::keys::PublicKey::from_bytes)
                             .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
                         crate::network::PeerInfo {
                             id: peer_id.clone(),
@@ -1070,7 +1069,7 @@ impl Node {
                 let destination = destination_opt.unwrap_or_else(|| {
                     let proper_peer_id = PeerId::from_bytes(*recipient.as_bytes());
                     let pub_key = contact_pub_key
-                        .map(|bytes| crate::crypto::keys::PublicKey::from_bytes(bytes))
+                        .map(crate::crypto::keys::PublicKey::from_bytes)
                         .unwrap_or_else(|| crate::crypto::keys::PublicKey::from_bytes([0u8; 32]));
                     crate::network::PeerInfo {
                         id: proper_peer_id,
@@ -1156,7 +1155,7 @@ impl Node {
             self.identity = new_identity;
             Ok(())
         } else {
-            Err(NetworkError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "Failed to rotate identity")))
+            Err(NetworkError::IoError(std::io::Error::other("Failed to rotate identity")))
         }
     }
 

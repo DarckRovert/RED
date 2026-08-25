@@ -14,6 +14,12 @@ pub struct EphemeralPurgeEngine {
     configs: Arc<RwLock<HashMap<String, EphemeralConfig>>>,
 }
 
+impl Default for EphemeralPurgeEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EphemeralPurgeEngine {
     pub fn new() -> Self {
         Self {

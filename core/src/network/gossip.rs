@@ -314,13 +314,13 @@ pub mod peer_selection {
     use rand::thread_rng;
 
     /// Select random peers for gossip
-    pub fn select_random_peers<T: Clone>(
+    pub fn select_random_peers<T>(
         peers: &[T],
         count: usize,
         exclude: Option<&T>,
     ) -> Vec<T>
     where
-        T: PartialEq,
+        T: Clone + PartialEq,
     {
         let mut available: Vec<_> = peers.iter()
             .filter(|p| exclude.map(|e| *p != e).unwrap_or(true))

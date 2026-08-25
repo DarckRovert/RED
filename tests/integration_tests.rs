@@ -6,24 +6,22 @@
 #[cfg(test)]
 mod crypto_tests {
     use red_core::crypto::{
-        keys::{PublicKey, SecretKey},
         encryption,
-        signing,
         hashing,
+        keys::SigningKeyPair,
     };
 
     #[test]
     fn test_chacha20_encrypt_decrypt_roundtrip() {
         let key = [0x42u8; 32];
-        let nonce = [0x24u8; 12];
         let plaintext = b"RED Protocol secret message";
 
-        let ciphertext = encryption::encrypt(&key, &nonce, plaintext)
+        let encrypted = encryption::encrypt(&key, plaintext)
             .expect("Encryption should succeed");
 
-        assert_ne!(ciphertext, plaintext, "Ciphertext must differ from plaintext");
+        assert_ne!(encrypted.ciphertext, plaintext, "Ciphertext must differ from plaintext");
 
-        let decrypted = encryption::decrypt(&key, &nonce, &ciphertext)
+        let decrypted = encryption::decrypt(&key, &encrypted)
             .expect("Decryption should succeed");
 
         assert_eq!(decrypted, plaintext, "Decrypted text must match original");
@@ -33,47 +31,46 @@ mod crypto_tests {
     fn test_wrong_key_fails_decryption() {
         let key = [0x42u8; 32];
         let wrong_key = [0x99u8; 32];
-        let nonce = [0x01u8; 12];
         let plaintext = b"secret";
 
-        let ciphertext = encryption::encrypt(&key, &nonce, plaintext)
+        let encrypted = encryption::encrypt(&key, plaintext)
             .expect("Encryption should succeed");
 
-        let result = encryption::decrypt(&wrong_key, &nonce, &ciphertext);
+        let result = encryption::decrypt(&wrong_key, &encrypted);
         assert!(result.is_err(), "Decryption with wrong key must fail (AEAD integrity check)");
     }
 
     #[test]
     fn test_ed25519_sign_verify() {
-        let (sk, pk) = signing::generate_keypair();
+        let kp = SigningKeyPair::generate();
         let message = b"RED Network block data";
 
-        let signature = signing::sign(&sk, message);
-        assert!(signing::verify(&pk, message, &signature), "Valid signature must verify");
+        let signature = kp.sign(message);
+        assert!(kp.verify(message, &signature).is_ok(), "Valid signature must verify");
     }
 
     #[test]
     fn test_tampered_message_fails_verify() {
-        let (sk, pk) = signing::generate_keypair();
+        let kp = SigningKeyPair::generate();
         let message = b"original message";
-        let mut tampered = message.to_vec();
+        let signature = kp.sign(message);
 
-        let signature = signing::sign(&sk, message);
+        let mut tampered = message.to_vec();
         tampered[0] ^= 0xFF; // Flip bits in the first byte
 
-        assert!(!signing::verify(&pk, &tampered, &signature),
+        assert!(kp.verify(&tampered, &signature).is_err(),
             "Tampered message must fail signature verification");
     }
 
     #[test]
     fn test_hkdf_key_derivation_deterministic() {
-        let password = b"test_password";
-        let salt = b"red-salt";
+        let password = [0x77u8; 32];
+        let salt = [0x11u8; 32];
         let info = b"storage-key";
 
-        let key1 = hashing::derive_symmetric_key(password, salt, info)
+        let key1 = hashing::derive_symmetric_key(&password, &salt, info)
             .expect("Key derivation should succeed");
-        let key2 = hashing::derive_symmetric_key(password, salt, info)
+        let key2 = hashing::derive_symmetric_key(&password, &salt, info)
             .expect("Key derivation should be deterministic");
 
         assert_eq!(key1, key2, "HKDF must be deterministic");
@@ -81,8 +78,11 @@ mod crypto_tests {
 
     #[test]
     fn test_different_passwords_produce_different_keys() {
-        let k1 = hashing::derive_symmetric_key(b"password1", b"salt", b"info").unwrap();
-        let k2 = hashing::derive_symmetric_key(b"password2", b"salt", b"info").unwrap();
+        let p1 = [0x01u8; 32];
+        let p2 = [0x02u8; 32];
+        let salt = [0x11u8; 32];
+        let k1 = hashing::derive_symmetric_key(&p1, &salt, b"info").unwrap();
+        let k2 = hashing::derive_symmetric_key(&p2, &salt, b"info").unwrap();
         assert_ne!(k1, k2, "Different passwords must produce different keys");
     }
 
@@ -121,7 +121,9 @@ mod identity_tests {
         let bob_shared = bob.key_exchange(alice.public_key());
 
         assert_eq!(alice_shared, bob_shared,
-            "Key exchange must produce the same shared secret on both sides");
+            "Diffie-Hellman key exchange must yield the same shared secret for both parties");
+        assert_ne!(alice_shared, [0u8; 32],
+            "Shared secret must not be all zeros");
     }
 
     #[test]
@@ -137,18 +139,30 @@ mod storage_tests {
     use red_core::storage::Storage;
     use red_core::identity::Identity;
     use red_core::crypto::hashing;
+    use std::path::PathBuf;
 
-    fn make_test_storage() -> (tempfile::TempDir, Storage) {
-        let dir = tempfile::tempdir().expect("Should create temp dir");
-        let key = hashing::derive_symmetric_key(b"test_pass", b"salt", b"key").unwrap();
-        let mut storage = Storage::new(dir.path().join("storage"), key);
+    struct TempStorageDir {
+        path: PathBuf,
+    }
+
+    impl Drop for TempStorageDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn make_test_storage() -> (TempStorageDir, Storage) {
+        let id = uuid::Uuid::new_v4();
+        let temp_path = std::env::temp_dir().join(format!("red_test_storage_{}", id));
+        let key = hashing::derive_symmetric_key(&[0x42u8; 32], &[0x11u8; 32], b"key").unwrap();
+        let mut storage = Storage::new(temp_path.clone(), key);
         storage.open().expect("Storage should open");
-        (dir, storage)
+        (TempStorageDir { path: temp_path }, storage)
     }
 
     #[test]
     fn test_storage_identity_persistence() {
-        let (_dir, mut s) = make_test_storage();
+        let (_guard, mut s) = make_test_storage();
         let id = Identity::generate().unwrap();
 
         s.set_identity(id.clone()).expect("Should save identity");
@@ -159,7 +173,7 @@ mod storage_tests {
 
     #[test]
     fn test_storage_contact_add_retrieve() {
-        let (_dir, mut s) = make_test_storage();
+        let (_guard, mut s) = make_test_storage();
         let contact = red_core::storage::Contact {
             identity_hash: red_core::identity::IdentityHash::from_bytes([0xABu8; 32]),
             display_name: "Alice".to_string(),
@@ -168,6 +182,9 @@ mod storage_tests {
             verified: true,
             blocked: false,
             notes: None,
+            avatar: None,
+            bio: None,
+            last_sync: 0,
         };
 
         s.add_contact(contact.clone()).expect("Should add contact");
@@ -179,7 +196,7 @@ mod storage_tests {
 
 #[cfg(test)]
 mod blockchain_tests {
-    use red_blockchain::consensus::{Consensus, MIN_VALIDATOR_STAKE};
+    use red_blockchain::{consensus::Consensus, MIN_VALIDATOR_STAKE};
 
     #[test]
     fn test_slashing_on_double_sign() {
@@ -209,7 +226,6 @@ mod blockchain_tests {
         consensus.register_validator(key, initial_stake).unwrap();
 
         // Slash until stake falls below minimum
-        // DoubleSign removes 20% — slash multiple times
         for _ in 0..10 {
             let _ = consensus.slash_validator(&key, red_blockchain::consensus::SlashReason::DoubleSign);
         }
@@ -237,7 +253,7 @@ mod blockchain_tests {
 #[cfg(test)]
 mod protocol_tests {
     use red_core::protocol::{Message, MessageType, MessageId};
-    use red_core::identity::{Identity, IdentityHash};
+    use red_core::identity::IdentityHash;
 
     #[test]
     fn test_message_serialization_roundtrip() {
@@ -252,6 +268,7 @@ mod protocol_tests {
             timestamp: 1_700_000_000_000,
             reply_to: None,
             status: red_core::protocol::MessageStatus::Pending,
+            edited: false,
         };
 
         let serialized = msg.serialize().expect("Serialization should succeed");
@@ -266,7 +283,7 @@ mod protocol_tests {
 
     #[test]
     fn test_message_size_limit_enforced() {
-        let big_content = "X".repeat(200_000); // 200KB > MAX_MESSAGE_SIZE (64KB)
+        let big_content = "X".repeat(red_core::protocol::MAX_MESSAGE_SIZE + 100); // Exceeds MAX_MESSAGE_SIZE (2MB)
         let msg = Message {
             id: MessageId::generate(),
             sender: IdentityHash::from_bytes([0u8; 32]),
@@ -275,7 +292,8 @@ mod protocol_tests {
             timestamp: 0,
             reply_to: None,
             status: red_core::protocol::MessageStatus::Pending,
+            edited: false,
         };
-        assert!(msg.is_too_large(), "Message over 64KB must be flagged as too large");
+        assert!(msg.is_too_large(), "Message over 2MB limit must be flagged as too large");
     }
 }

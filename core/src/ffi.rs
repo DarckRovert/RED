@@ -37,28 +37,32 @@ pub extern "C" fn red_identity_hash() -> *mut c_char {
 
 /// Send a message. Returns 0 on success, negative on error.
 /// Error codes: -1=null arg, -2=invalid UTF-8, -3=invalid recipient hash, -4=message creation failed
+///
+/// # Safety
+/// Caller must ensure that `sender_ptr`, `recipient_ptr`, and `text_ptr` point to valid
+/// null-terminated C strings or null pointers.
 #[no_mangle]
-pub extern "C" fn red_message_send(
+pub unsafe extern "C" fn red_message_send(
     sender_ptr: *const c_char,
     recipient_ptr: *const c_char,
     text_ptr: *const c_char,
 ) -> i32 {
     // SEC-3 FIX: Use safe string conversion — return error code instead of panicking
-    let sender_str = unsafe {
+    let sender_str = {
         if sender_ptr.is_null() { return -1; }
         match CStr::from_ptr(sender_ptr).to_str() {
             Ok(s) => s,
             Err(_) => return -2,
         }
     };
-    let recipient_str = unsafe {
+    let recipient_str = {
         if recipient_ptr.is_null() { return -1; }
         match CStr::from_ptr(recipient_ptr).to_str() {
             Ok(s) => s,
             Err(_) => return -2,
         }
     };
-    let text = unsafe {
+    let text = {
         if text_ptr.is_null() { return -1; }
         match CStr::from_ptr(text_ptr).to_str() {
             Ok(s) => s,
@@ -87,11 +91,11 @@ pub extern "C" fn red_message_send(
 }
 
 /// Free a string allocated by the bridge.
-/// Undefined behavior if called with a pointer not returned by this bridge.
+///
+/// # Safety
+/// Undefined behavior if called with a pointer not allocated by this bridge or already deallocated.
 #[no_mangle]
-pub extern "C" fn red_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn red_free_string(s: *mut c_char) {
     if s.is_null() { return; }
-    unsafe {
-        let _ = CString::from_raw(s);
-    }
+    let _ = CString::from_raw(s);
 }

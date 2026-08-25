@@ -164,7 +164,7 @@ impl Chain {
                 // SEC-FIX A-7: Validate the ZK proof before accepting registration
                 // This ensures the sender actually knows the private key for the identity.
                 if !zk_proof.is_empty() {
-                    if !red_core::crypto::zk_proofs::verify_zk_proof(identity_hash, public_key, &zk_proof) {
+                    if !red_core::crypto::zk_proofs::verify_zk_proof(identity_hash, public_key, zk_proof) {
                         return Err(BlockchainError::InvalidTransaction(
                             "Invalid ZK proof for identity registration".to_string()
                         ));

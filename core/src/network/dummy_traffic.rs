@@ -254,11 +254,9 @@ impl std::error::Error for SchedulerError {}
 /// Injects organic-looking fake contacts and mundane conversation history into a fresh SQLite vault.
 /// This ensures interrogators do not see a suspiciously empty app when the Duress PIN is entered.
 pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate::identity::IdentityHash) {
-    let fake_contacts = vec![
-        ("Mamá", "Hola hijo, ¿vas a venir a cenar hoy?"),
+    let fake_contacts = [("Mamá", "Hola hijo, ¿vas a venir a cenar hoy?"),
         ("Suscripción de Streaming", "Su factura ha sido pagada. Su plan termina el 30."),
-        ("Carlos Universidad", "¿Ya hiciste la tarea de finanzas? Está imposible hermano"),
-    ];
+        ("Carlos Universidad", "¿Ya hiciste la tarea de finanzas? Está imposible hermano")];
 
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 

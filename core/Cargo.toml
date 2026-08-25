@@ -72,8 +72,19 @@ serialport = "4.3.0"
 tokio-test = "0.4"
 criterion = "0.5"
 proptest = "1.4"
+red-blockchain = { path = "../blockchain" }
+
 
 [features]
 default = []
 test-utils = []
+
+[[test]]
+name = "crypto_tests"
+path = "../tests/crypto_tests.rs"
+
+[[test]]
+name = "integration_tests"
+path = "../tests/integration_tests.rs"
+
 

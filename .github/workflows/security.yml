@@ -1,0 +1,73 @@
+name: Security Audit
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+jobs:
+  rust-audit:
+    name: Rust Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      
+      - name: Run cargo audit
+        run: cargo audit --deny warnings
+  
+  npm-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+      
+      - name: NPM audit (client/app)
+        run: cd client/app && npm audit --production || npm audit --production --audit-level=moderate
+      
+      - name: NPM audit (signaling)
+        if: hashFiles('signaling/package.json') != ''
+        run: cd signaling && npm audit --production || npm audit --production --audit-level=moderate
+  
+  dependency-check:
+    name: Dependency Version Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate Cargo.toml versions
+        run: |
+          ROOT_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= "\([^"]*\)".*/\1/')
+          echo "Root workspace version: $ROOT_VERSION"
+          
+          for crate in core blockchain node red_mobile; do
+            if [ -f "$crate/Cargo.toml" ]; then
+              CRATE_VERSION=$(grep '^version' "$crate/Cargo.toml" | head -1 | sed 's/.*= "\([^"]*\)".*/\1/')
+              if [ "$CRATE_VERSION" != "$ROOT_VERSION" ]; then
+                echo "ERROR: $crate version ($CRATE_VERSION) doesn't match root ($ROOT_VERSION)"
+                exit 1
+              fi
+            fi
+          done
+      
+      - name: Validate package.json versions
+        run: |
+          ROOT_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= "\([^"]*\)".*/\1/')
+          PKG_VERSION=$(grep '"version"' client/app/package.json | head -1 | sed 's/.*: "\([^"]*\)".*/\1/')
+          if [ "$PKG_VERSION" != "$ROOT_VERSION" ]; then
+            echo "ERROR: package.json version ($PKG_VERSION) doesn't match Cargo.toml ($ROOT_VERSION)"
+            exit 1
+          fi

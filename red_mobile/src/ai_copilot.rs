@@ -34,6 +34,12 @@ pub struct AICopilotEngine {
     state: Arc<Mutex<AICopilotState>>,
 }
 
+impl Default for AICopilotEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AICopilotEngine {
     pub fn new() -> Self {
         Self {
@@ -112,7 +118,7 @@ impl AICopilotEngine {
 
         // Cargamos el modelo real
         let device = candle_core::Device::Cpu;
-        let mut file = match std::fs::File::open(&path) {
+        let mut file = match std::fs::File::open(path) {
             Ok(f) => f,
             Err(e) => {
                 return CopilotResponse {
@@ -363,7 +369,7 @@ impl AICopilotEngine {
 
             tokens.push(next_token);
             
-            if let Some(text) = tokenizer.decode(&[next_token], true).ok() {
+            if let Ok(text) = tokenizer.decode(&[next_token], true) {
                 generated_text.push_str(&text);
                 if generated_text.contains("<|im_end|>") 
                     || generated_text.contains("<|endoftext|>") 

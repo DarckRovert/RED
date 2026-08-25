@@ -1,0 +1,88 @@
+name: Build Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-rust:
+    name: Build Rust Workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build workspace release
+        run: cargo build --workspace --release
+      
+      - name: Generate checksums
+        run: |
+          mkdir -p release-assets
+          cp target/release/red-node release-assets/ 2>/dev/null || true
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt 2>/dev/null || true
+          cat SHA256SUMS.txt || true
+          cd ..
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-binaries
+          path: |
+            target/release/red-node
+            release-assets/SHA256SUMS.txt
+          retention-days: 5
+  
+  build-javascript:
+    name: Build JavaScript/TypeScript
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18.x']
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: client/app/package-lock.json
+      
+      - name: Build client/app
+        run: cd client/app && npm ci && npm run build
+      
+      - name: Upload Next.js static export
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-export
+          path: client/app/out
+          retention-days: 5
+
+  check-compilation:
+    name: Compilation Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Check all features
+        run: cargo check --workspace --all-features
+      
+      - name: Verify no missing dependencies
+        run: cargo tree --workspace

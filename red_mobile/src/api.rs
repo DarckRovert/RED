@@ -419,7 +419,7 @@ fn map_req_to_type(req: &SendMessageRequest) -> MessageType {
                         Some(red_core::protocol::MessageId::from_bytes(arr))
                     } else { None }
                 })
-                .unwrap_or_else(|| red_core::protocol::MessageId::generate());
+                .unwrap_or_else(red_core::protocol::MessageId::generate);
             MessageType::Reaction {
                 target_message_id: target_id,
                 emoji: req.content.clone(),
@@ -435,7 +435,7 @@ fn map_req_to_type(req: &SendMessageRequest) -> MessageType {
                         Some(red_core::protocol::MessageId::from_bytes(arr))
                     } else { None }
                 })
-                .unwrap_or_else(|| red_core::protocol::MessageId::generate());
+                .unwrap_or_else(red_core::protocol::MessageId::generate);
             MessageType::Delete { target_message_id: target_id }
         },
         Some("read_receipt") => {
@@ -817,7 +817,7 @@ async fn handle_set_dms_config(
     let mut node = state.node.lock().await;
     // Apply each config field to the node
     let hours = cfg.trigger_hours as u64;
-    node.set_dead_mans_days(hours / 24 + if hours % 24 > 0 { 1 } else { 0 }).await;
+    node.set_dead_mans_days(hours / 24 + if !hours.is_multiple_of(24) { 1 } else { 0 }).await;
     node.set_dms_config(
         cfg.enabled,
         cfg.trigger_hours as u64,
@@ -1037,7 +1037,7 @@ async fn handle_mesh_receive(
 }
 
 async fn handle_local_signal(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket))
+    ws.on_upgrade(handle_socket)
 }
 
 async fn handle_socket(socket: WebSocket) {
@@ -1048,7 +1048,7 @@ async fn handle_socket(socket: WebSocket) {
 
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            let ws_msg = WsMessage::Text(msg.into());
+            let ws_msg = WsMessage::Text(msg);
             if sender.send(ws_msg).await.is_err() {
                 break;
             }
@@ -1182,7 +1182,7 @@ async fn handle_add_contact(
 
     let pub_key_bytes = if let Some(ref pk_hex) = req.public_key {
         let pk_clean = pk_hex.trim().replace("did:red:", "");
-        let pk_val = pk_clean.split(':').last().unwrap_or(&pk_clean);
+        let pk_val = pk_clean.split(':').next_back().unwrap_or(&pk_clean);
         hex::decode(pk_val).ok().and_then(|b| b.try_into().ok()).unwrap_or([0u8; 32])
     } else {
         let parts: Vec<&str> = req.identity_hash.split(':').collect();
@@ -1357,7 +1357,7 @@ async fn handle_sse(State(state): State<ApiState>) -> Sse<impl Stream<Item = Res
         loop {
             match rx.recv().await {
                 Ok(msg) => {
-                    let item = map_message_to_item(&msg, &msg.sender == &my_hash);
+                    let item = map_message_to_item(&msg, msg.sender == my_hash);
                     let event_type = if item.msg_type == "contact_update" { "contact_update" } else { "message" };
                     let data = serde_json::json!({
                         "from": msg.sender.short(),
@@ -3201,7 +3201,7 @@ async fn handle_channel_hop(
     let (current_channel, _, _) = node.get_rf_state();
     
     // Hop sequence: 1 -> 6 -> 11 -> 37 -> 38 -> 39 -> 1
-    let next_channel = req.target_channel.unwrap_or_else(|| {
+    let next_channel = req.target_channel.unwrap_or({
         match current_channel {
             1 => 6,
             6 => 11,

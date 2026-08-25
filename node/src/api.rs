@@ -696,20 +696,17 @@ async fn handle_send_message(
     if msg_type_str == "image" {
         if let Some(ref media_data) = req.media_data {
             let verdict = state.guardian.analyze_image_hash(media_data);
-            match verdict {
-                GuardianVerdict::Block { category, reason: _ } => {
-                    tracing::warn!("Guardian bloqueó imagen: category={}", category);
-                    return (
-                        StatusCode::FORBIDDEN,
-                        Json(serde_json::json!({
-                            "error": "Imagen bloqueada por el sistema de moderación RED Guardian",
-                            "category": category,
-                            "code": "GUARDIAN_BLOCK_IMAGE"
-                        })),
-                    )
-                        .into_response();
-                }
-                _ => {}
+            if let GuardianVerdict::Block { category, reason: _ } = verdict {
+                tracing::warn!("Guardian bloqueó imagen: category={}", category);
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({
+                        "error": "Imagen bloqueada por el sistema de moderación RED Guardian",
+                        "category": category,
+                        "code": "GUARDIAN_BLOCK_IMAGE"
+                    })),
+                )
+                    .into_response();
             }
         }
     }
@@ -843,7 +840,7 @@ async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoRe
                         }
                     });
                     let last_ts = msgs.last().map(|m| m.timestamp);
-                    let peer = if &c.our_identity == &my_hash {
+                    let peer = if c.our_identity == my_hash {
                         c.their_identity.to_hex()
                     } else {
                         c.our_identity.to_hex()
@@ -1388,7 +1385,7 @@ async fn handle_set_dms(
 
 async fn handle_get_blocks(State(state): State<ApiState>) -> impl IntoResponse {
     let height = state.chain.height();
-    let start = if height > 20 { height - 20 } else { 0 };
+    let start = height.saturating_sub(20);
     let mut blocks = Vec::new();
 
     for h in (start..=height).rev() {
@@ -1628,7 +1625,7 @@ async fn handle_set_lora_config(
     let mut node = state.node.lock().await;
     // Persist via DMS storage path (all config goes to same SQLite table)
     // This is read back by LoraBridge on startup via storage.get_config()
-    let _ = futures::executor::block_on(async {
+    futures::executor::block_on(async {
         node.set_nickname(&format!("__lora_port__:{}", req.port))
             .await
     });
@@ -2149,7 +2146,7 @@ fn signaling_channel() -> broadcast::Sender<String> {
 }
 
 async fn handle_local_signal(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket))
+    ws.on_upgrade(handle_socket)
 }
 
 async fn handle_socket(socket: WebSocket) {
@@ -2160,7 +2157,7 @@ async fn handle_socket(socket: WebSocket) {
 
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            let ws_msg = WsMessage::Text(msg.into());
+            let ws_msg = WsMessage::Text(msg);
             if sender.send(ws_msg).await.is_err() {
                 break;
             }

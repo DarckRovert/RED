@@ -136,7 +136,7 @@ impl SocialStore {
             // Fusionar reacciones (Merge)
             let mut existing = feed_list[existing_idx].clone();
             for (emoji, hashes) in post.reactions {
-                let entry = existing.reactions.entry(emoji).or_insert_with(Vec::new);
+                let entry = existing.reactions.entry(emoji).or_default();
                 for hash in hashes {
                     if !entry.contains(&hash) {
                         entry.push(hash);

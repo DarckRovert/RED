@@ -1,86 +1,88 @@
-name: Publish GitHub Release with APK
+name: Release Pipeline
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*'
-  workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
-  release:
-    name: Create GitHub Release
+  validate:
+    name: Validate Release
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Set up Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'zulu'
-          java-version: '21'
-
-      - name: Install Frontend Dependencies
-        working-directory: client/app
-        run: npm install --legacy-peer-deps
-
-      - name: Build Next.js Static Export
-        working-directory: client/app
-        run: npm run build
-
-      - name: Sync Capacitor Android
-        working-directory: client/app
-        run: npx cap sync android
-
-      - name: Grant Execute Permission for Gradlew
-        working-directory: client/app/android
-        run: chmod +x gradlew
-
-      - name: Build Android Release APK
-        working-directory: client/app/android
-        run: ./gradlew assembleRelease --no-daemon
-
-      - name: Copy and Package Assets for Release
+      - uses: actions/checkout@v4
+      
+      - name: Validate version consistency
+        run: |
+          ROOT_VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*= "\([^"]*\)".*/\1/')
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          
+          if [[ $GITHUB_REF == refs/tags/v* ]]; then
+            if [ "$TAG_VERSION" != "$ROOT_VERSION" ]; then
+              echo "ERROR: Tag version ($TAG_VERSION) doesn't match Cargo.toml ($ROOT_VERSION)"
+              exit 1
+            fi
+          fi
+  
+  build-release:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Build release binaries
+        run: |
+          cargo build --release --bin red-node
+          cargo build --release -p red-blockchain
+          cargo build --release -p red-core
+      
+      - name: Generate checksums
         run: |
           mkdir -p release-assets
-          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/RED-${{ github.ref_name }}.apk
-          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/red-${{ github.ref_name }}-latest.apk
-          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/red-latest.apk
-          cp client/app/android/app/build/outputs/apk/release/app-release.apk release-assets/app-release.apk
-          cd release-assets && sha256sum * > SHA256SUMS.txt || true
-
-      - name: Create Release and Upload APK
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+          cp target/release/red-node release-assets/
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cd ..
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: "RED ${{ github.ref_name }} — Sovereign Mesh OS"
-          body: |
-            ## 🛡️ RED Sovereign Mesh OS — Release ${{ github.ref_name }}
-            
-            ### 🚀 Hardened P2P & Unified Protocol Edition — v62.0.0
-            
-            - **Despacho Garantizado de Handshakes & Solicitudes de Contacto:** Enrutamiento instantáneo de `contact_request` y `contact_response` sobre libp2p TCP nativo (Wi-Fi) y WebRTC con alerta táctica y modal reactivo `IncomingContactRequestModal`.
-            - **Unificación Canónica y Cero Chats Duplicados:** Resolución universal de claves canónicas de 64 caracteres en Rust y TypeScript. 1 Par = Exactamente 1 Conversación en la barra lateral sin desincronizaciones de perfil.
-            - **Enrutamiento E2E de Señalización WebRTC:** Reenvío en tiempo real de paquetes `webrtc_signal` sobre la malla local, activando timbrado instantáneo (`IncomingCallBanner`) y enlaces DTLS-SRTP para llamadas de voz y videollamadas 1-a-1.
-            - **Deduplicación Estricta E2E e Idempotencia:** Identificadores deterministas libres de colisiones (`generateDeterministicMsgId`) y almacenamiento de medios en `IndexedMediaVault` (IndexedDB).
-            - **Escuadrones Multi-Par (Signal SenderKey) & Walkie-Talkie PTT:** Grupos federados con llaves simétricas rotativas y radio PTT con compresión acústica de ultra-bajo bitrate.
-            
-            ### 📱 Descarga Directa de Binarios:
-            - **Android APK:** `RED-${{ github.ref_name }}.apk` (o `red-latest.apk`) para dispositivos Android (ARM64).
-            - **Sumas de Verificación:** Consulta `SHA256SUMS.txt` para comprobar la integridad criptográfica.
-          files: |
-            release-assets/RED-${{ github.ref_name }}.apk
-            release-assets/red-${{ github.ref_name }}-latest.apk
-            release-assets/red-latest.apk
-            release-assets/app-release.apk
-            release-assets/SHA256SUMS.txt
+          name: release-artifacts
+          path: release-assets/
+          retention-days: 90
+  
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: release-assets/
+      
+      - name: Extract release notes
+        id: release_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          NOTES=$(sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | head -n -1)
+          echo "release_notes=$NOTES" >> $GITHUB_OUTPUT
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          body: ${{ steps.release_notes.outputs.release_notes }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

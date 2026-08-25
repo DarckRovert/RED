@@ -15,6 +15,12 @@ pub struct BatteryOptimizer {
     status: Arc<RwLock<EcoMeshStatus>>,
 }
 
+impl Default for BatteryOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BatteryOptimizer {
     pub fn new() -> Self {
         Self {

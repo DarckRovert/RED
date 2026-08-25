@@ -58,7 +58,7 @@ impl PublicKey {
 
     /// Convert to hex string
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.bytes)
+        hex::encode(self.bytes)
     }
 
     /// Parse from hex string

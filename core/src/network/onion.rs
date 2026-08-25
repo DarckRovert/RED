@@ -279,7 +279,7 @@ fn compute_mac(key: &[u8; 32], data: &[u8]) -> [u8; 16] {
 
 /// Pad message to fixed cell size
 fn pad_message(message: &[u8]) -> Vec<u8> {
-    let num_cells = (message.len() + 4 + CELL_SIZE - 1) / CELL_SIZE;
+    let num_cells = (message.len() + 4).div_ceil(CELL_SIZE);
     let padded_len = num_cells * CELL_SIZE;
 
     let mut padded = Vec::with_capacity(padded_len);

@@ -49,7 +49,7 @@ impl ChunkerEngine {
 
         let total_size = raw_bytes.len();
         let chunk_size = 64 * 1024; // 64 KB per chunk
-        let total_chunks = (total_size + chunk_size - 1) / chunk_size;
+        let total_chunks = total_size.div_ceil(chunk_size);
 
         let root_hash = blake3::hash(&raw_bytes).to_hex().to_string();
         let file_id = format!("file_{}_{}", &root_hash[..10], total_chunks);

@@ -33,6 +33,12 @@ pub struct SosStore {
     beacons: Arc<RwLock<HashMap<String, SosBeacon>>>,
 }
 
+impl Default for SosStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SosStore {
     pub fn new() -> Self {
         Self {

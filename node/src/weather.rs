@@ -109,11 +109,9 @@ impl WeatherStore {
         let mut list = Vec::new();
         if let Some(db) = &self.db {
             if let Ok(tree) = db.open_tree("weather_reports") {
-                for item in tree.iter() {
-                    if let Ok((_, v)) = item {
-                        if let Ok(r) = bincode::deserialize::<WeatherReport>(&v) {
-                            list.push(r);
-                        }
+                for (_, v) in tree.iter().flatten() {
+                    if let Ok(r) = bincode::deserialize::<WeatherReport>(&v) {
+                        list.push(r);
                     }
                 }
             }

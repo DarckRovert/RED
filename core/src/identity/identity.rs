@@ -29,7 +29,7 @@ impl IdentityHash {
 
     /// Convert to hex string
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.0)
+        hex::encode(self.0)
     }
 
     /// Parse from hex string

@@ -1,0 +1,85 @@
+name: Lint & Format Check
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  rust-lint:
+    name: Rust Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+  
+  javascript-lint:
+    name: JavaScript/TypeScript Lint & Format
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['18.x']
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+      
+      - name: Install dependencies (client/app)
+        run: cd client/app && npm ci
+      
+      - name: Check formatting
+        run: cd client/app && npm run lint
+      
+      - name: Install dependencies (signaling)
+        if: hashFiles('signaling/package.json') != ''
+        run: cd signaling && npm ci
+      
+      - name: Check formatting (signaling)
+        if: hashFiles('signaling/package.json') != ''
+        run: cd signaling && npm run lint || true
+  
+  markdown-lint:
+    name: Markdown Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+      
+      - name: Check markdown files
+        run: |
+          markdownlint '**/*.md' --ignore node_modules --ignore target || true

@@ -90,7 +90,7 @@ impl FecEncoder {
     /// Encode a payload into K + M FecChunks
     pub fn encode(&self, stream_id: u32, payload: &[u8]) -> Vec<FecChunk> {
         let original_len = payload.len() as u32;
-        let chunk_size = (payload.len() + self.k - 1) / self.k;
+        let chunk_size = payload.len().div_ceil(self.k);
         let chunk_size = if chunk_size == 0 { 1 } else { chunk_size };
 
         // 1. Prepare K data chunks (padded with zeros if necessary)
@@ -157,6 +157,12 @@ pub struct FecDecoder {
     k: usize,
     original_len: usize,
     stream_id: u32,
+}
+
+impl Default for FecDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FecDecoder {

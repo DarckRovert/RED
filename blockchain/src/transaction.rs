@@ -178,20 +178,18 @@ impl Transaction {
 
         // Validate based on type
         match &self.tx_type {
-            TransactionType::RegisterIdentity { zk_proof, .. } => {
-                if zk_proof.is_empty() {
+            TransactionType::RegisterIdentity { zk_proof, .. }
+                if zk_proof.is_empty() => {
                     return Err(BlockchainError::InvalidTransaction(
                         "Missing ZK proof".to_string()
                     ));
                 }
-            }
-            TransactionType::Stake { amount, .. } => {
-                if *amount < crate::MIN_VALIDATOR_STAKE {
+            TransactionType::Stake { amount, .. }
+                if *amount < crate::MIN_VALIDATOR_STAKE => {
                     return Err(BlockchainError::InvalidTransaction(
                         format!("Stake too low: {} < {}", amount, crate::MIN_VALIDATOR_STAKE)
                     ));
                 }
-            }
             _ => {}
         }
 
