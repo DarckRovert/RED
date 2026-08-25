@@ -29,7 +29,7 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 ## 2. Llaves Biométricas Universales & Passkeys
 
-RED v62.0.0 te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
+RED v63.0.0 te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
 
 - **En Celulares y Tablets Android:**
   - **Huella Dactilar:** Reconocimiento instantáneo mediante sensores capacitivos, ópticos o ultrasónicos en pantalla.

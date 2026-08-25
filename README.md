@@ -6,7 +6,7 @@
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
-[![Rust Workspace](https://img.shields.io/badge/Rust_Cargo-81_Tests_Pass-DEA584?style=for-the-badge&logo=rust)](https://github.com/DarckRovert/RED)
+[![Rust Workspace](https://img.shields.io/badge/Rust_Cargo-106_Tests_Pass-DEA584?style=for-the-badge&logo=rust)](https://github.com/DarckRovert/RED)
 [![Android Gradle Build](https://img.shields.io/badge/Android_APK-BUILD_SUCCESSFUL-00E676?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED)
 
 ---

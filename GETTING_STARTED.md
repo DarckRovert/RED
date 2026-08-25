@@ -32,8 +32,11 @@ npm run build
 # Compilar todo el espacio de trabajo en modo Release
 cargo build --release
 
-# Ejecutar las 81 pruebas unitarias y de integración del workspace
+# Ejecutar las 106 pruebas unitarias, KAT e integración del workspace
 cargo test --workspace
+
+# Ejecutar la suite de pruebas criptográficas de cliente (TypeScript)
+cd client/app && npm run test:crypto
 ```
 
 ### 3. Sincronización y Compilación Android

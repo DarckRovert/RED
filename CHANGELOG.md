@@ -13,9 +13,12 @@
 - `useSquadCallMesh.ts`: Motor WebRTC full-mesh N-way con análisis de espectro de frecuencia VAD (Voice Activity Detection) y estado `isSpeaking` reactivo.
 - `SquadVoiceRoom.tsx`: HUD táctico de sala grupal con tarjetas de participantes, silenciado de mic, modo sordo, cámara y compartir pantalla.
 
-**3. Automatización Limpia de Script de Build y Sincronización de Assets Nativa**
-- `build_apk.bat`: Reconstrucción automatizada de Next.js (`npm run build:mobile`), copia de assets web a Capacitor (`npx cap copy android`) y ensamblado Gradle para garantizar cero versiones desfasadas en APK.
-- `release-assets/`: Actualización completa de binarios `red-node.exe`, APKs v63.0.0 y cálculo de sumas de comprobación SHA-256 (`SHA256SUMS.txt`).
+**3. Automatización Limpia de Scripts, Saneamiento de Raíz & Gobernanza v63.0.0**
+- `GOVERNANCE.md` & `CONTRIBUTING.md`: Creación del marco normativo integral de 11 niveles con pre-commit hooks, verificación de versiones y auditoría de seguridad.
+- Saneamiento de Raíz: Purga total de binarios `.exe` y `.apk` de la raíz del repositorio, moviendo scripts de soporte a `scripts/windows/`.
+- `tests/crypto_tests.rs`: Suite completa de Known-Answer Tests (KAT) para X25519, ChaCha20-Poly1305 AEAD, Double Ratchet, BLAKE3, Ed25519 y Zero-Knowledge Merkle Proofs (106 tests en verde).
+- `.github/workflows/`: Modernización integral de 8 pipelines CI/CD (`lint`, `security`, `build`, `test`, `proverif`, `release`, `deploy-pages`, `build-ios`) a GitHub Actions v4.
+- `release-assets/`: Directorio dedicado para distribución de artefactos de producción y checksums SHA-256 (`SHA256SUMS.txt`).
 
 ---
 

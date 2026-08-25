@@ -26,7 +26,7 @@ npm install
 PORT=3001 node server.js
 ```
 
-### Características del Servidor de Señalización v62.0.0:
+### Características del Servidor de Señalización v63.0.0:
 - **Capacidad de Sala Ampliada:** Soporta hasta **50 pares P2P simultáneos** por sala (`roomId = sort([DID1, DID2]).join("-")`).
 - **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociación de red y relé ciego (`mesh-relay`).
 - **Health Check HTTP:** Monitoreo en vivo vía `GET /health` (`status`, `uptime`, `peers`, `rooms`).
