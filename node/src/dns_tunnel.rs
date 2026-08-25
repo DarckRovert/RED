@@ -29,9 +29,16 @@ impl DnsTunnelServer {
         let addr = format!("0.0.0.0:{}", port);
         let socket = match UdpSocket::bind(&addr).await {
             Ok(s) => s,
-            Err(e) => {
-                error!("Failed to bind DNS tunnel to {}: {}", addr, e);
-                return;
+            Err(_) => {
+                let fallback_port = if port == 5353 { 5354 } else { port + 100 };
+                let fallback_addr = format!("0.0.0.0:{}", fallback_port);
+                match UdpSocket::bind(&fallback_addr).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!("Failed to bind DNS tunnel to {} (fallback {}): {}", addr, fallback_addr, e);
+                        return;
+                    }
+                }
             }
         };
         info!("🔴 DNS Tunnel listening on UDP {}", addr);
