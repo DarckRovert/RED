@@ -27,13 +27,13 @@ impl DnsTunnelServer {
 
     pub async fn start(self: Arc<Self>, port: u16) {
         let addr = format!("0.0.0.0:{}", port);
-        let socket = match UdpSocket::bind(&addr).await {
-            Ok(s) => s,
+        let (socket, bound_addr) = match UdpSocket::bind(&addr).await {
+            Ok(s) => (s, addr.clone()),
             Err(_) => {
                 let fallback_port = if port == 5353 { 5354 } else { port + 100 };
                 let fallback_addr = format!("0.0.0.0:{}", fallback_port);
                 match UdpSocket::bind(&fallback_addr).await {
-                    Ok(s) => s,
+                    Ok(s) => (s, fallback_addr),
                     Err(e) => {
                         error!("Failed to bind DNS tunnel to {} (fallback {}): {}", addr, fallback_addr, e);
                         return;
@@ -41,7 +41,7 @@ impl DnsTunnelServer {
                 }
             }
         };
-        info!("🔴 DNS Tunnel listening on UDP {}", addr);
+        info!("🔴 DNS Tunnel listening on UDP {}", bound_addr);
 
         let mut buf = [0u8; 1024];
         loop {
