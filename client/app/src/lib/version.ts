@@ -15,4 +15,4 @@ export const RED_PROTOCOL_VERSION = "RED/63.0-NOISE-PQC";
 export const RED_RELEASE_CHANNEL = "stable-p2p";
 export const RED_APK_NAME = "red-v63.0.0-latest.apk";
 export const RED_APK_CANONICAL = "red-latest.apk";
-export const RED_APK_SHA256 = "808cea3529a09084e8ff185e846988a88c1440467f4fefe2c73efbf83a9aff0b";
+export const RED_APK_SHA256 = "cc2e096e13bb40b295b78f718817aabc2a223add89020f49b58b3d0f3a29504a";
