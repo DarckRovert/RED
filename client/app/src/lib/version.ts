@@ -1,6 +1,6 @@
 /**
  * RED Sovereign Mesh — Single Source of Truth for System Version
- * Version: 62.0.0 RED Sovereign Mesh — Hardened P2P & Unified Protocol Edition
+ * Version: 63.0.0 RED Sovereign Mesh — Hardened P2P & Unified Protocol Edition
  */
 
 export const RED_VERSION = "63.0.0";
