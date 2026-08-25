@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ================================================================
-echo   RED v62.0.0 — PIPELINE MAESTRO DE COMPILACION Y DISTRIBUCION
+echo   RED v63.0.0 — PIPELINE MAESTRO DE COMPILACION Y DISTRIBUCION
 echo ================================================================
 
 echo.
@@ -34,16 +34,17 @@ if %ERRORLEVEL% NEQ 0 (
 echo.
 echo [4/6] Actualizando binarios locales y release-assets...
 set "SRC_APK=d:\PROYECTO RED\client\app\android\app\build\outputs\apk\release\app-release.apk"
-copy /Y "%SRC_APK%" "d:\PROYECTO RED\release-assets\RED-v62.0.0.apk"
-copy /Y "%SRC_APK%" "d:\PROYECTO RED\release-assets\red-v62.0.0-latest.apk"
+copy /Y "%SRC_APK%" "d:\PROYECTO RED\release-assets\RED-v63.0.0.apk"
+copy /Y "%SRC_APK%" "d:\PROYECTO RED\release-assets\red-v63.0.0-latest.apk"
 copy /Y "%SRC_APK%" "d:\PROYECTO RED\release-assets\red-latest.apk"
-copy /Y "%SRC_APK%" "d:\PROYECTO RED\RED-v62.0.0.apk"
-copy /Y "%SRC_APK%" "d:\PROYECTO RED\red-v62.0.0-latest.apk"
+copy /Y "%SRC_APK%" "d:\PROYECTO RED\release-assets\app-release.apk"
+copy /Y "%SRC_APK%" "d:\PROYECTO RED\RED-v63.0.0.apk"
+copy /Y "%SRC_APK%" "d:\PROYECTO RED\red-v63.0.0-latest.apk"
 copy /Y "%SRC_APK%" "d:\PROYECTO RED\red-latest.apk"
 copy /Y "%SRC_APK%" "d:\PROYECTO RED\app-release.apk"
 
 echo Calculando checksum SHA-256...
-powershell -Command "$hash = (Get-FileHash 'd:\PROYECTO RED\release-assets\red-v62.0.0-latest.apk' -Algorithm SHA256).Hash.ToLower(); $nodeHash = (Get-FileHash 'd:\PROYECTO RED\release-assets\red-node.exe' -Algorithm SHA256).Hash.ToLower(); \"$hash  RED-v62.0.0.apk`n$hash  red-v62.0.0-latest.apk`n$hash  red-latest.apk`n$hash  app-release.apk`n$nodeHash  red-node.exe\" | Out-File -Encoding utf8 'd:\PROYECTO RED\SHA256SUMS.txt'"
+powershell -Command "$hash = (Get-FileHash 'd:\PROYECTO RED\release-assets\red-v63.0.0-latest.apk' -Algorithm SHA256).Hash.ToLower(); $nodeHash = (Get-FileHash 'd:\PROYECTO RED\release-assets\red-node.exe' -Algorithm SHA256).Hash.ToLower(); \"$hash  RED-v63.0.0.apk`n$hash  red-v63.0.0-latest.apk`n$hash  red-latest.apk`n$hash  app-release.apk`n$nodeHash  red-node.exe\" | Out-File -Encoding utf8 'd:\PROYECTO RED\release-assets\SHA256SUMS.txt'; Copy-Item 'd:\PROYECTO RED\release-assets\SHA256SUMS.txt' 'd:\PROYECTO RED\SHA256SUMS.txt' -Force"
 
 echo.
 echo [5/6] Compilando Next.js para GitHub Pages (basePath='/RED')...
@@ -60,6 +61,6 @@ xcopy /E /Y /I "d:\PROYECTO RED\client\app\out\*" "d:\PROYECTO RED\"
 
 echo.
 echo ================================================================
-echo   PIPELINE MAESTRO COMPLETADO CON EXITO
+echo   PIPELINE MAESTRO COMPLETADO CON EXITO (v63.0.0)
 echo ================================================================
 endlocal
