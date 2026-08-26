@@ -244,6 +244,16 @@ export function useSquadCallMesh({
             });
         };
 
+        pc.oniceconnectionstatechange = () => {
+            const iceState = pc?.iceConnectionState;
+            if (iceState === 'failed' || iceState === 'disconnected') {
+                console.warn(`[SquadVoiceMesh] ICE ${iceState} para ${targetPeerHash.slice(0, 8)} — ejecutando ICE restart`);
+                try {
+                    pc.restartIce();
+                } catch {}
+            }
+        };
+
         peerConnectionsRef.current.set(targetPeerHash, pc);
         return pc;
     };
@@ -331,7 +341,18 @@ export function useSquadCallMesh({
     };
 
     // ── 6. Controls ──────────────────────────────────────────────────────────
+    const resumeAudio = async () => {
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+            try {
+                await audioContextRef.current.resume();
+            } catch (e) {
+                console.warn('[SquadVoiceMesh] Error reanudando AudioContext:', e);
+            }
+        }
+    };
+
     const toggleMic = () => {
+        resumeAudio();
         if (!localStreamRef.current) return;
         const nextState = !isMicMuted;
         localStreamRef.current.getAudioTracks().forEach(track => {
@@ -350,6 +371,7 @@ export function useSquadCallMesh({
     };
 
     const toggleDeafen = () => {
+        resumeAudio();
         const nextState = !isDeafened;
         setIsDeafened(nextState);
     };

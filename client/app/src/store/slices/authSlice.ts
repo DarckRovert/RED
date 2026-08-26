@@ -259,13 +259,21 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             }
                         } else if (event.type === 'LIVE_TYPING') {
                             const { peer, isTyping } = event.data;
-                            get().setTyping(peer, isTyping);
+                            if (peer) {
+                                set((s: any) => ({
+                                    peerTyping: Boolean(isTyping),
+                                    peerTypingStatus: { ...s.peerTypingStatus, [peer]: isTyping ? 'typing' : 'idle' }
+                                }));
+                            }
                         } else if (event.type === 'LIVE_CONTACT_UPDATE') {
                             get().fetchData();
                         } else if (event.type === 'LIVE_CONV_WIPE') {
                             const { peer } = event.data;
                             if (peer) {
-                                get().deleteConversation(peer);
+                                set((s: any) => ({
+                                    conversations: s.conversations.filter((c: any) => c.peer !== peer && c.id !== peer),
+                                    messages: s.activeConversationId === peer ? [] : s.messages
+                                }));
                             }
                         }
                     } catch (liveErr) {

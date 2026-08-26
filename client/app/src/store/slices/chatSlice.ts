@@ -300,6 +300,19 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     m.id === tempId ? { ...m, status: 'Sent' as const } : m
                 )});
             }
+
+            // Mirror to active Live Companion (Web <-> Mobile Real-Time Sync)
+            try {
+                const { companionSyncEngine } = await import('../../lib/mesh/companionSyncEngine');
+                if (companionSyncEngine.isLiveSessionActive()) {
+                    companionSyncEngine.publishLiveEvent('LIVE_MSG_SEND', {
+                        recipient: cleanPeerHash,
+                        content,
+                        options: apiOptions,
+                        id: msgId
+                    }).catch(() => {});
+                }
+            } catch {}
         } catch (e) {
             console.error('Message send failed', e);
             if (tempId) {
