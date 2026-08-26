@@ -40,34 +40,50 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
         }
 
         if (screen === 'chat' && contextId) {
-            const canonicalPeer = meshRouter.getCanonicalId(contextId) || contextId;
+            const isGroup = contextId.length === 64 && !/^[0-9a-fA-F]+$/.test(contextId) ? false : (get().groups || []).some(g => g.id === contextId);
+            const canonicalPeer = isGroup ? contextId : (meshRouter.getCanonicalId(contextId) || contextId);
             const conversations = Array.isArray(get().conversations) ? get().conversations : [];
-            const identity = get().identity;
+            
             const existingConv = conversations.find(c => c && (
                 c.id === canonicalPeer ||
                 c.peer === canonicalPeer ||
                 c.id === contextId ||
                 c.peer === contextId ||
-                (canonicalPeer.length >= 8 && c.peer?.startsWith(canonicalPeer.slice(0, 8))) ||
+                (canonicalPeer.length >= 8 && (c.peer?.startsWith(canonicalPeer.slice(0, 8)) || c.id?.startsWith(canonicalPeer.slice(0, 8)))) ||
                 (!!c.peer && c.peer.length >= 8 && canonicalPeer.startsWith(c.peer.slice(0, 8)))
             ));
             
-            let finalId = canonicalPeer;
+            const finalId = canonicalPeer;
             let updatedConvs = [...conversations];
             if (existingConv) {
-                finalId = existingConv.id || canonicalPeer;
-                updatedConvs = updatedConvs.map(c => (c.id === finalId || c.peer === canonicalPeer) ? { ...c, unread_count: 0 } : c);
+                updatedConvs = updatedConvs.map(c => {
+                    const matches = c.id === canonicalPeer || c.peer === canonicalPeer || c.id === existingConv.id || c.peer === existingConv.peer;
+                    if (matches) {
+                        return { ...c, id: finalId, peer: finalId, unread_count: 0 };
+                    }
+                    return c;
+                });
             } else {
-                finalId = canonicalPeer;
                 const newPlaceholder: ConversationItem = {
                     id: finalId,
-                    peer: canonicalPeer,
+                    peer: finalId,
                     last_message: 'Nuevo chat P2P cifrado',
                     last_timestamp: Date.now() / 1000,
                     unread_count: 0
                 };
                 updatedConvs.unshift(newPlaceholder);
             }
+
+            // Deduplicate conversations list strictly
+            const seenMap = new Map<string, ConversationItem>();
+            for (const c of updatedConvs) {
+                if (!c || !c.peer) continue;
+                const p = meshRouter.getCanonicalId(c.peer) || c.peer;
+                if (!seenMap.has(p)) {
+                    seenMap.set(p, { ...c, id: p, peer: p });
+                }
+            }
+            updatedConvs = Array.from(seenMap.values());
 
             set({ currentScreen: screen, activeConversationId: finalId, conversations: updatedConvs, messages: [] });
             RedAPI.setWebStore('red_web_conversations', updatedConvs);

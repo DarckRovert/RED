@@ -152,7 +152,21 @@ class MeshRouter {
   public activeGateways: Map<string, MeshPeer> = new Map();
 
   /** Maps raw hardware device IDs (BLE MAC, WebRTC client IDs) to 64-char canonical identity_hash */
-  public deviceToCanonicalMap: Map<string, string> = new Map();
+  public deviceToCanonicalMap: Map<string, string> = (() => {
+    const map = new Map<string, string>();
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('red_device_canonical_map');
+        if (raw) {
+          const list: [string, string][] = JSON.parse(raw);
+          for (const [k, v] of list) {
+            if (k && v) map.set(k.toLowerCase(), v.toLowerCase());
+          }
+        }
+      } catch {}
+    }
+    return map;
+  })();
 
   /** Pending identity query promises keyed by hardware device ID or sender hash */
   private pendingIdentityQueries: Map<string, PendingIdentityQuery[]> = new Map();
@@ -460,6 +474,13 @@ class MeshRouter {
 
     this.deviceToCanonicalMap.set(cleanDevice, cleanCanonical);
     this.deviceToCanonicalMap.set(deviceId.trim(), cleanCanonical);
+
+    if (typeof window !== 'undefined') {
+      try {
+        const entries = Array.from(this.deviceToCanonicalMap.entries()).slice(-500);
+        localStorage.setItem('red_device_canonical_map', JSON.stringify(entries));
+      } catch {}
+    }
 
     // Migrate any temporary peer record under deviceId to canonicalId
     const tempPeer = this.peers.get(cleanDevice) || this.peers.get(deviceId.trim());

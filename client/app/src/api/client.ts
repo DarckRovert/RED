@@ -224,10 +224,42 @@ export class RedAPIClient {
     }
 
     async getMessages(conversationId: string): Promise<MessageItem[]> {
-        const localKey = `red_web_messages_${conversationId}`;
-        const localMsgs = this.getWebStore<MessageItem[]>(localKey, []);
+        const cleanId = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();
+        const localKey = `red_web_messages_${cleanId}`;
+        let localMsgs = this.getWebStore<MessageItem[]>(localKey, []);
+
+        // Also aggregate any messages stored under associated hardware / alias keys
+        if (typeof window !== 'undefined') {
+            try {
+                const mapRaw = localStorage.getItem('red_device_canonical_map');
+                if (mapRaw) {
+                    const mappings: [string, string][] = JSON.parse(mapRaw);
+                    const associatedKeys: string[] = [];
+                    for (const [hw, canon] of mappings) {
+                        if (canon.toLowerCase() === cleanId && hw.toLowerCase() !== cleanId) {
+                            associatedKeys.push(`red_web_messages_${hw.toLowerCase()}`);
+                        } else if (hw.toLowerCase() === cleanId && canon.toLowerCase() !== cleanId) {
+                            associatedKeys.push(`red_web_messages_${canon.toLowerCase()}`);
+                        }
+                    }
+                    for (const ak of associatedKeys) {
+                        const extraMsgs = this.getWebStore<MessageItem[]>(ak, []);
+                        if (extraMsgs.length > 0) {
+                            const seenIds = new Set(localMsgs.map(m => m.id));
+                            for (const em of extraMsgs) {
+                                if (em && em.id && !seenIds.has(em.id)) {
+                                    seenIds.add(em.id);
+                                    localMsgs.push(em);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+
         try {
-            const rustMsgs = await this.reqList<MessageItem>(`/conversations/${conversationId}/messages`);
+            const rustMsgs = await this.reqList<MessageItem>(`/conversations/${cleanId}/messages`);
             if (!rustMsgs || rustMsgs.length === 0) {
                 // Rust returned empty (conversation only exists in local mesh cache) — use local vault
                 return localMsgs;

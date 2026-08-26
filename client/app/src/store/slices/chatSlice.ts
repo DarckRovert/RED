@@ -246,6 +246,8 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 const existing = updatedConvs[existingIdx];
                 const updatedItem: ConversationItem = {
                     ...existing,
+                    id: canonicalPeer,
+                    peer: canonicalPeer,
                     last_message: snippet,
                     last_timestamp: nowSec,
                     unread_count: 0
@@ -254,14 +256,24 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 updatedConvs.unshift(updatedItem);
             } else {
                 const newConv: ConversationItem = {
-                    id: cleanPeerHash,
-                    peer: cleanPeerHash,
+                    id: canonicalPeer,
+                    peer: canonicalPeer,
                     last_message: snippet,
                     last_timestamp: nowSec,
                     unread_count: 0
                 };
                 updatedConvs.unshift(newConv);
             }
+
+            // Deduplicate conversations list strictly
+            const seenPeerSet = new Set<string>();
+            updatedConvs = updatedConvs.filter(c => {
+                if (!c || !c.peer) return false;
+                const p = meshRouter.getCanonicalId(c.peer) || c.peer;
+                if (seenPeerSet.has(p)) return false;
+                seenPeerSet.add(p);
+                return true;
+            });
 
             set({
                 messages: [...get().messages.filter(m => m.id !== msgId), optimisticMsg],

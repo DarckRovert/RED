@@ -1286,16 +1286,21 @@ export async function dispatchIncomingMessage(
                              (normalizedItem.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (normalizedItem.content || 'Mensaje P2P')));
 
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
-            const convId = item.conversation_id ? item.conversation_id : (canonicalSender || item.sender);
+            const isGroup = Boolean(item.msg_type === 'group_message' || (item as any).group_id);
+            const convId = isGroup 
+                ? (item.conversation_id || (item as any).group_id) 
+                : (canonicalSender || normalizeIdentity(item.sender));
+
             const currentConvs = get().conversations || [];
             const idx = currentConvs.findIndex(c => 
                 c && (
                     c.id === convId ||
+                    c.peer === convId ||
                     c.peer === item.sender ||
                     c.peer === canonicalSender ||
                     c.id === item.sender ||
-                    (canonicalSender.length >= 8 && c.peer?.startsWith(canonicalSender.slice(0, 8))) ||
-                    (!!c.peer && c.peer.length >= 8 && canonicalSender.startsWith(c.peer.slice(0, 8)))
+                    (convId.length >= 8 && (c.peer?.startsWith(convId.slice(0, 8)) || c.id?.startsWith(convId.slice(0, 8)))) ||
+                    (!!c.peer && c.peer.length >= 8 && convId.startsWith(c.peer.slice(0, 8)))
                 )
             );
 
@@ -1305,7 +1310,7 @@ export async function dispatchIncomingMessage(
                 const updatedObj: ConversationItem = {
                     ...existing,
                     id: convId,
-                    peer: canonicalSender || existing.peer,
+                    peer: convId,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: 0
@@ -1315,13 +1320,24 @@ export async function dispatchIncomingMessage(
             } else {
                 const newObj: ConversationItem = {
                     id: convId,
-                    peer: canonicalSender || item.sender,
+                    peer: convId,
                     last_message: snippet,
                     last_timestamp: normTimestamp,
                     unread_count: 0
                 };
                 updatedConvs.unshift(newObj);
             }
+
+            // Deduplicación final del array
+            const seenPeerSet = new Set<string>();
+            updatedConvs = updatedConvs.filter(c => {
+                if (!c || !c.peer) return false;
+                const p = meshRouter.getCanonicalId(c.peer) || c.peer;
+                if (seenPeerSet.has(p)) return false;
+                seenPeerSet.add(p);
+                return true;
+            });
+
             set({ conversations: updatedConvs });
             RedAPI.setWebStore('red_web_conversations', updatedConvs);
 

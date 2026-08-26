@@ -542,44 +542,112 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 if (_identityResolvedUnsub) { _identityResolvedUnsub(); _identityResolvedUnsub = null; }
                 _identityResolvedUnsub = meshRouter.onIdentityResolved(({ hardwareId, canonicalId, displayName, publicKey }) => {
                     if (!canonicalId || canonicalId === get().identity?.identity_hash) return;
-                    const currentContacts = get().contacts || [];
+                    const cleanHw = hardwareId?.toLowerCase() || '';
+                    const cleanCanon = canonicalId?.toLowerCase() || '';
                     const isGeneric = (name?: string) => !name || name.startsWith('Operador ') || name.startsWith('Nodo ') || name.startsWith('Par Escaneado') || name === 'Nuevo Par' || name === 'Par Malla';
+
+                    // 1. Incondicionalmente actualizar y migrar contactos si coinciden
+                    const currentContacts = get().contacts || [];
                     const idx = currentContacts.findIndex(c => {
                         if (!c) return false;
                         const cHash = (c.identity_hash || '').toLowerCase();
-                        if (cHash === hardwareId.toLowerCase() || cHash === canonicalId.toLowerCase()) return true;
+                        if (cHash === cleanHw || cHash === cleanCanon || (cleanHw.length >= 8 && cHash.startsWith(cleanHw.slice(0, 8))) || (cleanCanon.length >= 8 && cHash.startsWith(cleanCanon.slice(0, 8)))) return true;
                         if (displayName && !isGeneric(displayName) && !isGeneric(c.display_name)) {
                             if (c.display_name.trim().toLowerCase() === displayName.trim().toLowerCase() ||
                                 c.display_name.trim().toLowerCase() === `red-${displayName.trim().toLowerCase()}`) return true;
                         }
                         return false;
                     });
+
+                    let updatedContacts = [...currentContacts];
+                    let oldContactHash = cleanHw;
                     if (idx >= 0) {
-                        const updated = [...currentContacts];
-                        const oldEntry = updated[idx];
-                        const oldHash = oldEntry.identity_hash;
-                        updated[idx] = {
+                        const oldEntry = updatedContacts[idx];
+                        oldContactHash = oldEntry.identity_hash;
+                        updatedContacts[idx] = {
                             ...oldEntry,
-                            identity_hash: canonicalId,
+                            identity_hash: cleanCanon,
                             display_name: (!isGeneric(displayName)) ? displayName : oldEntry.display_name,
                             public_key: publicKey || oldEntry.public_key
                         };
-                        const currentConvs = get().conversations || [];
-                        let updatedConvs = [...currentConvs];
-                        if (oldHash && oldHash !== canonicalId) {
-                            updatedConvs = updatedConvs.map(conv => {
-                                if (conv.id === oldHash || conv.peer === oldHash) {
-                                    return { ...conv, id: canonicalId, peer: canonicalId };
-                                }
-                                return conv;
-                            });
-                            set({ contacts: updated, conversations: updatedConvs });
-                            RedAPI.setWebStore('red_web_conversations', updatedConvs);
-                        } else {
-                            set({ contacts: updated });
-                        }
-                        RedAPI.setWebStore('red_web_contacts', updated);
                     }
+
+                    // 2. INCONDICIONAL: Migrar y fusionar TODAS las conversaciones que coincidan con hardwareId o canonicalId
+                    const currentConvs = get().conversations || [];
+                    const dedupedMap = new Map<string, ConversationItem>();
+
+                    for (const conv of currentConvs) {
+                        if (!conv) continue;
+                        const p = (conv.peer || conv.id || '').toLowerCase();
+                        const isMatch = p === cleanHw || p === cleanCanon || (cleanHw.length >= 8 && p.startsWith(cleanHw.slice(0, 8))) || (cleanCanon.length >= 8 && p.startsWith(cleanCanon.slice(0, 8))) || p === oldContactHash;
+                        const targetKey = isMatch ? cleanCanon : (meshRouter.getCanonicalId(p) || p);
+
+                        const normalizedConv: ConversationItem = {
+                            ...conv,
+                            id: targetKey,
+                            peer: targetKey,
+                            peer_name: isMatch && !isGeneric(displayName) ? displayName : (conv.peer_name || (conv as any).name)
+                        };
+
+                        if (!dedupedMap.has(targetKey)) {
+                            dedupedMap.set(targetKey, normalizedConv);
+                        } else {
+                            const existing = dedupedMap.get(targetKey)!;
+                            const existingTs = (typeof existing.last_message === 'object' && (existing.last_message as any)?.timestamp) || existing.last_timestamp || 0;
+                            const convTs = (typeof conv.last_message === 'object' && (conv.last_message as any)?.timestamp) || conv.last_timestamp || 0;
+                            const bestTs = Math.max(existingTs, convTs);
+                            const bestSnippet = convTs > existingTs ? (conv.last_message || existing.last_message) : (existing.last_message || conv.last_message);
+                            dedupedMap.set(targetKey, {
+                                ...existing,
+                                last_message: bestSnippet,
+                                last_timestamp: bestTs,
+                                unread_count: (existing.unread_count || 0) + (conv.unread_count || 0)
+                            });
+                        }
+                    }
+
+                    const updatedConvs = Array.from(dedupedMap.values());
+
+                    // 3. Fusión y migración del historial de mensajes en LocalStorage
+                    if (typeof window !== 'undefined' && cleanHw && cleanHw !== cleanCanon) {
+                        try {
+                            const hwKey = `red_web_messages_${cleanHw}`;
+                            const canonKey = `red_web_messages_${cleanCanon}`;
+                            const rawHw = localStorage.getItem(hwKey);
+                            const rawCanon = localStorage.getItem(canonKey);
+                            const hwMsgs: any[] = rawHw ? JSON.parse(rawHw) : [];
+                            const canonMsgs: any[] = rawCanon ? JSON.parse(rawCanon) : [];
+
+                            if (hwMsgs.length > 0) {
+                                const seenIds = new Set(canonMsgs.map(m => m.id));
+                                const merged = [...canonMsgs];
+                                for (const hm of hwMsgs) {
+                                    if (hm && hm.id && !seenIds.has(hm.id)) {
+                                        seenIds.add(hm.id);
+                                        merged.push(hm);
+                                    }
+                                }
+                                merged.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+                                localStorage.setItem(canonKey, JSON.stringify(merged));
+                                localStorage.removeItem(hwKey);
+                            }
+                        } catch {}
+                    }
+
+                    // 4. Si el chat activo era el hardwareId, migrar activeConversationId de inmediato
+                    const { activeConversationId } = get();
+                    const nextActiveId = (activeConversationId === cleanHw || (cleanHw.length >= 8 && activeConversationId?.startsWith(cleanHw.slice(0, 8))))
+                        ? cleanCanon
+                        : activeConversationId;
+
+                    set({
+                        contacts: updatedContacts,
+                        conversations: updatedConvs,
+                        activeConversationId: nextActiveId
+                    });
+
+                    RedAPI.setWebStore('red_web_contacts', updatedContacts);
+                    RedAPI.setWebStore('red_web_conversations', updatedConvs);
                 });
 
                 // Run storage Merkle self-healing audit
@@ -1036,6 +1104,8 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 groups: safeGrps,
                 activeConversationId: newActiveId
             });
+            RedAPI.setWebStore('red_web_conversations', finalSortedConvs);
+            RedAPI.setWebStore('red_web_contacts', dedupedConts);
         } catch {
             // BUG-FIX: Never wipe existing data on transient network errors.
             // Previously this destroyed all conversations/contacts on every blip.

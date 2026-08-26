@@ -71,12 +71,19 @@ export default function Sidebar() {
         const seenCanonical = new Set<string>();
         const deduped: any[] = [];
         for (const c of conversations) {
-            if (!c || !c.peer || c.peer.startsWith("00000000")) continue;
-            const canonical = meshRouter.getCanonicalId(c.peer) || c.peer.toLowerCase();
-            if (seenCanonical.has(canonical)) continue;
+            if (!c || (!c.peer && !c.id) || c.peer?.startsWith("00000000") || c.id?.startsWith("00000000") || c.peer === 'me' || c.peer === 'local') continue;
+            const rawP = c.peer || c.id || '';
+            const canonical = (meshRouter.getCanonicalId(rawP) || rawP).toLowerCase();
+            const shortP = canonical.slice(0, 16);
+            if (seenCanonical.has(canonical) || seenCanonical.has(shortP)) continue;
             seenCanonical.add(canonical);
-            if (resolvePeerName(c.peer || "").toLowerCase().includes(searchQuery.toLowerCase())) {
-                deduped.push(c);
+            seenCanonical.add(shortP);
+            if (resolvePeerName(c.peer || c.id || "").toLowerCase().includes(searchQuery.toLowerCase())) {
+                deduped.push({
+                    ...c,
+                    id: canonical,
+                    peer: canonical
+                });
             }
         }
         return deduped.sort((a: any, b: any) => {
