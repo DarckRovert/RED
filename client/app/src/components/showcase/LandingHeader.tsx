@@ -141,7 +141,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         {/* Right CTA Button & Mobile Toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <a
-            href="https://github.com/DarckRovert/RED/raw/main/release-assets/red-latest.apk"
+            href="https://github.com/DarckRovert/RED/releases/download/v64.0.0/red-latest.apk"
             style={{
               padding: "7px 14px",
               borderRadius: "10px",

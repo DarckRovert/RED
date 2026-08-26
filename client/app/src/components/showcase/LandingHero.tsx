@@ -77,7 +77,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
           {/* Primary CTA Buttons */}
           <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", justifyContent: "center", marginBottom: "36px" }}>
             <a
-              href="https://github.com/DarckRovert/RED/raw/main/release-assets/red-latest.apk"
+              href="https://github.com/DarckRovert/RED/releases/download/v64.0.0/red-latest.apk"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -118,7 +118,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
             </button>
 
             <a
-              href="https://github.com/DarckRovert/RED/raw/main/release-assets/red-node-windows-v64.0.0.zip"
+              href="https://github.com/DarckRovert/RED/releases/download/v64.0.0/red-node-windows-v64.0.0.zip"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
