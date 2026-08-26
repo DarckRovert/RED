@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from '../../lib/i18n/i18nEngine';
+import { RED_VERSION, RED_APK_NAME } from '../../lib/version';
 
 interface LandingHeroProps {
     heroAlias: string;
@@ -77,7 +78,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
           {/* Primary CTA Buttons */}
           <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", justifyContent: "center", marginBottom: "36px" }}>
             <a
-              href="https://github.com/DarckRovert/RED/releases/download/v64.0.0/red-latest.apk"
+              href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/${RED_APK_NAME}`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -93,7 +94,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
                 transition: "transform 0.2s, box-shadow 0.2s",
               }}
             >
-              <span>📥</span> Descargar APK (v64.0.0 · 57.7 MB)
+              <span>📥</span> Descargar APK (v{RED_VERSION} · 57.7 MB)
             </a>
 
             <button
@@ -118,7 +119,7 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
             </button>
 
             <a
-              href="https://github.com/DarckRovert/RED/releases/download/v64.0.0/red-node-windows-v64.0.0.zip"
+              href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/red-node-windows-v${RED_VERSION}.zip`}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
