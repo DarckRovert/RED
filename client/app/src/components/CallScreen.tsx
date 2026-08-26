@@ -466,7 +466,9 @@ export default function CallScreen() {
                     { urls: "stun:stun1.l.google.com:19302" },
                     { urls: "stun:stun2.l.google.com:19302" },
                     { urls: "stun:stun.cloudflare.com:3478" },
-                    { urls: "stun:stun.nextcloud.com:443" }
+                    { urls: "stun:stun.services.mozilla.com:443" },
+                    { urls: "stun:stun.nextcloud.com:443" },
+                    { urls: "stun:stun.sipgate.net:3478" }
                 ];
                 if (preferences?.customStunServer && preferences.customStunServer.startsWith("stun:")) {
                     stunServers.unshift({ urls: preferences.customStunServer.trim() });

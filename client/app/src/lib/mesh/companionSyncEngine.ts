@@ -2,13 +2,15 @@
  * RED Web Companion Sync Engine
  *
  * Protocolo de Vinculación Criptográfica Multidispositivo (Estilo WhatsApp Web)
- * Permite a la versión Web (Navegador PC) sincronizar en tiempo real
- * la identidad soberana, contactos y conversaciones desde la app móvil Android.
+ * Permite a la versión Web (Navegador PC) sincronizar en tiempo real y de forma
+ * BI-DIRECCIONAL la identidad soberana, contactos, conversaciones, mensajes enviados
+ * y recibidos, acuses de lectura (read receipts) y estados de escritura.
  *
- * Utiliza brokers MQTT públicos sobre WebSockets con cifrado E2E ECDH P-256 + AES-256-GCM.
- *
- * FIX: El móvil lee el broker del propio QR para garantizar que ambos lados
- *      usen el MISMO broker. Se elimina el pool no coordinado.
+ * Arquitectura Omni-Transporte (4G / 5G / 6G, Wi-Fi WAN, Off-Grid):
+ * - Vinculación inicial por Código QR con intercambio Diffie-Hellman P-256 + AES-256-GCM.
+ * - Túnel en Vivo Persistente sobre WebSockets / MQTT con latido continuo (keepalive: 25s)
+ *   y reconexión automática adaptativa (Roaming 4G <-> 5G <-> Wi-Fi).
+ * - Cifrado E2E inviolable: los relés públicos solo transmiten bytes cifrados opacos.
  */
 
 export interface CompanionSyncPayload {
@@ -31,6 +33,28 @@ export interface PairingSession {
     qrPayload: string;
     expiresAt: number;
     cleanup: () => void;
+}
+
+export interface CompanionLiveEvent {
+    type: 
+        | 'LIVE_MSG_SEND'         // Web envía mensaje -> Móvil lo transmite por la Malla (4G/5G/BLE/LoRa)
+        | 'LIVE_MSG_RECV'         // Móvil recibe mensaje de la Malla -> Se replica en Web en tiempo real
+        | 'LIVE_READ_ACK'         // Mensaje leído en un extremo -> Se marca como leído en el otro
+        | 'LIVE_TYPING'           // Indicador de escritura sincronizado
+        | 'LIVE_CONTACT_UPDATE'   // Contacto añadido o editado
+        | 'LIVE_CONV_WIPE'        // Conversación eliminada
+        | 'LIVE_PROFILE_UPDATE';  // Perfil / avatar actualizado
+    senderId: string;
+    timestamp: number;
+    data: any;
+}
+
+export interface ActiveCompanionSession {
+    sessionId: string;
+    aesKeyHex: string;
+    brokerUrl: string;
+    isMobileHost: boolean;
+    pairedAt: number;
 }
 
 // ── WebCrypto Helpers ─────────────────────────────────────────────────────────
@@ -66,7 +90,25 @@ async function deriveAesKey(privateKey: CryptoKey, peerPublicKey: CryptoKey): Pr
         { name: "ECDH", public: peerPublicKey },
         privateKey,
         { name: "AES-GCM", length: 256 },
-        false,
+        true,
+        ["encrypt", "decrypt"]
+    );
+}
+
+async function exportAesKeyHex(key: CryptoKey): Promise<string> {
+    const exported = await window.crypto.subtle.exportKey("raw", key);
+    return Array.from(new Uint8Array(exported))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("");
+}
+
+async function importAesKeyHex(hex: string): Promise<CryptoKey> {
+    const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
+    return await window.crypto.subtle.importKey(
+        "raw",
+        bytes,
+        { name: "AES-GCM" },
+        true,
         ["encrypt", "decrypt"]
     );
 }
@@ -98,97 +140,115 @@ async function decryptData(key: CryptoKey, ivHex: string, cipherHex: string): Pr
 }
 
 // ── Broker Pool Ordenado por Estabilidad ──────────────────────────────────────
-// CRÍTICO: El broker elegido se embebe en el QR. El móvil usa EXACTAMENTE el mismo.
 
 const MQTT_BROKERS = [
     "wss://broker.emqx.io:8084/mqtt",
     "wss://broker.hivemq.com:8884/mqtt"
 ];
 
-// Índice de broker codificado en el QR (0-1) para que el móvil use el mismo
 const BROKER_INDEX_MAP: Record<string, string> = {
     "0": "wss://broker.emqx.io:8084/mqtt",
     "1": "wss://broker.hivemq.com:8884/mqtt"
 };
 
-// ── Lightweight Zero-Dependency MQTT v3.1.1 Client ───────────────────────────
+// ── Lightweight Zero-Dependency MQTT v3.1.1 Client con Auto-Reconexión ────────
 
 class SimpleMqttClient {
     private ws: WebSocket | null = null;
     private packetId = 1;
     public isConnected = false;
     private onMessageCb: ((topic: string, payload: string) => void) | null = null;
+    private shouldReconnect = false;
+    private reconnectTimeout: any = null;
+    private subscribedTopics = new Set<string>();
+    private brokerUrl: string;
 
-    constructor(private brokerUrl: string) {}
-
-    private encodeRemainingLength(len: number): number[] {
-        const lenBytes: number[] = [];
-        let l = len;
-        do {
-            let digit = l % 128;
-            l = Math.floor(l / 128);
-            if (l > 0) digit = digit | 0x80;
-            lenBytes.push(digit);
-        } while (l > 0);
-        return lenBytes;
+    constructor(brokerUrl: string) {
+        this.brokerUrl = brokerUrl;
     }
 
-    public connect(onOpen: () => void, onError: (err: any) => void): Promise<void> {
-        return new Promise((resolve, reject) => {
-            let settled = false;
+    public setBrokerUrl(url: string) {
+        this.brokerUrl = url;
+    }
+
+    public getBrokerUrl(): string {
+        return this.brokerUrl;
+    }
+
+    public connect(onConnect?: () => void, onError?: (err: any) => void): Promise<void> {
+        this.shouldReconnect = true;
+        return new Promise<void>((resolve, reject) => {
             try {
-                this.ws = new WebSocket(this.brokerUrl, ["mqttv3.1", "mqtt"]);
+                this.ws = new WebSocket(this.brokerUrl, "mqtt");
                 this.ws.binaryType = "arraybuffer";
-            } catch (e) {
-                reject(e);
-                return;
-            }
 
-            const timeout = setTimeout(() => {
-                if (!settled && !this.isConnected) {
-                    settled = true;
-                    this.close();
-                    reject(new Error(`Timeout conectando a broker ${this.brokerUrl}`));
-                }
-            }, 12000);
-
-            this.ws.onopen = () => {
-                this.sendConnect();
-            };
-
-            this.ws.onmessage = (event: MessageEvent) => {
-                const data = new Uint8Array(event.data as ArrayBuffer);
-                if (data.length === 0) return;
-
-                const packetType = data[0] >> 4;
-                if (packetType === 2) {
-                    // CONNACK
-                    clearTimeout(timeout);
-                    this.isConnected = true;
-                    if (!settled) {
-                        settled = true;
-                        onOpen();
-                        resolve();
+                const timeout = setTimeout(() => {
+                    if (!this.isConnected) {
+                        try { this.ws?.close(); } catch {}
+                        const err = new Error(`Timeout conectando a broker MQTT: ${this.brokerUrl}`);
+                        onError?.(err);
+                        reject(err);
                     }
-                } else if (packetType === 3) {
-                    // PUBLISH
-                    this.handlePublish(data);
-                }
-            };
+                }, 10000);
 
-            this.ws.onerror = (err) => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timeout);
-                    onError(err);
-                    reject(err);
-                }
-            };
+                this.ws.onopen = () => {
+                    this.sendConnect();
+                };
 
-            this.ws.onclose = () => {
-                this.isConnected = false;
-            };
+                this.ws.onmessage = (event) => {
+                    const data = new Uint8Array(event.data as ArrayBuffer);
+                    const packetType = data[0] >> 4;
+
+                    if (packetType === 2) {
+                        // CONNACK
+                        clearTimeout(timeout);
+                        this.isConnected = true;
+                        console.log(`[SimpleMqttClient] ✅ Conectado a broker MQTT: ${this.brokerUrl}`);
+                        
+                        // Re-suscribirse a todos los tópicos pendientes
+                        for (const topic of this.subscribedTopics) {
+                            this.sendSubscribe(topic);
+                        }
+
+                        onConnect?.();
+                        resolve();
+                    } else if (packetType === 3) {
+                        // PUBLISH
+                        this.handlePublish(data);
+                    }
+                };
+
+                this.ws.onerror = (err) => {
+                    if (!this.isConnected) {
+                        clearTimeout(timeout);
+                        onError?.(err);
+                        reject(err);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    this.isConnected = false;
+                    if (this.shouldReconnect) {
+                        this.scheduleReconnect();
+                    }
+                };
+
+            } catch (e) {
+                onError?.(e);
+                reject(e);
+            }
         });
+    }
+
+    private scheduleReconnect() {
+        if (this.reconnectTimeout) return;
+        this.reconnectTimeout = setTimeout(() => {
+            this.reconnectTimeout = null;
+            if (this.shouldReconnect && !this.isConnected) {
+                console.log(`[SimpleMqttClient] 🔄 Reconectando al relé MQTT (${this.brokerUrl})...`);
+                this.connect().catch(() => {});
+            }
+        }, 3500);
     }
 
     public onMessage(cb: (topic: string, payload: string) => void) {
@@ -196,6 +256,13 @@ class SimpleMqttClient {
     }
 
     public subscribe(topic: string) {
+        this.subscribedTopics.add(topic);
+        if (this.isConnected) {
+            this.sendSubscribe(topic);
+        }
+    }
+
+    private sendSubscribe(topic: string) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         const topicBytes = new TextEncoder().encode(topic);
         const pid = this.packetId++;
@@ -222,8 +289,21 @@ class SimpleMqttClient {
         this.ws.send(packet);
     }
 
+    public sendPing() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                this.ws.send(new Uint8Array([0xC0, 0x00])); // MQTT PINGREQ
+            } catch {}
+        }
+    }
+
     public close() {
+        this.shouldReconnect = false;
         this.isConnected = false;
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
         if (this.ws) {
             try { this.ws.close(); } catch {}
             this.ws = null;
@@ -243,6 +323,20 @@ class SimpleMqttClient {
         const lenBytes = this.encodeRemainingLength(remainingLength);
         const packet = new Uint8Array([0x10, ...lenBytes, ...varHeader, ...payload]);
         this.ws.send(packet);
+    }
+
+    private encodeRemainingLength(length: number): number[] {
+        const encodedBytes: number[] = [];
+        let x = length;
+        do {
+            let encodedByte = x % 128;
+            x = Math.floor(x / 128);
+            if (x > 0) {
+                encodedByte |= 128;
+            }
+            encodedBytes.push(encodedByte);
+        } while (x > 0);
+        return encodedBytes;
     }
 
     private handlePublish(data: Uint8Array) {
@@ -275,10 +369,38 @@ class SimpleMqttClient {
 // ── Companion Sync Engine Class ──────────────────────────────────────────────
 
 class CompanionSyncEngineClass {
+    private liveClient: SimpleMqttClient | null = null;
+    private liveAesKey: CryptoKey | null = null;
+    private activeSession: ActiveCompanionSession | null = null;
+    private liveListeners: ((event: CompanionLiveEvent) => void)[] = [];
+    private pingInterval: any = null;
+
+    constructor() {
+        if (typeof window !== 'undefined') {
+            this.loadSavedSession();
+        }
+    }
+
+    /**
+     * Carga y reactiva la sesión viva guardada en localStorage si existe.
+     */
+    private async loadSavedSession() {
+        try {
+            const raw = localStorage.getItem('red_companion_active_session');
+            if (!raw) return;
+            const session: ActiveCompanionSession = JSON.parse(raw);
+            if (session && session.sessionId && session.aesKeyHex && session.brokerUrl) {
+                this.activeSession = session;
+                this.liveAesKey = await importAesKeyHex(session.aesKeyHex);
+                this.startLiveBridge(session.sessionId, session.brokerUrl);
+            }
+        } catch (e) {
+            console.warn('[CompanionEngine] Error cargando sesión persistente:', e);
+        }
+    }
 
     /**
      * Conecta a un broker intentando cada uno del pool hasta encontrar uno funcional.
-     * Devuelve el cliente conectado + el índice del broker usado.
      */
     private async connectToBestBroker(
         onProgress?: (msg: string) => void
@@ -302,8 +424,7 @@ class CompanionSyncEngineClass {
 
     /**
      * Inicia una sesión de vinculación en el Navegador Web (muestra QR).
-     * SECUENCIAL: primero conecta al broker, luego retorna el QR con el índice
-     * del broker embebido. Garantiza que móvil y web usen el MISMO broker.
+     * Mantiene la conexión abierta y activa el canal en vivo tras recibir la bóveda.
      */
     public async createWebPairingSession(
         onSuccess: (payload: CompanionSyncPayload) => void,
@@ -326,6 +447,7 @@ class CompanionSyncEngineClass {
 
         const vaultTopic = `red/pair/${sessionId}/vault`;
         const ackTopic = `red/pair/${sessionId}/ack`;
+        const liveTopic = `red/pair/${sessionId}/live`;
 
         client.subscribe(vaultTopic);
         console.log(`[CompanionEngine] Web suscrita en: ${vaultTopic} vía broker[${brokerIndex}]`);
@@ -334,7 +456,9 @@ class CompanionSyncEngineClass {
 
         const cleanup = () => {
             isClosed = true;
-            client.close();
+            if (this.liveClient !== client) {
+                client.close();
+            }
         };
 
         client.onMessage(async (topic, payloadStr) => {
@@ -349,14 +473,31 @@ class CompanionSyncEngineClass {
 
                         // ACK inmediato al móvil
                         client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
-                        // ACK redundante 300ms después
                         setTimeout(() => {
-                            if (!isClosed && client.isConnected) {
+                            if (client.isConnected) {
                                 client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
                             }
                         }, 300);
 
-                        cleanup();
+                        // Guardar sesión viva en localStorage
+                        const aesKeyHex = await exportAesKeyHex(aesKey);
+                        const activeSession: ActiveCompanionSession = {
+                            sessionId,
+                            aesKeyHex,
+                            brokerUrl: client.getBrokerUrl(),
+                            isMobileHost: false,
+                            pairedAt: Date.now()
+                        };
+                        this.activeSession = activeSession;
+                        this.liveAesKey = aesKey;
+                        localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
+
+                        // Promover el cliente a Canal en Vivo Persistente
+                        this.liveClient = client;
+                        client.subscribe(liveTopic);
+                        this.setupLiveMessageListener(client, liveTopic, aesKey);
+                        this.startKeepalive(client);
+
                         onSuccess(decrypted);
                     }
                 } catch (e: any) {
@@ -366,19 +507,10 @@ class CompanionSyncEngineClass {
             }
         });
 
-        // Keepalive PINGREQ cada 30s para mantener la conexión WebSocket viva
-        const pingInterval = setInterval(() => {
-            if (isClosed || !client.isConnected) {
-                clearInterval(pingInterval);
-                return;
-            }
-            try {
-                (client as any).ws?.send(new Uint8Array([0xC0, 0x00]));
-            } catch {}
-        }, 30000);
+        // Keepalive PINGREQ cada 25s
+        this.startKeepalive(client);
 
         // PASO 2: Generar el QR con el brokerIndex real embebido en el campo 6
-        // Formato: RED_PAIR:1:sessionId:pubKeyHex:expiresAt:brokerIdx
         const qrPayload = `RED_PAIR:1:${sessionId}:${pubKeyHex}:${expiresAt}:${brokerIndex}`;
 
         return {
@@ -391,7 +523,7 @@ class CompanionSyncEngineClass {
 
     /**
      * Ejecutado desde la App Móvil: Lee el broker del QR, cifra la bóveda y la envía.
-     * El campo broker_idx en el QR garantiza que móvil y web usen el MISMO broker.
+     * Al recibir el ACK, activa el Canal en Vivo Persistente en el móvil.
      */
     public async transmitMobileVaultToWeb(
         qrData: string,
@@ -403,8 +535,6 @@ class CompanionSyncEngineClass {
         }
 
         const parts = qrData.split(":");
-        // Formato v1: RED_PAIR:1:sessionId:webPubKeyHex:expiresAt
-        // Formato v2: RED_PAIR:1:sessionId:webPubKeyHex:expiresAt:brokerIdx
         if (parts.length < 5) {
             throw new Error("Formato de emparejamiento incompleto");
         }
@@ -426,18 +556,15 @@ class CompanionSyncEngineClass {
 
         const vaultTopic = `red/pair/${sessionId}/vault`;
         const ackTopic = `red/pair/${sessionId}/ack`;
+        const liveTopic = `red/pair/${sessionId}/live`;
 
         onProgress?.("Estableciendo canal criptográfico seguro E2E…");
 
-        // 1. Generar par de claves efímero móvil
         const mobileKeyPair = await generateEcdhKeyPair();
         const mobilePubKeyHex = await exportPublicKeyHex(mobileKeyPair.publicKey);
-
-        // 2. Derivar clave AES con la clave pública de la web
         const webPubKey = await importPublicKeyHex(webPubKeyHex);
         const aesKey = await deriveAesKey(mobileKeyPair.privateKey, webPubKey);
 
-        // 3. Cifrar la carga útil
         onProgress?.("Cifrando bóveda táctica con AES-256-GCM…");
         const encrypted = await encryptData(aesKey, vaultPayload);
 
@@ -448,9 +575,6 @@ class CompanionSyncEngineClass {
             ciphertext: encrypted.ciphertext
         });
 
-        // 4. Determinar qué broker usar:
-        //    - Si el QR tiene un brokerIdx válido (v2), usarlo directamente.
-        //    - Si no, intentar todos en orden (v1 legacy).
         const brokersToTry = (brokerIdx >= 0 && BROKER_INDEX_MAP[String(brokerIdx)])
             ? [BROKER_INDEX_MAP[String(brokerIdx)], ...MQTT_BROKERS.filter((_, i) => i !== brokerIdx)]
             : MQTT_BROKERS;
@@ -467,7 +591,7 @@ class CompanionSyncEngineClass {
                     if (activeClient) activeClient.close();
                     reject(new Error("Tiempo de espera agotado. Asegúrate de que la página web esté abierta y esperando el QR."));
                 }
-            }, 45000); // 45s — tiempo suficiente para la bóveda completa
+            }, 45000);
 
             for (const brokerUrl of brokersToTry) {
                 if (isResolved) break;
@@ -482,15 +606,11 @@ class CompanionSyncEngineClass {
                     }
 
                     activeClient = client;
-
-                    // Suscribirse al ACK
                     client.subscribe(ackTopic);
 
-                    // Publicar la bóveda cifrada
                     onProgress?.("Transmitiendo cápsula cifrada al navegador…");
                     client.publish(vaultTopic, vaultMessage);
 
-                    // Re-publicar cada 1.5s hasta recibir ACK (en caso de que la web reconecte)
                     const retryInterval = setInterval(() => {
                         if (isResolved || !client.isConnected) {
                             clearInterval(retryInterval);
@@ -499,7 +619,7 @@ class CompanionSyncEngineClass {
                         client.publish(vaultTopic, vaultMessage);
                     }, 1500);
 
-                    client.onMessage((topic, payloadStr) => {
+                    client.onMessage(async (topic, payloadStr) => {
                         if (isResolved) return;
                         if (topic === ackTopic) {
                             try {
@@ -508,19 +628,36 @@ class CompanionSyncEngineClass {
                                     isResolved = true;
                                     clearTimeout(timeout);
                                     clearInterval(retryInterval);
-                                    client.close();
+
+                                    // Guardar sesión viva en el móvil
+                                    const aesKeyHex = await exportAesKeyHex(aesKey);
+                                    const activeSession: ActiveCompanionSession = {
+                                        sessionId,
+                                        aesKeyHex,
+                                        brokerUrl,
+                                        isMobileHost: true,
+                                        pairedAt: Date.now()
+                                    };
+                                    this.activeSession = activeSession;
+                                    this.liveAesKey = aesKey;
+                                    localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
+
+                                    // Mantener el canal en vivo abierto en el móvil
+                                    this.liveClient = client;
+                                    client.subscribe(liveTopic);
+                                    this.setupLiveMessageListener(client, liveTopic, aesKey);
+                                    this.startKeepalive(client);
+
+                                    console.log(`[CompanionEngine:Mobile] 🚀 Canal en Vivo Activado en tópico: ${liveTopic}`);
                                     resolve(true);
                                 }
                             } catch {}
                         }
                     });
 
-                    // Conectado al broker — esperar ACK o timeout
                     break;
-
                 } catch (e) {
                     console.warn(`[CompanionEngine:Mobile] Broker falló: ${brokerUrl}`, e);
-                    // Intentar siguiente
                 }
             }
 
@@ -530,6 +667,143 @@ class CompanionSyncEngineClass {
                 reject(new Error("No se pudo conectar a los relés de emparejamiento. Verifica tu conexión a internet."));
             }
         });
+    }
+
+    /**
+     * Inicia o reactiva el canal en vivo con los datos de sesión almacenados.
+     */
+    private async startLiveBridge(sessionId: string, brokerUrl: string) {
+        if (this.liveClient) {
+            this.liveClient.close();
+        }
+
+        const liveTopic = `red/pair/${sessionId}/live`;
+        console.log(`[CompanionEngine] 🔌 Reactivando Canal en Vivo en: ${brokerUrl} (${liveTopic})`);
+
+        const client = new SimpleMqttClient(brokerUrl);
+        this.liveClient = client;
+
+        client.connect(
+            () => {
+                client.subscribe(liveTopic);
+                if (this.liveAesKey) {
+                    this.setupLiveMessageListener(client, liveTopic, this.liveAesKey);
+                }
+                this.startKeepalive(client);
+            },
+            (err) => {
+                console.warn('[CompanionEngine] Fallo al reactivar canal en vivo:', err);
+            }
+        );
+    }
+
+    private setupLiveMessageListener(client: SimpleMqttClient, liveTopic: string, aesKey: CryptoKey) {
+        client.onMessage(async (topic, payloadStr) => {
+            if (topic === liveTopic) {
+                try {
+                    const msg = JSON.parse(payloadStr);
+                    if (msg.iv && msg.ciphertext) {
+                        const event: CompanionLiveEvent = await decryptData(aesKey, msg.iv, msg.ciphertext);
+                        // Ignorar eventos generados por nosotros mismos
+                        const myId = localStorage.getItem('red_identity_hash') || '';
+                        if (event.senderId && myId && event.senderId === myId) {
+                            return;
+                        }
+                        console.log(`[CompanionEngine] ⚡ Evento en Vivo Recibido: ${event.type}`, event.data);
+                        this.notifyLiveListeners(event);
+                    }
+                } catch (err) {
+                    console.warn('[CompanionEngine] Error descifrando evento en vivo:', err);
+                }
+            }
+        });
+    }
+
+    private startKeepalive(client: SimpleMqttClient) {
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        this.pingInterval = setInterval(() => {
+            if (client.isConnected) {
+                client.sendPing();
+            }
+        }, 25000);
+    }
+
+    /**
+     * Transmite un evento en tiempo real (mensaje nuevo, lectura, contacto) al dispositivo compañero.
+     */
+    public async publishLiveEvent(type: CompanionLiveEvent['type'], data: any): Promise<boolean> {
+        if (!this.liveClient || !this.liveClient.isConnected || !this.liveAesKey || !this.activeSession) {
+            return false;
+        }
+
+        try {
+            const myId = localStorage.getItem('red_identity_hash') || 'me';
+            const event: CompanionLiveEvent = {
+                type,
+                senderId: myId,
+                timestamp: Date.now(),
+                data
+            };
+
+            const encrypted = await encryptData(this.liveAesKey, event);
+            const liveTopic = `red/pair/${this.activeSession.sessionId}/live`;
+
+            this.liveClient.publish(liveTopic, JSON.stringify({
+                iv: encrypted.iv,
+                ciphertext: encrypted.ciphertext
+            }));
+
+            return true;
+        } catch (err) {
+            console.warn('[CompanionEngine] Error publicando evento en vivo:', err);
+            return false;
+        }
+    }
+
+    /**
+     * Suscribe un callback para recibir eventos del dispositivo compañero en tiempo real.
+     */
+    public onLiveEvent(callback: (event: CompanionLiveEvent) => void): () => void {
+        this.liveListeners.push(callback);
+        return () => {
+            this.liveListeners = this.liveListeners.filter(l => l !== callback);
+        };
+    }
+
+    private notifyLiveListeners(event: CompanionLiveEvent) {
+        for (const listener of this.liveListeners) {
+            try {
+                listener(event);
+            } catch (err) {
+                console.warn('[CompanionEngine] Error en listener de evento en vivo:', err);
+            }
+        }
+    }
+
+    /**
+     * Consulta si hay una sesión viva vinculada activa.
+     */
+    public isLiveSessionActive(): boolean {
+        return Boolean(this.liveClient?.isConnected && this.activeSession);
+    }
+
+    /**
+     * Desvincula la sesión viva activa.
+     */
+    public unpairSession() {
+        if (this.liveClient) {
+            this.liveClient.close();
+            this.liveClient = null;
+        }
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+        this.activeSession = null;
+        this.liveAesKey = null;
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('red_companion_active_session');
+        }
     }
 }
 

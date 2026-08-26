@@ -8,6 +8,7 @@ import { toast } from '../../components/Toast';
 import { RED_VERSION } from '../../lib/version';
 import { StateIntegrityEngine } from '../../lib/storage/StateIntegrityEngine';
 import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
+import { companionSyncEngine } from '../../lib/mesh/companionSyncEngine';
 
 let _fetchInterval: ReturnType<typeof setInterval> | null = null;
 let _mainSSE: EventSource | null = null;
@@ -238,6 +239,37 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         }
                     } catch (deliveryErr) {
                         console.warn('[RED Web] Error handling mesh packet delivery:', deliveryErr);
+                    }
+                });
+
+                // Wire Live Companion Sync Bridge (WhatsApp Web Style Real-time Mirror)
+                companionSyncEngine.onLiveEvent((event) => {
+                    try {
+                        if (event.type === 'LIVE_MSG_RECV') {
+                            get().addIncomingMessage(event.data);
+                        } else if (event.type === 'LIVE_MSG_SEND') {
+                            const { recipient, content, options } = event.data;
+                            RedAPI.sendMessage(recipient, content, options).catch((err) => {
+                                console.warn('[CompanionEngine:Mobile] Error broadcasting web message to mesh:', err);
+                            });
+                        } else if (event.type === 'LIVE_READ_ACK') {
+                            const { peer, conversationId } = event.data;
+                            if (peer || conversationId) {
+                                get().markAsRead(peer || conversationId);
+                            }
+                        } else if (event.type === 'LIVE_TYPING') {
+                            const { peer, isTyping } = event.data;
+                            get().setTyping(peer, isTyping);
+                        } else if (event.type === 'LIVE_CONTACT_UPDATE') {
+                            get().fetchData();
+                        } else if (event.type === 'LIVE_CONV_WIPE') {
+                            const { peer } = event.data;
+                            if (peer) {
+                                get().deleteConversation(peer);
+                            }
+                        }
+                    } catch (liveErr) {
+                        console.warn('[RED Live Companion] Error handling live event:', liveErr);
                     }
                 });
 

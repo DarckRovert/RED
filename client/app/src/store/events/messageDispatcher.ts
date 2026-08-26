@@ -11,6 +11,7 @@ import { StateIntegrityEngine } from '../../lib/storage/StateIntegrityEngine';
 import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
 import { toast } from '../../components/Toast';
 import { MonetizationEngine } from '../../lib/network/MonetizationEngine';
+import { companionSyncEngine } from '../../lib/mesh/companionSyncEngine';
 
 // Persistent cross-session message deduplication set
 const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (() => {
@@ -1263,6 +1264,13 @@ export async function dispatchIncomingMessage(
                     }
                 }
             }
+
+            // Mirror incoming message to active Web Companion Live Bridge
+            try {
+                if (companionSyncEngine.isLiveSessionActive()) {
+                    companionSyncEngine.publishLiveEvent('LIVE_MSG_RECV', normalizedItem).catch(() => {});
+                }
+            } catch {}
 
             // ── In-Memory & Storage Conversation List Update for Active Chat ──
             const msgType = normalizedItem.msg_type;

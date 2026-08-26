@@ -444,6 +444,19 @@ export class RedAPIClient {
         } catch (meshErr) {
             console.warn('[RedAPI.sendMessage] Mesh dispatch failed:', meshErr);
         }
+
+        // 4. Mirror in Real-Time to Paired Companion (Web <-> Mobile Live Bridge)
+        try {
+            const { companionSyncEngine } = await import('../lib/mesh/companionSyncEngine');
+            if (companionSyncEngine.isLiveSessionActive()) {
+                companionSyncEngine.publishLiveEvent('LIVE_MSG_SEND', {
+                    recipient: cleanRecipient,
+                    content,
+                    options: { ...options, id: msgId },
+                    id: msgId
+                }).catch(() => {});
+            }
+        } catch {}
     }
 
     // ── Live Streaming API ──────────────────────────────────────────────────────
