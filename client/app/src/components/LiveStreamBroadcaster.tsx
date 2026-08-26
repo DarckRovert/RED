@@ -6,10 +6,20 @@ import { RedAPI } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
-const FRAME_INTERVAL_MS = 500;
-const FRAME_QUALITY = 0.35;
-const FRAME_WIDTH = 240;
-const FRAME_HEIGHT = 320;
+interface ResolutionConfig {
+    label: string;
+    width: number;
+    height: number;
+    quality: number;
+    intervalMs: number;
+}
+
+const RESOLUTIONS: Record<string, ResolutionConfig> = {
+    "144p": { label: "144p (Malla Lenta)", width: 144, height: 192, quality: 0.25, intervalMs: 600 },
+    "240p": { label: "240p (Equilibrado)", width: 240, height: 320, quality: 0.35, intervalMs: 500 },
+    "480p": { label: "480p (Alta Calidad)", width: 360, height: 480, quality: 0.50, intervalMs: 350 },
+    "720p": { label: "720p (Enlace Directo)", width: 480, height: 640, quality: 0.65, intervalMs: 250 },
+};
 
 export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
     const { contacts, identity } = useRedStore();
@@ -23,6 +33,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
 
     const [streamId] = useState(() => `live-${Date.now()}-${identity?.identity_hash ? identity.identity_hash.slice(0, 6) : "local"}`);
     const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+    const [selectedRes, setSelectedRes] = useState<string>("240p");
     const [isLive, setIsLive] = useState(false);
     const [camReady, setCamReady] = useState(false);
     const [camError, setCamError] = useState<string | null>(null);
@@ -39,8 +50,9 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
 
     useEffect(() => {
         let cancelled = false;
+        const resConfig = RESOLUTIONS[selectedRes] || RESOLUTIONS["240p"];
         navigator.mediaDevices.getUserMedia({
-            video: { facingMode, width: { ideal: FRAME_WIDTH }, height: { ideal: FRAME_HEIGHT } },
+            video: { facingMode, width: { ideal: resConfig.width }, height: { ideal: resConfig.height } },
             audio: false,
         }).then(stream => {
             if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
@@ -70,18 +82,19 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         const canvas = canvasRef.current;
         if (!video || !canvas || video.readyState < 2) return;
 
-        canvas.width = FRAME_WIDTH;
-        canvas.height = FRAME_HEIGHT;
+        const config = RESOLUTIONS[selectedRes] || RESOLUTIONS["240p"];
+        canvas.width = config.width;
+        canvas.height = config.height;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        ctx.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-        const dataUrl = canvas.toDataURL("image/jpeg", FRAME_QUALITY);
+        ctx.drawImage(video, 0, 0, config.width, config.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", config.quality);
         const seq = frameSeqRef.current++;
 
         await RedAPI.sendLiveFrame(contacts, streamId, dataUrl, seq).catch(() => {});
         setFramesSent(s => s + 1);
-    }, [contacts, streamId]);
+    }, [contacts, streamId, selectedRes]);
 
     const startLive = useCallback(async () => {
         if (!camReady || isLive) return;
@@ -110,10 +123,11 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
             streamId,
         }));
 
+        const config = RESOLUTIONS[selectedRes] || RESOLUTIONS["240p"];
         elapsedRef.current = setInterval(() => setElapsed(s => s + 1), 1000);
-        frameIntervalRef.current = setInterval(captureAndSendFrame, FRAME_INTERVAL_MS);
-        toast.info("🔴 Transmisión iniciada en la malla P2P");
-    }, [camReady, isLive, contacts, streamId, identity, captureAndSendFrame]);
+        frameIntervalRef.current = setInterval(captureAndSendFrame, config.intervalMs);
+        toast.info(`🔴 Transmisión iniciada (${config.label})`);
+    }, [camReady, isLive, contacts, streamId, identity, captureAndSendFrame, selectedRes]);
 
     const stopLive = useCallback(async () => {
         if (!isLive) return;
@@ -204,6 +218,30 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                 </div>
 
                 <div style={{ display: "flex", gap: "8px" }}>
+                    {!isLive && (
+                        <select
+                            value={selectedRes}
+                            onChange={(e) => setSelectedRes(e.target.value)}
+                            style={{
+                                background: "rgba(0,0,0,0.6)",
+                                border: "1px solid var(--glass-border)",
+                                color: "var(--accent-cyan)",
+                                borderRadius: "8px",
+                                padding: "4px 8px",
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                outline: "none",
+                                cursor: "pointer"
+                            }}
+                        >
+                            {Object.entries(RESOLUTIONS).map(([key, cfg]) => (
+                                <option key={key} value={key} style={{ background: "#0c0d1a", color: "#fff" }}>
+                                    {cfg.label}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+
                     <button
                         onClick={() => setFacingMode(f => f === "user" ? "environment" : "user")}
                         className="btn-icon"

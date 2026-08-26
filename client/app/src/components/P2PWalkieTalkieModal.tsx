@@ -7,6 +7,7 @@ import { sendVoiceBurst, getVoiceBursts, deleteVoiceBurst, VoiceBurst } from "..
 import { PayloadCompressor } from "../lib/PayloadCompressor";
 import { LowBitrateVocoder } from "../lib/LowBitrateVocoder";
 import { SoundMeshEngine } from "../lib/SoundMeshEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { SkeletonCard } from "./ui/SkeletonCard";
 import { ErrorBanner } from "./ui/ErrorBanner";
@@ -285,6 +286,8 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             });
 
             if (res && res.ok) {
+                TacticalAudioEngine.playRogerBeep();
+                setTimeout(() => TacticalAudioEngine.playSquelchTail(), 100);
                 toast.success(isEmergency ? "🚨 RÁFAGA DE EMERGENCIA EMITIDA" : "🎙️ Ráfaga PTT transmitida por la malla");
                 await loadBursts();
             } else {
