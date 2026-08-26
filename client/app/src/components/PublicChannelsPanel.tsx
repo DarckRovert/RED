@@ -22,7 +22,13 @@ export const PublicChannelsPanel: React.FC = () => {
     const loadMessages = async () => {
         try {
             const data = await getChannelMessages(channelId);
-            setMessages(Array.isArray(data?.messages) ? data.messages : []);
+            const rawList = Array.isArray(data?.messages) ? data.messages : [];
+            const sorted = [...rawList].sort((a, b) => {
+                const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
+                const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
+                return tsA - tsB;
+            });
+            setMessages(sorted);
             if (Array.isArray(data?.channels) && data.channels.length > 0) {
                 setChannels(data.channels);
             }
@@ -167,7 +173,7 @@ export const PublicChannelsPanel: React.FC = () => {
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <strong style={{ fontSize: "0.88rem", color: "var(--accent-cyan)" }}>{m.sender_name}</strong>
                                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                    {new Date(m.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                    {new Date(m.timestamp ? (m.timestamp > 1e11 ? m.timestamp : m.timestamp * 1000) : Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                             </div>
                             <div style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>

@@ -926,7 +926,11 @@ export async function dispatchIncomingMessage(
                         const ts = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
                         return ts >= sinceTs;
                     })
-                    .sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0))
+                    .sort((a: any, b: any) => {
+                        const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
+                        const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
+                        return tsA - tsB;
+                    })
                     .slice(-limit);
 
                 if (filtered.length === 0) return;
@@ -972,7 +976,11 @@ export async function dispatchIncomingMessage(
 
                 if (newMsgs.length === 0) return;
 
-                const merged = [...existing, ...newMsgs].sort((a: any, b: any) => (a.timestamp || 0) - (b.timestamp || 0));
+                const merged = [...existing, ...newMsgs].sort((a: any, b: any) => {
+                    const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
+                    const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
+                    return tsA - tsB;
+                });
                 localStorage.setItem(storageKey, JSON.stringify(merged));
 
                 // If this group is currently active, update the in-memory messages list
