@@ -1,108 +1,65 @@
 # Política de Seguridad - RED v63.0.0
 
-## Reporte de Vulnerabilidades
+## Reporte Responsable de Vulnerabilidades
 
-RED toma seguridad muy en serio. Si descubres una vulnerabilidad de seguridad, **POR FAVOR NO la reportes públicamente**. En su lugar:
+### NO reportar públicamente
+Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente para proteger a los operadores en zonas de riesgo.
 
 ### Opción 1: GitHub Security Advisory (Recomendado)
 1. Ve a: https://github.com/DarckRovert/RED/security/advisories
 2. Click "Report a vulnerability"
-3. Describe la vulnerabilidad detalladamente
-4. GitHub te notificará cuando sea procesada
+3. Describe el issue detalladamente con pasos de reproducción (PoC)
 
 ### Opción 2: Email Privado
-Envía a: `security@red-crypto.org` (si existe contacto público)
+- Email: `security@red-mesh.org`
+- Clave PGP: Disponible en el directorio de seguridad oficial
 
-Incluye:
-- Descripción clara del issue
-- Versión afectada
-- Pasos para reproducir
-- Posible impacto
-- Sugerencias de fix (opcional)
+### Tiempo de Respuesta y SLAs
 
-## Tiempo de Respuesta
+| Severidad | Tiempo de Respuesta Inicial | Tiempo de Patch / Mitigación |
+|-----------|-----------------------------|------------------------------|
+| **Crítica** | < 24 horas | 48-72 horas |
+| **Alta** | < 48 horas | 1-2 semanas |
+| **Media** | < 1 semana | 2-4 semanas |
+| **Baja** | < 2 semanas | 1-2 meses |
 
-| Severidad | Tiempo de Respuesta | Tiempo de Patch |
-|-----------|-------------------|-----------------|
-| **Crítica** | 24 horas | 48-72 horas |
-| **Alta** | 48 horas | 1-2 semanas |
-| **Media** | 1 semana | 2-4 semanas |
-| **Baja** | 2 semanas | 1-2 meses |
-
-## Proceso de Disclosure
-
-1. **Privado**: Tu reporte y nuestro fix
-2. **Coordinado**: Acordamos fecha de disclosure públic
-3. **Notificación**: Alertamos a usuarios
-4. **Publicación**: Release con patch
-5. **Crédito**: Te mencionamos (si lo deseas)
-
-## Prácticas de Seguridad en RED
-
-### Criptografía
-- ✅ Post-Cuántica (ML-KEM-768 + X25519)
-- ✅ Algoritmos auditados (NIST FIPS 203, RFC 8439)
-- ✅ Formal verification con ProVerif
-
-### Autenticación
-- ✅ Biométrica (huella, rostro, iris, Passkeys WebAuthn)
-- ✅ Zero-Trust architecture
-- ✅ PIN con validación stricta (aborto si incorrecto)
-
-### Storage
-- ✅ Cifrado AES-256-GCM
-- ✅ Base de datos Sled con permiso immutable
-- ✅ Rotación de claves cada 90 días
-
-### Comunicación
-- ✅ Malla P2P descentralizada
-- ✅ Multi-transport (BLE, WiFi, LoRa, Acoustic)
-- ✅ Forward secrecy (Double Ratchet)
-
-### Auditoría
-- ✅ Logging inmutable de eventos sensibles
-- ✅ Detección de anomalías (Guardian AI)
-- ✅ Merkle tree para integridad de estado
-
-## Dependencias Seguras
-
-Auditamos TODAS las dependencias:
-```bash
-cargo audit --deny warnings
-npm audit --production
-```
-
-Se verifica:
-- ✅ Sin vulnerabilidades críticas/altas
-- ✅ Mantenidas activamente
-- ✅ Licencias compatibles
-
-## Testing de Seguridad
-
-Ejecutamos en cada commit:
-- ✅ SAST (SonarQube)
-- ✅ Dependency scanning (Trivy)
-- ✅ Formal proofs (ProVerif)
-- ✅ Fuzzing (random input)
-- ✅ Code review (2+ humans)
-
-## EOL (End of Life)
-
-Versions soportadas:
-
-| Versión | Lanzamiento | EOL | Status |
-|---------|------------|-----|--------|
-| 63.0.0 | 2024 | 2025-Q4 | ✅ Actual |
-| 62.0.0 | 2023 | 2024-Q4 | ⚠️ Bug fixes solo |
-| 61.0.0 | 2023 | 2024-Q2 | ❌ EOL |
-
-Solo las 2 últimas versiones reciben patches.
-
-## Reconocimientos
-
-Gracias a los investigadores de seguridad que han reportado vulnerabilidades responsablemente.
+### Proceso de Divulgación Coordinada (Coordinated Disclosure)
+1. Reporte confidencial recibido y confirmado en < 24h.
+2. Análisis de causa raíz, modelado de amenazas y desarrollo del parche en rama aislada.
+3. Validación matemática mediante Known-Answer Tests (KAT) y ProVerif 2.0x.
+4. Notificación coordinada a los operadores de nodos validadores y despliegue del hotfix.
+5. Publicación de la nota de seguridad oficial y crédito explícito al investigador.
 
 ---
 
-**Última actualización**: 2024-01-15  
-**Versión de política**: 1.0.0
+## Prácticas de Seguridad en RED
+
+### Criptografía Post-Cuántica & Híbrida
+- ✅ **ML-KEM-768** (NIST FIPS 203) encapsulando secretos compartidos contra computación cuántica futura.
+- ✅ **X25519** ECDH (RFC 7748) para conmutatividad y secreto efímero.
+- ✅ **ChaCha20-Poly1305 AEAD** (RFC 8439) con integridad y autenticación de datos asociados (AAD).
+- ✅ **Double Ratchet** con secreto perfecto hacia adelante (PFS) y auto-recuperación de clave (PCS).
+- ✅ **Argon2id** (OWASP 2021) para derivación robusta de claves desde PINs de coacción y PIN maestro.
+- ✅ Verificación formal de seguridad mediante **ProVerif 2.0x**.
+
+### Almacenamiento & Memoria
+- ✅ Bóveda Sled con cifrado AES-256-GCM y aborto fatal inmediato ante alteración de memoria.
+- ✅ Sanitización de memoria volátil (`zeroize`) en estructuras de claves privadas.
+- ✅ Bóveda señuelo (*Decoy Vault*) y borrado de pánico (*Panic Wipe*) en < 500ms.
+
+### Comunicaciones & Red Malla
+- ✅ Enrutamiento cebolla (Onion Routing) de 3 saltos para ofuscación de metadatos de transporte.
+- ✅ Cero texto plano en tránsito sobre BLE, WiFi Direct, LoRa 915/868 MHz y módem acústico SoundMesh.
+- ✅ Aislamiento estricto de loopback en servidor local Axum (`127.0.0.1:7333`) con autenticación `X-API-Key`.
+
+---
+
+## Política de Fin de Soporte (End-of-Life Policy)
+
+| Versión | Lanzamiento | Fin de Soporte (EOL) | Estado |
+|---------|------------|---------------------|--------|
+| **v63.0.0** | 2026-08 | 2027-08 | 🟢 **Soporte Activo / Producción** |
+| **v62.0.0** | 2026-06 | 2026-12 | 🟡 Parches de Seguridad Críticos |
+| **v61.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
+
+*Solo las dos versiones mayores más recientes reciben parches de seguridad y backports.*

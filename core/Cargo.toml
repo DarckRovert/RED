@@ -87,4 +87,22 @@ path = "../tests/crypto_tests.rs"
 name = "integration_tests"
 path = "../tests/integration_tests.rs"
 
+[[test]]
+name = "mesh_integration_test"
+path = "../tests/mesh_integration_test.rs"
+
+[[test]]
+name = "crypto_known_answer_tests"
+path = "../tests/crypto_known_answer_tests.rs"
+
+[[bench]]
+name = "crypto_bench"
+path = "benches/crypto_bench.rs"
+harness = false
+
+[[bench]]
+name = "mesh_bench"
+path = "benches/mesh_bench.rs"
+harness = false
+
 
