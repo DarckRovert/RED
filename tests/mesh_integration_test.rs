@@ -1,7 +1,8 @@
 //! Suite de Pruebas de Integración E2E para Red Malla (Mesh Resilience & Multi-Hop)
 //!
-//! Valida la propagación mediante GossipProtocol, deduplicación, expiración de TTL,
-//! retransmisión multi-salto y aislamiento/recuperación de nodos en RED v63.0.0.
+//! Pruebas de integración de la red malla RED:
+//! Simula escenarios de Gossipsub epidémico, deduplicación de paquetes,
+//! retransmisión multi-salto y aislamiento/recuperación de nodos en RED v64.0.0.
 
 use red_core::identity::Identity;
 use red_core::network::gossip::{GossipMessage, GossipProtocol, ReceiveResult};

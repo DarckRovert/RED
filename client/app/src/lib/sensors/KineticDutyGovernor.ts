@@ -82,6 +82,21 @@ export class KineticDutyGovernor {
             }
         } catch {}
 
+        // 3. Android Doze Mode & Background Visibility Guard
+        try {
+            if (typeof document !== "undefined") {
+                document.addEventListener("visibilitychange", () => {
+                    if (document.hidden) {
+                        // Modo Fondo / Reposo -> Activar perfil Sentry con pulso periódico
+                        this.evaluateProfile();
+                    } else {
+                        // Retorno a Primer Plano -> Despertar inmediato y ráfaga de escaneo
+                        this.triggerShakeBoost();
+                    }
+                });
+            }
+        } catch {}
+
         // Periodic evaluation timer (every 3 seconds)
         this.motionInterval = setInterval(() => {
             this.evaluateProfile();

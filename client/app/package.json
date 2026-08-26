@@ -15,7 +15,8 @@
     "test:audio": "node scripts/test-phase2-audio-comms.js",
     "test:vault": "node scripts/test-phase3-vault-crypto.js",
     "test:mesh": "node scripts/test-phase4-depin-mesh.js",
-    "test:all": "node scripts/test-crypto-core.js && node scripts/test-phase1-sensors.js && node scripts/test-phase2-audio-comms.js && node scripts/test-phase3-vault-crypto.js && node scripts/test-phase4-depin-mesh.js",
+    "test:evolution": "node scripts/test-phase5-evolutionary-hardening.js",
+    "test:all": "node scripts/test-crypto-core.js && node scripts/test-phase1-sensors.js && node scripts/test-phase2-audio-comms.js && node scripts/test-phase3-vault-crypto.js && node scripts/test-phase4-depin-mesh.js && node scripts/test-phase5-evolutionary-hardening.js",
     "postinstall": "node scripts/copy-wasm.js",
     "copy-wasm": "node scripts/copy-wasm.js"
   },

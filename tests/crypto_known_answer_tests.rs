@@ -1,8 +1,8 @@
-//! Known-Answer Tests (KAT) & Pruebas Criptográficas Deterministas
+//! Invariant Validation Tests para la suite criptográfica de grado militar de RED v64.0.0.
 //!
 //! Valida el comportamiento de los primitivos criptográficos contra vectores deterministas,
 //! garantizando la resistencia contra manipulación de bits, secreto hacia adelante y
-//! conmutatividad Diffie-Hellman en RED v63.0.0.
+//! conmutatividad Diffie-Hellman en RED v64.0.0.
 
 use red_core::crypto::{
     encryption::{decrypt, encrypt},

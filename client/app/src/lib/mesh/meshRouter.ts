@@ -25,6 +25,7 @@ import { mqttRelay } from './mqttRelayTransport';
 import { networkWatcher, NetworkState } from './networkWatcher';
 import { RED_VERSION } from '../version';
 import { dtnStorage } from './dtnStorage';
+import { loraBridge } from '../hardware/LoraSerialBridgeEngine';
 import {
   MeshPacket,
   createPacket,
@@ -206,6 +207,12 @@ class MeshRouter {
     this.wifi.onMessage(({ from, payload }) => {
       this.updatePeer(from, 'wifi');
       this.handleRawPacket(payload, from, 'wifi');
+    });
+
+    // Receive from physical LoRa Serial / BLE bridge
+    loraBridge.onPacketReceived((payload, rssi) => {
+      this.updatePeer('lora-hardware-node', 'lora', rssi);
+      this.handleRawPacket(payload, 'lora-hardware-node', 'lora');
     });
 
     // Initialize Network Watcher for automatic transitions (WiFi <-> 4G/5G <-> Offline)
@@ -1212,9 +1219,10 @@ class MeshRouter {
 
   private async sendViaLoRa(payload: Uint8Array): Promise<boolean> {
     try {
+      const okHardware = await loraBridge.sendPacket(payload);
       const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
-      await RedAPI.injectMeshPayload(hex, true);
-      return true;
+      await RedAPI.injectMeshPayload(hex, true).catch(() => {});
+      return okHardware;
     } catch {
       return false;
     }

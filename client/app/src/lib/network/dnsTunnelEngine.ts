@@ -1,5 +1,5 @@
 /**
- * RED v31.0.0 — DNS Tunneling Engine (UDP 53 & DoH Fallback)
+ * RED v64.0.0 — DNS Tunneling Engine (UDP 53 & DoH Fallback)
  * 
  * Permite la transmisión de paquetes cifrados Noise XK a través de consultas DNS
  * cuando el usuario no posee saldo de datos en su red celular.

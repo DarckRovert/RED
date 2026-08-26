@@ -1,6 +1,6 @@
 
 /**
- * RED Guardian IA — Engine de Moderación Off-Grid Real v31.0.0
+ * RED Guardian IA — Engine de Moderación Off-Grid Real v64.0.0
  * 
  * Evaluación híbrida (Heurística + Clasificador Semántico IA Local + De-obfuscator Leetspeak).
  * Opera 100% en el dispositivo emisor (<15MB RAM) sin enviar datos a internet.

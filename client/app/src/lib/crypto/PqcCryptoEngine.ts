@@ -7,12 +7,27 @@
  */
 
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
+import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
 
 export interface HybridKeyPair {
     x25519PublicKeyHex: string;
     x25519PrivateKeyHex: string;
     kyberPublicKeyHex: string;
     kyberPrivateKeyHex: string;
+}
+
+export interface PostQuantumSigningKeyPair {
+    ed25519PublicKeyHex: string;
+    ed25519PrivateKeyHex: string;
+    dilithiumPublicKeyHex: string;
+    dilithiumPrivateKeyHex: string;
+}
+
+export interface HybridSignature {
+    ed25519SigHex: string;
+    dilithiumSigHex: string;
+    combinedSignatureHex: string;
 }
 
 export interface EncapsulatedSecret {
@@ -153,6 +168,95 @@ export class PqcCryptoEngine {
         kdfInput.set(ssEcdh, ssKem.length);
 
         return this.sha256Hex(kdfInput);
+    }
+
+    /**
+     * Generates a hybrid post-quantum digital signature key pair:
+     * - Ed25519 classical Edwards curve key pair (32B public, 32B private)
+     * - NIST FIPS 204 ML-DSA-65 (Dilithium3) lattice key pair (1952B public, 4032B secret)
+     */
+    public static async generatePostQuantumSigningKeyPair(): Promise<PostQuantumSigningKeyPair> {
+        // 1. Classical Ed25519 Key Generation
+        const { secretKey: edPriv, publicKey: edPub } = ed25519.keygen();
+
+        // 2. NIST FIPS 204 ML-DSA-65 Key Generation
+        const mlDsaKeys = ml_dsa65.keygen();
+
+        return {
+            ed25519PublicKeyHex:   this.bytesToHex(edPub),
+            ed25519PrivateKeyHex:  this.bytesToHex(edPriv),
+            dilithiumPublicKeyHex: this.bytesToHex(mlDsaKeys.publicKey),
+            dilithiumPrivateKeyHex: this.bytesToHex(mlDsaKeys.secretKey),
+        };
+    }
+
+    /**
+     * Signs a message using both Ed25519 (classical) and ML-DSA-65 (quantum-resistant).
+     * Output format: combined hex = ed25519Sig (64B) + mlDsaSig (3309B)
+     */
+    public static async signHybrid(
+        message: Uint8Array,
+        ed25519PrivKeyHex: string,
+        dilithiumPrivKeyHex: string
+    ): Promise<HybridSignature> {
+        const edPrivBytes = this.hexToBytes(ed25519PrivKeyHex);
+        const dsaPrivBytes = this.hexToBytes(dilithiumPrivKeyHex);
+
+        // 1. Classical Ed25519 Signature (64 bytes)
+        const edSig = ed25519.sign(message, edPrivBytes);
+
+        // 2. NIST FIPS 204 ML-DSA-65 Signature (3309 bytes) — (message, secretKey)
+        const dsaSig = ml_dsa65.sign(message, dsaPrivBytes);
+
+        // 3. Combined Signature: Ed25519 (64B) + ML-DSA-65 (3309B)
+        const combined = new Uint8Array(edSig.length + dsaSig.length);
+        combined.set(edSig, 0);
+        combined.set(dsaSig, edSig.length);
+
+        return {
+            ed25519SigHex: this.bytesToHex(edSig),
+            dilithiumSigHex: this.bytesToHex(dsaSig),
+            combinedSignatureHex: this.bytesToHex(combined),
+        };
+    }
+
+    /**
+     * Verifies a hybrid post-quantum signature against both Ed25519 and ML-DSA-65 public keys.
+     * Both signatures MUST be valid for the verification to succeed.
+     */
+    public static async verifyHybrid(
+        message: Uint8Array,
+        signature: HybridSignature | string,
+        ed25519PubKeyHex: string,
+        dilithiumPubKeyHex: string
+    ): Promise<boolean> {
+        try {
+            let edSigBytes: Uint8Array;
+            let dsaSigBytes: Uint8Array;
+
+            if (typeof signature === 'string') {
+                const rawSig = this.hexToBytes(signature);
+                if (rawSig.length < 64) return false;
+                edSigBytes = rawSig.slice(0, 64);
+                dsaSigBytes = rawSig.slice(64);
+            } else {
+                edSigBytes = this.hexToBytes(signature.ed25519SigHex);
+                dsaSigBytes = this.hexToBytes(signature.dilithiumSigHex);
+            }
+
+            const edPubBytes = this.hexToBytes(ed25519PubKeyHex);
+            const dsaPubBytes = this.hexToBytes(dilithiumPubKeyHex);
+
+            // 1. Verify Ed25519
+            const edOk = ed25519.verify(edSigBytes, message, edPubBytes);
+            if (!edOk) return false;
+
+            // 2. Verify ML-DSA-65 — (signature, message, publicKey)
+            const dsaOk = ml_dsa65.verify(dsaSigBytes, message, dsaPubBytes);
+            return dsaOk;
+        } catch {
+            return false;
+        }
     }
 
     private static getCryptoSubtle(): SubtleCrypto {

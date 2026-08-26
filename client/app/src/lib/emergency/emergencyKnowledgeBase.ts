@@ -1,6 +1,5 @@
 /**
- * RED EmergencyKnowledgeBase.ts — 100% Offline Tactical Emergency Knowledge Base v31.0.0
- * 
+ * RED EmergencyKnowledgeBase.ts — 100% Offline Tactical Emergency Knowledge Base v64.0.0
  * Verified military and civilian tactical emergency protocols (Triage START, Hemorrhages,
  * CPR, Burns, Fractures, Water Purification, Hypothermia, CBRN, Collapses, RF Evasion,
  * Snakebites, Morse Signalling, Dead Man Switch).

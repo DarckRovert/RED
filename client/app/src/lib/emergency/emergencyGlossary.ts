@@ -1,5 +1,5 @@
 /**
- * emergencyGlossary.ts — 100% Offline Tactical Emergency Glossary & Translator v31.0.0
+ * emergencyGlossary.ts — 100% Offline Tactical Emergency Glossary & Translator v64.0.0
  *
  * Provides deterministic, zero-hallucination translations and definitions for
  * critical survival, medical, evacuation, rescue, and defense terminology across

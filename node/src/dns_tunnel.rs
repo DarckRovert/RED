@@ -1,4 +1,4 @@
-// RED v31.0.0 — Native Rust DNS Tunneling Server Module
+// RED v64.0.0 — Native Rust DNS Tunneling Server Module
 // Engine for encoding/decoding Noise XK frames into UDP 53 DNS Queries for Zero-Balance cellular bypass.
 
 use std::sync::Arc;

@@ -9,6 +9,7 @@ import { EmergencyGlossaryEngine, GlossaryLanguage, GlossaryEntry, EMERGENCY_GLO
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { NeuralThoughtViewer, NeuralTelemetryData } from "./ai/NeuralThoughtViewer";
+import { vectorKnowledgeStore } from "../lib/ai/VectorKnowledgeStore";
 
 type CopilotTab = "chat" | "translator" | "summarizer" | "models";
 
@@ -307,16 +308,25 @@ export const AICopilotModal: React.FC = () => {
 
         const startTime = performance.now();
         try {
+            // 1. Consulta RAG vectorial nativa offline (<5ms)
+            const ragResults = await vectorKnowledgeStore.search(text, 1);
+            let ragSnippet = "";
+            if (ragResults.length > 0 && ragResults[0].similarityScore > 0.52) {
+                const topDoc = ragResults[0].document;
+                ragSnippet = `[RAG Táctico INT8: ${topDoc.title}]: ${topDoc.content}`;
+            }
+
             let contextStr: string | undefined = undefined;
-            if (includeTacticalContext) {
+            if (includeTacticalContext || ragSnippet) {
                 const nodeCount = status?.peer_count ?? contacts.length;
                 const activeCh = effectiveChannels.find(c => c.id === activeConversationId)?.name || "General";
-                contextStr = `Malla con ${nodeCount} nodos detectados. Canal activo: #${activeCh}. Modo: 100% Offline`;
+                const baseCtx = `Malla con ${nodeCount} nodos detectados. Canal activo: #${activeCh}. Modo: 100% Offline`;
+                contextStr = ragSnippet ? `${baseCtx}\n${ragSnippet}` : baseCtx;
             }
 
             const res: CopilotResponse = await queryAICopilot(text, contextStr);
             const latency = Math.round(performance.now() - startTime);
-            const tag = res.source || (activeModel && activeModel.isDownloaded ? `${activeModel.name} (ARM64 Nativo)` : "SmolLM2-360M + e5-small (100% Offline)");
+            const tag = res.source || (activeModel && activeModel.isDownloaded ? `${activeModel.name} (ARM64 Nativo)` : "SmolLM2-360M + Vector INT8 (100% Offline)");
 
             const aiMsg: ChatMessage = {
                 id: `msg_${Date.now()}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`,

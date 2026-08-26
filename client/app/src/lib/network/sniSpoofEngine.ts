@@ -1,7 +1,7 @@
 import { RED_VERSION } from '../version';
 
 /**
- * RED v31.0.0 — SNI Domain Fronting & Zero-Rating Bypass Engine
+ * RED v64.0.0 — SNI Domain Fronting & Zero-Rating Bypass Engine
  * 
  * Permite tunelizar tráfico de datos cifrados simulando el encabezado TLS SNI (Server Name Indication)
  * de portales cautivos de operadoras telefónicas exentos de cobro de datos (Zero-Rating Sites).

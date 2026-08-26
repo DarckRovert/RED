@@ -1,4 +1,4 @@
-//! Cryptographic Known-Answer & Invariant Tests for RED v63.0.0
+//! Cryptographic Known-Answer & Invariant Tests for RED v64.0.0
 //!
 //! Validates:
 //! 1. X25519 Diffie-Hellman Key Exchange & Commutativity
