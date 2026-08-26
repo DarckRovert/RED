@@ -58,8 +58,8 @@ Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente p
 
 | Versión | Lanzamiento | Fin de Soporte (EOL) | Estado |
 |---------|------------|---------------------|--------|
-| **v63.0.0** | 2026-08 | 2027-08 | 🟢 **Soporte Activo / Producción** |
-| **v62.0.0** | 2026-06 | 2026-12 | 🟡 Parches de Seguridad Críticos |
-| **v61.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
+| **v64.0.0** | 2026-08 | 2027-08 | 🟢 **Soporte Activo / Producción** |
+| **v63.0.0** | 2026-08 | 2027-02 | 🟡 Parches de Seguridad Críticos |
+| **v62.0.0** y anteriores | - | - | 🔴 Fin de Soporte (EOL) |
 
 *Solo las dos versiones mayores más recientes reciben parches de seguridad y backports.*

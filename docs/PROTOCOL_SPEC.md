@@ -1,4 +1,4 @@
-# Especificación Formal de Protocolo — RED v63.0.0
+# Especificación Formal de Protocolo — RED v64.0.0
 
 Este documento define la especificación matemática y estructural de tramas de paquetes, acuerdos de clave híbridos post-cuánticos, difusión Gossipsub, topología Kademlia DHT y mecanismos Store-and-Forward (DTN) del ecosistema **RED**.
 

@@ -1,4 +1,4 @@
-# Métricas de Rendimiento & Baselines — RED v63.0.0
+# Métricas de Rendimiento & Baselines — RED v64.0.0
 
 Este documento formaliza las mediciones empíricas de rendimiento, latencia de algoritmos criptográficos, rendimiento de la red de malla y consumo energético en dispositivos móviles reales.
 

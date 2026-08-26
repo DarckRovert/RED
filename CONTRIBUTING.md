@@ -1,4 +1,4 @@
-# Guía de Contribución — RED v63.0.0
+# Guía de Contribución — RED v64.0.0
 
 Bienvenido al proyecto **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Para mantener la integridad matemática, la seguridad zero-trust y la estabilidad en dispositivos reales, todas las contribuciones deben seguir estas directrices.
 

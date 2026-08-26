@@ -1,4 +1,4 @@
-# 🏛️ RED OS v63.0.0 — Arquitectura Técnica & Mapa Visual Completo
+# 🏛️ RED OS v64.0.0 — Arquitectura Técnica & Mapa Visual Completo
 
 > Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de capas, los protocolos criptográficos, la matriz de enrutamiento multi-transporte, el sistema de autenticación biométrica y el motor de inferencia neuronal offline.
 
@@ -87,11 +87,11 @@ graph TD
         WAN_DHT["Internet WAN (Kademlia DHT + Bootstrap Peers)"]
     end
 
-    CAPA_1_PRESENTACION <-->|Zustand Hooks / Dispatch| CAPA_2_ESTADO
-    CAPA_2_ESTADO <-->|HTTP REST & SSE Events| CAPA_4_SERVIDOR
-    CAPA_3_PUENTE <-->|Carga libred_mobile.so| CAPA_5_RUST_CORE
-    CAPA_4_SERVIDOR <-->|Async State & Tokio Channels| CAPA_5_RUST_CORE
-    CAPA_5_RUST_CORE <-->|Controladores de Radio & Sockets| CAPA_6_HARDWARE
+    CAPA_1_PRESENTACION <-->|"Zustand Hooks / Dispatch"| CAPA_2_ESTADO
+    CAPA_2_ESTADO <-->|"HTTP REST & SSE Events"| CAPA_4_SERVIDOR
+    CAPA_3_PUENTE <-->|"Carga libred_mobile.so"| CAPA_5_RUST_CORE
+    CAPA_4_SERVIDOR <-->|"Async State & Tokio Channels"| CAPA_5_RUST_CORE
+    CAPA_5_RUST_CORE <-->|"Controladores de Radio & Sockets"| CAPA_6_HARDWARE
 ```
 
 ---
@@ -111,33 +111,33 @@ sequenceDiagram
 
     Note over Alice,Bob: 1. Negociación Inicial de Llaves (Key Encapsulation Mechanism)
     Alice->>CoreA: Redactar mensaje para Bob (did:red:BobHash)
-    CoreA->>CoreA: Obtener Clave Pública de Bob (ECDH P-256 + ML-KEM-768 PubKey)
-    CoreA->>CoreA: Generar secreto efímero clásico (ECDH Shared Secret $S_{cl}$)
-    CoreA->>CoreA: Encapsular secreto post-cuántico (ML-KEM Encapsulate $\rightarrow S_{pq}, C_{pq}$)
-    CoreA->>CoreA: Derivar Clave Maestra de Sesión: $K_{master} = \text{HKDF-SHA256}(S_{cl} \parallel S_{pq})$
+    CoreA->>CoreA: Obtener Clave Publica de Bob (ECDH P-256 + ML-KEM-768 PubKey)
+    CoreA->>CoreA: Generar secreto efimero clasico (ECDH Shared Secret S_cl)
+    CoreA->>CoreA: Encapsular secreto post-cuantico (ML-KEM Encapsulate -> S_pq, C_pq)
+    CoreA->>CoreA: Derivar Clave Maestra de Sesion: K_master = HKDF-SHA256(S_cl || S_pq)
 
     Note over Alice,Bob: 2. Cifrado Authenticated Encryption (AES-256-GCM)
-    CoreA->>CoreA: Cifrar Payload con $K_{master}$ + Nonce único + AAD (Metadata)
+    CoreA->>CoreA: Cifrar Payload con K_master + Nonce unico + AAD (Metadata)
     CoreA->>CoreA: Computar Hashcash Proof-of-Work (Anti-Spam PoW)
-    CoreA->>CoreA: Empaquetar en Cebolla Onion (3 capas de enrutamiento anónimo)
+    CoreA->>CoreA: Empaquetar en Cebolla Onion (3 capas de enrutamiento anonimo)
 
-    Note over Alice,Bob: 3. Transmisión Multi-Salto por la Malla
-    CoreA->>Mesh: Inyectar paquete cifrado (`MeshPacket`)
-    Mesh->>Mesh: Reenvío Gossipsub / Flooding por nodos intermedios (Zero-Knowledge)
+    Note over Alice,Bob: 3. Transmision Multi-Salto por la Malla
+    CoreA->>Mesh: Inyectar paquete cifrado (MeshPacket)
+    Mesh->>Mesh: Reenvio Gossipsub / Flooding por nodos intermedios (Zero-Knowledge)
     Mesh->>CoreB: Entrega de paquete en destino
 
-    Note over Alice,Bob: 4. Desencapsulación & Descifrado
-    CoreB->>CoreB: Decapsular secreto post-cuántico (ML-KEM Decapsulate con Bob PrivKey)
-    CoreB->>CoreB: Computar secreto clásico ECDH
-    CoreB->>CoreB: Derivar $K_{master}$ idéntica
-    CoreB->>CoreB: Descifrar AES-256-GCM & verificar etiqueta de autenticación (AuthTag)
+    Note over Alice,Bob: 4. Desencapsulacion & Descifrado
+    CoreB->>CoreB: Decapsular secreto post-cuantico (ML-KEM Decapsulate con Bob PrivKey)
+    CoreB->>CoreB: Computar secreto clasico ECDH
+    CoreB->>CoreB: Derivar K_master identica
+    CoreB->>CoreB: Descifrar AES-256-GCM & verificar etiqueta de autenticacion (AuthTag)
     CoreB->>Bob: Notificar mensaje descifrado en interfaz
 
-    Note over Alice,Bob: 5. Retorno de Acuse de Recibo Criptográfico (DELIVERY_ACK)
+    Note over Alice,Bob: 5. Retorno de Acuse de Recibo Criptografico (DELIVERY_ACK)
     CoreB->>CoreB: Generar DELIVERY_ACK con Hash del Mensaje + Nonce firmado
     CoreB->>Mesh: Inyectar paquete DELIVERY_ACK
     Mesh->>CoreA: Retorno a Alice
-    CoreA->>CoreA: Verificar firma del ACK & marcar mensaje como 'Entregado' (Doble Check)
+    CoreA->>CoreA: Verificar firma del ACK & marcar mensaje como Entregado (Doble Check)
 ```
 
 ---
@@ -163,8 +163,8 @@ flowchart TD
 
     subgraph UNLOCK ["Modo Desbloqueo (Usuario Recurrente)"]
         PROMPT_METHOD{"Método de Entrada"}
-        PROMPT_METHOD -->|Biometría / Passkey| BIO_AUTH["Disparar BiometricPrompt / Windows Hello / Touch ID"]
-        PROMPT_METHOD -->|Teclado Táctico| PIN_ENTRY["Ingresar PIN de 6 dígitos"]
+        PROMPT_METHOD -->|"Biometría / Passkey"| BIO_AUTH["Disparar BiometricPrompt / Windows Hello / Touch ID"]
+        PROMPT_METHOD -->|"Teclado Táctico"| PIN_ENTRY["Ingresar PIN de 6 dígitos"]
         
         BIO_AUTH --> BIO_RESULT{"¿Biometría Válida?"}
         BIO_RESULT -- Sí --> RETRIEVE_PIN["Obtener PIN Maestro del KeyStore Seguro"]
@@ -178,17 +178,17 @@ flowchart TD
     RETRIEVE_PIN --> INIT_RUST
 
     subgraph PROTOCOLOS_ESPECIALES ["Protocolos de Seguridad & Anti-Coacción"]
-        CHECK_PIN_TYPE -->|PIN de Pánico| PANIC_WIPE["🔥 PROTOCOLO DE PÁNICO: Destrucción Total de Claves y DB"]
-        CHECK_PIN_TYPE -->|PIN Señuelo| DECOY_VAULT["🎭 BÓVEDA SEÑUELO: Abrir entorno simulado inocente"]
-        CHECK_PIN_TYPE -->|PIN Maestro| INIT_RUST["Inicializar Nodo Rust (JNI / red-node.exe)"]
+        CHECK_PIN_TYPE -->|"PIN de Pánico"| PANIC_WIPE["🔥 PROTOCOLO DE PÁNICO: Destrucción Total de Claves y DB"]
+        CHECK_PIN_TYPE -->|"PIN Señuelo"| DECOY_VAULT["🎭 BÓVEDA SEÑUELO: Abrir entorno simulado inocente"]
+        CHECK_PIN_TYPE -->|"PIN Maestro"| INIT_RUST["Inicializar Nodo Rust (JNI / red-node.exe)"]
     end
 
     subgraph VALIDACION_RUST ["Validación en Núcleo Rust (Storage Decryption)"]
         INIT_RUST --> DERIVE_KEY["Derivar Clave Simétrica AES-256 (Argon2id)"]
         DERIVE_KEY --> OPEN_SLED["Abrir Base de Datos Sled"]
         OPEN_SLED --> TRY_DECRYPT{"try_get_identity: ¿Desencriptación Exitosa?"}
-        TRY_DECRYPT -- Fallo (Clave Inválida) --> FATAL_ABORT["❌ ABORTO FATAL: Clave Incorrecta / Error de Descifrado"]
-        TRY_DECRYPT -- Éxito --> BIND_AXUM["Enlazar Axum a 127.0.0.1:7333 (Loopback)"]
+        TRY_DECRYPT -- "Fallo (Clave Inválida)" --> FATAL_ABORT["❌ ABORTO FATAL: Clave Incorrecta / Error de Descifrado"]
+        TRY_DECRYPT -- "Éxito" --> BIND_AXUM["Enlazar Axum a 127.0.0.1:7333 (Loopback)"]
         BIND_AXUM --> AUTH_SUCCESS(["✅ AUTENTICACIÓN EXITOSA: Bóveda Desbloqueada"])
     end
 ```
@@ -206,11 +206,11 @@ graph LR
     end
 
     subgraph MEDIOS_DE_TRANSMISION ["Matriz de Medios Físicos de Transporte"]
-        PACKETIZER -->|Proximidad Inmediata (<10m)| BLE["Bluetooth LE 5.x GATT (HCI)"]
-        PACKETIZER -->|Banda Ancha Local (<100m)| WIFI_D["WiFi Direct / WebRTC DataChannel"]
-        PACKETIZER -->|Largo Alcance Off-Grid (<15km)| LORA["LoRa 915 MHz / 868 MHz"]
-        PACKETIZER -->|Radio Bloqueada / Cero RF| SOUND["SoundMesh Acústico (18-20 kHz)"]
-        PACKETIZER -->|Acceso a Internet WAN| WAN_KAD["P2P Kademlia DHT + Auto-Relay"]
+        PACKETIZER -->|"Proximidad Inmediata (Menor a 10m)"| BLE["Bluetooth LE 5.x GATT (HCI)"]
+        PACKETIZER -->|"Banda Ancha Local (Menor a 100m)"| WIFI_D["WiFi Direct / WebRTC DataChannel"]
+        PACKETIZER -->|"Largo Alcance Off-Grid (Menor a 15km)"| LORA["LoRa 915 MHz / 868 MHz"]
+        PACKETIZER -->|"Radio Bloqueada / Cero RF"| SOUND["SoundMesh Acústico (18-20 kHz)"]
+        PACKETIZER -->|"Acceso a Internet WAN"| WAN_KAD["P2P Kademlia DHT + Auto-Relay"]
     end
 
     subgraph RECEPTOR ["Nodo Receptor"]
@@ -223,7 +223,7 @@ graph LR
         IN_MSG --> ACK_GEN["Generador de DELIVERY_ACK"]
     end
 
-    ACK_GEN -.->|Retorno por Mejor Ruta| PACKETIZER
+    ACK_GEN -.->|"Retorno por Mejor Ruta"| PACKETIZER
 ```
 
 ---
@@ -237,15 +237,15 @@ flowchart TD
     USER_QUERY["Entrada de Usuario / Mensaje en Malla"] --> GUARDIAN_IN{"Guardian IA Firewall (64-bit Hamming Filter)"}
 
     subgraph GUARDIAN_ENGINE ["Sistema de Seguridad Guardian IA"]
-        GUARDIAN_IN -- Amenaza / Inyección Detectada --> BLOCK_ACT["⛔ Bloquear Contenido & Alertar"]
-        GUARDIAN_IN -- Seguro --> AI_PIPELINE["Pipeline de Inferencia Neuronal"]
+        GUARDIAN_IN -- "Amenaza / Inyección Detectada" --> BLOCK_ACT["⛔ Bloquear Contenido & Alertar"]
+        GUARDIAN_IN -- "Seguro" --> AI_PIPELINE["Pipeline de Inferencia Neuronal"]
     end
 
     subgraph AI_PIPELINE_ENGINE ["Pipeline Neuronal Offline"]
         AI_PIPELINE --> CLASSIFIER["Clasificador de Dominio (8 Categorías Tácticas)"]
         CLASSIFIER --> RAG["RAG Semántico Vectorial en Memoria"]
         RAG --> ONNX_RUNTIME["ONNX Runtime Web (WASM / WebGL)"]
-        ONNX_RUNTIME --> MODEL_WEIGHTS["Pesos LaMini-Flan-T5 Cuantizados"]
+        ONNX_RUNTIME --> MODEL_WEIGHTS["Pesos MiniLM-L6-v2 Cuantizados"]
         MODEL_WEIGHTS --> GEN_RESP["Generación de Respuesta Estructurada"]
     end
 

@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v63.0.0 Sovereign Tactical Master Edition
+# 📘 Manual Operativo del Usuario — RED v64.0.0 Sovereign Tactical Master Edition
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura, apagones o censura.
 
@@ -29,7 +29,7 @@ Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentr
 
 ## 2. Llaves Biométricas Universales & Passkeys
 
-RED v63.0.0 te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
+RED v64.0.0 te permite desbloquear la aplicación en 1 solo toque mediante cualquier sensor biométrico que posea tu dispositivo:
 
 - **En Celulares y Tablets Android:**
   - **Huella Dactilar:** Reconocimiento instantáneo mediante sensores capacitivos, ópticos o ultrasónicos en pantalla.

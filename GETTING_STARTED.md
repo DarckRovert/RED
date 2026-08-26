@@ -1,4 +1,4 @@
-# 🔴 RED — Guía de Inicio Rápido (v63.0.0 Sovereign Tactical Master Edition)
+# 🔴 RED — Guía de Inicio Rápido (v64.0.0 Sovereign Tactical Master Edition)
 
 RED es el sistema de comunicaciones tácticas, descentralizadas y cifradas de grado militar más avanzado del mundo, diseñado para operar tanto en redes globales descentralizadas como en aislamiento total fuera de línea (Off-Grid).
 

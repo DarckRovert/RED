@@ -1,4 +1,4 @@
-# 📋 Lista de Verificación de Release (Release Checklist) — RED v63.0.0
+# 📋 Lista de Verificación de Release (Release Checklist) — RED v64.0.0
 
 Este documento define el protocolo formal de validación y control de calidad previo a la publicación de cualquier versión de producción de **RED**.
 
@@ -15,7 +15,7 @@ Este documento define el protocolo formal de validación y control de calidad pr
 - [ ] **Modelos ProVerif:** Validar que los modelos matemáticos en `proofs/` pasen la verificación formal sin consultas falsadas.
 
 ### Sincronización de Versión & Documentación
-- [ ] Versión unificada (`v63.0.0`) en `Cargo.toml`, `core/Cargo.toml`, `blockchain/Cargo.toml`, `node/Cargo.toml`, `red_mobile/Cargo.toml` y `client/app/package.json`.
+- [ ] Versión unificada (`v64.0.0`) en `Cargo.toml`, `core/Cargo.toml`, `blockchain/Cargo.toml`, `node/Cargo.toml`, `red_mobile/Cargo.toml` y `client/app/package.json`.
 - [ ] `scripts/validate-version.sh` ejecutado con resultado exitoso.
 - [ ] `CHANGELOG.md` actualizado con todas las características, correcciones y notas de seguridad de la versión.
 - [ ] `README.md`, `GETTING_STARTED.md`, `ADMIN_MANUAL.md` y `USER_MANUAL.md` actualizados.
@@ -40,8 +40,8 @@ Este documento define el protocolo formal de validación y control de calidad pr
 ### Etiquetado y Despliegue Git
 - [ ] Crear y empujar el tag anotado y firmado:
   ```bash
-  git tag -a v63.0.0 -m "RED Sovereign Tactical Master Edition v63.0.0"
-  git push origin v63.0.0
+  git tag -a v64.0.0 -m "RED Sovereign Tactical Master Edition v64.0.0"
+  git push origin v64.0.0
   ```
 - [ ] Verificar la ejecución correcta de los 8 workflows en GitHub Actions.
 - [ ] Validar que la página web oficial en GitHub Pages ([darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)) se actualice y responda con HTTP 200.

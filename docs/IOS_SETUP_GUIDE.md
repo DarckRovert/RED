@@ -1,6 +1,6 @@
-# 🍏 Guía Técnica de Integración y Despliegue en iOS — RED v63.0.0
+# 🍏 Guía Técnica de Integración y Despliegue en iOS — RED v64.0.0
 
-Este documento detalla la arquitectura de integración, configuración de permisos en `Info.plist`, enlace estático de la biblioteca nativa en Rust (`libred_mobile.a`) y compilación para iOS y iPadOS mediante Capacitor 6 y Xcode 15/16.
+Este documento detalla la arquitectura de integración, configuración de permisos en `Info.plist`, enlace estático de la biblioteca nativa en Rust (`libred_mobile.a`) y compilación para iOS y iPadOS mediante Capacitor 8 y Xcode 15/16.
 
 ---
 
@@ -8,13 +8,13 @@ Este documento detalla la arquitectura de integración, configuración de permis
 
 ```mermaid
 graph TD
-    A["Frontend Web (Next.js PWA / React)"] -->|Capacitor Bridge JS| B["Capacitor iOS Container (WKWebView)"]
-    B -->|Objective-C / Swift C-Bridge| C["libred_mobile.a (Rust Native Static Library)"]
-    C -->|Core Engine| D["red_core (Criptografía ML-KEM-768 + Malla P2P)"]
-    B -->|Apple iOS Frameworks| E["CoreBluetooth (BLE Mesh GATT)"]
-    B -->|Apple iOS Frameworks| F["LocalAuthentication (Face ID / Touch ID)"]
-    B -->|Apple iOS Frameworks| G["AVFoundation (Audio Vocoder & Mic)"]
-    B -->|Apple iOS Frameworks| H["Network.framework (mDNS Local Peer Discovery)"]
+    A["Frontend Web (Next.js PWA / React)"] -->|"Capacitor Bridge JS"| B["Capacitor iOS Container (WKWebView)"]
+    B -->|"Objective-C / Swift C-Bridge"| C["libred_mobile.a (Rust Native Static Library)"]
+    C -->|"Core Engine"| D["red_core (Criptografía ML-KEM-768 + Malla P2P)"]
+    B -->|"Apple iOS Frameworks"| E["CoreBluetooth (BLE Mesh GATT)"]
+    B -->|"Apple iOS Frameworks"| F["LocalAuthentication (Face ID / Touch ID)"]
+    B -->|"Apple iOS Frameworks"| G["AVFoundation (Audio Vocoder & Mic)"]
+    B -->|"Apple iOS Frameworks"| H["Network.framework (mDNS Local Peer Discovery)"]
 ```
 
 ---

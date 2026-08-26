@@ -1,4 +1,4 @@
-# Referencia Oficial de API REST & SSE — RED v63.0.0
+# Referencia Oficial de API REST & SSE — RED v64.0.0
 
 El nodo nativo de **RED** expone una API HTTP/SSE de ultra-baja latencia sobre la interfaz de bucle invertido (`127.0.0.1:7333`) mediante Axum y Tokio.
 

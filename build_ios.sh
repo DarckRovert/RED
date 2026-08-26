@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# RED v63.0.0 — Script de Compilación Nativa para iOS (Universal XCFramework)
+# RED v64.0.0 — Script de Compilación Nativa para iOS (Universal XCFramework)
 # ==============================================================================
 set -euo pipefail
 
