@@ -6,7 +6,7 @@ publish = false
 
 [lib]
 name = "red_mobile"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 jni = "0.21.1"
