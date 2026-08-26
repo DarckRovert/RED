@@ -334,6 +334,24 @@ export default function Sidebar() {
                                     <span>🚀</span> Actualizador
                                 </button>
                             </div>
+
+                            <button
+                                onClick={() => {
+                                    setMenuOpen(false);
+                                    if (typeof window !== "undefined") {
+                                        window.dispatchEvent(new CustomEvent("red:open_landing"));
+                                    }
+                                }}
+                                style={{
+                                    width: "100%", padding: "8px", borderRadius: "var(--radius-sm)",
+                                    background: "rgba(0, 240, 255, 0.08)", border: "1px solid rgba(0, 240, 255, 0.25)",
+                                    color: "var(--accent-cyan)", fontSize: "0.74rem", fontWeight: 800,
+                                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                }}
+                            >
+                                <span>🌐</span> Portal Web Oficial & Descargas
+                            </button>
+
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px" }}>
                                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>v{RED_VERSION}</span>
                                 <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>● LIBP2P MESH</span>

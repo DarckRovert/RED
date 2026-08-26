@@ -68,11 +68,91 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
               color: "#94A3B8",
               maxWidth: "960px",
               lineHeight: 1.6,
-              marginBottom: "36px",
+              marginBottom: "28px",
             }}
           >
-            RED opera directamente entre dispositivos usando radio Bluetooth LE, WiFi Direct, LoRa 915MHz y pulsos acústicos ultrasónicos SoundMesh. Sin servidores centrales, sin torres celulares y blindado con el estándar post-cuántico ML-KEM-768.
+            RED opera directamente entre dispositivos usando radio transceptor LoRa 915/868 MHz (15–25 km), Bluetooth LE, WiFi Direct ad-hoc y pulsos acústicos ultrasónicos SoundMesh. Sin servidores centrales, sin torres celulares y blindado con el estándar criptográfico post-cuántico NIST FIPS 203 (ML-KEM-768) y FIPS 204 (ML-DSA-65).
           </p>
+
+          {/* Primary CTA Buttons */}
+          <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", justifyContent: "center", marginBottom: "36px" }}>
+            <a
+              href="https://github.com/DarckRovert/RED/raw/main/release-assets/red-latest.apk"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "14px 28px",
+                borderRadius: "14px",
+                background: "linear-gradient(135deg, #00FF88 0%, #00F0FF 100%)",
+                color: "#050B14",
+                fontWeight: 900,
+                fontSize: "15px",
+                textDecoration: "none",
+                boxShadow: "0 0 30px rgba(0, 255, 136, 0.4)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+              }}
+            >
+              <span>📥</span> Descargar APK (v64.0.0 · 57.7 MB)
+            </a>
+
+            <button
+              onClick={handleEnter}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "14px 28px",
+                borderRadius: "14px",
+                background: "linear-gradient(135deg, #FF2A51 0%, #B8001F 100%)",
+                color: "#FFF",
+                fontWeight: 900,
+                fontSize: "15px",
+                border: "none",
+                cursor: "pointer",
+                boxShadow: "0 0 30px rgba(255, 42, 81, 0.45)",
+                transition: "transform 0.2s, box-shadow 0.2s",
+              }}
+            >
+              <span>🚀</span> Iniciar Web Companion
+            </button>
+
+            <a
+              href="https://github.com/DarckRovert/RED/raw/main/release-assets/red-node-windows-v64.0.0.zip"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "14px 22px",
+                borderRadius: "14px",
+                background: "rgba(255, 255, 255, 0.06)",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                color: "#E2E8F0",
+                fontWeight: 800,
+                fontSize: "14px",
+                textDecoration: "none",
+                transition: "background 0.2s",
+              }}
+            >
+              <span>💻</span> Windows Node (.zip)
+            </a>
+          </div>
+
+          {/* Quick Metrics Badges */}
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center", marginBottom: "36px" }}>
+            <span style={{ padding: "6px 14px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 240, 255, 0.25)", color: "#00F0FF", fontSize: "11px", fontFamily: "monospace", fontWeight: 800 }}>
+              📡 LORA 15-25 KM
+            </span>
+            <span style={{ padding: "6px 14px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 255, 136, 0.25)", color: "#00FF88", fontSize: "11px", fontFamily: "monospace", fontWeight: 800 }}>
+              🛡️ NIST FIPS 203/204 PQC
+            </span>
+            <span style={{ padding: "6px 14px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255, 42, 81, 0.25)", color: "#FF2A51", fontSize: "11px", fontFamily: "monospace", fontWeight: 800 }}>
+              🔊 SOUNDMESH ULTRASONIC
+            </span>
+            <span style={{ padding: "6px 14px", borderRadius: "12px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(176, 38, 255, 0.25)", color: "#B026FF", fontSize: "11px", fontFamily: "monospace", fontWeight: 800 }}>
+              🧠 RAG IA OFFLINE &lt;5MS
+            </span>
+          </div>
 
           {/* Interactive Live DID Generator Card */}
           <div

@@ -140,10 +140,29 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
 
         {/* Right CTA Button & Mobile Toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <a
+            href="https://github.com/DarckRovert/RED/raw/main/release-assets/red-latest.apk"
+            style={{
+              padding: "7px 14px",
+              borderRadius: "10px",
+              background: "rgba(0, 255, 136, 0.12)",
+              border: "1px solid rgba(0, 255, 136, 0.35)",
+              color: "#00FF88",
+              fontWeight: 800,
+              fontSize: "12px",
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <span>📥</span> APK
+          </a>
+
           <button
             onClick={handleEnter}
             style={{
-              padding: "10px 18px",
+              padding: "7px 16px",
               borderRadius: "10px",
               background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
               color: "#FFF",
@@ -157,7 +176,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
               gap: "8px",
             }}
           >
-            <span>⚡</span> Bóveda Web
+            <span>🚀</span> Iniciar Web Companion
           </button>
 
           <button

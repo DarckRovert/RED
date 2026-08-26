@@ -282,27 +282,20 @@ export default function AppRouter() {
         }
 
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("showcase") === "true") {
-          setShowLanding(true);
+        if (urlParams.get("app") === "true") {
+          setShowLanding(false);
           return;
         }
 
-        const isDismissed = typeof window !== "undefined" && localStorage.getItem("red_landing_dismissed") === "true";
-        const hasSession = typeof window !== "undefined" && Boolean(
-          localStorage.getItem("master_pin") || 
-          localStorage.getItem("red_identity_hash") || 
-          localStorage.getItem("user_nickname")
-        );
-
-        if (urlParams.get("app") === "true" || isDismissed || hasSession) {
-          setShowLanding(false);
-        } else {
-          setShowLanding(true);
-        }
+        // En la web (GitHub Pages / companion), siempre se muestra el Portal / Landing Page oficial
+        setShowLanding(true);
       } catch {
-        setShowLanding(false);
+        setShowLanding(true);
       }
     };
+
+    const handleOpenLanding = () => setShowLanding(true);
+    window.addEventListener("red:open_landing", handleOpenLanding);
 
     const runIntegrityAudit = async () => {
       try {
@@ -406,6 +399,7 @@ export default function AppRouter() {
     return () => {
       window.removeEventListener("resize", checkViewport);
       window.removeEventListener("red:open_conversation", handleNativeOpenConv);
+      window.removeEventListener("red:open_landing", handleOpenLanding);
     };
   }, []);
 

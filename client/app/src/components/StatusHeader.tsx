@@ -153,6 +153,22 @@ export default function StatusHeader() {
                 >
                     {t('status_header.map_btn')}
                 </button>
+
+                <button
+                    onClick={() => {
+                        if (typeof window !== "undefined") {
+                            window.dispatchEvent(new CustomEvent("red:open_landing"));
+                        }
+                    }}
+                    style={{
+                        background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.18)",
+                        borderRadius: "var(--radius-full)", padding: "1px 7px", color: "#E2E8F0",
+                        fontSize: "0.66rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap"
+                    }}
+                    title="Volver al Portal Web Oficial"
+                >
+                    🌐 Portal Web
+                </button>
             </div>
         </div>
     );
