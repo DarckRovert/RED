@@ -62,7 +62,7 @@ jobs:
         run: cd client/app && npm ci
       
       - name: Run tests
-        run: cd client/app && npm run test:crypto || true
+        run: cd client/app && npm run test:crypto
   
   integration-tests:
     name: Integration Tests
@@ -82,4 +82,3 @@ jobs:
           if [ -d "tests" ]; then
             cargo test --test '*' --release
           fi
-        continue-on-error: true
