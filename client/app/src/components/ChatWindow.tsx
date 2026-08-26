@@ -256,6 +256,13 @@ export default function ChatWindow() {
             }
         }
 
+        // Sort chronologically — messages arrive out-of-order (own: optimistic, peer: SSE delay)
+        deduped.sort((a, b) => {
+            const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
+            const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
+            return tsA - tsB;
+        });
+
         return deduped;
     }, [messages, activeConversationId]);
 
