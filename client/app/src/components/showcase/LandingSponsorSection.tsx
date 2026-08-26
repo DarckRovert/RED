@@ -100,19 +100,22 @@ export const LandingSponsorSection: React.FC = () => {
                             borderRadius: "18px",
                             overflow: "hidden",
                             border: "1px solid rgba(255, 255, 255, 0.12)",
-                            background: "rgba(13, 17, 23, 0.8)",
+                            background: "#0d1117",
                             boxShadow: "0 12px 40px rgba(0, 0, 0, 0.6)",
+                            colorScheme: "dark",
                         }}
                     >
                         <iframe
                             src="https://github.com/sponsors/DarckRovert/card"
                             title="Sponsor DarckRovert"
-                            height="225"
+                            height="120"
                             width="600"
                             style={{
                                 border: 0,
                                 maxWidth: "100%",
                                 display: "block",
+                                colorScheme: "dark",
+                                background: "#0d1117",
                             }}
                         />
                     </div>
