@@ -11,13 +11,10 @@ const config: CapacitorConfig = {
   },
   ios: {
     backgroundColor: '#0b141a',
-    preferredScheme: 'http',
-    limitsNavigationsToAppBoundDomains: false,
-    contentInsetAdjustmentBehavior: 'automatic',
+    scheme: 'RED',
   },
   server: {
     androidScheme: 'http',
-    iosScheme: 'http',
     hostname: 'localhost',
     cleartext: true
   },

@@ -59,11 +59,14 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              window.Capacitor = window.Capacitor || {
-                triggerEvent: function() {},
-                isNativePlatform: function() { return typeof window !== 'undefined' && (window.location.protocol === 'capacitor:' || window.location.hostname === 'localhost'); },
-                Plugins: {}
-              };
+              if (typeof window !== 'undefined' && !window.Capacitor) {
+                window.Capacitor = {
+                  triggerEvent: function() {},
+                  isNativePlatform: function() { return false; },
+                  isPluginAvailable: function() { return false; },
+                  Plugins: {}
+                };
+              }
             `,
           }}
         />

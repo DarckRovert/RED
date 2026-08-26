@@ -1,5 +1,28 @@
 # Changelog
 
+## [64.0.0-omni-transport-production-master] - 2026-08-26
+
+### Omni-Transport Production Master — Replicación Web Companion en Vivo, Resiliencia de Malla E2E, Benchmarks y Certificación de Producción
+
+**1. Sincronización Web Companion en Tiempo Real (WhatsApp Web Style):**
+- `companionSyncEngine.ts`: Canal persistente bi-direccional (`red/pair/{sessionId}/live`) cifrado con **AES-256-GCM**, latidos keepalive (25s) y reconexión adaptativa ante saltos de celda 4G/5G/Wi-Fi.
+- `chatSlice.ts` & `authSlice.ts`: Replicación instantánea de eventos salientes y entrantes (`LIVE_MSG_SEND`, `LIVE_MSG_RECV`, `LIVE_READ_ACK`, `LIVE_TYPING`, `LIVE_CONTACT_UPDATE`).
+
+**2. Resiliencia WebRTC y Travesía de CGNAT en Redes Móviles:**
+- `wifiDirectTransport.ts`: Pool multi-región de servidores STUN de alta disponibilidad sobre puerto 443 (`stun.services.mozilla.com:443`, `stun.nextcloud.com:443`, `stun.cloudflare.com:3478`, `stun.l.google.com:19302`) para atravesar Carrier-Grade NAT (CGNAT) en redes celulares.
+- `useSquadCallMesh.ts`: Auto-recuperación de conexión mediante `pc.restartIce()` y función `resumeAudio()` para evitar bloqueos por políticas de Autoplay en Android WebView y navegadores de escritorio.
+
+**3. Cobertura de Pruebas de Integración y Criptografía Determinista (116 Tests Pasando):**
+- `tests/mesh_integration_test.rs`: Validación de propagación multi-salto ($A \rightarrow B \rightarrow C$), recuperación ante partición de red y aislamiento determinista por TTL.
+- `tests/crypto_known_answer_tests.rs`: Known-Answer Tests (KAT) para BLAKE3, ChaCha20-Poly1305 anti-tampering, conmutatividad Diffie-Hellman X25519, secreto hacia adelante en Double Ratchet y verificación Merkle ZK.
+
+**4. Benchmarks de Rendimiento con Criterion & Especificaciones Formales:**
+- `core/benches/crypto_bench.rs` & `mesh_bench.rs`: Micro-benchmarks de operaciones criptográficas y serialización Gossipsub.
+- `docs/PERFORMANCE.md`: Métricas de latencia en $\mu s$ y consumos de batería en Moto G22, Lenovo Tab M9 y Xiaomi Redmi Note 14.
+- `docs/PROTOCOL_SPEC.md` & `docs/API_REFERENCE.md`: Especificación formal del formato de trama binaria RED v1 y catálogo de endpoints REST/SSE.
+
+---
+
 ## [63.0.0-sovereign-mesh-final-release] - 2026-08-25
 
 ### Sovereign Mesh Final Release — Cero Código Falso, Malla P2P de Mercado, Salas de Voz/Video en Grupo y Despliegue Limpio
