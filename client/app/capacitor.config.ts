@@ -9,8 +9,15 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
     webContentsDebuggingEnabled: true,
   },
+  ios: {
+    backgroundColor: '#0b141a',
+    preferredScheme: 'http',
+    limitsNavigationsToAppBoundDomains: false,
+    contentInsetAdjustmentBehavior: 'automatic',
+  },
   server: {
     androidScheme: 'http',
+    iosScheme: 'http',
     hostname: 'localhost',
     cleartext: true
   },

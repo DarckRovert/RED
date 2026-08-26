@@ -47,5 +47,27 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Bluetooth Mesh Permissions -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>RED utiliza Bluetooth Low Energy para comunicar dispositivos cercanos en modo malla sin conexión a internet.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Permite a este dispositivo actuar como repetidor de malla para otros operadores tácticos en la zona.</string>
+	<!-- Local Network & mDNS Discovery -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>RED requiere acceso a la red local para descubrir pares P2P en el mismo punto de acceso Wi-Fi o router de emergencia.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_red-mesh._tcp</string>
+		<string>_red-mesh._udp</string>
+	</array>
+	<!-- Biometric Authentication (Face ID / Touch ID) -->
+	<key>NSFaceIDUsageDescription</key>
+	<string>Utilizado para desbloquear la bóveda criptográfica y descifrar las claves maestras de identidad.</string>
+	<!-- Microphone for Walkie-Talkie & Acoustic Modem -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Permite la transmisión de voz táctica PTT y la modulación acústica ultrasónica en entornos aislados.</string>
+	<!-- Camera for QR Identity Handshake -->
+	<key>NSCameraUsageDescription</key>
+	<string>Permite escanear códigos QR de identidad para verificar contactos de forma presencial.</string>
 </dict>
 </plist>
