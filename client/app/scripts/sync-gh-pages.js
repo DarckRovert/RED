@@ -37,7 +37,7 @@ if (fs.existsSync(rootNextDir)) {
 }
 
 // Copy new assets
-const itemsToCopy = ['index.html', '404.html', 'sw.js', '_next', 'offline', 'manifest.json', 'favicon.ico'];
+const itemsToCopy = ['index.html', '404.html', 'sw.js', '_next', 'offline', 'manifest.json', '.nojekyll', 'red_icon.png', 'red_splash.png', 'favicon.ico'];
 for (const item of itemsToCopy) {
     const src = path.join(outDir, item);
     const dst = path.join(rootDir, item);
@@ -46,6 +46,9 @@ for (const item of itemsToCopy) {
         console.log(`   ✓ Copiado: ${item}`);
     }
 }
+
+// Ensure .nojekyll in root
+fs.writeFileSync(path.join(rootDir, '.nojekyll'), '# Disable Jekyll for GitHub Pages\n');
 
 // 3. Rebuild for Android Mobile SPA (clean base path '') and sync Capacitor
 console.log("\n3️⃣ Restaurando compilación móvil nativa (Capacitor Android)...");
