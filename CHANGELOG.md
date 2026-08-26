@@ -21,6 +21,14 @@
 - `docs/PERFORMANCE.md`: Métricas de latencia en $\mu s$ y consumos de batería en Moto G22, Lenovo Tab M9 y Xiaomi Redmi Note 14.
 - `docs/PROTOCOL_SPEC.md` & `docs/API_REFERENCE.md`: Especificación formal del formato de trama binaria RED v1 y catálogo de endpoints REST/SSE.
 
+**5. Suite de Evolución & Blindaje Militar NIST FIPS 204 y Hardware LoRa:**
+- `LoraSerialBridgeEngine.ts` & `LoraTransceiverModal.tsx`: Driver serie USB-OTG / WebUSB / BLE NUS con encuadre COBS (*Consistent Overhead Byte Stuffing*) y checksum CRC-32 IEEE 802.3 para enlaces de radio de largo alcance (15–25 km).
+- `PqcCryptoEngine.ts`: Esquema de firma híbrida post-cuántica **Ed25519 (64B) + ML-DSA-65 / Dilithium3 (3309B)** certificado bajo estándar **NIST FIPS 204**.
+- `SlottedGossipEngine.ts`: Enrutador probabilístico anti-tormentas con retardo aleatorio ranurado (15–75 ms) y supresión estocástica.
+- `MultipathBondingEngine.ts`: Agregación de ancho de banda y redundancia mediante *Erasure Coding* ($K$ datos $+ M$ paridad) sobre WiFi Direct, BLE, LoRa y SoundMesh.
+- `VectorKnowledgeStore.ts` & `AICopilotModal.tsx`: Base de datos vectorial embebida INT8 con recuperación RAG de protocolos tácticos de supervivencia en $<5\text{ ms}$.
+- `KineticDutyGovernor.ts`: Doze Mode Guard con conmutación adaptativa de ciclo de trabajo en suspensión.
+
 ---
 
 ## [63.0.0-sovereign-mesh-final-release] - 2026-08-25

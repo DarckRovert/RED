@@ -381,7 +381,7 @@ jobs:
 **Triggers a versionado + deployment:**
 - ✅ Versión automática = `X.Y.Z` (semántica)
 - ✅ CHANGELOG.md actualizado automáticamente
-- ✅ Git tags: `v63.0.0` apuntando a commit
+- ✅ Git tags: `v64.0.0` apuntando a commit
 - ✅ Release artifacts generados:
   - `red-node` (Linux/Windows/macOS)
   - `app-release.apk` (Android)
@@ -545,7 +545,7 @@ CMD ["red-node"]
 ```
 main (stable)
   ↑
-  ├─ release/v63.0.0 (release candidate)
+  ├─ release/v64.0.0 (release candidate)
   │   ↑
   │   └─ develop (integration branch)
   │       ↑
@@ -569,8 +569,8 @@ main (stable)
 - ✅ ProVerif proofs passed
 - ✅ Release notes generadas
 - ✅ Binarios compilados y checksummed
-- ✅ Git tag creado: `git tag -s v63.0.0 -m "Release 63.0.0"`
-- ✅ Tag pusheado: `git push origin v63.0.0`
+- ✅ Git tag creado: `git tag -s v64.0.0 -m "Release 64.0.0"`
+- ✅ Tag pusheado: `git push origin v64.0.0`
 
 ---
 
