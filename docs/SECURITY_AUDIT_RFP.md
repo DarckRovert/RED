@@ -1,16 +1,16 @@
-# 🛡️ Solicitud de Propuesta de Auditoría Criptográfica (Security Audit RFP) — RED v63.0.0
+# 🛡️ Solicitud de Propuesta de Auditoría Criptográfica (Security Audit RFP) — RED v64.0.0
 
 **Para:** Firmas Auditoras de Criptografía y Ciberseguridad de Sistemas Distribuidos (*Trail of Bits*, *NCC Group*, *OpenZeppelin Security*, *Cure53*).  
 **De:** Equipo de Desarrollo de RED (Red Criptográfica Soberana Off-Grid & P2P Mesh).  
 **Fecha de Emisión:** Agosto 2026  
-**Versión del Repositorio:** `v63.0.0` (`main` branch)  
-**Contacto Confidencial:** `security@red-mesh.org`
+**Versión del Repositorio:** `v64.0.0` (`main` branch)  
+**Contacto Confidencial:** `darckrovert@gmail.com` / [GitHub Security Advisories](https://github.com/DarckRovert/RED/security/advisories/new)
 
 ---
 
 ## 1. 🎯 Objetivo del Compromiso
 
-Contratar una auditoría de código fuente independiente y exhaustiva para evaluar la solidez matemática, la resistencia a ataques de canal lateral, la corrección de protocolos post-cuánticos y la resiliencia del almacenamiento cifrado en el ecosistema **RED v63.0.0**.
+Contratar una auditoría de código fuente independiente y exhaustiva para evaluar la solidez matemática, la resistencia a ataques de canal lateral, la corrección de protocolos post-cuánticos y la resiliencia del almacenamiento cifrado en el ecosistema **RED v64.0.0**.
 
 ---
 

@@ -51,12 +51,12 @@ Este documento define el protocolo formal de validación y control de calidad pr
 ## 🛡️ 3. Post-Release & Procedimiento de Rollback
 
 ### Monitoreo Inmediato (48 Horas)
-- [ ] Supervisar reportes confidenciales en `security@red-mesh.org` y GitHub Security Advisories.
+- [ ] Supervisar reportes confidenciales en `darckrovert@gmail.com` y [GitHub Security Advisories](https://github.com/DarckRovert/RED/security/advisories/new).
 - [ ] Monitorear estabilidad del servidor de señalización P2P y telemetría de enlace LQS.
 
 ### Procedimiento de Rollback de Emergencia
 Si se detecta una vulnerabilidad crítica o fallo fatal de desincronización en la malla:
-1. Crear inmediatamente una rama de hotfix: `git checkout -b hotfix/v63.0.1`.
+1. Crear inmediatamente una rama de hotfix: `git checkout -b hotfix/v64.0.1`.
 2. Aplicar el parche mínimo necesario sin refactorizaciones cosméticas.
 3. Ejecutar la suite completa de Known-Answer Tests.
-4. Incrementar versión de parche a `v63.0.1` y desplegar nueva release prioritaria.
+4. Incrementar versión de parche a `v64.0.1` y desplegar nueva release prioritaria.

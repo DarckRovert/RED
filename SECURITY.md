@@ -1,4 +1,4 @@
-# Política de Seguridad - RED v63.0.0
+# Política de Seguridad - RED v64.0.0
 
 ## Reporte Responsable de Vulnerabilidades
 
@@ -6,13 +6,13 @@
 Todas las vulnerabilidades de seguridad DEBEN ser reportadas confidencialmente para proteger a los operadores en zonas de riesgo.
 
 ### Opción 1: GitHub Security Advisory (Recomendado)
-1. Ve a: https://github.com/DarckRovert/RED/security/advisories
+1. Ve a: [https://github.com/DarckRovert/RED/security/advisories/new](https://github.com/DarckRovert/RED/security/advisories/new)
 2. Click "Report a vulnerability"
 3. Describe el issue detalladamente con pasos de reproducción (PoC)
 
-### Opción 2: Email Privado
-- Email: `security@red-mesh.org`
-- Clave PGP: Disponible en el directorio de seguridad oficial
+### Opción 2: Email Privado & Confidencial
+- Email: `darckrovert@gmail.com`
+- Asunto sugerido: `[SECURITY RED-v64] Vulnerability Report`
 
 ### Tiempo de Respuesta y SLAs
 
