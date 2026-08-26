@@ -287,6 +287,9 @@ class MeshRouter {
   getCanonicalId(id: string): string {
     if (!id) return '';
     const clean = normalizeIdentity(id);
+    if (clean.length === 64 && /^[0-9a-fA-F]+$/.test(clean)) {
+      return clean;
+    }
     const rawTrimmed = id.trim();
 
     if (this.deviceToCanonicalMap.has(clean)) {

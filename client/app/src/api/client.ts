@@ -127,34 +127,47 @@ export class RedAPIClient {
     // ── Conversations & Contacts ──────────────────────────────────────────────
 
     async getConversations(): Promise<ConversationItem[]> {
-        // Always read local cache first — these are the conversations that arrived via P2P mesh
-        // and may not exist yet in the Rust Sled tree (they were saved to localStorage).
         const localConvs = this.getWebStore<ConversationItem[]>('red_web_conversations', []);
         try {
             const rustConvs = await this.reqList<ConversationItem>('/conversations');
-            // Bidirectional merge: build a map keyed by first 16 chars of peer hash.
-            // Rust entries WIN on timestamp tie-breaks; local entries are preserved if missing from Rust.
+
+            const resolveKey = (idStr: string): string => {
+                const clean = (idStr || '').toLowerCase().trim();
+                if (typeof window !== 'undefined') {
+                    try {
+                        const mapRaw = localStorage.getItem('red_device_canonical_map');
+                        if (mapRaw) {
+                            const list: [string, string][] = JSON.parse(mapRaw);
+                            for (const [k, v] of list) {
+                                if (k && v && k.toLowerCase() === clean) return v.toLowerCase().slice(0, 16);
+                            }
+                        }
+                    } catch {}
+                }
+                return clean.slice(0, 16);
+            };
+
+            // Bidirectional merge: build a map keyed by canonical peer hash prefix.
             const mergedMap = new Map<string, ConversationItem>();
             for (const lc of localConvs) {
-                const key = ((lc.peer || lc.id || '').toLowerCase()).slice(0, 16);
-                if (key) mergedMap.set(key, lc);
+                const rawP = lc.peer || lc.id || '';
+                const key = resolveKey(rawP);
+                if (key) mergedMap.set(key, { ...lc, id: lc.id || lc.peer || rawP, peer: lc.peer || lc.id || rawP });
             }
             for (const rc of rustConvs) {
-                const key = ((rc.peer || rc.id || '').toLowerCase()).slice(0, 16);
+                const rawP = rc.peer || rc.id || '';
+                const key = resolveKey(rawP);
                 if (!key) continue;
                 const existing = mergedMap.get(key);
                 if (!existing) {
                     mergedMap.set(key, rc);
                 } else {
-                    // Pick the entry with the newer last_timestamp
                     const existTs = existing.last_timestamp || 0;
                     const rustTs = rc.last_timestamp || 0;
                     mergedMap.set(key, rustTs >= existTs ? { ...existing, ...rc } : existing);
                 }
             }
             const merged = Array.from(mergedMap.values());
-            // Only write to localStorage if the merged set is different from what was there.
-            // Avoids constant 5MB+ serialization on every 30s poll when nothing changed.
             if (merged.length !== localConvs.length) {
                 this.setWebStore('red_web_conversations', merged);
             }
