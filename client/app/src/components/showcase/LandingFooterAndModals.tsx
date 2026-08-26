@@ -157,16 +157,35 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
       <footer
         style={{
           borderTop: "1px solid rgba(255,255,255,0.06)",
-          padding: "30px 20px",
+          padding: "36px 20px",
           textAlign: "center",
           fontSize: "12px",
           color: "#64748B",
           fontFamily: "monospace",
           position: "relative",
           zIndex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "14px",
         }}
       >
-        © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build {RED_BUILD_CODE}). Código Abierto.
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", flexWrap: "wrap" }}>
+          <iframe
+            src="https://github.com/sponsors/DarckRovert/button"
+            title="Sponsor DarckRovert"
+            height="32"
+            width="114"
+            style={{
+              border: 0,
+              borderRadius: "6px",
+            }}
+          />
+        </div>
+
+        <div>
+          © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build {RED_BUILD_CODE}). Código Abierto & Descentralizado.
+        </div>
       </footer>
         </>
     );

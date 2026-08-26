@@ -31,6 +31,7 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "packet-inspector", label: "Laboratorio" },
         { id: "use-cases", label: "Escenarios" },
         { id: "architecture", label: "Arquitectura" },
+        { id: "sponsors", label: "💖 Patrocinar" },
         { id: "download", label: "Descarga" },
         { id: "faq", label: "FAQ" },
     ];
@@ -140,6 +141,20 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
 
         {/* Right CTA Button & Mobile Toggle */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div className="hidden-mobile-sponsor" style={{ display: "flex", alignItems: "center" }}>
+            <iframe
+              src="https://github.com/sponsors/DarckRovert/button"
+              title="Sponsor DarckRovert"
+              height="32"
+              width="114"
+              style={{
+                border: 0,
+                borderRadius: "6px",
+                verticalAlign: "middle",
+              }}
+            />
+          </div>
+
           <a
             href={`https://github.com/DarckRovert/RED/releases/download/v${RED_VERSION}/red-latest.apk`}
             style={{
@@ -236,6 +251,19 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
                 {tab.label}
               </button>
             ))}
+
+            <div style={{ padding: "8px 0 4px", display: "flex", justifyContent: "center" }}>
+              <iframe
+                src="https://github.com/sponsors/DarckRovert/button"
+                title="Sponsor DarckRovert"
+                height="32"
+                width="114"
+                style={{
+                  border: 0,
+                  borderRadius: "6px",
+                }}
+              />
+            </div>
           </div>
         )}
       </header>

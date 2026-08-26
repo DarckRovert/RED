@@ -11,6 +11,7 @@ import { LandingMeshSimulator } from './showcase/LandingMeshSimulator';
 import { LandingModuleCatalog } from './showcase/LandingModuleCatalog';
 import { LandingInteractiveLabs } from './showcase/LandingInteractiveLabs';
 import { LandingUseCasesAndArchitecture } from './showcase/LandingUseCasesAndArchitecture';
+import { LandingSponsorSection } from './showcase/LandingSponsorSection';
 import { LandingFooterAndModals } from './showcase/LandingFooterAndModals';
 
 interface RedShowcaseLandingProps {
@@ -206,6 +207,8 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
                         handleCopy={handleCopy}
                         copiedText={copiedText}
                     />
+
+                    <LandingSponsorSection />
 
                     <LandingFooterAndModals
                         handleCopy={handleCopy}
