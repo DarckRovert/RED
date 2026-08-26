@@ -147,12 +147,10 @@ if (Test-Path "gradlew.bat") {
         Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
         
-        Write-Host "Copying APK to release paths (red-v38.0.0-latest.apk, red-latest.apk)..." -ForegroundColor Gray
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\red-v38.0.0-latest.apk" -Force -ErrorAction SilentlyContinue
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\red-latest.apk" -Force -ErrorAction SilentlyContinue
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\app-release.apk" -Force -ErrorAction SilentlyContinue
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-v38.0.0-latest.apk" -Force -ErrorAction SilentlyContinue
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\assets\red-latest.apk" -Force -ErrorAction SilentlyContinue
+        Write-Host "Copying APK to release-assets (red-v64.0.0-release.apk, red-latest.apk)..." -ForegroundColor Gray
+        if (-not (Test-Path "$RED_ROOT\release-assets")) { New-Item -ItemType Directory -Path "$RED_ROOT\release-assets" | Out-Null }
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-v64.0.0-release.apk" -Force -ErrorAction SilentlyContinue
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-latest.apk" -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow
         exit 1
