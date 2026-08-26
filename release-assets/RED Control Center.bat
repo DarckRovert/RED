@@ -1,6 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
-title RED Sovereign Mesh -- Centro de Control PC (v63.0.0)
+title RED Sovereign Mesh -- Centro de Control PC (v64.0.0)
 color 0C
 
 set "SCRIPT_DIR=%~dp0"
@@ -27,7 +27,7 @@ if exist "%SCRIPT_DIR%red-node.exe" (
 :MENU
 cls
 echo ===============================================================================
-echo   RED SOVEREIGN MESH -- CENTRO DE CONTROL DE NODO (PC / WINDOWS v63.0.0)
+echo   RED SOVEREIGN MESH -- CENTRO DE CONTROL DE NODO (PC / WINDOWS v64.0.0)
 echo ===============================================================================
 echo.
 echo   [1] Iniciar Nodo en Segundo Plano y Abrir Web App
