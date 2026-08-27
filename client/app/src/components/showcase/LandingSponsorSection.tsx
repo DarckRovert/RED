@@ -3,19 +3,43 @@
 import React, { useState } from 'react';
 
 export const LandingSponsorSection: React.FC = () => {
-    const [copiedCrypto, setCopiedCrypto] = useState<string | null>(null);
+    const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
-    const cryptoWallets = [
-        { label: "Bitcoin (BTC)", address: "bc1q9p8e27c8e93cc112102f8658ea94eb113987d", icon: "₿", note: "Red Principal Bitcoin" },
-        { label: "Monero (XMR)", address: "888tZNLWzUBbV2kPQC915MeshSovereignZeroCloud87X2mKp9", icon: "ɱ", note: "100% Anónimo & Privado" },
-        { label: "USDT / USDC", address: "0x7F3A91BC2E844D0F81E73A6B90D2E6F83C1A7B5D", icon: "₮", note: "Red Polygon / Arbitrum" }
+    const donationChannels = [
+        {
+            name: "GitHub Sponsors",
+            handle: "@DarckRovert",
+            desc: "Patrocinio mensual recurrente o único con insignias oficiales en GitHub.",
+            icon: "🐙",
+            color: "#EA4AAA",
+            url: "https://github.com/sponsors/DarckRovert",
+            badge: "Oficial & Sin Comisiones"
+        },
+        {
+            name: "Ko-fi",
+            handle: "darckrovert",
+            desc: "Donaciones directas con tarjeta de débito/crédito sin necesidad de suscripción.",
+            icon: "☕",
+            color: "#FF5E5B",
+            url: "https://ko-fi.com/darckrovert",
+            badge: "Pago Directo en 1 Toque"
+        },
+        {
+            name: "PayPal Me",
+            handle: "paypal.me/darckrovert",
+            desc: "Aportes rápidos y seguros a través de tu cuenta personal de PayPal.",
+            icon: "💳",
+            color: "#0079C1",
+            url: "https://paypal.me/darckrovert",
+            badge: "Transferencia Global"
+        }
     ];
 
-    const copyAddress = (addr: string, label: string) => {
+    const copyToClipboard = (url: string, name: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
-            navigator.clipboard.writeText(addr);
-            setCopiedCrypto(label);
-            setTimeout(() => setCopiedCrypto(null), 2500);
+            navigator.clipboard.writeText(url);
+            setCopiedUrl(name);
+            setTimeout(() => setCopiedUrl(null), 2500);
         }
     };
 
@@ -106,7 +130,7 @@ export const LandingSponsorSection: React.FC = () => {
                         {
                             tier: "🥉 NODO COMUNITARIO", price: "$10 USD / mes",
                             desc: "Apoyo continuo a los servidores de desarrollo e investigación de protocolos de radio.",
-                            perks: ["✓ Mención de honor en el repositorio GitHub", "✓ Acceso prioritario a builds nightly experimentales", "✓ Rol exclusivo de Patrocinador en Discord/Matrix"],
+                            perks: ["✓ Mención de honor en el repositorio GitHub", "✓ Acceso prioritario a builds nightly experimentales", "✓ Rol exclusivo de Patrocinador en la comunidad"],
                             color: "#00E5FF", highlight: false
                         },
                         {
@@ -159,7 +183,7 @@ export const LandingSponsorSection: React.FC = () => {
                     ))}
                 </div>
 
-                {/* Crypto Sovereign Vault Section */}
+                {/* Direct Donation Channels (GitHub Sponsors, Ko-fi, PayPal) */}
                 <div style={{
                     padding: "24px", borderRadius: "20px",
                     background: "rgba(6, 9, 18, 0.95)", border: "1px solid rgba(255, 255, 255, 0.1)",
@@ -167,8 +191,8 @@ export const LandingSponsorSection: React.FC = () => {
                 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "16px" }}>
                         <div>
-                            <div style={{ fontSize: "14px", fontWeight: 900, color: "#FFF" }}>Bóveda Criptográfica Soberana (Donaciones Directas P2P)</div>
-                            <div style={{ fontSize: "12px", color: "#94A3B8" }}>Para donantes que priorizan la privacidad financiera y el anonimato total off-grid.</div>
+                            <div style={{ fontSize: "15px", fontWeight: 900, color: "#FFF" }}>Canales Oficiales de Patrocinio & Donación</div>
+                            <div style={{ fontSize: "12px", color: "#94A3B8" }}>Elige tu método preferido para respaldar el desarrollo continuo de RED Sovereign Mesh.</div>
                         </div>
                         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                             <iframe
@@ -194,32 +218,58 @@ export const LandingSponsorSection: React.FC = () => {
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
-                        {cryptoWallets.map((w, wIdx) => (
-                            <div key={wIdx} style={{
-                                padding: "14px", borderRadius: "14px",
-                                background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.06)",
-                                display: "flex", flexDirection: "column", gap: "6px"
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "14px" }}>
+                        {donationChannels.map((ch, chIdx) => (
+                            <div key={chIdx} style={{
+                                padding: "18px", borderRadius: "16px",
+                                background: "rgba(0,0,0,0.6)", border: `1px solid ${ch.color}40`,
+                                display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px"
                             }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <span style={{ fontSize: "12px", fontWeight: 800, color: "#FFF" }}>{w.icon} {w.label}</span>
-                                    <span style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>{w.note}</span>
+                                <div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                                        <span style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <span>{ch.icon}</span> {ch.name}
+                                        </span>
+                                        <span style={{ fontSize: "10px", color: ch.color, fontFamily: "JetBrains Mono, monospace", background: `${ch.color}15`, padding: "2px 8px", borderRadius: "6px", border: `1px solid ${ch.color}30` }}>
+                                            {ch.badge}
+                                        </span>
+                                    </div>
+                                    <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: 1.4, marginBottom: "8px" }}>
+                                        {ch.desc}
+                                    </div>
+                                    <div style={{ fontSize: "11px", color: "#CBD5E1", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {ch.handle}
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "11px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", wordBreak: "break-all" }}>
-                                    {w.address}
+
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                    <a
+                                        href={ch.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{
+                                            flex: 1, textAlign: "center", padding: "8px 12px", borderRadius: "8px",
+                                            background: `linear-gradient(135deg, ${ch.color} 0%, ${ch.color}CC 100%)`,
+                                            color: "#FFF", textDecoration: "none", fontSize: "12px", fontWeight: 800,
+                                            boxShadow: `0 4px 12px ${ch.color}30`
+                                        }}
+                                    >
+                                        Ir a {ch.name} ➔
+                                    </a>
+                                    <button
+                                        onClick={() => copyToClipboard(ch.url, ch.name)}
+                                        style={{
+                                            padding: "8px 12px", borderRadius: "8px",
+                                            background: copiedUrl === ch.name ? "#00E676" : "rgba(255,255,255,0.08)",
+                                            color: copiedUrl === ch.name ? "#000" : "#FFF",
+                                            border: "1px solid rgba(255,255,255,0.15)", fontSize: "11px", fontWeight: 700, cursor: "pointer",
+                                            fontFamily: "JetBrains Mono, monospace"
+                                        }}
+                                        title="Copiar enlace"
+                                    >
+                                        {copiedUrl === ch.name ? "✓" : "📋"}
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => copyAddress(w.address, w.label)}
-                                    style={{
-                                        alignSelf: "flex-end", padding: "4px 10px", borderRadius: "6px",
-                                        background: copiedCrypto === w.label ? "#00E676" : "rgba(255,255,255,0.08)",
-                                        color: copiedCrypto === w.label ? "#000" : "#FFF",
-                                        border: "none", fontSize: "10px", fontWeight: 700, cursor: "pointer",
-                                        fontFamily: "JetBrains Mono, monospace"
-                                    }}
-                                >
-                                    {copiedCrypto === w.label ? "✓ ¡Copiado!" : "📋 Copiar Dirección"}
-                                </button>
                             </div>
                         ))}
                     </div>
