@@ -179,7 +179,7 @@ export const LandingInteractiveLabs: React.FC = () => {
         setTriageResult(null);
     };
 
-    // Radar Canvas Effect
+    // Tactical Radar Canvas Effect with High-DPI scaling, mesh routing vectors and animated packet pulses
     useEffect(() => {
         const canvas = radarCanvasRef.current;
         if (!canvas) return;
@@ -187,80 +187,203 @@ export const LandingInteractiveLabs: React.FC = () => {
         if (!ctx) return;
 
         let animFrameId: number;
-        let angle = 0;
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radius = Math.min(centerX, centerY) - 10;
+        let sweepAngle = 0;
+        let packetProgress = 0;
 
-        const blips = [
-            { angle: 0.8, dist: 0.6, label: "MOTO-G22", active: true },
-            { angle: 2.3, dist: 0.85, label: "TAB-LENOVO", active: true },
-            { angle: 4.1, dist: 0.4, label: "RELAY-04", active: true },
-            { angle: 5.4, dist: 0.7, label: "LORA-GATEWAY", active: true }
+        const updateSize = () => {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = rect.width * dpr;
+            canvas.height = 440 * dpr;
+            ctx.scale(dpr, dpr);
+        };
+        updateSize();
+
+        const tacticalNodes = [
+            { id: "hq", label: "HQ_MANDO", sub: "Nodo Base", angle: 0, dist: 0, color: "#00FF88", type: "base" },
+            { id: "alpha", label: "NODO_ALPHA", sub: "LoRa 915MHz • 14.2km", angle: 0.65, dist: 0.68, color: "#00E5FF", type: "lora" },
+            { id: "moto", label: "PATRULLA_02", sub: "BLE 5.3 • 85m", angle: 2.1, dist: 0.38, color: "#FFB300", type: "ble" },
+            { id: "tab", label: "BRIGADA_TAB", sub: "Wi-Fi Direct • 190m", angle: 3.8, dist: 0.48, color: "#00FF88", type: "wifi" },
+            { id: "dron", label: "DRON_REPETIDOR", sub: "Aéreo • 28.4km", angle: 5.2, dist: 0.82, color: "#A855F7", type: "air" },
+            { id: "sat", label: "GATEWAY_SAT", sub: "Enlace Satelital", angle: 1.5, dist: 0.76, color: "#00E5FF", type: "sat" }
+        ];
+
+        const meshLinks = [
+            ["hq", "moto"],
+            ["hq", "tab"],
+            ["moto", "alpha"],
+            ["tab", "alpha"],
+            ["alpha", "dron"],
+            ["dron", "sat"],
+            ["hq", "sat"]
         ];
 
         const render = () => {
-            ctx.fillStyle = "rgba(5, 7, 13, 0.15)";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const rect = canvas.getBoundingClientRect();
+            const width = rect.width;
+            const height = 440;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = Math.min(centerX, centerY) - 28;
 
-            // Anillos concéntricos
-            ctx.strokeStyle = isBlackout ? "rgba(255, 23, 68, 0.3)" : "rgba(0, 240, 255, 0.25)";
-            ctx.lineWidth = 1;
+            ctx.clearRect(0, 0, width, height);
 
-            for (let r = radius * 0.25; r <= radius; r += radius * 0.25) {
+            // Dark Tactical Radar Background Grid
+            ctx.fillStyle = "rgba(4, 7, 14, 0.95)";
+            ctx.fillRect(0, 0, width, height);
+
+            // Polar Range Rings (5km, 10km, 15km, 20km, 25km)
+            const ringLabels = ["5 KM", "10 KM", "15 KM", "20 KM", "25 KM"];
+            for (let i = 1; i <= 5; i++) {
+                const r = (radius / 5) * i;
+                ctx.strokeStyle = isBlackout ? "rgba(255, 51, 85, 0.2)" : "rgba(0, 229, 255, 0.15)";
+                ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
                 ctx.stroke();
+
+                // Range Text
+                ctx.fillStyle = isBlackout ? "rgba(255, 51, 85, 0.4)" : "rgba(0, 229, 255, 0.35)";
+                ctx.font = "9px 'JetBrains Mono', monospace";
+                ctx.textAlign = "left";
+                ctx.fillText(ringLabels[i - 1], centerX + 6, centerY - r + 10);
             }
 
-            // Ejes
-            ctx.beginPath();
-            ctx.moveTo(centerX - radius, centerY);
-            ctx.lineTo(centerX + radius, centerY);
-            ctx.moveTo(centerX, centerY - radius);
-            ctx.lineTo(centerX, centerY + radius);
-            ctx.stroke();
+            // Azimuth Crosshair Rays (every 45 degrees)
+            const anglesDeg = [0, 45, 90, 135, 180, 225, 270, 315];
+            const cardinals: Record<number, string> = { 0: "E 90°", 90: "S 180°", 180: "W 270°", 270: "N 000°" };
+            anglesDeg.forEach((deg) => {
+                const rad = (deg * Math.PI) / 180;
+                const x2 = centerX + Math.cos(rad) * radius;
+                const y2 = centerY + Math.sin(rad) * radius;
 
-            // Haz de barrido
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+                ctx.lineWidth = 0.8;
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+
+                if (cardinals[deg]) {
+                    const labelX = centerX + Math.cos(rad) * (radius + 16);
+                    const labelY = centerY + Math.sin(rad) * (radius + 16);
+                    ctx.fillStyle = isBlackout ? "#FF3355" : "#00E5FF";
+                    ctx.font = "10px 'JetBrains Mono', monospace";
+                    ctx.textAlign = "center";
+                    ctx.fillText(cardinals[deg], labelX, labelY + 3);
+                }
+            });
+
+            // Node Position Map
+            const nodeCoords: Record<string, { x: number; y: number; node: typeof tacticalNodes[0] }> = {};
+            tacticalNodes.forEach((n) => {
+                const x = centerX + Math.cos(n.angle) * (radius * n.dist);
+                const y = centerY + Math.sin(n.angle) * (radius * n.dist);
+                nodeCoords[n.id] = { x, y, node: n };
+            });
+
+            // Mesh Interconnection Vectors (Polylines)
+            meshLinks.forEach(([fromId, toId]) => {
+                const p1 = nodeCoords[fromId];
+                const p2 = nodeCoords[toId];
+                if (!p1 || !p2) return;
+
+                const isSatLink = fromId === "sat" || toId === "sat";
+                if (isBlackout && isSatLink) {
+                    // Cellular / Central Sat link cut off during blackout
+                    ctx.strokeStyle = "rgba(255, 51, 85, 0.2)";
+                    ctx.setLineDash([4, 4]);
+                } else {
+                    ctx.strokeStyle = "rgba(0, 230, 118, 0.35)";
+                    ctx.setLineDash([]);
+                }
+
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Animated Traveling Packet Pulses
+                if (!isBlackout || !isSatLink) {
+                    const px = p1.x + (p2.x - p1.x) * packetProgress;
+                    const py = p1.y + (p2.y - p1.y) * packetProgress;
+                    ctx.fillStyle = "#00FF88";
+                    ctx.beginPath();
+                    ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Rotating Radar Sweep Beam with Gradient Trail
             if (!isBlackout) {
-                const sweepX = centerX + Math.cos(angle) * radius;
-                const sweepY = centerY + Math.sin(angle) * radius;
+                const sweepX = centerX + Math.cos(sweepAngle) * radius;
+                const sweepY = centerY + Math.sin(sweepAngle) * radius;
 
-                ctx.strokeStyle = "rgba(0, 240, 255, 0.8)";
+                // Sweep Trail Cone
+                const trailSteps = 15;
+                for (let i = 0; i < trailSteps; i++) {
+                    const tAngle = sweepAngle - (i * 0.03);
+                    const tx = centerX + Math.cos(tAngle) * radius;
+                    const ty = centerY + Math.sin(tAngle) * radius;
+                    ctx.fillStyle = `rgba(0, 229, 255, ${0.12 * (1 - i / trailSteps)})`;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(tx, ty);
+                    ctx.arc(centerX, centerY, radius, tAngle, tAngle + 0.03);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Main Sweep Line
+                ctx.strokeStyle = "rgba(0, 240, 255, 0.9)";
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 ctx.moveTo(centerX, centerY);
                 ctx.lineTo(sweepX, sweepY);
                 ctx.stroke();
 
-                // Blips de nodos detectados
-                blips.forEach((blip) => {
-                    const bx = centerX + Math.cos(blip.angle) * (radius * blip.dist);
-                    const by = centerY + Math.sin(blip.angle) * (radius * blip.dist);
-
-                    const diff = Math.abs(angle - blip.angle);
-                    const isLit = diff < 0.2 || diff > Math.PI * 2 - 0.2;
-
-                    ctx.fillStyle = isLit ? "#00F0FF" : "rgba(0, 240, 255, 0.4)";
-                    ctx.beginPath();
-                    ctx.arc(bx, by, isLit ? 4 : 2.5, 0, Math.PI * 2);
-                    ctx.fill();
-
-                    if (isLit) {
-                        ctx.fillStyle = "#00F0FF";
-                        ctx.font = "9px monospace";
-                        ctx.fillText(blip.label, bx + 6, by - 4);
-                    }
-                });
-
-                angle = (angle + 0.03) % (Math.PI * 2);
-            } else {
-                ctx.fillStyle = "#FF1744";
-                ctx.font = "12px monospace";
-                ctx.textAlign = "center";
-                ctx.fillText("RADIO SILENCE / STEALTH", centerX, centerY);
+                sweepAngle = (sweepAngle + 0.025) % (Math.PI * 2);
             }
 
+            // Draw Node Blips with Glowing Status Badges
+            Object.values(nodeCoords).forEach(({ x, y, node }) => {
+                const isCentral = node.type === "base";
+                const isDown = isBlackout && node.type === "sat";
+
+                // Glow Ring
+                ctx.fillStyle = isDown ? "rgba(255, 51, 85, 0.2)" : `${node.color}33`;
+                ctx.beginPath();
+                ctx.arc(x, y, isCentral ? 10 : 7, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Core Dot
+                ctx.fillStyle = isDown ? "#FF3355" : node.color;
+                ctx.beginPath();
+                ctx.arc(x, y, isCentral ? 5 : 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Node Badge
+                ctx.fillStyle = isDown ? "#FF3355" : "#FFF";
+                ctx.font = "bold 10px 'JetBrains Mono', monospace";
+                ctx.textAlign = "left";
+                ctx.fillText(node.label, x + 10, y - 2);
+
+                ctx.fillStyle = isDown ? "#94A3B8" : "rgba(0, 229, 255, 0.8)";
+                ctx.font = "8px 'JetBrains Mono', monospace";
+                ctx.fillText(isDown ? "[ENLACE CORTADO]" : node.sub, x + 10, y + 8);
+            });
+
+            // Blackout HUD Overlay Warning
+            if (isBlackout) {
+                ctx.fillStyle = "rgba(232, 33, 58, 0.85)";
+                ctx.font = "bold 12px 'JetBrains Mono', monospace";
+                ctx.textAlign = "center";
+                ctx.fillText("⚠️ APAGÓN TOTAL DE TORRES CELULARES • LA MALLA P2P REENRUTA PAQUETES SIN INTERNET", centerX, 26);
+            }
+
+            packetProgress = (packetProgress + 0.015) % 1;
             animFrameId = requestAnimationFrame(render);
         };
 
@@ -869,8 +992,36 @@ export const LandingInteractiveLabs: React.FC = () => {
             {isBlackout ? "⚡ MODO APAGÓN ACTIVADO (Sin Internet / Solo Radios de Hardware)" : "🌐 Modo Normal (Hacer clic para simular Apagón / EMP)"}
           </button>
 
-          <div style={{ width: "100%", maxWidth: "1160px", margin: "0 auto", background: "#030508", borderRadius: "20px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden" }}>
+          <div style={{ width: "100%", maxWidth: "1160px", margin: "0 auto", background: "#030508", borderRadius: "20px", border: "1.5px solid rgba(0, 229, 255, 0.35)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
             <canvas ref={radarCanvasRef} style={{ width: "100%", height: "440px", display: "block" }} />
+            
+            {/* Live Tactical Telemetry HUD Bar */}
+            <div style={{
+              padding: "16px 24px",
+              background: "rgba(10, 14, 26, 0.95)",
+              borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+              display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: "14px", textAlign: "left"
+            }}>
+              <div>
+                <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>FRECUENCIA OPERATIVA</div>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#00E5FF", marginTop: "2px" }}>US915 MHz (Banda Libre MTC)</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>TOPOLOGÍA DE MALLA</div>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: isBlackout ? "#FF3355" : "#00FF88", marginTop: "2px" }}>
+                  {isBlackout ? "● Malla P2P de Emergencia Activa" : "● Multi-Hop Híbrido (BLE + LoRa + Wi-Fi)"}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>ENCRIPTACIÓN DE TRAMAS</div>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#C084FC", marginTop: "2px" }}>NIST FIPS 203 (ML-KEM-768)</div>
+              </div>
+              <div>
+                <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>TASA DE ENTREGA P2P</div>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: "#00E676", marginTop: "2px" }}>99.8% (Cero Dependencia IP)</div>
+              </div>
+            </div>
           </div>
         </section>
         </>

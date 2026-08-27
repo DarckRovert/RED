@@ -204,8 +204,8 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
             🛡️ Descargo Legal (DISCLAIMER.md)
           </a>
           <span>•</span>
-          <a href="mailto:contacto@darckrovert.com?subject=Consulta%20Corporativa%20RED" style={{ color: "#00FF88", textDecoration: "none" }}>
-            💼 Contacto Comercial & Licitaciones
+          <a href="mailto:darckrovert@gmail.com?subject=Consulta%20Corporativa%20RED%20Mesh" style={{ color: "#00FF88", textDecoration: "none", fontWeight: 700 }}>
+            💼 Contacto Comercial & Licitaciones (darckrovert@gmail.com)
           </a>
         </div>
 

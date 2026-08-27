@@ -180,7 +180,7 @@ export const LandingResilienceCalculator: React.FC = () => {
                         </div>
 
                         <a
-                            href="mailto:contacto@darckrovert.com?subject=Solicitud%20de%20Propuesta%20Tecnica%20RED%20Mesh"
+                            href="mailto:darckrovert@gmail.com?subject=Solicitud%20de%20Propuesta%20Tecnica%20RED%20Mesh"
                             style={{
                                 display: "block", textAlign: "center", padding: "12px 18px",
                                 borderRadius: "12px", background: "linear-gradient(135deg, #00E676 0%, #00B0FF 100%)",
@@ -189,7 +189,7 @@ export const LandingResilienceCalculator: React.FC = () => {
                                 boxShadow: "0 4px 20px rgba(0,230,118,0.3)"
                             }}
                         >
-                            📋 Solicitar Propuesta Técnica Institucional
+                            📋 Solicitar Propuesta Técnica Institucional (darckrovert@gmail.com)
                         </a>
                     </div>
                 </div>
