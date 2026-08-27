@@ -1,5 +1,30 @@
 # Changelog
 
+## [65.0.0-squad-lifecycle-storage-hardened] - 2026-08-27
+
+### Sovereign Tactical Master Edition — Ciclo de Vida Completo de Escuadrones, Moderación P2P en Tiempo Real, Blindaje de Almacenamiento IndexedDB y Despliegue en Limpio Multi-Dispositivo
+
+**1. Ciclo de Vida Completo de Grupos y Salida Voluntaria (`leaveGroup`):**
+- `client.ts`: Implementación de `leaveGroup(groupId)` con sincronización atómica en el demonio nativo Rust (`DELETE /groups/:id/members/:hash`), purga en `localStorage` / Zustand y emisión del paquete de control P2P `group_leave` a todos los nodos del escuadrón.
+- `messageDispatcher.ts`: Enrutamiento y despacho reactivo de `group_leave` que actualiza en vivo las listas de integrantes en todos los nodos de la malla y emite notificaciones tácticas de partida.
+
+**2. Sincronización en Tiempo Real de Moderación de Escuadrones (`group_admin`):**
+- `client.ts` & `messageDispatcher.ts`: Sincronización P2P reactiva de cambios de rol (`Admin`, `Moderator`, `Member`, `ReadOnly`), estados de silenciado de miembros (`mute`) y alternancia de modo canal unidireccional (`broadcast_only`).
+- `GroupAdminModal.tsx`: Derivación dinámica de permisos y roles del operador local basada en su clave criptográfica única, junto con el botón táctico **🚪 Abandonar Escuadrón**.
+
+**3. Integración en Ventana de Chat & Rótulos de Remitente:**
+- `ChatWindow.tsx`: Despliegue automático de la consola de administración del escuadrón al pulsar la cabecera en chats de grupo (`isGroupChat`).
+- `MessageBubble.tsx`: Rótulos dinámicos con apodo táctico y DID abreviado en color cian sobre el cuerpo de cada mensaje entrante en conversaciones grupales.
+
+**4. Blindaje de Almacenamiento Multimedia (`indexedMediaVault`):**
+- `client.ts` & `messageDispatcher.ts`: Derivación íntegra de metadatos multimedia (`duration_ms`, `latitude`, `longitude`, `file_name`, `mime_type`) y derivación automática de archivos base64 $>512\text{ bytes}$ a `indexedMediaVault` (`red_vault://${msgId}`), previniendo desbordamientos de cuota `QuotaExceededError` en WebView y navegadores.
+
+**5. Validación y Despliegue en Hardware Real:**
+- Despliegue y verificación en **Motorola Moto G22** (`ZT322B386P`, Android 12) y **Lenovo Tab M10** (`HA2CHKZ2`, Android 15).
+- Verificación de inicialización de motor Rust `arm64-v8a`, servidores SSE en loopback `127.0.0.1:7333`, BLE GATT y transporte libp2p Kademlia DHT.
+
+---
+
 ## [64.0.0-omni-transport-production-master] - 2026-08-26
 
 ### Omni-Transport Production Master — Replicación Web Companion en Vivo, Resiliencia de Malla E2E, Benchmarks y Certificación de Producción
