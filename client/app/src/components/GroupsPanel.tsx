@@ -37,9 +37,12 @@ export default function GroupsPanel() {
 
         setCreationStatus("Sincronizando llaves compartidas (SenderKey)...");
         try {
-            await RedAPI.createGroup(groupName.trim(), selectedContacts);
+            const result = await RedAPI.createGroup(groupName.trim(), selectedContacts);
             setCreationStatus("Grupo federado con éxito.");
             toast.success(`Escuadrón ${groupName} creado con éxito`);
+            // Bug #5 fix: fetchData may race against createGroup's async Zustand setState.
+            // Wait a tick so the optimistic store update from createGroup settles first.
+            await new Promise(r => setTimeout(r, 80));
             await fetchData();
             setTimeout(() => goBack(), 1200);
         } catch (e) {
@@ -212,6 +215,10 @@ export default function GroupsPanel() {
                                             </button>
                                             <button
                                                 className="btn-tactical-secondary"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate("chat", g.id);
+                                                }}
                                                 style={{ padding: "6px 14px", fontSize: "0.76rem" }}
                                             >
                                                 Entrar ➔

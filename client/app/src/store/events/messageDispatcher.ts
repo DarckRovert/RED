@@ -801,6 +801,240 @@ export async function dispatchIncomingMessage(
             return;
         }
 
+        // ── GROUP INVITE: Register group on recipient device & create conversation entry ──
+        if (
+            item.msg_type === 'group_invite' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"type":"group_invite"'))
+        ) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+
+                const groupId: string = parsed.group_id || parsed.groupId || '';
+                const groupName: string = parsed.name || parsed.group_name || 'Escuadrón Cifrado';
+                const creator: string = parsed.creator || item.sender || '';
+                const rawMembers: any[] = Array.isArray(parsed.members) ? parsed.members : [];
+
+                if (!groupId) { return; }
+
+                // Normalise member list to {identity_hash, role} objects
+                const members = rawMembers.map((m: any) =>
+                    typeof m === 'string'
+                        ? { identity_hash: m, role: m === creator ? 'Admin' : 'Member', joined_at: Math.floor(Date.now() / 1000) }
+                        : { role: 'Member', joined_at: Math.floor(Date.now() / 1000), ...m }
+                );
+
+                const groupObj = {
+                    id: groupId,
+                    name: groupName,
+                    members,
+                    creator,
+                    created_at: parsed.created_at ? Math.floor(parsed.created_at / 1000) : Math.floor(Date.now() / 1000),
+                    last_activity: Math.floor(Date.now() / 1000)
+                };
+
+                // 1. Persist in localStorage
+                if (typeof window !== 'undefined') {
+                    try {
+                        const storedGroups: any[] = JSON.parse(localStorage.getItem('red_web_groups') || '[]');
+                        if (!storedGroups.some((g: any) => g.id === groupId || g.group_id === groupId)) {
+                            storedGroups.push(groupObj);
+                            localStorage.setItem('red_web_groups', JSON.stringify(storedGroups));
+                        }
+                        // Create group conversation entry
+                        const convs: any[] = JSON.parse(localStorage.getItem('red_web_conversations') || '[]');
+                        if (!convs.some((c: any) => c.id === groupId || c.peer === groupId)) {
+                            convs.unshift({
+                                id: groupId,
+                                peer: groupId,
+                                peer_name: groupName,
+                                last_message: `${creator.slice(0, 8)} te añadió al escuadrón`,
+                                last_timestamp: Date.now() / 1000,
+                                unread_count: 1,
+                                is_group: true
+                            });
+                            localStorage.setItem('red_web_conversations', JSON.stringify(convs));
+                        }
+                    } catch {}
+                }
+
+                // 2. Update Zustand store
+                const curGroups: any[] = Array.isArray(get().groups) ? get().groups : [];
+                if (!curGroups.some((g: any) => g.id === groupId)) {
+                    const curConvs = get().conversations || [];
+                    const hasConv = curConvs.some(c => c.id === groupId || c.peer === groupId);
+                    set({
+                        groups: [...curGroups, groupObj],
+                        conversations: hasConv ? curConvs : [{
+                            id: groupId,
+                            peer: groupId,
+                            peer_name: groupName,
+                            last_message: `Te añadieron al escuadrón "${groupName}"`,
+                            last_timestamp: Date.now() / 1000,
+                            unread_count: 1,
+                            is_group: true
+                        }, ...curConvs]
+                    });
+                }
+
+                TacticalAudioEngine.playMessageReceived();
+                toast.success(`👥 Te añadieron al escuadrón "${groupName}"`);
+            } catch (e) {
+                console.warn('[RED Group] group_invite parse error:', e);
+            }
+            return;
+        }
+
+        // ── GROUP MESSAGE: Route to group conversation in store ──
+        if (
+            item.msg_type === 'group_message' ||
+            item.msg_type === 'squad_msg' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') &&
+                (item.content.includes('"type":"group_message"') || item.content.includes('"type":"squad_msg"')))
+        ) {
+            try {
+                const rawItem = item as any;
+                let groupId: string = rawItem.group_id || rawItem.conversation_id || '';
+                let msgContent: string = item.content || '';
+                let senderHash: string = item.sender || '';
+
+                // Unwrap JSON envelope if content is the full payload
+                if (typeof msgContent === 'string' && msgContent.startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(msgContent);
+                        if (parsed.group_id) groupId = parsed.group_id;
+                        if (parsed.content !== undefined) msgContent = parsed.content;
+                        if (parsed.sender) senderHash = parsed.sender;
+                    } catch {}
+                }
+
+                if (!groupId) { /* can't route without group id — fall through to normal message */ }
+                else {
+                    const msgId = rawItem.id || item.id || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                    const normTs = (item.timestamp && item.timestamp > 1e11) ? item.timestamp / 1000 : (item.timestamp || Date.now() / 1000);
+                    const newMsg = {
+                        id: msgId,
+                        sender: senderHash,
+                        sender_name: rawItem.sender_name,
+                        recipient: groupId,
+                        content: msgContent,
+                        timestamp: normTs,
+                        is_mine: false,
+                        msg_type: 'text',
+                        status: 'Delivered' as const,
+                        conversation_id: groupId
+                    };
+
+                    // Persist to localStorage group message vault
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const convKey = `red_web_messages_${groupId}`;
+                            const raw = localStorage.getItem(convKey);
+                            const list: any[] = raw ? JSON.parse(raw) : [];
+                            if (!list.some((m: any) => m.id === msgId)) {
+                                list.push(newMsg);
+                                localStorage.setItem(convKey, JSON.stringify(list));
+                            }
+                        } catch {}
+                    }
+
+                    // If group chat is currently open, append directly to messages state
+                    const { activeConversationId } = get();
+                    if (activeConversationId === groupId) {
+                        const curMsgs = get().messages || [];
+                        if (!curMsgs.some(m => m.id === msgId)) {
+                            set({ messages: [...curMsgs, newMsg as any] });
+                        }
+                    }
+
+                    // Update conversation list unread badge
+                    const curConvs = get().conversations || [];
+                    const convIdx = curConvs.findIndex(c => c.id === groupId || c.peer === groupId);
+                    const senderContact = (get().contacts || []).find((c: any) => c.identity_hash === senderHash);
+                    const senderLabel = senderContact?.display_name || senderHash.slice(0, 8);
+                    const snippet = `${senderLabel}: ${msgContent.slice(0, 40)}`;
+                    if (convIdx >= 0) {
+                        const updated = [...curConvs];
+                        const isActive = activeConversationId === groupId;
+                        updated[convIdx] = {
+                            ...updated[convIdx],
+                            last_message: snippet,
+                            last_timestamp: normTs,
+                            unread_count: isActive ? 0 : (updated[convIdx].unread_count || 0) + 1
+                        };
+                        updated.unshift(updated.splice(convIdx, 1)[0]);
+                        set({ conversations: updated });
+                        RedAPI.setWebStore('red_web_conversations', updated);
+                    }
+
+                    if (activeConversationId !== groupId) {
+                        TacticalAudioEngine.playMessageReceived();
+                    }
+                    return;
+                }
+            } catch (e) {
+                console.warn('[RED Group] group_message dispatch error:', e);
+            }
+        }
+
+        // ── GROUP KICK: Remove group from local store when ejected ──
+        if (
+            item.msg_type === 'group_kick' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"type":"group_kick"'))
+        ) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+                const groupId: string = parsed.group_id || '';
+                const myHash = get().identity?.identity_hash?.toLowerCase() || '';
+                const kickedHash: string = (parsed.kicked_hash || '').toLowerCase();
+
+                if (groupId && (kickedHash === myHash || kickedHash.startsWith(myHash.slice(0, 8)))) {
+                    // We were kicked — remove group from local store
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const groups: any[] = JSON.parse(localStorage.getItem('red_web_groups') || '[]');
+                            localStorage.setItem('red_web_groups', JSON.stringify(groups.filter((g: any) => g.id !== groupId)));
+                        } catch {}
+                    }
+                    const curGroups = Array.isArray(get().groups) ? get().groups : [];
+                    set({ groups: curGroups.filter((g: any) => g.id !== groupId) });
+                    toast.warning(`⛔ Fuiste expulsado del escuadrón`);
+                } else if (groupId) {
+                    // Another member was kicked — update local group members list
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const groups: any[] = JSON.parse(localStorage.getItem('red_web_groups') || '[]');
+                            const g = groups.find((g: any) => g.id === groupId);
+                            if (g && Array.isArray(g.members)) {
+                                g.members = g.members.filter((m: any) =>
+                                    (typeof m === 'string' ? m : m.identity_hash)?.toLowerCase() !== kickedHash
+                                );
+                                localStorage.setItem('red_web_groups', JSON.stringify(groups));
+                            }
+                        } catch {}
+                    }
+                    const curGroups: any[] = Array.isArray(get().groups) ? get().groups : [];
+                    set({
+                        groups: curGroups.map((g: any) => {
+                            if (g.id !== groupId) return g;
+                            return {
+                                ...g,
+                                members: (g.members || []).filter((m: any) =>
+                                    (typeof m === 'string' ? m : m.identity_hash)?.toLowerCase() !== kickedHash
+                                )
+                            };
+                        })
+                    });
+                }
+            } catch (e) {
+                console.warn('[RED Group] group_kick parse error:', e);
+            }
+            return;
+        }
+
         // ── Triage Report: ingest into medical records store ──
         if (item.msg_type === 'triage_report') {
             try {

@@ -801,15 +801,17 @@ export class RedAPIClient {
         const allGroups = [...localGroups, ...storeGroups];
         const group = allGroups.find(g => g && (g.id === groupId || g.group_id === groupId));
 
-        let members: string[] = group?.members?.map((m: any) => {
+        // Extract member hashes robustly: handles string[], {identity_hash}[], or mixed arrays
+        let members: string[] = (group?.members || []).map((m: any) => {
             if (typeof m === 'string') return m;
             return m?.identity_hash || m?.peer || m?.id || '';
-        }).filter(Boolean) || [];
+        }).filter((h: string) => h && h.length >= 8);
 
-        // If members list is empty, fallback to all known contacts
-        if (members.length === 0) {
-            const contacts = this.getWebStore<any[]>('red_web_contacts', []);
-            members = contacts.map((c: any) => c.identity_hash || c.peer).filter(Boolean);
+        // Safety guard: only fan-out to all contacts when NO group record is found at all.
+        // Never broadcast to all contacts just because members[] was empty (privacy risk).
+        if (members.length === 0 && !group) {
+            console.warn(`[RED Group] sendGroupMessage: no group found for id=${groupId.slice(0, 8)}, aborting fan-out`);
+            return;
         }
 
         const recipientMembers = members.filter(m => m && m !== myHash && m !== 'me');
@@ -892,6 +894,99 @@ export class RedAPIClient {
 
     // ── Group Admin API — Sprint 3 (v42.0.0) ────────────────────────────────────
 
+    /** Add a new member to an existing group and broadcast a group_invite to them */
+    async addGroupMember(groupId: string, memberHash: string): Promise<void> {
+        // 1. Try Rust node
+        try {
+            await this.req(`/groups/${groupId}/members`, {
+                method: 'POST',
+                body: JSON.stringify({ identity_hash: memberHash, role: 'Member' })
+            });
+        } catch { /* Offline / Web fallback — update local store */ }
+
+        // 2. Update local web store
+        const groups = this.getWebStore<any[]>('red_web_groups', []);
+        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        if (g) {
+            const members: any[] = Array.isArray(g.members) ? g.members : [];
+            if (!members.some((m: any) => (typeof m === 'string' ? m : m.identity_hash) === memberHash)) {
+                members.push({ identity_hash: memberHash, role: 'Member', joined_at: Math.floor(Date.now() / 1000) });
+                g.members = members;
+                this.setWebStore('red_web_groups', groups);
+            }
+        }
+
+        // 3. Send group_invite packet to the new member so they register the group on their device
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+        const groupName = g?.name || 'Grupo RED';
+        const allMemberHashes: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter(Boolean);
+        const invitePayload = JSON.stringify({
+            type: 'group_invite',
+            group_id: groupId,
+            name: groupName,
+            creator: myHash,
+            members: allMemberHashes,
+            created_at: Date.now()
+        });
+        try {
+            await this.sendMessage(memberHash, invitePayload, {
+                msg_type: 'group_invite',
+                group_id: groupId,
+                group_name: groupName
+            });
+        } catch (e) {
+            console.warn(`[RED Group] addGroupMember invite failed to ${memberHash.slice(0, 8)}:`, e);
+        }
+
+        // 4. Sync Zustand store
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            const updatedGroups = this.getWebStore<any[]>('red_web_groups', []);
+            useRedStore.setState({ groups: updatedGroups });
+        } catch {}
+    }
+
+    /** Remove a member from a group and broadcast a group_kick packet to them */
+    async removeGroupMember(groupId: string, memberHash: string): Promise<void> {
+        // 1. Try Rust node
+        try {
+            await this.req(`/groups/${groupId}/members/${memberHash}`, { method: 'DELETE' });
+        } catch { /* Offline / Web fallback */ }
+
+        // 2. Update local web store
+        const groups = this.getWebStore<any[]>('red_web_groups', []);
+        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        if (g && Array.isArray(g.members)) {
+            g.members = g.members.filter((m: any) =>
+                (typeof m === 'string' ? m : m.identity_hash) !== memberHash
+            );
+            this.setWebStore('red_web_groups', groups);
+        }
+
+        // 3. Send group_kick signal so the removed member clears it from their local store
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+        try {
+            await this.sendMessage(memberHash, JSON.stringify({
+                type: 'group_kick',
+                group_id: groupId,
+                kicked_hash: memberHash,
+                kicked_by: myHash,
+                timestamp: Date.now()
+            }), { msg_type: 'group_kick', group_id: groupId });
+        } catch (e) {
+            console.warn(`[RED Group] removeGroupMember kick signal failed:`, e);
+        }
+
+        // 4. Sync Zustand store
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            const updatedGroups = this.getWebStore<any[]>('red_web_groups', []);
+            useRedStore.setState({ groups: updatedGroups });
+        } catch {}
+    }
+
     /** Promote or demote a member's role in a group (caller must be Admin) */
     async setGroupMemberRole(
         groupId: string,
@@ -904,12 +999,14 @@ export class RedAPIClient {
                 body: JSON.stringify({ role })
             });
         } catch {
-            // Fallback: update locally via PUT on the whole group record
+            // Fallback: update locally
             const groups = this.getWebStore<any[]>('red_web_groups', []);
             const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
             if (g && g.members) {
-                const m = g.members.find((m: any) => m.identity_hash === memberHash);
-                if (m) { m.role = role; this.setWebStore('red_web_groups', groups); }
+                const m = g.members.find((m: any) =>
+                    (typeof m === 'string' ? m : m.identity_hash) === memberHash
+                );
+                if (m && typeof m === 'object') { m.role = role; this.setWebStore('red_web_groups', groups); }
             }
         }
     }
@@ -925,8 +1022,10 @@ export class RedAPIClient {
             const groups = this.getWebStore<any[]>('red_web_groups', []);
             const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
             if (g && g.members) {
-                const m = g.members.find((m: any) => m.identity_hash === memberHash);
-                if (m) { m.muted = muted; this.setWebStore('red_web_groups', groups); }
+                const m = g.members.find((m: any) =>
+                    (typeof m === 'string' ? m : m.identity_hash) === memberHash
+                );
+                if (m && typeof m === 'object') { m.muted = muted; this.setWebStore('red_web_groups', groups); }
             }
         }
     }
@@ -956,13 +1055,11 @@ export class RedAPIClient {
             limit
         };
         try {
-            // Try Rust node first
             await this.req('/groups/history/request', {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
         } catch {
-            // Fallback: broadcast over mesh
             try {
                 const { meshRouter } = await import('../lib/mesh/meshRouter');
                 const encoded = new TextEncoder().encode(JSON.stringify(payload));
@@ -1056,15 +1153,7 @@ export class RedAPIClient {
         await this.req(`/conversations/${conversationId}/clear`, { method: 'DELETE' });
     }
 
-    /** E1: Add a member to a group */
-    async addGroupMember(groupId: string, identity_hash: string): Promise<void> {
-        await this.req(`/groups/${groupId}/members`, { method: 'POST', body: JSON.stringify({ identity_hash }) });
-    }
 
-    /** E1: Remove a member from a group */
-    async removeGroupMember(groupId: string, memberHash: string): Promise<void> {
-        await this.req(`/groups/${groupId}/members/${memberHash}`, { method: 'DELETE' });
-    }
 
     async getProfile(): Promise<any> {
         return this.req<any>('/profile').catch(() => null);
