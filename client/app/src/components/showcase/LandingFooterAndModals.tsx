@@ -156,21 +156,33 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
 
       <footer
         style={{
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          padding: "36px 20px",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+          padding: "44px 20px",
           textAlign: "center",
-          fontSize: "12px",
-          color: "#64748B",
-          fontFamily: "monospace",
+          fontSize: "13px",
+          color: "#94A3B8",
+          background: "rgba(5, 7, 12, 0.95)",
           position: "relative",
           zIndex: 1,
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: "14px",
+          gap: "18px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", flexWrap: "wrap" }}>
+          <button
+            onClick={onEnterApp}
+            style={{
+              padding: "10px 20px", borderRadius: "10px",
+              background: "linear-gradient(135deg, #00FF88 0%, #00F0FF 100%)",
+              color: "#050B14", fontWeight: 900, fontSize: "13px",
+              border: "none", cursor: "pointer", boxShadow: "0 0 15px rgba(0,255,136,0.3)"
+            }}
+          >
+            🚀 Iniciar Nodo Web App
+          </button>
+          
           <iframe
             src="https://github.com/sponsors/DarckRovert/button"
             title="Sponsor DarckRovert"
@@ -183,8 +195,22 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
           />
         </div>
 
-        <div>
-          © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build {RED_BUILD_CODE}). Código Abierto & Descentralizado.
+        <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", justifyContent: "center", fontSize: "12px", color: "#64748B" }}>
+          <a href="https://github.com/DarckRovert/RED/blob/main/LICENSE" target="_blank" rel="noreferrer" style={{ color: "#00F0FF", textDecoration: "none" }}>
+            📄 Licencia AGPLv3
+          </a>
+          <span>•</span>
+          <a href="https://github.com/DarckRovert/RED/blob/main/DISCLAIMER.md" target="_blank" rel="noreferrer" style={{ color: "#FF3355", textDecoration: "none" }}>
+            🛡️ Descargo Legal (DISCLAIMER.md)
+          </a>
+          <span>•</span>
+          <a href="mailto:contacto@darckrovert.com?subject=Consulta%20Corporativa%20RED" style={{ color: "#00FF88", textDecoration: "none" }}>
+            💼 Contacto Comercial & Licitaciones
+          </a>
+        </div>
+
+        <div style={{ fontSize: "11px", color: "#475569", fontFamily: "monospace" }}>
+          © 2026 PROYECTO RED — Sovereign Mesh OS v{RED_VERSION} (Build {RED_BUILD_CODE}). Autor: Rodrigo Alejandro Vega Rojas (alias "DarckRovert"). Lima, Perú.
         </div>
       </footer>
         </>

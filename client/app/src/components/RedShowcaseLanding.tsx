@@ -6,6 +6,9 @@ import { RED_VERSION, RED_BUILD_CODE, RED_APK_NAME } from '../lib/version';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { LandingHeader } from './showcase/LandingHeader';
 import { LandingHero } from './showcase/LandingHero';
+import { LandingHowItWorksInteractive } from './showcase/LandingHowItWorksInteractive';
+import { LandingScenariosAndUseCases } from './showcase/LandingScenariosAndUseCases';
+import { LandingResilienceCalculator } from './showcase/LandingResilienceCalculator';
 import { LandingBentoAndMatrix } from './showcase/LandingBentoAndMatrix';
 import { LandingMeshSimulator } from './showcase/LandingMeshSimulator';
 import { LandingModuleCatalog } from './showcase/LandingModuleCatalog';
@@ -39,7 +42,7 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
 
     const isGhPages = typeof window !== "undefined" && window.location.pathname.includes("/RED");
     const basePath = isGhPages ? "/RED" : "";
-    const heroBannerUrl = `${basePath}/assets/red_investor_hero_banner.png`;
+    const heroBannerUrl = `${basePath}/assets/red_hero_tactical_mesh.png`;
 
     const handleEnter = onEnterVault || onEnterApp || (() => {
         navigate('chat');
@@ -194,6 +197,12 @@ export default function RedShowcaseLanding({ onEnterVault, onEnterApp }: RedShow
                         scrollToSection={scrollToSection}
                         handleEnter={handleEnter}
                     />
+
+                    <LandingHowItWorksInteractive />
+
+                    <LandingScenariosAndUseCases />
+
+                    <LandingResilienceCalculator />
 
                     <LandingBentoAndMatrix />
 
