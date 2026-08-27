@@ -913,17 +913,42 @@ export async function dispatchIncomingMessage(
                 else {
                     const msgId = rawItem.id || item.id || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
                     const normTs = (item.timestamp && item.timestamp > 1e11) ? item.timestamp / 1000 : (item.timestamp || Date.now() / 1000);
-                    const newMsg = {
+                    const parsedObj = typeof item.content === 'string' && item.content.startsWith('{') ? (() => { try { return JSON.parse(item.content); } catch { return {}; } })() : {};
+                    
+                    const msgType = rawItem.msg_type || parsedObj.msg_type || (
+                        typeof msgContent === 'string' && msgContent.startsWith('data:image') ? 'image' :
+                        typeof msgContent === 'string' && msgContent.startsWith('data:audio') ? 'voice' :
+                        typeof msgContent === 'string' && msgContent.startsWith('data:video') ? 'video' :
+                        'text'
+                    );
+
+                    const rawMedia = rawItem.media_data || parsedObj.media_data || (typeof msgContent === 'string' && msgContent.startsWith('data:') ? msgContent : undefined);
+                    if (rawMedia && rawMedia.length > 512) {
+                        indexedMediaVault.saveMedia(msgId, rawMedia, rawItem.mime_type || parsedObj.mime_type).catch(() => {});
+                    }
+
+                    const newMsg: any = {
                         id: msgId,
                         sender: senderHash,
-                        sender_name: rawItem.sender_name,
+                        sender_name: rawItem.sender_name || parsedObj.sender_name,
                         recipient: groupId,
-                        content: msgContent,
+                        content: typeof msgContent === 'string' && msgContent.startsWith('data:') && msgContent.length > 512 ? `red_vault://${msgId}` : msgContent,
+                        media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${msgId}` : rawMedia,
                         timestamp: normTs,
                         is_mine: false,
-                        msg_type: 'text',
+                        msg_type: msgType,
                         status: 'Delivered' as const,
-                        conversation_id: groupId
+                        conversation_id: groupId,
+                        duration_ms: rawItem.duration_ms || parsedObj.duration_ms,
+                        latitude: rawItem.latitude || parsedObj.latitude,
+                        longitude: rawItem.longitude || parsedObj.longitude,
+                        accuracy: rawItem.accuracy || parsedObj.accuracy,
+                        file_name: rawItem.file_name || parsedObj.file_name,
+                        file_size: rawItem.file_size || parsedObj.file_size,
+                        mime_type: rawItem.mime_type || parsedObj.mime_type,
+                        reply_to: rawItem.reply_to || parsedObj.reply_to,
+                        ttl: rawItem.ttl || parsedObj.ttl,
+                        expires_at: rawItem.expires_at || parsedObj.expires_at,
                     };
 
                     // Persist to localStorage group message vault

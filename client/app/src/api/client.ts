@@ -851,17 +851,30 @@ export class RedAPIClient {
                 const convKey = `red_web_messages_${groupId}`;
                 const raw = localStorage.getItem(convKey);
                 const list = raw ? JSON.parse(raw) : [];
-                list.push({
+
+                const rawMedia = options?.media_data || (content?.startsWith('data:') ? content : undefined);
+                if (rawMedia && rawMedia.length > 512) {
+                    indexedMediaVault.saveMedia(msgId, rawMedia, options?.mime_type).catch(() => {});
+                }
+
+                const lightMsg = {
                     id: msgId,
                     sender: myHash,
                     recipient: groupId,
-                    content,
+                    content: content?.startsWith('data:') && content.length > 512 ? `red_vault://${msgId}` : content,
+                    media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${msgId}` : rawMedia,
                     timestamp: normTs,
                     is_mine: true,
                     status: 'Sent',
                     conversation_id: groupId,
+                    msg_type: options?.msg_type || (content?.startsWith('data:image') ? 'image' : content?.startsWith('data:audio') ? 'voice' : content?.startsWith('data:video') ? 'video' : 'text'),
                     ...(options || {})
-                });
+                };
+                if (rawMedia && rawMedia.length > 512) {
+                    lightMsg.media_data = `red_vault://${msgId}`;
+                }
+
+                list.push(lightMsg);
                 localStorage.setItem(convKey, JSON.stringify(list));
 
                 // Keep conversation list entry up to date
