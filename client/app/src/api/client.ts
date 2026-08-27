@@ -228,14 +228,6 @@ export class RedAPIClient {
         }
     }
 
-    async getGroups(): Promise<any[]> {
-        try {
-            return await this.reqList<any>('/groups');
-        } catch {
-            return this.getWebStore<any[]>('red_web_groups', []);
-        }
-    }
-
     async getMessages(conversationId: string): Promise<MessageItem[]> {
         const cleanId = conversationId.toLowerCase().replace(/^did:red:/i, '').trim();
         const localKey = `red_web_messages_${cleanId}`;
@@ -315,13 +307,52 @@ export class RedAPIClient {
                     mergedList.push(rm);
                 }
             }
-            return mergedList.sort((a, b) => {
+            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const isGroupConv = groups.some(g => g.id === cleanId || g.group_id === cleanId);
+
+            const filteredList = mergedList.filter(m => {
+                if (!m) return false;
+                if (!isGroupConv) {
+                    if (m.msg_type === 'group_invite' || m.msg_type === 'group_message' || m.msg_type === 'squad_msg' || m.msg_type === 'group_kick' || m.msg_type === 'group_leave') return false;
+                    if (typeof m.content === 'string' && m.content.startsWith('{')) {
+                        if (m.content.includes('"type":"group_invite"') || m.content.includes('"type":"group_message"') || m.content.includes('"type":"squad_msg"')) return false;
+                    }
+                }
+                return true;
+            }).map(m => {
+                if (isGroupConv && typeof m.content === 'string' && m.content.startsWith('{') && (m.content.includes('"type":"group_message"') || m.content.includes('"type":"squad_msg"'))) {
+                    try {
+                        const parsed = JSON.parse(m.content);
+                        if (parsed.content !== undefined) {
+                            return {
+                                ...m,
+                                content: parsed.content,
+                                sender: parsed.sender || m.sender,
+                                media_data: parsed.media_data || m.media_data,
+                                msg_type: parsed.msg_type || 'text'
+                            };
+                        }
+                    } catch {}
+                }
+                return m;
+            });
+
+            return filteredList.sort((a, b) => {
                 const tsA = a.timestamp ? (a.timestamp > 1e11 ? a.timestamp / 1000 : a.timestamp) : 0;
                 const tsB = b.timestamp ? (b.timestamp > 1e11 ? b.timestamp / 1000 : b.timestamp) : 0;
                 return tsA - tsB;
             });
         } catch {
-            return localMsgs;
+            const groups = this.getWebStore<any[]>('red_web_groups', []);
+            const isGroupConv = groups.some(g => g.id === cleanId || g.group_id === cleanId);
+            return localMsgs.filter(m => {
+                if (!m) return false;
+                if (!isGroupConv) {
+                    if (m.msg_type === 'group_invite' || m.msg_type === 'group_message' || m.msg_type === 'squad_msg') return false;
+                    if (typeof m.content === 'string' && m.content.startsWith('{') && (m.content.includes('"type":"group_invite"') || m.content.includes('"type":"group_message"'))) return false;
+                }
+                return true;
+            });
         }
     }
 
@@ -355,9 +386,24 @@ export class RedAPIClient {
         const { generateDeterministicMsgId } = await import('../lib/mesh/meshRouter');
         const msgId = options?.id || generateDeterministicMsgId(myDid, cleanRecipient, content);
 
+        let myNickname = (typeof window !== 'undefined' && localStorage.getItem('red_identity_nickname')) || '';
+        let myPk = (typeof window !== 'undefined' && localStorage.getItem('red_identity_public_key')) || '';
+        let myAvatar = (typeof window !== 'undefined' && localStorage.getItem('red_identity_avatar')) || '';
+        if (!myNickname || !myPk) {
+            try {
+                const { useRedStore } = await import('../store/useRedStore');
+                const storeId = useRedStore.getState().identity;
+                if (storeId?.nickname) myNickname = storeId.nickname;
+                if (storeId?.public_key) myPk = storeId.public_key;
+                if (storeId?.avatar_url) myAvatar = storeId.avatar_url;
+            } catch {}
+        }
+
         const msgItem: MessageItem = {
             id: msgId,
             sender: myDid,
+            sender_name: myNickname || options?.sender_name || undefined,
+            sender_pk: myPk || options?.sender_pk || undefined,
             recipient: cleanRecipient,
             content,
             timestamp: Date.now() / 1000,
@@ -368,6 +414,13 @@ export class RedAPIClient {
         };
 
         const isControlMessage = 
+            Boolean(options?.is_group) ||
+            options?.msg_type === 'group_invite' ||
+            options?.msg_type === 'group_message' ||
+            options?.msg_type === 'squad_msg' ||
+            options?.msg_type === 'group_kick' ||
+            options?.msg_type === 'group_leave' ||
+            options?.msg_type === 'group_admin' ||
             options?.msg_type === 'conversation_wipe' ||
             options?.msg_type === 'message_wipe' ||
             options?.msg_type === 'profile_update' ||
@@ -388,11 +441,14 @@ export class RedAPIClient {
             options?.msg_type === 'live_announce' ||
             options?.msg_type === 'live_end' ||
             options?.msg_type === 'live_comment' ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"group_invite"')) ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"group_message"')) ||
+            (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"squad_msg"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"reason":"user_remote_wipe"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"status":') && content.includes('"sender_hash"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
 
-        // 1. Save in Web / local store for instant UI rendering and persistence (only for real user chat messages)
+        // 1. Save in Web / local store for instant UI rendering and persistence (only for real direct user chat messages)
         if (!isControlMessage && cleanRecipient !== 'me' && cleanRecipient !== 'local') {
             // Save heavy media to IndexedDB to avoid QuotaExceededError
             const rawMedia = options?.media_data || (content?.startsWith('data:') ? content : undefined);
@@ -454,7 +510,15 @@ export class RedAPIClient {
             options?.msg_type === 'location_ping';
 
         if (shouldSendToRust) {
-            const body = { recipient: cleanRecipient, content, ...options, id: msgId };
+            const body = {
+                recipient: cleanRecipient,
+                content,
+                sender_name: myNickname || options?.sender_name,
+                sender_pk: myPk || options?.sender_pk,
+                avatar_url: myAvatar || options?.avatar_url,
+                ...options,
+                id: msgId
+            };
             try {
                 await this.req('/messages/send', { method: 'POST', body: JSON.stringify(body) });
             } catch (e) {
@@ -483,6 +547,9 @@ export class RedAPIClient {
                 id: msgId,
                 content,
                 sender: myDid,
+                sender_name: myNickname || options?.sender_name,
+                sender_pk: myPk || options?.sender_pk,
+                avatar_url: myAvatar || options?.avatar_url,
                 recipient: cleanRecipient,
                 msg_type: options?.msg_type || 'text',
                 timestamp: Date.now() / 1000,
@@ -562,18 +629,264 @@ export class RedAPIClient {
     }
 
     /**
+     * Retrieve all groups from local vault and Rust backend
+     */
+    async getGroups(): Promise<any[]> {
+        let localGroups = this.getWebStore<any[]>('red_web_groups', []);
+        try {
+            const rustGroups = await this.reqList<any>('/groups');
+            if (rustGroups && Array.isArray(rustGroups) && rustGroups.length > 0) {
+                const mergedMap = new Map<string, any>();
+                for (const g of localGroups) {
+                    if (g && (g.id || g.group_id)) mergedMap.set(g.id || g.group_id, g);
+                }
+                for (const rg of rustGroups) {
+                    if (rg && (rg.id || rg.group_id)) mergedMap.set(rg.id || rg.group_id, { ...mergedMap.get(rg.id || rg.group_id), ...rg });
+                }
+                localGroups = Array.from(mergedMap.values());
+                this.setWebStore('red_web_groups', localGroups);
+            }
+        } catch {
+            // Web / offline fallback
+        }
+        return localGroups;
+    }
+
+    /**
+     * Create a new group/squad, persist it locally, and broadcast GroupInvite packets to all members.
+     */
+    async createGroup(name: string, memberHashes: string[]): Promise<{ id: string; name: string }> {
+        let myHash = '';
+        try {
+            if (typeof window !== 'undefined') {
+                const rawId = localStorage.getItem('red_identity');
+                if (rawId) {
+                    const parsed = JSON.parse(rawId);
+                    if (parsed.identity_hash) myHash = parsed.identity_hash;
+                }
+                if (!myHash) myHash = localStorage.getItem('red_identity_hash') || '';
+            }
+        } catch {}
+
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            const state = useRedStore.getState();
+            if (!myHash && state.identity?.identity_hash) {
+                myHash = state.identity.identity_hash;
+            }
+        } catch {}
+
+        if (!myHash) myHash = 'me';
+
+        let result: { id: string; name: string } | null = null;
+        try {
+            result = await this.req<{ id: string; name: string }>('/groups', {
+                method: 'POST',
+                body: JSON.stringify({ name, members: memberHashes }),
+            });
+        } catch {
+            // Offline / Web fallback
+            const randHex = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+            result = { id: randHex, name };
+        }
+
+        const groupId = result.id;
+        const allMembers = [
+            { identity_hash: myHash, role: 'Admin', joined_at: Math.floor(Date.now() / 1000) },
+            ...memberHashes.filter(m => m !== myHash).map(m => ({ identity_hash: m, role: 'Member', joined_at: Math.floor(Date.now() / 1000) }))
+        ];
+
+        const groupObj = {
+            id: groupId,
+            name: name,
+            members: allMembers,
+            created_at: Math.floor(Date.now() / 1000),
+            last_activity: Math.floor(Date.now() / 1000)
+        };
+
+        // Persist in Web store
+        const existingGroups = this.getWebStore<any[]>('red_web_groups', []);
+        if (!existingGroups.some(g => g.id === groupId)) {
+            existingGroups.push(groupObj);
+            this.setWebStore('red_web_groups', existingGroups);
+        }
+
+        // Update in Zustand store immediately
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            const curGroups = useRedStore.getState().groups || [];
+            if (!curGroups.some((g: any) => g.id === groupId)) {
+                useRedStore.setState({ groups: [...curGroups, groupObj] });
+            }
+        } catch {}
+
+        // Create initial conversation entry for group
+        const existingConvs = this.getWebStore<any[]>('red_web_conversations', []);
+        if (!existingConvs.some(c => c.id === groupId || c.peer === groupId)) {
+            existingConvs.unshift({
+                id: groupId,
+                peer: groupId,
+                peer_name: name,
+                last_message: 'Escuadrón creado. Cifrado multi-par activo.',
+                last_timestamp: Date.now() / 1000,
+                unread_count: 0,
+                is_group: true
+            });
+            this.setWebStore('red_web_conversations', existingConvs);
+        }
+
+        // Broadcast GroupInvite across the mesh to each member
+        const invitePayload = JSON.stringify({
+            type: 'group_invite',
+            group_id: groupId,
+            name: name,
+            creator: myHash,
+            members: allMembers.map(m => m.identity_hash),
+            created_at: Date.now()
+        });
+
+        for (const memberHash of memberHashes) {
+            if (memberHash && memberHash !== myHash) {
+                try {
+                    await this.sendMessage(memberHash, invitePayload, {
+                        msg_type: 'group_invite',
+                        group_id: groupId,
+                        group_name: name,
+                    });
+                } catch (e) {
+                    console.warn(`[RED Group] Failed to send invite to ${memberHash.slice(0, 8)}:`, e);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /**
      * Send a message to a P2P group.
-     * The Rust node fans it out to all group members and stores it under the
-     * unified group conversation (my_hash, group_id).
+     * Fans out across MeshRouter to all members and persists under group conversation vault.
      */
     async sendGroupMessage(groupId: string, content: string, options?: Record<string, any>): Promise<void> {
-        // NOTE: Rust struct SendMessageRequest requires `recipient: String`.
-        // Omitting recipient caused Serde deserialization failure (422 Unprocessable Entity).
-        const body = { recipient: groupId, content, ...options };
         try {
+            const body = { recipient: groupId, content, ...options };
             await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
-        } catch {
-            await this.sendMessage(groupId, content, { ...options, is_group: true, group_id: groupId });
+        } catch {}
+
+        // Web / Mesh Fan-Out over meshRouter:
+        const localGroups = this.getWebStore<any[]>('red_web_groups', []);
+        let myHash = '';
+        try {
+            if (typeof window !== 'undefined') {
+                const rawId = localStorage.getItem('red_identity');
+                if (rawId) {
+                    const parsed = JSON.parse(rawId);
+                    if (parsed.identity_hash) myHash = parsed.identity_hash;
+                }
+                if (!myHash) myHash = localStorage.getItem('red_identity_hash') || '';
+            }
+        } catch {}
+
+        let storeGroups: any[] = [];
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            const state = useRedStore.getState();
+            storeGroups = state.groups || [];
+            if (!myHash && state.identity?.identity_hash) {
+                myHash = state.identity.identity_hash;
+            }
+        } catch {}
+
+        const allGroups = [...localGroups, ...storeGroups];
+        const group = allGroups.find(g => g && (g.id === groupId || g.group_id === groupId));
+
+        let members: string[] = group?.members?.map((m: any) => {
+            if (typeof m === 'string') return m;
+            return m?.identity_hash || m?.peer || m?.id || '';
+        }).filter(Boolean) || [];
+
+        // If members list is empty, fallback to all known contacts
+        if (members.length === 0) {
+            const contacts = this.getWebStore<any[]>('red_web_contacts', []);
+            members = contacts.map((c: any) => c.identity_hash || c.peer).filter(Boolean);
+        }
+
+        const recipientMembers = members.filter(m => m && m !== myHash && m !== 'me');
+
+        const msgId = options?.id || `grp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const normTs = Date.now() / 1000;
+
+        const groupMsgPayload = JSON.stringify({
+            type: 'group_message',
+            id: msgId,
+            group_id: groupId,
+            sender: myHash || 'me',
+            content,
+            timestamp: normTs,
+            ...(options || {})
+        });
+
+        // Fan-out to every member node over mesh
+        for (const memberHash of recipientMembers) {
+            try {
+                await this.sendMessage(memberHash, groupMsgPayload, {
+                    ...options,
+                    id: msgId,
+                    is_group: true,
+                    group_id: groupId,
+                    conversation_id: groupId,
+                    msg_type: options?.msg_type || 'group_message'
+                });
+            } catch (e) {
+                console.warn(`[RED Group] Fan-out error to member ${memberHash.slice(0, 8)}:`, e);
+            }
+        }
+
+        // Persist locally under group messages
+        if (typeof window !== 'undefined') {
+            try {
+                const convKey = `red_web_messages_${groupId}`;
+                const raw = localStorage.getItem(convKey);
+                const list = raw ? JSON.parse(raw) : [];
+                list.push({
+                    id: msgId,
+                    sender: myHash,
+                    recipient: groupId,
+                    content,
+                    timestamp: normTs,
+                    is_mine: true,
+                    status: 'Sent',
+                    conversation_id: groupId,
+                    ...(options || {})
+                });
+                localStorage.setItem(convKey, JSON.stringify(list));
+
+                // Keep conversation list entry up to date
+                const convs = this.getWebStore<any[]>('red_web_conversations', []);
+                const convIdx = convs.findIndex(c => c.id === groupId || c.peer === groupId);
+                const snippet = options?.msg_type === 'image' ? '📷 Foto' :
+                                options?.msg_type === 'voice' ? '🎤 Nota de voz' :
+                                options?.msg_type === 'video' ? '📹 Video' :
+                                (content || 'Mensaje de escuadrón');
+                const convData = {
+                    id: groupId,
+                    peer: groupId,
+                    peer_name: group?.name || 'Escuadrón Cifrado',
+                    last_message: snippet,
+                    last_timestamp: normTs,
+                    unread_count: 0,
+                    is_group: true
+                };
+                if (convIdx >= 0) {
+                    const existing = convs[convIdx];
+                    convs.splice(convIdx, 1);
+                    convs.unshift({ ...existing, ...convData });
+                } else {
+                    convs.unshift(convData);
+                }
+                this.setWebStore('red_web_conversations', convs);
+            } catch {}
         }
     }
 

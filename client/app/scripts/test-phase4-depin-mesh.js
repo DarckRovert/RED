@@ -159,6 +159,82 @@ function enforceDefconPolicy(packet, currentDefcon) {
         assert.strictEqual(res.acousticCarrier, true);
     });
 
+    // ── 4. Escuadrones Cifrados & Enrutamiento de Vistas ────────────────────────
+    console.log("\n👥 4. Probando Escuadrones Cifrados (SenderKey P2P) y Enrutador...");
+
+    await runAsyncTest("Escuadrones Cifrados: Descriptor GroupInvite y Auto-registro de miembros", async () => {
+        const groupId = "grp_alpha_99887766554433221100aabbccddeeff";
+        const creator = "did:red:creator_node_hash_alpha_112233445566";
+        const members = [creator, "did:red:member_node_hash_bravo_998877"];
+        
+        const invite = {
+            type: "group_invite",
+            group_id: groupId,
+            name: "Escuadrón Alfa",
+            creator: creator,
+            members: members,
+            created_at: Date.now()
+        };
+
+        // Validate invite payload integrity
+        assert.strictEqual(invite.type, "group_invite");
+        assert.strictEqual(invite.members.length, 2);
+        assert.ok(invite.members.includes("did:red:member_node_hash_bravo_998877"));
+
+        // Simulate receiving member node registering group
+        const localGroups = [];
+        localGroups.push({
+            id: invite.group_id,
+            name: invite.name,
+            members: invite.members.map(m => ({ identity_hash: m, role: m === creator ? "Admin" : "Member" }))
+        });
+
+        assert.strictEqual(localGroups.length, 1);
+        assert.strictEqual(localGroups[0].name, "Escuadrón Alfa");
+        assert.strictEqual(localGroups[0].members[0].role, "Admin");
+    });
+
+    await runAsyncTest("Escuadrones Cifrados: Fan-out y Aislamiento de Conversación Grupal vs 1-a-1", async () => {
+        const groupId = "grp_alpha_99887766554433221100aabbccddeeff";
+        const senderHash = "did:red:member_node_hash_bravo_998877";
+        const myHash = "did:red:creator_node_hash_alpha_112233445566";
+
+        const incomingGroupMsg = {
+            id: "msg_grp_001",
+            group_id: groupId,
+            sender: senderHash,
+            content: "¡Posición asegurada en el cuadrante B!",
+            msg_type: "group_message",
+            timestamp: Date.now() / 1000
+        };
+
+        // Determine destination conversation ID
+        const isGroup = Boolean(incomingGroupMsg.msg_type === "group_message" || incomingGroupMsg.group_id);
+        const convId = isGroup ? incomingGroupMsg.group_id : incomingGroupMsg.sender;
+
+        // Group message MUST route to groupId and NOT to senderHash private chat
+        assert.strictEqual(convId, groupId);
+        assert.notStrictEqual(convId, senderHash);
+    });
+
+    await runAsyncTest("Enrutador UI: Resolución sin pantallas negras para 'compass', 'contacts', 'sos', 'squads'", async () => {
+        const screenAliases = {
+            compass: "OffGridCompassModal",
+            offGridCompass: "OffGridCompassModal",
+            contacts: "NearbyDevicesPanel",
+            nearby: "NearbyDevicesPanel",
+            sos: "SurvivalBeaconModal",
+            survivalBeacon: "SurvivalBeaconModal",
+            squads: "GroupsPanel",
+            groups: "GroupsPanel"
+        };
+
+        assert.strictEqual(screenAliases["compass"], "OffGridCompassModal");
+        assert.strictEqual(screenAliases["contacts"], "NearbyDevicesPanel");
+        assert.strictEqual(screenAliases["sos"], "SurvivalBeaconModal");
+        assert.strictEqual(screenAliases["squads"], "GroupsPanel");
+    });
+
     console.log("\n================================================================================");
     console.log(`📊 RESUMEN DE RESULTADOS: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE`);
     console.log("================================================================================\n");

@@ -58,6 +58,43 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_updateBatteryStatus(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_f_red_app_RedNodePlugin_injectBlePayload(
+    env: JNIEnv,
+    _class: JClass,
+    payload_jbytes: jni::objects::JByteArray,
+    _from_device_jstr: JString,
+) {
+    let payload_bytes = match env.convert_byte_array(&payload_jbytes) {
+        Ok(b) => b,
+        Err(e) => {
+            error!("injectBlePayload: failed to convert byte array from JNI: {:?}", e);
+            return;
+        }
+    };
+
+    if payload_bytes.is_empty() {
+        return;
+    }
+
+    if let Some(state_arc) = GLOBAL_API_STATE.get() {
+        let state_arc_clone = state_arc.clone();
+        tokio::spawn(async move {
+            let state_guard = state_arc_clone.lock().await;
+            if let Some(ref api_state) = *state_guard {
+                let node_arc = api_state.node.clone();
+                drop(state_guard);
+                let mut node = node_arc.lock().await;
+                if let Err(e) = node.inject_raw_payload(payload_bytes).await {
+                    error!("injectBlePayload: failed to inject payload into node: {:?}", e);
+                } else {
+                    tracing::debug!("injectBlePayload: successfully injected BLE payload into Rust node");
+                }
+            }
+        });
+    }
+}
+
+#[no_mangle]
 pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
     mut env: JNIEnv,
     _class: JClass,

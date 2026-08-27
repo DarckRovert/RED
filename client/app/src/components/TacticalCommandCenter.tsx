@@ -7,8 +7,9 @@ import { globalShield } from '../lib/network/GlobalShieldEngine';
 import { MonetizationEngine } from '../lib/network/MonetizationEngine';
 import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
 import { GlobalSearchModal } from './GlobalSearchModal';
+import { toast } from './Toast';
 
-type CommandDomain = 'comms' | 'nav' | 'survival' | 'security' | 'economy';
+type CommandDomain = 'favs' | 'comms' | 'nav' | 'survival' | 'security' | 'economy';
 
 interface ModuleCardItem {
     id: string;
@@ -24,14 +25,37 @@ interface ModuleCardItem {
 export const TacticalCommandCenter: React.FC = () => {
     const { t } = useTranslation();
     const { navigate, identity, nodeOnline, conversations, contacts } = useRedStore();
-    const [activeDomain, setActiveDomain] = useState<CommandDomain>('comms');
+    const [activeDomain, setActiveDomain] = useState<CommandDomain>('favs');
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    const [favoriteModules, setFavoriteModules] = useState<string[]>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const saved = localStorage.getItem("red_fav_modules");
+                if (saved) return JSON.parse(saved);
+            } catch {}
+        }
+        return ["channels", "walkie", "offGridCompass", "vitalScan", "nearby", "idVault"];
+    });
+
+    const toggleFavorite = (e: React.MouseEvent, modId: string) => {
+        e.stopPropagation();
+        const next = favoriteModules.includes(modId)
+            ? favoriteModules.filter(id => id !== modId)
+            : [...favoriteModules, modId];
+        setFavoriteModules(next);
+        try {
+            localStorage.setItem("red_fav_modules", JSON.stringify(next));
+        } catch {}
+        toast.info(favoriteModules.includes(modId) ? "Módulo quitado de favoritos" : "⭐ Módulo fijado en favoritos");
+    };
 
     const shieldTelemetry = globalShield.getTelemetry();
     const proStatus = MonetizationEngine.getProStatus();
 
     const domainCategories: { id: CommandDomain; label: string; icon: string; count: number }[] = [
+        { id: 'favs', label: 'Favoritos', icon: '⭐', count: favoriteModules.length },
         { id: 'comms', label: 'Comunicaciones', icon: '💬', count: 6 },
         { id: 'nav', label: 'Navegación & Sensores', icon: '🧭', count: 6 },
         { id: 'survival', label: 'Supervivencia & Salud', icon: '🚨', count: 4 },
@@ -39,7 +63,7 @@ export const TacticalCommandCenter: React.FC = () => {
         { id: 'economy', label: 'Economía & Sistema', icon: '⚡', count: 6 },
     ];
 
-    const modulesByDomain: Record<CommandDomain, ModuleCardItem[]> = {
+    const modulesByDomain: Record<Exclude<CommandDomain, 'favs'>, ModuleCardItem[]> = {
         comms: [
             {
                 id: 'channels',
@@ -337,10 +361,21 @@ export const TacticalCommandCenter: React.FC = () => {
         navigate(action);
     };
 
-    const currentModules = modulesByDomain[activeDomain] || [];
+    const allModulesList: ModuleCardItem[] = useMemo(() => {
+        const lists = Object.values(modulesByDomain) as ModuleCardItem[][];
+        return lists.flat();
+    }, []);
 
-    const searchFilteredModules = searchQuery.trim() 
-        ? Object.values(modulesByDomain).flat().filter(m => {
+    const currentModules: ModuleCardItem[] = useMemo(() => {
+        if (activeDomain === 'favs') {
+            const favs = allModulesList.filter(m => favoriteModules.includes(m.id));
+            return favs.length > 0 ? favs : allModulesList.slice(0, 6);
+        }
+        return (modulesByDomain as Record<string, ModuleCardItem[]>)[activeDomain] || [];
+    }, [activeDomain, favoriteModules, allModulesList]);
+
+    const searchFilteredModules: ModuleCardItem[] | null = searchQuery.trim() 
+        ? allModulesList.filter(m => {
             const q = searchQuery.toLowerCase();
             return m.title.toLowerCase().includes(q) ||
                    m.subtitle.toLowerCase().includes(q) ||
@@ -533,21 +568,41 @@ export const TacticalCommandCenter: React.FC = () => {
                                     </h3>
                                 </div>
                             </div>
-                            {mod.badge && (
-                                <span style={{
-                                    fontSize: '9px',
-                                    fontWeight: 800,
-                                    padding: '2px 8px',
-                                    borderRadius: '10px',
-                                    background: 'rgba(255, 255, 255, 0.08)',
-                                    color: mod.badgeColor || 'var(--text-secondary)',
-                                    border: `1px solid ${mod.badgeColor || 'rgba(255,255,255,0.15)'}40`,
-                                    fontFamily: 'JetBrains Mono, monospace',
-                                    whiteSpace: 'nowrap'
-                                }}>
-                                    {mod.badge}
-                                </span>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <button
+                                    onClick={(e) => toggleFavorite(e, mod.id)}
+                                    style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '1rem',
+                                        padding: '2px',
+                                        color: favoriteModules.includes(mod.id) ? '#FFD700' : 'rgba(255,255,255,0.25)',
+                                        transition: 'transform 0.15s ease',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }}
+                                    title={favoriteModules.includes(mod.id) ? "Quitar de favoritos" : "Fijar en favoritos"}
+                                >
+                                    {favoriteModules.includes(mod.id) ? '⭐' : '☆'}
+                                </button>
+                                {mod.badge && (
+                                    <span style={{
+                                        fontSize: '9px',
+                                        fontWeight: 800,
+                                        padding: '2px 8px',
+                                        borderRadius: '10px',
+                                        background: 'rgba(255, 255, 255, 0.08)',
+                                        color: mod.badgeColor || 'var(--text-secondary)',
+                                        border: `1px solid ${mod.badgeColor || 'rgba(255,255,255,0.15)'}40`,
+                                        fontFamily: 'JetBrains Mono, monospace',
+                                        whiteSpace: 'nowrap'
+                                    }}>
+                                        {mod.badge}
+                                    </span>
+                                )}
+                            </div>
                         </div>
 
                         <p style={{

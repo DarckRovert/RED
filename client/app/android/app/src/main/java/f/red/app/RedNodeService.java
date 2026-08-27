@@ -587,7 +587,15 @@ public class RedNodeService extends Service {
                 }
 
                 if (value != null && value.length > 0) {
-                    // Forward bytes to Capacitor App via RedNodePlugin static event emitter
+                    // 1. Direct native JNI injection into Rust core node (runs 24/7 even with screen off/WebView frozen)
+                    if (RedNodePlugin.isNativeLoaded) {
+                        try {
+                            RedNodePlugin.injectBlePayload(value, device.getAddress());
+                        } catch (Throwable jniErr) {
+                            Log.w(TAG, "Direct JNI injectBlePayload warning: " + jniErr.getMessage());
+                        }
+                    }
+                    // 2. Forward bytes to Capacitor App via RedNodePlugin static event emitter for active UI
                     RedNodePlugin.emitBleMessage(value, device.getAddress());
                 }
             } else {

@@ -4,6 +4,7 @@ import { useTranslation } from "../../lib/i18n/i18nEngine";
 interface CallConnectingOverlayProps {
     isAudioOnly: boolean;
     callActive: boolean;
+    hasRemoteVideo?: boolean;
     status: string;
     peerDisplayName: string;
     vadLevel: number;
@@ -19,13 +20,14 @@ const ErrorBanner: React.FC<{ message: string }> = ({ message }) => (
 export const CallConnectingOverlay: React.FC<CallConnectingOverlayProps> = ({
     isAudioOnly,
     callActive,
+    hasRemoteVideo,
     status,
     peerDisplayName,
     vadLevel,
     waveformCanvasRef,
 }) => {
     const { t } = useTranslation();
-    if (!isAudioOnly && callActive) return null;
+    if (!isAudioOnly && (hasRemoteVideo || callActive)) return null;
 
     const displayStatus = callActive
         ? (t.calls?.connected || "LLAMADA CIFRADA E2E")

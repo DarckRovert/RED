@@ -127,6 +127,14 @@ pub enum MessageType {
     },
     /// Encrypted group message using SenderKey
     GroupPayload(crate::protocol::group::GroupMessage),
+    /// Group Invitation / Descriptor Distribution (v64.1)
+    GroupInvite {
+        group_id: [u8; 32],
+        group_name: String,
+        creator_hash: IdentityHash,
+        members: Vec<IdentityHash>,
+        created_at: u64,
+    },
     /// Timer update for disappearing messages
     TimerUpdate {
         seconds: u32,
@@ -244,6 +252,7 @@ impl MessageType {
             MessageType::ReadReceipt { message_ids } => message_ids.len() * 32,
             MessageType::Typing { .. } => 1,
             MessageType::GroupPayload(msg) => msg.ciphertext.len() + 68,
+            MessageType::GroupInvite { group_name, members, .. } => 72 + group_name.len() + members.len() * 32,
             MessageType::TimerUpdate { .. } => 4,
             MessageType::Ephemeral { content, .. } => 8 + content.size(),
             MessageType::SocialPost(data) => data.len(),
@@ -266,7 +275,7 @@ impl MessageType {
     /// Check if this is a control message (not user content)
     pub fn is_control(&self) -> bool {
         match self {
-            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } | MessageType::PresenceBeacon { .. } | MessageType::ChannelHopCoordination { .. } | MessageType::WebRTCSignal(_) | MessageType::ContactRequest(_) | MessageType::ContactResponse(_) => true,
+            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } | MessageType::PresenceBeacon { .. } | MessageType::ChannelHopCoordination { .. } | MessageType::WebRTCSignal(_) | MessageType::ContactRequest(_) | MessageType::ContactResponse(_) | MessageType::GroupInvite { .. } => true,
             MessageType::Ephemeral { content, .. } => content.is_control(),
             _ => false,
         }

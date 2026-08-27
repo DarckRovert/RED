@@ -1,14 +1,16 @@
 /**
- * PqcCryptoEngine.ts — RED Post-Quantum Hybrid Cryptography Engine (NIST ML-KEM-768 / Kyber + ECDH)
+ * PqcCryptoEngine.ts — RED Post-Quantum Hybrid Cryptography Engine (NIST ML-KEM-768 / Kyber + X25519)
  *
- * Implements a dual-hybrid Key Encapsulation Mechanism (KEM) combining classical ECDH P-256
+ * Implements a dual-hybrid Key Encapsulation Mechanism (KEM) combining classical Curve25519 (X25519)
  * with NIST FIPS 203 ML-KEM-768 (Kyber-768) lattice-based encryption over ring R_q = Z_q[X]/(X^256 + 1).
  * Protects against both classical and quantum "Harvest Now, Decrypt Later" adversaries.
  */
 
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js';
 import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
-import { ed25519 } from '@noble/curves/ed25519.js';
+import { ed25519, x25519 } from '@noble/curves/ed25519.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 export interface HybridKeyPair {
     x25519PublicKeyHex: string;
@@ -37,137 +39,110 @@ export interface EncapsulatedSecret {
 
 export class PqcCryptoEngine {
     private static CT_KEM_LEN = 1088; // NIST FIPS 203 ML-KEM-768 ciphertext length
+    private static X25519_PUB_LEN = 32; // Curve25519 public key length
+    private static KYBER_PUB_LEN = 1184; // ML-KEM-768 public key length
+    private static KYBER_SEC_LEN = 2400; // ML-KEM-768 secret key length
 
     /**
      * Generates a hybrid post-quantum key pair:
-     * - Classical ECDH P-256 key pair (65B raw public, 138B pkcs8 private)
+     * - Classical X25519 Diffie-Hellman key pair (32B public, 32B private)
      * - ML-KEM-768 key pair with authentic NTT polynomial arithmetic (1184B public, 2400B secret)
      */
     public static async generateHybridKeyPair(): Promise<HybridKeyPair> {
-        const cryptoSubtle = this.getCryptoSubtle();
+        // 1. Classical X25519 key generation (32 bytes)
+        const x25519Keys = x25519.keygen();
 
-        // 1. Classical ECDH P-256 key generation
-        const ecdhKeyPair = await cryptoSubtle.generateKey(
-            { name: 'ECDH', namedCurve: 'P-256' },
-            true,
-            ['deriveKey', 'deriveBits']
-        );
-
-        const rawPub = await cryptoSubtle.exportKey('raw', ecdhKeyPair.publicKey);
-        const pkcs8Priv = await cryptoSubtle.exportKey('pkcs8', ecdhKeyPair.privateKey);
-
-        // 2. Authentic NIST FIPS 203 ML-KEM-768 key generation
+        // 2. Authentic NIST FIPS 203 ML-KEM-768 key generation (1184B pub, 2400B sec)
         const mlKemKeys = ml_kem768.keygen();
 
         return {
-            x25519PublicKeyHex:  this.bytesToHex(new Uint8Array(rawPub)),
-            x25519PrivateKeyHex: this.bytesToHex(new Uint8Array(pkcs8Priv)),
-            kyberPublicKeyHex:   this.bytesToHex(mlKemKeys.publicKey),
-            kyberPrivateKeyHex:  this.bytesToHex(mlKemKeys.secretKey),
+            x25519PublicKeyHex:  bytesToHex(x25519Keys.publicKey),
+            x25519PrivateKeyHex: bytesToHex(x25519Keys.secretKey),
+            kyberPublicKeyHex:   bytesToHex(mlKemKeys.publicKey),
+            kyberPrivateKeyHex:  bytesToHex(mlKemKeys.secretKey),
         };
     }
 
     /**
-     * Encapsulates a shared secret using recipient's ML-KEM-768 public key (1184 bytes) and ECDH public key (65 bytes).
-     * Produces an authentic combined ciphertext (1088B ML-KEM + 65B Ephemeral ECDH = 1153B)
-     * and derives a 256-bit hybrid shared secret via SHA-256 KDF(ss_kem || ss_ecdh).
+     * Encapsulates a shared secret using recipient's ML-KEM-768 public key (1184 bytes) and X25519 public key (32 bytes).
+     * Produces an authentic combined ciphertext (1088B ML-KEM + 32B Ephemeral X25519 = 1120B)
+     * and derives a 256-bit hybrid shared secret via SHA-256 KDF(ss_kem || ss_x25519).
      */
     public static async encapsulateSharedSecret(
         peerKyberPubHex: string,
-        peerEcdhPubHex: string
+        peerX25519PubHex: string
     ): Promise<EncapsulatedSecret> {
-        const cryptoSubtle = this.getCryptoSubtle();
-        const peerKyberPubBytes = this.hexToBytes(peerKyberPubHex);
-        const peerEcdhPubBytes = this.hexToBytes(peerEcdhPubHex);
+        const peerKyberPubBytes = hexToBytes(peerKyberPubHex.trim());
+        const peerX25519PubBytes = hexToBytes(peerX25519PubHex.trim());
+
+        if (peerKyberPubBytes.length !== this.KYBER_PUB_LEN) {
+            throw new Error(`Invalid ML-KEM-768 public key length: ${peerKyberPubBytes.length} bytes (expected ${this.KYBER_PUB_LEN})`);
+        }
+        if (peerX25519PubBytes.length !== this.X25519_PUB_LEN) {
+            throw new Error(`Invalid X25519 public key length: ${peerX25519PubBytes.length} bytes (expected ${this.X25519_PUB_LEN})`);
+        }
 
         // 1. Authentic ML-KEM-768 Encapsulation
         const { cipherText: ctKem, sharedSecret: ssKem } = ml_kem768.encapsulate(peerKyberPubBytes);
 
-        // 2. Ephemeral ECDH P-256 Key Exchange
-        const ephemKeyPair = await cryptoSubtle.generateKey(
-            { name: 'ECDH', namedCurve: 'P-256' },
-            true,
-            ['deriveBits']
-        );
-        const ephemPubRaw = await cryptoSubtle.exportKey('raw', ephemKeyPair.publicKey);
-        const peerEcdhKey = await cryptoSubtle.importKey(
-            'raw',
-            peerEcdhPubBytes as ArrayBufferView<ArrayBuffer>,
-            { name: 'ECDH', namedCurve: 'P-256' },
-            false,
-            []
-        );
-        const ssEcdhBuffer = await cryptoSubtle.deriveBits(
-            { name: 'ECDH', public: peerEcdhKey },
-            ephemKeyPair.privateKey,
-            256
-        );
-        const ssEcdh = new Uint8Array(ssEcdhBuffer);
+        // 2. Ephemeral X25519 Key Exchange (32B)
+        const ephemKeys = x25519.keygen();
+        const ssX25519 = x25519.getSharedSecret(ephemKeys.secretKey, peerX25519PubBytes);
 
-        // 3. Combined Ciphertext: ctKem (1088 bytes) + ephemPubRaw (65 bytes) = 1153 bytes
-        const combinedCt = new Uint8Array(ctKem.length + ephemPubRaw.byteLength);
+        // 3. Combined Ciphertext: ctKem (1088 bytes) + ephemPub (32 bytes) = 1120 bytes
+        const combinedCt = new Uint8Array(ctKem.length + ephemKeys.publicKey.length);
         combinedCt.set(ctKem, 0);
-        combinedCt.set(new Uint8Array(ephemPubRaw), ctKem.length);
+        combinedCt.set(ephemKeys.publicKey, ctKem.length);
 
-        // 4. Hybrid KDF: SHA-256(ssKem || ssEcdh)
-        const kdfInput = new Uint8Array(ssKem.length + ssEcdh.length);
+        // 4. Hybrid KDF: SHA-256(ssKem || ssX25519)
+        const kdfInput = new Uint8Array(ssKem.length + ssX25519.length);
         kdfInput.set(ssKem, 0);
-        kdfInput.set(ssEcdh, ssKem.length);
-        const finalSecretHex = await this.sha256Hex(kdfInput);
+        kdfInput.set(ssX25519, ssKem.length);
+        const finalSecret = sha256(kdfInput);
 
         return {
-            ciphertextHex:   this.bytesToHex(combinedCt),
-            sharedSecretHex: finalSecretHex,
+            ciphertextHex:   bytesToHex(combinedCt),
+            sharedSecretHex: bytesToHex(finalSecret),
         };
     }
 
     /**
-     * Decapsulates the shared secret using recipient's ML-KEM-768 secret key (2400 bytes) and ECDH private key.
+     * Decapsulates the shared secret using recipient's ML-KEM-768 secret key (2400 bytes) and X25519 private key (32 bytes).
      */
     public static async decapsulateSharedSecret(
         ciphertextHex: string,
         kyberPrivHex:  string,
-        ecdhPrivHex:   string
+        x25519PrivHex: string
     ): Promise<string> {
-        const cryptoSubtle = this.getCryptoSubtle();
-        const combinedCt = this.hexToBytes(ciphertextHex);
-        const kyberPrivBytes = this.hexToBytes(kyberPrivHex);
-        const ecdhPrivBytes = this.hexToBytes(ecdhPrivHex);
+        const combinedCt = hexToBytes(ciphertextHex.trim());
+        const kyberPrivBytes = hexToBytes(kyberPrivHex.trim());
+        const x25519PrivBytes = hexToBytes(x25519PrivHex.trim());
+
+        if (combinedCt.length < this.CT_KEM_LEN + this.X25519_PUB_LEN) {
+            throw new Error(`Ciphertext too short for hybrid decapsulation: ${combinedCt.length} bytes (expected at least ${this.CT_KEM_LEN + this.X25519_PUB_LEN})`);
+        }
+        if (kyberPrivBytes.length !== this.KYBER_SEC_LEN) {
+            throw new Error(`Invalid ML-KEM-768 secret key length: ${kyberPrivBytes.length} bytes (expected ${this.KYBER_SEC_LEN})`);
+        }
+        if (x25519PrivBytes.length !== this.X25519_PUB_LEN) {
+            throw new Error(`Invalid X25519 secret key length: ${x25519PrivBytes.length} bytes (expected ${this.X25519_PUB_LEN})`);
+        }
 
         const ctKem = combinedCt.slice(0, this.CT_KEM_LEN);
-        const ephemPubBytes = combinedCt.slice(this.CT_KEM_LEN);
+        const ephemPubBytes = combinedCt.slice(this.CT_KEM_LEN, this.CT_KEM_LEN + this.X25519_PUB_LEN);
 
         // 1. Authentic ML-KEM-768 Decapsulation
         const ssKem = ml_kem768.decapsulate(ctKem, kyberPrivBytes);
 
-        // 2. ECDH Decapsulation
-        const ephemPubKey = await cryptoSubtle.importKey(
-            'raw',
-            ephemPubBytes as ArrayBufferView<ArrayBuffer>,
-            { name: 'ECDH', namedCurve: 'P-256' },
-            false,
-            []
-        );
-        const myPrivKey = await cryptoSubtle.importKey(
-            'pkcs8',
-            ecdhPrivBytes as ArrayBufferView<ArrayBuffer>,
-            { name: 'ECDH', namedCurve: 'P-256' },
-            false,
-            ['deriveBits']
-        );
-        const ssEcdhBuffer = await cryptoSubtle.deriveBits(
-            { name: 'ECDH', public: ephemPubKey },
-            myPrivKey,
-            256
-        );
-        const ssEcdh = new Uint8Array(ssEcdhBuffer);
+        // 2. X25519 Decapsulation
+        const ssX25519 = x25519.getSharedSecret(x25519PrivBytes, ephemPubBytes);
 
-        // 3. Hybrid KDF: SHA-256(ssKem || ssEcdh)
-        const kdfInput = new Uint8Array(ssKem.length + ssEcdh.length);
+        // 3. Hybrid KDF: SHA-256(ssKem || ssX25519)
+        const kdfInput = new Uint8Array(ssKem.length + ssX25519.length);
         kdfInput.set(ssKem, 0);
-        kdfInput.set(ssEcdh, ssKem.length);
+        kdfInput.set(ssX25519, ssKem.length);
 
-        return this.sha256Hex(kdfInput);
+        return bytesToHex(sha256(kdfInput));
     }
 
     /**
@@ -183,10 +158,10 @@ export class PqcCryptoEngine {
         const mlDsaKeys = ml_dsa65.keygen();
 
         return {
-            ed25519PublicKeyHex:   this.bytesToHex(edPub),
-            ed25519PrivateKeyHex:  this.bytesToHex(edPriv),
-            dilithiumPublicKeyHex: this.bytesToHex(mlDsaKeys.publicKey),
-            dilithiumPrivateKeyHex: this.bytesToHex(mlDsaKeys.secretKey),
+            ed25519PublicKeyHex:   bytesToHex(edPub),
+            ed25519PrivateKeyHex:  bytesToHex(edPriv),
+            dilithiumPublicKeyHex: bytesToHex(mlDsaKeys.publicKey),
+            dilithiumPrivateKeyHex: bytesToHex(mlDsaKeys.secretKey),
         };
     }
 
@@ -199,8 +174,8 @@ export class PqcCryptoEngine {
         ed25519PrivKeyHex: string,
         dilithiumPrivKeyHex: string
     ): Promise<HybridSignature> {
-        const edPrivBytes = this.hexToBytes(ed25519PrivKeyHex);
-        const dsaPrivBytes = this.hexToBytes(dilithiumPrivKeyHex);
+        const edPrivBytes = hexToBytes(ed25519PrivKeyHex.trim());
+        const dsaPrivBytes = hexToBytes(dilithiumPrivKeyHex.trim());
 
         // 1. Classical Ed25519 Signature (64 bytes)
         const edSig = ed25519.sign(message, edPrivBytes);
@@ -214,9 +189,9 @@ export class PqcCryptoEngine {
         combined.set(dsaSig, edSig.length);
 
         return {
-            ed25519SigHex: this.bytesToHex(edSig),
-            dilithiumSigHex: this.bytesToHex(dsaSig),
-            combinedSignatureHex: this.bytesToHex(combined),
+            ed25519SigHex: bytesToHex(edSig),
+            dilithiumSigHex: bytesToHex(dsaSig),
+            combinedSignatureHex: bytesToHex(combined),
         };
     }
 
@@ -235,17 +210,17 @@ export class PqcCryptoEngine {
             let dsaSigBytes: Uint8Array;
 
             if (typeof signature === 'string') {
-                const rawSig = this.hexToBytes(signature);
+                const rawSig = hexToBytes(signature.trim());
                 if (rawSig.length < 64) return false;
                 edSigBytes = rawSig.slice(0, 64);
                 dsaSigBytes = rawSig.slice(64);
             } else {
-                edSigBytes = this.hexToBytes(signature.ed25519SigHex);
-                dsaSigBytes = this.hexToBytes(signature.dilithiumSigHex);
+                edSigBytes = hexToBytes(signature.ed25519SigHex.trim());
+                dsaSigBytes = hexToBytes(signature.dilithiumSigHex.trim());
             }
 
-            const edPubBytes = this.hexToBytes(ed25519PubKeyHex);
-            const dsaPubBytes = this.hexToBytes(dilithiumPubKeyHex);
+            const edPubBytes = hexToBytes(ed25519PubKeyHex.trim());
+            const dsaPubBytes = hexToBytes(dilithiumPubKeyHex.trim());
 
             // 1. Verify Ed25519
             const edOk = ed25519.verify(edSigBytes, message, edPubBytes);
@@ -257,39 +232,6 @@ export class PqcCryptoEngine {
         } catch {
             return false;
         }
-    }
-
-    private static getCryptoSubtle(): SubtleCrypto {
-        if (typeof window !== 'undefined' && window.crypto?.subtle) {
-            return window.crypto.subtle;
-        }
-        if (typeof globalThis !== 'undefined' && globalThis.crypto?.subtle) {
-            return globalThis.crypto.subtle;
-        }
-        throw new Error(
-            '[PqcCryptoEngine] crypto.subtle unavailable. ' +
-            'This engine requires a secure origin (HTTPS or Capacitor).'
-        );
-    }
-
-    private static async sha256Hex(data: Uint8Array): Promise<string> {
-        const cryptoSubtle = this.getCryptoSubtle();
-        const buf: ArrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-        const hashBuffer = await cryptoSubtle.digest('SHA-256', buf);
-        const hashArray  = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    private static bytesToHex(bytes: Uint8Array): string {
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    private static hexToBytes(hex: string): Uint8Array {
-        const bytes = new Uint8Array(Math.ceil(hex.length / 2));
-        for (let i = 0; i < bytes.length; i++) {
-            bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16) || 0;
-        }
-        return bytes;
     }
 }
 

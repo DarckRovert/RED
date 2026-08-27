@@ -141,7 +141,7 @@ export const AppearanceTab: React.FC = () => {
                             </p>
                         </div>
 
-                        {/* Grid de Temas */}
+                        {/* Grid de Temas Tácticos Militares */}
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px" }}>
                             {Object.values(TACTICAL_THEMES).map((theme) => {
                                 const isSelected = preferences.themeId === theme.id;
@@ -155,12 +155,15 @@ export const AppearanceTab: React.FC = () => {
                                             display: "flex", flexDirection: "column", gap: "8px",
                                             border: isSelected ? `2px solid ${theme.primary}` : "1px solid var(--glass-border)",
                                             background: isSelected ? "rgba(255,255,255,0.06)" : "var(--glass-bg)",
-                                            boxShadow: isSelected ? `0 0 16px ${theme.primaryGlow}` : "none"
+                                            boxShadow: isSelected ? `0 0 16px ${theme.primaryGlow}` : "none",
+                                            borderRadius: "14px"
                                         }}
                                     >
                                         <div style={{
                                             height: "36px", borderRadius: "8px",
-                                            background: theme.previewGradient,
+                                            background: theme.id === 'custom'
+                                                ? `linear-gradient(135deg, ${preferences.customPrimaryColor || '#E8213A'} 0%, ${preferences.customAccentColor || '#00E5FF'} 100%)`
+                                                : theme.previewGradient,
                                             display: "flex", alignItems: "center", justifyContent: "flex-end",
                                             padding: "6px"
                                         }}>
@@ -187,6 +190,92 @@ export const AppearanceTab: React.FC = () => {
                                 );
                             })}
                         </div>
+
+                        {/* ── SECCIÓN 2.1: PERSONALIZADOR TÁCTICO DE COLOR (CUSTOM BUILDER) ── */}
+                        {preferences.themeId === 'custom' && (
+                            <div className="card-tactical" style={{
+                                padding: "16px",
+                                borderRadius: "14px",
+                                border: "1.5px solid var(--accent-primary, #E8213A)",
+                                background: "linear-gradient(135deg, rgba(232,33,58,0.08) 0%, rgba(0,229,255,0.05) 100%)",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "12px",
+                                animation: "fadeIn 0.2s ease"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span>🎛️</span>
+                                        <span>Configuración de Paleta Personalizada</span>
+                                    </div>
+                                    <span className="badge-tactical" style={{ fontSize: "0.65rem", fontWeight: 900, background: "var(--primary)", color: "#FFF" }}>
+                                        EN VIVO
+                                    </span>
+                                </div>
+
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                    {/* Color Primario */}
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        <label style={{ fontSize: "0.74rem", color: "var(--text-secondary)", fontWeight: 700 }}>
+                                            Color Primario
+                                        </label>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <input
+                                                type="color"
+                                                value={preferences.customPrimaryColor || "#E8213A"}
+                                                onChange={(e) => {
+                                                    updatePreferences({ customPrimaryColor: e.target.value });
+                                                }}
+                                                style={{ width: 38, height: 38, border: "none", borderRadius: "8px", cursor: "pointer", background: "none" }}
+                                            />
+                                            <span style={{ fontSize: "0.78rem", fontFamily: "JetBrains Mono, monospace", color: "#FFF", fontWeight: 700 }}>
+                                                {preferences.customPrimaryColor || "#E8213A"}
+                                            </span>
+                                        </div>
+                                        {/* Quick Color Dots */}
+                                        <div style={{ display: "flex", gap: "6px", marginTop: "2px" }}>
+                                            {["#E8213A", "#FF6B00", "#D4A373", "#00E676", "#00D2FF", "#E040FB"].map(c => (
+                                                <div
+                                                    key={c}
+                                                    onClick={() => updatePreferences({ customPrimaryColor: c })}
+                                                    style={{ width: 16, height: 16, borderRadius: "50%", background: c, cursor: "pointer", border: "1px solid rgba(255,255,255,0.4)" }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Color Secundario / Acento */}
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        <label style={{ fontSize: "0.74rem", color: "var(--text-secondary)", fontWeight: 700 }}>
+                                            Color Secundario / Acento
+                                        </label>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <input
+                                                type="color"
+                                                value={preferences.customAccentColor || "#00E5FF"}
+                                                onChange={(e) => {
+                                                    updatePreferences({ customAccentColor: e.target.value });
+                                                }}
+                                                style={{ width: 38, height: 38, border: "none", borderRadius: "8px", cursor: "pointer", background: "none" }}
+                                            />
+                                            <span style={{ fontSize: "0.78rem", fontFamily: "JetBrains Mono, monospace", color: "#FFF", fontWeight: 700 }}>
+                                                {preferences.customAccentColor || "#00E5FF"}
+                                            </span>
+                                        </div>
+                                        {/* Quick Color Dots */}
+                                        <div style={{ display: "flex", gap: "6px", marginTop: "2px" }}>
+                                            {["#00E5FF", "#00FF66", "#FFD600", "#FF4081", "#7C4DFF", "#FFFFFF"].map(c => (
+                                                <div
+                                                    key={c}
+                                                    onClick={() => updatePreferences({ customAccentColor: c })}
+                                                    style={{ width: 16, height: 16, borderRadius: "50%", background: c, cursor: "pointer", border: "1px solid rgba(255,255,255,0.4)" }}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         <hr style={{ borderColor: "var(--glass-border)", margin: "4px 0" }} />
 

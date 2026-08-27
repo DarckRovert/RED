@@ -845,6 +845,11 @@ export const MessageBubble = memo(({
                                 </div>
                             )}
 
+                            {/* P2P Decentralized Poll Card */}
+                            {msg.msg_type === "poll" && (
+                                <PollMessage msg={msg} onVote={(optIdx) => onVote(msg.id, optIdx)} />
+                            )}
+
                             {/* Standard Text content — with URL & mention highlighting */}
                             {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>

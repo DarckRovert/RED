@@ -286,7 +286,9 @@ class MonetizationEngineService {
             console.log('[MonetizationEngine] User completed Rewarded Video!', reward);
             this.grantProReward(24);
             this.recordTransaction('reward_ad', 100, 'Recompensa por Transmisión Patrocinada (+24h Pro & +100 RED)');
-            this.onRewardCallbacks.forEach(cb => {
+            const callbacks = [...this.onRewardCallbacks];
+            this.onRewardCallbacks = [];
+            callbacks.forEach(cb => {
                 try { cb(reward); } catch (e: any) { console.warn('[MonetizationEngine] Reward callback error:', e?.message || e); }
             });
         });
@@ -294,11 +296,13 @@ class MonetizationEngineService {
         AdMob.addListener(RewardAdPluginEvents.FailedToLoad, (err) => {
             console.warn('[MonetizationEngine] Rewarded Ad failed to load:', err);
             this.isAdLoading = false;
+            this.onRewardCallbacks = [];
         });
 
         AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
             console.log('[MonetizationEngine] Rewarded Ad dismissed');
             this.isAdLoading = false;
+            this.onRewardCallbacks = [];
         });
 
         this.listenersRegistered = true;
@@ -306,16 +310,33 @@ class MonetizationEngineService {
 
     /**
      * Muestra un video bonificado. Intenta con la unidad real y hace fallback al ID de pruebas oficial de Google.
+     * Si el dispositivo está fuera de línea (Off-Grid), activa la soberanía táctica sin bloquear.
      */
     public async showRewardedVideo(onRewarded?: (reward: AdMobRewardItem) => void): Promise<{ success: boolean; message: string }> {
         if (onRewarded) {
             this.onRewardCallbacks.push(onRewarded);
         }
 
+        // 1. Detección de Aislamiento de Red Off-Grid (Zero-Internet Sentinel)
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            console.log('[MonetizationEngine] Dispositivo Off-Grid detectado — operando en Modo Soberano Puro');
+            this.onRewardCallbacks = [];
+            return {
+                success: false,
+                message: 'Modo Soberano Activo: Nodo desconectado de Internet. Genera créditos mediante Proof-of-Relay en la malla P2P o canjea vales criptográficos offline.'
+            };
+        }
+
         if (!Capacitor.isNativePlatform()) {
             // Simulación transparente en Web para desarrollo
             this.grantProReward(24);
             this.recordTransaction('reward_ad', 100, 'Recompensa de Desarrollo Web (+24h Pro & +100 RED)');
+            const dummyReward: AdMobRewardItem = { type: 'RED_CREDITS', amount: 100 };
+            const callbacks = [...this.onRewardCallbacks];
+            this.onRewardCallbacks = [];
+            callbacks.forEach(cb => {
+                try { cb(dummyReward); } catch {}
+            });
             return { 
                 success: true, 
                 message: 'Modo Web: Recompensa de +24h Modo Pro y 100 Créditos acreditada con éxito.' 
@@ -351,7 +372,7 @@ class MonetizationEngineService {
                 console.error('[MonetizationEngine] Failed to show rewarded video:', testErr);
                 return { 
                     success: false, 
-                    message: testErr?.message || 'No se pudo conectar con la red de patrocinio. Verifica tu conexión a Internet.' 
+                    message: testErr?.message || 'Red de patrocinio no disponible. Opera en Modo Soberano Off-Grid.' 
                 };
             }
         }

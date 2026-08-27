@@ -177,6 +177,30 @@ impl Group {
         }
     }
 
+    /// Create a group with a specific pre-determined GroupId (e.g. from GroupInvite)
+    pub fn create_with_id(id: GroupId, name: String, creator: GroupMember) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        let mut members = HashMap::new();
+        let creator_hash = creator.identity_hash.clone();
+        members.insert(creator_hash, creator);
+
+        Self {
+            id,
+            name,
+            description: None,
+            broadcast_only: false,
+            members,
+            our_sender_key: SenderKey::generate(),
+            member_sender_keys: HashMap::new(),
+            created_at: now,
+            last_activity: now,
+        }
+    }
+
     /// Promote a member to a higher role (requires caller to be Admin)
     pub fn promote_member(
         &mut self,

@@ -86,10 +86,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             className={`btn-tactical-pill ${activeTab === tab.id ? "active" : ""}`}
                             style={{
                                 padding: "8px 14px", borderRadius: "12px",
-                                border: activeTab === tab.id ? "1px solid var(--accent-red, #E8213A)" : "1px solid transparent",
-                                background: activeTab === tab.id ? "rgba(232, 33, 58, 0.18)" : "rgba(255, 255, 255, 0.04)",
+                                border: activeTab === tab.id ? "1.5px solid var(--primary, #E8213A)" : "1px solid rgba(255,255,255,0.06)",
+                                background: activeTab === tab.id ? "var(--primary-subtle, rgba(232, 33, 58, 0.18))" : "rgba(255, 255, 255, 0.04)",
                                 color: activeTab === tab.id ? "#FFF" : "var(--text-secondary)",
-                                fontSize: "0.82rem", fontWeight: activeTab === tab.id ? 700 : 500,
+                                fontSize: "0.82rem", fontWeight: activeTab === tab.id ? 800 : 500,
+                                boxShadow: activeTab === tab.id ? "0 0 12px var(--primary-glow)" : "none",
                                 cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
                                 whiteSpace: "nowrap", transition: "all 0.15s"
                             }}

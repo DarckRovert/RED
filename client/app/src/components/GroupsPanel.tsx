@@ -37,16 +37,13 @@ export default function GroupsPanel() {
 
         setCreationStatus("Sincronizando llaves compartidas (SenderKey)...");
         try {
-            await RedAPI.req("/groups", {
-                method: "POST",
-                body: JSON.stringify({ name: groupName.trim(), members: selectedContacts })
-            });
+            await RedAPI.createGroup(groupName.trim(), selectedContacts);
             setCreationStatus("Grupo federado con éxito.");
             toast.success(`Escuadrón ${groupName} creado con éxito`);
             await fetchData();
             setTimeout(() => goBack(), 1200);
         } catch (e) {
-            console.error("Group creation failed natively", e);
+            console.error("Group creation failed", e);
             setCreationStatus("Error al crear el grupo.");
             toast.error("Error al federar contrato de grupo");
         }

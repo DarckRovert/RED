@@ -403,7 +403,16 @@ export class MqttRelayTransport {
       const payloadStr = new TextDecoder().decode(payload);
 
       // A) Signaling message (SDP / ICE / Handshake)
-      if (topic.includes('/sig/') || payloadStr.startsWith('{"type":"offer"') || payloadStr.startsWith('{"type":"answer"') || payloadStr.startsWith('{"type":"ice-candidate"')) {
+      const isSignaling = topic.includes('/sig/') ||
+        (payloadStr.startsWith('{') && (
+          payloadStr.includes('"offer":') ||
+          payloadStr.includes('"answer":') ||
+          payloadStr.includes('"candidate":') ||
+          payloadStr.includes('"hangup":') ||
+          payloadStr.includes('webrtc_signal')
+        ));
+
+      if (isSignaling) {
         const sigMsg = JSON.parse(payloadStr);
         this.signalingListeners.forEach(cb => {
           try { cb(sigMsg); } catch {}

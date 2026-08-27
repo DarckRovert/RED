@@ -338,6 +338,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_displayName', cleanName);
             localStorage.setItem('user_nickname', cleanName);
+            localStorage.setItem('red_identity_nickname', cleanName);
             if (phone) {
                 localStorage.setItem('red_phoneNumber', phone);
                 localStorage.setItem('user_phone_number', phone);
@@ -352,6 +353,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         import('capacitor-secure-storage-plugin').then(({ SecureStoragePlugin }) => {
                             SecureStoragePlugin.set({ key: "red_displayName", value: cleanName }).catch(() => null);
                             SecureStoragePlugin.set({ key: "user_nickname", value: cleanName }).catch(() => null);
+                            SecureStoragePlugin.set({ key: "red_identity_nickname", value: cleanName }).catch(() => null);
                             if (phone) SecureStoragePlugin.set({ key: "red_phoneNumber", value: phone }).catch(() => null);
                             if (bio) SecureStoragePlugin.set({ key: "red_bio", value: bio }).catch(() => null);
                         });

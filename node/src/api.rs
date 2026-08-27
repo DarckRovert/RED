@@ -1275,11 +1275,12 @@ async fn handle_create_group(
     let mut node = state.node.lock().await;
     match node.create_group(req.name).await {
         Ok(mut group) => {
+            let mut added_members = Vec::new();
             // Add initial members if provided
             for member_hash in req.members {
                 if let Ok(id_hash) = parse_identity_hash(&member_hash) {
                     let member = red_core::protocol::GroupMember {
-                        identity_hash: id_hash,
+                        identity_hash: id_hash.clone(),
                         public_key: red_core::crypto::keys::PublicKey::from_bytes([0u8; 32]), // Placeholder until resolved
                         joined_at: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -1289,7 +1290,20 @@ async fn handle_create_group(
                         muted: false,
                     };
                     let _ = group.add_member(member);
+                    added_members.push(id_hash);
                 }
+            }
+
+            // Persist the updated group with its members in node storage
+            {
+                let storage_arc = node.get_storage();
+                let mut s = storage_arc.lock().await;
+                let _ = s.add_group(group.clone());
+            }
+
+            // Broadcast GroupInvite descriptors to each member
+            for member_hash in added_members {
+                let _ = node.send_group_invite(group.id.clone(), member_hash).await;
             }
 
             Json(serde_json::json!({

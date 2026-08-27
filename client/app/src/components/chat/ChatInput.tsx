@@ -4,6 +4,7 @@ import { useRedStore } from "../../store/useRedStore";
 import { LocalAIEngine } from "../../lib/localAiEngine";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { TacticalEmojiPicker } from "./TacticalEmojiPicker";
 
 export interface ChatInputProps {
     inputText?: string;
@@ -47,6 +48,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [localText, setLocalText] = useState("");
     const [localAttachOpen, setLocalAttachOpen] = useState(false);
+    const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
     const [multiline, setMultiline] = useState(false);
     const [isHandsFree, setIsHandsFree] = useState(false);
     const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -325,10 +327,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         <button
                             onClick={() => setIsAttachOpen(!isAttachOpen)}
                             className={`btn-icon ${isAttachOpen ? "active" : ""}`}
-                            style={{ width: 40, height: 40, fontSize: "1.2rem", flexShrink: 0 }}
+                            style={{ width: 38, height: 38, fontSize: "1.15rem", flexShrink: 0 }}
                             title="Adjuntar multimedia"
                         >
                             📎
+                        </button>
+
+                        <button
+                            onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
+                            className={`btn-icon ${emojiPickerOpen ? "active" : ""}`}
+                            style={{
+                                width: 38,
+                                height: 38,
+                                fontSize: "1.15rem",
+                                flexShrink: 0,
+                                color: emojiPickerOpen ? "var(--accent-cyan)" : "var(--text-secondary)",
+                                background: emojiPickerOpen ? "rgba(0, 229, 255, 0.15)" : "transparent",
+                                borderRadius: "50%",
+                                transition: "all 0.15s ease",
+                            }}
+                            title="Símbolos & Emojis Tácticos"
+                        >
+                            😊
                         </button>
 
                         <div style={{
@@ -556,6 +576,28 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     </>
                 )}
             </div>
+
+            {/* Tactical Emoji Picker Popover */}
+            <TacticalEmojiPicker
+                isOpen={emojiPickerOpen}
+                onClose={() => setEmojiPickerOpen(false)}
+                onSelectEmoji={(emoji) => {
+                    const ta = textareaRef.current;
+                    if (ta) {
+                        const start = ta.selectionStart || text.length;
+                        const end = ta.selectionEnd || text.length;
+                        const updated = text.substring(0, start) + emoji + text.substring(end);
+                        setText(updated);
+                        setTimeout(() => {
+                            ta.focus();
+                            const newPos = start + emoji.length;
+                            ta.setSelectionRange(newPos, newPos);
+                        }, 10);
+                    } else {
+                        setText(text + emoji);
+                    }
+                }}
+            />
         </div>
     );
 };

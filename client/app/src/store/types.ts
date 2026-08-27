@@ -48,7 +48,7 @@ export interface PendingContactRequest {
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'commandCenter' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault' | 'webCompanionLink' | 'companionLink';
+export type ScreenView = 'sidebar' | 'commandCenter' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'squads' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault' | 'webCompanionLink' | 'companionLink';
 
 export interface RedStore {
     // 0. User Preferences & UI Customization
@@ -124,7 +124,7 @@ export interface RedStore {
     streamId: string | null;             // own active stream id
 
     // ── WebRTC Voice & Video Call State ───────────────────────────────────────
-    incomingCall: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video'; callId?: string } | null;
+    incomingCall: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video'; callId?: string; startedAt?: number } | null;
     activeCallOffer: any | null;
     activeCallSignal: { senderHash: string; signal: any } | null;
     callSignalQueue: { senderHash: string; signal: any; timestamp: number }[];
@@ -135,7 +135,7 @@ export interface RedStore {
     setActiveCallPeer: (peer: string | null) => void;
     setActiveCallType: (type: 'audio' | 'video') => void;
     setActiveCallOffer: (offer: any | null) => void;
-    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video'; callId?: string } | null) => void;
+    setIncomingCall: (call: { callerHash: string; callerName: string; offer: any; callType: 'audio' | 'video'; callId?: string; startedAt?: number } | null) => void;
     setActiveCallSignal: (sig: { senderHash: string; signal: any } | null) => void;
     pushCallSignal: (sig: { senderHash: string; signal: any }) => void;
     clearCallSignals: () => void;

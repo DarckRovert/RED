@@ -7,7 +7,19 @@
 import { RingtoneType } from "./CallRingtoneEngine";
 import type { LanguageMode } from "./i18n/i18nEngine";
 
-export type TacticalThemeId = 'void-crimson' | 'cyber-cyan' | 'emerald-recon' | 'ghost-purple' | 'solar-amber' | 'stealth-dark';
+export type TacticalThemeId = 
+    | 'void-crimson' 
+    | 'cyber-cyan' 
+    | 'emerald-recon' 
+    | 'ghost-purple' 
+    | 'solar-amber' 
+    | 'stealth-dark'
+    | 'desert-ops'
+    | 'stealth-night'
+    | 'jungle-recon'
+    | 'matrix-green'
+    | 'custom';
+
 export type FontSizeScale = 'compact' | 'normal' | 'large';
 export type AutoDestructTimer = 'off' | '5m' | '1h' | '24h' | '7d';
 export type MeshPowerProfile = 'high' | 'balanced' | 'eco';
@@ -58,10 +70,66 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         bubbleGradient: 'linear-gradient(135deg, rgba(0, 229, 255, 0.28) 0%, rgba(0, 140, 190, 0.42) 100%)',
         bubbleBorder: 'rgba(0, 229, 255, 0.45)',
     },
+    'desert-ops': {
+        id: 'desert-ops',
+        name: 'Desert Ops',
+        description: 'Arena Coyote & Dorado Táctico para Terreno Árido',
+        primary: '#D4A373',
+        primaryBright: '#F4C597',
+        primaryGlow: 'rgba(212, 163, 115, 0.38)',
+        primarySubtle: 'rgba(212, 163, 115, 0.14)',
+        primarySurface: 'rgba(212, 163, 115, 0.07)',
+        accentGlow: 'rgba(212, 163, 115, 0.58)',
+        previewGradient: 'linear-gradient(135deg, #D4A373 0%, #8B5E34 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(212, 163, 115, 0.32) 0%, rgba(139, 94, 52, 0.46) 100%)',
+        bubbleBorder: 'rgba(244, 197, 151, 0.45)',
+    },
+    'stealth-night': {
+        id: 'stealth-night',
+        name: 'Stealth Night',
+        description: 'Azul Medianoche Profundo & Blanco Polar de Infiltración',
+        primary: '#00D2FF',
+        primaryBright: '#80E5FF',
+        primaryGlow: 'rgba(0, 210, 255, 0.38)',
+        primarySubtle: 'rgba(0, 210, 255, 0.14)',
+        primarySurface: 'rgba(0, 210, 255, 0.07)',
+        accentGlow: 'rgba(0, 210, 255, 0.58)',
+        previewGradient: 'linear-gradient(135deg, #00D2FF 0%, #0D1B2A 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(0, 210, 255, 0.28) 0%, rgba(13, 27, 42, 0.65) 100%)',
+        bubbleBorder: 'rgba(128, 229, 255, 0.45)',
+    },
+    'jungle-recon': {
+        id: 'jungle-recon',
+        name: 'Jungle Recon',
+        description: 'Verde Oliva Militar y Camuflaje Selvático Profundo',
+        primary: '#4E9F3D',
+        primaryBright: '#78CC68',
+        primaryGlow: 'rgba(78, 159, 61, 0.38)',
+        primarySubtle: 'rgba(78, 159, 61, 0.14)',
+        primarySurface: 'rgba(78, 159, 61, 0.07)',
+        accentGlow: 'rgba(78, 159, 61, 0.58)',
+        previewGradient: 'linear-gradient(135deg, #4E9F3D 0%, #1E5128 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(78, 159, 61, 0.30) 0%, rgba(30, 81, 40, 0.48) 100%)',
+        bubbleBorder: 'rgba(120, 204, 104, 0.45)',
+    },
+    'matrix-green': {
+        id: 'matrix-green',
+        name: 'Matrix Ops',
+        description: 'Terminal Hacker Táctico & Fósforo Verde Cibernético',
+        primary: '#00FF66',
+        primaryBright: '#66FFA3',
+        primaryGlow: 'rgba(0, 255, 102, 0.40)',
+        primarySubtle: 'rgba(0, 255, 102, 0.14)',
+        primarySurface: 'rgba(0, 255, 102, 0.07)',
+        accentGlow: 'rgba(0, 255, 102, 0.60)',
+        previewGradient: 'linear-gradient(135deg, #00FF66 0%, #003B15 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(0, 255, 102, 0.26) 0%, rgba(0, 59, 21, 0.50) 100%)',
+        bubbleBorder: 'rgba(102, 255, 163, 0.45)',
+    },
     'emerald-recon': {
         id: 'emerald-recon',
         name: 'Emerald Recon',
-        description: 'Verde Táctico Militar para Operaciones Nocturnas',
+        description: 'Esmeralda de Alta Intensidad para Operaciones de Campo',
         primary: '#00E676',
         primaryBright: '#33FF99',
         primaryGlow: 'rgba(0, 230, 118, 0.35)',
@@ -113,12 +181,28 @@ export const TACTICAL_THEMES: Record<TacticalThemeId, TacticalTheme> = {
         previewGradient: 'linear-gradient(135deg, #90A4AE 0%, #263238 100%)',
         bubbleGradient: 'linear-gradient(135deg, rgba(144, 164, 174, 0.26) 0%, rgba(85, 105, 115, 0.40) 100%)',
         bubbleBorder: 'rgba(144, 164, 174, 0.40)',
+    },
+    'custom': {
+        id: 'custom',
+        name: 'Custom Tactical',
+        description: 'Combinación Personalizada por el Operador',
+        primary: '#E8213A',
+        primaryBright: '#FF3355',
+        primaryGlow: 'rgba(232, 33, 58, 0.35)',
+        primarySubtle: 'rgba(232, 33, 58, 0.12)',
+        primarySurface: 'rgba(232, 33, 58, 0.06)',
+        accentGlow: 'rgba(232, 33, 58, 0.55)',
+        previewGradient: 'linear-gradient(135deg, #E8213A 0%, #00E5FF 100%)',
+        bubbleGradient: 'linear-gradient(135deg, rgba(232, 33, 58, 0.32) 0%, rgba(0, 229, 255, 0.32) 100%)',
+        bubbleBorder: 'rgba(255, 60, 95, 0.42)',
     }
 };
 
 export interface UserPreferences {
     language: LanguageMode;
     themeId: TacticalThemeId;
+    customPrimaryColor?: string;
+    customAccentColor?: string;
     fontSize: FontSizeScale;
     pureOled: boolean;
     reducedMotion: boolean;
@@ -143,6 +227,8 @@ export interface UserPreferences {
 export const DEFAULT_PREFERENCES: UserPreferences = {
     language: 'auto',
     themeId: 'void-crimson',
+    customPrimaryColor: '#E8213A',
+    customAccentColor: '#00E5FF',
     fontSize: 'normal',
     pureOled: false,
     reducedMotion: false,
@@ -218,8 +304,26 @@ export class SettingsManager {
     public static applyAll(prefs: UserPreferences) {
         if (typeof document === 'undefined') return;
 
-        // 1. Tema de color
-        const theme = TACTICAL_THEMES[prefs.themeId] || TACTICAL_THEMES['void-crimson'];
+        // 1. Tema de color táctico
+        let theme = TACTICAL_THEMES[prefs.themeId] || TACTICAL_THEMES['void-crimson'];
+        if (prefs.themeId === 'custom') {
+            const primary = prefs.customPrimaryColor || '#E8213A';
+            const accent = prefs.customAccentColor || '#00E5FF';
+            theme = {
+                id: 'custom',
+                name: 'Custom Tactical',
+                description: 'Personalizado por Operador',
+                primary: primary,
+                primaryBright: primary,
+                primaryGlow: `${primary}59`,
+                primarySubtle: `${primary}1F`,
+                primarySurface: `${primary}0F`,
+                accentGlow: `${primary}8C`,
+                previewGradient: `linear-gradient(135deg, ${primary} 0%, ${accent} 100%)`,
+                bubbleGradient: `linear-gradient(135deg, ${primary}52 0%, ${accent}66 100%)`,
+                bubbleBorder: `${primary}99`,
+            };
+        }
         const root = document.documentElement;
 
         root.style.setProperty('--primary', theme.primary);
@@ -230,6 +334,7 @@ export class SettingsManager {
         root.style.setProperty('--glass-border-active', theme.accentGlow);
         root.style.setProperty('--bubble-me', theme.bubbleGradient);
         root.style.setProperty('--bubble-me-border', theme.bubbleBorder);
+        root.style.setProperty('--accent-primary', theme.primary);
 
         // 2. Escala de tipografía
         if (prefs.fontSize === 'compact') {

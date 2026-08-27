@@ -40,17 +40,28 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
         }
 
         if (screen === 'chat' && contextId) {
-            const isGroup = contextId.length === 64 && !/^[0-9a-fA-F]+$/.test(contextId) ? false : (get().groups || []).some(g => g.id === contextId);
+            const rawGroups = get().groups || [];
+            let localWebGroups: any[] = [];
+            if (typeof window !== 'undefined') {
+                try {
+                    const stored = localStorage.getItem('red_web_groups');
+                    if (stored) localWebGroups = JSON.parse(stored);
+                } catch {}
+            }
+            const allKnownGroups = [...rawGroups, ...localWebGroups];
+            const matchedGroup = allKnownGroups.find((g: any) => g && (g.id === contextId || g.group_id === contextId));
+            const isGroup = Boolean(matchedGroup);
             const canonicalPeer = isGroup ? contextId : (meshRouter.getCanonicalId(contextId) || contextId);
             const conversations = Array.isArray(get().conversations) ? get().conversations : [];
+            const groupName = matchedGroup?.name;
             
             const existingConv = conversations.find(c => c && (
                 c.id === canonicalPeer ||
                 c.peer === canonicalPeer ||
                 c.id === contextId ||
                 c.peer === contextId ||
-                (canonicalPeer.length >= 8 && (c.peer?.startsWith(canonicalPeer.slice(0, 8)) || c.id?.startsWith(canonicalPeer.slice(0, 8)))) ||
-                (!!c.peer && c.peer.length >= 8 && canonicalPeer.startsWith(c.peer.slice(0, 8)))
+                (!isGroup && canonicalPeer.length >= 8 && (c.peer?.startsWith(canonicalPeer.slice(0, 8)) || c.id?.startsWith(canonicalPeer.slice(0, 8)))) ||
+                (!isGroup && !!c.peer && c.peer.length >= 8 && canonicalPeer.startsWith(c.peer.slice(0, 8)))
             ));
             
             const finalId = canonicalPeer;
@@ -59,7 +70,14 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
                 updatedConvs = updatedConvs.map(c => {
                     const matches = c.id === canonicalPeer || c.peer === canonicalPeer || c.id === existingConv.id || c.peer === existingConv.peer;
                     if (matches) {
-                        return { ...c, id: finalId, peer: finalId, unread_count: 0 };
+                        return {
+                            ...c,
+                            id: finalId,
+                            peer: finalId,
+                            peer_name: isGroup ? (groupName || c.peer_name) : c.peer_name,
+                            is_group: isGroup,
+                            unread_count: 0
+                        };
                     }
                     return c;
                 });
@@ -67,9 +85,11 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
                 const newPlaceholder: ConversationItem = {
                     id: finalId,
                     peer: finalId,
-                    last_message: 'Nuevo chat P2P cifrado',
+                    peer_name: isGroup ? groupName : undefined,
+                    last_message: isGroup ? 'Escuadrón P2P activo' : 'Nuevo chat P2P cifrado',
                     last_timestamp: Date.now() / 1000,
-                    unread_count: 0
+                    unread_count: 0,
+                    is_group: isGroup
                 };
                 updatedConvs.unshift(newPlaceholder);
             }
@@ -78,7 +98,7 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
             const seenMap = new Map<string, ConversationItem>();
             for (const c of updatedConvs) {
                 if (!c || !c.peer) continue;
-                const p = meshRouter.getCanonicalId(c.peer) || c.peer;
+                const p = c.is_group ? c.peer : (meshRouter.getCanonicalId(c.peer) || c.peer);
                 if (!seenMap.has(p)) {
                     seenMap.set(p, { ...c, id: p, peer: p });
                 }
@@ -91,10 +111,46 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
             const sanitizeMsgs = (list: any[]): MessageItem[] => {
                 if (!Array.isArray(list)) return [];
                 return list.filter(m => {
-                    if (!m) return false;
-                    if (m.msg_type === 'typing' || m.msg_type === 'typing_status') return false;
-                    if (typeof m.content === 'string' && m.content.startsWith('{') && m.content.includes('"status":') && m.content.includes('"sender_hash"')) return false;
+                    if (!m || !m.content) return false;
+                    if (
+                        m.msg_type === 'typing' || 
+                        m.msg_type === 'typing_status' || 
+                        m.msg_type === 'group_invite' || 
+                        m.msg_type === 'group_kick' || 
+                        m.msg_type === 'group_leave' ||
+                        m.msg_type === 'webrtc_signal' ||
+                        m.msg_type === 'read_receipt'
+                    ) return false;
+                    if (typeof m.content === 'string' && m.content.startsWith('{')) {
+                        if (!isGroup && (m.content.includes('"type":"group_invite"') || m.content.includes('"type":"group_message"') || m.content.includes('"type":"squad_msg"'))) {
+                            return false;
+                        }
+                        if (m.content.includes('"status":') && m.content.includes('"sender_hash"')) return false;
+                        if (
+                            m.content.includes('"type":"IDENTITY_ANNOUNCE"') || 
+                            m.content.includes('"type":"IDENTITY_RESPONSE"') || 
+                            m.content.includes('"type":"SHAKE_PAIR_') || 
+                            m.content.includes('"type":"DELIVERY_ACK"') ||
+                            m.content.includes('"type":"PROFILE_UPDATE"')
+                        ) return false;
+                    }
                     return true;
+                }).map(m => {
+                    if (isGroup && typeof m.content === 'string' && m.content.startsWith('{') && (m.content.includes('"type":"group_message"') || m.content.includes('"type":"squad_msg"'))) {
+                        try {
+                            const parsed = JSON.parse(m.content);
+                            if (parsed.content !== undefined) {
+                                return {
+                                    ...m,
+                                    content: parsed.content,
+                                    sender: parsed.sender || m.sender,
+                                    media_data: parsed.media_data || m.media_data,
+                                    msg_type: parsed.msg_type || m.msg_type || 'text'
+                                };
+                            }
+                        } catch {}
+                    }
+                    return m;
                 });
             };
 

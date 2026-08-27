@@ -240,6 +240,8 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ---
 
 <a id="licencia"></a>
-## 📄 Licencia
+## 📄 Licencia & Descargo Legal
 
-Este proyecto está licenciado bajo la **GNU Affero General Public License v3.0 (AGPL-3.0)**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+Este proyecto está licenciado bajo la **GNU Affero General Public License v3.0 (AGPL-3.0)** — Copyright (C) 2026 Rodrigo Alejandro Vega Rojas (alias "DarckRovert") / RED Sovereign Mesh Team. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+
+> ⚠️ **Aviso Táctico & Descargo de Responsabilidad:** El uso de este software en operaciones de emergencia, telecomunicaciones o rescate se realiza bajo la exclusiva responsabilidad del usuario. Consulta los términos legales vinculantes en el [Descargo de Responsabilidad (DISCLAIMER.md)](DISCLAIMER.md).

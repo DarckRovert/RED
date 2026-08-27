@@ -27,6 +27,13 @@ export interface Waypoint {
     createdAt: number;
 }
 
+export interface TacticalTarget {
+    lat: number;
+    lon: number;
+    name?: string;
+    createdAt: number;
+}
+
 export interface TriangulatedPosition {
     lat: number;
     lon: number;
@@ -39,6 +46,79 @@ export class OffGridNavigationEngine {
      */
     private static mod(n: number, m: number): number {
         return ((n % m) + m) % m;
+    }
+
+    /**
+     * Calculates tactical navigation guidance towards a target point.
+     * Returns distance in meters, bearing in degrees (0..360), cardinal point, relative steering angle (-180..+180),
+     * human-readable steering cue, and estimated walking time.
+     */
+    public static calculateTacticalGuidance(
+        userLat: number, userLon: number,
+        targetLat: number, targetLon: number,
+        currentHeadingDeg: number = 0
+    ): {
+        distanceMeters: number;
+        bearingDegrees: number;
+        cardinal: string;
+        relativeSteeringDeg: number;
+        steeringInstruction: string;
+        estimatedWalkTimeFormatted: string;
+        formattedDistance: string;
+    } {
+        const { distanceMeters, bearingDegrees } = OffGridNavigationEngine.calculateDistanceAndBearing(
+            userLat, userLon, targetLat, targetLon
+        );
+
+        // Cardinal 16-wind compass
+        const cardinals = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+        const cardinalIdx = Math.round(bearingDegrees / 22.5) % 16;
+        const cardinal = cardinals[cardinalIdx];
+
+        // Relative steering angle (-180 to +180)
+        let diff = (bearingDegrees - currentHeadingDeg + 360) % 360;
+        if (diff > 180) diff -= 360;
+        const relativeSteeringDeg = Math.round(diff);
+
+        let steeringInstruction = "🎯 EN RUMBO DIRECTO";
+        if (Math.abs(relativeSteeringDeg) <= 8) {
+            steeringInstruction = "🎯 EN RUMBO DIRECTO (Avanzar)";
+        } else if (relativeSteeringDeg > 0) {
+            steeringInstruction = `➡️ Virar ${relativeSteeringDeg}° a Estribor (Derecha)`;
+        } else {
+            steeringInstruction = `⬅️ Virar ${Math.abs(relativeSteeringDeg)}° a Babor (Izquierda)`;
+        }
+
+        // Formatted distance (m or km)
+        let formattedDistance = `${distanceMeters} m`;
+        if (distanceMeters >= 1000) {
+            formattedDistance = `${(distanceMeters / 1000).toFixed(2)} km (${distanceMeters} m)`;
+        }
+
+        // ETA at standard tactical walking pace (~4.5 km/h = 1.25 m/s)
+        const totalSeconds = Math.round(distanceMeters / 1.25);
+        let estimatedWalkTimeFormatted = "";
+        if (totalSeconds < 60) {
+            estimatedWalkTimeFormatted = `~${totalSeconds}s a pie`;
+        } else if (totalSeconds < 3600) {
+            const mins = Math.floor(totalSeconds / 60);
+            const secs = totalSeconds % 60;
+            estimatedWalkTimeFormatted = `~${mins}m ${secs}s a pie`;
+        } else {
+            const hrs = Math.floor(totalSeconds / 3600);
+            const mins = Math.floor((totalSeconds % 3600) / 60);
+            estimatedWalkTimeFormatted = `~${hrs}h ${mins}m a pie`;
+        }
+
+        return {
+            distanceMeters,
+            bearingDegrees,
+            cardinal,
+            relativeSteeringDeg,
+            steeringInstruction,
+            estimatedWalkTimeFormatted,
+            formattedDistance
+        };
     }
 
     /**
@@ -263,5 +343,70 @@ export class OffGridNavigationEngine {
         const northingPadded = String(northingVal).padStart(7, '0');
 
         return `${zone}${hemi} ${eastingPadded}E ${northingPadded}N`;
+    }
+
+    /**
+     * Determines whether a GPS coordinate is inside a polygon perimeter using the Ray-Casting algorithm.
+     * Used for Tactical Geofencing & Dead Man's Zone enforcement.
+     */
+    public static isPointInGeofence(
+        point: { lat: number; lon: number },
+        polygon: { lat: number; lon: number }[]
+    ): boolean {
+        if (polygon.length < 3) return false;
+
+        let inside = false;
+        const x = point.lon;
+        const y = point.lat;
+
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+            const xi = polygon[i].lon, yi = polygon[i].lat;
+            const xj = polygon[j].lon, yj = polygon[j].lat;
+
+            const intersect = ((yi > y) !== (yj > y)) &&
+                (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+
+        return inside;
+    }
+
+    /**
+     * Computes the 1st Fresnel Zone maximum clearance radius (in meters) at midpoint for RF links.
+     * Formula: r_1 = 8.656 * sqrt( D_km / (f_GHz) )
+     * @param distanceMeters Link distance in meters
+     * @param frequencyMhz Radio frequency in MHz (e.g. 915 for LoRa, 144 for VHF)
+     */
+    public static calculateFresnelZone(
+        distanceMeters: number,
+        frequencyMhz: number = 915
+    ): { maxRadiusMeters: number; requiredClearance60PercentMeters: number } {
+        const dKm = Math.max(0.01, distanceMeters / 1000);
+        const fGhz = Math.max(0.001, frequencyMhz / 1000);
+        const maxRadiusMeters = 8.656 * Math.sqrt(dKm / fGhz);
+        const requiredClearance60PercentMeters = maxRadiusMeters * 0.6;
+
+        return {
+            maxRadiusMeters: Math.round(maxRadiusMeters * 100) / 100,
+            requiredClearance60PercentMeters: Math.round(requiredClearance60PercentMeters * 100) / 100
+        };
+    }
+
+    /**
+     * Computes maximum theoretical optical and RF Line-of-Sight (LOS) with 4/3 Earth curvature refraction.
+     * Formula: d_los_km = 4.12 * (sqrt(h1_meters) + sqrt(h2_meters))
+     */
+    public static calculateRadioLineOfSight(
+        antenna1HeightMeters: number,
+        antenna2HeightMeters: number
+    ): { maxRangeKm: number; maxRangeMeters: number } {
+        const h1 = Math.max(0.1, antenna1HeightMeters);
+        const h2 = Math.max(0.1, antenna2HeightMeters);
+        const maxRangeKm = 4.12 * (Math.sqrt(h1) + Math.sqrt(h2));
+
+        return {
+            maxRangeKm: Math.round(maxRangeKm * 100) / 100,
+            maxRangeMeters: Math.round(maxRangeKm * 1000)
+        };
     }
 }

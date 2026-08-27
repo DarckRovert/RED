@@ -9,6 +9,7 @@ import { RedAPI } from "../lib/api";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { HiveMindEngine } from "../lib/hiveMindEngine";
 import { toast } from "./Toast";
+import { OffGridNavigationEngine, TacticalTarget } from "../lib/OffGridNavigationEngine";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -106,6 +107,54 @@ export default function NodeMap() {
     const [selectedPeer, setSelectedPeer] = useState<CanonicalNode | null>(null);
     const [showTelemetryDrawer, setShowTelemetryDrawer] = useState(false);
 
+    // Tactical Target Navigation State (Synchronized with OffGridCompassModal)
+    const [target, setTarget] = useState<TacticalTarget | null>(() => {
+        if (typeof window !== "undefined") {
+            try {
+                const saved = localStorage.getItem("red_tactical_target_point");
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    if (typeof parsed.lat === "number" && typeof parsed.lon === "number") {
+                        return parsed;
+                    }
+                }
+            } catch {}
+        }
+        return null;
+    });
+
+    const handleSetTarget = (lat: number, lon: number, name?: string) => {
+        const newTarget: TacticalTarget = {
+            lat: Math.round(lat * 100000) / 100000,
+            lon: Math.round(lon * 100000) / 100000,
+            name: name || "Punto Objetivo Táctico",
+            createdAt: Date.now()
+        };
+        setTarget(newTarget);
+        try {
+            localStorage.setItem("red_tactical_target_point", JSON.stringify(newTarget));
+        } catch {}
+
+        if (gpsData.lat !== 0 && gpsData.lng !== 0) {
+            const g = OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, newTarget.lat, newTarget.lon, gpsData.heading || 0);
+            toast.success(`🎯 Objetivo Fijado: ${g.formattedDistance} | Rumbo ${g.bearingDegrees}° ${g.cardinal}`);
+        } else {
+            toast.success(`🎯 Objetivo Fijado: [${newTarget.lat.toFixed(5)}, ${newTarget.lon.toFixed(5)}]`);
+        }
+    };
+
+    const handleClearTarget = () => {
+        setTarget(null);
+        try {
+            localStorage.removeItem("red_tactical_target_point");
+        } catch {}
+        toast.info("Objetivo táctico cancelado");
+    };
+
+    const tacticalGuidance = (gpsData.lat !== 0 && gpsData.lng !== 0 && target)
+        ? OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, target.lat, target.lon, gpsData.heading || 0)
+        : null;
+
     // 1. Geolocalización en tiempo real continua de hardware y broadcast por la malla
     useEffect(() => {
         let mounted = true;
@@ -127,7 +176,7 @@ export default function NodeMap() {
             setRealGPS(true);
 
             if (typeof window !== "undefined") {
-                localStorage.setItem("red_last_known_gps", JSON.stringify({ lat: newLat, lng: newLng, timestamp: Date.now() }));
+                localStorage.setItem("red_last_known_gps", JSON.stringify({ lat: newLat, lng: newLng, lon: newLng, timestamp: Date.now() }));
             }
 
             if (leafletMapRef.current && !realGPS) {
@@ -326,6 +375,11 @@ export default function NodeMap() {
                     maxZoom: 19,
                 }).addTo(mapInstance);
 
+                // Listener de fijación de Objetivo Táctico con click
+                mapInstance.on("click", (e: any) => {
+                    handleSetTarget(e.latlng.lat, e.latlng.lng);
+                });
+
                 const markersGroup = L.layerGroup().addTo(mapInstance);
                 markersGroupRef.current = markersGroup;
                 leafletMapRef.current = mapInstance;
@@ -385,11 +439,68 @@ export default function NodeMap() {
                         setSelectedPeer({ ...p, distMeters: pos.distMeters });
                     });
                 });
+
+                // Marcadores de Waypoints Tácticos (Guardados en Brújula Off-Grid)
+                try {
+                    const rawWps = localStorage.getItem("red_offgrid_waypoints");
+                    if (rawWps) {
+                        const waypoints = JSON.parse(rawWps);
+                        waypoints.forEach((wp: any) => {
+                            if (typeof wp.lat === "number" && typeof wp.lon === "number") {
+                                const dist = getHaversineDistanceMeters(gpsData.lat, gpsData.lng, wp.lat, wp.lon);
+                                const wpIcon = L.divIcon({
+                                    className: "custom-waypoint-marker",
+                                    html: `<div style="width:24px;height:24px;border-radius:50%;background:#FFB300;border:2px solid #fff;box-shadow:0 0 16px #FFB300;display:flex;align-items:center;justify-content:center;font-size:12px;">🚩</div>`,
+                                    iconSize: [24, 24],
+                                    iconAnchor: [12, 12]
+                                });
+                                const wpMarker = L.marker([wp.lat, wp.lon], { icon: wpIcon }).addTo(markersGroupRef.current);
+                                wpMarker.bindPopup(`
+                                    <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                        <strong>🚩 ${wp.name || 'Waypoint'}</strong><br/>
+                                        Distancia: ${dist}m<br/>
+                                        Rumbo: ${wp.bearingDegrees || 0}°
+                                    </div>
+                                `);
+                            }
+                        });
+                    }
+                } catch {}
+
+                // Marcador y Vector del Objetivo Táctico Activo
+                if (target) {
+                    const targetIcon = L.divIcon({
+                        className: "custom-target-marker",
+                        html: `<div style="width:28px;height:28px;border-radius:50%;background:#E8213A;border:3px solid #FFF;box-shadow:0 0 20px #E8213A;display:flex;align-items:center;justify-content:center;font-size:13px;animation:pulse 1.2s infinite;color:#FFF;">🎯</div>`,
+                        iconSize: [28, 28],
+                        iconAnchor: [14, 14]
+                    });
+                    const targetMarker = L.marker([target.lat, target.lon], { icon: targetIcon }).addTo(markersGroupRef.current);
+                    
+                    if (gpsData.lat !== 0 && gpsData.lng !== 0) {
+                        const distM = getHaversineDistanceMeters(gpsData.lat, gpsData.lng, target.lat, target.lon);
+                        targetMarker.bindPopup(`
+                            <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                <strong>🎯 ${target.name || 'Objetivo'}</strong><br/>
+                                Distancia: ${distM}m<br/>
+                                Coord: ${target.lat.toFixed(5)}, ${target.lon.toFixed(5)}
+                            </div>
+                        `);
+
+                        // Vector Polilínea Táctica
+                        L.polyline([[gpsData.lat, gpsData.lng], [target.lat, target.lon]], {
+                            color: "#E8213A",
+                            weight: 3.5,
+                            dashArray: "8, 8",
+                            opacity: 0.95
+                        }).addTo(markersGroupRef.current);
+                    }
+                }
             }
         };
 
         initMap();
-    }, [gpsData.lat, gpsData.lng, peers]);
+    }, [gpsData.lat, gpsData.lng, peers, target]);
 
     const recenterMap = () => {
         if (leafletMapRef.current) {
@@ -506,6 +617,83 @@ export default function NodeMap() {
                     </div>
                 </div>
             </div>
+
+            {/* Tarjeta Flotante de Navegación Táctica Activa */}
+            {target && tacticalGuidance && (
+                <div style={{
+                    position: "absolute", top: "124px", left: "10px", right: "10px",
+                    zIndex: 900, pointerEvents: "none", maxWidth: "460px", margin: "0 auto"
+                }}>
+                    <div className="card-tactical animate-pop" style={{
+                        padding: "10px 14px", pointerEvents: "auto",
+                        background: "rgba(232, 33, 58, 0.14)", backdropFilter: "blur(20px)",
+                        border: "1px solid rgba(232, 33, 58, 0.5)",
+                        boxShadow: "0 8px 32px rgba(232, 33, 58, 0.25)",
+                        display: "flex", flexDirection: "column", gap: "8px"
+                    }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ fontSize: "1.1rem" }}>🎯</span>
+                                <div>
+                                    <div style={{ fontSize: "0.60rem", color: "#FF6B81", fontWeight: 800, letterSpacing: "0.5px" }}>
+                                        VECTOR HACIA OBJETIVO
+                                    </div>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFF" }}>
+                                        {target.name}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleClearTarget}
+                                style={{
+                                    background: "rgba(232, 33, 58, 0.25)",
+                                    border: "1px solid rgba(232, 33, 58, 0.6)",
+                                    color: "#FFF",
+                                    padding: "4px 8px",
+                                    borderRadius: "6px",
+                                    fontSize: "0.70rem",
+                                    fontWeight: 700,
+                                    cursor: "pointer"
+                                }}
+                            >
+                                🗑️ Cancelar
+                            </button>
+                        </div>
+
+                        <div style={{
+                            display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px",
+                            background: "rgba(0,0,0,0.35)", padding: "8px", borderRadius: "8px"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 700 }}>DISTANCIA</div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {tacticalGuidance.formattedDistance}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 700 }}>RUMBO</div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFB300", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {tacticalGuidance.bearingDegrees}° {tacticalGuidance.cardinal}
+                                </div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 700 }}>TIEMPO A PIE</div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {tacticalGuidance.estimatedWalkTimeFormatted}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{
+                            fontSize: "0.68rem", fontWeight: 700, color: "#FFF",
+                            background: "rgba(232, 33, 58, 0.2)", padding: "4px 8px", borderRadius: "6px",
+                            textAlign: "center"
+                        }}>
+                            🧭 {tacticalGuidance.steeringInstruction}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Contenedor del Mapa Leaflet */}
             <div ref={mapContainerRef} style={{ flex: 1, width: "100%", height: "100%", background: "#04060A" }} />

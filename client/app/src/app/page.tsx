@@ -458,8 +458,8 @@ export default function AppRouter() {
                 {currentScreen === "explorer" && <BlockchainExplorer />}
                 {currentScreen === "socialFeed" && <SocialFeedPanel />}
                 {(currentScreen === "channels" || currentScreen === "publicChannels") && <PublicChannelsPanel />}
-                {currentScreen === "groups" && <GroupsPanel />}
-                {currentScreen === "nearby" && <NearbyDevicesPanel />}
+                {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
+                {(currentScreen === "nearby" || currentScreen === "contacts") && <NearbyDevicesPanel />}
                 {currentScreen === "security" && <SecurityPanel />}
                 {currentScreen === "status" && <StatusView />}
                 {currentScreen === "network" && <NetworkPanel />}
@@ -478,9 +478,9 @@ export default function AppRouter() {
                 {(currentScreen === "proximitySettings" || currentScreen === "proximity_settings") && <ProximitySettingsModal />}
                 {(currentScreen === "aiCopilot" || currentScreen === "copilot") && <AICopilotModal />}
                 {currentScreen === "liveStream" && <LiveStreamBroadcaster onClose={goBack} />}
-                {currentScreen === "offGridCompass" && <OffGridCompassModal />}
+                {(currentScreen === "offGridCompass" || currentScreen === "compass") && <OffGridCompassModal />}
                 {currentScreen === "vitalScan" && <VitalScanModal />}
-                {currentScreen === "survivalBeacon" && <SurvivalBeaconModal />}
+                {(currentScreen === "survivalBeacon" || currentScreen === "sos") && <SurvivalBeaconModal />}
                 {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
                 {currentScreen === "stegoVault" && <StegoVaultModal />}
                 {currentScreen === "shakePair" && <ShakePairModal />}
@@ -514,7 +514,7 @@ export default function AppRouter() {
               {currentScreen === "call" && <CallScreen />}
               {currentScreen === "broadcast" && <BroadcastPanel />}
               {currentScreen === "crypto" && <CryptoPanel />}
-              {currentScreen === "groups" && <GroupsPanel />}
+              {(currentScreen === "groups" || currentScreen === "squads") && <GroupsPanel />}
               {currentScreen === "status" && <StatusView />}
               {currentScreen === "explorer" && <BlockchainExplorer />}
               {currentScreen === "nodemap" && <NodeMap />}
@@ -533,11 +533,11 @@ export default function AppRouter() {
               {currentScreen === "ecoMesh" && <EcoMeshPanel />}
               {(currentScreen === "proximitySettings" || currentScreen === "proximity_settings") && <ProximitySettingsModal />}
               {(currentScreen === "aiCopilot" || currentScreen === "copilot") && <AICopilotModal />}
-              {currentScreen === "nearby" && <NearbyDevicesPanel />}
+              {(currentScreen === "nearby" || currentScreen === "contacts") && <NearbyDevicesPanel />}
               {currentScreen === "liveStream" && <LiveStreamBroadcaster onClose={goBack} />}
-              {currentScreen === "offGridCompass" && <OffGridCompassModal />}
+              {(currentScreen === "offGridCompass" || currentScreen === "compass") && <OffGridCompassModal />}
               {currentScreen === "vitalScan" && <VitalScanModal />}
-              {currentScreen === "survivalBeacon" && <SurvivalBeaconModal />}
+              {(currentScreen === "survivalBeacon" || currentScreen === "sos") && <SurvivalBeaconModal />}
               {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
               {currentScreen === "stegoVault" && <StegoVaultModal />}
               {currentScreen === "shakePair" && <ShakePairModal />}

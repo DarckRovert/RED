@@ -350,8 +350,11 @@ impl Node {
             debug!("Starting background pruning task (60s interval)");
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(60)).await;
-                let n: tokio::sync::MutexGuard<'_, Self> = node_ref_prune.lock().await;
-                let mut s: tokio::sync::MutexGuard<'_, Storage> = n.storage.lock().await;
+                let storage_arc = {
+                    let n = node_ref_prune.lock().await;
+                    n.storage.clone()
+                };
+                let mut s = storage_arc.lock().await;
                 match s.prune_expired_messages() {
                     Ok(count) if count > 0 => info!("Background prune: removed {} expired messages", count),
                     Err(e) => error!("Background prune error: {:?}", e),
@@ -365,40 +368,53 @@ impl Node {
             debug!("Starting RED identity handshake loop (10s interval)");
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-                let n = node_ref_handshake.lock().await;
-                let hash_hex = n.identity.identity_hash().to_hex();
-                let pk_hex = hex::encode(n.identity.public_key().as_bytes());
+                let (hash_hex, pk_hex, transport) = {
+                    let n = node_ref_handshake.lock().await;
+                    (
+                        n.identity.identity_hash().to_hex(),
+                        hex::encode(n.identity.public_key().as_bytes()),
+                        n.transport.clone(),
+                    )
+                };
                 let dummy_peer = crate::network::PeerId::from_bytes([0; 32]);
-                let _ = n.transport.send(&dummy_peer, crate::network::transport::TransportMessage::IdentityBroadcast {
+                let _ = transport.send(&dummy_peer, crate::network::transport::TransportMessage::IdentityBroadcast {
                     hash: hash_hex,
                     pk: pk_hex,
                 }).await;
             }
         });
 
+        // Background delivery retry loop for offline peers
         let node_ref_retry = node_ref.clone();
         tokio::spawn(async move {
             info!("Starting background pending delivery retry loop (15s interval)");
             loop {
                 tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 
-                let pending = {
+                let (pending, storage_arc) = {
                     let n = node_ref_retry.lock().await;
-                    let s = n.storage.lock().await;
-                    s.get_pending_deliveries().unwrap_or_default()
+                    let s_arc = n.storage.clone();
+                    let s = s_arc.lock().await;
+                    (s.get_pending_deliveries().unwrap_or_default(), s_arc.clone())
                 };
 
                 for (key, message) in pending {
-                    let mut n = node_ref_retry.lock().await;
-                    let available_peers = n.transport.known_peers();
+                    let available_peers = {
+                        let n = node_ref_retry.lock().await;
+                        n.transport.known_peers()
+                    };
                     let is_recipient_online = available_peers.iter().any(|p| p.identity_hash.as_ref() == Some(&message.recipient));
                     
                     if is_recipient_online {
                         info!("Peer {} came online. Retrying delivery of message {}", message.recipient.short(), message.id.to_hex());
-                        match n.deliver_message(&message.recipient, &message).await {
+                        let deliver_res = {
+                            let mut n = node_ref_retry.lock().await;
+                            n.deliver_message(&message.recipient, &message).await
+                        };
+                        match deliver_res {
                             Ok(_) => {
                                 info!("Delivery of pending message {} succeeded.", message.id.to_hex());
-                                let s = n.storage.lock().await;
+                                let s = storage_arc.lock().await;
                                 let _ = s.remove_pending_delivery(&key);
                             }
                             Err(e) => {
@@ -625,6 +641,36 @@ impl Node {
                 }
             } else {
                 error!("Received group message for unknown group {:?}", group_msg.group_id);
+            }
+        }
+
+        // Handle GroupInvite descriptor: auto-register group on receiving member device
+        if let MessageType::GroupInvite { ref group_id, ref group_name, ref creator_hash, ref members, created_at } = message.content {
+            let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
+            let gid = GroupId(*group_id);
+            if s.get_group(&gid).is_none() {
+                info!("Auto-registering incoming GroupInvite for '{}' ({:?})", group_name, gid);
+                let creator_member = crate::protocol::GroupMember {
+                    identity_hash: creator_hash.clone(),
+                    public_key: crate::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+                    joined_at: created_at,
+                    role: crate::protocol::MemberRole::Admin,
+                    muted: false,
+                };
+                let mut new_group = Group::create_with_id(gid, group_name.clone(), creator_member);
+                for m_hash in members {
+                    if m_hash != creator_hash {
+                        let is_me = *m_hash == self.identity.identity_hash().clone();
+                        let _ = new_group.add_member(crate::protocol::GroupMember {
+                            identity_hash: m_hash.clone(),
+                            public_key: if is_me { self.identity.public_key().clone() } else { crate::crypto::keys::PublicKey::from_bytes([0u8; 32]) },
+                            joined_at: created_at,
+                            role: crate::protocol::MemberRole::Member,
+                            muted: false,
+                        });
+                    }
+                }
+                let _ = s.add_group(new_group);
             }
         }
 
@@ -1222,17 +1268,67 @@ impl Node {
     /// Add a member to a group
     pub async fn add_group_member(&mut self, group_id: GroupId, member: GroupMember) -> NetworkResult<()> {
         info!("Adding member {} to group {:?}", member.identity_hash.short(), group_id);
+        let member_hash = member.identity_hash.clone();
         
-        let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
-        if let Some(mut group) = s.get_group(&group_id) {
-            group.add_member(member)
-                .map_err(|e| NetworkError::TransportError(e.to_string()))?;
-            s.add_group(group)
-                .map_err(|e: crate::storage::StorageError| NetworkError::TransportError(e.to_string()))?;
-            Ok(())
-        } else {
-            Err(NetworkError::TransportError("Group not found".to_string()))
+        {
+            let mut s: tokio::sync::MutexGuard<'_, Storage> = self.storage.lock().await;
+            if let Some(mut group) = s.get_group(&group_id) {
+                group.add_member(member)
+                    .map_err(|e| NetworkError::TransportError(e.to_string()))?;
+                s.add_group(group)
+                    .map_err(|e: crate::storage::StorageError| NetworkError::TransportError(e.to_string()))?;
+            } else {
+                return Err(NetworkError::TransportError("Group not found".to_string()));
+            }
         }
+
+        // Emit GroupInvite descriptor directly to the newly added member
+        let _ = self.send_group_invite(group_id, member_hash).await;
+        Ok(())
+    }
+
+    /// Send a GroupInvite descriptor to a member so they can auto-register the group
+    pub async fn send_group_invite(
+        &mut self,
+        group_id: GroupId,
+        target_member: IdentityHash,
+    ) -> NetworkResult<()> {
+        let (group_name, members, created_at) = {
+            let s = self.storage.lock().await;
+            if let Some(group) = s.get_group(&group_id) {
+                let member_hashes: Vec<IdentityHash> = group.members().map(|m| m.identity_hash.clone()).collect();
+                (group.name.clone(), member_hashes, group.created_at)
+            } else {
+                return Err(NetworkError::TransportError("Group not found".to_string()));
+            }
+        };
+
+        let my_hash = self.identity.identity_hash().clone();
+        if target_member == my_hash {
+            return Ok(());
+        }
+
+        let invite_msg = Message {
+            id: MessageId::generate(),
+            sender: my_hash.clone(),
+            recipient: target_member.clone(),
+            content: MessageType::GroupInvite {
+                group_id: group_id.0,
+                group_name,
+                creator_hash: my_hash.clone(),
+                members,
+                created_at,
+            },
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+            reply_to: None,
+            status: crate::protocol::MessageStatus::Pending,
+            edited: false,
+        };
+
+        self.send_message(target_member, invite_msg).await
     }
 
     pub async fn list_groups(&self) -> NetworkResult<Vec<Group>> {

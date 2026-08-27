@@ -11,6 +11,7 @@ import { SquadVoiceRoom } from "./call/SquadVoiceRoom";
 import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
 import { MessageForwardModal } from "./chat/MessageForwardModal";
 import { SafetyNumberModal } from "./chat/SafetyNumberModal";
+import { PollCreationModal } from "./chat/PollCreationModal";
 import { ContactProfileModal } from "./ContactProfileModal";
 import { toast } from "./Toast";
 import { meshRouter } from "../lib/mesh/meshRouter";
@@ -104,6 +105,7 @@ export default function ChatWindow() {
     const [editingMsg, setEditingMsg] = useState<MessageItem | null>(null);
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
+    const [showPollModal, setShowPollModal] = useState(false);
 
     // Ref so selection callbacks can access convMessages without ordering issues
     const convMessagesRef = useRef<MessageItem[]>([]);
@@ -164,6 +166,8 @@ export default function ChatWindow() {
             'group_invite', 'group_kick', 'group_leave', 'group_admin',
         ]);
 
+        const isGroupConv = isGroupChat;
+
         // Detects JSON objects that are signaling packets by structure (content-based heuristic)
         const isJsonSignaling = (content: string): boolean => {
             if (!content || typeof content !== 'string') return false;
@@ -192,6 +196,11 @@ export default function ChatWindow() {
                 return true;
             }
 
+            // In 1-to-1 chats, filter out raw group invites and raw group message JSON
+            if (!isGroupConv && (trimmed.includes('"type":"group_invite"') || trimmed.includes('"type":"group_message"') || trimmed.includes('"type":"squad_msg"'))) {
+                return true;
+            }
+
             try {
                 const c = JSON.parse(trimmed);
                 // Type-tagged mesh packets
@@ -201,7 +210,9 @@ export default function ChatWindow() {
                     c.type.startsWith('RED_PAIR') ||
                     c.type === 'DELIVERY_ACK' ||
                     c.type === 'PROFILE_UPDATE' ||
-                    c.type === 'NODE_LOCATION_UPDATE'
+                    c.type === 'NODE_LOCATION_UPDATE' ||
+                    c.type === 'group_invite' ||
+                    (!isGroupConv && (c.type === 'group_message' || c.type === 'squad_msg'))
                 )) return true;
 
                 // Inspect inner nested content if wrapped
@@ -220,6 +231,7 @@ export default function ChatWindow() {
 
         const isProtocolPacket = (m: MessageItem): boolean => {
             if (m.msg_type && PROTOCOL_MSG_TYPES.has(m.msg_type)) return true;
+            if (!isGroupConv && (m.msg_type === 'group_message' || m.msg_type === 'squad_msg')) return true;
             if (typeof m.content === 'string' && isJsonSignaling(m.content)) return true;
             return false;
         };
@@ -229,6 +241,22 @@ export default function ChatWindow() {
             if (!m || !m.content) return false;
             if (isProtocolPacket(m)) return false;
             return true;
+        }).map((m: MessageItem) => {
+            if (isGroupConv && typeof m.content === 'string' && m.content.startsWith('{') && (m.content.includes('"type":"group_message"') || m.content.includes('"type":"squad_msg"'))) {
+                try {
+                    const parsed = JSON.parse(m.content);
+                    if (parsed.content !== undefined) {
+                        return {
+                            ...m,
+                            content: parsed.content,
+                            sender: parsed.sender || m.sender,
+                            media_data: parsed.media_data || m.media_data,
+                            msg_type: parsed.msg_type || m.msg_type || 'text'
+                        };
+                    }
+                } catch {}
+            }
+            return m;
         });
 
         // Deterministic deduplication pass (eliminates duplicate bubbles from dual SSE + MeshRouter channels)
@@ -264,7 +292,7 @@ export default function ChatWindow() {
         });
 
         return deduped;
-    }, [messages, activeConversationId]);
+    }, [messages, activeConversationId, isGroupChat, groups]);
 
     // Keep ref in sync with latest convMessages
     useEffect(() => { convMessagesRef.current = convMessages; }, [convMessages]);
@@ -767,6 +795,24 @@ export default function ChatWindow() {
         }
     };
 
+    const handleCreatePoll = async (pollData: { question: string; options: string[]; allowMultiple?: boolean }) => {
+        if (!peerHash) return;
+        try {
+            const payload = {
+                question: pollData.question,
+                options: pollData.options.map((text, idx) => ({ id: idx, text, votes: 0 })),
+                allow_multiple: Boolean(pollData.allowMultiple),
+                created_at: Math.floor(Date.now() / 1000),
+            };
+            await sendMessage(JSON.stringify(payload), {
+                msg_type: "poll",
+            });
+            TacticalAudioEngine.playMessageSent();
+        } catch {
+            toast.error("Error al publicar encuesta");
+        }
+    };
+
     return (
         <div className="modal-screen-container">
             <input
@@ -775,8 +821,6 @@ export default function ChatWindow() {
                 style={{ display: "none" }}
                 onChange={handleFileSelected}
             />
-
-            {/* Header Táctico E2E */}
 
             {/* Header Táctico E2E */}
             <ChatHeader
@@ -816,6 +860,80 @@ export default function ChatWindow() {
                     }
                 }}
             />
+
+            {/* Floating In-Chat Search HUD */}
+            {searchOpen && (
+                <div style={{
+                    padding: "8px 14px",
+                    background: "rgba(10, 14, 28, 0.98)",
+                    backdropFilter: "blur(20px)",
+                    borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    zIndex: 45,
+                    animation: "fadeIn 0.15s ease-out",
+                    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.6)"
+                }}>
+                    <span style={{ fontSize: "0.9rem", color: "var(--accent-cyan)" }}>🔍</span>
+                    <input
+                        type="text"
+                        placeholder="Buscar en esta conversación..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            setCurrentMatchIdx(0);
+                        }}
+                        autoFocus
+                        style={{
+                            flex: 1,
+                            background: "rgba(255, 255, 255, 0.05)",
+                            border: "1px solid var(--glass-border)",
+                            borderRadius: "10px",
+                            padding: "6px 12px",
+                            color: "#FFFFFF",
+                            fontSize: "0.85rem",
+                            outline: "none"
+                        }}
+                    />
+                    {searchMatches.length > 0 && (
+                        <div style={{ fontSize: "0.74rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap" }}>
+                            {currentMatchIdx + 1} de {searchMatches.length}
+                        </div>
+                    )}
+                    {searchQuery && searchMatches.length === 0 && (
+                        <div style={{ fontSize: "0.74rem", color: "var(--accent-crimson)", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap" }}>
+                            Sin coincidencias
+                        </div>
+                    )}
+                    <button
+                        onClick={handlePrevMatch}
+                        disabled={searchMatches.length <= 1}
+                        className="btn-icon"
+                        style={{ width: 28, height: 28, fontSize: "0.8rem", color: searchMatches.length > 1 ? "#fff" : "var(--text-muted)" }}
+                        title="Coincidencia anterior"
+                    >
+                        ▲
+                    </button>
+                    <button
+                        onClick={handleNextMatch}
+                        disabled={searchMatches.length <= 1}
+                        className="btn-icon"
+                        style={{ width: 28, height: 28, fontSize: "0.8rem", color: searchMatches.length > 1 ? "#fff" : "var(--text-muted)" }}
+                        title="Coincidencia siguiente"
+                    >
+                        ▼
+                    </button>
+                    <button
+                        onClick={() => { setSearchOpen(false); setSearchQuery(""); }}
+                        className="btn-icon"
+                        style={{ width: 28, height: 28, fontSize: "0.85rem", color: "var(--text-muted)" }}
+                        title="Cerrar búsqueda"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
 
             {activeSquadCall && (
                 <SquadVoiceRoom
@@ -1229,6 +1347,7 @@ export default function ChatWindow() {
                     handleDocument={() => docInputRef.current?.click()}
                     handleLocation={handleLocation}
                     handlePay={() => setIsPayModalOpen(true)}
+                    setShowPollModal={setShowPollModal}
                     peerHash={peerHash}
                     peerName={peerName}
                     burnTimer={burnTimer}
@@ -1462,6 +1581,12 @@ export default function ChatWindow() {
                     </div>
                 </div>
             )}
+            {/* P2P Decentralized Poll Creation Modal */}
+            <PollCreationModal
+                isOpen={showPollModal}
+                onClose={() => setShowPollModal(false)}
+                onCreatePoll={handleCreatePoll}
+            />
         </div>
     );
 }

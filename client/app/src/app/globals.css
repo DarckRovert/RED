@@ -1366,3 +1366,22 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   box-shadow: 0 0 16px rgba(0, 229, 255, 0.4);
   font-weight: 800;
 }
+
+/* ─── Video & WebRTC Media Controls Normalization ─── */
+video::-webkit-media-controls {
+  display: none !important;
+}
+video::-webkit-media-controls-start-playback-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+video::-webkit-media-controls-play-button {
+  display: none !important;
+  -webkit-appearance: none;
+}
+video::-webkit-media-controls-enclosure {
+  display: none !important;
+}
+video::-webkit-media-controls-panel {
+  display: none !important;
+}

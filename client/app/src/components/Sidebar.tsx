@@ -13,7 +13,7 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { avatarStyle, formatTime } from "./sidebar/types";
-import { SidebarHeader } from "./sidebar/SidebarHeader";
+import { SidebarHeader, ChatFilterType } from "./sidebar/SidebarHeader";
 import { ConversationList } from "./sidebar/ConversationList";
 import { ContactList } from "./sidebar/ContactList";
 
@@ -56,6 +56,7 @@ export default function Sidebar() {
     }
 
     const [activeTab, setActiveTab] = useState<"chats" | "contacts">("chats");
+    const [chatFilter, setChatFilter] = useState<ChatFilterType>("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [searchOpen, setSearchOpen] = useState(false);
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
@@ -66,6 +67,10 @@ export default function Sidebar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
+
+    const unreadTotal = useMemo(() => {
+        return conversations.reduce((acc: number, c: any) => acc + (c.unread_count || 0), 0);
+    }, [conversations]);
 
     const filteredConvs = useMemo(() => {
         const seenCanonical = new Set<string>();
@@ -86,14 +91,25 @@ export default function Sidebar() {
                 });
             }
         }
-        return deduped.sort((a: any, b: any) => {
+
+        let sorted = deduped.sort((a: any, b: any) => {
             const tsA = (typeof a.last_message === "object" && a.last_message?.timestamp) || (a as any).last_timestamp || 0;
             const tsB = (typeof b.last_message === "object" && b.last_message?.timestamp) || (b as any).last_timestamp || 0;
             const normA = tsA < 1e10 ? tsA : tsA / 1000;
             const normB = tsB < 1e10 ? tsB : tsB / 1000;
             return normB - normA;
         });
-    }, [conversations, searchQuery, groups, contacts]);
+
+        if (chatFilter === "unread") {
+            sorted = sorted.filter((c: any) => (c.unread_count || 0) > 0);
+        } else if (chatFilter === "groups") {
+            sorted = sorted.filter((c: any) => Boolean(c.is_group) || groups.some((g: any) => g.id === c.id || g.id === c.peer));
+        } else if (chatFilter === "channels") {
+            sorted = sorted.filter((c: any) => c.is_channel || c.id?.startsWith("chan_") || c.peer?.startsWith("chan_"));
+        }
+
+        return sorted;
+    }, [conversations, searchQuery, groups, contacts, chatFilter]);
 
     const filteredContacts = useMemo(() => {
         const seen = new Set<string>();
@@ -376,6 +392,9 @@ export default function Sidebar() {
                 filteredConvsCount={filteredConvs.length}
                 filteredContactsCount={filteredContacts.length}
                 pendingCount={pendingCount}
+                chatFilter={chatFilter}
+                setChatFilter={setChatFilter}
+                unreadTotal={unreadTotal}
             />
 
             {/* Stories Bar (24h Ephemeral & Live Video Streams) */}

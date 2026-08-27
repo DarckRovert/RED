@@ -167,11 +167,24 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                             if (content.startsWith("{")) {
                                 try {
                                     const parsed = JSON.parse(content);
-                                    const SIGNAL_TYPES = ['IDENTITY_ANNOUNCE','IDENTITY_RESPONSE','IDENTITY_REQUEST','SHAKE_PAIR_BROADCAST','SHAKE_PAIR_ACCEPT','DELIVERY_ACK','PROFILE_UPDATE','NODE_LOCATION_UPDATE'];
+                                    const SIGNAL_TYPES = ['IDENTITY_ANNOUNCE','IDENTITY_RESPONSE','IDENTITY_REQUEST','SHAKE_PAIR_BROADCAST','SHAKE_PAIR_ACCEPT','DELIVERY_ACK','PROFILE_UPDATE','NODE_LOCATION_UPDATE','group_invite'];
                                     const SIGNAL_KEYS = ['read_up_to','reader_hash','offer','answer','candidate','hangup','sender_hash','sender_pk','beacon_id'];
-                                    if (parsed.type && SIGNAL_TYPES.some(t => parsed.type.startsWith(t.split('_')[0]))) isSignalingJson = true;
-                                    else if (SIGNAL_KEYS.filter(k => k in parsed).length >= 2) isSignalingJson = true;
-                                    else if (parsed.reason === 'user_remote_wipe') isSignalingJson = true;
+                                    if (parsed.type === 'group_message' || parsed.type === 'squad_msg') {
+                                        if (c.is_group) {
+                                            const subText = parsed.content || 'Mensaje de escuadrón';
+                                            const truncated = subText.length > 38 ? subText.substring(0, 38) + "…" : subText;
+                                            snippet = prefix + truncated;
+                                            isSignalingJson = true; // Handled directly
+                                        } else {
+                                            isSignalingJson = true;
+                                        }
+                                    } else if (parsed.type && SIGNAL_TYPES.some(t => parsed.type.startsWith(t.split('_')[0]) || parsed.type === t)) {
+                                        isSignalingJson = true;
+                                    } else if (SIGNAL_KEYS.filter(k => k in parsed).length >= 2) {
+                                        isSignalingJson = true;
+                                    } else if (parsed.reason === 'user_remote_wipe') {
+                                        isSignalingJson = true;
+                                    }
                                 } catch {}
                             }
                             if (!isSignalingJson) {

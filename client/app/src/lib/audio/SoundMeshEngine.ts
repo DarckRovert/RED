@@ -39,23 +39,75 @@ export class SoundMeshEngine {
     }
 
     /**
+     * Calculates 16-bit CRC-CCITT (Polynomial 0x1021, Initial 0xFFFF)
+     */
+    public static calculateCrc16(data: Uint8Array): number {
+        let crc = 0xFFFF;
+        for (let i = 0; i < data.length; i++) {
+            crc ^= (data[i] << 8);
+            for (let j = 0; j < 8; j++) {
+                if ((crc & 0x8000) !== 0) {
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                } else {
+                    crc = (crc << 1) & 0xFFFF;
+                }
+            }
+        }
+        return crc & 0xFFFF;
+    }
+
+    /**
+     * Packages payload into a framed byte stream:
+     * [Sync1 (0xD3), Sync2 (0x91), Length (1B), Payload (NB), CRC_High (1B), CRC_Low (1B)]
+     */
+    public static framePacket(payload: Uint8Array): Uint8Array {
+        if (payload.length > 255) {
+            throw new Error(`SoundMesh payload exceeds 255 bytes max length (${payload.length}B)`);
+        }
+        const crc = this.calculateCrc16(payload);
+        const frame = new Uint8Array(3 + payload.length + 2);
+        frame[0] = 0xD3;
+        frame[1] = 0x91;
+        frame[2] = payload.length;
+        frame.set(payload, 3);
+        frame[3 + payload.length] = (crc >> 8) & 0xFF;
+        frame[4 + payload.length] = crc & 0xFF;
+        return frame;
+    }
+
+    /**
+     * Unframes and verifies CRC-16 integrity of received bytes
+     */
+    public static unframePacket(data: Uint8Array): { valid: boolean; payload?: Uint8Array } {
+        if (data.length < 5) return { valid: false };
+        if (data[0] !== 0xD3 || data[1] !== 0x91) return { valid: false };
+        const len = data[2];
+        if (data.length < 3 + len + 2) return { valid: false };
+        const payload = data.slice(3, 3 + len);
+        const expectedCrc = (data[3 + len] << 8) | data[4 + len];
+        const computedCrc = this.calculateCrc16(payload);
+        if (computedCrc !== expectedCrc) return { valid: false };
+        return { valid: true, payload };
+    }
+
+    /**
      * Transmits a text or hex payload as ultrasonic FSK audio tones
      */
-    public static async transmit(payload: string): Promise<boolean> {
+    public static async transmit(payload: string | Uint8Array): Promise<boolean> {
         return this.transmitPayload(payload);
     }
 
-    public static async transmitPayload(payload: string): Promise<boolean> {
+    public static async transmitPayload(payload: string | Uint8Array): Promise<boolean> {
         try {
             const ctx = this.getAudioContext();
-            const encoder = new TextEncoder();
-            const bytes = encoder.encode(payload);
+            const rawBytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
+            const framedBytes = this.framePacket(rawBytes);
 
-            // Convert bytes to bit array (8 bits per byte)
+            // Convert framed bytes to bit array (MSB first)
             const bits: number[] = [];
-            for (let i = 0; i < bytes.length; i++) {
+            for (let i = 0; i < framedBytes.length; i++) {
                 for (let bit = 7; bit >= 0; bit--) {
-                    bits.push((bytes[i] >> bit) & 1);
+                    bits.push((framedBytes[i] >> bit) & 1);
                 }
             }
 
@@ -138,7 +190,7 @@ export class SoundMeshEngine {
 
             let isDecoding = false;
             let receivingBits: number[] = [];
-            let bitsExpected = 0;
+            let totalBitsToRead = 0;
 
             const listenLoop = () => {
                 if (!this.isReceiving) return;
@@ -150,44 +202,19 @@ export class SoundMeshEngine {
                 if (!isDecoding && dbPreamble > -70) {
                     isDecoding = true;
                     receivingBits = [];
-                    bitsExpected = 160; // Up to 20 bytes (160 bits)
+                    // Initial expectation: Header (16b sync + 8b len = 24b) + max 255B payload + 16b CRC = up to 2072 bits
+                    totalBitsToRead = 2072;
 
                     let sampledCount = 0;
                     if (this.sampleInterval) clearInterval(this.sampleInterval);
 
-                    // Symbol-timed sampling every 40ms (matching transmitter bit clock)
+                    // Symbol-timed sampling every 40ms
                     this.sampleInterval = setInterval(() => {
-                        if (!this.isReceiving || sampledCount >= bitsExpected) {
+                        if (!this.isReceiving || sampledCount >= totalBitsToRead) {
                             if (this.sampleInterval) clearInterval(this.sampleInterval);
                             this.sampleInterval = null;
                             isDecoding = false;
-
-                            if (receivingBits.length >= 8 && this.onPacketCallback) {
-                                const bytes: number[] = [];
-                                for (let i = 0; i < receivingBits.length; i += 8) {
-                                    let byteVal = 0;
-                                    for (let b = 0; b < 8 && (i + b) < receivingBits.length; b++) {
-                                        byteVal = (byteVal << 1) | receivingBits[i + b];
-                                    }
-                                    if (byteVal > 0 && byteVal < 128) bytes.push(byteVal);
-                                }
-
-                                if (bytes.length > 0) {
-                                    const decodedStr = new TextDecoder().decode(new Uint8Array(bytes));
-                                    
-                                    // Parse real sender ID if payload has format SENDER:MSG or default to acoustic node
-                                    const parts = decodedStr.split(':');
-                                    const sender = parts.length > 1 ? parts[0] : 'Nodo Acústico 19.5kHz';
-                                    const payloadText = parts.length > 1 ? parts.slice(1).join(':') : decodedStr;
-
-                                    this.onPacketCallback({
-                                        senderId: sender,
-                                        payloadHex: payloadText,
-                                        timestamp: Date.now(),
-                                        rssiDb: Math.round(dbPreamble)
-                                    });
-                                }
-                            }
+                            this.processReceivedBits(receivingBits, dbPreamble);
                             return;
                         }
 
@@ -200,6 +227,17 @@ export class SoundMeshEngine {
                         } else {
                             receivingBits.push(0);
                         }
+
+                        // Dynamically adjust totalBitsToRead once length byte is received (bit 24)
+                        if (receivingBits.length === 24) {
+                            const syncWord = (receivingBits.slice(0, 8).reduce((acc, b) => (acc << 1) | b, 0) << 8) |
+                                             receivingBits.slice(8, 16).reduce((acc, b) => (acc << 1) | b, 0);
+                            if (syncWord === 0xD391) {
+                                const payloadLen = receivingBits.slice(16, 24).reduce((acc, b) => (acc << 1) | b, 0);
+                                totalBitsToRead = 24 + (payloadLen * 8) + 16;
+                            }
+                        }
+
                         sampledCount++;
                     }, this.BIT_DURATION_MS);
                 }
@@ -215,6 +253,36 @@ export class SoundMeshEngine {
             console.error('[SoundMeshEngine] Listen error:', e);
             this.stopListening();
             return false;
+        }
+    }
+
+    private static processReceivedBits(bits: number[], rssiDb: number) {
+        if (bits.length < 40 || !this.onPacketCallback) return;
+
+        const bytes: number[] = [];
+        for (let i = 0; i < bits.length; i += 8) {
+            let byteVal = 0;
+            for (let b = 0; b < 8 && (i + b) < bits.length; b++) {
+                byteVal = (byteVal << 1) | bits[i + b];
+            }
+            bytes.push(byteVal);
+        }
+
+        const rawData = new Uint8Array(bytes);
+        const unframeRes = this.unframePacket(rawData);
+
+        if (unframeRes.valid && unframeRes.payload) {
+            const decodedStr = new TextDecoder().decode(unframeRes.payload);
+            const parts = decodedStr.split(':');
+            const sender = parts.length > 1 ? parts[0] : 'Nodo Acústico RED';
+            const payloadText = parts.length > 1 ? parts.slice(1).join(':') : decodedStr;
+
+            this.onPacketCallback({
+                senderId: sender,
+                payloadHex: payloadText,
+                timestamp: Date.now(),
+                rssiDb: Math.round(rssiDb)
+            });
         }
     }
 

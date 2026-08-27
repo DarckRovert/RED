@@ -50,6 +50,7 @@ public class RedNodePlugin extends Plugin {
     public static native void startNode(String dataDir, String password);
     // SEC-FIX C-3: destroyNode — wipes all data directories via Rust JNI.
     public static native void destroyNode(String dataDir);
+    public static native void injectBlePayload(byte[] payload, String fromDevice);
 
     private static RedNodePlugin instance;
 

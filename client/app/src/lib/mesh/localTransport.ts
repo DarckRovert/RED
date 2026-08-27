@@ -111,10 +111,9 @@ class LocalTransport {
     this.discoveredBluetoothPeers = [];
     try {
       await bluetoothTransport.scan((device) => {
-        const normDevId = normalizeIdentity(device.id);
+        const rawDevId = device.id.trim();
         const existing = this.discoveredBluetoothPeers.find(d => {
-          const normD = normalizeIdentity(d.id);
-          if (normD === normDevId) return true;
+          if (d.id === rawDevId) return true;
           if (device.name && d.name && isNameSimilar(d.name, device.name)) return true;
           return false;
         });
@@ -123,16 +122,16 @@ class LocalTransport {
           if (device.name && (!existing.name || existing.name === 'Dispositivo RED' || existing.name.startsWith('Nodo '))) {
             existing.name = device.name;
           }
-          meshRouter.addBlePeer(normDevId, device.rssi, undefined, existing.name || device.name);
+          meshRouter.addBlePeer(rawDevId, device.rssi, undefined, existing.name || device.name);
         } else {
-          const cleanDev = { ...device, id: normDevId };
+          const cleanDev = { ...device, id: rawDevId };
           this.discoveredBluetoothPeers.push(cleanDev);
           // Register newly found BLE device in the mesh router with its advertised name
-          meshRouter.addBlePeer(normDevId, device.rssi, undefined, device.name);
+          meshRouter.addBlePeer(rawDevId, device.rssi, undefined, device.name);
           console.log(`[LocalTransport] BLE peer discovered: ${device.name} (RSSI ${device.rssi})`);
           
           // Proactive background auto-connect & MTU negotiation for warm zero-latency mesh link
-          this.autoAssociateBlePeer(normDevId).catch(() => {});
+          this.autoAssociateBlePeer(rawDevId).catch(() => {});
         }
       }, 5000);
     } catch (e) {
@@ -144,8 +143,8 @@ class LocalTransport {
   private connectingBleDevices: Set<string> = new Set();
 
   private async autoAssociateBlePeer(deviceId: string) {
-    const cleanId = normalizeIdentity(deviceId);
-    if (this.connectingBleDevices.has(cleanId) || bluetoothTransport.isDeviceConnected(cleanId)) return;
+    const cleanId = deviceId.trim();
+    if (!cleanId || this.connectingBleDevices.has(cleanId) || bluetoothTransport.isDeviceConnected(cleanId)) return;
     this.connectingBleDevices.add(cleanId);
     try {
       await bluetoothTransport.connect(cleanId);

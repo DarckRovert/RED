@@ -197,6 +197,64 @@ runTest("Conversión GPS a Coordenadas Militares OTAN UTM/MGRS", () => {
     assert(/\d{6}E \d{7}N/.test(utm), `Formato OTAN 6 dígitos Este y 7 dígitos Norte esperado, obtenido: ${utm}`);
 });
 
+function isPointInGeofence(point, polygon) {
+    if (polygon.length < 3) return false;
+    let inside = false;
+    const x = point.lon;
+    const y = point.lat;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const xi = polygon[i].lon, yi = polygon[i].lat;
+        const xj = polygon[j].lon, yj = polygon[j].lat;
+        const intersect = ((yi > y) !== (yj > y)) &&
+            (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+function calculateFresnelZone(distanceMeters, frequencyMhz = 915) {
+    const dKm = Math.max(0.01, distanceMeters / 1000);
+    const fGhz = Math.max(0.001, frequencyMhz / 1000);
+    const maxRadiusMeters = 8.656 * Math.sqrt(dKm / fGhz);
+    return {
+        maxRadiusMeters: Math.round(maxRadiusMeters * 100) / 100,
+        requiredClearance60PercentMeters: Math.round(maxRadiusMeters * 0.6 * 100) / 100
+    };
+}
+
+runTest("Geofencing Táctico: Inclusión / Exclusión Ray-Casting en Perímetro Defensivo", () => {
+    const polygon = [
+        { lat: -12.0400, lon: -77.0500 },
+        { lat: -12.0400, lon: -77.0300 },
+        { lat: -12.0600, lon: -77.0300 },
+        { lat: -12.0600, lon: -77.0500 }
+    ];
+    assert.strictEqual(isPointInGeofence({ lat: -12.0500, lon: -77.0400 }, polygon), true);
+    assert.strictEqual(isPointInGeofence({ lat: -12.0700, lon: -77.0400 }, polygon), false);
+});
+
+runTest("Cálculo Radiofrecuencia: Despeje Zona de Fresnel 1a para Enlace LoRa 915MHz", () => {
+    const fresnel = calculateFresnelZone(5000, 915);
+    assert(fresnel.maxRadiusMeters >= 20.0 && fresnel.maxRadiusMeters <= 20.5);
+    assert(fresnel.requiredClearance60PercentMeters >= 12.0 && fresnel.requiredClearance60PercentMeters <= 12.5);
+});
+
+function calculateRadioLineOfSight(h1, h2) {
+    const h1m = Math.max(0.1, h1);
+    const h2m = Math.max(0.1, h2);
+    const maxRangeKm = 4.12 * (Math.sqrt(h1m) + Math.sqrt(h2m));
+    return {
+        maxRangeKm: Math.round(maxRangeKm * 100) / 100,
+        maxRangeMeters: Math.round(maxRangeKm * 1000)
+    };
+}
+
+runTest("Cálculo Radiofrecuencia: Línea de Vista Óptica y RF (Horizonte con Refracción 4/3)", () => {
+    // 2m handheld to 25m tower mast
+    const los = calculateRadioLineOfSight(2, 25);
+    assert(los.maxRangeKm >= 26.0 && los.maxRangeKm <= 27.0, `Rango LOS esperado ~26.4km, obtenido ${los.maxRangeKm}km`);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. weatherBarometerEngine
 // ─────────────────────────────────────────────────────────────────────────────

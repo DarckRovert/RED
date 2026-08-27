@@ -146,8 +146,17 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
 
         // ── GROUP ROUTING FIX ──────────────────────────────────────────────────
         // Check if peerHash matches a known group id (hex-encoded GroupId)
-        const matchedGroup = (groups as any[]).find((g: any) => g.id === cleanPeerHash || g.id === peerHash);
-        const isGroupConv = !!matchedGroup;
+        const rawGroups = groups || [];
+        let localWebGroups: any[] = [];
+        if (typeof window !== 'undefined') {
+            try {
+                const stored = localStorage.getItem('red_web_groups');
+                if (stored) localWebGroups = JSON.parse(stored);
+            } catch {}
+        }
+        const allKnownGroups = [...rawGroups, ...localWebGroups];
+        const matchedGroup = allKnownGroups.find((g: any) => g && (g.id === cleanPeerHash || g.id === peerHash || g.group_id === cleanPeerHash || g.group_id === peerHash));
+        const isGroupConv = Boolean(matchedGroup);
 
         // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
         if (content && (!options?.msg_type || options.msg_type === 'text')) {
@@ -228,15 +237,16 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                              content?.startsWith('data:video') ? '📹 Video' :
                              content || 'Mensaje P2P');
 
-            const canonicalPeer = meshRouter.getCanonicalId(cleanPeerHash) || cleanPeerHash;
+            const canonicalPeer = isGroupConv ? cleanPeerHash : (meshRouter.getCanonicalId(cleanPeerHash) || cleanPeerHash);
+            const groupName = matchedGroup?.name || `Escuadrón ${cleanPeerHash.slice(0, 6)}`;
             const existingIdx = currentConvs.findIndex(c => 
                 c && (
                     c.peer === cleanPeerHash ||
                     c.id === cleanPeerHash ||
                     c.peer === canonicalPeer ||
                     c.id === canonicalPeer ||
-                    (canonicalPeer.length >= 8 && c.peer?.startsWith(canonicalPeer.slice(0, 8))) ||
-                    (!!c.peer && c.peer.length >= 8 && canonicalPeer.startsWith(c.peer.slice(0, 8)))
+                    (!isGroupConv && canonicalPeer.length >= 8 && c.peer?.startsWith(canonicalPeer.slice(0, 8))) ||
+                    (!isGroupConv && !!c.peer && c.peer.length >= 8 && canonicalPeer.startsWith(c.peer.slice(0, 8)))
                 )
             );
 
@@ -248,9 +258,11 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     ...existing,
                     id: canonicalPeer,
                     peer: canonicalPeer,
+                    peer_name: isGroupConv ? (groupName || existing.peer_name) : existing.peer_name,
                     last_message: snippet,
                     last_timestamp: nowSec,
-                    unread_count: 0
+                    unread_count: 0,
+                    is_group: isGroupConv || existing.is_group
                 };
                 updatedConvs.splice(existingIdx, 1);
                 updatedConvs.unshift(updatedItem);
@@ -258,9 +270,11 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 const newConv: ConversationItem = {
                     id: canonicalPeer,
                     peer: canonicalPeer,
+                    peer_name: isGroupConv ? groupName : undefined,
                     last_message: snippet,
                     last_timestamp: nowSec,
-                    unread_count: 0
+                    unread_count: 0,
+                    is_group: isGroupConv
                 };
                 updatedConvs.unshift(newConv);
             }
@@ -269,7 +283,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             const seenPeerSet = new Set<string>();
             updatedConvs = updatedConvs.filter(c => {
                 if (!c || !c.peer) return false;
-                const p = meshRouter.getCanonicalId(c.peer) || c.peer;
+                const p = c.is_group ? c.peer : (meshRouter.getCanonicalId(c.peer) || c.peer);
                 if (seenPeerSet.has(p)) return false;
                 seenPeerSet.add(p);
                 return true;

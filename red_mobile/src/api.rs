@@ -341,6 +341,10 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
             item.msg_type = "contact_response".to_string();
             item.content = content.clone();
         }
+        MessageType::GroupInvite { group_name, .. } => {
+            item.msg_type = "group_invite".to_string();
+            item.content = format!("Invitación al escuadrón: {}", group_name);
+        }
     }
     item
 }
@@ -580,6 +584,8 @@ pub struct AddContactRequest {
 #[derive(Deserialize)]
 pub struct CreateGroupRequest {
     pub name: String,
+    #[serde(default)]
+    pub members: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -1258,10 +1264,40 @@ async fn handle_create_group(
 ) -> impl IntoResponse {
     let mut node = state.node.lock().await;
     match node.create_group(req.name).await {
-        Ok(group) => Json(serde_json::json!({
-            "id": hex::encode(group.id.0),
-            "name": group.name,
-        })).into_response(),
+        Ok(mut group) => {
+            let mut added_members = Vec::new();
+            for member_hash in req.members {
+                if let Ok(id_hash) = parse_identity_hash(&member_hash) {
+                    let member = red_core::protocol::GroupMember {
+                        identity_hash: id_hash.clone(),
+                        public_key: red_core::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+                        joined_at: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs(),
+                        role: red_core::protocol::MemberRole::Member,
+                        muted: false,
+                    };
+                    let _ = group.add_member(member);
+                    added_members.push(id_hash);
+                }
+            }
+
+            {
+                let storage_arc = node.get_storage();
+                let mut s = storage_arc.lock().await;
+                let _ = s.add_group(group.clone());
+            }
+
+            for member_hash in added_members {
+                let _ = node.send_group_invite(group.id.clone(), member_hash).await;
+            }
+
+            Json(serde_json::json!({
+                "id": hex::encode(group.id.0),
+                "name": group.name,
+            })).into_response()
+        },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": format!("{}", e)}))).into_response(),
     }
 }

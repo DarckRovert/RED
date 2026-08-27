@@ -79,51 +79,53 @@ export default function StatusHeader() {
     return (
         <div style={{
             width: "100%",
-            background: "linear-gradient(180deg, rgba(8,8,16,0.98) 0%, rgba(12,12,22,0.95) 100%)",
-            borderBottom: "1px solid var(--glass-border)",
+            background: "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(8, 10, 20, 0.98) 100%)",
+            borderBottom: "1.5px solid rgba(255, 255, 255, 0.12)",
+            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.6)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            padding: "calc(3px + var(--safe-top, 0px)) 10px 3px 10px",
+            padding: "calc(4px + var(--safe-top, 0px)) 12px 4px 12px",
             fontFamily: "JetBrains Mono, monospace",
-            fontSize: "0.70rem",
+            fontSize: "0.72rem",
             color: "var(--text-secondary)",
             zIndex: 50,
-            backdropFilter: "blur(16px)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
             flexShrink: 0,
-            gap: "6px"
+            gap: "8px"
         }}>
             {/* Left: Active Transport Pill */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexShrink: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
                 <span style={{
-                    width: 7, height: 7, borderRadius: "50%",
-                    background: color, boxShadow: `0 0 8px ${color}`,
+                    width: 8, height: 8, borderRadius: "50%",
+                    background: color, boxShadow: `0 0 10px ${color}`,
                     display: "inline-block", flexShrink: 0
                 }} />
-                <span style={{ color: "#fff", fontWeight: 800, letterSpacing: "0.3px", whiteSpace: "nowrap" }}>
+                <span style={{ color: "#FFFFFF", fontWeight: 900, letterSpacing: "0.4px", whiteSpace: "nowrap", textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
                     {activeNetwork}
                 </span>
-                <span style={{ color: "var(--text-muted)", fontSize: "0.66rem", whiteSpace: "nowrap" }}>
+                <span style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "0.68rem", fontWeight: 700, whiteSpace: "nowrap" }}>
                     ({meshCounts.total})
                 </span>
             </div>
 
             {/* Right: Quick Telemetry & Shortcuts */}
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-                <div style={{ display: "flex", gap: "4px", fontSize: "0.66rem" }}>
-                    {meshCounts.wifi > 0 && <span style={{ color: "var(--accent-emerald)" }}>WIFI:{meshCounts.wifi}</span>}
-                    {meshCounts.ble > 0 && <span style={{ color: "var(--accent-cyan)" }}>BLE:{meshCounts.ble}</span>}
-                    {meshCounts.lora > 0 && <span style={{ color: "var(--accent-purple, #B388FF)" }}>LORA:{meshCounts.lora}</span>}
+                <div style={{ display: "flex", gap: "6px", fontSize: "0.68rem", fontWeight: 700 }}>
+                    {meshCounts.wifi > 0 && <span style={{ color: "var(--accent-emerald)", textShadow: "0 0 6px rgba(0,230,118,0.4)" }}>WIFI:{meshCounts.wifi}</span>}
+                    {meshCounts.ble > 0 && <span style={{ color: "var(--accent-cyan)", textShadow: "0 0 6px rgba(0,229,255,0.4)" }}>BLE:{meshCounts.ble}</span>}
+                    {meshCounts.lora > 0 && <span style={{ color: "var(--accent-purple, #B388FF)", textShadow: "0 0 6px rgba(179,136,255,0.4)" }}>LORA:{meshCounts.lora}</span>}
                 </div>
 
                 <button
                     onClick={() => navigate("aiCopilot")}
                     style={{
-                        background: "linear-gradient(135deg, rgba(0,229,255,0.25) 0%, rgba(2,132,199,0.15) 100%)", 
-                        border: "1px solid rgba(0,229,255,0.45)",
-                        borderRadius: "var(--radius-full)", padding: "1px 8px", color: "var(--accent-cyan)",
-                        fontSize: "0.66rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-                        boxShadow: "0 0 8px rgba(0,229,255,0.3)"
+                        background: "linear-gradient(135deg, rgba(0,229,255,0.22) 0%, rgba(2,132,199,0.3) 100%)", 
+                        border: "1.5px solid rgba(0,229,255,0.6)",
+                        borderRadius: "var(--radius-full)", padding: "2px 9px", color: "#E0F7FA",
+                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 0 10px rgba(0,229,255,0.35)", transition: "all 0.15s ease"
                     }}
                     title={t('status_header.ai_tooltip')}
                 >
@@ -133,11 +135,11 @@ export default function StatusHeader() {
                 <button
                     onClick={() => navigate("commercialHub")}
                     style={{
-                        background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(255,51,85,0.15) 100%)", 
-                        border: "1px solid rgba(255,60,95,0.45)",
-                        borderRadius: "var(--radius-full)", padding: "1px 8px", color: "#FF8599",
-                        fontSize: "0.66rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-                        boxShadow: "0 0 8px rgba(232,33,58,0.3)"
+                        background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(255,51,85,0.25) 100%)", 
+                        border: "1.5px solid rgba(255,60,95,0.6)",
+                        borderRadius: "var(--radius-full)", padding: "2px 9px", color: "#FFE4E8",
+                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 0 10px rgba(232,33,58,0.35)", transition: "all 0.15s ease"
                     }}
                 >
                     {t('status_header.hub_btn')}
@@ -146,9 +148,10 @@ export default function StatusHeader() {
                 <button
                     onClick={() => navigate("nodemap")}
                     style={{
-                        background: "rgba(255,255,255,0.06)", border: "1px solid var(--glass-border)",
-                        borderRadius: "var(--radius-full)", padding: "1px 7px", color: "var(--accent-cyan)",
-                        fontSize: "0.66rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap"
+                        background: "rgba(255,255,255,0.1)", border: "1.5px solid rgba(0, 229, 255, 0.4)",
+                        borderRadius: "var(--radius-full)", padding: "2px 8px", color: "var(--accent-cyan)",
+                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
+                        boxShadow: "0 0 8px rgba(0,229,255,0.2)"
                     }}
                 >
                     {t('status_header.map_btn')}
@@ -161,13 +164,13 @@ export default function StatusHeader() {
                         }
                     }}
                     style={{
-                        background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.18)",
-                        borderRadius: "var(--radius-full)", padding: "1px 7px", color: "#E2E8F0",
-                        fontSize: "0.66rem", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap"
+                        background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.25)",
+                        borderRadius: "var(--radius-full)", padding: "2px 8px", color: "#FFFFFF",
+                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap"
                     }}
                     title="Volver al Portal Web Oficial"
                 >
-                    🌐 Portal Web
+                    🌐 Portal
                 </button>
             </div>
         </div>

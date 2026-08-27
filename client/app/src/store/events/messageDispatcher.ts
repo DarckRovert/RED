@@ -682,13 +682,15 @@ export async function dispatchIncomingMessage(
                     if (get().currentScreen !== 'call') {
                         const determinedType: 'audio' | 'video' = signal.callType === 'audio' || (signal.offer?.sdp && !signal.offer.sdp.includes('m=video')) ? 'audio' : 'video';
                         const callId = signal.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                        const sessionStartTime = signal.startedAt || (signal.timestamp > 1e11 ? signal.timestamp : Date.now());
                         set({
                             incomingCall: {
                                 callerHash: senderHash,
                                 callerName: callerName,
                                 offer: signal.offer,
                                 callType: determinedType,
-                                callId: callId
+                                callId: callId,
+                                startedAt: sessionStartTime
                             },
                             activeCallType: determinedType,
                             activeCallId: callId
@@ -1005,6 +1007,218 @@ export async function dispatchIncomingMessage(
             return;
         }
 
+        // ── Group Invitation / Escuadrón P2P Synchronization (v64.1) ───────────
+        if (item.msg_type === 'group_invite' || (typeof item.content === 'string' && item.content.includes('"type":"group_invite"'))) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item as any;
+                const groupId = parsed.group_id || (item as any).group_id;
+                const groupName = parsed.name || parsed.group_name || (item as any).group_name || `Escuadrón ${groupId?.slice(0, 6)}`;
+                const creator = parsed.creator || parsed.creator_hash || item.sender;
+                const members = parsed.members || [creator, get().identity?.identity_hash || 'me'];
+
+                if (groupId) {
+                    // 1. Update in-memory and local Web groups
+                    const currentGroups = get().groups || [];
+                    if (!currentGroups.some((g: any) => g.id === groupId || g.group_id === groupId)) {
+                        const newGroup = {
+                            id: groupId,
+                            name: groupName,
+                            members: members.map((m: any) => typeof m === 'string' ? { identity_hash: m, role: m === creator ? 'Admin' : 'Member' } : m),
+                            created_at: parsed.created_at || Math.floor(Date.now() / 1000),
+                            last_activity: Math.floor(Date.now() / 1000)
+                        };
+                        const nextGroups = [...currentGroups, newGroup];
+                        set({ groups: nextGroups });
+                        RedAPI.setWebStore('red_web_groups', nextGroups);
+                    }
+
+                    // 2. Ensure conversation item exists in conversation list
+                    const currentConvs = get().conversations || [];
+                    if (!currentConvs.some((c: any) => c.id === groupId || c.peer === groupId)) {
+                        const newConv: ConversationItem = {
+                            id: groupId,
+                            peer: groupId,
+                            peer_name: groupName,
+                            last_message: `Invitación al escuadrón ${groupName}`,
+                            last_timestamp: Date.now() / 1000,
+                            unread_count: 1,
+                            is_group: true
+                        };
+                        const nextConvs = [newConv, ...currentConvs];
+                        set({ conversations: nextConvs });
+                        RedAPI.setWebStore('red_web_conversations', nextConvs);
+                    }
+
+                    // 3. Save initial welcome system message inside the group vault (NOT in 1-to-1 chat)
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const groupConvKey = `red_web_messages_${groupId}`;
+                            const rawMsgs = localStorage.getItem(groupConvKey);
+                            const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
+                            const sysId = `sys_inv_${groupId}`;
+                            if (!list.some(m => m.id === sysId)) {
+                                list.push({
+                                    id: sysId,
+                                    sender: creator,
+                                    recipient: groupId,
+                                    content: `🛡️ Has sido añadido al escuadrón "${groupName}" por ${creator.slice(0, 6)}…`,
+                                    timestamp: Date.now() / 1000,
+                                    is_mine: false,
+                                    status: 'Delivered',
+                                    conversation_id: groupId,
+                                    msg_type: 'system' as any
+                                });
+                                localStorage.setItem(groupConvKey, JSON.stringify(list));
+                            }
+                        } catch {}
+                    }
+
+                    toast.success(`👥 Te han añadido al escuadrón: ${groupName}`);
+                    TacticalAudioEngine.playMessageReceived();
+                }
+            } catch (e) {
+                console.warn('[Group Invite Ingest Error]', e);
+            }
+            return;
+        }
+
+        // ── Group / Squad Messages Ingestion (v64.2 P2P Fan-Out Router) ─────────
+        if (
+            item.msg_type === 'group_message' ||
+            item.msg_type === 'squad_msg' ||
+            (typeof item.content === 'string' && (item.content.includes('"type":"group_message"') || item.content.includes('"type":"squad_msg"')))
+        ) {
+            try {
+                let parsed: any = null;
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    try { parsed = JSON.parse(item.content); } catch {}
+                }
+                const groupId = parsed?.group_id || (item as any).group_id || item.conversation_id;
+                if (groupId) {
+                    const senderHash = parsed?.sender || item.sender;
+                    const actualContent = parsed?.content !== undefined ? parsed.content : item.content;
+                    const actualMsgId = parsed?.id || item.id || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                    const actualTimestamp = parsed?.timestamp || item.timestamp || (Date.now() / 1000);
+                    const actualMsgType = parsed?.msg_type || item.msg_type || (actualContent?.startsWith('data:image') ? 'image' : actualContent?.startsWith('data:audio') ? 'voice' : 'text');
+                    const actualMediaData = parsed?.media_data || item.media_data;
+
+                    const myHash = get().identity?.identity_hash;
+                    const isMine = senderHash === myHash || senderHash === 'me';
+
+                    const groupMessageItem: MessageItem = {
+                        id: actualMsgId,
+                        sender: senderHash,
+                        recipient: groupId,
+                        content: actualContent,
+                        timestamp: actualTimestamp > 1e11 ? actualTimestamp / 1000 : actualTimestamp,
+                        is_mine: isMine,
+                        status: 'Delivered',
+                        conversation_id: groupId,
+                        msg_type: actualMsgType === 'group_message' || actualMsgType === 'squad_msg' ? 'text' : actualMsgType,
+                        media_data: actualMediaData,
+                        mime_type: parsed?.mime_type || (item as any).mime_type
+                    };
+
+                    // 1. Ensure Group in store
+                    let groups = get().groups || [];
+                    let group = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+                    const groupName = group?.name || `Escuadrón ${groupId.slice(0, 6)}`;
+
+                    if (!group) {
+                        const newGroup = {
+                            id: groupId,
+                            name: groupName,
+                            members: [{ identity_hash: senderHash, role: 'Member' }, { identity_hash: myHash || 'me', role: 'Member' }],
+                            created_at: actualTimestamp,
+                            last_activity: actualTimestamp
+                        };
+                        groups = [...groups, newGroup];
+                        set({ groups });
+                        RedAPI.setWebStore('red_web_groups', groups);
+                    }
+
+                    // 2. Update Conversations list
+                    const currentConvs = get().conversations || [];
+                    const isCurrentChat = get().activeConversationId === groupId;
+                    const existingConvIdx = currentConvs.findIndex((c: any) => c && (c.id === groupId || c.peer === groupId));
+                    let updatedConvs = [...currentConvs];
+
+                    if (existingConvIdx >= 0) {
+                        const existing = updatedConvs[existingConvIdx];
+                        updatedConvs.splice(existingConvIdx, 1);
+                        updatedConvs.unshift({
+                            ...existing,
+                            id: groupId,
+                            peer: groupId,
+                            peer_name: groupName,
+                            last_message: actualContent?.startsWith('data:image') ? '📷 Foto' : actualContent?.startsWith('data:audio') ? '🎤 Nota de voz' : actualContent,
+                            last_timestamp: actualTimestamp > 1e11 ? actualTimestamp / 1000 : actualTimestamp,
+                            unread_count: isCurrentChat ? 0 : ((existing.unread_count || 0) + 1),
+                            is_group: true
+                        });
+                    } else {
+                        updatedConvs.unshift({
+                            id: groupId,
+                            peer: groupId,
+                            peer_name: groupName,
+                            last_message: actualContent?.startsWith('data:image') ? '📷 Foto' : actualContent?.startsWith('data:audio') ? '🎤 Nota de voz' : actualContent,
+                            last_timestamp: actualTimestamp > 1e11 ? actualTimestamp / 1000 : actualTimestamp,
+                            unread_count: isCurrentChat ? 0 : 1,
+                            is_group: true
+                        });
+                    }
+                    set({ conversations: updatedConvs });
+                    RedAPI.setWebStore('red_web_conversations', updatedConvs);
+
+                    // 3. Persist into group's message vault
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const groupConvKey = `red_web_messages_${groupId}`;
+                            const rawMsgs = localStorage.getItem(groupConvKey);
+                            const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
+                            if (!list.some(m => m.id === groupMessageItem.id)) {
+                                list.push(groupMessageItem);
+                                localStorage.setItem(groupConvKey, JSON.stringify(list));
+                            }
+                        } catch {}
+                    }
+
+                    // 4. Update in-memory active chat if user is currently in this group
+                    if (isCurrentChat) {
+                        set((s: any) => {
+                            if (s.messages.some((m: any) => m.id === groupMessageItem.id)) return s;
+                            return { messages: [...s.messages, groupMessageItem] };
+                        });
+                    }
+
+                    if (!isMine) {
+                        TacticalAudioEngine.playMessageReceived();
+                        // Push Local Notification if not focused on this group
+                        if (!isCurrentChat) {
+                            import('@capacitor/core').then(({ Capacitor }) => {
+                                if (Capacitor.isNativePlatform()) {
+                                    import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+                                        LocalNotifications.schedule({
+                                            notifications: [{
+                                                title: `👥 ${groupName}`,
+                                                body: `${senderHash.slice(0, 6)}: ${actualContent}`,
+                                                id: Math.floor(Date.now() % 2147483647),
+                                                schedule: { at: new Date(Date.now() + 100) },
+                                                extra: { conversation_id: groupId, is_group: true }
+                                            }]
+                                        }).catch(() => {});
+                                    });
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[Group Message Ingest Error]', e);
+            }
+            return;
+        }
+
         // ── Real-Time Reactions: apply to target bubble, never append as new message ──
         if (item.msg_type === 'reaction') {
             try {
@@ -1143,7 +1357,7 @@ export async function dispatchIncomingMessage(
         if (!item.msg_type && typeof item.content === 'string' && item.content.startsWith('{')) {
             try {
                 const c = JSON.parse(item.content);
-                const SIGNAL_KEYS = ['read_up_to', 'reader_hash', 'delivery_ack', 'offer', 'answer', 'candidate', 'hangup', 'beacon_id', 'group_id'];
+                const SIGNAL_KEYS = ['read_up_to', 'reader_hash', 'delivery_ack', 'offer', 'answer', 'candidate', 'hangup', 'beacon_id'];
                 const hitCount = SIGNAL_KEYS.filter(k => k in c).length;
                 if (hitCount >= 1) return; // discard silently — signaling packet without proper msg_type
                 if (c.type && typeof c.type === 'string' && (
@@ -1169,13 +1383,23 @@ export async function dispatchIncomingMessage(
         const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
         const canonicalRecipient = itemRecipient ? (meshRouter.getCanonicalId(itemRecipient) || itemRecipient) : undefined;
 
+        const isGroup = Boolean(
+            item.msg_type === 'group_message' || 
+            (item as any).group_id || 
+            (item as any).is_group || 
+            (typeof item.conversation_id === 'string' && get().groups?.some((g: any) => g.id === item.conversation_id || g.group_id === item.conversation_id))
+        );
+        const groupTargetId = isGroup ? ((item as any).group_id || item.conversation_id) : null;
+
         const isCurrentChat =
+            (groupTargetId && activeConversationId === groupTargetId) ||
             activeConversationId === item.conversation_id ||
             (currentConv && (
                 currentConv.peer === item.sender ||
                 currentConv.peer === canonicalSender ||
                 (itemRecipient && (currentConv.peer === itemRecipient || currentConv.peer === canonicalRecipient)) ||
-                currentConv.id === item.conversation_id
+                currentConv.id === item.conversation_id ||
+                (groupTargetId && (currentConv.id === groupTargetId || currentConv.peer === groupTargetId))
             )) ||
             (canonicalSender.length >= 8 && canonicalSender !== myHash && activeConversationId?.includes(canonicalSender.substring(0, 8))) ||
             (canonicalRecipient && canonicalRecipient.length >= 8 && canonicalRecipient !== myHash && activeConversationId?.includes(canonicalRecipient.substring(0, 8)));
@@ -1386,7 +1610,15 @@ export async function dispatchIncomingMessage(
                              (item.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (item.content || 'Mensaje P2P')));
 
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
-            const convId = canonicalSender || normalizeIdentity(item.sender);
+            const isGroup = Boolean(
+                item.msg_type === 'group_message' || 
+                (item as any).group_id || 
+                (item as any).is_group || 
+                (typeof item.conversation_id === 'string' && get().groups?.some((g: any) => g.id === item.conversation_id || g.group_id === item.conversation_id))
+            );
+            const convId = isGroup 
+                ? ((item as any).group_id || item.conversation_id) 
+                : (canonicalSender || normalizeIdentity(item.sender));
 
             // Never create conversations for broadcast addresses or control wipe packets
             const isBroadcastId = !convId || convId === 'me' || convId === 'local' ||
@@ -1404,64 +1636,109 @@ export async function dispatchIncomingMessage(
             const idx = currentConvs.findIndex(c => 
                 c && (
                     c.id === convId ||
-                    c.peer === item.sender ||
-                    c.peer === canonicalSender ||
-                    c.id === item.sender ||
-                    (canonicalSender.length >= 8 && c.peer?.startsWith(canonicalSender.slice(0, 8))) ||
-                    (!!c.peer && c.peer.length >= 8 && canonicalSender.startsWith(c.peer.slice(0, 8)))
+                    c.peer === convId ||
+                    (!isGroup && (
+                        c.peer === item.sender ||
+                        c.peer === canonicalSender ||
+                        c.id === item.sender ||
+                        (canonicalSender.length >= 8 && c.peer?.startsWith(canonicalSender.slice(0, 8))) ||
+                        (!!c.peer && c.peer.length >= 8 && canonicalSender.startsWith(c.peer.slice(0, 8)))
+                    ))
                 )
             );
 
             let updatedConvs = [...currentConvs];
+            const rawSenderName = (item as any).sender_name || (typeof item.content === 'string' && item.content.startsWith('{') ? (() => { try { return JSON.parse(item.content).sender_name; } catch { return ''; } })() : '');
+            const isNonGenericSender = rawSenderName &&
+                !rawSenderName.startsWith('Operador ') &&
+                !rawSenderName.startsWith('Nodo ') &&
+                !rawSenderName.startsWith('Par Escaneado') &&
+                rawSenderName !== 'Nuevo Par' &&
+                rawSenderName !== 'Par Malla' &&
+                rawSenderName !== 'Contacto P2P';
+
+            const matchedGroup = isGroup ? get().groups?.find((g: any) => g.id === convId || g.group_id === convId) : null;
+            const convName = matchedGroup?.name || (isGroup ? `Escuadrón ${convId.slice(0, 6)}` : (isNonGenericSender ? rawSenderName : undefined));
+
             if (idx >= 0) {
                 const existing = updatedConvs[idx];
                 const updatedObj: ConversationItem = {
                     ...existing,
-                    id: canonicalSender,
-                    peer: canonicalSender,
+                    id: convId,
+                    peer: convId,
+                    peer_name: convName || (isNonGenericSender ? rawSenderName : existing.peer_name),
                     last_message: snippet,
                     last_timestamp: normTimestamp,
-                    unread_count: (existing.unread_count || 0) + 1
+                    unread_count: (existing.unread_count || 0) + 1,
+                    is_group: isGroup || existing.is_group
                 };
                 updatedConvs.splice(idx, 1);
                 updatedConvs.unshift(updatedObj);
             } else {
                 const newObj: ConversationItem = {
-                    id: canonicalSender,
-                    peer: canonicalSender,
+                    id: convId,
+                    peer: convId,
+                    peer_name: convName || (isNonGenericSender ? rawSenderName : undefined),
                     last_message: snippet,
                     last_timestamp: normTimestamp,
-                    unread_count: 1
+                    unread_count: 1,
+                    is_group: isGroup
                 };
                 updatedConvs.unshift(newObj);
+            }
 
-                // Auto-register sender as contact if not present (WhatsApp/Signal/Telegram model)
+            if (!isGroup && canonicalSender && canonicalSender !== 'unknown' && canonicalSender !== 'local') {
                 const currentContacts = get().contacts || [];
-                const hasContact = currentContacts.some((c: any) => {
+                const peerMeta = meshRouter.getPeerByAnyId(canonicalSender) || meshRouter.getPeerByAnyId(item.sender);
+                const resolvedName = isNonGenericSender
+                    ? rawSenderName
+                    : (peerMeta?.name && !peerMeta.name.startsWith('Operador ') ? peerMeta.name : `Operador ${canonicalSender.slice(0, 6)}`);
+                const resolvedPk = (item as any).sender_pk || peerMeta?.publicKey;
+                const resolvedAvatar = (item as any).avatar_url || (peerMeta as any)?.avatar_url;
+
+                const contactIdx = currentContacts.findIndex((c: any) => {
                     const cHash = normalizeIdentity(c.identity_hash || '');
                     return cHash === canonicalSender || cHash === item.sender || (canonicalSender.length >= 8 && cHash.startsWith(canonicalSender.slice(0, 8)));
                 });
-                if (!hasContact && canonicalSender && canonicalSender !== 'unknown' && canonicalSender !== 'local') {
-                    const peerMeta = meshRouter.getPeerByAnyId(canonicalSender) || meshRouter.getPeerByAnyId(item.sender);
-                    const newContactName = peerMeta?.name && !peerMeta.name.startsWith('Operador ') ? peerMeta.name : `Operador ${canonicalSender.slice(0, 6)}`;
-                    const newContactPk = peerMeta?.publicKey || (item as any).sender_pk;
+
+                if (contactIdx >= 0) {
+                    const existingContact = currentContacts[contactIdx];
+                    const shouldUpdateName = isNonGenericSender && (!existingContact.display_name || existingContact.display_name.startsWith('Operador ') || existingContact.display_name.startsWith('Nodo ') || existingContact.display_name !== rawSenderName);
+                    if (shouldUpdateName || resolvedPk || resolvedAvatar) {
+                        const updatedContacts = [...currentContacts];
+                        updatedContacts[contactIdx] = {
+                            ...existingContact,
+                            display_name: shouldUpdateName ? rawSenderName : existingContact.display_name,
+                            public_key: resolvedPk || existingContact.public_key,
+                            avatar_url: resolvedAvatar || existingContact.avatar_url
+                        };
+                        set({ contacts: updatedContacts });
+                        RedAPI.setWebStore('red_web_contacts', updatedContacts);
+                    }
+                } else {
                     const newContact = {
                         identity_hash: canonicalSender,
-                        display_name: newContactName,
-                        public_key: newContactPk
+                        display_name: resolvedName,
+                        public_key: resolvedPk || null,
+                        avatar_url: resolvedAvatar || null
                     };
                     const nextContacts = [...currentContacts, newContact];
                     set({ contacts: nextContacts });
                     RedAPI.setWebStore('red_web_contacts', nextContacts);
-                    RedAPI.addContact(canonicalSender, newContactName, newContactPk).catch(() => {});
+                    RedAPI.addContact(canonicalSender, resolvedName, resolvedPk).catch(() => {});
+                }
+
+                if (isNonGenericSender) {
+                    meshRouter.updatePeer(canonicalSender, 'ble', undefined, canonicalSender, rawSenderName, resolvedPk);
                 }
             }
+
             set({ conversations: updatedConvs });
             RedAPI.setWebStore('red_web_conversations', updatedConvs);
 
-            if (typeof window !== 'undefined' && canonicalSender) {
+            if (typeof window !== 'undefined' && (convId || canonicalSender)) {
                 try {
-                    const convKey = `red_web_messages_${canonicalSender}`;
+                    const convKey = `red_web_messages_${convId || canonicalSender}`;
                     const rawMsgs = localStorage.getItem(convKey);
                     const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
                     if (!list.some(m => m.id === item.id)) {
@@ -1472,7 +1749,8 @@ export async function dispatchIncomingMessage(
                         const lightItem: MessageItem = {
                             ...(item as MessageItem),
                             media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${item.id}` : item.media_data,
-                            content: item.content?.startsWith('data:') && item.content.length > 512 ? `red_vault://${item.id}` : item.content
+                            content: item.content?.startsWith('data:') && item.content.length > 512 ? `red_vault://${item.id}` : item.content,
+                            conversation_id: isGroup ? convId : item.conversation_id
                         };
                         list.push(lightItem);
                         localStorage.setItem(convKey, JSON.stringify(list));

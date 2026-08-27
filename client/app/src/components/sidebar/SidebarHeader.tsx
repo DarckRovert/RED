@@ -5,6 +5,8 @@ import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle } from "./types";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 
+export type ChatFilterType = "all" | "unread" | "groups" | "channels";
+
 interface SidebarHeaderProps {
     activeTab: "chats" | "contacts";
     setActiveTab: (tab: "chats" | "contacts") => void;
@@ -19,6 +21,9 @@ interface SidebarHeaderProps {
     filteredConvsCount: number;
     filteredContactsCount: number;
     pendingCount: number;
+    chatFilter?: ChatFilterType;
+    setChatFilter?: (filter: ChatFilterType) => void;
+    unreadTotal?: number;
 }
 
 export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
@@ -35,9 +40,19 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     filteredConvsCount,
     filteredContactsCount,
     pendingCount,
+    chatFilter = "all",
+    setChatFilter,
+    unreadTotal = 0,
 }) => {
     const { identity, nodeOnline, navigate } = useRedStore();
     const { t } = useTranslation();
+
+    const filters: { id: ChatFilterType; label: string; icon: string; badge?: number }[] = [
+        { id: "all", label: "Todos", icon: "💬" },
+        { id: "unread", label: "No Leídos", icon: "🔔", badge: unreadTotal },
+        { id: "groups", label: "Grupos", icon: "👥" },
+        { id: "channels", label: "Canales", icon: "📻" },
+    ];
 
     return (
         <>
@@ -206,6 +221,47 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         </button>
                     )}
                 </div>
+
+                {/* Sub-Filter Pill Bar (Chats View) */}
+                {activeTab === "chats" && (
+                    <div style={{
+                        display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "2px",
+                        scrollbarWidth: "none", msOverflowStyle: "none"
+                    }}>
+                        {filters.map(f => {
+                            const isSelected = chatFilter === f.id;
+                            return (
+                                <button
+                                    key={f.id}
+                                    onClick={() => setChatFilter?.(f.id)}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "5px",
+                                        padding: "4px 10px", borderRadius: "14px",
+                                        background: isSelected ? "rgba(0, 229, 255, 0.18)" : "rgba(255, 255, 255, 0.04)",
+                                        border: isSelected ? "1px solid rgba(0, 229, 255, 0.5)" : "1px solid rgba(255, 255, 255, 0.06)",
+                                        color: isSelected ? "var(--accent-cyan)" : "var(--text-secondary)",
+                                        fontSize: "0.72rem", fontWeight: isSelected ? 800 : 600,
+                                        cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                                        transition: "all 0.15s ease",
+                                        boxShadow: isSelected ? "0 0 10px rgba(0, 229, 255, 0.25)" : "none"
+                                    }}
+                                >
+                                    <span style={{ fontSize: "0.75rem" }}>{f.icon}</span>
+                                    <span>{f.label}</span>
+                                    {typeof f.badge === "number" && f.badge > 0 && (
+                                        <span style={{
+                                            background: "var(--accent-crimson)", color: "#fff",
+                                            fontSize: "0.58rem", fontWeight: 900,
+                                            padding: "1px 5px", borderRadius: "10px"
+                                        }}>
+                                            {f.badge}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
         </>

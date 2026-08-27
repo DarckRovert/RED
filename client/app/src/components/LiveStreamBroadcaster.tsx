@@ -39,14 +39,25 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
     const [camError, setCamError] = useState<string | null>(null);
     const [elapsed, setElapsed] = useState(0);
     const [framesSent, setFramesSent] = useState(0);
+    const [totalBytesSent, setTotalBytesSent] = useState(0);
     const [comments, setComments] = useState<{ sender: string; text: string }[]>([]);
     const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const isSendingRef = useRef(false);
 
     const liveStreams = useRedStore(s => s.liveStreams);
     useEffect(() => {
         const stream = liveStreams[streamId];
         if (stream) setComments(stream.comments.slice(-20));
     }, [liveStreams, streamId]);
+
+    // Unconditional unmount cleanup to prevent leaking stream timers or tracks
+    useEffect(() => {
+        return () => {
+            if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+            if (elapsedRef.current) clearInterval(elapsedRef.current);
+            useRedStore.setState({ isStreaming: false, streamId: null });
+        };
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -78,6 +89,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
     }, [facingMode]);
 
     const captureAndSendFrame = useCallback(async () => {
+        if (isSendingRef.current) return; // Backpressure guard: drop frame if previous frame is still in-flight
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas || video.readyState < 2) return;
@@ -92,8 +104,15 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         const dataUrl = canvas.toDataURL("image/jpeg", config.quality);
         const seq = frameSeqRef.current++;
 
-        await RedAPI.sendLiveFrame(contacts, streamId, dataUrl, seq).catch(() => {});
-        setFramesSent(s => s + 1);
+        isSendingRef.current = true;
+        try {
+            await RedAPI.sendLiveFrame(contacts, streamId, dataUrl, seq);
+            setFramesSent(s => s + 1);
+            setTotalBytesSent(b => b + dataUrl.length);
+        } catch {
+        } finally {
+            isSendingRef.current = false;
+        }
     }, [contacts, streamId, selectedRes]);
 
     const startLive = useCallback(async () => {
@@ -101,6 +120,7 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
         setIsLive(true);
         frameSeqRef.current = 0;
         setFramesSent(0);
+        setTotalBytesSent(0);
         setElapsed(0);
 
         await RedAPI.sendLiveAnnounce(contacts, streamId).catch(console.error);
@@ -211,8 +231,13 @@ export function LiveStreamBroadcaster({ onClose }: { onClose?: () => void }) {
                     </div>
 
                     {isLive && (
-                        <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.5)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace" }}>
-                            {framesSent} fps
+                        <div style={{ display: "flex", gap: "6px" }}>
+                            <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.5)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)" }}>
+                                {(framesSent / Math.max(1, elapsed)).toFixed(1)} FPS
+                            </div>
+                            <div style={{ padding: "4px 8px", borderRadius: "var(--radius-full)", background: "rgba(0,0,0,0.5)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "#00E676" }}>
+                                {(totalBytesSent / 1024).toFixed(0)} KB
+                            </div>
                         </div>
                     )}
                 </div>
