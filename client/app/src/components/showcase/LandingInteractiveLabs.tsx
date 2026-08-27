@@ -1,9 +1,11 @@
+'use client';
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '../../lib/i18n/i18nEngine';
 
 export const LandingInteractiveLabs: React.FC = () => {
     const { t } = useTranslation();
-    const [customPacketPayload, setCustomPacketPayload] = useState("ALERTA EVACUACIÓN ZONA NORTE");
+    const [customPacketPayload, setCustomPacketPayload] = useState("ALERTA EVACUACIÓN SECTOR 4");
     const [packetTtl, setPacketTtl] = useState(7);
 
     const [soundMode, setSoundMode] = useState<"audible" | "ultrasound">("audible");
@@ -16,9 +18,9 @@ export const LandingInteractiveLabs: React.FC = () => {
 
     const [pqcAlgorithm, setPqcAlgorithm] = useState<"kyber" | "rsa" | "ecc">("kyber");
     const [pqcSimLog, setPqcSimLog] = useState<string[]>([
-        "> [INIT] Inicializando retículos algebraicos ML-KEM-768...",
-        "> [ENTROPÍA] Semilla CSPRNG cargada (32 bytes)...",
-        "> [ESTADO] Listo para derivación de claves post-cuánticas."
+        "> [INIT] Retículos algebraicos ML-KEM-768 cargados en memoria.",
+        "> [ENTROPÍA] Semilla CSPRNG de 256 bits generada...",
+        "> [ESTADO] Inmune a ataques cuánticos con algoritmo de Shor."
     ]);
     const [pqcEntropySeed, setPqcEntropySeed] = useState<string>("0x8F1A29D84C20E76B");
 
@@ -60,19 +62,19 @@ export const LandingInteractiveLabs: React.FC = () => {
 
             osc.type = "sine";
             osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(targetFreq, ctx.currentTime + 0.4);
+            osc.frequency.exponentialRampToValueAtTime(targetFreq, ctx.currentTime + 0.45);
 
-            gain.gain.setValueAtTime(0.2, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+            gain.gain.setValueAtTime(0.25, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
 
             osc.connect(gain);
             gain.connect(analyser);
             analyser.connect(ctx.destination);
 
             osc.start();
-            osc.stop(ctx.currentTime + 0.45);
+            osc.stop(ctx.currentTime + 0.5);
 
-            setSoundLog(`> [TX] Modulación FSK enviada: "${soundPayloadText}" (${soundMode === "audible" ? "2.4-3.4 kHz" : "18.5-20.5 kHz"}). Trama acústica emitida al canal aéreo.`);
+            setSoundLog(`> [TX FSK] Modulación emitida: "${soundPayloadText}" (${soundMode === "audible" ? "2.4-3.4 kHz Audible" : "18.5-20.5 kHz Inaudible"}). Trama transmitida al canal aéreo.`);
 
             const canvas = oscilloscopeCanvasRef.current;
             if (canvas) {
@@ -86,11 +88,11 @@ export const LandingInteractiveLabs: React.FC = () => {
                         animId = requestAnimationFrame(draw);
                         analyser.getByteTimeDomainData(dataArray);
 
-                        cCtx.fillStyle = "rgba(5, 7, 13, 0.3)";
+                        cCtx.fillStyle = "rgba(4, 7, 14, 0.3)";
                         cCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-                        cCtx.lineWidth = 2;
-                        cCtx.strokeStyle = soundMode === "audible" ? "#FFB800" : "#00F0FF";
+                        cCtx.lineWidth = 2.5;
+                        cCtx.strokeStyle = soundMode === "audible" ? "#FFB800" : "#00E5FF";
                         cCtx.beginPath();
 
                         const sliceWidth = (canvas.width * 1.0) / bufferLength;
@@ -116,7 +118,7 @@ export const LandingInteractiveLabs: React.FC = () => {
                     setTimeout(() => {
                         cancelAnimationFrame(animId);
                         setIsTransmittingAudio(false);
-                    }, 600);
+                    }, 650);
                 }
             }
         } catch (err: any) {
@@ -133,7 +135,7 @@ export const LandingInteractiveLabs: React.FC = () => {
         const hex = Array.from(randBuf, (b) => b.toString(16).padStart(2, "0")).join("").toUpperCase();
         setPqcEntropySeed(`0x${hex}`);
         setPqcSimLog([
-            `> [ENTROPÍA RENOVADA] Semilla CSPRNG de 128 bits generada: 0x${hex}`,
+            `> [ENTROPÍA RENOVADA] Semilla CSPRNG de 128 bits: 0x${hex}`,
             `> [ML-KEM-768] Encapsulando secreto compartido en retículo euclidiano de dimensión 768...`,
             `> [ÉPOCA SEGURA] Secreto derivado con HKDF-SHA256 (32 bytes). Inmune a ataques cuánticos retroactivos.`
         ]);
@@ -145,7 +147,7 @@ export const LandingInteractiveLabs: React.FC = () => {
                 color: "#00E676",
                 tag: "VERDE (LEVE)",
                 priority: "Prioridad 3",
-                action: "Evacuación secundaria. Lesiones que no comprometen la vida. Puede desplazarse por sus propios medios."
+                action: "Evacuación secundaria. Lesiones leves que no comprometen la vida. Puede desplazarse por sus propios medios."
             });
             return;
         }
@@ -290,7 +292,6 @@ export const LandingInteractiveLabs: React.FC = () => {
 
                 const isSatLink = fromId === "sat" || toId === "sat";
                 if (isBlackout && isSatLink) {
-                    // Cellular / Central Sat link cut off during blackout
                     ctx.strokeStyle = "rgba(255, 51, 85, 0.2)";
                     ctx.setLineDash([4, 4]);
                 } else {
@@ -393,44 +394,46 @@ export const LandingInteractiveLabs: React.FC = () => {
 
     return (
         <>
-        <section id="packet-inspector" style={{ padding: "60px 0" }}>
+        {/* 1. PACKET INSPECTOR LAB */}
+        <section id="packet-inspector" style={{ padding: "70px 0 60px", position: "relative" }}>
           <div style={{ textAlign: "center", marginBottom: "32px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "4px 12px",
+                padding: "5px 14px",
                 borderRadius: "20px",
-                background: "rgba(0, 240, 255, 0.15)",
-                color: "#00F0FF",
-                border: "1px solid rgba(0, 240, 255, 0.3)",
-                fontFamily: "monospace",
-                fontWeight: 700,
+                background: "rgba(0, 229, 255, 0.12)",
+                color: "#00E5FF",
+                border: "1px solid rgba(0, 229, 255, 0.3)",
+                fontFamily: "JetBrains Mono, monospace",
+                fontWeight: 800,
+                letterSpacing: "1px"
               }}
             >
               INGENIERÍA DE PROTOCOLO • SERIALIZACIÓN BINARIA
             </span>
-            <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px", letterSpacing: "-0.5px" }}>
               Inspector Interactivo de Paquetes de Malla
             </h2>
-            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
-              Desglose byte a byte de una trama física que viaja por radio BLE/LoRa con autenticación Poly1305.
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
+              Desglose en tiempo real de los bytes físicos de una trama que viaja por radio BLE/LoRa con encapsulación post-cuántica y autenticación Poly1305.
             </p>
           </div>
 
           <div
             style={{
-              maxWidth: "1160px",
+              maxWidth: "1280px",
               margin: "0 auto",
               padding: "26px",
               borderRadius: "24px",
-              background: "rgba(15, 23, 42, 0.85)",
-              border: "1px solid rgba(0, 240, 255, 0.35)",
+              background: "rgba(14, 18, 34, 0.9)",
+              border: "1.5px solid rgba(0, 229, 255, 0.35)",
               boxShadow: "0 20px 50px rgba(0,0,0,0.7)",
             }}
           >
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", marginBottom: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "14px", marginBottom: "20px" }}>
               <div>
-                <label style={{ fontSize: "11px", color: "#94A3B8", display: "block", marginBottom: "4px" }}>Payload de Texto:</label>
+                <label style={{ fontSize: "11px", color: "#94A3B8", display: "block", marginBottom: "6px", fontFamily: "JetBrains Mono, monospace" }}>PAYLOAD DE TEXTO EN CLARO:</label>
                 <input
                   type="text"
                   value={customPacketPayload}
@@ -438,8 +441,8 @@ export const LandingInteractiveLabs: React.FC = () => {
                   style={{
                     width: "100%",
                     padding: "12px 16px",
-                    borderRadius: "10px",
-                    background: "rgba(30,41,59,0.8)",
+                    borderRadius: "12px",
+                    background: "rgba(0,0,0,0.6)",
                     border: "1px solid rgba(255,255,255,0.15)",
                     color: "#FFF",
                     fontSize: "13px",
@@ -448,21 +451,21 @@ export const LandingInteractiveLabs: React.FC = () => {
                 />
               </div>
               <div>
-                <label style={{ fontSize: "11px", color: "#94A3B8", display: "block", marginBottom: "4px" }}>TTL Saltos:</label>
+                <label style={{ fontSize: "11px", color: "#94A3B8", display: "block", marginBottom: "6px", fontFamily: "JetBrains Mono, monospace" }}>TTL DE SALTOS:</label>
                 <select
                   value={packetTtl}
                   onChange={(e) => setPacketTtl(Number(e.target.value))}
                   style={{
                     padding: "12px 16px",
-                    borderRadius: "10px",
-                    background: "rgba(30,41,59,0.8)",
+                    borderRadius: "12px",
+                    background: "rgba(0,0,0,0.6)",
                     border: "1px solid rgba(255,255,255,0.15)",
                     color: "#FFF",
                     fontSize: "13px",
                     outline: "none",
                   }}
                 >
-                  <option value={3}>3 Saltos</option>
+                  <option value={3}>3 Saltos (Local)</option>
                   <option value={7}>7 Saltos (Recomendado)</option>
                   <option value={15}>15 Saltos (Área Amplia)</option>
                 </select>
@@ -470,74 +473,70 @@ export const LandingInteractiveLabs: React.FC = () => {
             </div>
 
             {/* Visual Byte Structure Breakdown */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px", marginBottom: "20px" }}>
-              <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(255, 42, 81, 0.15)", border: "1px solid #FF2A51", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#FF2A51", fontFamily: "monospace", fontWeight: 700 }}>MAGIC HEADER (3B)</div>
-                <div style={{ fontSize: "13px", color: "#FFF", fontFamily: "monospace", marginTop: "4px" }}>0x524544 (RED)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px", marginBottom: "20px" }}>
+              <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(255, 51, 85, 0.12)", border: "1px solid #FF3355", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#FF3355", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>MAGIC HEADER (3B)</div>
+                <div style={{ fontSize: "14px", color: "#FFF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px" }}>0x524544 (RED)</div>
               </div>
-              <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(0, 240, 255, 0.15)", border: "1px solid #00F0FF", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#00F0FF", fontFamily: "monospace", fontWeight: 700 }}>TTL HOPS (1B)</div>
-                <div style={{ fontSize: "13px", color: "#FFF", fontFamily: "monospace", marginTop: "4px" }}>0x0{packetTtl}</div>
+              <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(0, 229, 255, 0.12)", border: "1px solid #00E5FF", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>TTL HOPS (1B)</div>
+                <div style={{ fontSize: "14px", color: "#FFF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px" }}>0x0{packetTtl} ({packetTtl})</div>
               </div>
-              <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(176, 38, 255, 0.15)", border: "1px solid #B026FF", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#B026FF", fontFamily: "monospace", fontWeight: 700 }}>PQC EPHEMERAL (32B)</div>
-                <div style={{ fontSize: "13px", color: "#FFF", fontFamily: "monospace", marginTop: "4px" }}>0x8F1A29D8...</div>
+              <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(192, 132, 252, 0.12)", border: "1px solid #C084FC", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#C084FC", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>PQC EPHEMERAL (32B)</div>
+                <div style={{ fontSize: "14px", color: "#FFF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px" }}>0x8F1A29D8...</div>
               </div>
-              <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(255, 184, 0, 0.15)", border: "1px solid #FFB800", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#FFB800", fontFamily: "monospace", fontWeight: 700 }}>CIPHERTEXT ({customPacketPayload.length}B)</div>
-                <div style={{ fontSize: "13px", color: "#FFF", fontFamily: "monospace", marginTop: "4px" }}>ChaCha20 AEAD</div>
+              <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(255, 179, 0, 0.12)", border: "1px solid #FFB300", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#FFB300", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>CIPHERTEXT ({customPacketPayload.length}B)</div>
+                <div style={{ fontSize: "14px", color: "#FFF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px" }}>AES-256-GCM</div>
               </div>
-              <div style={{ padding: "12px", borderRadius: "10px", background: "rgba(0, 255, 136, 0.15)", border: "1px solid #00FF88", textAlign: "center" }}>
-                <div style={{ fontSize: "10px", color: "#00FF88", fontFamily: "monospace", fontWeight: 700 }}>MAC TAG (16B)</div>
-                <div style={{ fontSize: "13px", color: "#FFF", fontFamily: "monospace", marginTop: "4px" }}>Poly1305 Auth</div>
+              <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(0, 230, 118, 0.12)", border: "1px solid #00E676", textAlign: "center" }}>
+                <div style={{ fontSize: "10px", color: "#00E676", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>MAC TAG (16B)</div>
+                <div style={{ fontSize: "14px", color: "#FFF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px" }}>Poly1305 Auth</div>
               </div>
             </div>
 
-            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#00FF88", wordBreak: "break-all" }}>
+            <div style={{ background: "#030508", padding: "16px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: "#00E676", wordBreak: "break-all" }}>
               RAW FRAME: 52 45 44 0{packetTtl} 8F 1A 29 D8 4C 20 E7 6B 91 A2 3D 8E 5F 7C 1B 4A 90 D2 E6 F8 3C 1A 7B 5D ... [AES-POLY1305 SIGNATURE OK]
             </div>
           </div>
         </section>
 
-        {/* 7. SOUNDMESH ACOUSTIC OSCILLOSCOPE LAB */}
-        <section id="soundmesh" style={{ padding: "60px 0" }}>
-          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+        {/* 2. SOUNDMESH ACOUSTIC OSCILLOSCOPE LAB */}
+        <section id="soundmesh" style={{ padding: "60px 0", position: "relative" }}>
+          <div style={{ textAlign: "center", marginBottom: "32px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "4px 12px",
+                padding: "5px 14px",
                 borderRadius: "20px",
-                background: "rgba(255, 184, 0, 0.15)",
-                color: "#FFB800",
-                border: "1px solid rgba(255, 184, 0, 0.3)",
-                fontFamily: "monospace",
-                fontWeight: 700,
+                background: "rgba(255, 179, 0, 0.12)",
+                color: "#FFB300",
+                border: "1px solid rgba(255, 179, 0, 0.3)",
+                fontFamily: "JetBrains Mono, monospace",
+                fontWeight: 800,
+                letterSpacing: "1px"
               }}
             >
               LABORATORIO ACÚSTICO • WEB AUDIO API OSCILOSCOPIO
             </span>
-            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
-              Módem Ultrasónico SoundMesh & Vocoder DSP
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px", letterSpacing: "-0.5px" }}>
+              Módem Acústico FSK & Vocoder Táctico
             </h2>
-            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
-              Transmite tramas de datos por el aire a través del altavoz a frecuencias inaudibles con visualización espectral en tiempo real.
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
+              Transmite datos a través del altavoz hacia cualquier dispositivo cercano sin usar Bluetooth ni WiFi, mediante ondas de sonido moduladas.
             </p>
           </div>
 
-          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 184, 0, 0.35)" }}>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "26px", borderRadius: "24px", background: "rgba(14, 18, 34, 0.9)", border: "1.5px solid rgba(255, 179, 0, 0.35)", boxShadow: "0 20px 50px rgba(0,0,0,0.7)" }}>
             <div style={{ display: "flex", gap: "12px", marginBottom: "16px" }}>
               <button
                 onClick={() => setSoundMode("audible")}
                 style={{
-                  flex: 1,
-                  padding: "12px",
-                  borderRadius: "12px",
-                  background: soundMode === "audible" ? "rgba(255, 184, 0, 0.2)" : "rgba(30,41,59,0.5)",
-                  border: soundMode === "audible" ? "1px solid #FFB800" : "1px solid rgba(255,255,255,0.1)",
-                  color: "#FFF",
-                  fontWeight: 700,
-                  fontSize: "13px",
-                  cursor: "pointer",
+                  flex: 1, padding: "12px", borderRadius: "12px",
+                  background: soundMode === "audible" ? "rgba(255, 179, 0, 0.2)" : "rgba(0,0,0,0.4)",
+                  border: soundMode === "audible" ? "1.5px solid #FFB300" : "1px solid rgba(255,255,255,0.1)",
+                  color: "#FFF", fontWeight: 800, fontSize: "13px", cursor: "pointer",
                 }}
               >
                 🔊 Modo Demostración Audible (2.4 - 3.4 kHz)
@@ -545,15 +544,10 @@ export const LandingInteractiveLabs: React.FC = () => {
               <button
                 onClick={() => setSoundMode("ultrasound")}
                 style={{
-                  flex: 1,
-                  padding: "12px",
-                  borderRadius: "12px",
-                  background: soundMode === "ultrasound" ? "rgba(0, 240, 255, 0.2)" : "rgba(30,41,59,0.5)",
-                  border: soundMode === "ultrasound" ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.1)",
-                  color: "#FFF",
-                  fontWeight: 700,
-                  fontSize: "13px",
-                  cursor: "pointer",
+                  flex: 1, padding: "12px", borderRadius: "12px",
+                  background: soundMode === "ultrasound" ? "rgba(0, 229, 255, 0.2)" : "rgba(0,0,0,0.4)",
+                  border: soundMode === "ultrasound" ? "1.5px solid #00E5FF" : "1px solid rgba(255,255,255,0.1)",
+                  color: "#FFF", fontWeight: 800, fontSize: "13px", cursor: "pointer",
                 }}
               >
                 🦇 Modo Ultrasónico Inaudible (18.5 - 20.5 kHz)
@@ -566,19 +560,13 @@ export const LandingInteractiveLabs: React.FC = () => {
               value={soundPayloadText}
               onChange={(e) => setSoundPayloadText(e.target.value)}
               style={{
-                width: "100%",
-                padding: "14px",
-                borderRadius: "12px",
-                background: "rgba(30,41,59,0.8)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                color: "#FFF",
-                fontSize: "14px",
-                marginBottom: "16px",
-                outline: "none",
+                width: "100%", padding: "14px", borderRadius: "12px",
+                background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.15)",
+                color: "#FFF", fontSize: "14px", marginBottom: "16px", outline: "none",
               }}
             />
 
-            <div style={{ width: "100%", height: "140px", background: "#030508", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", marginBottom: "16px" }}>
+            <div style={{ width: "100%", height: "140px", background: "#030508", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden", marginBottom: "16px" }}>
               <canvas ref={oscilloscopeCanvasRef} width={800} height={140} style={{ width: "100%", height: "100%", display: "block" }} />
             </div>
 
@@ -586,124 +574,111 @@ export const LandingInteractiveLabs: React.FC = () => {
               onClick={playSoundMeshChirp}
               disabled={isTransmittingAudio}
               style={{
-                width: "100%",
-                padding: "16px",
-                borderRadius: "12px",
-                background: isTransmittingAudio ? "#00FF88" : "linear-gradient(90deg, #FFB800 0%, #D97706 100%)",
+                width: "100%", padding: "16px", borderRadius: "12px",
+                background: isTransmittingAudio ? "#00E676" : "linear-gradient(135deg, #FFB300 0%, #D97706 100%)",
                 color: isTransmittingAudio ? "#000" : "#FFF",
-                fontWeight: 900,
-                fontSize: "14px",
-                border: "none",
-                cursor: "pointer",
-                boxShadow: "0 4px 20px rgba(255, 184, 0, 0.4)",
-                marginBottom: "16px",
+                fontWeight: 900, fontSize: "14px", border: "none", cursor: "pointer",
+                boxShadow: "0 4px 20px rgba(255, 179, 0, 0.4)", marginBottom: "16px",
               }}
             >
               {isTransmittingAudio ? "📡 Emitiendo Señal FSK en el Osciloscopio..." : "▶️ Sintetizar y Transmitir Trama FSK por el Aire"}
             </button>
 
-            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#FFB800" }}>
+            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: "#FFB300" }}>
               {soundLog}
             </div>
           </div>
         </section>
 
-        {/* 8. POST-QUANTUM LAB */}
-        <section id="pqc-lab" style={{ padding: "60px 0" }}>
-          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+        {/* 3. POST-QUANTUM LAB */}
+        <section id="pqc-lab" style={{ padding: "60px 0", position: "relative" }}>
+          <div style={{ textAlign: "center", marginBottom: "32px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "4px 12px",
+                padding: "5px 14px",
                 borderRadius: "20px",
-                background: "rgba(176, 38, 255, 0.15)",
-                color: "#B026FF",
-                border: "1px solid rgba(176, 38, 255, 0.3)",
-                fontFamily: "monospace",
-                fontWeight: 700,
+                background: "rgba(192, 132, 252, 0.12)",
+                color: "#C084FC",
+                border: "1px solid rgba(192, 132, 252, 0.3)",
+                fontFamily: "JetBrains Mono, monospace",
+                fontWeight: 800,
+                letterSpacing: "1px"
               }}
             >
-              LABORATORIO CRIPTOGRÁFICO • ESTÁNDAR FIPS 203
+              LABORATORIO CRIPTOGRÁFICO • ESTÁNDAR NIST FIPS 203
             </span>
-            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px", letterSpacing: "-0.5px" }}>
               Benchmark Post-Cuántica: ML-KEM-768 vs RSA vs ECC
             </h2>
-            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
               Compara la resistencia cuántica y el tamaño de claves entre la criptografía tradicional y el encapsulamiento en retículos euclidianos de RED.
             </p>
           </div>
 
-          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(176, 38, 255, 0.35)" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "14px", marginBottom: "20px" }}>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "26px", borderRadius: "24px", background: "rgba(14, 18, 34, 0.9)", border: "1.5px solid rgba(192, 132, 252, 0.35)", boxShadow: "0 20px 50px rgba(0,0,0,0.7)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "14px", marginBottom: "20px" }}>
               <div
                 onClick={() => setPqcAlgorithm("kyber")}
                 style={{
-                  padding: "16px",
-                  borderRadius: "14px",
-                  background: pqcAlgorithm === "kyber" ? "rgba(176, 38, 255, 0.2)" : "rgba(255,255,255,0.03)",
-                  border: pqcAlgorithm === "kyber" ? "1px solid #B026FF" : "1px solid rgba(255,255,255,0.08)",
+                  padding: "18px", borderRadius: "14px",
+                  background: pqcAlgorithm === "kyber" ? "rgba(192, 132, 252, 0.2)" : "rgba(0,0,0,0.4)",
+                  border: pqcAlgorithm === "kyber" ? "1.5px solid #C084FC" : "1px solid rgba(255,255,255,0.08)",
                   cursor: "pointer",
                 }}
               >
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#B026FF" }}>ML-KEM-768 (RED OS)</div>
-                <div style={{ fontSize: "11px", color: "#00FF88", fontWeight: 700, marginTop: "4px" }}>🛡️ RESISTENCIA CUÁNTICA: 100%</div>
-                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 1,184 B | Ciphertext: 1,088 B</div>
+                <div style={{ fontSize: "15px", fontWeight: 900, color: "#C084FC" }}>ML-KEM-768 (RED OS)</div>
+                <div style={{ fontSize: "11px", color: "#00E676", fontWeight: 800, marginTop: "4px", fontFamily: "JetBrains Mono, monospace" }}>🛡️ RESISTENCIA CUÁNTICA: 100%</div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 1,184 B • Retículo Euclidiano</div>
               </div>
 
               <div
                 onClick={() => setPqcAlgorithm("rsa")}
                 style={{
-                  padding: "16px",
-                  borderRadius: "14px",
-                  background: pqcAlgorithm === "rsa" ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.03)",
-                  border: pqcAlgorithm === "rsa" ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.08)",
+                  padding: "18px", borderRadius: "14px",
+                  background: pqcAlgorithm === "rsa" ? "rgba(255, 51, 85, 0.2)" : "rgba(0,0,0,0.4)",
+                  border: pqcAlgorithm === "rsa" ? "1.5px solid #FF3355" : "1px solid rgba(255,255,255,0.08)",
                   cursor: "pointer",
                 }}
               >
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FF2A51" }}>RSA-2048 (Legado)</div>
-                <div style={{ fontSize: "11px", color: "#FF2A51", fontWeight: 700, marginTop: "4px" }}>⚠️ VULNERABLE A SHOR: 0%</div>
-                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 256 B | Vulnerable a cuántica</div>
+                <div style={{ fontSize: "15px", fontWeight: 900, color: "#FF3355" }}>RSA-2048 (Legado)</div>
+                <div style={{ fontSize: "11px", color: "#FF3355", fontWeight: 800, marginTop: "4px", fontFamily: "JetBrains Mono, monospace" }}>⚠️ VULNERABLE A SHOR: 0%</div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 256 B • Factorización Rota</div>
               </div>
 
               <div
                 onClick={() => setPqcAlgorithm("ecc")}
                 style={{
-                  padding: "16px",
-                  borderRadius: "14px",
-                  background: pqcAlgorithm === "ecc" ? "rgba(0, 240, 255, 0.2)" : "rgba(255,255,255,0.03)",
-                  border: pqcAlgorithm === "ecc" ? "1px solid #00F0FF" : "1px solid rgba(255,255,255,0.08)",
+                  padding: "18px", borderRadius: "14px",
+                  background: pqcAlgorithm === "ecc" ? "rgba(0, 229, 255, 0.2)" : "rgba(0,0,0,0.4)",
+                  border: pqcAlgorithm === "ecc" ? "1.5px solid #00E5FF" : "1px solid rgba(255,255,255,0.08)",
                   cursor: "pointer",
                 }}
               >
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#00F0FF" }}>ECDH X25519 (Clásico)</div>
-                <div style={{ fontSize: "11px", color: "#FFB800", fontWeight: 700, marginTop: "4px" }}>⚠️ VULNERABLE RETROACTIVO</div>
-                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 32 B | Rápido pero vulnerable</div>
+                <div style={{ fontSize: "15px", fontWeight: 900, color: "#00E5FF" }}>ECDH X25519 (Clásico)</div>
+                <div style={{ fontSize: "11px", color: "#FFB300", fontWeight: 800, marginTop: "4px", fontFamily: "JetBrains Mono, monospace" }}>⚠️ VULNERABLE RETROACTIVO</div>
+                <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "6px" }}>Clave Pública: 32 B • Curvas Elípticas</div>
               </div>
             </div>
 
-            <div style={{ padding: "14px", borderRadius: "12px", background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ padding: "14px 18px", borderRadius: "14px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "16px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
               <div>
-                <div style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace" }}>SEMILLA DE ENTROPÍA CSPRNG EN VIVO:</div>
-                <div style={{ fontSize: "13px", color: "#00F0FF", fontFamily: "monospace", fontWeight: 700, marginTop: "2px" }}>{pqcEntropySeed}</div>
+                <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>SEMILLA DE ENTROPÍA CSPRNG EN VIVO:</div>
+                <div style={{ fontSize: "13px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, marginTop: "2px" }}>{pqcEntropySeed}</div>
               </div>
               <button
                 onClick={refreshPqcEntropy}
                 style={{
-                  padding: "8px 14px",
-                  borderRadius: "8px",
-                  background: "rgba(176, 38, 255, 0.2)",
-                  border: "1px solid #B026FF",
-                  color: "#FFF",
-                  fontSize: "12px",
-                  fontWeight: 700,
-                  cursor: "pointer",
+                  padding: "8px 16px", borderRadius: "10px",
+                  background: "rgba(192, 132, 252, 0.2)", border: "1px solid #C084FC",
+                  color: "#FFF", fontSize: "12px", fontWeight: 800, cursor: "pointer",
                 }}
               >
                 🔄 Generar Nueva Época
               </button>
             </div>
 
-            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#CBD5E1", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ background: "#030508", padding: "14px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: "#CBD5E1", display: "flex", flexDirection: "column", gap: "6px" }}>
               {pqcSimLog.map((log, i) => (
                 <div key={i}>{log}</div>
               ))}
@@ -711,32 +686,33 @@ export const LandingInteractiveLabs: React.FC = () => {
           </div>
         </section>
 
-        {/* 9. MEDICAL START TRIAGE CALCULATOR */}
-        <section id="triage" style={{ padding: "60px 0" }}>
-          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+        {/* 4. MEDICAL START TRIAGE CALCULATOR */}
+        <section id="triage" style={{ padding: "60px 0", position: "relative" }}>
+          <div style={{ textAlign: "center", marginBottom: "32px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "4px 12px",
+                padding: "5px 14px",
                 borderRadius: "20px",
-                background: "rgba(0, 255, 136, 0.15)",
-                color: "#00FF88",
-                border: "1px solid rgba(0, 255, 136, 0.3)",
-                fontFamily: "monospace",
-                fontWeight: 700,
+                background: "rgba(0, 230, 118, 0.12)",
+                color: "#00E676",
+                border: "1px solid rgba(0, 230, 118, 0.3)",
+                fontFamily: "JetBrains Mono, monospace",
+                fontWeight: 800,
+                letterSpacing: "1px"
               }}
             >
               MÉDICO & CATÁSTROFES • PROTOCOLO START OFFLINE
             </span>
-            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px", letterSpacing: "-0.5px" }}>
               Calculadora Interactiva de Triaje START
             </h2>
-            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
               Simula el algoritmo médico de campo para clasificación masiva de heridos en catástrofes y desastres naturales.
             </p>
           </div>
 
-          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(0, 255, 136, 0.35)" }}>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "26px", borderRadius: "24px", background: "rgba(14, 18, 34, 0.9)", border: "1.5px solid rgba(0, 230, 118, 0.35)", boxShadow: "0 20px 50px rgba(0,0,0,0.7)" }}>
             <div style={{ marginBottom: "16px" }}>
               <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>1. ¿El paciente puede caminar?</div>
               <div style={{ display: "flex", gap: "10px" }}>
@@ -745,46 +721,46 @@ export const LandingInteractiveLabs: React.FC = () => {
                     setCanWalk(true);
                     evaluateTriage(true, "", "", "");
                   }}
-                  style={{ flex: 1, padding: "10px", borderRadius: "10px", background: canWalk === true ? "#00FF88" : "rgba(255,255,255,0.05)", color: canWalk === true ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  style={{ flex: 1, padding: "12px", borderRadius: "12px", background: canWalk === true ? "#00E676" : "rgba(255,255,255,0.05)", color: canWalk === true ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                 >
-                  Sí (Camina)
+                  Sí (Camina por sus propios medios)
                 </button>
                 <button
                   onClick={() => setCanWalk(false)}
-                  style={{ flex: 1, padding: "10px", borderRadius: "10px", background: canWalk === false ? "rgba(255, 42, 81, 0.2)" : "rgba(255,255,255,0.05)", color: canWalk === false ? "#FF2A51" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                  style={{ flex: 1, padding: "12px", borderRadius: "12px", background: canWalk === false ? "rgba(255, 51, 85, 0.2)" : "rgba(255,255,255,0.05)", color: canWalk === false ? "#FF3355" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                 >
-                  No (Inmóvil)
+                  No (Inmóvil / En suelo)
                 </button>
               </div>
             </div>
 
             {canWalk === false && (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>2. Frecuencia Respiratoria:</div>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>2. ¿Respira espontáneamente?</div>
                 <div style={{ display: "flex", gap: "10px" }}>
                   <button
                     onClick={() => {
                       setRespiration("none");
                       evaluateTriage(false, "none", "", "");
                     }}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "none" ? "#64748B" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: respiration === "none" ? "#64748B" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                   >
-                    Ausente (No respira)
+                    No (Apnea tras apertura vía aérea)
                   </button>
                   <button
                     onClick={() => {
                       setRespiration("over30");
                       evaluateTriage(false, "over30", "", "");
                     }}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "over30" ? "#FF2A51" : "rgba(255,255,255,0.05)", color: respiration === "over30" ? "#FFF" : "#FF2A51", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: respiration === "over30" ? "rgba(255, 51, 85, 0.2)" : "rgba(255,255,255,0.05)", color: respiration === "over30" ? "#FF3355" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                   >
-                    &gt; 30 / minuto (Rápida)
+                    &gt; 30 rpm (Taquipnea)
                   </button>
                   <button
                     onClick={() => setRespiration("normal")}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: respiration === "normal" ? "#00F0FF" : "rgba(255,255,255,0.05)", color: respiration === "normal" ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: respiration === "normal" ? "rgba(0, 230, 118, 0.2)" : "rgba(255,255,255,0.05)", color: respiration === "normal" ? "#00E676" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                   >
-                    10 - 30 / min (Normal)
+                    10 - 30 rpm (Normal)
                   </button>
                 </div>
               </div>
@@ -792,22 +768,22 @@ export const LandingInteractiveLabs: React.FC = () => {
 
             {canWalk === false && respiration === "normal" && (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>3. Pulso Radial / Relleno Capilar:</div>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>3. Pulso Radial / Relleno Capilar</div>
                 <div style={{ display: "flex", gap: "10px" }}>
                   <button
                     onClick={() => {
                       setRadialPulse("absent");
                       evaluateTriage(false, "normal", "absent", "");
                     }}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: radialPulse === "absent" ? "#FF2A51" : "rgba(255,255,255,0.05)", color: "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: radialPulse === "absent" ? "rgba(255, 51, 85, 0.2)" : "rgba(255,255,255,0.05)", color: radialPulse === "absent" ? "#FF3355" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                   >
-                    Ausente / Capilar &gt; 2s
+                    Ausente / Relleno &gt; 2 seg
                   </button>
                   <button
                     onClick={() => setRadialPulse("present")}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: radialPulse === "present" ? "#00FF88" : "rgba(255,255,255,0.05)", color: radialPulse === "present" ? "#000" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: radialPulse === "present" ? "rgba(0, 230, 118, 0.2)" : "rgba(255,255,255,0.05)", color: radialPulse === "present" ? "#00E676" : "#FFF", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 800, cursor: "pointer" }}
                   >
-                    Presente (&lt; 2s)
+                    Presente / Relleno &lt; 2 seg
                   </button>
                 </div>
               </div>
@@ -815,17 +791,17 @@ export const LandingInteractiveLabs: React.FC = () => {
 
             {canWalk === false && respiration === "normal" && radialPulse === "present" && (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>4. Estado Mental (Obedece órdenes sencillas):</div>
+                <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF", marginBottom: "8px" }}>4. Estado Mental / Respuesta a Órdenes</div>
                 <div style={{ display: "flex", gap: "10px" }}>
                   <button
                     onClick={() => evaluateTriage(false, "normal", "present", "confused")}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "rgba(255, 42, 81, 0.2)", color: "#FF2A51", border: "1px solid #FF2A51", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "rgba(255, 51, 85, 0.2)", color: "#FF3355", border: "1px solid #FF3355", fontWeight: 800, cursor: "pointer" }}
                   >
                     No obedece / Confuso
                   </button>
                   <button
                     onClick={() => evaluateTriage(false, "normal", "present", "obeys")}
-                    style={{ flex: 1, padding: "10px", borderRadius: "10px", background: "rgba(255, 184, 0, 0.2)", color: "#FFB800", border: "1px solid #FFB800", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "rgba(255, 179, 0, 0.2)", color: "#FFB300", border: "1px solid #FFB300", fontWeight: 800, cursor: "pointer" }}
                   >
                     Obedece órdenes
                   </button>
@@ -845,7 +821,7 @@ export const LandingInteractiveLabs: React.FC = () => {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                   <div style={{ fontSize: "18px", fontWeight: 900, color: triageResult.color }}>{triageResult.tag}</div>
-                  <span style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.08)", color: "#FFF", fontFamily: "monospace" }}>
+                  <span style={{ fontSize: "11px", padding: "4px 10px", borderRadius: "20px", background: "rgba(255,255,255,0.08)", color: "#FFF", fontFamily: "JetBrains Mono, monospace" }}>
                     {triageResult.priority}
                   </span>
                 </div>
@@ -855,34 +831,35 @@ export const LandingInteractiveLabs: React.FC = () => {
           </div>
         </section>
 
-        {/* 10. CONSENT-FIRST P2P SIMULATOR */}
-        <section id="consent" style={{ padding: "60px 0" }}>
-          <div style={{ textAlign: "center", marginBottom: "28px" }}>
+        {/* 5. CONSENT-FIRST P2P SIMULATOR */}
+        <section id="consent" style={{ padding: "60px 0", position: "relative" }}>
+          <div style={{ textAlign: "center", marginBottom: "32px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "4px 12px",
+                padding: "5px 14px",
                 borderRadius: "20px",
-                background: "rgba(255, 42, 81, 0.15)",
-                color: "#FF2A51",
-                border: "1px solid rgba(255, 42, 81, 0.3)",
-                fontFamily: "monospace",
-                fontWeight: 700,
+                background: "rgba(255, 51, 85, 0.12)",
+                color: "#FF3355",
+                border: "1px solid rgba(255, 51, 85, 0.3)",
+                fontFamily: "JetBrains Mono, monospace",
+                fontWeight: 800,
+                letterSpacing: "1px"
               }}
             >
-              POLÍTICA ZERO-TRUST & ANTI-ACOSÓ
+              POLÍTICA ZERO-TRUST & ANTI-ACOSO
             </span>
-            <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginTop: "10px", marginBottom: "8px" }}>
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px", letterSpacing: "-0.5px" }}>
               Simulador Consent-First P2P
             </h2>
-            <p style={{ fontSize: "14px", color: "#94A3B8", lineHeight: 1.6 }}>
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
               En RED, ningún nodo desconocido puede forzar conversaciones en tu pantalla. Toda solicitud entrante requiere confirmación humana explícita.
             </p>
           </div>
 
-          <div style={{ maxWidth: "1160px", margin: "0 auto", padding: "24px", borderRadius: "20px", background: "rgba(15,23,42,0.85)", border: "1px solid rgba(255, 42, 81, 0.35)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <span style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Prueba de Handshake:</span>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "26px", borderRadius: "24px", background: "rgba(14, 18, 34, 0.9)", border: "1.5px solid rgba(255, 51, 85, 0.35)", boxShadow: "0 20px 50px rgba(0,0,0,0.7)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+              <span style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Prueba de Handshake P2P:</span>
               <button
                 onClick={() => {
                   const randBuf = new Uint8Array(4);
@@ -899,14 +876,10 @@ export const LandingInteractiveLabs: React.FC = () => {
                   ]);
                 }}
                 style={{
-                  padding: "10px 18px",
-                  borderRadius: "10px",
-                  background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
-                  color: "#FFF",
-                  fontWeight: 800,
-                  fontSize: "13px",
-                  border: "none",
-                  cursor: "pointer",
+                  padding: "10px 20px", borderRadius: "12px",
+                  background: "linear-gradient(135deg, #FF3355 0%, #C41230 100%)",
+                  color: "#FFF", fontWeight: 800, fontSize: "13px",
+                  border: "none", cursor: "pointer", boxShadow: "0 4px 15px rgba(255, 51, 85, 0.4)",
                 }}
               >
                 ⚡ Simular Solicitud de Contacto P2P
@@ -914,12 +887,12 @@ export const LandingInteractiveLabs: React.FC = () => {
             </div>
 
             {simConsentStep === "incoming" && (
-              <div style={{ padding: "20px", borderRadius: "16px", background: "rgba(255, 42, 81, 0.15)", border: "1px solid #FF2A51", marginBottom: "16px" }}>
+              <div style={{ padding: "20px", borderRadius: "16px", background: "rgba(255, 51, 85, 0.15)", border: "1px solid #FF3355", marginBottom: "16px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
                   <span style={{ fontSize: "24px" }}>🚨</span>
                   <div>
-                    <div style={{ fontWeight: 800, color: "#FFF", fontSize: "15px" }}>Solicitud de Conexión P2P Detectada</div>
-                    <div style={{ fontSize: "12px", color: "#FF2A51", fontFamily: "monospace" }}>Nodo: {simPeerAlias} ({simPeerHash})</div>
+                    <div style={{ fontWeight: 900, color: "#FFF", fontSize: "15px" }}>Solicitud de Conexión P2P Detectada</div>
+                    <div style={{ fontSize: "12px", color: "#FF3355", fontFamily: "JetBrains Mono, monospace" }}>Nodo: {simPeerAlias} ({simPeerHash})</div>
                   </div>
                 </div>
                 <div style={{ fontSize: "13px", color: "#CBD5E1", marginBottom: "16px" }}>
@@ -932,7 +905,7 @@ export const LandingInteractiveLabs: React.FC = () => {
                       setSimConsentStep("accepted");
                       setSimLog((prev) => [...prev, `> [AUTORIZADO ✅] Nodo ${simPeerAlias} aceptado. Se añade a la lista de contactos autorizados.`]);
                     }}
-                    style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#00FF88", color: "#000", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "#00E676", color: "#000", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
                   >
                     ✅ Aceptar Contacto
                   </button>
@@ -941,7 +914,7 @@ export const LandingInteractiveLabs: React.FC = () => {
                       setSimConsentStep("rejected");
                       setSimLog((prev) => [...prev, `> [RECHAZADO ❌] Solicitud descartada silenciosamente sin alertar al nodo remoto.`]);
                     }}
-                    style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "rgba(255,255,255,0.1)", color: "#FFF", fontWeight: 700, border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "13px" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.1)", color: "#FFF", fontWeight: 700, border: "1px solid rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "13px" }}
                   >
                     ❌ Rechazar Silencioso
                   </button>
@@ -950,7 +923,7 @@ export const LandingInteractiveLabs: React.FC = () => {
                       setSimConsentStep("blocked");
                       setSimLog((prev) => [...prev, `> [BLOQUEADO 🚫] Nodo ${simPeerAlias} añadido a la lista negra permanente. Todo paquete futuro será descartado a nivel de controlador de radio.`]);
                     }}
-                    style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#FF2A51", color: "#FFF", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
+                    style={{ flex: 1, padding: "12px", borderRadius: "12px", background: "#FF3355", color: "#FFF", fontWeight: 800, border: "none", cursor: "pointer", fontSize: "13px" }}
                   >
                     🚫 Bloquear Nodo (Anti-Acoso)
                   </button>
@@ -958,7 +931,7 @@ export const LandingInteractiveLabs: React.FC = () => {
               </div>
             )}
 
-            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "monospace", fontSize: "12px", color: "#00F0FF", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ background: "#030508", padding: "14px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)", fontFamily: "JetBrains Mono, monospace", fontSize: "12px", color: "#00E5FF", display: "flex", flexDirection: "column", gap: "6px" }}>
               {simLog.map((l, i) => (
                 <div key={i}>{l}</div>
               ))}
@@ -966,33 +939,34 @@ export const LandingInteractiveLabs: React.FC = () => {
           </div>
         </section>
 
-        {/* 11. RADAR CANVAS */}
-        <section id="radar" style={{ padding: "60px 0", textAlign: "center" }}>
-          <h2 style={{ fontSize: "32px", fontWeight: 900, color: "#FFF", marginBottom: "10px" }}>
+        {/* 6. TACTICAL RADAR CANVAS */}
+        <section id="radar" style={{ padding: "60px 0", textAlign: "center", position: "relative" }}>
+          <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginBottom: "12px", letterSpacing: "-0.5px" }}>
             Simulador de Radar & Malla Off-Grid
           </h2>
-          <p style={{ fontSize: "14px", color: "#94A3B8", marginBottom: "20px" }}>
+          <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto 24px", lineHeight: 1.6 }}>
             Comprueba cómo la topología multi-radio mantiene los canales operativos incluso ante la caída total de torres celulares y proveedores de Internet.
           </p>
 
           <button
             onClick={() => setIsBlackout(!isBlackout)}
             style={{
-              padding: "12px 24px",
+              padding: "12px 28px",
               borderRadius: "14px",
-              background: isBlackout ? "linear-gradient(90deg, #FF2A51 0%, #7F0010 100%)" : "rgba(0, 255, 136, 0.15)",
-              color: isBlackout ? "#FFF" : "#00FF88",
-              border: isBlackout ? "1px solid #FF2A51" : "1px solid #00FF88",
+              background: isBlackout ? "linear-gradient(135deg, #FF3355 0%, #7F0010 100%)" : "rgba(0, 230, 118, 0.15)",
+              color: isBlackout ? "#FFF" : "#00E676",
+              border: isBlackout ? "1.5px solid #FF3355" : "1.5px solid #00E676",
               fontWeight: 800,
+              fontSize: "14px",
               cursor: "pointer",
-              marginBottom: "20px",
-              boxShadow: isBlackout ? "0 0 20px rgba(255, 42, 81, 0.5)" : "none",
+              marginBottom: "24px",
+              boxShadow: isBlackout ? "0 0 25px rgba(255, 51, 85, 0.5)" : "0 0 15px rgba(0, 230, 118, 0.2)",
             }}
           >
             {isBlackout ? "⚡ MODO APAGÓN ACTIVADO (Sin Internet / Solo Radios de Hardware)" : "🌐 Modo Normal (Hacer clic para simular Apagón / EMP)"}
           </button>
 
-          <div style={{ width: "100%", maxWidth: "1160px", margin: "0 auto", background: "#030508", borderRadius: "20px", border: "1.5px solid rgba(0, 229, 255, 0.35)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
+          <div style={{ width: "100%", maxWidth: "1280px", margin: "0 auto", background: "#030508", borderRadius: "24px", border: "1.5px solid rgba(0, 229, 255, 0.35)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
             <canvas ref={radarCanvasRef} style={{ width: "100%", height: "440px", display: "block" }} />
             
             {/* Live Tactical Telemetry HUD Bar */}
@@ -1009,7 +983,7 @@ export const LandingInteractiveLabs: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>TOPOLOGÍA DE MALLA</div>
-                <div style={{ fontSize: "13px", fontWeight: 800, color: isBlackout ? "#FF3355" : "#00FF88", marginTop: "2px" }}>
+                <div style={{ fontSize: "13px", fontWeight: 800, color: isBlackout ? "#FF3355" : "#00E676", marginTop: "2px" }}>
                   {isBlackout ? "● Malla P2P de Emergencia Activa" : "● Multi-Hop Híbrido (BLE + LoRa + Wi-Fi)"}
                 </div>
               </div>

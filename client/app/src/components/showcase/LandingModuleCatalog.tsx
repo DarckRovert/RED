@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useMemo } from 'react';
 import { TacticalModule } from './types';
 import { TACTICAL_MODULES_CATALOG } from './catalogData';
@@ -30,204 +32,222 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
         });
     }, [selectedCategory, moduleSearch]);
 
-    const handleEnter = onEnterApp;
-
     return (
-        <section id="modules" style={{ padding: "60px 0" }}>
+        <section id="modules" style={{ padding: "70px 0 80px", position: "relative" }}>
           <div style={{ textAlign: "center", marginBottom: "36px" }}>
             <span
               style={{
                 fontSize: "11px",
-                padding: "4px 12px",
+                padding: "5px 14px",
                 borderRadius: "20px",
-                background: "rgba(0, 229, 255, 0.15)",
+                background: "rgba(0, 229, 255, 0.12)",
                 color: "#00E5FF",
                 border: "1px solid rgba(0, 229, 255, 0.3)",
-                fontFamily: "monospace",
-                fontWeight: 700,
+                fontFamily: "JetBrains Mono, monospace",
+                fontWeight: 800,
+                letterSpacing: "1px"
               }}
             >
-              {t.showcase_landing?.catalog_title || "CATÁLOGO DE MÓDULOS TÁCTICOS"}
+              SUITE OPERATIVA COMPLETA • 42 MÓDULOS ACTIVOS
             </span>
-            <h2 style={{ fontSize: "36px", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
-              Centro de Operaciones Tácticas
+            <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "14px", marginBottom: "12px", letterSpacing: "-0.5px" }}>
+              Catálogo de Módulos Tácticos & Resiliencia
             </h2>
-            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "780px", margin: "0 auto", lineHeight: 1.6 }}>
-              Haz clic en cualquier módulo para abrir su ficha técnica con especificaciones de latencia, protocolo de cifrado y arquitectura de transporte.
+            <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
+              Explora e inspecciona los 42 sistemas autónomos integrados en RED OS: comunicaciones de emergencia, criptografía post-cuántica, cartografía sin conexión y herramientas médicas de campo.
             </p>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "32px" }}>
-            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
-              {categoriesList.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
+          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 16px" }}>
+            {/* Category Filter Pills & Search Input */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "32px", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                {categoriesList.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: "20px",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      fontFamily: "JetBrains Mono, monospace",
+                      border: selectedCategory === cat ? "1.5px solid #00E5FF" : "1px solid rgba(255,255,255,0.08)",
+                      background: selectedCategory === cat ? "rgba(0, 229, 255, 0.2)" : "rgba(14, 18, 34, 0.7)",
+                      color: selectedCategory === cat ? "#FFF" : "#94A3B8",
+                      transition: "all 0.2s ease"
+                    }}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ width: "100%", maxWidth: "720px", position: "relative" }}>
+                <input
+                  type="text"
+                  placeholder="🔍 Buscar por nombre, stack técnico (Rust, BLE, LoRa, PQC) o palabra clave..."
+                  value={moduleSearch}
+                  onChange={(e) => setModuleSearch(e.target.value)}
                   style={{
-                    padding: "8px 16px",
-                    borderRadius: "20px",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    border: selectedCategory === cat ? "1px solid #FF2A51" : "1px solid rgba(255,255,255,0.1)",
-                    background: selectedCategory === cat ? "rgba(255, 42, 81, 0.2)" : "rgba(15,23,42,0.6)",
-                    color: selectedCategory === cat ? "#FFF" : "#94A3B8",
+                    width: "100%",
+                    padding: "14px 20px",
+                    borderRadius: "14px",
+                    background: "rgba(14, 18, 34, 0.9)",
+                    border: "1px solid rgba(255,255,255,0.15)",
+                    color: "#FFF",
+                    fontSize: "14px",
+                    outline: "none",
+                    boxShadow: "0 8px 30px rgba(0,0,0,0.5)"
                   }}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-
-            <input
-              type="text"
-              placeholder="Buscar por módulo, stack (BLE, Rust, PQC, SOS) o algoritmo de cifrado..."
-              value={moduleSearch}
-              onChange={(e) => setModuleSearch(e.target.value)}
-              style={{
-                width: "100%",
-                maxWidth: "700px",
-                margin: "0 auto",
-                padding: "14px 20px",
-                borderRadius: "14px",
-                background: "rgba(15,23,42,0.85)",
-                border: "1px solid rgba(255,255,255,0.15)",
-                color: "#FFF",
-                fontSize: "14px",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "18px" }}>
-            {filteredModules.map((mod) => (
-              <div
-                key={mod.id}
-                onClick={() => setSelectedModuleDetail(mod)}
-                style={{
-                  padding: "20px",
-                  borderRadius: "16px",
-                  background: "rgba(15,23,42,0.75)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  cursor: "pointer",
-                  transition: "all 0.2s ease",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(255, 42, 81, 0.5)";
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
-                  e.currentTarget.style.transform = "translateY(0px)";
-                }}
-              >
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                    <span style={{ fontSize: "28px" }}>{mod.icon}</span>
-                    <span
-                      style={{
-                        fontSize: "10px",
-                        padding: "3px 8px",
-                        borderRadius: "12px",
-                        background: "rgba(0,240,255,0.15)",
-                        color: "#00F0FF",
-                        border: "1px solid rgba(0,240,255,0.3)",
-                        fontFamily: "monospace",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {mod.badge}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "16px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>{mod.name}</div>
-                  <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: 1.5, marginBottom: "12px" }}>{mod.summary}</div>
-                </div>
-                <div style={{ fontSize: "11px", color: "#64748B", fontFamily: "monospace", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "8px", display: "flex", justifyContent: "space-between" }}>
-                  <span>⚙️ {mod.techStack}</span>
-                  <span style={{ color: "#00FF88" }}>{mod.latency}</span>
+                />
+                <div style={{ position: "absolute", right: "16px", top: "14px", fontSize: "11px", color: "#00E676", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                  {filteredModules.length} de {TACTICAL_MODULES_CATALOG.length} Módulos
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Modules Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "18px" }}>
+              {filteredModules.map((mod) => (
+                <div
+                  key={mod.id}
+                  onClick={() => setSelectedModuleDetail(mod)}
+                  style={{
+                    padding: "22px",
+                    borderRadius: "18px",
+                    background: "rgba(14, 18, 34, 0.8)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(0, 229, 255, 0.6)";
+                    e.currentTarget.style.transform = "translateY(-3px)";
+                    e.currentTarget.style.boxShadow = "0 12px 30px rgba(0, 229, 255, 0.15)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
+                >
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "10px", padding: "3px 8px", borderRadius: "6px", background: "rgba(255,255,255,0.06)", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                        {mod.category}
+                      </span>
+                      <span style={{ fontSize: "16px" }}>{mod.icon || "⚙️"}</span>
+                    </div>
+                    <div style={{ fontSize: "16px", fontWeight: 900, color: "#FFF", marginBottom: "6px" }}>
+                      {mod.name}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.5 }}>
+                      {mod.summary}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace", marginBottom: "8px" }}>
+                      {mod.techStack}
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#00FF88", fontWeight: 800, display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span>Inspeccionar Ficha Técnica</span>
+                      <span>→</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Module Drawer Modal */}
+          {/* Module Detail Modal */}
           {selectedModuleDetail && (
             <div
               style={{
-                position: "fixed",
-                inset: 0,
-                zIndex: 200,
+                position: "fixed", inset: 0,
                 background: "rgba(0,0,0,0.85)",
-                backdropFilter: "blur(16px)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "20px",
+                backdropFilter: "blur(12px)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                zIndex: 9999, padding: "20px"
               }}
               onClick={() => setSelectedModuleDetail(null)}
             >
               <div
                 style={{
-                  width: "100%",
-                  maxWidth: "560px",
-                  background: "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(3,5,8,0.99) 100%)",
-                  border: "1px solid rgba(255, 42, 81, 0.4)",
-                  borderRadius: "24px",
-                  padding: "30px",
-                  boxShadow: "0 25px 60px rgba(0,0,0,0.9)",
+                  maxWidth: "600px", width: "100%",
+                  background: "linear-gradient(180deg, rgba(18, 24, 44, 0.98) 0%, rgba(8, 12, 24, 0.99) 100%)",
+                  borderRadius: "24px", border: "1.5px solid rgba(0, 229, 255, 0.4)",
+                  padding: "32px", position: "relative",
+                  boxShadow: "0 25px 80px rgba(0,0,0,0.9)",
                 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <span style={{ fontSize: "36px" }}>{selectedModuleDetail.icon}</span>
-                    <div>
-                      <div style={{ fontSize: "20px", fontWeight: 900, color: "#FFF" }}>{selectedModuleDetail.name}</div>
-                      <div style={{ fontSize: "11px", color: "#00F0FF", fontFamily: "monospace" }}>{selectedModuleDetail.category}</div>
+                <button
+                  onClick={() => setSelectedModuleDetail(null)}
+                  style={{
+                    position: "absolute", top: "20px", right: "20px",
+                    background: "rgba(255,255,255,0.08)", border: "none",
+                    color: "#FFF", borderRadius: "50%", width: 32, height: 32,
+                    cursor: "pointer", fontSize: "16px"
+                  }}
+                >
+                  ✕
+                </button>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+                  <span style={{ fontSize: "28px" }}>{selectedModuleDetail.icon || "⚙️"}</span>
+                  <div>
+                    <div style={{ fontSize: "20px", fontWeight: 900, color: "#FFF" }}>{selectedModuleDetail.name}</div>
+                    <div style={{ fontSize: "11px", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                      CATEGORÍA: {selectedModuleDetail.category.toUpperCase()}
                     </div>
                   </div>
-                  <button
-                    onClick={() => setSelectedModuleDetail(null)}
-                    style={{ background: "none", border: "none", color: "#94A3B8", fontSize: "18px", cursor: "pointer" }}
-                  >
-                    ✕
-                  </button>
                 </div>
 
-                <div style={{ fontSize: "13px", color: "#CBD5E1", lineHeight: 1.6, marginBottom: "20px" }}>
+                <div style={{ fontSize: "14px", color: "#CBD5E1", lineHeight: 1.6, marginBottom: "20px" }}>
                   {selectedModuleDetail.details}
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "24px" }}>
-                  <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>LATENCIA ESTIMADA</div>
-                    <div style={{ fontSize: "14px", fontWeight: 800, color: "#00FF88", marginTop: "4px" }}>{selectedModuleDetail.latency}</div>
-                  </div>
-                  <div style={{ padding: "12px", borderRadius: "12px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "monospace" }}>CAPA DE CIFRADO</div>
-                    <div style={{ fontSize: "14px", fontWeight: 800, color: "#B026FF", marginTop: "4px" }}>{selectedModuleDetail.encryption}</div>
+                <div style={{ padding: "14px", borderRadius: "14px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: "24px" }}>
+                  <div style={{ fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>STACK & PROTOCOLO TÉCNICO:</div>
+                  <div style={{ fontSize: "13px", color: "#00FF88", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "4px" }}>
+                    {selectedModuleDetail.techStack}
                   </div>
                 </div>
 
-                <button
-                  onClick={handleEnter}
-                  style={{
-                    width: "100%",
-                    padding: "14px",
-                    borderRadius: "12px",
-                    background: "linear-gradient(90deg, #FF2A51 0%, #990014 100%)",
-                    color: "#FFF",
-                    fontWeight: 800,
-                    fontSize: "14px",
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  ⚡ Abrir Módulo en la Bóveda Web
-                </button>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <button
+                    onClick={() => {
+                      setSelectedModuleDetail(null);
+                      onEnterApp();
+                    }}
+                    style={{
+                      flex: 1, padding: "14px", borderRadius: "12px",
+                      background: "linear-gradient(135deg, #00FF88 0%, #00F0FF 100%)",
+                      color: "#050B14", fontWeight: 900, fontSize: "14px",
+                      border: "none", cursor: "pointer", boxShadow: "0 4px 20px rgba(0,255,136,0.3)"
+                    }}
+                  >
+                    🚀 Abrir Módulo en Web App
+                  </button>
+                  <button
+                    onClick={() => setSelectedModuleDetail(null)}
+                    style={{
+                      padding: "14px 20px", borderRadius: "12px",
+                      background: "rgba(255,255,255,0.06)", color: "#FFF",
+                      border: "1px solid rgba(255,255,255,0.15)", fontWeight: 700,
+                      fontSize: "13px", cursor: "pointer"
+                    }}
+                  >
+                    Cerrar
+                  </button>
+                </div>
               </div>
             </div>
           )}
