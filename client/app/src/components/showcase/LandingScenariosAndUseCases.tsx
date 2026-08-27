@@ -7,13 +7,18 @@ export const LandingScenariosAndUseCases: React.FC = () => {
     const { t } = useTranslation();
     const [selectedScenario, setSelectedScenario] = useState<"mining" | "disasters" | "defense" | "drone_sat">("mining");
 
+    const isGhPages = typeof window !== "undefined" && window.location.pathname.includes("/RED");
+    const basePath = isGhPages ? "/RED" : "";
+
     const scenarios = [
         {
             id: "mining",
             tabLabel: "⛏️ Minería & Socavón",
             badge: "SECTOR MINERO, ENERGÍA & PETRÓLEO",
             title: "Comunicaciones Subterráneas donde el 4G y la Fibra son Inviables",
-            description: "En interior de mina y socavón, las señales celulares no penetran la roca y la fibra óptica se rompe constantemente con las voladuras. RED despliega balizas mesh en las paredes de los túneles que retransmiten voz comprimida (Vocoder 1.6 kbps), telemetría de gases y alertas de derrumbe al puesto de mando.",
+            description: "En interior de mina y frentes de avance subterráneos, las señales celulares no penetran la roca y la fibra óptica se rompe constantemente con las voladuras. RED despliega balizas mesh en las paredes de los túneles que retransmiten voz comprimida (Vocoder 1.6 kbps), telemetría de gases y alertas de derrumbe al puesto de mando.",
+            imageSrc: `${basePath}/assets/red_scenario_mining.png`,
+            imageAlt: "Mineros comunicándose en socavón con radios LoRa Mesh de RED",
             metrics: [
                 { value: "0 ms", label: "Cero Dependencia de Fibra en Frentes de Avance" },
                 { value: "1.6 kbps", label: "Voz Ultracomprimida por Radio LoRa" },
@@ -33,6 +38,8 @@ export const LandingScenariosAndUseCases: React.FC = () => {
             badge: "GESTIÓN DEL RIESGO DE DESASTRES & DEFENSA CIVIL",
             title: "Supervivencia y Rescate ante el Colapso Total de la Red Celular",
             description: "Tras un sismo de gran magnitud o tsunami, las antenas telefónicas colapsan por corte eléctrico y sobrecarga. RED convierte los teléfonos de los brigadistas y ciudadanos en una red de auxilio instantánea. Permite clasificar heridos mediante el protocolo de Triaje START y coordinar cuadrillas de rescate con la Brújula Táctica Off-Grid.",
+            imageSrc: `${basePath}/assets/red_scenario_rescue.png`,
+            imageAlt: "Brigadas de rescate e INDECI operando en apagón total con la malla RED",
             metrics: [
                 { value: "Grado 8.5+", label: "Inmune a la Caída de la Red Eléctrica" },
                 { value: "Triaje START", label: "Clasificación de Víctimas en Masa" },
@@ -52,6 +59,8 @@ export const LandingScenariosAndUseCases: React.FC = () => {
             badge: "SEGURIDAD CIUDADANA, POLICÍA & OPERACIONES CRÍTICAS",
             title: "Cifrado Post-Cuántico sin Servidores Centrales ni Puertas Traseras",
             description: "En operaciones de custodia, inteligencia o patrullaje en zonas rojas, las comunicaciones celulares pueden ser intervenidas mediante antenas espía (IMSI-Catchers) o bloqueadores comerciales. RED utiliza criptografía cuántica NIST FIPS 203 y canales efímeros sin registro en ninguna compañía de telecomunicaciones.",
+            imageSrc: `${basePath}/assets/red_hardware_ecosystem.png`,
+            imageAlt: "Maletín táctico Pelican con transceptores LoRa y terminales cifrados",
             metrics: [
                 { value: "ML-KEM-768", label: "Criptografía Post-Cuántica (Kyber)" },
                 { value: "Zero-Logs", label: "Cero Registro en Servidores Centrales" },
@@ -71,6 +80,8 @@ export const LandingScenariosAndUseCases: React.FC = () => {
             badge: "INNOVACIÓN DISRUPTIVA • REPETIDOR AÉREO Y SATÉLITE COMPARTIDO",
             title: "Extensión de Malla a 30+ km con Drones y Reparto de Internet Satelital",
             description: "En la geografía accidentada de los Andes o la Amazonía, un dron comercial equipado con un nodo RED vuela a 100m de altura actuando como torre repetidora aérea que conecta valles enteros. Además, un solo campamento con antena satelital (Starlink/Iridium) puede retransmitir datos vitales a cientos de usuarios en tierra vía LoRa sin costo adicional por terminal.",
+            imageSrc: `${basePath}/assets/red_scenario_drone_sat.png`,
+            imageAlt: "Dron táctico repetidor sobrevolando los Andes conectado a antena satelital",
             metrics: [
                 { value: "30+ km", label: "Alcance con Dron Repetidor Aéreo" },
                 { value: "1 Antena", label: "Satelital Compartida con Cientos de Nodos" },
@@ -90,7 +101,7 @@ export const LandingScenariosAndUseCases: React.FC = () => {
 
     return (
         <section id="scenarios" style={{ padding: "70px 0 80px", position: "relative" }}>
-            <div style={{ textAlign: "center", marginBottom: "40px" }}>
+            <div style={{ textAlign: "center", marginBottom: "36px" }}>
                 <span style={{
                     fontSize: "11px", padding: "5px 14px", borderRadius: "20px",
                     background: "rgba(255, 179, 0, 0.12)", color: "#FFB300",
@@ -107,11 +118,11 @@ export const LandingScenariosAndUseCases: React.FC = () => {
                 </p>
             </div>
 
-            <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "0 16px" }}>
+            <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 16px" }}>
                 {/* Scenario Selector Tabs */}
                 <div style={{
                     display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center",
-                    marginBottom: "32px"
+                    marginBottom: "28px"
                 }}>
                     {scenarios.map(s => {
                         const isSelected = s.id === selectedScenario;
@@ -136,69 +147,90 @@ export const LandingScenariosAndUseCases: React.FC = () => {
                     })}
                 </div>
 
-                {/* Scenario Presentation Card */}
+                {/* Scenario Presentation Card (Split 2 Columns: Details on Left, High-Res Visual on Right) */}
                 <div style={{
                     background: "linear-gradient(180deg, rgba(14, 18, 34, 0.95) 0%, rgba(8, 10, 20, 0.98) 100%)",
                     border: `1.5px solid ${current.accentColor}55`,
                     borderRadius: "24px", padding: "36px",
                     backdropFilter: "blur(20px)",
                     boxShadow: `0 20px 60px rgba(0,0,0,0.6), 0 0 40px ${current.accentColor}15`,
-                    display: "flex", flexDirection: "column", gap: "28px"
-                }}>
-                    <div>
-                        <div style={{
-                            display: "inline-block", fontSize: "11px", padding: "4px 12px",
-                            borderRadius: "10px", background: `${current.accentColor}22`,
-                            color: current.accentColor, fontWeight: 800,
-                            fontFamily: "JetBrains Mono, monospace", marginBottom: "12px",
-                            border: `1px solid ${current.accentColor}44`
-                        }}>
-                            {current.badge}
-                        </div>
-                        <h3 style={{ fontSize: "clamp(22px, 3vw, 30px)", fontWeight: 900, color: "#FFF", lineHeight: 1.25, marginBottom: "14px" }}>
-                            {current.title}
-                        </h3>
-                        <p style={{ fontSize: "15px", color: "#CBD5E1", lineHeight: 1.7 }}>
-                            {current.description}
-                        </p>
-                    </div>
-
-                    {/* Metric Badges */}
-                    <div style={{
-                        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                        gap: "14px"
-                    }}>
-                        {current.metrics.map((m, mIdx) => (
-                            <div key={mIdx} style={{
-                                background: "rgba(0,0,0,0.4)",
-                                border: "1px solid rgba(255,255,255,0.08)",
-                                borderRadius: "16px", padding: "18px",
-                                textAlign: "center"
+                    display: "grid", gridTemplateColumns: "1.1fr 0.9fr", gap: "36px",
+                    alignItems: "center"
+                }} className="scenario-split-grid">
+                    
+                    {/* Left Column: Details & Bullets */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                        <div>
+                            <div style={{
+                                display: "inline-block", fontSize: "11px", padding: "4px 12px",
+                                borderRadius: "10px", background: `${current.accentColor}22`,
+                                color: current.accentColor, fontWeight: 800,
+                                fontFamily: "JetBrains Mono, monospace", marginBottom: "12px",
+                                border: `1px solid ${current.accentColor}44`
                             }}>
-                                <div style={{ fontSize: "22px", fontWeight: 900, color: current.accentColor, fontFamily: "JetBrains Mono, monospace" }}>
-                                    {m.value}
-                                </div>
-                                <div style={{ fontSize: "12px", color: "#94A3B8", marginTop: "6px", fontWeight: 600 }}>
-                                    {m.label}
-                                </div>
+                                {current.badge}
                             </div>
-                        ))}
+                            <h3 style={{ fontSize: "clamp(22px, 2.5vw, 28px)", fontWeight: 900, color: "#FFF", lineHeight: 1.25, marginBottom: "12px" }}>
+                                {current.title}
+                            </h3>
+                            <p style={{ fontSize: "15px", color: "#CBD5E1", lineHeight: 1.7 }}>
+                                {current.description}
+                            </p>
+                        </div>
+
+                        {/* Metric Badges */}
+                        <div style={{
+                            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                            gap: "10px"
+                        }}>
+                            {current.metrics.map((m, mIdx) => (
+                                <div key={mIdx} style={{
+                                    background: "rgba(0,0,0,0.45)",
+                                    border: "1px solid rgba(255,255,255,0.08)",
+                                    borderRadius: "14px", padding: "14px",
+                                    textAlign: "center"
+                                }}>
+                                    <div style={{ fontSize: "18px", fontWeight: 900, color: current.accentColor, fontFamily: "JetBrains Mono, monospace" }}>
+                                        {m.value}
+                                    </div>
+                                    <div style={{ fontSize: "11px", color: "#94A3B8", marginTop: "4px", fontWeight: 600 }}>
+                                        {m.label}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Bullet Points */}
+                        <div style={{
+                            background: "rgba(0,0,0,0.3)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: "14px", padding: "16px",
+                            display: "flex", flexDirection: "column", gap: "8px"
+                        }}>
+                            {current.keyFeatures.map((feat, fIdx) => (
+                                <div key={fIdx} style={{ display: "flex", alignItems: "flex-start", gap: "8px", fontSize: "13px", color: "#E2E8F0" }}>
+                                    <span style={{ color: current.accentColor, fontWeight: 900, fontSize: "14px" }}>✓</span>
+                                    <span>{feat}</span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
-                    {/* Bullet Points */}
+                    {/* Right Column: High-Res Scenario Image */}
                     <div style={{
-                        background: "rgba(0,0,0,0.25)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        borderRadius: "16px", padding: "20px",
-                        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                        gap: "12px"
+                        borderRadius: "20px", overflow: "hidden",
+                        border: `1.5px solid ${current.accentColor}66`,
+                        boxShadow: `0 15px 40px rgba(0,0,0,0.8), 0 0 30px ${current.accentColor}20`,
+                        background: "rgba(0,0,0,0.6)"
                     }}>
-                        {current.keyFeatures.map((feat, fIdx) => (
-                            <div key={fIdx} style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "13px", color: "#E2E8F0" }}>
-                                <span style={{ color: current.accentColor, fontWeight: 900, fontSize: "15px" }}>✓</span>
-                                <span>{feat}</span>
-                            </div>
-                        ))}
+                        <img
+                            src={current.imageSrc}
+                            alt={current.imageAlt}
+                            style={{ width: "100%", height: "auto", display: "block", objectFit: "cover" }}
+                            onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = "none";
+                            }}
+                        />
                     </div>
                 </div>
             </div>
