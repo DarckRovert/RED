@@ -987,6 +987,50 @@ export class RedAPIClient {
         } catch {}
     }
 
+    /** Leave a group, update local store, remove conversation, and broadcast group_leave signal to members */
+    async leaveGroup(groupId: string): Promise<void> {
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+
+        // 1. Try Rust node
+        try {
+            await this.req(`/groups/${groupId}/members/${myHash}`, { method: 'DELETE' });
+        } catch { /* Offline / Web fallback */ }
+
+        // 2. Update local web store
+        const groups = this.getWebStore<any[]>('red_web_groups', []);
+        const group = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        const updatedGroups = groups.filter((g: any) => g.id !== groupId && g.group_id !== groupId);
+        this.setWebStore('red_web_groups', updatedGroups);
+
+        // 3. Remove conversation from local list
+        const convs = this.getWebStore<any[]>('red_web_conversations', []);
+        const updatedConvs = convs.filter((c: any) => c.id !== groupId && c.peer !== groupId);
+        this.setWebStore('red_web_conversations', updatedConvs);
+
+        // 4. Send group_leave signal to other members
+        const members: string[] = (group?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const payload = JSON.stringify({
+            type: 'group_leave',
+            group_id: groupId,
+            member_hash: myHash,
+            timestamp: Date.now()
+        });
+        for (const memberHash of members) {
+            try {
+                await this.sendMessage(memberHash, payload, { msg_type: 'group_leave', group_id: groupId });
+            } catch (e) {
+                console.warn(`[RED Group] leaveGroup signal failed for ${memberHash.slice(0, 8)}:`, e);
+            }
+        }
+
+        // 5. Update Zustand store
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.setState({ groups: updatedGroups, conversations: updatedConvs, activeConversationId: null, currentScreen: 'sidebar' });
+        } catch {}
+    }
+
     /** Promote or demote a member's role in a group (caller must be Admin) */
     async setGroupMemberRole(
         groupId: string,
@@ -998,17 +1042,40 @@ export class RedAPIClient {
                 method: 'PUT',
                 body: JSON.stringify({ role })
             });
-        } catch {
-            // Fallback: update locally
-            const groups = this.getWebStore<any[]>('red_web_groups', []);
-            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
-            if (g && g.members) {
-                const m = g.members.find((m: any) =>
-                    (typeof m === 'string' ? m : m.identity_hash) === memberHash
-                );
-                if (m && typeof m === 'object') { m.role = role; this.setWebStore('red_web_groups', groups); }
-            }
+        } catch { /* Fallback */ }
+
+        // Update locally
+        const groups = this.getWebStore<any[]>('red_web_groups', []);
+        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        if (g && g.members) {
+            const m = g.members.find((m: any) =>
+                (typeof m === 'string' ? m : m.identity_hash) === memberHash
+            );
+            if (m && typeof m === 'object') { m.role = role; this.setWebStore('red_web_groups', groups); }
         }
+
+        // Broadcast group_admin update across mesh
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+        const members: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const adminPayload = JSON.stringify({
+            type: 'group_admin',
+            action: 'set_role',
+            group_id: groupId,
+            target_hash: memberHash,
+            role,
+            admin_hash: myHash,
+            timestamp: Date.now()
+        });
+        for (const mh of members) {
+            try { await this.sendMessage(mh, adminPayload, { msg_type: 'group_admin', group_id: groupId }); } catch {}
+        }
+
+        // Sync Zustand store
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.setState({ groups: this.getWebStore<any[]>('red_web_groups', []) });
+        } catch {}
     }
 
     /** Mute or unmute a group member (caller must be Admin or Moderator) */
@@ -1018,16 +1085,38 @@ export class RedAPIClient {
                 method: 'PUT',
                 body: JSON.stringify({ muted })
             });
-        } catch {
-            const groups = this.getWebStore<any[]>('red_web_groups', []);
-            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
-            if (g && g.members) {
-                const m = g.members.find((m: any) =>
-                    (typeof m === 'string' ? m : m.identity_hash) === memberHash
-                );
-                if (m && typeof m === 'object') { m.muted = muted; this.setWebStore('red_web_groups', groups); }
-            }
+        } catch { /* Fallback */ }
+
+        const groups = this.getWebStore<any[]>('red_web_groups', []);
+        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        if (g && g.members) {
+            const m = g.members.find((m: any) =>
+                (typeof m === 'string' ? m : m.identity_hash) === memberHash
+            );
+            if (m && typeof m === 'object') { m.muted = muted; this.setWebStore('red_web_groups', groups); }
         }
+
+        // Broadcast mute update across mesh
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+        const members: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const mutePayload = JSON.stringify({
+            type: 'group_admin',
+            action: 'mute',
+            group_id: groupId,
+            target_hash: memberHash,
+            muted,
+            admin_hash: myHash,
+            timestamp: Date.now()
+        });
+        for (const mh of members) {
+            try { await this.sendMessage(mh, mutePayload, { msg_type: 'group_admin', group_id: groupId }); } catch {}
+        }
+
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.setState({ groups: this.getWebStore<any[]>('red_web_groups', []) });
+        } catch {}
     }
 
     /** Toggle broadcast-only mode on a group (only Admins) */
@@ -1037,11 +1126,32 @@ export class RedAPIClient {
                 method: 'PUT',
                 body: JSON.stringify({ broadcast_only: broadcastOnly })
             });
-        } catch {
-            const groups = this.getWebStore<any[]>('red_web_groups', []);
-            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
-            if (g) { g.broadcast_only = broadcastOnly; this.setWebStore('red_web_groups', groups); }
+        } catch { /* Fallback */ }
+
+        const groups = this.getWebStore<any[]>('red_web_groups', []);
+        const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+        if (g) { g.broadcast_only = broadcastOnly; this.setWebStore('red_web_groups', groups); }
+
+        // Broadcast channel mode update across mesh
+        let myHash = '';
+        try { myHash = localStorage.getItem('red_identity_hash') || ''; } catch {}
+        const members: string[] = (g?.members || []).map((m: any) => typeof m === 'string' ? m : m.identity_hash).filter((h: string) => h && h !== myHash && h !== 'me');
+        const bcastPayload = JSON.stringify({
+            type: 'group_admin',
+            action: 'broadcast_mode',
+            group_id: groupId,
+            broadcast_only: broadcastOnly,
+            admin_hash: myHash,
+            timestamp: Date.now()
+        });
+        for (const mh of members) {
+            try { await this.sendMessage(mh, bcastPayload, { msg_type: 'group_admin', group_id: groupId }); } catch {}
         }
+
+        try {
+            const { useRedStore } = await import('../store/useRedStore');
+            useRedStore.setState({ groups: this.getWebStore<any[]>('red_web_groups', []) });
+        } catch {}
     }
 
     /** Request DTN history sync from peers — broadcast to group over mesh */

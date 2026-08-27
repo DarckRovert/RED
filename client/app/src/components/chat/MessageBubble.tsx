@@ -40,6 +40,7 @@ interface MessageBubbleProps {
     isSelected?: boolean;
     onToggleSelect?: (msgId: string) => void;
     onSelectMode?: (msg: MessageItem) => void;
+    isGroupChat?: boolean;
 }
 
 function datePill(ts: number): string {
@@ -207,7 +208,8 @@ export const MessageBubble = memo(({
     msg, isMine, isFirst, isLast, showDate, peerName, starredMessages,
     searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
     onLongPress, onCancelLongPress, onReaction, onVote, onPin, onReply, onForward, onEdit, onDeleteForEveryone, onOpenMediaGallery,
-    isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode
+    isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode,
+    isGroupChat,
 }: MessageBubbleProps) => {
     const { t } = useTranslation();
     const [viewingImageSrc, setViewingImageSrc] = useState<string | null>(null);
@@ -549,6 +551,23 @@ export const MessageBubble = memo(({
                         opacity: isDeleted ? 0.75 : 1,
                     }}
                 >
+                    {/* Group Chat Sender Nickname */}
+                    {isGroupChat && !isMine && !isDeleted && (
+                        <div style={{
+                            display: "flex", alignItems: "center", gap: "6px",
+                            fontSize: "0.72rem", fontWeight: 800,
+                            color: "var(--accent-cyan, #00E5FF)",
+                            marginBottom: "1px", letterSpacing: "0.2px"
+                        }}>
+                            <span>{msg.sender_name || (msg.sender ? `Operador ${msg.sender.substring(0, 8)}` : "Miembro")}</span>
+                            {msg.sender && (
+                                <span style={{ fontSize: "0.58rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
+                                    {msg.sender.substring(0, 6)}
+                                </span>
+                            )}
+                        </div>
+                    )}
+
                     {/* Forwarded Message Header */}
                     {isForwarded && !isDeleted && (
                         <div style={{

@@ -1035,6 +1035,105 @@ export async function dispatchIncomingMessage(
             return;
         }
 
+        // ── GROUP LEAVE: Update local group member list when a member departs ──
+        if (
+            item.msg_type === 'group_leave' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"type":"group_leave"'))
+        ) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+                const groupId: string = parsed.group_id || '';
+                const memberHash: string = (parsed.member_hash || item.sender || '').toLowerCase();
+
+                if (groupId && memberHash) {
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const groups: any[] = JSON.parse(localStorage.getItem('red_web_groups') || '[]');
+                            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+                            if (g && Array.isArray(g.members)) {
+                                g.members = g.members.filter((m: any) =>
+                                    (typeof m === 'string' ? m : m.identity_hash)?.toLowerCase() !== memberHash
+                                );
+                                localStorage.setItem('red_web_groups', JSON.stringify(groups));
+                            }
+                        } catch {}
+                    }
+                    const curGroups: any[] = Array.isArray(get().groups) ? get().groups : [];
+                    set({
+                        groups: curGroups.map((g: any) => {
+                            if (g.id !== groupId && g.group_id !== groupId) return g;
+                            return {
+                                ...g,
+                                members: (g.members || []).filter((m: any) =>
+                                    (typeof m === 'string' ? m : m.identity_hash)?.toLowerCase() !== memberHash
+                                )
+                            };
+                        })
+                    });
+                    const contacts = get().contacts || [];
+                    const contact = contacts.find((c: any) => c.identity_hash?.toLowerCase() === memberHash);
+                    const name = contact?.display_name || memberHash.slice(0, 8);
+                    toast.info(`👤 ${name} salió del escuadrón`);
+                }
+            } catch (e) {
+                console.warn('[RED Group] group_leave dispatch error:', e);
+            }
+            return;
+        }
+
+        // ── GROUP ADMIN: Sync role changes, mute states & broadcast channel modes ──
+        if (
+            item.msg_type === 'group_admin' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && item.content.includes('"type":"group_admin"'))
+        ) {
+            try {
+                const parsed = typeof item.content === 'string' && item.content.startsWith('{')
+                    ? JSON.parse(item.content)
+                    : (item as any);
+                const groupId: string = parsed.group_id || '';
+                const action: string = parsed.action || '';
+
+                if (groupId) {
+                    let updatedGroups: any[] = [];
+                    if (typeof window !== 'undefined') {
+                        try {
+                            const groups: any[] = JSON.parse(localStorage.getItem('red_web_groups') || '[]');
+                            const g = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+                            if (g) {
+                                if (action === 'set_role' && parsed.target_hash && parsed.role) {
+                                    if (Array.isArray(g.members)) {
+                                        const m = g.members.find((m: any) =>
+                                            (typeof m === 'string' ? m : m.identity_hash)?.toLowerCase() === parsed.target_hash.toLowerCase()
+                                        );
+                                        if (m && typeof m === 'object') m.role = parsed.role;
+                                    }
+                                } else if (action === 'mute' && parsed.target_hash) {
+                                    if (Array.isArray(g.members)) {
+                                        const m = g.members.find((m: any) =>
+                                            (typeof m === 'string' ? m : m.identity_hash)?.toLowerCase() === parsed.target_hash.toLowerCase()
+                                        );
+                                        if (m && typeof m === 'object') m.muted = Boolean(parsed.muted);
+                                    }
+                                } else if (action === 'broadcast_mode') {
+                                    g.broadcast_only = Boolean(parsed.broadcast_only);
+                                }
+                                localStorage.setItem('red_web_groups', JSON.stringify(groups));
+                                updatedGroups = groups;
+                            }
+                        } catch {}
+                    }
+                    if (updatedGroups.length > 0) {
+                        set({ groups: updatedGroups });
+                    }
+                }
+            } catch (e) {
+                console.warn('[RED Group] group_admin dispatch error:', e);
+            }
+            return;
+        }
+
         // ── Triage Report: ingest into medical records store ──
         if (item.msg_type === 'triage_report') {
             try {

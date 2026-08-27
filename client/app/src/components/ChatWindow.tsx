@@ -13,6 +13,7 @@ import { MessageForwardModal } from "./chat/MessageForwardModal";
 import { SafetyNumberModal } from "./chat/SafetyNumberModal";
 import { PollCreationModal } from "./chat/PollCreationModal";
 import { ContactProfileModal } from "./ContactProfileModal";
+import { GroupAdminModal } from "./GroupAdminModal";
 import { toast } from "./Toast";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
@@ -42,7 +43,7 @@ export default function ChatWindow() {
         activeConversationId, conversations, contacts, groups, messages,
         sendMessage, sendTyping, sendTypingStatus, sendReaction, goBack, navigate, peerTyping, peerTypingStatus, addContact,
         deleteMessage, deleteMessageForEveryone, editMessage, clearConversation, starMessage, starredMessages,
-        identity, peerPresence, markAsRead, preferences, setActiveCallType, deleteContact, blockNode,
+        identity, peerPresence, markAsRead, preferences, setActiveCallType, deleteContact, blockNode, fetchData,
     } = useRedStore();
 
     const canonicalFromMesh = activeConversationId ? meshRouter.getCanonicalId(activeConversationId) : '';
@@ -1197,6 +1198,7 @@ export default function ChatWindow() {
                                 isSelected={selectedMsgIds.has(msg.id)}
                                 onToggleSelect={toggleMsgSelect}
                                 onSelectMode={enterSelectionMode}
+                                isGroupChat={isGroupChat}
                             />
                         );
                     })
@@ -1467,37 +1469,51 @@ export default function ChatWindow() {
             )}
 
             {/* Contact Profile & Shared Media Modal */}
+            {/* Contact Profile Modal (Direct) or Squad Admin Modal (Group) */}
             {isContactProfileOpen && (
-                <ContactProfileModal
-                    contact={peerContact || { identity_hash: peerHash, display_name: peerName }}
-                    conversation={activeConv}
-                    messages={convMessages}
-                    onClose={() => setIsContactProfileOpen(false)}
-                    onStartCall={(type) => {
-                        const target = fullPeerHash || peerHash;
-                        setActiveCallType(type);
-                        useRedStore.setState({
-                            activeCallPeer: target,
-                            activeCallOffer: null,
-                            activeCallSignal: null,
-                            callSignalQueue: []
-                        });
-                        navigate("call", target);
-                    }}
-                    onClearChat={clearConversation}
-                    onDeleteContact={() => {
-                        const target = fullPeerHash || peerHash;
-                        deleteContact(target);
-                        setIsContactProfileOpen(false);
-                        goBack();
-                    }}
-                    onBlockNode={() => {
-                        const target = fullPeerHash || peerHash;
-                        blockNode(target);
-                        setIsContactProfileOpen(false);
-                        goBack();
-                    }}
-                />
+                isGroupChat ? (
+                    <GroupAdminModal
+                        groupId={currentGroup?.id || activeConversationId || ""}
+                        groupName={currentGroup?.name || peerName}
+                        members={currentGroup?.members || []}
+                        broadcastOnly={currentGroup?.broadcast_only}
+                        onClose={() => {
+                            setIsContactProfileOpen(false);
+                            fetchData();
+                        }}
+                    />
+                ) : (
+                    <ContactProfileModal
+                        contact={peerContact || { identity_hash: peerHash, display_name: peerName }}
+                        conversation={activeConv}
+                        messages={convMessages}
+                        onClose={() => setIsContactProfileOpen(false)}
+                        onStartCall={(type) => {
+                            const target = fullPeerHash || peerHash;
+                            setActiveCallType(type);
+                            useRedStore.setState({
+                                activeCallPeer: target,
+                                activeCallOffer: null,
+                                activeCallSignal: null,
+                                callSignalQueue: []
+                            });
+                            navigate("call", target);
+                        }}
+                        onClearChat={clearConversation}
+                        onDeleteContact={() => {
+                            const target = fullPeerHash || peerHash;
+                            deleteContact(target);
+                            setIsContactProfileOpen(false);
+                            goBack();
+                        }}
+                        onBlockNode={() => {
+                            const target = fullPeerHash || peerHash;
+                            blockNode(target);
+                            setIsContactProfileOpen(false);
+                            goBack();
+                        }}
+                    />
+                )
             )}
 
             {/* Media Gallery Full-Screen Modal */}

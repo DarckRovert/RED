@@ -47,7 +47,7 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
     onClose,
 }) => {
     const { t } = useTranslation();
-    const { contacts, fetchData } = useRedStore();
+    const { contacts, fetchData, identity } = useRedStore();
 
     // Normalize incoming members (may be string[] or GroupMemberInfo[])
     const normalize = (raw: (string | GroupMemberInfo)[]): GroupMemberInfo[] =>
@@ -63,8 +63,12 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
     const [isUpdating, setIsUpdating] = useState(false);
     const [activeAction, setActiveAction] = useState<string | null>(null);
 
-    const isAdmin = myRole === "Admin";
-    const isModerator = myRole === "Admin" || myRole === "Moderator";
+    const myHash = identity?.identity_hash || (typeof window !== "undefined" ? localStorage.getItem("red_identity_hash") : "") || "";
+    const myMember = members.find((m) => m.identity_hash?.toLowerCase() === myHash?.toLowerCase());
+    const effectiveRole: GroupRole = myMember?.role || myRole || (members.length > 0 && members[0].identity_hash?.toLowerCase() === myHash?.toLowerCase() ? "Admin" : "Member");
+
+    const isAdmin = effectiveRole === "Admin";
+    const isModerator = effectiveRole === "Admin" || effectiveRole === "Moderator";
 
     const getContactName = (hash: string) =>
         contacts.find((c) => c.identity_hash === hash)?.display_name || hash.substring(0, 10) + "…";
@@ -72,6 +76,21 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
     const availableContacts = contacts.filter(
         (c) => !members.some((m) => m.identity_hash === c.identity_hash)
     );
+
+    const handleLeaveGroup = async () => {
+        if (!window.confirm("¿Seguro que deseas abandonar este escuadrón?")) return;
+        setIsUpdating(true);
+        try {
+            await RedAPI.leaveGroup(groupId);
+            toast.info("Has abandonado el escuadrón");
+            onClose?.();
+            await fetchData();
+        } catch {
+            toast.error("Error al abandonar el escuadrón");
+        } finally {
+            setIsUpdating(false);
+        }
+    };
 
     const handleAddMember = async () => {
         if (!selectedNewContact) return;
@@ -375,6 +394,25 @@ export const GroupAdminModal: React.FC<GroupAdminModalProps> = ({
                             );
                         })}
                     </div>
+                </div>
+
+                {/* Leave Group Action Button */}
+                <div style={{ paddingTop: "8px", borderTop: "1px solid var(--glass-border)", display: "flex", justifyContent: "flex-end" }}>
+                    <button
+                        onClick={handleLeaveGroup}
+                        disabled={isUpdating}
+                        className="btn-tactical-secondary"
+                        style={{
+                            padding: "8px 16px",
+                            fontSize: "0.78rem",
+                            color: "var(--accent-crimson, #FF3C5F)",
+                            borderColor: "rgba(255, 60, 95, 0.4)",
+                            background: "rgba(255, 60, 95, 0.08)",
+                            fontWeight: 700
+                        }}
+                    >
+                        🚪 Abandonar Escuadrón
+                    </button>
                 </div>
             </div>
         </div>
