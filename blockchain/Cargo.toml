@@ -1,5 +1,5 @@
 [package]
-name = "red_blockchain"
+name = "red-blockchain"
 version = "65.0.1"
 edition = "2021"
 authors = ["RED Team"]
