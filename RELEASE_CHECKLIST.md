@@ -43,13 +43,13 @@ Este documento define el protocolo formal de validación y control de calidad pr
 - [ ] **Validación en Hardware Real:** Instalación limpia en Moto G22 y Xiaomi Redmi Note 14 5G.
 
 ### Etiquetado y Despliegue Git
-- [ ] Crear y empujar el tag anotado y firmado:
+- [x] Crear y empujar el tag anotado y firmado:
   ```bash
   git tag -a v65.0.1 -m "RED Sovereign Mesh — Multi-Broker & Web P2P Edition v65.0.1"
   git push origin v65.0.1
   ```
-- [ ] Validar que GitHub Pages ([darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)) responda HTTP 200.
-- [ ] Publicar assets y notas de release en GitHub Releases v65.0.1.
+- [x] Validar que GitHub Pages ([darckrovert.github.io/RED/](https://darckrovert.github.io/RED/)) responda HTTP 200.
+- [x] Publicar assets y notas de release en GitHub Releases v65.0.1 ([Releases v65.0.1](https://github.com/DarckRovert/RED/releases/tag/v65.0.1)).
 
 ---
 
