@@ -18,24 +18,19 @@ export interface MqttMessage {
 }
 
 export class MqttRelayTransport {
-  private ws: WebSocket | null = null;
+  private brokerSockets: Map<string, { ws: WebSocket; isAuthed: boolean }> = new Map();
   private myId: string;
-  private isConnecting = false;
-  private reconnectTimer: any = null;
-  private primaryFailbackTimer: any = null;
-  private activeBrokerIndex = 0;
   private messageListeners: ((msg: { from: string; payload: Uint8Array }) => void)[] = [];
   private signalingListeners: ((msg: any) => void)[] = [];
   private connectListeners: (() => void)[] = [];
   private pingInterval: any = null;
   public isConnected = false;
   private seenMqttHashes: Set<string> = new Set();
+  private reconnectTimers: Map<string, any> = new Map();
 
   private static readonly BROKER_POOL: string[] = [
     'wss://broker.emqx.io:8084/mqtt',
     'wss://broker.hivemq.com:8884/mqtt',
-    'wss://test.mosquitto.org:8081',
-    'wss://mqtt.eclipseprojects.io:443/mqtt',
   ];
 
   private cleanId(raw: string): string {
@@ -58,9 +53,7 @@ export class MqttRelayTransport {
     const clean = this.cleanId(myId);
     if (this.myId !== clean) {
       this.myId = clean;
-      if (this.isConnected) {
-        this.subscribeToMyTopics();
-      }
+      this.subscribeToMyTopics();
     }
   }
 
@@ -73,121 +66,90 @@ export class MqttRelayTransport {
 
   async connect(): Promise<void> {
     if (typeof window === 'undefined') return;
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+
+    for (const url of MqttRelayTransport.BROKER_POOL) {
+      this.connectBroker(url);
+    }
+    this.startPing();
+  }
+
+  private connectBroker(url: string) {
+    const existing = this.brokerSockets.get(url);
+    if (existing && (existing.ws.readyState === WebSocket.OPEN || existing.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
-    if (this.isConnecting) return;
-    this.isConnecting = true;
-
-    const brokers = MqttRelayTransport.BROKER_POOL;
-    const url = brokers[this.activeBrokerIndex % brokers.length];
-
-    return new Promise<void>((resolve) => {
-      console.log(`[MqttRelay] Connecting to primary global broker [${this.activeBrokerIndex + 1}/${brokers.length}]: ${url}...`);
-
-      let socket: WebSocket;
-      try {
-        socket = new WebSocket(url, ['mqtt', 'mqttv3.1']);
-        socket.binaryType = 'arraybuffer';
-      } catch (err) {
-        console.warn(`[MqttRelay] WebSocket creation failed for ${url}:`, err);
-        this.isConnecting = false;
-        this.tryNextBroker();
-        resolve();
-        return;
-      }
-
-      this.ws = socket;
-
-      const connectTimeout = setTimeout(() => {
-        if (!this.isConnected && socket.readyState !== WebSocket.OPEN) {
-          try { socket.close(); } catch {}
-          this.isConnecting = false;
-          this.tryNextBroker();
-          resolve();
-        }
-      }, 5000);
+    try {
+      console.log(`[MqttRelay] Connecting to global broker: ${url}...`);
+      const socket = new WebSocket(url, ['mqtt', 'mqttv3.1']);
+      socket.binaryType = 'arraybuffer';
+      this.brokerSockets.set(url, { ws: socket, isAuthed: false });
 
       socket.onopen = () => {
-        clearTimeout(connectTimeout);
-        this.sendMqttConnect();
+        this.sendMqttConnect(socket);
       };
 
       socket.onmessage = (event: MessageEvent) => {
         try {
           const data = new Uint8Array(event.data as ArrayBuffer);
-          this.handleMqttPacket(data, resolve);
+          this.handleMqttPacket(data, socket, url);
         } catch (e) {
-          console.warn('[MqttRelay] Error handling message packet:', e);
+          console.warn(`[MqttRelay] Error handling packet on ${url}:`, e);
         }
       };
 
       socket.onclose = () => {
-        clearTimeout(connectTimeout);
-        this.isConnected = false;
-        this.isConnecting = false;
-        this.stopPing();
-        console.log(`[MqttRelay] Broker connection closed (${url}). Reconnecting in 3s...`);
-        this.scheduleReconnect();
+        const entry = this.brokerSockets.get(url);
+        if (entry) entry.isAuthed = false;
+        this.updateConnectedState();
+        this.scheduleBrokerReconnect(url);
       };
 
-      socket.onerror = (err) => {
-        clearTimeout(connectTimeout);
-        this.isConnected = false;
-        this.isConnecting = false;
+      socket.onerror = () => {
         try { socket.close(); } catch {}
       };
-    });
-  }
-
-  private tryNextBroker() {
-    this.activeBrokerIndex = (this.activeBrokerIndex + 1) % MqttRelayTransport.BROKER_POOL.length;
-    this.scheduleReconnect(1000);
-
-    // If we fell back to a secondary broker, attempt to return to primary broker in 30s
-    if (this.activeBrokerIndex !== 0) {
-      if (this.primaryFailbackTimer) clearTimeout(this.primaryFailbackTimer);
-      this.primaryFailbackTimer = setTimeout(() => {
-        console.log('[MqttRelay] Attempting failback to primary deterministic broker (EMQX)...');
-        this.activeBrokerIndex = 0;
-        if (this.ws) {
-          try { this.ws.close(); } catch {}
-        }
-      }, 30000);
+    } catch (err) {
+      console.warn(`[MqttRelay] WebSocket creation failed for ${url}:`, err);
+      this.scheduleBrokerReconnect(url);
     }
   }
 
-  private scheduleReconnect(delayMs = 3000) {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => {
-      this.connect().catch(() => {});
-    }, delayMs);
+  private scheduleBrokerReconnect(url: string) {
+    if (this.reconnectTimers.has(url)) return;
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(url);
+      this.connectBroker(url);
+    }, 3000);
+    this.reconnectTimers.set(url, timer);
+  }
+
+  private updateConnectedState() {
+    let anyAuthed = false;
+    for (const [, entry] of this.brokerSockets) {
+      if (entry.isAuthed && entry.ws.readyState === WebSocket.OPEN) {
+        anyAuthed = true;
+        break;
+      }
+    }
+    this.isConnected = anyAuthed;
   }
 
   private startPing() {
-    this.stopPing();
+    if (this.pingInterval) clearInterval(this.pingInterval);
     this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        // Send MQTT PINGREQ (0xC0, 0x00)
-        try {
-          this.ws.send(new Uint8Array([0xC0, 0x00]));
-        } catch {}
+      const pingPacket = new Uint8Array([0xC0, 0x00]);
+      for (const [, entry] of this.brokerSockets) {
+        if (entry.ws.readyState === WebSocket.OPEN) {
+          try { entry.ws.send(pingPacket); } catch {}
+        }
       }
     }, 20000);
   }
 
-  private stopPing() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-  }
-
   // ─── MQTT Protocol Implementation ──────────────────────────────────────────
 
-  private sendMqttConnect() {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  private sendMqttConnect(socket: WebSocket) {
+    if (socket.readyState !== WebSocket.OPEN) return;
 
     const clientId = `red_${this.myId ? this.myId.slice(0, 12) : 'node'}_${Math.random().toString(36).substring(2, 8)}`;
     const protocolName = 'MQTT';
@@ -224,11 +186,13 @@ export class MqttRelayTransport {
     packet[offset++] = clientBytes.length & 0xFF;
     packet.set(clientBytes, offset);
 
-    this.ws.send(packet.buffer);
+    try {
+      socket.send(packet.buffer);
+    } catch {}
   }
 
-  private subscribeToMyTopics() {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.myId) return;
+  private subscribeToMyTopics(targetWs?: WebSocket) {
+    if (!this.myId) return;
 
     const topics = [
       `red/v65/dm/${this.myId}`,
@@ -263,13 +227,11 @@ export class MqttRelayTransport {
       topics.push(`red/v32/mb/${short}`);
     }
 
-    topics.forEach(t => this.subscribe(t));
-    console.log(`[MqttRelay] Subscribed to ${topics.length} routing topics for DID ${this.myId.slice(0, 8)}`);
+    topics.forEach(t => this.subscribe(t, 0, targetWs));
+    console.log(`[MqttRelay] Subscribed to ${topics.length} routing topics for DID ${this.myId.slice(0, 8)} across active brokers`);
   }
 
-  private subscribe(topic: string, qos: number = 0) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
+  private subscribe(topic: string, qos: number = 0, targetWs?: WebSocket) {
     const topicBytes = new TextEncoder().encode(topic);
     const packetId = Math.floor(Math.random() * 65535) + 1;
     const remainingLen = 2 + (2 + topicBytes.length + 1);
@@ -302,14 +264,20 @@ export class MqttRelayTransport {
 
     packet[offset++] = qos;
 
-    try {
-      this.ws.send(packet.buffer);
-    } catch {}
+    if (targetWs) {
+      if (targetWs.readyState === WebSocket.OPEN) {
+        try { targetWs.send(packet.buffer); } catch {}
+      }
+    } else {
+      for (const [, entry] of this.brokerSockets) {
+        if (entry.ws.readyState === WebSocket.OPEN) {
+          try { entry.ws.send(packet.buffer); } catch {}
+        }
+      }
+    }
   }
 
   public publish(topic: string, payload: Uint8Array | string): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-
     const payloadBytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
     const topicBytes = new TextEncoder().encode(topic);
     const remainingLen = 2 + topicBytes.length + payloadBytes.length;
@@ -339,18 +307,22 @@ export class MqttRelayTransport {
     // Payload
     packet.set(payloadBytes, offset);
 
-    try {
-      this.ws.send(packet.buffer);
-      return true;
-    } catch (e) {
-      console.warn('[MqttRelay] Publish failed:', e);
-      return false;
+    let publishedCount = 0;
+    for (const [, entry] of this.brokerSockets) {
+      if (entry.ws.readyState === WebSocket.OPEN) {
+        try {
+          entry.ws.send(packet.buffer);
+          publishedCount++;
+        } catch {}
+      }
     }
+
+    return publishedCount > 0;
   }
 
   // ─── Packet Dispatcher ──────────────────────────────────────────────────────
 
-  private handleMqttPacket(data: Uint8Array, onConnected?: () => void) {
+  private handleMqttPacket(data: Uint8Array, socket: WebSocket, url: string) {
     let cursor = 0;
     while (cursor < data.length) {
       if (data.length - cursor < 2) break;
@@ -373,18 +345,17 @@ export class MqttRelayTransport {
       if (packetType === 2) {
         const returnCode = data[offset + 1];
         if (returnCode === 0) {
-          this.isConnected = true;
-          this.isConnecting = false;
-          console.log('[MqttRelay] ✅ Connected and authenticated with global broker');
-          this.startPing();
-          this.subscribeToMyTopics();
-          if (onConnected) onConnected();
+          const entry = this.brokerSockets.get(url);
+          if (entry) entry.isAuthed = true;
+          this.updateConnectedState();
+          console.log(`[MqttRelay] ✅ Connected and authenticated with broker: ${url}`);
+          this.subscribeToMyTopics(socket);
           this.connectListeners.forEach(cb => {
             try { cb(); } catch (err) { console.warn('[MqttRelay] Error in connect listener:', err); }
           });
         } else {
-          console.warn(`[MqttRelay] Connection rejected by broker (code ${returnCode})`);
-          this.tryNextBroker();
+          console.warn(`[MqttRelay] Connection rejected by broker ${url} (code ${returnCode})`);
+          try { socket.close(); } catch {}
         }
       }
       // 2. PINGRESP (Type 13)
@@ -401,9 +372,9 @@ export class MqttRelayTransport {
         if (qos > 0) {
           const packetId = (data[offset] << 8) | data[offset + 1];
           offset += 2;
-          if (qos === 1 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+          if (qos === 1 && socket.readyState === WebSocket.OPEN) {
             try {
-              this.ws.send(new Uint8Array([0x40, 0x02, (packetId >> 8) & 0xFF, packetId & 0xFF]));
+              socket.send(new Uint8Array([0x40, 0x02, (packetId >> 8) & 0xFF, packetId & 0xFF]));
             } catch {}
           }
         }
@@ -417,7 +388,7 @@ export class MqttRelayTransport {
 
   private routeIncomingMqttMessage(topic: string, payload: Uint8Array) {
     try {
-      // Deduplicate identical MQTT payloads delivered across multiple topic subscriptions
+      // Deduplicate identical MQTT payloads delivered across multiple topic subscriptions & brokers
       let hash = '';
       const sampleLen = Math.min(payload.length, 32);
       for (let i = 0; i < sampleLen; i++) {
@@ -426,7 +397,7 @@ export class MqttRelayTransport {
       hash += '_' + payload.length;
       if (this.seenMqttHashes.has(hash)) return;
       this.seenMqttHashes.add(hash);
-      if (this.seenMqttHashes.size > 500) {
+      if (this.seenMqttHashes.size > 1000) {
         const first = this.seenMqttHashes.values().next().value;
         if (first) this.seenMqttHashes.delete(first);
       }
