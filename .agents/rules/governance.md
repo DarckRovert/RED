@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v63.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v65.0.1
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 
@@ -20,12 +20,17 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
    - **Rust**: `cargo fmt`, `cargo clippy -- -D warnings`, cero `unsafe` no justificado/documentado con mínimo 3 líneas explicativas.
    - **TypeScript**: Estricto, cero tipo `any`, cero `console.log` en rutas de producción (solo `console.error`/`console.warn`).
 
-3. **Nivel 3 - Criptografía Post-Cuántica & Seguridad**:
+3. **Nivel 2 - SSOT de Protocolo & Cero Duplicación Backend**:
+   - **Single Source of Truth**: Todos los modelos de datos, structs de red, DTOs y enums de comunicación P2P (AMBER, SOS, Clima, Canales, Social, Guardian, Audio, Efímeros, Proximidad, Batería, Sanitizador, Chunker, IA Copilot) DEBEN residir exclusivamente en `core/src/protocol/tactical.rs`.
+   - **Prohibición de Duplicación**: Queda estrictamente prohibido redefinir structs duplicados en `node/src/` o `red_mobile/src/`. Ambos crates deben re-exportar e importar directamente desde `red_core::protocol::tactical`.
+   - **Aislamiento de Plataforma**: `node` conserva su almacenamiento persistente en disco (`sled::Db`) y CLI `main.rs`, mientras que `red_mobile` conserva su almacenamiento liviano en RAM (`RwLock<HashMap>`) y su puente JNI C-ABI intacto.
+
+4. **Nivel 3 - Criptografía Post-Cuántica & Seguridad**:
    - `ML-KEM-768` SIEMPRE en modo híbrido con `X25519`.
    - `AES-256-GCM` con nonces estrictamente monotónicos (nunca reutilizados).
    - Generación de entropía con `ChaCha20Rng` o `OsRng`.
    - Derivación de claves con `HKDF-SHA256` y `Argon2id` (`m_cost >= 65536, t_cost >= 3, parallelism >= 4`).
    - Cifrado total en reposo para Sled DB (`CryptoEngine::encrypt()` / `CryptoEngine::decrypt()`).
 
-4. **Nivel 6 - Automatización CI/CD**:
-   - Todos los cambios deben pasar sin excepción los pipelines de `.github/workflows/` (`lint.yml`, `security.yml`, `build.yml`, `test.yml`, `proverif.yml`, `release.yml`).
+5. **Nivel 6 - Automatización CI/CD**:
+   - Todos los cambios deben pasar sin excepción los pipelines de `.github/workflows/` (`lint.yml`, `security.yml`, `build.yml`, `test.yml`, `build-android.yml`, `release.yml`).

@@ -3,93 +3,16 @@
 //! Versión simplificada para mobile: usa HashMap en memoria con RwLock.
 //! La persistencia sled se omite en favor de la ligereza en Android.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::amber_authority::is_authorized_authority;
 
-const DEFAULT_ALERT_TTL_SECS: u64 = 72 * 3600;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AlertStatus {
-    Active,
-    Resolved,
-    Expired,
-    Cancelled,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AmberAlert {
-    pub id: String,
-    pub name: String,
-    pub age: u32,
-    pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub photo_b64: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_seen_lat: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_seen_lon: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_seen_location: Option<String>,
-    pub issued_at: u64,
-    pub expires_at: u64,
-    pub authority_node_id: String,
-    pub authority_signature: String,
-    pub status: AlertStatus,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub resolution_notes: Option<String>,
-    pub sighting_count: u32,
-}
-
-impl AmberAlert {
-    pub fn is_active(&self) -> bool {
-        if self.status != AlertStatus::Active {
-            return false;
-        }
-        unix_now() < self.expires_at
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AmberSighting {
-    pub alert_id: String,
-    pub reporter_node_id: String,
-    pub reported_at: u64,
-    pub lat: Option<f64>,
-    pub lon: Option<f64>,
-    pub notes: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct CreateAmberAlertRequest {
-    pub name: String,
-    pub age: u32,
-    pub description: String,
-    pub photo_b64: Option<String>,
-    pub last_seen_lat: Option<f64>,
-    pub last_seen_lon: Option<f64>,
-    pub last_seen_location: Option<String>,
-    pub ttl_secs: Option<u64>,
-    pub authority_signature: String,
-    pub authority_node_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ResolveAmberAlertRequest {
-    pub authority_node_id: String,
-    pub resolution_notes: Option<String>,
-    pub authority_signature: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ReportSightingRequest {
-    pub lat: Option<f64>,
-    pub lon: Option<f64>,
-    pub notes: Option<String>,
-}
+pub use red_core::protocol::tactical::{
+    AlertStatus, AmberAlert, AmberSighting, CreateAmberAlertRequest, ReportSightingRequest,
+    ResolveAmberAlertRequest, AMBER_GOSSIP_TOPIC, DEFAULT_ALERT_TTL_SECS,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AmberError {

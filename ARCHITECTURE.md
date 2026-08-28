@@ -1,4 +1,4 @@
-# 🏛️ RED OS v64.0.0 — Arquitectura Técnica & Mapa Visual Completo
+# 🏛️ RED OS v65.0.1 — Arquitectura Técnica & Mapa Visual Completo
 
 > Documento maestro de ingeniería de software y especificación arquitectónica de **RED (Red Criptográfica Off-Grid & P2P Mesh)**. Describe en detalle la topología de capas, los protocolos criptográficos, la matriz de enrutamiento multi-transporte, el sistema de autenticación biométrica y el motor de inferencia neuronal offline.
 
@@ -259,7 +259,7 @@ flowchart TD
 
 | Componente | Lenguaje / Framework | Responsabilidad Principal | Ubicación |
 |---|---|---|---|
-| **`red_core`** | Rust (1.80+) | Criptografía post-cuántica, enrutamiento mesh, base de datos Sled, identidades soberanas. | [core/](core/) |
+| **`red_core`** | Rust (1.80+) | SSOT de modelos de protocolo táctico (`red_core::protocol::tactical`), criptografía post-cuántica, enrutamiento mesh, identidades soberanas. | [core/](core/) |
 | **`red_mobile`** | Rust + JNI | Biblioteca dinámica nativa (`libred_mobile.so`) para Android con servidor Axum embebido. | [red_mobile/](red_mobile/) |
 | **`red_node`** | Rust | Binario ejecutable de escritorio (`red-node.exe`) con CLI, nodo validador y servidor local. | [node/](node/) |
 | **`red_blockchain`** | Rust | Libro mayor distribuido, consenso Proof-of-Stake, validadores y mempool de transacciones. | [blockchain/](blockchain/) |

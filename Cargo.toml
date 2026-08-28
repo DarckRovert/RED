@@ -5,6 +5,10 @@ members = [
     "node",
     "red_mobile",
 ]
+exclude = [
+    "client",
+    "prometheus-client-fix",
+]
 resolver = "2"
 
 [workspace.package]

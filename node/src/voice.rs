@@ -1,26 +1,8 @@
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VoiceBurst {
-    pub id: String,
-    pub sender_did: String,
-    pub sender_name: String,
-    pub duration_seconds: f32,
-    pub audio_opus_b64: String,
-    pub timestamp: i64,
-    pub sample_rate: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SendVoiceBurstRequest {
-    pub sender_name: String,
-    pub duration_seconds: f32,
-    pub audio_opus_b64: String,
-    pub sample_rate: Option<u32>,
-}
+pub use red_core::protocol::tactical::{SendVoiceBurstRequest, VoiceBurst};
 
 #[derive(Clone)]
 pub struct VoiceStore {

@@ -1,4 +1,4 @@
-# 🤖 RULESET AUTÓMATA RED v64.0.0 — FLUJO INTEGRAL DE GOBERNANZA
+# 🤖 RULESET AUTÓMATA RED v65.0.1 — FLUJO INTEGRAL DE GOBERNANZA
 
 ## **NIVEL 0: PRE-COMMIT (Git Hooks & Validation)**
 
@@ -87,6 +87,12 @@ RED/
 - ✅ Validar que bloques de código tienen language specifier (```rust, ```typescript, etc)
 - ✅ Verificar que CHANGELOG.md tiene entrada para versión actual
 - ✅ README.md debe mencionar: descripción, arquitectura, cómo compilar, licencia
+
+### Regla 1.5: Single Source of Truth (SSOT) de Protocolo & Cero Duplicación
+**Para TODOS los modelos y contratos de datos en core/, node/, red_mobile/:**
+- ✅ **Centralización Obligatoria**: Todo struct, enum, DTO o mensaje de red P2P (AMBER, SOS, Clima, Canales, Social, Guardian, Audio, Efímeros, Proximidad, Batería, Sanitizador, Chunker, IA Copilot) DEBE residir en `core/src/protocol/tactical.rs`.
+- ❌ **Prohibición de Duplicación**: Queda estrictamente prohibido redefinir structs duplicados en `node/src/` o `red_mobile/src/`. Ambos crates deben re-exportar e importar directamente desde `red_core::protocol::tactical`.
+- ✅ **Aislamiento de Plataforma**: `node` mantiene su persistencia en disco (`sled::Db`) y CLI, mientras que `red_mobile` mantiene su almacenamiento liviano en RAM (`RwLock<HashMap>`) y su puente JNI C-ABI intacto.
 
 ---
 

@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node -e \"const s=require('./server'); setTimeout(()=>process.exit(0),500)\""
+    "test": "node -e \"const s=require('./server'); setTimeout(()=>process.exit(0),500)\"",
+    "lint": "node -c server.js"
   },
   "keywords": ["webrtc", "signaling", "p2p", "websocket"],
   "license": "MIT",

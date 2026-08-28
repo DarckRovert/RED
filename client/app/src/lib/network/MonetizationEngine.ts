@@ -142,6 +142,18 @@ class MonetizationEngineService {
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_tactical_catalog_custom', JSON.stringify(updated));
             window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+            
+            // Registrar anclaje inmutable en blockchain local
+            import('../blockchain/LocalChainLedger').then(({ localChainLedger }) => {
+                localChainLedger.submitTransaction({
+                    type: 'MARKETPLACE_LISTING',
+                    sender: 'did:red:merchant',
+                    recipient: 'MARKETPLACE',
+                    amount: 0,
+                    fee: 0,
+                    payload: { product: newProd }
+                }).catch(() => {});
+            }).catch(() => {});
         }
         this.broadcastProductToMesh(newProd).catch(() => {});
         return newProd;
@@ -218,6 +230,19 @@ class MonetizationEngineService {
             const updatedTx = [tx, ...txList].slice(0, 50);
             localStorage.setItem('red_tactical_txs', JSON.stringify(updatedTx));
             window.dispatchEvent(new CustomEvent('red_pro_status_updated'));
+
+            // Registrar en el libro mayor criptográfico local
+            import('../blockchain/LocalChainLedger').then(({ localChainLedger }) => {
+                localChainLedger.submitTransaction({
+                    type: 'CREDIT_ADJUST',
+                    sender: amount >= 0 ? 'SYSTEM_REWARD' : 'LOCAL_OPERATOR',
+                    recipient: amount >= 0 ? 'LOCAL_OPERATOR' : 'COMMERCIAL_REDEMPTION',
+                    amount: Math.abs(amount),
+                    fee: 0,
+                    payload: { txType: type, description, balanceAfter: newBal }
+                }).catch(() => {});
+            }).catch(() => {});
+
             return tx;
         }
 

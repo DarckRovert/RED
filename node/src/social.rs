@@ -1,31 +1,8 @@
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
-pub const MAX_LOCAL_POSTS: usize = 500; // Mantiene el móvil ligero
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SocialPost {
-    pub id: String,           // blake3 hash
-    pub author_hash: String,
-    pub author_name: String,
-    pub content: String,
-    pub media_data: Option<String>, // Base64 JPEG (baja res)
-    pub timestamp: i64,
-    pub reactions: HashMap<String, Vec<String>>, // emote -> [hashes]
-    #[serde(default)]
-    pub reply_to: Option<String>,
-    #[serde(default)]
-    pub signature: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostRequest {
-    pub author_name: String,
-    pub content: String,
-    pub media_data: Option<String>,
-}
+pub use red_core::protocol::tactical::{SocialPost, PostRequest, MAX_LOCAL_POSTS};
 
 #[derive(Clone)]
 pub struct SocialStore {

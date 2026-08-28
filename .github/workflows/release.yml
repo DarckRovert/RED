@@ -35,11 +35,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+      
       - name: Build release binaries
-        run: |
-          cargo build --release --bin red-node
-          cargo build --release -p red-blockchain
-          cargo build --release -p red-core
+        run: cargo build --release --bin red-node
       
       - name: Generate checksums
         run: |

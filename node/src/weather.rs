@@ -1,56 +1,8 @@
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WeatherReport {
-    pub id: String,
-    pub sender_did: String,
-    pub sender_name: String,
-    pub pressure_hpa: f32,
-    pub temperature_c: Option<f32>,
-    pub humidity_percent: Option<f32>,
-    pub wind_speed_kmh: Option<f32>,
-    pub wind_direction_deg: Option<f32>,
-    pub condition_summary: String,
-    pub is_disaster_alert: bool,
-    // OASIS CAP v1.2 fields
-    pub cap_event: Option<String>,
-    pub cap_urgency: Option<String>,
-    pub cap_severity: Option<String>,
-    pub cap_certainty: Option<String>,
-    pub cap_headline: Option<String>,
-    pub cap_instruction: Option<String>,
-    pub cap_area_desc: Option<String>,
-    pub cap_expires_at: Option<i64>,
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
-    pub timestamp: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostWeatherReportRequest {
-    pub sender_name: String,
-    pub pressure_hpa: f32,
-    pub temperature_c: Option<f32>,
-    pub humidity_percent: Option<f32>,
-    pub wind_speed_kmh: Option<f32>,
-    pub wind_direction_deg: Option<f32>,
-    pub condition_summary: String,
-    pub is_disaster_alert: bool,
-    // OASIS CAP v1.2 fields
-    pub cap_event: Option<String>,
-    pub cap_urgency: Option<String>,
-    pub cap_severity: Option<String>,
-    pub cap_certainty: Option<String>,
-    pub cap_headline: Option<String>,
-    pub cap_instruction: Option<String>,
-    pub cap_area_desc: Option<String>,
-    pub cap_expires_at: Option<i64>,
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
-}
+pub use red_core::protocol::tactical::{WeatherReport, PostWeatherReportRequest};
 
 #[derive(Clone)]
 pub struct WeatherStore {

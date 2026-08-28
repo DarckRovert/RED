@@ -8,10 +8,20 @@
 mod message;
 mod conversation;
 pub mod group;
+pub mod tactical;
 
 pub use message::{Message, MessageType, MessageId, MessageStatus, SocialPostPayload, P2PVoucherPayload, MedicalTriagePayload};
 pub use conversation::{Conversation, ConversationId};
 pub use group::{Group, GroupId, GroupMember, GroupMessage, MemberRole, GroupError};
+pub use tactical::{
+    AlertStatus, AmberAlert, AmberSighting, CreateAmberAlertRequest, ReportSightingRequest, ResolveAmberAlertRequest,
+    SosBeacon, SosReportRequest, WeatherReport, PostWeatherReportRequest, ChannelMessage, PostChannelMessageRequest,
+    SocialPost, PostRequest, GuardianVerdict, GuardianMode, VoiceBurst, SendVoiceBurstRequest, EphemeralConfig,
+    ProximityNode, RegisterBleDeviceRequest, WaveHandshakeRequest, SafeZone, ProximityFilterConfig, ProximityDigest,
+    EcoMeshStatus, CleanImageRequest, CleanImageResponse, FileChunk, ChunkManifest, SplitFileRequest,
+    CopilotQueryRequest, CopilotResponse, SummarizeChannelRequest, ChannelSummaryResponse, TranslateRequest, TranslateResponse,
+    AMBER_GOSSIP_TOPIC, DEFAULT_ALERT_TTL_SECS, MAX_LOCAL_POSTS,
+};
 
 use thiserror::Error;
 

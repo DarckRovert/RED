@@ -7,29 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum GuardianVerdict {
-    Allow,
-    Block { category: String, reason: String },
-    FlagForReview { category: String, reason: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum GuardianMode {
-    Strict,
-    Warn,
-    Off,
-}
-
-impl GuardianMode {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "warn" => GuardianMode::Warn,
-            "off" => GuardianMode::Off,
-            _ => GuardianMode::Strict,
-        }
-    }
-}
+pub use red_core::protocol::tactical::{GuardianVerdict, GuardianMode};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GuardianStats {

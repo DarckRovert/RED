@@ -5,7 +5,7 @@
 use clap::{Parser, Subcommand};
 use colored::*;
 use std::path::PathBuf;
-use red_core::storage::{Storage, Contact, Profile};
+use red_core::storage::{Storage, Profile};
 use red_core::identity::Identity;
 use red_core::protocol::{Message, GroupId, GroupMember, MemberRole};
 use red_core::crypto::hashing::derive_symmetric_key;
@@ -330,11 +330,11 @@ async fn listen_for_messages() -> anyhow::Result<()> {
             Ok(n) => {
                 if let Ok(resp) = bincode::deserialize::<NodeResponse>(&buffer[..n]) {
                     match resp {
-                        NodeResponse::MessageReceived(msg) => {
+                        NodeResponse::NewMessage(msg) => {
                             println!();
                             println!("{} {}", "📩 NEW MESSAGE".green().bold(), chrono::Local::now().format("%H:%M:%S").to_string().dimmed());
                             println!("  {}: {}", "From".bold(), msg.sender.short());
-                            if let Some(text) = msg.text() {
+                            if let red_core::protocol::MessageType::Text(ref text) = msg.content {
                                 println!("  {}: {}", "Text".bold(), text.white());
                             } else {
                                 println!("  {}", "[Binary/Encrypted Data]".dimmed());
@@ -610,7 +610,7 @@ async fn handle_group(action: GroupAction) -> anyhow::Result<()> {
                 group_id,
                 member: GroupMember {
                     identity_hash: member_hash,
-                    public_key: [0u8; 32].into(),
+                    public_key: red_core::crypto::PublicKey::from_bytes([0u8; 32]),
                     joined_at: 0,
                     role: MemberRole::Member,
                     muted: false,
@@ -631,12 +631,10 @@ async fn handle_group(action: GroupAction) -> anyhow::Result<()> {
         GroupAction::Send { group, message } => {
             let group_id = GroupId(hex::decode(&group)?.try_into().map_err(|_| anyhow::anyhow!("Invalid Group ID"))?);
             
-            let cmd = ClientCommand::SendGroupMessage(red_core::protocol::GroupMessage {
+            let cmd = ClientCommand::SendGroupMessage {
                 group_id,
-                sender_key_id: [0u8; 32].into(),
-                iteration: 0,
-                ciphertext: message.as_bytes().to_vec(),
-            });
+                content: red_core::protocol::MessageType::Text(message),
+            };
             
             let serialized = bincode::serialize(&cmd)?;
             stream.write_all(&serialized).await?;

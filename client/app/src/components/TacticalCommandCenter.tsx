@@ -448,6 +448,60 @@ export const TacticalCommandCenter: React.FC = () => {
                 </div>
             </header>
 
+            {/* Barra HUD de Acciones Críticas 1-Tap */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                gap: '8px',
+                padding: '12px 20px',
+                background: 'rgba(10, 14, 24, 0.85)',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                backdropFilter: 'blur(16px)'
+            }}>
+                <button
+                    onClick={() => handleCardClick('survivalBeacon')}
+                    className="btn-tactical-danger"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
+                >
+                    <span>🚨</span> <span>SOS Malla</span>
+                </button>
+                <button
+                    onClick={() => handleCardClick('walkie')}
+                    className="btn-tactical-primary"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
+                >
+                    <span>🎙️</span> <span>Walkie P2P</span>
+                </button>
+                <button
+                    onClick={() => handleCardClick('offGridCompass')}
+                    className="btn-tactical-secondary"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
+                >
+                    <span>🧭</span> <span>Brújula</span>
+                </button>
+                <button
+                    onClick={() => handleCardClick('nearby')}
+                    className="btn-tactical-secondary"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
+                >
+                    <span>📡</span> <span>Radar BLE</span>
+                </button>
+                <button
+                    onClick={() => handleCardClick('aiCopilot')}
+                    className="btn-tactical-secondary"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
+                >
+                    <span>🤖</span> <span>Copilot IA</span>
+                </button>
+                <button
+                    onClick={() => handleCardClick('p2pPay')}
+                    className="btn-tactical-secondary"
+                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
+                >
+                    <span>💳</span> <span>Vales P2P</span>
+                </button>
+            </div>
+
             {/* Selector de Dominios Operativos (Chips Horizontales) */}
             <div style={{
                 display: 'flex',

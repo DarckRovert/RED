@@ -17,6 +17,11 @@
 - Desacoplamiento de rutas de bundle (`basePath: ''` para Android/Capacitor vs `basePath: '/RED'` para GitHub Pages), eliminando errores 404 en WebViews de dispositivos físicos.
 - Compilación de Release oficial `v65.0.1` e instalación en hardware real (**Motorola Moto G22** y **Lenovo Tab M10**).
 
+**4. Unificación Completa de Modelos de Protocolo y Servicios (SSOT en `red_core::protocol::tactical`):**
+- Centralización de los 13 subsistemas tácticos y de IA (AMBER, SOS, Clima CAP v1.2, Canales, Social, Guardian, Voice, Ephemeral, Proximity, Battery, Sanitizer, Chunker, IA Copilot).
+- Eliminación del 100% de tipos duplicados en `node/src/` y `red_mobile/src/`, re-exportando canónicamente desde `red_core`.
+- Preservación íntegra de almacenamiento diferencial (Sled en PC / In-Memory en Android) y puente JNI C-ABI intacto.
+
 ---
 
 ## [65.0.0-squad-lifecycle-storage-hardened] - 2026-08-27

@@ -1,14 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EcoMeshStatus {
-    pub battery_level: u8,
-    pub ble_scan_interval_ms: u32,
-    pub lora_tx_power_dbm: i8,
-    pub estimated_mesh_hours: f32,
-    pub eco_mode_enabled: bool,
-}
+pub use red_core::protocol::tactical::EcoMeshStatus;
 
 #[derive(Clone)]
 pub struct BatteryOptimizer {

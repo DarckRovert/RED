@@ -11,7 +11,7 @@ import { RedAPI } from '../api';
 
 export interface ChainTransaction {
     id: string;
-    type: 'VOUCHER_ISSUE' | 'VOUCHER_REDEEM' | 'STAKE_LOCK' | 'STAKE_UNBOND' | 'MESH_REWARD' | 'DATA_ANCHOR' | 'TRANSFER';
+    type: 'VOUCHER_ISSUE' | 'VOUCHER_REDEEM' | 'STAKE_LOCK' | 'STAKE_UNBOND' | 'MESH_REWARD' | 'DATA_ANCHOR' | 'TRANSFER' | 'MARKETPLACE_LISTING' | 'CREDIT_ADJUST';
     sender: string;
     recipient: string;
     amount: number;

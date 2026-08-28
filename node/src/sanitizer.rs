@@ -1,18 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CleanImageRequest {
-    pub image_b64: String,
-    pub mime_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CleanImageResponse {
-    pub ok: bool,
-    pub cleaned_b64: String,
-    pub bytes_stripped: usize,
-    pub metadata_removed: Vec<String>,
-}
+pub use red_core::protocol::tactical::{CleanImageRequest, CleanImageResponse};
 
 pub struct ImageSanitizer;
 

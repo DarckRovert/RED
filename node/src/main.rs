@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports)]
+#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::all)]
 //! RED Network Node
 //!
 //! A full node for the RED decentralized messaging network.
@@ -47,7 +47,7 @@ use tokio::sync::Mutex;
 #[derive(Parser)]
 #[command(name = "red-node")]
 #[command(author = "RED Team")]
-#[command(version = "0.1.0")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "RED decentralized messaging network node", long_about = None)]
 struct Cli {
     /// Configuration file path

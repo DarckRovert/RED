@@ -3,26 +3,10 @@
 //! Executes local tactical AI inference over GGUF models directly on the ARM64 processor 
 //! without third-party web cloud dependencies.
 
-use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CopilotQueryRequest {
-    pub prompt: String,
-    pub context: Option<String>,
-    pub model_path: Option<String>,
-    pub model_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CopilotResponse {
-    pub answer: String,
-    pub topic_category: String,
-    pub source: String,
-    pub model_used: String,
-    pub execution_time_ms: u64,
-}
+pub use red_core::protocol::tactical::{CopilotQueryRequest, CopilotResponse};
 
 /// Estado interno del Motor (Singleton para evitar recargar el GGUF)
 pub struct AICopilotState {

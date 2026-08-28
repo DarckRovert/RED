@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::all)]
 use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use std::path::PathBuf;

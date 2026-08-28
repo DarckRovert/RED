@@ -17,39 +17,9 @@ const GUARDIAN_MODEL: &str = "RED-Guardian-Nano-v3 (Offline Deep Semantic Engine
 const CACHE_TTL_SECS: u64 = 300; // 5 minutos
 const MAX_CACHE_ENTRIES: usize = 1000;
 
+pub use red_core::protocol::tactical::{GuardianVerdict, GuardianMode};
+
 // ─── Tipos públicos ────────────────────────────────────────────────────────────
-
-/// Resultado del análisis de Guardian
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum GuardianVerdict {
-    /// Contenido permitido — continúa flujo normal
-    Allow,
-    /// Contenido bloqueado — incluye categoría y razón
-    Block { category: String, reason: String },
-    /// Contenido flaggeado para revisión (modo warn)
-    FlagForReview { category: String, reason: String },
-}
-
-/// Modo de operación del Guardian
-#[derive(Debug, Clone, PartialEq)]
-pub enum GuardianMode {
-    /// Bloqueo total de contenido peligroso
-    Strict,
-    /// Solo advertencia, no bloquea
-    Warn,
-    /// Apagado — no analiza nada
-    Off,
-}
-
-impl GuardianMode {
-    pub fn from_str(s: &str) -> Self {
-        match s.to_lowercase().as_str() {
-            "warn" => GuardianMode::Warn,
-            "off" => GuardianMode::Off,
-            _ => GuardianMode::Strict, // Default: strict
-        }
-    }
-}
 
 /// Estadísticas del Guardian
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

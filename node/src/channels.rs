@@ -1,26 +1,8 @@
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChannelMessage {
-    pub id: String,
-    pub channel_id: String, // e.g., "red-local-general", "red-emergency-lima"
-    pub sender_did: String,
-    pub sender_name: String,
-    pub content: String,
-    pub timestamp: i64,
-    pub hash: String,
-    pub is_moderated: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PostChannelMessageRequest {
-    pub channel_id: String,
-    pub sender_name: String,
-    pub content: String,
-}
+pub use red_core::protocol::tactical::{ChannelMessage, PostChannelMessageRequest};
 
 #[derive(Clone)]
 pub struct ChannelStore {

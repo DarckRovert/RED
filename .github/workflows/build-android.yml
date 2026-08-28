@@ -1,0 +1,85 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build-android:
+    name: Build Android Native App (APK + JNI)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'client/app/package-lock.json'
+
+      - name: Setup Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Android SDK & NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;25.2.9519653" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/25.2.9519653" >> $GITHUB_ENV
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-ndk
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: Install Frontend Dependencies
+        working-directory: ./client/app
+        run: npm ci
+
+      - name: Build Next.js Static Export for Mobile
+        working-directory: ./client/app
+        run: npm run build:mobile
+
+      - name: Compile Rust JNI Shared Libraries (libred_mobile.so)
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+        run: |
+          mkdir -p client/app/android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p client/app/android/app/src/main/jniLibs/x86_64
+          cargo ndk -t arm64-v8a -t x86_64 -o client/app/android/app/src/main/jniLibs build --release -p red_mobile
+
+      - name: Capacitor Sync Android
+        working-directory: ./client/app
+        run: npx cap sync android
+
+      - name: Build Android Debug APK
+        working-directory: ./client/app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload Android APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RED-Android-APK
+          path: client/app/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

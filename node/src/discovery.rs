@@ -2,46 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProximityNode {
-    pub identity_hash: String,
-    pub display_name: String,
-    pub rssi_dbm: i32,
-    pub distance_meters: f32,
-    pub transport: String,
-    pub last_seen: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WaveHandshakeRequest {
-    pub target_identity_hash: String,
-    pub greeting_message: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SafeZone {
-    pub name: String,
-    pub lat: f64,
-    pub lon: f64,
-    pub radius_meters: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProximityFilterConfig {
-    pub cooldown_seconds: u64, // ej. 3600 = 1 hora sin repetir alerta para el mismo nodo
-    pub rssi_threshold_dbm: i32, // ej. -70 dBm (descarta señales débiles)
-    pub stealth_mode: String,  // "silent" | "vibrate" | "discreet_sound"
-    pub digest_enabled: bool,  // Resumen agrupado por lote
-    pub safe_zones: Vec<SafeZone>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProximityDigest {
-    pub total_nodes_detected: usize,
-    pub nodes_summary: Vec<String>,
-    pub timestamp: i64,
-    pub is_in_safe_zone: bool,
-}
+pub use red_core::protocol::tactical::{
+    ProximityDigest, ProximityFilterConfig, ProximityNode, SafeZone, WaveHandshakeRequest,
+};
 
 #[derive(Clone)]
 pub struct DiscoveryEngine {

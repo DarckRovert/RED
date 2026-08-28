@@ -1,20 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SummarizeChannelRequest {
-    pub channel_id: String,
-    pub messages: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChannelSummaryResponse {
-    pub channel_id: String,
-    pub summary_bullets: Vec<String>,
-    pub total_messages_analyzed: usize,
-    pub sentiment: String,
-    pub execution_time_ms: u64,
-}
+pub use red_core::protocol::tactical::{ChannelSummaryResponse, SummarizeChannelRequest};
 
 pub struct AISummarizerEngine;
 

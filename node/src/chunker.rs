@@ -1,32 +1,7 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileChunk {
-    pub file_id: String,
-    pub chunk_index: usize,
-    pub total_chunks: usize,
-    pub chunk_hash: String,
-    pub data_base64: String,
-    pub chunk_size: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChunkManifest {
-    pub file_id: String,
-    pub filename: String,
-    pub total_size: usize,
-    pub total_chunks: usize,
-    pub root_hash: String,
-    pub chunk_hashes: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SplitFileRequest {
-    pub filename: String,
-    pub data_base64: String,
-}
+pub use red_core::protocol::tactical::{ChunkManifest, FileChunk, SplitFileRequest};
 
 #[derive(Clone)]
 pub struct ChunkerEngine {

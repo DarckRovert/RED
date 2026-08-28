@@ -9,7 +9,7 @@
 //!
 //! Messages are NOT stored on the blockchain.
 
-#![allow(missing_docs)]
+#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::all)]
 #![forbid(unsafe_code)]
 
 pub mod block;

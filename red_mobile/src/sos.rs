@@ -1,32 +1,8 @@
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SosBeacon {
-    pub id: String,
-    pub sender_did: String,
-    pub sender_name: String,
-    pub lat: f64,
-    pub lon: f64,
-    pub altitude: Option<f64>,
-    pub timestamp: i64,
-    pub battery_level: u8,
-    pub note: String,
-    pub is_active: bool,
-    pub signature: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SosReportRequest {
-    pub sender_name: String,
-    pub lat: f64,
-    pub lon: f64,
-    pub altitude: Option<f64>,
-    pub battery_level: u8,
-    pub note: String,
-}
+pub use red_core::protocol::tactical::{SosBeacon, SosReportRequest};
 
 #[derive(Clone)]
 pub struct SosStore {

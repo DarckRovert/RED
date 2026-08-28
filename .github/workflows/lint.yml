@@ -18,23 +18,8 @@ jobs:
         with:
           components: rustfmt, clippy
       
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
-      
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
       
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -47,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ['18.x']
+        node-version: ['20.x']
     steps:
       - uses: actions/checkout@v4
       
@@ -56,20 +41,21 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
+          cache-dependency-path: client/app/package-lock.json
       
       - name: Install dependencies (client/app)
         run: cd client/app && npm ci
       
-      - name: Check formatting
+      - name: Check formatting (client/app)
         run: cd client/app && npm run lint
       
       - name: Install dependencies (signaling)
         if: hashFiles('signaling/package.json') != ''
         run: cd signaling && npm ci
       
-      - name: Check formatting (signaling)
+      - name: Check syntax & formatting (signaling)
         if: hashFiles('signaling/package.json') != ''
-        run: cd signaling && npm run lint || true
+        run: cd signaling && npm run lint
   
   markdown-lint:
     name: Markdown Validation

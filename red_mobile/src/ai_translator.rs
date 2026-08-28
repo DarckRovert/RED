@@ -1,20 +1,6 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TranslateRequest {
-    pub text: String,
-    pub target_language: String, // "es" | "en" | "qu"
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TranslateResponse {
-    pub original_text: String,
-    pub translated_text: String,
-    pub target_language: String,
-    pub execution_time_ms: u64,
-    pub source: String,
-}
+pub use red_core::protocol::tactical::{TranslateRequest, TranslateResponse};
 
 pub struct AITranslatorEngine {
     dict_es_en: HashMap<&'static str, &'static str>,

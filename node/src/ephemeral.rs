@@ -1,13 +1,7 @@
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EphemeralConfig {
-    pub conversation_id: String,
-    pub self_destruct_seconds: u32, // 0 = off, 10, 60, 3600, etc.
-    pub burn_on_read: bool,
-}
+pub use red_core::protocol::tactical::EphemeralConfig;
 
 #[derive(Clone)]
 pub struct EphemeralPurgeEngine {
