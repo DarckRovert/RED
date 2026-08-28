@@ -282,12 +282,12 @@ export default function AppRouter() {
         }
 
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("app") === "true") {
+        if (urlParams.get("app") === "true" || (typeof window !== "undefined" && localStorage.getItem("red_landing_dismissed") === "true")) {
           setShowLanding(false);
           return;
         }
 
-        // En la web (GitHub Pages / companion), siempre se muestra el Portal / Landing Page oficial
+        // En la web por primera vez, se muestra el Portal / Landing Page oficial
         setShowLanding(true);
       } catch {
         setShowLanding(true);

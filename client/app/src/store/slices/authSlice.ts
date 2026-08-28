@@ -365,12 +365,22 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         if (currentIdentity) {
             set({ identity: { ...currentIdentity, nickname: cleanName, phone_number: phone, bio } });
         } else {
-            const randBytes = typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(16)) : new Uint8Array(16);
-            const hex = Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            let localHash = typeof window !== 'undefined' ? localStorage.getItem("red_identity_hash") : null;
+            let shortId = typeof window !== 'undefined' ? localStorage.getItem("red_short_id") : null;
+            if (!localHash || !shortId) {
+                const randBytes = typeof window !== 'undefined' && window.crypto ? window.crypto.getRandomValues(new Uint8Array(32)) : new Uint8Array(32);
+                localHash = Array.from(randBytes).map(b => b.toString(16).padStart(2, '0')).join('') || "af10d57e5a4179e83b24f1c900e5";
+                shortId = "red_" + localHash.substring(0, 10);
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem("red_identity_hash", localHash);
+                    localStorage.setItem("red_short_id", shortId);
+                }
+            }
             set({
                 identity: {
-                    identity_hash: 'local_' + hex,
-                    short_id: cleanName.substring(0, 8).toLowerCase(),
+                    identity_hash: localHash,
+                    short_id: shortId,
+                    public_key: localHash,
                     nickname: cleanName,
                     phone_number: phone,
                     bio

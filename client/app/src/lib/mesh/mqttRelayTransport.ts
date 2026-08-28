@@ -34,6 +34,8 @@ export class MqttRelayTransport {
   private static readonly BROKER_POOL: string[] = [
     'wss://broker.emqx.io:8084/mqtt',
     'wss://broker.hivemq.com:8884/mqtt',
+    'wss://test.mosquitto.org:8081',
+    'wss://mqtt.eclipseprojects.io:443/mqtt',
   ];
 
   private cleanId(raw: string): string {
@@ -86,7 +88,7 @@ export class MqttRelayTransport {
 
       let socket: WebSocket;
       try {
-        socket = new WebSocket(url, ['mqttv3.1', 'mqtt']);
+        socket = new WebSocket(url, ['mqtt', 'mqttv3.1']);
         socket.binaryType = 'arraybuffer';
       } catch (err) {
         console.warn(`[MqttRelay] WebSocket creation failed for ${url}:`, err);
@@ -229,14 +231,18 @@ export class MqttRelayTransport {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.myId) return;
 
     const topics = [
+      `red/v65/dm/${this.myId}`,
+      `red/v65/sig/${this.myId}`,
+      `red/v65/mb/${this.myId}`,
+      `red/mesh/dm/${this.myId}`,
+      `red/mesh/sig/${this.myId}`,
       `red/v40/dm/${this.myId}`,
       `red/v40/sig/${this.myId}`,
       `red/v40/mb/${this.myId}`,
       `red/v32/dm/${this.myId}`,
       `red/v32/sig/${this.myId}`,
       `red/v32/mb/${this.myId}`,
-      `red/mesh/dm/${this.myId}`,
-      `red/mesh/sig/${this.myId}`,
+      'red/v65/broadcast',
       'red/mesh/broadcast',
       'red/v40/broadcast',
       'red/v32/broadcast'
@@ -244,14 +250,17 @@ export class MqttRelayTransport {
 
     if (this.myId.length >= 8) {
       const short = this.myId.slice(0, 8);
+      topics.push(`red/v65/dm/${short}`);
+      topics.push(`red/v65/sig/${short}`);
+      topics.push(`red/v65/mb/${short}`);
+      topics.push(`red/mesh/dm/${short}`);
+      topics.push(`red/mesh/sig/${short}`);
       topics.push(`red/v40/dm/${short}`);
       topics.push(`red/v40/sig/${short}`);
       topics.push(`red/v40/mb/${short}`);
       topics.push(`red/v32/dm/${short}`);
       topics.push(`red/v32/sig/${short}`);
       topics.push(`red/v32/mb/${short}`);
-      topics.push(`red/mesh/dm/${short}`);
-      topics.push(`red/mesh/sig/${short}`);
     }
 
     topics.forEach(t => this.subscribe(t));
@@ -265,11 +274,21 @@ export class MqttRelayTransport {
     const packetId = Math.floor(Math.random() * 65535) + 1;
     const remainingLen = 2 + (2 + topicBytes.length + 1);
 
-    const packet = new Uint8Array(2 + remainingLen);
+    // Variable length remaining length encoding
+    const lenBytes: number[] = [];
+    let tempLen = remainingLen;
+    do {
+      let encodedByte = tempLen % 128;
+      tempLen = Math.floor(tempLen / 128);
+      if (tempLen > 0) encodedByte |= 128;
+      lenBytes.push(encodedByte);
+    } while (tempLen > 0);
+
+    const packet = new Uint8Array(1 + lenBytes.length + remainingLen);
     let offset = 0;
 
-    packet[offset++] = 0x82; // SUBSCRIBE (QoS 1)
-    packet[offset++] = remainingLen;
+    packet[offset++] = 0x82; // SUBSCRIBE (QoS 1 header)
+    for (const b of lenBytes) packet[offset++] = b;
 
     // Packet ID
     packet[offset++] = (packetId >> 8) & 0xFF;
@@ -283,7 +302,9 @@ export class MqttRelayTransport {
 
     packet[offset++] = qos;
 
-    this.ws.send(packet.buffer);
+    try {
+      this.ws.send(packet.buffer);
+    } catch {}
   }
 
   public publish(topic: string, payload: Uint8Array | string): boolean {
@@ -372,10 +393,20 @@ export class MqttRelayTransport {
       }
       // 3. PUBLISH (Type 3)
       else if (packetType === 3) {
+        const qos = (data[cursor] & 0x06) >> 1;
         const topicLen = (data[offset] << 8) | data[offset + 1];
         offset += 2;
         const topic = new TextDecoder().decode(data.slice(offset, offset + topicLen));
         offset += topicLen;
+        if (qos > 0) {
+          const packetId = (data[offset] << 8) | data[offset + 1];
+          offset += 2;
+          if (qos === 1 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+              this.ws.send(new Uint8Array([0x40, 0x02, (packetId >> 8) & 0xFF, packetId & 0xFF]));
+            } catch {}
+          }
+        }
         const payload = data.slice(offset, packetEnd);
         this.routeIncomingMqttMessage(topic, payload);
       }
@@ -446,20 +477,24 @@ export class MqttRelayTransport {
     const clean = this.cleanId(recipientHash);
     if (!clean) return false;
     
-    // Publish to primary v40 and v32 realtime topics
-    let published = this.publish(`red/v40/dm/${clean}`, payload);
+    // Publish to primary v65, mesh, v40 and v32 realtime topics
+    let published = this.publish(`red/v65/dm/${clean}`, payload);
+    this.publish(`red/v65/mb/${clean}`, payload);
+    this.publish(`red/mesh/dm/${clean}`, payload);
+    this.publish(`red/v40/dm/${clean}`, payload);
     this.publish(`red/v40/mb/${clean}`, payload);
     this.publish(`red/v32/dm/${clean}`, payload);
     this.publish(`red/v32/mb/${clean}`, payload);
-    this.publish(`red/mesh/dm/${clean}`, payload);
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
+      this.publish(`red/v65/dm/${short}`, payload);
+      this.publish(`red/v65/mb/${short}`, payload);
+      this.publish(`red/mesh/dm/${short}`, payload);
       this.publish(`red/v40/dm/${short}`, payload);
       this.publish(`red/v40/mb/${short}`, payload);
       this.publish(`red/v32/dm/${short}`, payload);
       this.publish(`red/v32/mb/${short}`, payload);
-      this.publish(`red/mesh/dm/${short}`, payload);
     }
     return published;
   }
@@ -477,15 +512,17 @@ export class MqttRelayTransport {
       ...signalData
     });
 
-    let published = this.publish(`red/v40/sig/${clean}`, jsonStr);
-    this.publish(`red/v32/sig/${clean}`, jsonStr);
+    let published = this.publish(`red/v65/sig/${clean}`, jsonStr);
     this.publish(`red/mesh/sig/${clean}`, jsonStr);
+    this.publish(`red/v40/sig/${clean}`, jsonStr);
+    this.publish(`red/v32/sig/${clean}`, jsonStr);
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
+      this.publish(`red/v65/sig/${short}`, jsonStr);
+      this.publish(`red/mesh/sig/${short}`, jsonStr);
       this.publish(`red/v40/sig/${short}`, jsonStr);
       this.publish(`red/v32/sig/${short}`, jsonStr);
-      this.publish(`red/mesh/sig/${short}`, jsonStr);
     }
     return published;
   }

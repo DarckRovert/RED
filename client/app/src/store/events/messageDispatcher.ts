@@ -104,7 +104,7 @@ export async function dispatchIncomingMessage(
             return;
         }
 
-        // ── Protocol & Handshake Control Packets: never append to user chat bubbles ──
+        // ── Protocol Packets (Discovery & Ack): handled directly here ──
         if (
             typeof item.content === 'string' && item.content.startsWith('{') && (
                 item.content.includes('"type":"IDENTITY_ANNOUNCE"') ||
@@ -112,10 +112,7 @@ export async function dispatchIncomingMessage(
                 item.content.includes('"type":"IDENTITY_REQUEST"') ||
                 item.content.includes('"type":"SHAKE_PAIR_') ||
                 item.content.includes('"type":"DELIVERY_ACK"') ||
-                item.content.includes('"type":"PROFILE_UPDATE"') ||
-                item.content.includes('"type":"RED_PAIR') ||
-                (item.content.includes('"sender_hash"') && item.content.includes('"sender_pk"')) ||
-                (item.content.includes('"reason":"user_remote_wipe"'))
+                item.content.includes('"type":"RED_PAIR')
             )
         ) {
             try {
@@ -129,11 +126,10 @@ export async function dispatchIncomingMessage(
                         // Only update P2P routing topology — contact isolation: never auto-add to contacts list
                         meshRouter.bindDeviceToCanonical(item.sender, peerHash, peerName, peerPk);
                         meshRouter.updatePeer(peerHash, 'ble', undefined, peerHash, peerName, peerPk);
-                        // RedAPI.addContact removed: discovery ≠ consent. Contact list is user-curated only.
                     }
                 }
             } catch {}
-            return; // strictly do NOT add system protocol JSON to chat message bubbles
+            return; // strictly do NOT add system topology JSON to chat message bubbles
         }
 
         // ── Real-Time Typing & Recording Indicator: never append to message list ──
