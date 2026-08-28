@@ -1,5 +1,24 @@
 # Changelog
 
+## [65.0.1-multi-broker-redundant-web-p2p] - 2026-08-27
+
+### Web P2P & Multi-Broker Redundant Mesh Edition — Eliminación de Particiones de Red MQTT, Despacho Reactivo de Handshakes y Sincronización Universal de Binarios
+
+**1. Transporte Multi-Broker Concurrente en Tiempo Real (`MqttRelayTransport`):**
+- Conexiones WebSocket redundantes y simultáneas con `broker.emqx.io:8084` y `broker.hivemq.com:8884`.
+- Suscripción y publicación concurrentes en todos los brokers activos, garantizando entrega de doble ruta y eliminando las particiones de red entre clientes Web y dispositivos móviles.
+- Buffer de deduplicación determinista (`seenMqttHashes`) para entrega *exactly-once* en capa de aplicación.
+
+**2. Despacho Completo de Solicitudes y Handshakes P2P (`messageDispatcher`):**
+- Corrección de filtros de descarte en dispatcher para permitir la recepción y procesamiento reactivo de `contact_request`, `contact_response`, `profile_update` y `conversation_wipe`.
+- Normalización criptográfica de DIDs canónicos de 64 caracteres hexadecimales en el almacenamiento web.
+
+**3. Sincronización Limpia de Assets en Android Nativo & GitHub Pages:**
+- Desacoplamiento de rutas de bundle (`basePath: ''` para Android/Capacitor vs `basePath: '/RED'` para GitHub Pages), eliminando errores 404 en WebViews de dispositivos físicos.
+- Compilación de Release oficial `v65.0.1` e instalación en hardware real (**Motorola Moto G22** y **Lenovo Tab M10**).
+
+---
+
 ## [65.0.0-squad-lifecycle-storage-hardened] - 2026-08-27
 
 ### Sovereign Tactical Master Edition — Ciclo de Vida Completo de Escuadrones, Moderación P2P en Tiempo Real, Blindaje de Almacenamiento IndexedDB y Despliegue en Limpio Multi-Dispositivo

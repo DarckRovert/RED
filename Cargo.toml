@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "65.0.0"
+version = "65.0.1"
 edition = "2021"
 authors = ["Rodrigo Alejandro Vega Rojas <DarckRovert>"]
 license = "AGPL-3.0"
