@@ -68,6 +68,9 @@ export const ko: I18nSchema = {
         cat_emergency_health: "🫀 비상, 보건 & 인명구조",
         cat_ai: "🤖 신경망 인공지능",
         cat_tools_system: "⚙️ 도구, 시스템 & 위장",
+        cat_miniapps: "🏪 자율형 미니앱 & 웹 브라우징",
+        app_store: "Sovereign App Store (미니앱)",
+        hyper_browser: "RED Hyper-Browser Mesh",
         
         groups: "P2P 분대 & 그룹",
         channels: "로컬 메시 채널 (#)",

@@ -68,6 +68,9 @@ export const qu: I18nSchema = {
         cat_emergency_health: "🫀 Llakiykuna, Qhali Kay & Qispichiy",
         cat_ai: "🤖 Yuyay Sapallan AI Yachay",
         cat_tools_system: "⚙️ Llamk'anakuna & Pakakuy",
+        cat_miniapps: "🏪 Kikin Mini-Appskuna & Web Maskay",
+        app_store: "Sovereign App Store (Mini-Apps)",
+        hyper_browser: "RED Hyper-Browser Mesh",
         
         groups: "P2P T'aqakuna & Huñukuna",
         channels: "Kitipaq Mesh Ñankuna (#)",

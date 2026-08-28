@@ -236,6 +236,26 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
         </div>
 
         <div
+          onClick={() => onOpenTool("appStore")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(0,230,118,0.12) 0%, rgba(0,229,255,0.06) 100%)", border: "1px solid rgba(0,230,118,0.3)" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>🛒</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-emerald)" }}>App Store P2P</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("hyperBrowser")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(0,229,255,0.12) 0%, rgba(138,43,226,0.06) 100%)", border: "1px solid rgba(0,229,255,0.3)" }}
+        >
+          <span style={{ fontSize: "1.8rem" }}>🌐</span>
+          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-cyan)" }}>Hyper-Browser</span>
+          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>MESH HTTP</span>
+        </div>
+
+        <div
           onClick={() => onOpenTool("updater")}
           className="card-tactical-interactive"
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}

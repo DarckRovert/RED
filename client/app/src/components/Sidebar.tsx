@@ -132,6 +132,13 @@ export default function Sidebar() {
 
     const menuCategories = [
         {
+            title: t('modules.cat_miniapps') || "🏪 Mini-Apps Soberanas & Navegación Web",
+            items: [
+                { icon: "🛒", label: t('modules.app_store') || "Sovereign App Store (Mini-Apps)", action: "appStore" },
+                { icon: "🌐", label: t('modules.hyper_browser') || "RED Hyper-Browser Mesh", action: "hyperBrowser" },
+            ]
+        },
+        {
             title: t('modules.cat_messaging'),
             items: [
                 { icon: "📻", label: t('modules.channels'), action: "channels" },
@@ -288,6 +295,36 @@ export default function Sidebar() {
                                     <button onClick={() => setDrawerSearch("")} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>✕</button>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Quick Action Highlights v66.0.0 */}
+                        <div style={{ padding: "0 16px 8px 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", flexShrink: 0 }}>
+                            <button
+                                onClick={() => { setMenuOpen(false); navigate("appStore"); }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                                    background: "linear-gradient(135deg, rgba(0, 230, 118, 0.15) 0%, rgba(0, 229, 255, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 230, 118, 0.35)", borderRadius: "var(--radius-md)", textAlign: "center"
+                                }}
+                            >
+                                <span style={{ fontSize: "1.4rem" }}>🛒</span>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-emerald)" }}>App Store P2P</span>
+                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS</span>
+                            </button>
+                            <button
+                                onClick={() => { setMenuOpen(false); navigate("hyperBrowser"); }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(138, 43, 226, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 229, 255, 0.35)", borderRadius: "var(--radius-md)", textAlign: "center"
+                                }}
+                            >
+                                <span style={{ fontSize: "1.4rem" }}>🌐</span>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-cyan)" }}>Hyper-Browser</span>
+                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MESH HTTP</span>
+                            </button>
                         </div>
 
                         {/* Modules Scrollable Area */}

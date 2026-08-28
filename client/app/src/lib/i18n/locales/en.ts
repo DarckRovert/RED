@@ -68,6 +68,9 @@ export const en: I18nSchema = {
         cat_emergency_health: "🫀 Emergency, Health & Rescue",
         cat_ai: "🤖 Neural Artificial Intelligence",
         cat_tools_system: "⚙️ Tools, System & Camouflage",
+        cat_miniapps: "🏪 Sovereign Mini-Apps & Web Browsing",
+        app_store: "Sovereign App Store (Mini-Apps)",
+        hyper_browser: "RED Hyper-Browser Mesh",
         
         groups: "P2P Squads & Groups",
         channels: "Local Mesh Channels (#)",

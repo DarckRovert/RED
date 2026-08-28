@@ -68,6 +68,9 @@ export const ja: I18nSchema = {
         cat_emergency_health: "🫀 緊急・医療＆救助",
         cat_ai: "🤖 ニューラル人工知能",
         cat_tools_system: "⚙️ ツール、システム＆偽装",
+        cat_miniapps: "🏪 自律型ミニアプリ＆ウェブブラウジング",
+        app_store: "Sovereign App Store（ミニアプリ）",
+        hyper_browser: "RED Hyper-Browser Mesh",
         
         groups: "P2P分隊＆グループ",
         channels: "ローカルメッシュチャンネル (#)",

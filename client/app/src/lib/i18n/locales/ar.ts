@@ -68,6 +68,9 @@ export const ar: I18nSchema = {
         cat_emergency_health: "🫀 الطوارئ، الصحة والإنقاذ",
         cat_ai: "🤖 الذكاء الاصطناعي العصبي",
         cat_tools_system: "⚙️ الأدوات، النظام والتمويه",
+        cat_miniapps: "🏪 التطبيقات المصغرة والتصفح",
+        app_store: "متجر التطبيقات P2P",
+        hyper_browser: "متصفح RED الشبكي",
         
         groups: "فرق ومجموعات P2P",
         channels: "قنوات الشبكة المحلية (#)",

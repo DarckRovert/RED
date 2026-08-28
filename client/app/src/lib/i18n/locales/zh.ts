@@ -68,6 +68,9 @@ export const zh: I18nSchema = {
         cat_emergency_health: "🫀 紧急、医疗 & 救援",
         cat_ai: "🤖 神经网络人工智能",
         cat_tools_system: "⚙️ 工具、系统 & 伪装",
+        cat_miniapps: "🏪 主权微应用与网页浏览",
+        app_store: "主权应用商店 (微应用)",
+        hyper_browser: "RED Hyper-Browser Mesh",
         
         groups: "P2P 小队 & 群组",
         channels: "本地网状频道 (#)",

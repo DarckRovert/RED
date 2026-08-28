@@ -66,6 +66,9 @@ export const es = {
         cat_emergency_health: "🫀 Emergencias, Salud & Rescate",
         cat_ai: "🤖 Inteligencia Artificial Neuronal",
         cat_tools_system: "⚙️ Herramientas, Sistema & Camuflaje",
+        cat_miniapps: "🏪 Mini-Apps Soberanas & Navegación Web",
+        app_store: "Sovereign App Store (Mini-Apps)",
+        hyper_browser: "RED Hyper-Browser Mesh",
         
         groups: "Escuadrones & Grupos P2P",
         channels: "Canales Mesh Locales (#)",
