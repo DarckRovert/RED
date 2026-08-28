@@ -14,7 +14,7 @@ cd out
 rm -rf .git
 git init
 git add -A
-git commit -m "deploy: GitHub Pages production release v64.0.0"
+git commit -m "deploy: GitHub Pages production release v66.0.0"
 git branch -M gh-pages
 git remote add origin https://github.com/DarckRovert/RED.git
 git push -f origin gh-pages

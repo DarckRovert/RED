@@ -1,5 +1,54 @@
 # Changelog
 
+## [66.0.0-sovereign-app-store-hyper-browser] - 2026-08-28
+
+### Sovereign Mini-Apps, App Store P2P, Hyper-Browser & Multi-Rail Payments Edition
+
+**1. Sovereign P2P App Store (`SovereignAppStoreModal`):**
+- Grid completo de Mini-Apps instaladas con categorías, búsqueda en tiempo real y badges de permisos.
+- Creador de Mini-Apps en el dispositivo: editor HTML/JS/CSS integrado, publicación del manifiesto por mesh P2P.
+- Importación de bundles externos (`.redapp` / `.json`).
+- 3 apps built-in oficiales: RED Bazaar P2P (mercado), MeshWiki Táctica (wiki offline), Batalla Naval P2P (juego en red).
+
+**2. RED Hyper-Browser Mesh (`RedHyperBrowserModal`):**
+- Browser completo con protocolo dual: `red://` (dApps soberanas) + `https://` (web clearnet).
+- Historial de navegación, botones Atrás/Adelante, recarga funcionales.
+- 5 marcadores tácticos preconfigurados.
+- Fallback automático a Mesh Out-Proxy cuando no hay conexión a Internet.
+- Badge animado `🛰️ Mesh Out-Proxy Activo` con `animate-pulse`.
+
+**3. Mini-App Container Soberano (`MiniAppContainerModal`):**
+- `<iframe sandbox="allow-scripts allow-forms">` — aislamiento real de DOM.
+- `RedSDKBridge` — IPC seguro con enforcing por permiso, wire-format mesh encoding.
+- Gestión de permisos en tiempo real con drawer flyout: toggle individual por `RedPermissionScope`.
+- Modo fullscreen toggle, recarga limpia de Blob URL, cierre con revocación del ObjectURL.
+- Integración directa con `UniversalCheckoutModal` disparada por `window.RedSDK.payments.requestPayment`.
+
+**4. Pasarela de Pago Multi-Rail (`RedPaymentGatewayEngine` + `UniversalCheckoutModal`):**
+- 5 rieles de pago: PayPal/Tarjeta, Web3 USDT/Polygon, Bitcoin Lightning, Vale Off-Grid, RED Token.
+- UI con selector de riel, detalles contextuales por riel, spinner de procesamiento.
+- Integración con `Web3BridgeEngine` y `MonetizationEngine` para saldo local de créditos.
+
+**5. Infraestructura de Mini-Apps (`RedSDKTypes`, `RedAppRegistry`, `RedAppBundleEngine`):**
+- Tipos canónicos: `RedAppBundle`, `PaymentRail`, `PaymentIntentRequest/Receipt`, `RedPermissionScope`.
+- Registry persistente en `localStorage` con CRUD completo.
+- `createBlobUrl` — inyecta `window.RedSDK` en el HTML de la app antes de crear el Blob URL.
+
+**6. Mesh Gateway Engine (`MeshGatewayEngine`):**
+- Out-proxy HTTP sobre malla DTN con compresión asíncrona de payloads.
+- `checkInternetConnectivity()` — decide automáticamente entre iframe directo y proxy mesh.
+
+**7. Suite de Tests (118/118 PASS):**
+- 62 nuevos tests en Fase 7: IPC, aislamiento de sandbox, pagos multi-rail, registry y mesh proxy.
+- `tsc --noEmit`: 0 errores de TypeScript.
+
+**8. Limpieza y Peso:**
+- Eliminación de SVGs de template Next.js (`vercel.svg`, `next.svg`, `globe.svg`, `file.svg`, `window.svg`).
+- `sw.js` actualizado a `red-vault-cache-v66` para forzar invalidación de cache en navegadores.
+- Versión: `66.0.0` / `versionCode 66000`.
+
+---
+
 ## [65.0.1-multi-broker-redundant-web-p2p] - 2026-08-27
 
 ### Web P2P & Multi-Broker Redundant Mesh Edition — Eliminación de Particiones de Red MQTT, Despacho Reactivo de Handshakes y Sincronización Universal de Binarios
