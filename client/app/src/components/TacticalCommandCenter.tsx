@@ -352,6 +352,26 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'ENCRIPTADO',
                 badgeColor: 'var(--accent-purple)',
                 accentClass: 'glow-border-purple'
+            },
+            {
+                id: 'appStore',
+                action: 'appStore',
+                icon: '🛒',
+                title: 'Sovereign App Store',
+                subtitle: 'Instala, crea y publica Mini-Apps P2P soberanas con pagos multi-rail integrados.',
+                badge: 'MINI-APPS',
+                badgeColor: 'var(--accent-emerald)',
+                accentClass: 'glow-border-emerald'
+            },
+            {
+                id: 'hyperBrowser',
+                action: 'hyperBrowser',
+                icon: '🌐',
+                title: 'RED Hyper-Browser',
+                subtitle: 'Navega red:// y https:// sobre malla satelital. Sin censura, sin ISP.',
+                badge: 'MESH HTTP',
+                badgeColor: 'var(--accent-cyan)',
+                accentClass: 'glow-border-cyan'
             }
         ]
     };

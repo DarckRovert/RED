@@ -48,7 +48,7 @@ export interface PendingContactRequest {
  * Central hub for memory and UI View routing (No next/router).
  */
 
-export type ScreenView = 'sidebar' | 'commandCenter' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'squads' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault' | 'webCompanionLink' | 'companionLink';
+export type ScreenView = 'sidebar' | 'commandCenter' | 'chat' | 'settings' | 'updater' | 'status' | 'crypto' | 'broadcast' | 'radar' | 'contacts' | 'call' | 'nodemap' | 'explorer' | 'network' | 'dms' | 'amber' | 'amberAdmin' | 'guardian' | 'compass' | 'channels' | 'publicChannels' | 'sos' | 'walkie' | 'weather' | 'weatherAlert' | 'idVault' | 'identityVault' | 'proximity' | 'proximityWave' | 'canvas' | 'liveCanvas' | 'ecoMesh' | 'proximitySettings' | 'proximity_settings' | 'aiCopilot' | 'copilot' | 'nearby' | 'liveStream' | 'offGridCompass' | 'vitalScan' | 'survivalBeacon' | 'rfSpectrum' | 'stegoVault' | 'security' | 'groups' | 'squads' | 'p2pCompass' | 'socialFeed' | 'shakePair' | 'p2pPay' | 'redP2PPay' | 'blackout' | 'health' | 'systemHealth' | 'nodeLogs' | 'logs' | 'calculator' | 'secReport' | 'backup' | 'landing' | 'commercialHub' | 'hub' | 'globalShield' | 'web3Vault' | 'webCompanionLink' | 'companionLink' | 'hyperBrowser' | 'appStore' | 'miniApp';
 
 export interface RedStore {
     // 0. User Preferences & UI Customization
@@ -71,6 +71,7 @@ export interface RedStore {
     // 3. SPA UI State (The core of Mobile-First architecture)
     currentScreen: ScreenView;
     activeConversationId: string | null;
+    activeMiniAppBundle: any | null;
     
     // 4. Actions
     login: (password: string) => Promise<boolean>;
@@ -80,6 +81,7 @@ export interface RedStore {
     
     // Navigation Action
     navigate: (screen: ScreenView, contextId?: string) => void;
+    launchMiniApp: (bundle: any) => void;
     goBack: () => void;
     
     // Chat Actions

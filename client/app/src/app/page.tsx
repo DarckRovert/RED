@@ -57,6 +57,9 @@ const UpdateModal          = dynamic(() => import("../components/UpdateModal").t
 const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
 const GlobalShieldPanel    = dynamic(() => import("../components/GlobalShieldPanel"),    { ssr: false, loading: () => <AppLoader /> });
 const Web3VaultModal       = dynamic(() => import("../components/Web3VaultModal"),       { ssr: false, loading: () => <AppLoader /> });
+const RedHyperBrowserModal = dynamic(() => import("../components/miniapp/RedHyperBrowserModal").then(m => ({ default: m.RedHyperBrowserModal })), { ssr: false, loading: () => <AppLoader /> });
+const SovereignAppStoreModal = dynamic(() => import("../components/miniapp/SovereignAppStoreModal").then(m => ({ default: m.SovereignAppStoreModal })), { ssr: false, loading: () => <AppLoader /> });
+const MiniAppContainerModal = dynamic(() => import("../components/miniapp/MiniAppContainerModal").then(m => ({ default: m.MiniAppContainerModal })), { ssr: false, loading: () => <AppLoader /> });
 const TacticalCommandCenter = dynamic(() => import("../components/TacticalCommandCenter").then(m => ({ default: m.TacticalCommandCenter })), { ssr: false, loading: () => <AppLoader /> });
 const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLanding"),    { ssr: false, loading: () => <FullScreenTacticalLoader /> });
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
@@ -256,7 +259,7 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
 }
 
 export default function AppRouter() {
-  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate } = useRedStore();
+  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate, activeMiniAppBundle, launchMiniApp } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
@@ -499,6 +502,29 @@ export default function AppRouter() {
                 {currentScreen === "nodemap" && <NodeMap />}
                 {currentScreen === "radar" && <RadarWindow />}
                 {currentScreen === "call" && <CallScreen />}
+                {currentScreen === "hyperBrowser" && (
+                  <RedHyperBrowserModal
+                    userDid={identity?.identity_hash || 'did:red:guest'}
+                    onClose={goBack}
+                    onLaunchMiniApp={(bundle) => launchMiniApp(bundle)}
+                  />
+                )}
+                {currentScreen === "appStore" && (
+                  <SovereignAppStoreModal
+                    userDid={identity?.identity_hash || 'did:red:guest'}
+                    onClose={goBack}
+                    onLaunchApp={(bundle) => launchMiniApp(bundle)}
+                  />
+                )}
+                {currentScreen === "miniApp" && activeMiniAppBundle && (
+                  <MiniAppContainerModal
+                    bundle={activeMiniAppBundle}
+                    userDid={identity?.identity_hash || 'did:red:guest'}
+                    nickname={identity?.nickname || 'Operador'}
+                    publicKey={identity?.identity_hash || 'pk_00'}
+                    onClose={goBack}
+                  />
+                )}
                 {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
                 {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
               </div>
@@ -554,6 +580,29 @@ export default function AppRouter() {
               {currentScreen === "globalShield" && <GlobalShieldPanel />}
               {currentScreen === "web3Vault" && <Web3VaultModal />}
               {(currentScreen === "commercialHub" || currentScreen === "hub") && <CommercialHubModal isOpen={true} onClose={goBack} />}
+              {currentScreen === "hyperBrowser" && (
+                <RedHyperBrowserModal
+                  userDid={identity?.identity_hash || 'did:red:guest'}
+                  onClose={goBack}
+                  onLaunchMiniApp={(bundle) => launchMiniApp(bundle)}
+                />
+              )}
+              {currentScreen === "appStore" && (
+                <SovereignAppStoreModal
+                  userDid={identity?.identity_hash || 'did:red:guest'}
+                  onClose={goBack}
+                  onLaunchApp={(bundle) => launchMiniApp(bundle)}
+                />
+              )}
+              {currentScreen === "miniApp" && activeMiniAppBundle && (
+                <MiniAppContainerModal
+                  bundle={activeMiniAppBundle}
+                  userDid={identity?.identity_hash || 'did:red:guest'}
+                  nickname={identity?.nickname || 'Operador'}
+                  publicKey={identity?.identity_hash || 'pk_00'}
+                  onClose={goBack}
+                />
+              )}
               {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
             </>
           )}

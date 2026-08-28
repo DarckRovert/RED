@@ -27,6 +27,11 @@ export const createUiSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = 
     // ── Contact Authorization initial state ──────────────────────────────────,
 
     currentScreen: 'sidebar',
+    activeMiniAppBundle: null,
+
+    launchMiniApp: (bundle: any) => {
+        set({ activeMiniAppBundle: bundle, currentScreen: 'miniApp' });
+    },
 
     navigate: (screen: ScreenView, contextId?: string) => {
         // Overlay screens: navigate without touching activeConversationId unless contextId provided
