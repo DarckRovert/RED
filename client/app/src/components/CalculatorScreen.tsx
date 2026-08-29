@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
+import { antiForensicPanicWipe } from "../lib/security/AntiForensicPanicWipeEngine";
 
 interface CalculatorScreenProps {
     onUnlock?: (pin: string) => Promise<any> | any;
@@ -130,14 +131,24 @@ export function CalculatorScreen({ onUnlock }: CalculatorScreenProps) {
         const rawPin = display;
         setAwaitingUnlock(true);
 
-        // 1. Intentar desbloqueo silencioso de la bóveda
+        // 1. Verificar si es el PIN de coacción / pánico (Duress Zeroization)
+        if (antiForensicPanicWipe.isDuressPin(rawPin)) {
+            await antiForensicPanicWipe.triggerDuressPanicProtocol();
+            try {
+                await handleUnlock(rawPin);
+            } catch {}
+            setAwaitingUnlock(false);
+            return;
+        }
+
+        // 2. Intentar desbloqueo normal silencioso de la bóveda
         try {
             await handleUnlock(rawPin);
         } catch {}
 
         setAwaitingUnlock(false);
 
-        // 2. Si no desbloqueó, ejecutar la matemática real
+        // 3. Si no desbloqueó, ejecutar la matemática real
         const inputValue = parseFloat(display);
         if (operator && prevValue !== null) {
             let result = 0;

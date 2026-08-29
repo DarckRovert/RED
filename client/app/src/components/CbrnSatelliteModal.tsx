@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { cbrnRadiation, RadiationTelemetry } from "../lib/sensors/CbrnRadiationEngine";
 import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/SatelliteMeshGatewayEngine";
+import { cbrnPlumeDispersionEngine, PlumeHazardZone } from "../lib/tactical/CbrnPlumeDispersionEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
@@ -10,7 +11,13 @@ export function CbrnSatelliteModal() {
     const { navigate } = useRedStore();
     const [cbrn, setCbrn] = useState<RadiationTelemetry>(() => cbrnRadiation.getTelemetry());
     const [sat, setSat] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
-    const [activeTab, setActiveTab] = useState<"cbrn" | "satellite">("cbrn");
+    const [activeTab, setActiveTab] = useState<"cbrn" | "satellite" | "plume">("cbrn");
+    const [plumeZone, setPlumeZone] = useState<PlumeHazardZone>(() => 
+        cbrnPlumeDispersionEngine.calculatePlumeDispersion({
+            id: 'INCIDENT-01', lat: 4.6097, lon: -74.0817, hazardType: 'RADIOACTIVE_FALLOUT',
+            releaseRateKgSec: 15, windSpeedKmh: 18, windDirectionDegrees: 45, stabilityClass: 'D', timestamp: Date.now()
+        }, 4.6120, -74.0800)
+    );
 
     useEffect(() => {
         cbrnRadiation.startMonitoring();
@@ -79,22 +86,32 @@ export function CbrnSatelliteModal() {
                 <button
                     onClick={() => setActiveTab("cbrn")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
                         background: activeTab === "cbrn" ? "#FFB300" : "transparent",
                         color: activeTab === "cbrn" ? "#000" : "#AAA", border: "none", cursor: "pointer"
                     }}
                 >
-                    ☢️ Dosímetro Nuclear CBRN
+                    ☢️ Dosimetría
+                </button>
+                <button
+                    onClick={() => setActiveTab("plume")}
+                    style={{
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
+                        background: activeTab === "plume" ? "#FF3355" : "transparent",
+                        color: activeTab === "plume" ? "#FFF" : "#AAA", border: "none", cursor: "pointer"
+                    }}
+                >
+                    ☣️ Pluma & Escape
                 </button>
                 <button
                     onClick={() => setActiveTab("satellite")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
                         background: activeTab === "satellite" ? "#00E5FF" : "transparent",
                         color: activeTab === "satellite" ? "#000" : "#AAA", border: "none", cursor: "pointer"
                     }}
                 >
-                    🛰️ Constelación Satelital ({sat.activePasses.filter(s => s.isInAos).length} en AOS)
+                    🛰️ Satélite ({sat.activePasses.filter(s => s.isInAos).length})
                 </button>
             </div>
 
@@ -232,6 +249,86 @@ export function CbrnSatelliteModal() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+
+                {/* ── TAB 3: CBRN GAUSSIAN PLUME & SAFE ESCAPE CORRIDOR ── */}
+                {activeTab === "plume" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ background: "rgba(255, 51, 85, 0.08)", border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "12px", padding: "12px", fontSize: "0.74rem", color: "#DDD" }}>
+                            Modelo de dispersión atmosférica Pasquill-Gifford. Calcula el cono de peligro de viento a sotavento y genera el rumbo de escape a 90° barlovento para salir de la pluma tóxica.
+                        </div>
+
+                        {/* Escape Vector Master HUD */}
+                        <div style={{
+                            padding: "16px", borderRadius: "14px",
+                            background: plumeZone.escapeVector.isInDangerZone ? "rgba(255, 51, 85, 0.25)" : "rgba(0, 230, 118, 0.15)",
+                            border: `1.5px solid ${plumeZone.escapeVector.isInDangerZone ? "#FF3355" : "#00E676"}`,
+                            display: "flex", alignItems: "center", justifyContent: "space-between"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.72rem", color: "#AAA", fontWeight: 800 }}>ESTADO DE PELIGRO EN PLUMA</div>
+                                <div style={{ fontSize: "1.8rem", fontWeight: 900, color: plumeZone.escapeVector.isInDangerZone ? "#FF3355" : "#00E676" }}>
+                                    {plumeZone.escapeVector.currentDangerLevel}
+                                </div>
+                                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#FFB300" }}>
+                                    Agente: {plumeZone.source.hazardType}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: "0.7rem", color: "#AAA" }}>RUMBO DE ESCAPE</div>
+                                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    {plumeZone.escapeVector.recommendedAzimuthDegrees}°
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>
+                                    {plumeZone.escapeVector.distanceToSafetyMeters}m a zona segura ({plumeZone.escapeVector.estimatedWalkTimeMinutes} min)
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Plume Metrics Grid */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>ZONA CALIENTE (LETAL)</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FF3355" }}>{plumeZone.hotZoneRadiusMeters} m radio</div>
+                            </div>
+                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>LONGITUD PLUMA TIBIA</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FFB300" }}>{plumeZone.warmZoneLengthMeters} m</div>
+                            </div>
+                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>VIENTO SOTAVENTO</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#38BDF8" }}>{plumeZone.source.windSpeedKmh} km/h @ {plumeZone.source.windDirectionDegrees}°</div>
+                            </div>
+                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>PERÍMETRO SEGURO</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#00E676" }}>&gt; {plumeZone.coldZonePerimeterMeters} m</div>
+                            </div>
+                        </div>
+
+                        {/* Broadcast Escape Vector to Mesh */}
+                        <button
+                            onClick={() => {
+                                import("../lib/emergency/MeshSosBeaconEngine").then(({ meshSosBeacon }) => {
+                                    meshSosBeacon.activateSosBeacon({
+                                        distressType: "NATURAL_DISASTER",
+                                        triageColor: "RED",
+                                        note: `ALERTA EVACUACIÓN CBRN: Escape por Rumbo ${plumeZone.escapeVector.recommendedAzimuthDegrees}°. Zona Caliente: ${plumeZone.hotZoneRadiusMeters}m. Salir del cono de viento inmediatamente.`,
+                                        batteryLevel: 90
+                                    }, "CBRN_COMMAND", "Oficial de Seguridad CBRN");
+                                    toast.success("🚨 Corredor de Evacuación y Vector de Escape transmitido por la Malla SOS");
+                                });
+                            }}
+                            style={{
+                                padding: "14px", borderRadius: "10px",
+                                background: "linear-gradient(135deg, #FF3355, #E8213A)",
+                                color: "#FFF", fontWeight: 900, fontSize: "0.82rem", border: "none", cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                            }}
+                        >
+                            <span>🚨</span>
+                            <span>TRANSMITIR VECTOR DE ESCAPE A LA MALLA</span>
+                        </button>
                     </div>
                 )}
 

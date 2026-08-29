@@ -15,6 +15,10 @@ import { tacticalGeofence } from "../lib/sensors/TacticalGeofenceEngine";
 import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
 import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
 import { sitrepEngine } from "../lib/tactical/SitrepEngine";
+import { pedestrianDeadReckoning } from "../lib/sensors/PedestrianDeadReckoningEngine";
+import { tacticalRdf } from "../lib/sensors/TacticalRdfEngine";
+import { meshUavRelayEngine } from "../lib/mesh/MeshUavRelayEngine";
+import { cbrnPlumeDispersionEngine } from "../lib/tactical/CbrnPlumeDispersionEngine";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -675,6 +679,62 @@ export default function NodeMap() {
                             </div>
                         `);
                     });
+                } catch {}
+
+                // Marcadores de Repetidores Dron Aerotransportados (UAV Loiter Relays)
+                try {
+                    const uavRelays = meshUavRelayEngine.getActiveRelays();
+                    uavRelays.forEach(uav => {
+                        const uavSvg = milStd2525.generateSvg({
+                            affiliation: 'FRIEND',
+                            role: 'RECON_DRONE',
+                            size: 28
+                        });
+                        const uavIcon = L.divIcon({
+                            className: "custom-uav-marker",
+                            html: `<div style="filter:drop-shadow(0 0 10px #FFB300);animation:pulse 2s infinite;">${uavSvg}</div>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14]
+                        });
+                        const uavMarker = L.marker([uav.coords.lat, uav.coords.lon], { icon: uavIcon }).addTo(markersGroupRef.current);
+                        uavMarker.bindPopup(`
+                            <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                <strong>🛸 ${uav.callsign} (UAV RELAY)</strong><br/>
+                                Altitud AGL: ${uav.altitudeAglMeters}m<br/>
+                                Modo: ${uav.loiterMode} · Batería: ${uav.batteryPct}%<br/>
+                                Cobertura: ${uav.coverageRadiusKm} km radio<br/>
+                                Clientes Malla Activos: ${uav.activeRelayClients}
+                            </div>
+                        `);
+
+                        // Cono de Iluminación Radioeléctrica
+                        L.circle([uav.coords.lat, uav.coords.lon], {
+                            radius: uav.coverageRadiusKm * 1000,
+                            color: "#FFB300",
+                            weight: 1.5,
+                            fillColor: "#FFB300",
+                            fillOpacity: 0.05,
+                            dashArray: "6, 8"
+                        }).addTo(markersGroupRef.current);
+                    });
+                } catch {}
+
+                // Superposición de Línea de Demora Foxhunting (RDF LOB)
+                try {
+                    const rdfState = tacticalRdf.getState();
+                    if (rdfState.peakBearing && gpsData.lat !== 0 && gpsData.lng !== 0) {
+                        const bearingRad = (rdfState.peakBearing.peakHeadingDeg * Math.PI) / 180;
+                        const rayDistMeters = Math.min(500, rdfState.peakBearing.estimatedDistMeters || 300);
+                        const endLat = gpsData.lat + (rayDistMeters * Math.cos(bearingRad)) / 111000;
+                        const endLon = gpsData.lng + (rayDistMeters * Math.sin(bearingRad)) / (111000 * Math.cos(gpsData.lat * Math.PI / 180));
+                        
+                        L.polyline([[gpsData.lat, gpsData.lng], [endLat, endLon]], {
+                            color: "#00E5FF",
+                            weight: 2.5,
+                            dashArray: "6, 6",
+                            opacity: 0.85
+                        }).addTo(markersGroupRef.current);
+                    }
                 } catch {}
             }
         };
