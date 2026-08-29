@@ -64,6 +64,13 @@ export class TacticalPowerGovernorEngine {
 
         const remainingHours = Math.round((currentEnergyWh / powerW) * 10) / 10;
 
+        // Auto-throttle mesh bearer if critical
+        if (batteryPct <= 15) {
+            import("../mesh/DynamicBearerGovernor").then(({ dynamicBearerGovernor }) => {
+                dynamicBearerGovernor.applyPowerBudgetThrottle(batteryPct);
+            });
+        }
+
         return {
             remainingHours,
             remainingEnergyWh: Math.round(currentEnergyWh * 100) / 100,

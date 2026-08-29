@@ -247,6 +247,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     {[
                         { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
                         { icon: "🫀", label: "Ficha VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
+                        { icon: "🔊", label: "SoundMesh Acústico", action: () => {
+                            setIsAttachOpen(false);
+                            if (text.trim()) {
+                                import("../../lib/audio/SoundMeshEngine").then(({ SoundMeshEngine }) => {
+                                    SoundMeshEngine.transmit(text.trim());
+                                    toast.success("🔊 Transmitiendo mensaje por SoundMesh Acústico FSK");
+                                });
+                            } else {
+                                toast.info("✍️ Escribe un mensaje primero para emitirlo por audio");
+                            }
+                        } },
+                        { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
+                        { icon: "🖼️", label: "Esteganografía LSB", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
                         { icon: "💸", label: "Pagar RED", action: () => { setIsAttachOpen(false); handlePay(); } },
                         { icon: "📷", label: "Cámara", action: () => { setIsAttachOpen(false); handleCamera(); } },
                         { icon: "🖼️", label: "Galería", action: () => { setIsAttachOpen(false); handleGallery(); } },

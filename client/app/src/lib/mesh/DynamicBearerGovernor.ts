@@ -167,6 +167,18 @@ export class DynamicBearerGovernor {
         this.totalFailovers++;
         this.notify();
     }
+
+    /**
+     * Modula el perfil de transporte según el estado de la batería de campaña
+     */
+    public applyPowerBudgetThrottle(batteryPct: number) {
+        if (batteryPct <= 15 && this.primaryBearer === 'WIFI_DIRECT') {
+            console.warn(`[DynamicBearerGovernor] 🔋 Batería Crítica (${batteryPct}%): Conmutando automáticamente a BLE Mesh de bajo consumo`);
+            this.primaryBearer = 'BLE';
+            this.totalFailovers++;
+            this.notify();
+        }
+    }
 }
 
 export const dynamicBearerGovernor = DynamicBearerGovernor.getInstance();

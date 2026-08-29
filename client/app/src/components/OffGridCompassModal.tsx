@@ -8,6 +8,7 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { offlineTileCacheEngine } from "../lib/storage/OfflineTileCacheEngine";
 import { magneticDetector, MagneticTelemetry } from "../lib/sensors/MagneticAnomalyDetectorEngine";
+import { CelestialNavigationEngine, CelestialEphemeris } from "../lib/sensors/CelestialNavigationEngine";
 
 export function OffGridCompassModal() {
     const { navigate } = useRedStore();
@@ -313,17 +314,45 @@ export function OffGridCompassModal() {
         ctx.fillText("S", 0, radius - 16);
         ctx.fillText("W", -radius + 16, 0);
 
-        // Draw Sun / Moon Azimuth Marker
-        const sunRad = (solarAzimuth.azimuthDegrees * Math.PI) / 180;
-        const sunX = Math.sin(sunRad) * (radius - 30);
-        const sunY = -Math.cos(sunRad) * (radius - 30);
-        ctx.fillStyle = solarAzimuth.isNight ? "#38BDF8" : "#FFB300";
-        ctx.shadowColor = solarAzimuth.isNight ? "#38BDF8" : "#FFB300";
-        ctx.shadowBlur = 10;
-        ctx.beginPath();
-        ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        // Draw Sun & Moon Celestial Markers (Jean Meeus Astronomical Equations)
+        try {
+            const ephem = CelestialNavigationEngine.getInstance().calculateEphemeris(
+                userCoords?.lat || 4.6097,
+                userCoords?.lon || -74.0817,
+                new Date()
+            );
+
+            // Sun Marker (☀️ Amber)
+            const sunRad = (ephem.sun.azimuthDeg * Math.PI) / 180;
+            const sunX = Math.sin(sunRad) * (radius - 30);
+            const sunY = -Math.cos(sunRad) * (radius - 30);
+            ctx.fillStyle = ephem.isDaylight ? "#FFB300" : "rgba(255, 179, 0, 0.4)";
+            ctx.shadowColor = "#FFB300";
+            ctx.shadowBlur = ephem.isDaylight ? 10 : 2;
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Moon Marker (🌙 Cyan/Silver)
+            const moonRad = (ephem.moon.azimuthDeg * Math.PI) / 180;
+            const moonX = Math.sin(moonRad) * (radius - 30);
+            const moonY = -Math.cos(moonRad) * (radius - 30);
+            ctx.fillStyle = "#38BDF8";
+            ctx.shadowColor = "#38BDF8";
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(moonX, moonY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        } catch {
+            const sunRad = (solarAzimuth.azimuthDegrees * Math.PI) / 180;
+            const sunX = Math.sin(sunRad) * (radius - 30);
+            const sunY = -Math.cos(sunRad) * (radius - 30);
+            ctx.fillStyle = solarAzimuth.isNight ? "#38BDF8" : "#FFB300";
+            ctx.beginPath();
+            ctx.arc(sunX, sunY, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         // Draw Active Tactical Target Vector Ray & Marker on Radar Canvas
         if (userCoords && target) {

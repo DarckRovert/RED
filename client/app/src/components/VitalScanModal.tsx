@@ -549,6 +549,47 @@ export function VitalScanModal() {
                                             <span>ALERTA DE SHOCK HEMODINÁMICO: Taquicardia/Hipoxia con vasoconstricción periférica detectada.</span>
                                         </div>
                                     )}
+
+                                    {/* ── Action Bridges: TCCC & MEDEVAC SOS ── */}
+                                    <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                        <button
+                                            onClick={() => {
+                                                navigate("tcccBallistics");
+                                                toast.info("🩸 Derivado a Triage Militar MARCH-PAWS");
+                                            }}
+                                            style={{
+                                                flex: 1, padding: "10px", borderRadius: "8px",
+                                                background: "rgba(255, 51, 85, 0.2)", border: "1px solid #FF3355",
+                                                color: "#FF3355", fontSize: "0.78rem", fontWeight: 800,
+                                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                            }}
+                                        >
+                                            <span>🩸</span>
+                                            <span>TRIAGE TCCC</span>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                import("../lib/emergency/MeshSosBeaconEngine").then(({ meshSosBeacon }) => {
+                                                    meshSosBeacon.activateSosBeacon({
+                                                        distressType: "TCCC_MEDICAL",
+                                                        triageColor: scanResult.isShockSuspected ? "RED" : "YELLOW",
+                                                        note: `MEDEVAC: FC ${scanResult.bpm} BPM, SpO2 ${scanResult.spo2}% ${scanResult.isShockSuspected ? "[SHOCK]" : ""}`,
+                                                        batteryLevel: 90
+                                                    }, "LOCAL_MEDIC", "Operador VitalScan");
+                                                    toast.success("🚨 9-Line MEDEVAC emitido por Malla SOS");
+                                                });
+                                            }}
+                                            style={{
+                                                flex: 1, padding: "10px", borderRadius: "8px",
+                                                background: "rgba(0, 240, 255, 0.15)", border: "1px solid var(--accent-cyan)",
+                                                color: "var(--accent-cyan)", fontSize: "0.78rem", fontWeight: 800,
+                                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                            }}
+                                        >
+                                            <span>📡</span>
+                                            <span>9-LINE MEDEVAC SOS</span>
+                                        </button>
+                                    </div>
                                 </>
                             )}
 
