@@ -318,6 +318,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'SONAR / SÍSMICO',
                 badgeColor: 'var(--accent-emerald)',
                 accentClass: 'glow-border-emerald'
+            },
+            {
+                id: 'atmosphericSafety',
+                action: 'atmosphericSafety',
+                icon: '💨',
+                title: 'Espectrometría de Gas & Calidad de Aire',
+                subtitle: 'Detección óptica de humo, PM2.5/PM10, CO ppm y cálculo de índice AQI por cámara.',
+                badge: 'AQI / HAZMAT',
+                badgeColor: 'var(--accent-amber)',
+                accentClass: 'glow-border-amber'
             }
         ],
         security: [

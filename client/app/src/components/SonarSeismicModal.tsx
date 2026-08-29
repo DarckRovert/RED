@@ -3,12 +3,18 @@
 import React, { useState, useEffect } from "react";
 import { acousticSonar, SonarMediumType, SonarPingResult } from "../lib/sensors/AcousticSonarEngine";
 import { seismicTriangulation, SurvivorTriangulationResult, SeismicSensorNode } from "../lib/sensors/SeismicTriangulationEngine";
+import { structuralHealthSeismic, StructuralHealthTelemetry } from "../lib/sensors/StructuralHealthSeismicEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function SonarSeismicModal() {
     const { navigate } = useRedStore();
-    const [activeTab, setActiveTab] = useState<"sonar" | "seismic">("sonar");
+    const [activeTab, setActiveTab] = useState<"sonar" | "seismic" | "structural">("sonar");
+    
+    // Structural Health State
+    const [structTelemetry, setStructTelemetry] = useState<StructuralHealthTelemetry>(() => structuralHealthSeismic.subscribe(() => {}) as any || {
+        isMonitoring: false, structuralIntegrityPct: 100, dominantFrequencyHz: 7.5, baselineFrequencyHz: 7.5, vibrationEnergyG2: 0.002, collapseRiskLevel: 'SAFE', alarmTriggered: false, sampleCount: 0, timestamp: Date.now()
+    });
     
     // Sonar States
     const [medium, setMedium] = useState<SonarMediumType>("AIR_20C");
@@ -28,11 +34,14 @@ export function SonarSeismicModal() {
             setSeismicResult(r);
             setNodes(seismicTriangulation.getNodes());
         });
+        const unsubStruct = structuralHealthSeismic.subscribe(setStructTelemetry);
 
         return () => {
             unsubSonar();
             unsubSeismic();
+            unsubStruct();
             acousticSonar.stopContinuousScan();
+            structuralHealthSeismic.stopMonitoring();
         };
     }, []);
 
@@ -102,22 +111,32 @@ export function SonarSeismicModal() {
                 <button
                     onClick={() => setActiveTab("sonar")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
                         background: activeTab === "sonar" ? "#00E5FF" : "transparent",
                         color: activeTab === "sonar" ? "#000" : "#AAA", border: "none", cursor: "pointer"
                     }}
                 >
-                    📡 Sonar ToF FMCW {sonarState.isScanning && "▶ BARRIDO"}
+                    📡 Sonar ToF {sonarState.isScanning && "▶"}
                 </button>
                 <button
                     onClick={() => setActiveTab("seismic")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
                         background: activeTab === "seismic" ? "#FF3355" : "transparent",
                         color: activeTab === "seismic" ? "#FFF" : "#AAA", border: "none", cursor: "pointer"
                     }}
                 >
-                    🪨 Triangulación Sísmica TDoA
+                    🪨 Sísmica TDoA
+                </button>
+                <button
+                    onClick={() => setActiveTab("structural")}
+                    style={{
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
+                        background: activeTab === "structural" ? "#FFB300" : "transparent",
+                        color: activeTab === "structural" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                    }}
+                >
+                    🏢 Anti-Colapso {structTelemetry.isMonitoring && "●"}
                 </button>
             </div>
 
@@ -224,6 +243,88 @@ export function SonarSeismicModal() {
                         >
                             🪨 SIMULAR DETECCIÓN DE 3 GOLPES DE RESCATE
                         </button>
+                    </div>
+                )}
+
+                {/* ── TAB 3: STRUCTURAL HEALTH RESONANCE SENTINEL ── */}
+                {activeTab === "structural" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ background: "rgba(255, 179, 0, 0.08)", border: "1px solid rgba(255, 179, 0, 0.3)", borderRadius: "12px", padding: "12px", fontSize: "0.74rem", color: "#DDD" }}>
+                            Monitoreo acelerométrico FFT de micro-vibraciones estructurales (0.5 a 25 Hz). Coloca el dispositivo sobre muros de carga para detectar fatiga de materiales y prevenir aplastamiento por réplicas.
+                        </div>
+
+                        {/* Master Integrity Status */}
+                        <div style={{
+                            padding: "16px", borderRadius: "12px",
+                            background: structTelemetry.collapseRiskLevel === 'IMMINENT_COLLAPSE' ? "rgba(255, 51, 85, 0.25)" : "rgba(10, 18, 36, 0.8)",
+                            border: `1.5px solid ${structTelemetry.collapseRiskLevel === 'IMMINENT_COLLAPSE' ? "#FF3355" : structTelemetry.collapseRiskLevel === 'STRUCTURAL_FATIGUE' ? "#FFB300" : "#00E676"}`,
+                            display: "flex", alignItems: "center", justifyContent: "space-between"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.75rem", color: "#AAA", fontWeight: 700 }}>INTEGRIDAD ESTRUCTURAL</div>
+                                <div style={{ fontSize: "2.2rem", fontWeight: 900, color: structTelemetry.structuralIntegrityPct < 50 ? "#FF3355" : "#00E676" }}>
+                                    {structTelemetry.structuralIntegrityPct}%
+                                </div>
+                                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: structTelemetry.collapseRiskLevel === 'IMMINENT_COLLAPSE' ? "#FF3355" : "#FFB300" }}>
+                                    ESTADO: {structTelemetry.collapseRiskLevel}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: "0.7rem", color: "#AAA" }}>RESONANCIA f0</div>
+                                <div style={{ fontSize: "1.4rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    {structTelemetry.dominantFrequencyHz} Hz
+                                </div>
+                                <div style={{ fontSize: "0.65rem", color: "#888" }}>Base: {structTelemetry.baselineFrequencyHz} Hz</div>
+                            </div>
+                        </div>
+
+                        {/* Sensor Metrics */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>ENERGÍA DE VIBRACIÓN</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#38BDF8" }}>{structTelemetry.vibrationEnergyG2} G²</div>
+                            </div>
+                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>MUESTRAS ANALIZADAS</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FFF" }}>{structTelemetry.sampleCount} frames</div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <button
+                                onClick={() => {
+                                    if (structTelemetry.isMonitoring) {
+                                        structuralHealthSeismic.stopMonitoring();
+                                        toast.info("Monitoreo estructural en pausa");
+                                    } else {
+                                        structuralHealthSeismic.startMonitoring();
+                                        toast.success("🏢 Monitoreo de resonancia sísmica activo");
+                                    }
+                                }}
+                                style={{
+                                    flex: 1, padding: "12px", borderRadius: "10px",
+                                    background: structTelemetry.isMonitoring ? "rgba(255, 51, 85, 0.2)" : "#FFB300",
+                                    color: structTelemetry.isMonitoring ? "#FF3355" : "#000",
+                                    fontWeight: 900, fontSize: "0.8rem", border: "none", cursor: "pointer"
+                                }}
+                            >
+                                {structTelemetry.isMonitoring ? "⏹ DETENER MONITOREO" : "▶ INICIAR CENTINELA SÍSMICO"}
+                            </button>
+                            <button
+                                onClick={() => {
+                                    structuralHealthSeismic.calibrateBaseline();
+                                    toast.success("⚖️ Frecuencia base calibrada a la estructura actual");
+                                }}
+                                style={{
+                                    padding: "12px 16px", borderRadius: "10px",
+                                    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
+                                    color: "#FFF", fontWeight: 800, fontSize: "0.8rem", cursor: "pointer"
+                                }}
+                            >
+                                ⚖️ CALIBRAR
+                            </button>
+                        </div>
                     </div>
                 )}
 

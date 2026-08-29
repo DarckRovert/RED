@@ -202,6 +202,7 @@ export default function Sidebar() {
                 { icon: "📡", label: "Sonar Acústico & Sismología de Rescate", action: "sonarSeismic" },
                 { icon: "☀️", label: "Navegación Celeste & PDR Inercial", action: "celestialPdr" },
                 { icon: "🤝", label: "Canje Anónimo ZK & Baliza Sísmica VLF", action: "zkBarterSubsurface" },
+                { icon: "💨", label: "Espectrometría de Gas & AQI", action: "atmosphericSafety" },
                 { icon: "🚨", label: t('modules.survival_beacon') || "Baliza SOS de Malla", action: "survivalBeacon" },
                 { icon: "🟠", label: t('modules.amber') || "Alerta Amber P2P", action: "amber" },
             ]

@@ -53,6 +53,7 @@ const AcousticWarfareModal   = dynamic(() => import("../components/AcousticWarfa
 const VitalResourcesModal    = dynamic(() => import("../components/VitalResourcesModal").then(m => ({ default: m.VitalResourcesModal })),    { ssr: false, loading: () => <AppLoader /> });
 const SonarSeismicModal      = dynamic(() => import("../components/SonarSeismicModal").then(m => ({ default: m.SonarSeismicModal })),      { ssr: false, loading: () => <AppLoader /> });
 const TacticalFoxhuntModal   = dynamic(() => import("../components/TacticalFoxhuntModal").then(m => ({ default: m.TacticalFoxhuntModal })),   { ssr: false, loading: () => <AppLoader /> });
+const AtmosphericSafetyModal = dynamic(() => import("../components/AtmosphericSafetyModal").then(m => ({ default: m.AtmosphericSafetyModal })), { ssr: false, loading: () => <AppLoader /> });
 const RfSpectrumModal      = dynamic(() => import("../components/RfSpectrumModal").then(m => ({ default: m.RfSpectrumModal })),      { ssr: false, loading: () => <AppLoader /> });
 const StegoVaultModal      = dynamic(() => import("../components/StegoVaultModal").then(m => ({ default: m.StegoVaultModal })),      { ssr: false, loading: () => <AppLoader /> });
 const ShakePairModal       = dynamic(() => import("../components/ShakePairModal").then(m => ({ default: m.ShakePairModal })),       { ssr: false, loading: () => <AppLoader /> });
@@ -646,6 +647,7 @@ export default function AppRouter() {
               {currentScreen === "vitalResources" && <VitalResourcesModal />}
               {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
               {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
+              {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
               {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
               {currentScreen === "stegoVault" && <StegoVaultModal />}
               {currentScreen === "shakePair" && <ShakePairModal />}
