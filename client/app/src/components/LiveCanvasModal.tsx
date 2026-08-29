@@ -151,11 +151,14 @@ export const LiveCanvasModal: React.FC = () => {
         const canvas = canvasRef.current;
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
-        const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-        const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+        const touch = "touches" in e && e.touches.length > 0 
+            ? e.touches[0] 
+            : ("changedTouches" in e && (e as any).changedTouches?.length > 0 ? (e as any).changedTouches[0] : null);
+        const clientX = touch ? touch.clientX : ("clientX" in e ? (e as React.MouseEvent).clientX : 0);
+        const clientY = touch ? touch.clientY : ("clientY" in e ? (e as React.MouseEvent).clientY : 0);
         return {
-            x: (clientX - rect.left) * (canvas.width / rect.width),
-            y: (clientY - rect.top) * (canvas.height / rect.height)
+            x: (clientX - rect.left) * (canvas.width / (rect.width || 1)),
+            y: (clientY - rect.top) * (canvas.height / (rect.height || 1))
         };
     };
 

@@ -49,11 +49,11 @@
   --glass-blur: blur(24px);
   --glass-highlight: rgba(255, 255, 255, 0.14);
 
-  /* Typography & Readability */
-  --text-primary:   rgba(255, 255, 255, 0.96);
-  --text-secondary: rgba(255, 255, 255, 0.65);
-  --text-muted:     rgba(255, 255, 255, 0.38);
-  --text-disabled:  rgba(255, 255, 255, 0.18);
+  /* Typography & Readability (WCAG AAA Calibrated) */
+  --text-primary:   #FFFFFF;
+  --text-secondary: rgba(255, 255, 255, 0.82);
+  --text-muted:     rgba(255, 255, 255, 0.58);
+  --text-disabled:  rgba(255, 255, 255, 0.32);
 
   /* Semantic Feedback */
   --success: #00E676;
@@ -1384,4 +1384,220 @@ video::-webkit-media-controls-enclosure {
 }
 video::-webkit-media-controls-panel {
   display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MILITARY-GRADE OPERATIONAL MODES & HUD SYSTEM (v66.0.0+)
+   MIL-STD-1472 / ATAK Ergonomics / Scotopic Vision / Solar High-Contrast
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Modo Luz Roja Escotópica (Preservación de Visión Nocturna 650nm) ────── */
+html.mode-scotopic-red,
+body.mode-scotopic-red {
+  --bg-void: #050002 !important;
+  --bg-deep: #0A0004 !important;
+  --bg-surface: #140008 !important;
+  --bg-lifted: #20000C !important;
+  --bg-card: rgba(28, 0, 10, 0.88) !important;
+  --bg-card-hover: rgba(45, 0, 16, 0.95) !important;
+  
+  --primary: #FF1A35 !important;
+  --primary-bright: #FF3355 !important;
+  --primary-glow: rgba(255, 26, 53, 0.45) !important;
+  --accent-crimson: #FF1A35 !important;
+  --accent-emerald: #FF4D66 !important;
+  --accent-cyan: #FF667D !important;
+  --accent-amber: #FF8093 !important;
+  --accent-purple: #FF4D66 !important;
+  
+  --text-primary: #FFCCD3 !important;
+  --text-secondary: #FFA3AF !important;
+  --text-muted: #B33646 !important;
+  
+  --glass-bg: rgba(20, 0, 7, 0.92) !important;
+  --glass-border: rgba(255, 30, 60, 0.3) !important;
+  --glass-border-active: rgba(255, 40, 70, 0.6) !important;
+  --glass-highlight: rgba(255, 50, 80, 0.2) !important;
+}
+
+/* ── 2. Modo Solar / Alto Contraste para Luz Solar Directa ──────────────────── */
+html.mode-solar-contrast,
+body.mode-solar-contrast {
+  --bg-void: #090C10 !important;
+  --bg-deep: #0E131A !important;
+  --bg-surface: #171E28 !important;
+  --bg-lifted: #212B3A !important;
+  --bg-card: rgba(22, 30, 42, 0.96) !important;
+  --bg-card-hover: rgba(30, 40, 58, 0.98) !important;
+  
+  --text-primary: #FFFFFF !important;
+  --text-secondary: #E4ECF5 !important;
+  --text-muted: #9BB0C6 !important;
+  
+  --glass-border: rgba(255, 255, 255, 0.28) !important;
+  --glass-border-active: var(--accent-cyan) !important;
+  --glass-highlight: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ── 3. Modo Supervivencia / Apagón DEFCON 1 (OLED Pure Black) ──────────────── */
+html.mode-defcon-survival,
+body.mode-defcon-survival {
+  --bg-void: #000000 !important;
+  --bg-deep: #000000 !important;
+  --bg-surface: #05060A !important;
+  --bg-lifted: #0A0C14 !important;
+  --bg-card: rgba(10, 12, 18, 0.96) !important;
+  --glass-blur: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* ── 4. Utilidades Tácticas de Grado Militar (HUD UI) ───────────────────────── */
+.tactical-tabular {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.hud-corner-box {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+}
+
+.hud-corner-box::before,
+.hud-corner-box::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-color: var(--accent-cyan);
+  pointer-events: none;
+}
+
+.hud-corner-box::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+
+.hud-corner-box::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+.pill-operational {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.70rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.radar-sweep-indicator {
+  position: relative;
+  overflow: hidden;
+}
+
+.radar-sweep-indicator::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 200%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 229, 255, 0.15) 50%, transparent 100%);
+  animation: radarSweep 3s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes radarSweep {
+  0% { transform: translateX(-50%); }
+  100% { transform: translateX(50%); }
+}
+
+/* ── Universal Tactical Modal & Overlay System ── */
+.tactical-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(2, 4, 10, 0.90);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: fadeIn 0.18s ease-out forwards;
+}
+
+.tactical-modal-card {
+  width: 100%;
+  max-width: 960px;
+  height: 90vh;
+  max-height: 850px;
+  background: linear-gradient(180deg, rgba(14, 18, 34, 0.98) 0%, rgba(6, 8, 16, 0.99) 100%);
+  border: 1.5px solid rgba(0, 229, 255, 0.35);
+  border-radius: 20px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(0, 229, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.tactical-omnibox {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 6px 12px;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.tactical-omnibox:focus-within {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.3);
+}
+
+.tactical-input {
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  color: #FFFFFF;
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.tactical-input:focus {
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+}
+
+/* ─── Tactical GPS Map & Tile Dark Mode ────────────────────────────────────────── */
+.leaflet-container {
+  background-color: #060810 !important;
+  font-family: inherit !important;
+}
+
+.tactical-dark-tile,
+.leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(120%) !important;
 }

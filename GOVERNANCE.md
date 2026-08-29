@@ -1,4 +1,4 @@
-# 🤖 RULESET AUTÓMATA RED v66.0.0 — FLUJO INTEGRAL DE GOBERNANZA
+# 🤖 RULESET AUTÓMATA RED v70.0.0 — FLUJO INTEGRAL DE GOBERNANZA
 
 ## **NIVEL 0: PRE-COMMIT (Git Hooks & Validation)**
 
@@ -29,13 +29,11 @@ RED/
 
 **Si archivo no pertenece a carpeta categoría → RECHAZAR commit**
 
-### Regla 0.3: Versionado Sincronizado
-**Antes de push a main:**
-- Verificar que `Cargo.toml` en raíz (workspace) tiene versión `X.Y.Z`
-- Verificar que TODOS los Cargo.toml hijos coinciden: `blockchain/Cargo.toml`, `core/Cargo.toml`, `node/Cargo.toml`, `red_mobile/Cargo.toml`
-- Verificar que `client/app/package.json` tiene MISMA versión numérica
-- Verificar que `README.md` menciona versión actual 2+ veces
-- ❌ RECHAZAR si hay discrepancias de versión
+### Regla 0.3: Versionado Sincronizado Atómico (SSOT)
+**Antes de push a main o compilación:**
+- **Ejecución Obligatoria**: Todo cambio de versión DEBE realizarse exclusivamente mediante `node scripts/bump_version.js <X.Y.Z>`.
+- Verificar que `client/app/src/lib/version.ts`, `package.json`, `build.gradle`, `sw.js`, `public/sw.js` y los 6 `Cargo.toml` (`raíz`, `core`, `red_mobile`, `node`, `blockchain`, `client`) están en 100% de paridad.
+- ❌ RECHAZAR y ABORTAR si existe cualquier discrepancia en los 12 archivos SSOT.
 
 ### Regla 0.4: Validación de Dependencias
 **Por cada cambio en `package.json`, `Cargo.toml`, o `Cargo.lock`:**
@@ -43,6 +41,10 @@ RED/
 - Ejecutar `cargo audit` en cada crate del workspace
 - Generar SBOM (Software Bill of Materials) con `cargo sbom` si disponible
 - ❌ RECHAZAR si hay vulnerabilidades críticas o altas sin mitigación documentada
+
+### Regla 0.5: Pre-Flight Build Hygiene
+- Antes de ejecutar cualquier compilación (`next build`, `cap sync`, `gradlew`), es MANDATORIO ejecutar `node scripts/pre_build_check.js` para purgar `.next/`, `out/`, `build/` y prevenir artefactos obsoletos o binarios huérfanos en `public/`.
+
 
 ---
 

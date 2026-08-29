@@ -68,7 +68,7 @@ export const AppearanceTab: React.FC = () => {
                                         )}
                                     </div>
                                     <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Detección dinámica según la configuración regional de tu dispositivo
+                                        {t('settings.auto_detect_sub')}
                                     </div>
                                 </div>
                             </div>
@@ -206,10 +206,10 @@ export const AppearanceTab: React.FC = () => {
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                     <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FFF", display: "flex", alignItems: "center", gap: "6px" }}>
                                         <span>🎛️</span>
-                                        <span>Configuración de Paleta Personalizada</span>
+                                        <span>{t('settings.custom_theme_title')}</span>
                                     </div>
                                     <span className="badge-tactical" style={{ fontSize: "0.65rem", fontWeight: 900, background: "var(--primary)", color: "#FFF" }}>
-                                        EN VIVO
+                                        {t('settings.custom_live_badge')}
                                     </span>
                                 </div>
 
@@ -217,7 +217,7 @@ export const AppearanceTab: React.FC = () => {
                                     {/* Color Primario */}
                                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                         <label style={{ fontSize: "0.74rem", color: "var(--text-secondary)", fontWeight: 700 }}>
-                                            Color Primario
+                                            {t('settings.custom_primary_color')}
                                         </label>
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                             <input
@@ -247,7 +247,7 @@ export const AppearanceTab: React.FC = () => {
                                     {/* Color Secundario / Acento */}
                                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                         <label style={{ fontSize: "0.74rem", color: "var(--text-secondary)", fontWeight: 700 }}>
-                                            Color Secundario / Acento
+                                            {t('settings.custom_accent_color')}
                                         </label>
                                         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                             <input
@@ -282,11 +282,15 @@ export const AppearanceTab: React.FC = () => {
                         {/* Escala de Tipografía */}
                         <div>
                             <h4 style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                                Escala Tipográfica & Densidad
+                                {t('settings.font_scale_title')}
                             </h4>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginTop: "8px" }}>
                                 {(["compact", "normal", "large"] as FontSizeScale[]).map((scale) => {
-                                    const labels = { compact: "Compacta (14px)", normal: "Estándar (16px)", large: "Amplia (18px)" };
+                                    const labels = { 
+                                        compact: t('settings.font_compact'), 
+                                        normal: t('settings.font_normal'), 
+                                        large: t('settings.font_large') 
+                                    };
                                     const isSelected = preferences.fontSize === scale;
                                     return (
                                         <button
@@ -306,9 +310,9 @@ export const AppearanceTab: React.FC = () => {
                         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Modo OLED Negro Absoluto (#000000)</div>
+                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>{t('settings.oled_mode_title')}</div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Apaga los píxeles en pantallas AMOLED para mínimo consumo.
+                                        {t('settings.oled_mode_desc')}
                                     </div>
                                 </div>
                                 <input
@@ -324,9 +328,9 @@ export const AppearanceTab: React.FC = () => {
 
                             <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Reducir Animaciones / Ahorro GPU</div>
+                                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>{t('settings.reduced_motion_title')}</div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Desactiva transiciones complejas para acelerar la interfaz en hardware limitado.
+                                        {t('settings.reduced_motion_desc')}
                                     </div>
                                 </div>
                                 <input

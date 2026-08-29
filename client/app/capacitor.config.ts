@@ -29,6 +29,9 @@ const config: CapacitorConfig = {
       androidSplashResourceName: 'splash',
       showSpinner: false,
     },
+    PrivacyScreen: {
+      enable: false,
+    },
   },
 };
 

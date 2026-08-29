@@ -374,4 +374,60 @@ export class BiometricLockEngine {
             isLocked: this.isLockedState,
         };
     }
+
+    public static async getSecurePin(key: string): Promise<string | null> {
+        // 1. Instant check in localStorage / sessionStorage
+        if (typeof window !== "undefined") {
+            try {
+                const val = localStorage.getItem(key) || sessionStorage.getItem(key);
+                if (val && val.trim().length >= 4) return val.trim();
+            } catch {}
+        }
+        // 2. Hardware Keystore / SecureStorage check
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                const res = await SecureStoragePlugin.get({ key });
+                if (res && res.value && res.value.trim().length >= 4) {
+                    const clean = res.value.trim();
+                    if (typeof window !== "undefined") {
+                        try { localStorage.setItem(key, clean); } catch {}
+                    }
+                    return clean;
+                }
+            } catch {}
+        }
+        return null;
+    }
+
+    public static async setSecurePin(key: string, value: string): Promise<void> {
+        if (typeof window !== "undefined") {
+            try { localStorage.setItem(key, value); } catch {}
+        }
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                await SecureStoragePlugin.set({ key, value });
+            } catch {}
+        }
+    }
+
+    public static async clearSecurePin(key: string): Promise<void> {
+        if (typeof window !== "undefined") {
+            try {
+                localStorage.removeItem(key);
+                sessionStorage.removeItem(key);
+            } catch {}
+        }
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                await SecureStoragePlugin.remove({ key });
+            } catch {}
+        }
+    }
 }
+
+export const getSecurePin = BiometricLockEngine.getSecurePin;
+export const setSecurePin = BiometricLockEngine.setSecurePin;
+export const clearSecurePin = BiometricLockEngine.clearSecurePin;

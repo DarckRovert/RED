@@ -23,7 +23,7 @@ export default function Sidebar() {
         identity, conversations: rawConvs, contacts: rawConts, groups: rawGrps, nodeOnline, navigate, fetchData,
         pinnedChatIds: rawPinned, archivedChatIds: rawArchived, togglePinChat, toggleArchiveChat, peerStories,
         addContact, deleteContact, blockNode, pendingContactRequests: rawPending,
-        acceptContactRequest, rejectContactRequest,
+        acceptContactRequest, rejectContactRequest, preferences, updatePreferences,
     } = useRedStore();
 
     const conversations = Array.isArray(rawConvs) ? rawConvs : [];
@@ -178,22 +178,32 @@ export default function Sidebar() {
             ]
         },
         {
-            title: t('modules.cat_defense_shield'),
+            title: t('modules.cat_defense_shield') || "🛡️ Seguridad & Guerra Electrónica",
             items: [
-                { icon: "🛡️", label: t('modules.global_shield'), action: "globalShield" },
-                { icon: "⚡", label: t('modules.blackout'), action: "blackout" },
-                { icon: "💀", label: t('modules.dms'), action: "dms" },
-                { icon: "🛡️", label: t('modules.security'), action: "security" },
+                { icon: "🛡️", label: t('modules.global_shield') || "Escudo Global DEFCON", action: "globalShield" },
+                { icon: "🛰️", label: "Matriz C4ISR & Caos EMP", action: "c4isrEmpDrill" },
+                { icon: "🦊", label: "Radiogoniometría RDF & Caza Foxhunt", action: "tacticalFoxhunt" },
+                { icon: "🔇", label: "Guerra Acústica & Ondas Binaurales", action: "acousticWarfare" },
+                { icon: "🎞️", label: "Transferencia Air-Gap & Audio Stego", action: "airGapStego" },
+                { icon: "🔑", label: "Recuperación Social Shamir (SSS)", action: "shamirRecovery" },
+                { icon: "👁️", label: "Visión Edge Táctica & HUD Térmico", action: "tacticalVisionScan" },
+                { icon: "⚡", label: t('modules.blackout') || "Simulador Blackout", action: "blackout" },
+                { icon: "💀", label: t('modules.dms') || "Hombre Caído (Dead-Man's Switch)", action: "dms" },
+                { icon: "🛡️", label: t('modules.security') || "Centro de Seguridad", action: "security" },
             ]
         },
         {
-            title: t('modules.cat_emergency_health'),
+            title: t('modules.cat_emergency_health') || "🚨 Supervivencia, Rescate & Salud Táctica",
             items: [
-                { icon: "🫀", label: t('modules.vital_scan'), action: "vitalScan" },
-                { icon: "🚨", label: t('modules.survival_beacon'), action: "survivalBeacon" },
-                { icon: "🟠", label: t('modules.amber'), action: "amber" },
-                { icon: "💀", label: t('modules.dms'), action: "dms" },
-                { icon: "⚡", label: t('modules.blackout'), action: "blackout" },
+                { icon: "🫀", label: t('modules.vital_scan') || "Escáner Biovital", action: "vitalScan" },
+                { icon: "🩸", label: "TCCC Triage MARCH-PAWS & Balística", action: "tcccBallistics" },
+                { icon: "☢️", label: "Dosimetría CBRN & Pasarela Satelital", action: "cbrnSatellite" },
+                { icon: "💧", label: "Recursos Vitales: Agua & Energía", action: "vitalResources" },
+                { icon: "📡", label: "Sonar Acústico & Sismología de Rescate", action: "sonarSeismic" },
+                { icon: "☀️", label: "Navegación Celeste & PDR Inercial", action: "celestialPdr" },
+                { icon: "🤝", label: "Canje Anónimo ZK & Baliza Sísmica VLF", action: "zkBarterSubsurface" },
+                { icon: "🚨", label: t('modules.survival_beacon') || "Baliza SOS de Malla", action: "survivalBeacon" },
+                { icon: "🟠", label: t('modules.amber') || "Alerta Amber P2P", action: "amber" },
             ]
         },
         {
@@ -327,8 +337,51 @@ export default function Sidebar() {
                             </button>
                         </div>
 
+                        {/* Operational Mode Quick Selector */}
+                        <div style={{ padding: "0 16px 10px 16px", display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, textTransform: "uppercase" }}>
+                                MODO OPERACIONAL
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "4px" }}>
+                                {[
+                                    { id: 'stealth', icon: '🕶️', label: 'Sigilo' },
+                                    { id: 'scotopic_red', icon: '🔴', label: 'Luz Roja' },
+                                    { id: 'solar', icon: '☀️', label: 'Solar' },
+                                    { id: 'survival', icon: '⚡', label: 'Apagón' },
+                                    { id: 'offgrid', icon: '🛒', label: 'Off-Grid' }
+                                ].map(m => {
+                                    const isSel = (preferences.operationalMode || 'stealth') === m.id;
+                                    return (
+                                        <button
+                                            key={m.id}
+                                            type="button"
+                                            onClick={() => updatePreferences({ operationalMode: m.id as any })}
+                                            style={{
+                                                padding: "6px 4px",
+                                                borderRadius: "var(--radius-sm)",
+                                                border: isSel ? "1px solid var(--accent-cyan)" : "1px solid var(--glass-border)",
+                                                background: isSel ? "rgba(0, 229, 255, 0.18)" : "rgba(255,255,255,0.03)",
+                                                color: isSel ? "#FFF" : "var(--text-secondary)",
+                                                fontSize: "0.68rem",
+                                                fontWeight: 800,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                gap: "4px",
+                                                cursor: "pointer",
+                                                fontFamily: "JetBrains Mono, monospace"
+                                            }}
+                                        >
+                                            <span>{m.icon}</span>
+                                            <span>{m.label}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
                         {/* Modules Scrollable Area */}
-                        <div className="scroll-container" style={{ flex: 1, padding: "8px 16px 36px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                        <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 16px 36px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
                             {filteredMenuCategories.map((cat: { title: string; items: Array<{ icon: string; label: string; action: string }> }) => (
                                 <div key={cat.title} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                     <div style={{
@@ -484,28 +537,28 @@ export default function Sidebar() {
                         onClick={item.action}
                         style={{
                             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                            gap: "2px", 
-                            background: item.isModulesBtn && item.active ? "rgba(0, 229, 255, 0.15)" : "transparent",
-                            border: item.isModulesBtn ? (item.active ? "1px solid rgba(0, 229, 255, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)") : "none",
+                            gap: "3px", 
+                            background: item.isModulesBtn && item.active ? "rgba(0, 229, 255, 0.18)" : "transparent",
+                            border: item.isModulesBtn ? (item.active ? "1px solid rgba(0, 229, 255, 0.6)" : "1px solid rgba(255, 255, 255, 0.12)") : "none",
                             color: item.active ? (item.isModulesBtn ? "var(--accent-cyan)" : "var(--accent-crimson)") : (item.highlight ? "var(--accent-cyan)" : (item.isModulesBtn ? "var(--accent-amber)" : "var(--text-secondary)")),
-                            cursor: "pointer", padding: "4px 6px", borderRadius: "10px",
+                            cursor: "pointer", padding: "6px 8px", borderRadius: "12px",
                             transition: "all 0.15s ease", position: "relative",
-                            minWidth: "46px"
+                            minWidth: "48px", minHeight: "48px"
                         }}
                     >
-                        <span style={{ fontSize: "1.15rem", filter: item.active ? "drop-shadow(0 0 8px rgba(0,229,255,0.6))" : "none" }}>
+                        <span style={{ fontSize: "1.25rem", filter: item.active ? "drop-shadow(0 0 10px rgba(0,229,255,0.7))" : "none" }}>
                             {item.icon}
                         </span>
-                        <span style={{ fontSize: "0.60rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.2px", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: "0.72rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.3px", whiteSpace: "nowrap" }}>
                             {item.label}
                         </span>
                         {item.badgeText && (
                             <span style={{
                                 position: "absolute", top: 1, right: 2,
-                                fontSize: "0.50rem", fontWeight: 900,
+                                fontSize: "0.58rem", fontWeight: 900,
                                 background: "var(--accent-amber)", color: "#000",
-                                padding: "0 3px", borderRadius: "4px",
-                                boxShadow: "0 0 6px var(--accent-amber)"
+                                padding: "1px 4px", borderRadius: "6px",
+                                boxShadow: "0 0 8px var(--accent-amber)"
                             }}>
                                 {item.badgeText}
                             </span>

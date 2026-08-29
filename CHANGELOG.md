@@ -1,5 +1,37 @@
 # Changelog
 
+## [70.0.0-tactical-c4isr-sovereign-survival-master] - 2026-08-29
+
+### 🛡️ Tactical C4ISR & Sovereign Survival Master Edition (Fases P0 a P23)
+
+**1. Suite C4ISR, SITREP & Guerra Electrónica:**
+- **Matriz C4ISR Unificada (`C4isrTacticalMatrixEngine` + `C4isrEmpDrillModal`):** Teatro de operaciones militar unificado, informe ejecutivo C4ISR y ejercicios de caos / estrés frente a pulsos EMP.
+- **Radiogoniometría Táctica RDF & Caza Foxhunt (`TacticalRdfEngine` + `RdfTriangulationEngine` + `TacticalFoxhuntModal`):** Muestreo direccional polar 360° en 16 sectores y triangulación hiperbólica de líneas de marcación (LOB) para cazar transmisores clandestinos, jammers y balizas.
+- **Guerra Acústica Anti-Micrófonos & Bio-Enfoque (`AcousticScramblerEngine` + `TacticalBinauralEngine` + `AcousticWarfareModal`):** Perturbador de ruido rosa y ultrasonido de 20.5 kHz para saturar micrófonos MEMS espía, y generador estéreo de ondas binaurales (Gamma 40Hz, Beta 18Hz, Alpha 10Hz, Theta 6Hz y Solfeggio 528/432Hz).
+- **Transferencia Air-Gap Óptica & Audio Stego (`AirGapAnimatedQrEngine` + `PsychoacousticStegoEngine` + `AirGapStegoModal`):** Streaming de códigos QR animados de alta densidad con CRC-32 y modulación esteganográfica psicoacústica en audio WAV/PCM (14.5-17.5 kHz).
+- **Visión Edge Táctica (`TacticalEdgeVisionEngine` + `TacticalVisionScanModal`):** Detección de amenazas (Fuego, Humo, Drones, Bajas) y visor holográfico con shaders NVG / FLIR.
+- **Simbología Militar MIL-STD-2525D / APP-6 & SITREP (`MilStd2525Engine` + `SitrepEngine`):** Renderizado vectorial SVG de unidades Blue/Red/Neutral Force Tracking.
+
+**2. Navegación Soberana, Sensores & Rescate USAR:**
+- **Navegación Celeste Astronómica (`CelestialNavigationEngine` + `CelestialPdrModal`):** Efemérides Sol/Luna (Meeus), crepúsculos tácticos náuticos/astronómicos y estimador de Lat/Lon por Mediodía Solar sin GNSS.
+- **Navegación Inercial PDR (`PedestrianDeadReckoningEngine`):** Integración de pasos y desplazamiento 2D Norte/Este para desplazamiento en túneles e interiores.
+- **Sonar Acústico FMCW & Triangulación Sísmica (`AcousticSonarEngine` + `SeismicTriangulationEngine` + `SonarSeismicModal`):** Medición de cavidades por ToF (aire, concreto, agua, acero) y triangulación sísmica TDoA de 3 golpes de supervivientes sepultados.
+- **Dosimetría de Purificación H2O & Batería (`WaterPurificationEngine` + `TacticalPowerGovernorEngine` + `VitalResourcesModal`):** Dosificación química exacta (Cloro 5%, Yodo 2%, NaDCC, Solar SODIS) y cálculo de autonomía de batería en horas con balance fotovoltaico.
+- **Dosimetría CBRN Nuclear & Pasarela Satelital (`CbrnRadiationEngine` + `SatelliteMeshGatewayEngine` + `CbrnSatelliteModal`):** Tasa de dosis $\mu\text{Sv/h}$, dosis acumulada $\text{mSv}$, $T_{stay}$ y ráfagas satelitales Iridium SBD.
+
+**3. Criptografía Cuántica & Identidad de Resiliencia:**
+- **Bóveda de Canje Anónimo zk-Merkle (`ZeroKnowledgeBarterEngine` + `ZkBarterSubsurfaceModal`):** Pruebas de pertenencia Merkle en conocimiento cero con *Nullifiers* anti-doble gasto y baliza acústica sub-estructural VLF (25-60 Hz).
+- **Recuperación Social Shamir SSS 3-de-5 (`ShamirSecretSharingEngine` + `ShamirSocialRecoveryVault` + `ShamirRecoveryModal`):** Cuerpos finitos $GF(256)$ para restauración distribuida de claves maestras.
+- **TCCC Triage MARCH-PAWS & Balística Mil-Dot (`TacticalTcccEngine` + `TacticalBallisticsEngine` + `TcccBallisticsModal`):** Protocolo de trauma militar con temporizadores de torniquetes CAT y cálculo balístico 4-DOF en 0.1 MRAD / 1/4 MOA.
+- **Caja Negra Forense Inmutable (`ForensicBlackBoxEngine`):** Cadena de bloques local encadenada por SHA-256 para auditoría de eventos operacionales.
+
+**4. Infraestructura de Transporte y Gobernanza de Malla:**
+- **Gobernador Multi-Bearer Táctico (`DynamicBearerGovernor` + `FrequencyHoppingEngine` + `SwarmHealthHUD`):** Conmutación sub-200ms anti-jamming, salto de frecuencia espectral FHSS y telemetría de enjambre.
+- **Micro-Ráfagas LPI/LPD (`TacticalMicroBurstEngine`):** Dispersión temporal aleatoria para evasión de detección SIGINT.
+- **Versión:** `70.0.0` / `versionCode 70000` / `SHA-256 A72BEBB2D5E1374219271B49DCA190ED509F86681081A114ABF7AF92DD93103D`.
+
+---
+
 ## [66.0.0-sovereign-app-store-hyper-browser] - 2026-08-28
 
 ### Sovereign Mini-Apps, App Store P2P, Hyper-Browser & Multi-Rail Payments Edition

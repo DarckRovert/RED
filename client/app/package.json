@@ -1,9 +1,10 @@
 {
   "name": "app",
-  "version": "66.0.0",
+  "version": "70.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
+    "prebuild": "node ../../scripts/pre_build_check.js",
     "dev": "next dev",
     "build": "next build",
     "build:mobile": "node -e \"process.env.GITHUB_PAGES=''; process.env.NEXT_PUBLIC_BASE_PATH=''; require('child_process').execSync('next build', {stdio: 'inherit', env: {...process.env, GITHUB_PAGES: '', NEXT_PUBLIC_BASE_PATH: ''}});\"",
@@ -30,6 +31,7 @@
     "@capacitor-community/privacy-screen": "^6.0.0",
     "@capacitor/android": "^8.2.0",
     "@capacitor/app": "^8.0.1",
+    "@capacitor/browser": "^8.0.4",
     "@capacitor/camera": "^8.0.2",
     "@capacitor/cli": "^8.1.0",
     "@capacitor/clipboard": "^8.0.1",

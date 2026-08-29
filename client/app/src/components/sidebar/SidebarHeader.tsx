@@ -48,10 +48,10 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     const { t } = useTranslation();
 
     const filters: { id: ChatFilterType; label: string; icon: string; badge?: number }[] = [
-        { id: "all", label: "Todos", icon: "💬" },
-        { id: "unread", label: "No Leídos", icon: "🔔", badge: unreadTotal },
-        { id: "groups", label: "Grupos", icon: "👥" },
-        { id: "channels", label: "Canales", icon: "📻" },
+        { id: "all", label: t('common.all') || "Todos", icon: "💬" },
+        { id: "unread", label: unreadTotal > 0 ? `${t('common.unread')} (${unreadTotal})` : (t('common.unread') || "No Leídos"), icon: "🔔", badge: unreadTotal },
+        { id: "groups", label: t('nav.squads') || "Escuadrones", icon: "👥" },
+        { id: "channels", label: t('nav.channels') || "Canales", icon: "📻" },
     ];
 
     return (

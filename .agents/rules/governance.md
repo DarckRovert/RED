@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v65.0.1
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v70.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 
@@ -32,5 +32,10 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
    - Derivación de claves con `HKDF-SHA256` y `Argon2id` (`m_cost >= 65536, t_cost >= 3, parallelism >= 4`).
    - Cifrado total en reposo para Sled DB (`CryptoEngine::encrypt()` / `CryptoEngine::decrypt()`).
 
-5. **Nivel 6 - Automatización CI/CD**:
+5. **Nivel 5 - Versionado Atómico & Pre-Build Hygiene (SSOT)**:
+   - **Prohibición de Edición Manual Dispersa**: Queda estrictamente prohibido actualizar manualmente la versión en archivos aislados. Todo incremento o sincronización de versión DEBE ejecutarse mediante `node scripts/bump_version.js <X.Y.Z>`.
+   - **Pre-Flight Check Obligatorio**: Antes de compilar cualquier bundle (`next build`, `cap sync`, Gradle APK), ES OBLIGATORIO ejecutar `node scripts/pre_build_check.js` para purgar caché obsoleta y validar 100% de paridad en los 12 archivos SSOT.
+
+6. **Nivel 6 - Automatización CI/CD**:
    - Todos los cambios deben pasar sin excepción los pipelines de `.github/workflows/` (`lint.yml`, `security.yml`, `build.yml`, `test.yml`, `build-android.yml`, `release.yml`).
+

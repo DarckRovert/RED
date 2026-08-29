@@ -8,6 +8,8 @@
 
 import { TokenomicsEngine } from '../network/TokenomicsEngine';
 import { RedAPI } from '../api';
+import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
 export interface ChainTransaction {
     id: string;
@@ -101,12 +103,8 @@ export class LocalChainLedger {
                 return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
             } catch {}
         }
-        let hash = 0;
-        for (let i = 0; i < data.length; i++) {
-            hash = ((hash << 5) - hash) + data.charCodeAt(i);
-            hash |= 0;
-        }
-        return Math.abs(hash).toString(16).padStart(64, '0');
+        const buf = new TextEncoder().encode(data);
+        return bytesToHex(nobleSha256(buf));
     }
 
     private async calculateMerkleRoot(txs: ChainTransaction[]): Promise<string> {
@@ -318,6 +316,10 @@ export class LocalChainLedger {
 
     public getBlocks(): ChainBlock[] {
         return [...this.blocks].reverse();
+    }
+
+    public getLatestBlock(): ChainBlock | null {
+        return this.blocks.length > 0 ? this.blocks[this.blocks.length - 1] : null;
     }
 
     public getBlockByHeight(height: number): ChainBlock | undefined {

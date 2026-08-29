@@ -116,36 +116,32 @@ export class DnsTunnelEngine {
     this.stats.packetsSent++;
     this.stats.bytesTransmitted += dnsHostname.length;
 
-    try {
-      // Intentar consulta DoH directa exenta de cobro en redes móviles
-      const dohUrl = `${this.DOH_PROVIDERS[0]}?name=${encodeURIComponent(dnsHostname)}&type=TXT`;
-      const res = await fetch(dohUrl, {
-        headers: { Accept: "application/dns-json" },
-        cache: "no-store",
-      });
+    for (const provider of this.DOH_PROVIDERS) {
+      try {
+        const dohUrl = `${provider}?name=${encodeURIComponent(dnsHostname)}&type=TXT`;
+        const res = await fetch(dohUrl, {
+          headers: { Accept: "application/dns-json" },
+          cache: "no-store",
+        });
 
-      const latencyMs = Math.round(performance.now() - startTime);
-      this.stats.lastResponseTimeMs = latencyMs;
+        const latencyMs = Math.round(performance.now() - startTime);
+        this.stats.lastResponseTimeMs = latencyMs;
 
-      if (res.ok) {
-        const json = await res.json();
-        this.stats.packetsReceived++;
-        const answer = json.Answer && json.Answer.length > 0 ? json.Answer[0].data : "OK_ACK";
-        return { success: true, responseTxt: answer, latencyMs };
-      }
-    } catch (e) {
-      // Fallback a simulación nativa UDP 53 local
+        if (res.ok) {
+          const json = await res.json();
+          this.stats.packetsReceived++;
+          const answer = json.Answer && json.Answer.length > 0 ? json.Answer[0].data : "OK_ACK";
+          return { success: true, responseTxt: answer, latencyMs };
+        }
+      } catch {}
     }
 
     const latencyMs = Math.round(performance.now() - startTime);
-    // BUG-15 Fix: DoH failed — report failure honestly instead of simulating success.
-    // The caller should decide whether to retry with another provider or abort.
     return {
         success: false,
         responseTxt: undefined,
         latencyMs,
-        // Expose reason for UI/logging
-        reason: 'DoH request failed — DNS tunneling unavailable on current network',
+        reason: 'DoH request failed on all fallback providers (Cloudflare, Google, Quad9)',
     } as { success: boolean; responseTxt?: string; latencyMs: number };
   }
 

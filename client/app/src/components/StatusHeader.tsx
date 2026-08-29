@@ -4,25 +4,43 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { RedAPI } from "../lib/api";
+import { SettingsManager } from "../lib/settingsManager";
+import { KineticDutyGovernor } from "../lib/KineticDutyGovernor";
 
 export default function StatusHeader() {
-    const { nodeOnline, status, identity, navigate } = useRedStore();
+    const { nodeOnline, status, identity, navigate, preferences, updatePreferences } = useRedStore();
     const { t } = useTranslation();
     const [meshCounts, setMeshCounts] = useState({ wifi: 0, ble: 0, lora: 0, total: 0 });
     const [loraActive, setLoraActive] = useState(false);
+    const [batteryInfo, setBatteryInfo] = useState<{ level: number; charging: boolean; profile: string }>({
+        level: 100,
+        charging: false,
+        profile: 'BALANCED_PATROL'
+    });
+    const [showModeModal, setShowModeModal] = useState(false);
 
     useEffect(() => {
         setLoraActive(typeof window !== "undefined" && localStorage.getItem("red_lora_enabled") === "true");
+        
+        // Refresh battery duty state
+        const governor = KineticDutyGovernor.getInstance();
+        const telem = governor.getTelemetry();
+        setBatteryInfo({
+            level: telem.batteryLevel,
+            charging: telem.isCharging,
+            profile: telem.currentProfile
+        });
+
         if (!nodeOnline) return;
         const refresh = async () => {
             try {
                 const peers = await RedAPI.getPeers();
                 let wifi = 0, ble = 0, lora = 0, total = 0;
                 for (const p of peers) {
-                    const t = (p.transport || "").toLowerCase();
-                    if (t === "wifi_direct" || t === "websocket" || t === "quic") wifi++;
-                    else if (t === "ble") ble++;
-                    else if (t === "lorawan" || t === "lora") lora++;
+                    const tr = (p.transport || "").toLowerCase();
+                    if (tr === "wifi_direct" || tr === "websocket" || tr === "quic") wifi++;
+                    else if (tr === "ble") ble++;
+                    else if (tr === "lorawan" || tr === "lora") lora++;
                     total++;
                 }
                 setMeshCounts({ wifi, ble, lora, total });
@@ -47,6 +65,23 @@ export default function StatusHeader() {
         BLE:        "var(--accent-cyan)",
         "P2P MESH": "var(--accent-amber)",
         STANDALONE: "var(--accent-crimson)",
+    };
+
+    const currentMode = preferences.operationalMode || 'stealth';
+
+    const operationalModes = [
+        { id: 'stealth', label: 'Sigilo OLED', icon: '🕶️', desc: 'Carbón profundo, baja fatiga ocular (Standard)' },
+        { id: 'scotopic_red', label: 'Luz Roja (650nm)', icon: '🔴', desc: 'Visión nocturna militar sin deslumbramiento' },
+        { id: 'solar', label: 'Luz Solar / Exterior', icon: '☀️', desc: 'Alto contraste y bordes reforzados anti-reflejo' },
+        { id: 'survival', label: 'Apagón / Supervivencia', icon: '⚡', desc: 'DEFCON 1, pure black OLED, máximo ahorro' },
+        { id: 'offgrid', label: 'Comercio & Campo', icon: '🛒', desc: 'Terminal de vales Ed25519 y radar 360°' },
+    ];
+
+    const currentModeObj = operationalModes.find(m => m.id === currentMode) || operationalModes[0];
+
+    const handleSelectMode = (modeId: any) => {
+        updatePreferences({ operationalMode: modeId });
+        setShowModeModal(false);
     };
 
     const isOffline = !nodeOnline;
@@ -77,102 +112,261 @@ export default function StatusHeader() {
     }
 
     return (
-        <div style={{
-            width: "100%",
-            background: "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(8, 10, 20, 0.98) 100%)",
-            borderBottom: "1.5px solid rgba(255, 255, 255, 0.12)",
-            boxShadow: "0 4px 20px rgba(0, 0, 0, 0.6)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: "calc(4px + var(--safe-top, 0px)) 12px 4px 12px",
-            fontFamily: "JetBrains Mono, monospace",
-            fontSize: "0.72rem",
-            color: "var(--text-secondary)",
-            zIndex: 50,
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            flexShrink: 0,
-            gap: "8px"
-        }}>
-            {/* Left: Active Transport Pill */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
-                <span style={{
-                    width: 8, height: 8, borderRadius: "50%",
-                    background: color, boxShadow: `0 0 10px ${color}`,
-                    display: "inline-block", flexShrink: 0
-                }} />
-                <span style={{ color: "#FFFFFF", fontWeight: 900, letterSpacing: "0.4px", whiteSpace: "nowrap", textShadow: "0 1px 4px rgba(0,0,0,0.8)" }}>
-                    {activeNetwork}
-                </span>
-                <span style={{ color: "rgba(255, 255, 255, 0.6)", fontSize: "0.68rem", fontWeight: 700, whiteSpace: "nowrap" }}>
-                    ({meshCounts.total})
-                </span>
-            </div>
+        <>
+            <div style={{
+                width: "100%",
+                background: "linear-gradient(180deg, rgba(12, 15, 30, 0.98) 0%, rgba(6, 8, 16, 0.99) 100%)",
+                borderBottom: "1.5px solid var(--glass-border)",
+                boxShadow: "0 4px 25px rgba(0, 0, 0, 0.7)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "calc(4px + var(--safe-top, 0px)) 12px 4px 12px",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: "0.72rem",
+                color: "var(--text-secondary)",
+                zIndex: 50,
+                backdropFilter: "blur(20px)",
+                WebkitBackdropFilter: "blur(20px)",
+                flexShrink: 0,
+                gap: "8px"
+            }}>
+                {/* ── Left: Operational Mode Pill ── */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <button
+                        type="button"
+                        onClick={() => setShowModeModal(true)}
+                        style={{
+                            padding: "4px 8px",
+                            background: "rgba(0, 0, 0, 0.6)",
+                            border: "1px solid rgba(255, 255, 255, 0.18)",
+                            borderRadius: "8px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            color: "#FFFFFF",
+                            fontSize: "11px",
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            boxShadow: "0 2px 6px rgba(0,0,0,0.4)"
+                        }}
+                        title={t('status_header.switch_mode') || "Cambiar Modo Operacional"}
+                    >
+                        <span>{currentModeObj.icon}</span>
+                        <span style={{ letterSpacing: "0.5px", textTransform: "uppercase" }}>{currentModeObj.label}</span>
+                        <span style={{ fontSize: "9px", opacity: 0.6 }}>▼</span>
+                    </button>
 
-            {/* Right: Quick Telemetry & Shortcuts */}
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-                <div style={{ display: "flex", gap: "6px", fontSize: "0.68rem", fontWeight: 700 }}>
-                    {meshCounts.wifi > 0 && <span style={{ color: "var(--accent-emerald)", textShadow: "0 0 6px rgba(0,230,118,0.4)" }}>WIFI:{meshCounts.wifi}</span>}
-                    {meshCounts.ble > 0 && <span style={{ color: "var(--accent-cyan)", textShadow: "0 0 6px rgba(0,229,255,0.4)" }}>BLE:{meshCounts.ble}</span>}
-                    {meshCounts.lora > 0 && <span style={{ color: "var(--accent-purple, #B388FF)", textShadow: "0 0 6px rgba(179,136,255,0.4)" }}>LORA:{meshCounts.lora}</span>}
+                    {/* Active Transport Pill */}
+                    <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "rgba(0, 0, 0, 0.4)",
+                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                        padding: "3px 8px",
+                        borderRadius: "8px",
+                        fontSize: "10px"
+                    }}>
+                        <span style={{
+                            width: 7, height: 7, borderRadius: "50%",
+                            background: color, boxShadow: `0 0 8px ${color}`,
+                            display: "inline-block", flexShrink: 0
+                        }} />
+                        <span style={{ color: "#FFFFFF", fontWeight: 900, letterSpacing: "0.5px" }}>
+                            {activeNetwork}
+                        </span>
+                        <span style={{ color: "var(--text-muted)", fontWeight: 700 }}>
+                            ({meshCounts.total})
+                        </span>
+                    </div>
                 </div>
 
-                <button
-                    onClick={() => navigate("aiCopilot")}
-                    style={{
-                        background: "linear-gradient(135deg, rgba(0,229,255,0.22) 0%, rgba(2,132,199,0.3) 100%)", 
-                        border: "1.5px solid rgba(0,229,255,0.6)",
-                        borderRadius: "var(--radius-full)", padding: "2px 9px", color: "#E0F7FA",
-                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-                        boxShadow: "0 0 10px rgba(0,229,255,0.35)", transition: "all 0.15s ease"
-                    }}
-                    title={t('status_header.ai_tooltip')}
-                >
-                    {t('status_header.ai_btn')}
-                </button>
+                {/* ── Right: Telemetry & Tactical Actions ── */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    {/* Kinematic Battery Indicator */}
+                    <div 
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            background: "rgba(0, 0, 0, 0.4)",
+                            border: "1px solid rgba(255, 255, 255, 0.12)",
+                            padding: "3px 8px",
+                            borderRadius: "8px",
+                            fontSize: "10px",
+                            fontWeight: 800
+                        }}
+                        title={`Batería Cinemática: ${batteryInfo.level}% (${batteryInfo.profile})`}
+                    >
+                        <span>{batteryInfo.charging ? "⚡" : "🔋"}</span>
+                        <span style={{ color: "#FFFFFF" }} className="tactical-tabular">{batteryInfo.level}%</span>
+                    </div>
 
-                <button
-                    onClick={() => navigate("commercialHub")}
-                    style={{
-                        background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(255,51,85,0.25) 100%)", 
-                        border: "1.5px solid rgba(255,60,95,0.6)",
-                        borderRadius: "var(--radius-full)", padding: "2px 9px", color: "#FFE4E8",
-                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-                        boxShadow: "0 0 10px rgba(232,33,58,0.35)", transition: "all 0.15s ease"
-                    }}
-                >
-                    {t('status_header.hub_btn')}
-                </button>
+                    {/* Shortcuts */}
+                    <button
+                        type="button"
+                        onClick={() => navigate("aiCopilot")}
+                        style={{
+                            padding: "4px 8px",
+                            background: "rgba(0, 229, 255, 0.12)",
+                            border: "1px solid rgba(0, 229, 255, 0.5)",
+                            borderRadius: "8px",
+                            color: "var(--accent-cyan)",
+                            fontWeight: 900,
+                            fontSize: "10px",
+                            cursor: "pointer",
+                            boxShadow: "0 0 8px rgba(0,229,255,0.2)"
+                        }}
+                        title="Asistente de IA Táctico Offline"
+                    >
+                        🤖 IA
+                    </button>
 
-                <button
-                    onClick={() => navigate("nodemap")}
-                    style={{
-                        background: "rgba(255,255,255,0.1)", border: "1.5px solid rgba(0, 229, 255, 0.4)",
-                        borderRadius: "var(--radius-full)", padding: "2px 8px", color: "var(--accent-cyan)",
-                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap",
-                        boxShadow: "0 0 8px rgba(0,229,255,0.2)"
-                    }}
-                >
-                    {t('status_header.map_btn')}
-                </button>
+                    <button
+                        type="button"
+                        onClick={() => navigate("commercialHub")}
+                        style={{
+                            padding: "4px 8px",
+                            background: "rgba(0, 230, 118, 0.12)",
+                            border: "1px solid rgba(0, 230, 118, 0.5)",
+                            borderRadius: "8px",
+                            color: "var(--accent-emerald)",
+                            fontWeight: 900,
+                            fontSize: "10px",
+                            cursor: "pointer",
+                            boxShadow: "0 0 8px rgba(0,230,118,0.2)"
+                        }}
+                        title="Hub Comercial y Vales P2P"
+                    >
+                        💳 Hub
+                    </button>
 
-                <button
-                    onClick={() => {
-                        if (typeof window !== "undefined") {
-                            window.dispatchEvent(new CustomEvent("red:open_landing"));
-                        }
-                    }}
-                    style={{
-                        background: "rgba(255,255,255,0.08)", border: "1.5px solid rgba(255,255,255,0.25)",
-                        borderRadius: "var(--radius-full)", padding: "2px 8px", color: "#FFFFFF",
-                        fontSize: "0.68rem", fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap"
-                    }}
-                    title="Volver al Portal Web Oficial"
-                >
-                    🌐 Portal
-                </button>
+                    <button
+                        type="button"
+                        onClick={() => navigate("nodemap")}
+                        style={{
+                            padding: "4px 8px",
+                            background: "rgba(255, 255, 255, 0.06)",
+                            border: "1px solid rgba(255, 255, 255, 0.14)",
+                            borderRadius: "8px",
+                            color: "#FFFFFF",
+                            fontWeight: 900,
+                            fontSize: "10px",
+                            cursor: "pointer"
+                        }}
+                        title="Mapa Táctico de Nodos"
+                    >
+                        🗺️
+                    </button>
+                </div>
             </div>
-        </div>
+
+            {/* ── Modal de Selección de Modo Operacional (HUD Overlay) ── */}
+            {showModeModal && (
+                <div 
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        zIndex: 9999,
+                        background: "rgba(2, 4, 10, 0.88)",
+                        backdropFilter: "blur(20px)",
+                        WebkitBackdropFilter: "blur(20px)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "16px"
+                    }}
+                    onClick={() => setShowModeModal(false)}
+                >
+                    <div 
+                        style={{
+                            width: "100%",
+                            maxWidth: "460px",
+                            background: "linear-gradient(180deg, rgba(16, 20, 38, 0.98) 0%, rgba(8, 10, 22, 0.99) 100%)",
+                            border: "1px solid rgba(0, 229, 255, 0.4)",
+                            borderRadius: "20px",
+                            padding: "20px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 229, 255, 0.15)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "14px"
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "12px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span style={{ fontSize: "1.5rem" }}>🎛️</span>
+                                <div>
+                                    <h3 style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.8px", textTransform: "uppercase", margin: 0 }}>
+                                        MODO OPERACIONAL TÁCTICO
+                                    </h3>
+                                    <p style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0" }}>
+                                        Calibración HMI MIL-STD-1472
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowModeModal(false)}
+                                style={{
+                                    background: "rgba(255, 255, 255, 0.08)",
+                                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                                    color: "#FFFFFF",
+                                    width: "32px",
+                                    height: "32px",
+                                    borderRadius: "8px",
+                                    cursor: "pointer",
+                                    fontSize: "0.9rem",
+                                    fontWeight: 900
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {operationalModes.map(m => {
+                                const isSelected = m.id === currentMode;
+                                return (
+                                    <button
+                                        key={m.id}
+                                        type="button"
+                                        onClick={() => handleSelectMode(m.id)}
+                                        style={{
+                                            width: "100%",
+                                            padding: "12px 14px",
+                                            borderRadius: "14px",
+                                            border: isSelected ? "1.5px solid var(--accent-cyan)" : "1px solid rgba(255, 255, 255, 0.1)",
+                                            background: isSelected ? "linear-gradient(135deg, rgba(0, 229, 255, 0.18) 0%, rgba(10, 25, 45, 0.8) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                            boxShadow: isSelected ? "0 0 16px rgba(0, 229, 255, 0.25)" : "none",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "12px",
+                                            textAlign: "left",
+                                            cursor: "pointer",
+                                            transition: "all 0.15s ease"
+                                        }}
+                                    >
+                                        <div style={{ fontSize: "1.6rem", width: "36px", textAlign: "center" }}>{m.icon}</div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                                <span style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.3px" }}>{m.label}</span>
+                                                {isSelected && (
+                                                    <span style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", background: "rgba(0, 229, 255, 0.15)", padding: "2px 6px", borderRadius: "6px" }}>
+                                                        ACTIVO
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p style={{ fontSize: "0.74rem", color: "var(--text-secondary)", margin: "3px 0 0 0", lineHeight: 1.3 }}>{m.desc}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 }

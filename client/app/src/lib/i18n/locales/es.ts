@@ -323,6 +323,19 @@ export const es = {
         updates_check: "Verificar Actualizaciones",
         updates_current: "Nodo Actualizado",
         updates_available: "Nueva Versión Disponible",
+        auto_detect_sub: "Detección dinámica según la configuración regional de tu dispositivo",
+        custom_theme_title: "Configuración de Paleta Personalizada",
+        custom_live_badge: "EN VIVO",
+        custom_primary_color: "Color Primario",
+        custom_accent_color: "Color Secundario / Acento",
+        font_scale_title: "Escala Tipográfica & Densidad",
+        font_compact: "Compacta (14px)",
+        font_normal: "Estándar (16px)",
+        font_large: "Amplia (18px)",
+        oled_mode_title: "Modo OLED Negro Absoluto (#000000)",
+        oled_mode_desc: "Apaga los píxeles en pantallas AMOLED para mínimo consumo.",
+        reduced_motion_title: "Reducir Animaciones / Ahorro GPU",
+        reduced_motion_desc: "Desactiva transiciones complejas para acelerar la interfaz en hardware limitado.",
     },
     map: {
         title: "Mapa Táctico GPS",
@@ -783,6 +796,12 @@ export const es = {
         success: "Éxito",
         copied: "Copiado al portapapeles",
         loading: "Cargando...",
+        all: "Todos",
+        unread: "No Leídos",
+        active: "Activos",
+        search: "Buscar",
+        delete: "Eliminar",
+        refresh: "Actualizar",
     }
 };
 

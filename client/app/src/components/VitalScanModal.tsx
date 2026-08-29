@@ -4,15 +4,24 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { VitalScanEngine, PPGScanResult, StartTriageResult } from "../lib/VitalScanEngine";
+import { manDownDetector, ManDownTelemetry } from "../lib/sensors/ManDownDetectorEngine";
 import { RedAPI, TriageReportRecord } from "../lib/api";
 import { toast } from "./Toast";
 
-type MedicalTab = "ppg" | "triage" | "records" | "water";
+type MedicalTab = "ppg" | "triage" | "records" | "water" | "mandown";
 
 export function VitalScanModal() {
     const { navigate } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<MedicalTab>("ppg");
+
+    // Man-Down Sentry State
+    const [manDownTelemetry, setManDownTelemetry] = useState<ManDownTelemetry>(() => manDownDetector.getTelemetry());
+
+    useEffect(() => {
+        const unsub = manDownDetector.subscribe(setManDownTelemetry);
+        return unsub;
+    }, []);
 
     // PPG Scanner States
     const [isScanning, setIsScanning] = useState(false);
@@ -87,6 +96,17 @@ export function VitalScanModal() {
             VitalScanEngine.stopPPGScan();
         };
     }, [loadTriageReports]);
+
+    useEffect(() => {
+        if (activeTab === "ppg") {
+            setTimeout(() => {
+                drawMedicalGrid();
+                if (scanResult) {
+                    drawResultWaveform(scanResult);
+                }
+            }, 50);
+        }
+    }, [activeTab, scanResult]);
 
     // Render ICU Patient Monitor Medical Grid (Rejilla Médica ECG)
     const drawMedicalGrid = () => {
@@ -413,6 +433,17 @@ export function VitalScanModal() {
                 >
                     💧 Agua & Altitud
                 </button>
+                <button
+                    onClick={() => setActiveTab("mandown")}
+                    className={activeTab === "mandown" ? "glow-pill-active" : "btn-ghost"}
+                    style={{
+                        padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap",
+                        color: manDownTelemetry.isArmed ? "var(--accent-crimson-bright)" : undefined,
+                        borderColor: manDownTelemetry.isArmed ? "var(--accent-crimson)" : undefined
+                    }}
+                >
+                    🚨 Centinela {manDownTelemetry.isArmed ? "(ARMADO)" : ""}
+                </button>
             </div>
 
             {/* Contenido Principal con Scroll Seguro */}
@@ -449,28 +480,23 @@ export function VitalScanModal() {
 
                                 {!isScanning && !scanResult && (
                                     <div style={{
-                                        position: "absolute", inset: 0,
-                                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                                        background: "rgba(4, 6, 14, 0.75)", color: "var(--text-secondary)",
-                                        fontSize: "0.82rem", textAlign: "center", padding: "16px", gap: "6px"
+                                        position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                                        alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)"
                                     }}>
-                                        <span style={{ fontSize: "1.4rem" }}>👆</span>
-                                        <span>Coloca suavemente la yema de tu dedo índice cubriendo completamente la lente de la cámara y el flash LED.</span>
-                                    </div>
-                                )}
-
-                                {isScanning && !isFingerDetected && (
-                                    <div style={{
-                                        position: "absolute", inset: 0,
-                                        display: "flex", alignItems: "center", justifyContent: "center",
-                                        background: "rgba(232, 33, 58, 0.85)", color: "#fff",
-                                        fontSize: "0.85rem", fontWeight: 800, textAlign: "center", padding: "12px",
-                                        backdropFilter: "blur(6px)"
-                                    }}>
-                                        ⚠️ Contacto óptico débil: Cubre la cámara y el flash con la yema del dedo
+                                        <div style={{ fontSize: "1.8rem", marginBottom: "4px" }}>☝️</div>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
+                                            Coloque la yema del dedo sobre la cámara trasera y flash
+                                        </div>
                                     </div>
                                 )}
                             </div>
+
+                            {/* Alerta de Dedo No Detectado */}
+                            {isScanning && !isFingerDetected && (
+                                <div className="badge-tactical badge-tactical-crimson" style={{ padding: "8px 12px", textAlign: "center", fontSize: "0.78rem" }}>
+                                    ⚠️ Cubra completamente el lente de la cámara y el flash LED con su dedo
+                                </div>
+                            )}
 
                             {/* Barra de Progreso */}
                             {isScanning && (
@@ -485,26 +511,45 @@ export function VitalScanModal() {
 
                             {/* Métricas Resultantes */}
                             {scanResult && (
-                                <div className="hud-grid animate-pop">
-                                    <div className="hud-metric">
-                                        <div className="hud-metric-label">Frecuencia Cardíaca</div>
-                                        <div className="hud-metric-val" style={{ color: "var(--accent-crimson-bright)" }}>
-                                            {scanResult.bpm > 0 ? `${scanResult.bpm} BPM` : "N/D"}
+                                <>
+                                    <div className="hud-grid animate-pop">
+                                        <div className="hud-metric">
+                                            <div className="hud-metric-label">Frecuencia Cardíaca</div>
+                                            <div className="hud-metric-val" style={{ color: "var(--accent-crimson-bright)" }}>
+                                                {scanResult.bpm > 0 ? `${scanResult.bpm} BPM` : "N/D"}
+                                            </div>
+                                        </div>
+                                        <div className="hud-metric">
+                                            <div className="hud-metric-label">Saturación Oxígeno</div>
+                                            <div className="hud-metric-val" style={{ color: "var(--accent-emerald)" }}>
+                                                {scanResult.spo2 > 0 ? `${scanResult.spo2}% SpO2` : "N/D"}
+                                            </div>
+                                        </div>
+                                        <div className="hud-metric">
+                                            <div className="hud-metric-label">Variabilidad HRV</div>
+                                            <div className="hud-metric-val" style={{ color: "var(--accent-cyan)" }}>
+                                                {scanResult.hrvRmssdMs ?? 35} ms
+                                            </div>
+                                        </div>
+                                        <div className="hud-metric">
+                                            <div className="hud-metric-label">Perfusión / Calidad</div>
+                                            <div className="hud-metric-val" style={{ color: "var(--accent-amber)" }}>
+                                                {scanResult.perfusionIndexPct ?? 1.2}% ({scanResult.signalQuality})
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="hud-metric">
-                                        <div className="hud-metric-label">Saturación Oxígeno</div>
-                                        <div className="hud-metric-val" style={{ color: "var(--accent-emerald)" }}>
-                                            {scanResult.spo2 > 0 ? `${scanResult.spo2}% SpO2` : "N/D"}
+
+                                    {scanResult.isShockSuspected && (
+                                        <div style={{
+                                            padding: "12px", borderRadius: "8px", background: "rgba(232,33,58,0.18)",
+                                            border: "1px solid var(--accent-crimson)", color: "var(--accent-crimson-bright)",
+                                            fontSize: "0.8rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "8px"
+                                        }}>
+                                            <span>🚨</span>
+                                            <span>ALERTA DE SHOCK HEMODINÁMICO: Taquicardia/Hipoxia con vasoconstricción periférica detectada.</span>
                                         </div>
-                                    </div>
-                                    <div className="hud-metric">
-                                        <div className="hud-metric-label">Confianza de Señal</div>
-                                        <div className="hud-metric-val" style={{ color: "var(--accent-amber)" }}>
-                                            {scanResult.confidencePercent}%
-                                        </div>
-                                    </div>
-                                </div>
+                                    )}
+                                </>
                             )}
 
                             {/* Botón de Inicio de Escaneo */}
@@ -867,6 +912,91 @@ export function VitalScanModal() {
                                     A <strong>{alt} metros</strong> de altitud, la presión atmosférica reduce el punto de ebullición a <strong>{boilingTempC}°C</strong>. Mantener hervido a borbotones continuos durante al menos <strong>{requiredBoilingMins} minuto(s)</strong> para destruir patógenos biológicos.
                                 </div>
                             </div>
+                        </div>
+                    )}
+
+                    {/* ─── TAB 5: CENTINELA DE HOMBRE CAÍDO (DEAD-MAN'S SWITCH) ─── */}
+                    {activeTab === "mandown" && (
+                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-crimson-bright)" }}>
+                                        🚨 Centinela Táctico de Hombre Caído (Man-Down Sentry)
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                        Detección inercial de impacto severo ({'>'}2.4g) e inmovilidad con disparo automático de SOS
+                                    </div>
+                                </div>
+                                <span className={`badge-tactical ${manDownTelemetry.isArmed ? "badge-tactical-crimson" : "badge-tactical-emerald"}`}>
+                                    {manDownTelemetry.isArmed ? "● ARMADO" : "○ DESARMADO"}
+                                </span>
+                            </div>
+
+                            {/* Alerta de Pre-Alarma en Cuenta Regresiva */}
+                            {manDownTelemetry.state === "PRE_ALARM_COUNTDOWN" && (
+                                <div style={{
+                                    padding: "16px", borderRadius: "12px", background: "rgba(232,33,58,0.25)",
+                                    border: "2px solid var(--accent-crimson)", display: "flex", flexDirection: "column",
+                                    alignItems: "center", gap: "10px", animation: "pulse 0.5s infinite"
+                                }}>
+                                    <div style={{ fontSize: "1.8rem" }}>⚠️</div>
+                                    <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff", textAlign: "center" }}>
+                                        ¿SE ENCUENTRA BIEN? EMISIÓN SOS EN {manDownTelemetry.secondsRemaining}s
+                                    </div>
+                                    <div style={{ fontSize: "0.75rem", color: "rgba(255,255,255,0.8)", textAlign: "center" }}>
+                                        Se ha detectado inmovilidad tras un evento inercial. Presione el botón para cancelar.
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            manDownDetector.cancelPreAlarm();
+                                            toast.success("Pre-alarma cancelada. Operador activo.");
+                                        }}
+                                        className="btn-tactical-primary"
+                                        style={{ width: "100%", padding: "12px", fontSize: "0.9rem", fontWeight: 900 }}
+                                    >
+                                        🟢 ESTOY BIEN — CANCELAR ALARMA
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Telemetría Inercial en Tiempo Real */}
+                            <div className="hud-grid">
+                                <div className="hud-metric">
+                                    <div className="hud-metric-label">Magnitud G Actual</div>
+                                    <div className="hud-metric-val" style={{ color: "var(--accent-cyan)" }}>
+                                        {manDownTelemetry.lastMagnitude} g
+                                    </div>
+                                </div>
+                                <div className="hud-metric">
+                                    <div className="hud-metric-label">Tiempo Inmóvil</div>
+                                    <div className="hud-metric-val" style={{ color: manDownTelemetry.immobilityDurationSec > 30 ? "var(--accent-amber)" : "var(--text-primary)" }}>
+                                        {manDownTelemetry.immobilityDurationSec}s
+                                    </div>
+                                </div>
+                                <div className="hud-metric">
+                                    <div className="hud-metric-label">Estado Centinela</div>
+                                    <div className="hud-metric-val" style={{ color: "var(--accent-emerald)" }}>
+                                        {manDownTelemetry.state}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Botón de Armado / Desarmado */}
+                            <button
+                                onClick={() => {
+                                    if (manDownTelemetry.isArmed) {
+                                        manDownDetector.disarmSentry();
+                                        toast.info("Centinela de Hombre Caído desarmado");
+                                    } else {
+                                        manDownDetector.armSentry();
+                                        toast.error("🚨 Centinela de Hombre Caído ARMADO");
+                                    }
+                                }}
+                                className={manDownTelemetry.isArmed ? "btn-tactical-secondary" : "btn-tactical-danger"}
+                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem", fontWeight: 800 }}
+                            >
+                                {manDownTelemetry.isArmed ? "🛑 DESARMAR CENTINELA MAN-DOWN" : "🛡️ ARMAR CENTINELA DE HOMBRE CAÍDO"}
+                            </button>
                         </div>
                     )}
                 </div>

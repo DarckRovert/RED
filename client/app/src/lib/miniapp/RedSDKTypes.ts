@@ -15,6 +15,8 @@ export type RedPermissionScope =
     | 'sensors'         // Read GPS coordinates, barometer, and device orientation
     | 'clipboard';      // Read/write text to system clipboard
 
+export type RedAppCategory = 'market' | 'utility' | 'emergency' | 'games' | 'media' | 'social';
+
 export interface RedAppManifest {
     id: string;                         // Unique App ID (e.g., 'org.redmesh.bazaar')
     name: string;                       // Display name
@@ -26,7 +28,7 @@ export interface RedAppManifest {
         website?: string;
     };
     icon: string;                       // Emoji or Base64 data URL
-    category: 'market' | 'utility' | 'emergency' | 'games' | 'media' | 'social';
+    category: RedAppCategory;
     permissions: RedPermissionScope[];  // Required permissions
     entryPoint: string;                 // Relative path (usually 'index.html')
     bundleHash?: string;                // BLAKE3 / SHA-256 integrity hash

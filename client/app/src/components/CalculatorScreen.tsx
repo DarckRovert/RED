@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 
 interface CalculatorScreenProps {
-    onUnlock?: (pin: string) => Promise<void> | void;
+    onUnlock?: (pin: string) => Promise<any> | any;
 }
 
 /**

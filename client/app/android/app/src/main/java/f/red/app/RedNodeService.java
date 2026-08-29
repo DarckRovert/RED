@@ -73,6 +73,7 @@ public class RedNodeService extends Service {
     private Thread sseThread = null;
     private final AtomicBoolean sseShouldRun = new AtomicBoolean(false);
     private int notifIdCounter = 2000;
+    private java.util.concurrent.ScheduledExecutorService heartbeatExecutor = null;
 
     @Override
     public void onCreate() {
@@ -107,6 +108,8 @@ public class RedNodeService extends Service {
                 Log.w(TAG, "WifiLock warning: " + e.getMessage());
             }
         }
+
+        startHeartbeatGovernor();
     }
 
     @Override
@@ -454,6 +457,11 @@ public class RedNodeService extends Service {
 
         super.onDestroy();
         
+        if (heartbeatExecutor != null) {
+            heartbeatExecutor.shutdownNow();
+            heartbeatExecutor = null;
+        }
+
         // Stop the SSE consumer cleanly
         sseShouldRun.set(false);
         if (sseThread != null) {
@@ -686,5 +694,45 @@ public class RedNodeService extends Service {
                 Log.w(TAG, "Direct native mesh inject failed (non-critical): " + e.getMessage());
             }
         }).start();
+    }
+
+    /**
+     * Heartbeat Governor: runs periodic checks to prevent Android Doze Mode and aggressive OEM task killers
+     * from freezing the BLE mesh radio or background SSE message queues.
+     */
+    private void startHeartbeatGovernor() {
+        if (heartbeatExecutor != null && !heartbeatExecutor.isShutdown()) return;
+
+        heartbeatExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor();
+        heartbeatExecutor.scheduleWithFixedDelay(() -> {
+            try {
+                // 1. Maintain CPU WakeLock
+                if (wakeLock != null && !wakeLock.isHeld()) {
+                    wakeLock.acquire();
+                    Log.i(TAG, "[Heartbeat] WakeLock re-acquired");
+                }
+
+                // 2. Maintain MulticastLock for mDNS discovery
+                if (multicastLock != null && !multicastLock.isHeld()) {
+                    multicastLock.acquire();
+                    Log.i(TAG, "[Heartbeat] MulticastLock re-acquired");
+                }
+
+                // 3. Verify SSE notification consumer thread
+                if (sseThread == null || !sseThread.isAlive()) {
+                    Log.w(TAG, "[Heartbeat] SSE consumer died, restarting...");
+                    sseShouldRun.set(false);
+                    startSseNotificationConsumer();
+                }
+
+                // 4. Verify BLE Advertiser
+                if (bleAdvertiser == null && isNodeRunning) {
+                    Log.i(TAG, "[Heartbeat] BLE advertiser null, re-initializing...");
+                    restartBleIfPermitted();
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "[Heartbeat] Governor check exception: " + e.getMessage());
+            }
+        }, 30, 120, java.util.concurrent.TimeUnit.SECONDS);
     }
 }

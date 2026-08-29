@@ -14,15 +14,7 @@ import { RED_VERSION_NAME } from "../lib/version";
 
 const RedDisguise = registerPlugin<any>("RedDisguise");
 
-async function setSecurePin(key: string, value: string) {
-    await SecureStoragePlugin.set({ key, value });
-}
-async function getSecurePin(key: string): Promise<string> {
-    try {
-        const { value } = await SecureStoragePlugin.get({ key });
-        return value || "";
-    } catch { return ""; }
-}
+import { getSecurePin, setSecurePin, clearSecurePin } from "../lib/crypto/BiometricLockEngine";
 
 export default function SecurityPanel() {
     const { goBack } = useRedStore();
@@ -67,9 +59,9 @@ export default function SecurityPanel() {
         }
 
         // Cargar PINs de Keystore
-        getSecurePin("master_pin").then(v => { setMasterPin(v); setSavedMasterPin(v); });
-        getSecurePin("panic_pin").then(v => { setPanicPin(v); setSavedPanicPin(v); });
-        getSecurePin("decoy_pin").then(v => { setDecoyPin(v); setSavedDecoyPin(v); });
+        getSecurePin("master_pin").then(v => { setMasterPin(v || ""); setSavedMasterPin(v || ""); });
+        getSecurePin("panic_pin").then(v => { setPanicPin(v || ""); setSavedPanicPin(v || ""); });
+        getSecurePin("decoy_pin").then(v => { setDecoyPin(v || ""); setSavedDecoyPin(v || ""); });
 
         // Verificar biometría de hardware
         if (typeof window !== "undefined" && window.PublicKeyCredential) {
@@ -167,7 +159,7 @@ export default function SecurityPanel() {
     };
 
     const handleClearPanicPin = async () => {
-        await SecureStoragePlugin.remove({ key: "panic_pin" }).catch(() => {});
+        await clearSecurePin("panic_pin");
         setPanicPin("");
         setSavedPanicPin("");
         toast.info("PIN de pánico desactivado");
@@ -188,7 +180,7 @@ export default function SecurityPanel() {
     };
 
     const handleClearDecoyPin = async () => {
-        await SecureStoragePlugin.remove({ key: "decoy_pin" }).catch(() => {});
+        await clearSecurePin("decoy_pin");
         setDecoyPin("");
         setSavedDecoyPin("");
         toast.info("Bóveda señuelo desactivada");

@@ -1,11 +1,16 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRedStore, ScreenView } from '../store/useRedStore';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { globalShield } from '../lib/network/GlobalShieldEngine';
 import { MonetizationEngine } from '../lib/network/MonetizationEngine';
 import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
+import { meshSosBeacon } from '../lib/emergency/MeshSosBeaconEngine';
+import { rfSigintWatchdog, SigintTelemetry } from '../lib/sensors/RfSigintWatchdogEngine';
+import { forensicBlackBox } from '../lib/security/ForensicBlackBoxEngine';
+import { dynamicBearerGovernor, SwarmHealthTelemetry } from '../lib/mesh/DynamicBearerGovernor';
+import { SwarmHealthHUD } from './SwarmHealthHUD';
 import { GlobalSearchModal } from './GlobalSearchModal';
 import { toast } from './Toast';
 
@@ -28,6 +33,31 @@ export const TacticalCommandCenter: React.FC = () => {
     const [activeDomain, setActiveDomain] = useState<CommandDomain>('favs');
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [activeSosCount, setActiveSosCount] = useState<number>(0);
+    const [sigintTelemetry, setSigintTelemetry] = useState<SigintTelemetry>(() => rfSigintWatchdog.getTelemetry());
+    const [swarmTelemetry, setSwarmTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
+    const [showSwarmHUD, setShowSwarmHUD] = useState<boolean>(false);
+
+    useEffect(() => {
+        const updateSos = () => setActiveSosCount(meshSosBeacon.getActiveDistressCount());
+        updateSos();
+        const unsub = meshSosBeacon.subscribe(updateSos);
+        return unsub;
+    }, []);
+
+    useEffect(() => {
+        rfSigintWatchdog.startScanning();
+        const unsub = rfSigintWatchdog.subscribe(setSigintTelemetry);
+        return () => {
+            unsub();
+            rfSigintWatchdog.stopScanning();
+        };
+    }, []);
+
+    useEffect(() => {
+        const unsub = dynamicBearerGovernor.subscribe(setSwarmTelemetry);
+        return unsub;
+    }, []);
 
     const [favoriteModules, setFavoriteModules] = useState<string[]>(() => {
         if (typeof window !== "undefined") {
@@ -228,6 +258,66 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'SIMULACRO',
                 badgeColor: 'var(--accent-purple)',
                 accentClass: 'glow-border-purple'
+            },
+            {
+                id: 'tacticalVisionScan',
+                action: 'tacticalVisionScan',
+                icon: '👁️',
+                title: 'Visión Táctica Edge AI',
+                subtitle: 'Escaneo y reconocimiento de amenazas en vivo con filtros NVG, FLIR y bounding boxes.',
+                badge: 'EDGE AI',
+                badgeColor: 'var(--accent-cyan)',
+                accentClass: 'glow-border-cyan'
+            },
+            {
+                id: 'cbrnSatellite',
+                action: 'cbrnSatellite',
+                icon: '☢️',
+                title: 'Telemetría CBRN & Satélite LEO',
+                subtitle: 'Dosimetría nuclear en µSv/h, dosis biológica acumulada y enlace orbital DTN.',
+                badge: 'CBRN / LEO',
+                badgeColor: 'var(--accent-amber)',
+                accentClass: 'glow-border-amber'
+            },
+            {
+                id: 'tcccBallistics',
+                action: 'tcccBallistics',
+                icon: '🩸',
+                title: 'TCCC Triage & Balística Mil-Dot',
+                subtitle: 'Protocolo MARCH-PAWS, temporizadores de torniquetes CAT y cálculo balístico MRAD.',
+                badge: 'TCCC / MRAD',
+                badgeColor: 'var(--accent-crimson)',
+                accentClass: 'glow-border-crimson'
+            },
+            {
+                id: 'celestialPdr',
+                action: 'celestialPdr',
+                icon: '☀️',
+                title: 'Navegación Celeste & PDR',
+                subtitle: 'Efemérides Sol/Luna, coordenadas por mediodía solar y navegación inercial sin GNSS.',
+                badge: 'CELESTE / PDR',
+                badgeColor: 'var(--accent-amber)',
+                accentClass: 'glow-border-amber'
+            },
+            {
+                id: 'vitalResources',
+                action: 'vitalResources',
+                icon: '💧',
+                title: 'Recursos Vitales: Agua & Energía',
+                subtitle: 'Dosimetría de purificación química/SODIS de H2O y cálculo de autonomía de batería.',
+                badge: 'H2O / POWER',
+                badgeColor: 'var(--accent-cyan)',
+                accentClass: 'glow-border-cyan'
+            },
+            {
+                id: 'sonarSeismic',
+                action: 'sonarSeismic',
+                icon: '📡',
+                title: 'Sonar Acústico & Sismología',
+                subtitle: 'Medición FMCW ToF de cavidades y triangulación sísmica TDoA de supervivientes.',
+                badge: 'SONAR / SÍSMICO',
+                badgeColor: 'var(--accent-emerald)',
+                accentClass: 'glow-border-emerald'
             }
         ],
         security: [
@@ -290,6 +380,56 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'IA LOCAL',
                 badgeColor: 'var(--accent-cyan)',
                 accentClass: 'glow-border-cyan'
+            },
+            {
+                id: 'shamirRecovery',
+                action: 'shamirRecovery',
+                icon: '🧩',
+                title: 'Recuperación Social Shamir',
+                subtitle: 'Bóveda umbral 3-de-5 con distribución polinómica de claves a 5 guardianes.',
+                badge: 'SHAMIR SSS',
+                badgeColor: 'var(--accent-emerald)',
+                accentClass: 'glow-border-emerald'
+            },
+            {
+                id: 'c4isrEmpDrill',
+                action: 'c4isrEmpDrill',
+                icon: '🛰️',
+                title: 'Matriz C4ISR & Caos EMP',
+                subtitle: 'Teatro militar unificado, informe ejecutivo C4ISR y ejercicios de estrés frente a EMP.',
+                badge: 'C4ISR / EMP',
+                badgeColor: 'var(--accent-cyan)',
+                accentClass: 'glow-border-cyan'
+            },
+            {
+                id: 'airGapStego',
+                action: 'airGapStego',
+                icon: '🎞️',
+                title: 'Transferencia Air-Gap & Audio Stego',
+                subtitle: 'Flujo óptico QR animado a alta velocidad y ocultación psicoacústica en audio WAV.',
+                badge: 'AIR-GAP / AUDIO',
+                badgeColor: 'var(--accent-purple)',
+                accentClass: 'glow-border-purple'
+            },
+            {
+                id: 'acousticWarfare',
+                action: 'acousticWarfare',
+                icon: '🔇',
+                title: 'Guerra Acústica & Ondas Binaurales',
+                subtitle: 'Perturbador ultrasónico anti-micrófonos MEMS y ondas binaurales Gamma/Beta para combate.',
+                badge: 'AUDIO JAM / BRAIN',
+                badgeColor: 'var(--accent-crimson)',
+                accentClass: 'glow-border-crimson'
+            },
+            {
+                id: 'tacticalFoxhunt',
+                action: 'tacticalFoxhunt',
+                icon: '🦊',
+                title: 'Radiogoniometría RDF & Caza Foxhunt',
+                subtitle: 'Localización polar y triangulación LOB de emisores hostiles, jammers y balizas.',
+                badge: 'RDF / FOXHUNT',
+                badgeColor: 'var(--accent-amber)',
+                accentClass: 'glow-border-amber'
             }
         ],
         economy: [
@@ -302,6 +442,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'OFFLINE PAY',
                 badgeColor: 'var(--accent-emerald)',
                 accentClass: 'glow-border-emerald'
+            },
+            {
+                id: 'zkBarterSubsurface',
+                action: 'zkBarterSubsurface',
+                icon: '🪙',
+                title: 'Canje zk-Barter & Rescate VLF',
+                subtitle: 'Pruebas ZK de pertenencia Merkle anónimas y baliza acústica sub-estructural.',
+                badge: 'ZK / VLF',
+                badgeColor: 'var(--accent-cyan)',
+                accentClass: 'glow-border-cyan'
             },
             {
                 id: 'web3Vault',
@@ -450,6 +600,18 @@ export const TacticalCommandCenter: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <button
+                        onClick={() => setShowSwarmHUD(!showSwarmHUD)}
+                        className="btn-icon"
+                        style={{
+                            width: '38px', height: '38px', borderRadius: '10px',
+                            background: showSwarmHUD ? 'rgba(0, 229, 255, 0.25)' : undefined,
+                            border: showSwarmHUD ? '1px solid #00E5FF' : undefined
+                        }}
+                        title="Enjambre Multi-Bearer & EW C2"
+                    >
+                        🌐
+                    </button>
+                    <button
                         onClick={() => setIsSearchOpen(true)}
                         className="btn-icon"
                         style={{ width: '38px', height: '38px', borderRadius: '10px' }}
@@ -468,6 +630,34 @@ export const TacticalCommandCenter: React.FC = () => {
                 </div>
             </header>
 
+            {/* Modal Overlay / Dropdown de Swarm Health HUD */}
+            {showSwarmHUD && (
+                <div style={{ padding: '12px 20px', background: 'rgba(5, 8, 18, 0.95)', borderBottom: '1px solid rgba(0, 229, 255, 0.3)' }}>
+                    <SwarmHealthHUD onClose={() => setShowSwarmHUD(false)} />
+                </div>
+            )}
+
+            {/* Alerta SIGINT Drone C-UAS Banner */}
+            {sigintTelemetry.threatLevel !== 'CLEAR' && (
+                <div style={{
+                    padding: '10px 16px', background: sigintTelemetry.threatLevel === 'DRONE_DETECTED' ? 'rgba(232,33,58,0.25)' : 'rgba(255,179,0,0.18)',
+                    borderBottom: `1px solid ${sigintTelemetry.threatLevel === 'DRONE_DETECTED' ? 'var(--accent-crimson)' : 'var(--accent-amber)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', fontWeight: 800, color: '#fff' }}>
+                        <span>{sigintTelemetry.threatLevel === 'DRONE_DETECTED' ? '🛸' : '📡'}</span>
+                        <span>
+                            {sigintTelemetry.threatLevel === 'DRONE_DETECTED' 
+                                ? `ALERTA SIGINT: DRONE / OPEN-DRONE-ID DETECTADO (~${sigintTelemetry.closestDrone?.estimatedDistanceMeters}m)` 
+                                : `ALERTA SIGINT: VIGILANCIA RF SOSPECHOSA (${sigintTelemetry.suspiciousEmittersCount} balizas activas)`}
+                        </span>
+                    </div>
+                    <span className="badge-tactical badge-tactical-crimson" style={{ fontSize: '0.65rem' }}>
+                        {sigintTelemetry.threatLevel}
+                    </span>
+                </div>
+            )}
+
             {/* Barra HUD de Acciones Críticas 1-Tap */}
             <div style={{
                 display: 'grid',
@@ -483,7 +673,7 @@ export const TacticalCommandCenter: React.FC = () => {
                     className="btn-tactical-danger"
                     style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
                 >
-                    <span>🚨</span> <span>SOS Malla</span>
+                    <span>🚨</span> <span>SOS Malla {activeSosCount > 0 && `(${activeSosCount})`}</span>
                 </button>
                 <button
                     onClick={() => handleCardClick('walkie')}

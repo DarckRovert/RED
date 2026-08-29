@@ -71,9 +71,17 @@ if ($ApksInPublic) {
     exit 1
 }
 
-# --- Step 1: Frontend Build ---
+# --- Step 1: Pre-Build Hygiene & Frontend Build ---
 
-Write-Header "Step 1: Compiling React/Next.js Frontend"
+Write-Header "Step 1: Pre-Build Hygiene & Frontend Build"
+Set-Location $RED_ROOT
+Write-Host "Running pre-flight hygiene check..." -ForegroundColor Gray
+node "$RED_ROOT\scripts\pre_build_check.js"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[FATAL] Pre-flight check failed. Aborting build." -ForegroundColor Red
+    exit 1
+}
+
 Set-Location $FRONTEND_PATH
 Write-Host "Installing dependencies..." -ForegroundColor Gray
 npm install --quiet --legacy-peer-deps
@@ -147,9 +155,16 @@ if (Test-Path "gradlew.bat") {
         Write-Host "`n[OK] APK successfully built!" -ForegroundColor Green
         Write-Host "Path: $ApkPath" -ForegroundColor Cyan
         
-        Write-Host "Copying APK to release-assets (red-v64.0.0-release.apk, red-latest.apk)..." -ForegroundColor Gray
+        $VersionFile = "$FRONTEND_PATH\src\lib\version.ts"
+        $CurrentVersion = "66.0.0"
+        if (Test-Path $VersionFile) {
+            $Match = Select-String -Path $VersionFile -Pattern 'RED_VERSION\s*=\s*["'']([^"'']+)["'']'
+            if ($Match) { $CurrentVersion = $Match.Matches[0].Groups[1].Value }
+        }
+
+        Write-Host "Copying APK to release-assets (red-v$CurrentVersion-release.apk, red-latest.apk)..." -ForegroundColor Gray
         if (-not (Test-Path "$RED_ROOT\release-assets")) { New-Item -ItemType Directory -Path "$RED_ROOT\release-assets" | Out-Null }
-        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-v64.0.0-release.apk" -Force -ErrorAction SilentlyContinue
+        Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-v$CurrentVersion-release.apk" -Force -ErrorAction SilentlyContinue
         Copy-Item -Path $ApkPath -Destination "$RED_ROOT\release-assets\red-latest.apk" -Force -ErrorAction SilentlyContinue
     } else {
         Write-Host "`n[!] Warning: Gradle completed but APK was not found at expected path." -ForegroundColor Yellow

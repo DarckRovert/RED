@@ -49,18 +49,22 @@ export const PublicChannelsPanel: React.FC = () => {
         }
     }, [messages]);
 
-    const handleSend = async (e: React.FormEvent) => {
+    const handleSend = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        if (!inputText.trim()) return;
+        const form = e.currentTarget;
+        const inputEl = form.querySelector('input') as HTMLInputElement;
+        const textToSend = (inputText || inputEl?.value || "").trim();
+        if (!textToSend) return;
 
         setLoading(true);
         try {
             await postChannelMessage({
                 channel_id: channelId,
                 sender_name: senderName,
-                content: inputText.trim()
+                content: textToSend
             });
             setInputText("");
+            if (inputEl) inputEl.value = "";
             await loadMessages();
         } catch {
             toast.error("Error al publicar en el canal");
@@ -203,7 +207,7 @@ export const PublicChannelsPanel: React.FC = () => {
                 />
                 <button
                     type="submit"
-                    disabled={loading || !inputText.trim()}
+                    disabled={loading}
                     className="btn-tactical-primary"
                     style={{ padding: "10px 20px", fontSize: "0.88rem" }}
                 >

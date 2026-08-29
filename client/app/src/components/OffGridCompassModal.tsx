@@ -6,12 +6,26 @@ import { useRedStore } from "../store/useRedStore";
 import { OffGridNavigationEngine, Landmark, Waypoint, TacticalTarget, TriangulatedPosition } from "../lib/OffGridNavigationEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { offlineTileCacheEngine } from "../lib/storage/OfflineTileCacheEngine";
+import { magneticDetector, MagneticTelemetry } from "../lib/sensors/MagneticAnomalyDetectorEngine";
 
 export function OffGridCompassModal() {
     const { navigate } = useRedStore();
     const { t } = useTranslation();
 
     const [activeTab, setActiveTab] = useState<"radar" | "map" | "resection" | "waypoints">("radar");
+
+    // Magnetic Anomaly State
+    const [magTelemetry, setMagTelemetry] = useState<MagneticTelemetry>(() => magneticDetector.getTelemetry());
+
+    useEffect(() => {
+        magneticDetector.startListening();
+        const unsub = magneticDetector.subscribe(setMagTelemetry);
+        return () => {
+            unsub();
+            magneticDetector.stopListening();
+        };
+    }, []);
 
     const [heading, setHeading] = useState<number>(0);
     const [solarAzimuth, setSolarAzimuth] = useState<{ azimuthDegrees: number; elevationDegrees: number; isNight: boolean }>({ azimuthDegrees: 0, elevationDegrees: 0, isNight: false });
@@ -501,10 +515,57 @@ export function OffGridCompassModal() {
                     attributionControl: false
                 });
 
-                // Tactical CartoDB Dark Tiles
-                L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+                // Capa de Teselas Tácticas con prioridad de Bóveda Offline (IndexedDB)
+                const OfflineTileLayer = (L.TileLayer as any).extend({
+                    createTile(coords: any, done: any) {
+                        const tile = document.createElement('img');
+                        L.DomEvent.on(tile, 'load', L.Util.bind((this as any)._tileOnLoad, this, done, tile));
+                        L.DomEvent.on(tile, 'error', L.Util.bind((this as any)._tileOnError, this, done, tile));
+
+                        if ((this as any).options.crossOrigin || (this as any).options.crossOrigin === '') {
+                            tile.crossOrigin = (this as any).options.crossOrigin === true ? '' : (this as any).options.crossOrigin;
+                        }
+
+                        tile.alt = '';
+                        tile.setAttribute('role', 'presentation');
+
+                        offlineTileCacheEngine.getTile(coords.z, coords.x, coords.y).then((cachedBlob) => {
+                            if (cachedBlob) {
+                                tile.src = URL.createObjectURL(cachedBlob);
+                            } else {
+                                const url = (this as any).getTileUrl(coords);
+                                tile.src = url;
+                                fetch(url).then(res => res.ok ? res.blob() : null).then(blob => {
+                                    if (blob) offlineTileCacheEngine.saveTile(coords.z, coords.x, coords.y, blob);
+                                }).catch(() => {});
+                            }
+                        }).catch(() => {
+                            tile.src = (this as any).getTileUrl(coords);
+                        });
+
+                        return tile;
+                    }
+                });
+
+                const osmLayer = new OfflineTileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
                     maxZoom: 19,
-                }).addTo(mapInstance);
+                    className: "tactical-dark-tile",
+                    errorTileUrl: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.2' fill='none'/%3E%3C/svg%3E"
+                });
+
+                // Fallback a Esri World Dark Gray Base si OSM experimenta latencia o desconexión
+                osmLayer.on("tileerror", () => {
+                    if (!mapInstance) return;
+                    try {
+                        const fallbackLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+                            maxZoom: 16,
+                            className: "tactical-dark-tile"
+                        });
+                        fallbackLayer.addTo(mapInstance);
+                    } catch {}
+                });
+
+                osmLayer.addTo(mapInstance);
 
                 // Tap/Click anywhere on the map to set tactical target point
                 mapInstance.on("click", (e: any) => {
@@ -967,6 +1028,71 @@ export function OffGridCompassModal() {
                             <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.78rem', color: '#DDD', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Azimut: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.azimuthDegrees}°</strong></span>
                                 <span>Elevación: <strong style={{ color: solarAzimuth.isNight ? '#38BDF8' : '#FFB300' }}>{solarAzimuth.elevationDegrees}°</strong></span>
+                            </div>
+                        </div>
+
+                        {/* Detector de Anomalías Magnéticas y Metales */}
+                        <div style={{
+                            background: 'rgba(15,23,42,0.9)', border: `1px solid ${magTelemetry.isAnomalyDetected ? 'rgba(232,33,58,0.5)' : 'rgba(255,255,255,0.1)'}`,
+                            borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '6px' }}>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E5FF' }}>
+                                    🧲 Detector de Anomalías Magnéticas / Metales
+                                </div>
+                                <span style={{
+                                    fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '6px',
+                                    background: magTelemetry.isAnomalyDetected ? 'rgba(232,33,58,0.25)' : 'rgba(0,230,118,0.15)',
+                                    color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676'
+                                }}>
+                                    {magTelemetry.anomalySeverity}
+                                </span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', color: '#AAA' }}>Campo B</div>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>{magTelemetry.magnitudeMicroteslas} µT</div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', color: '#AAA' }}>Delta ΔB</div>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676', fontFamily: 'monospace' }}>
+                                        {magTelemetry.deltaFromBaselineMicroteslas > 0 ? `+${magTelemetry.deltaFromBaselineMicroteslas}` : magTelemetry.deltaFromBaselineMicroteslas} µT
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px', borderRadius: '8px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '0.65rem', color: '#AAA' }}>Línea Base</div>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 900, color: '#AAA', fontFamily: 'monospace' }}>{magTelemetry.baselineMicroteslas} µT</div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => {
+                                        magneticDetector.calibrateBaseline();
+                                        toast.success("Línea base magnética calibrada");
+                                    }}
+                                    style={{
+                                        flex: 1, padding: '8px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
+                                        border: '1px solid rgba(255,255,255,0.15)', color: '#FFF', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer'
+                                    }}
+                                >
+                                    🎯 Calibrar Terreno
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const active = magneticDetector.toggleAudioBeeps();
+                                        toast.info(active ? "🔊 Tono acústico Geiger activado" : "🔇 Tono silenciado");
+                                    }}
+                                    style={{
+                                        flex: 1, padding: '8px', borderRadius: '8px',
+                                        background: magTelemetry.isAudioBeepActive ? 'rgba(0,229,255,0.25)' : 'rgba(255,255,255,0.06)',
+                                        border: `1px solid ${magTelemetry.isAudioBeepActive ? '#00E5FF' : 'rgba(255,255,255,0.15)'}`,
+                                        color: '#FFF', fontSize: '0.74rem', fontWeight: 800, cursor: 'pointer'
+                                    }}
+                                >
+                                    {magTelemetry.isAudioBeepActive ? "🔊 Geiger Activo" : "🔇 Activar Geiger"}
+                                </button>
                             </div>
                         </div>
 

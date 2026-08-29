@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { MonetizationEngine, ProPerkStatus, TacticalProduct, TacticalTransaction } from '../lib/network/MonetizationEngine';
+import { bazaarSync } from '../lib/storage/BazaarSyncEngine';
+import { voucherVault } from '../lib/blockchain/VoucherVaultEngine';
 import { toast } from './Toast';
 
 import { useRedStore } from '../store/useRedStore';
@@ -42,7 +44,8 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
 
     const refreshData = () => {
         setProStatus(MonetizationEngine.getProStatus());
-        setCatalog(MonetizationEngine.getCatalog());
+        const crdtCatalog = bazaarSync.getActiveListings();
+        setCatalog(crdtCatalog.length > 0 ? crdtCatalog : MonetizationEngine.getCatalog());
         setTransactions(MonetizationEngine.getTransactions());
     };
 
@@ -101,7 +104,8 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             return;
         }
 
-        MonetizationEngine.addProduct({
+        const product: TacticalProduct = {
+            id: `prod-${Date.now()}`,
             title: newTitle.trim(),
             category: newCategory,
             description: newDesc.trim() || "Equipo homologado por el operador del nodo.",
@@ -111,9 +115,12 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
             affiliateUrl: newUrl.trim() || "#",
             authorHash: identity?.identity_hash,
             authorName: identity?.nickname || "Operador RED"
-        });
+        };
 
-        toast.success(`✅ Producto "${newTitle}" añadido al catálogo`);
+        MonetizationEngine.addProduct(product);
+        bazaarSync.publishListing(product, identity?.identity_hash || 'ANON_OPERATOR');
+
+        toast.success(`✅ Producto "${newTitle}" publicado en la malla Bazaar`);
         setNewTitle('');
         setNewDesc('');
         setNewPrice('');
@@ -124,7 +131,8 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
 
     const handleDeleteProduct = (id: string, name: string) => {
         MonetizationEngine.removeProduct(id);
-        toast.info(`Producto "${name}" eliminado`);
+        bazaarSync.retireListing(id, identity?.identity_hash || 'ANON_OPERATOR');
+        toast.info(`Producto "${name}" retirado de la malla`);
         refreshData();
     };
 

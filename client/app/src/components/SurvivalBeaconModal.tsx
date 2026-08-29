@@ -4,9 +4,11 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { registerPlugin, Capacitor } from "@capacitor/core";
 import { useRedStore } from "../store/useRedStore";
 import { SoundMeshEngine, SoundMeshPacket } from "../lib/SoundMeshEngine";
+import { meshSosBeacon } from "../lib/emergency/MeshSosBeaconEngine";
 import { RedAPI, EmergencyBeaconRecord } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { opticalMorseLiFi, MorseTransmissionState } from "../lib/sensors/OpticalMorseLiFiEngine";
 
 type BeaconTab = "sos" | "actuators" | "soundmesh" | "feed";
 
@@ -39,6 +41,35 @@ export function SurvivalBeaconModal() {
     const [isTransmitting, setIsTransmitting] = useState(false);
     const [isListening, setIsListening] = useState(false);
     const [receivedPackets, setReceivedPackets] = useState<SoundMeshPacket[]>([]);
+
+    // Morse Li-Fi Transceiver States
+    const [customMorseMsg, setCustomMorseMsg] = useState<string>("SOS EXTRACCION NORTE");
+    const [isMorseLiFiTransmitting, setIsMorseLiFiTransmitting] = useState<boolean>(false);
+    const [morseState, setMorseState] = useState<MorseTransmissionState>({
+        isTransmitting: false, currentWord: '', currentChar: '', progressPercent: 0, wpm: 12
+    });
+
+    useEffect(() => {
+        const unsub = opticalMorseLiFi.subscribe(setMorseState);
+        return unsub;
+    }, []);
+
+    const handleTransmitMorse = async () => {
+        if (!customMorseMsg.trim()) {
+            toast.error("Ingresa un mensaje para transmitir");
+            return;
+        }
+        setIsMorseLiFiTransmitting(true);
+        toast.info("Iniciando transmisión óptica Li-Fi...");
+        try {
+            await opticalMorseLiFi.transmitMessage(customMorseMsg, 12, { useTorch: true, useAudio: true });
+            toast.success("Transmisión Li-Fi finalizada");
+        } catch {
+            toast.error("Error en transmisión Li-Fi");
+        } finally {
+            setIsMorseLiFiTransmitting(false);
+        }
+    };
 
     const audioCtxRef = useRef<AudioContext | null>(null);
     const sirenOscRef = useRef<OscillatorNode | null>(null);
@@ -228,19 +259,19 @@ export function SurvivalBeaconModal() {
     // ── 5. Mesh SOS Gossip Broadcast ───────────────────────────────────────────────
     const handleToggleMeshSos = async () => {
         if (meshSosActive) {
+            // Desactivar baliza SOS
             if (myBeaconId) {
                 try {
                     await RedAPI.cancelEmergencyBeacon(myBeaconId);
-                    setMeshSosActive(false);
-                    setMyBeaconId(null);
-                    await loadBeacons();
-                    toast.info("Baliza SOS cancelada en Rust Sled y red malla");
-                } catch {
-                    toast.error("Error al cancelar la baliza en Rust");
-                }
-            } else {
-                setMeshSosActive(false);
+                } catch {}
             }
+            await meshSosBeacon.deactivateSosBeacon(myBeaconId || undefined);
+            setMeshSosActive(false);
+            setMyBeaconId(null);
+            await loadBeacons();
+            toast.info("Baliza SOS cancelada en la red malla");
+        } else {
+            // Activar baliza SOS
             setIsBroadcasting(true);
             try {
                 let medInfo = "";
@@ -255,19 +286,34 @@ export function SurvivalBeaconModal() {
                 } catch {}
 
                 const note = (customSosNote.trim() || `Alerta SOS: ${distressType}`) + medInfo;
-                const res = await RedAPI.broadcastEmergencyBeacon({
-                    distress_type: distressType,
-                    latitude: coords.lat,
-                    longitude: coords.lon,
-                    altitude: coords.alt,
-                    battery_pct: batteryLevel,
-                    custom_note: note
-                });
+                
+                // 1. Registro nativo en Rust Sled si está disponible
+                let beaconId = `SOS-${(identity?.identity_hash || 'LOCAL').substring(0, 8)}`;
+                try {
+                    const res = await RedAPI.broadcastEmergencyBeacon({
+                        distress_type: distressType,
+                        latitude: coords.lat,
+                        longitude: coords.lon,
+                        altitude: coords.alt,
+                        battery_pct: batteryLevel,
+                        custom_note: note
+                    });
+                    if (res && res.beacon_id) beaconId = res.beacon_id;
+                } catch {}
+
+                // 2. Activación en el motor soberano MeshSosBeaconEngine
+                const beaconPkt = await meshSosBeacon.activateSosBeacon({
+                    coords,
+                    distressType: (distressType === 'TCCC_MEDICAL' ? 'TCCC_MEDICAL' : 'GENERAL_DISTRESS'),
+                    triageColor: 'RED',
+                    note,
+                    batteryLevel,
+                }, identity?.identity_hash || 'LOCAL_OP', identity?.nickname || 'Operador en Peligro');
 
                 setMeshSosActive(true);
-                setMyBeaconId(res.beacon_id);
+                setMyBeaconId(beaconId || beaconPkt.id);
                 await loadBeacons();
-                toast.error(`🚨 BALIZA SOS ACTIVADA: ${res.beacon_id}`);
+                toast.error(`🚨 BALIZA SOS ACTIVADA: ${beaconId || beaconPkt.id}`);
             } catch {
                 toast.error("Fallo al emitir baliza por red mesh");
             } finally {
@@ -582,6 +628,52 @@ export function SurvivalBeaconModal() {
                                     <span className={`badge-tactical ${screenFlashActive ? "badge-tactical-emerald" : "badge-tactical"}`}>
                                         {screenFlashActive ? "ESTROBO ON" : "APAGADO"}
                                     </span>
+                                </div>
+
+                                {/* Transmisor Óptico Li-Fi / Código Morse de Texto Arbitrario */}
+                                <div style={{
+                                    marginTop: '8px', padding: '16px', borderRadius: '14px',
+                                    background: 'rgba(0, 229, 255, 0.05)', border: '1px solid rgba(0, 229, 255, 0.2)',
+                                    display: 'flex', flexDirection: 'column', gap: '10px'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#00E5FF' }}>
+                                            💡 Transmisor Óptico Li-Fi / Morse Air-Gapped
+                                        </div>
+                                        <span style={{ fontSize: '0.68rem', color: '#AAA' }}>Zero-RF EW</span>
+                                    </div>
+                                    <div style={{ fontSize: '0.72rem', color: '#AAA' }}>
+                                        Codifica cualquier mensaje de texto a pulsos ópticos temporizados por Flash LED y pantalla completa.
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input
+                                            type="text"
+                                            value={customMorseMsg}
+                                            onChange={(e) => setCustomMorseMsg(e.target.value)}
+                                            placeholder="Escribe mensaje (ej: SOS EXTRACCION NORTE)..."
+                                            style={{
+                                                flex: 1, padding: '8px 12px', borderRadius: '8px',
+                                                background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)',
+                                                color: '#FFF', fontSize: '0.8rem', fontFamily: 'monospace'
+                                            }}
+                                        />
+                                        <button
+                                            onClick={handleTransmitMorse}
+                                            disabled={isMorseLiFiTransmitting}
+                                            style={{
+                                                padding: '8px 14px', borderRadius: '8px',
+                                                background: isMorseLiFiTransmitting ? '#555' : 'linear-gradient(135deg, #00E5FF, #00B0FF)',
+                                                color: '#000', fontWeight: 800, fontSize: '0.76rem', border: 'none', cursor: 'pointer'
+                                            }}
+                                        >
+                                            {isMorseLiFiTransmitting ? "📡 ENVIANDO..." : "⚡ ENVIAR LI-FI"}
+                                        </button>
+                                    </div>
+                                    {isMorseLiFiTransmitting && (
+                                        <div style={{ fontSize: '0.7rem', color: '#00E5FF', fontFamily: 'monospace' }}>
+                                            Transmitiendo: {morseState.currentChar} ({morseState.progressPercent}%)
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

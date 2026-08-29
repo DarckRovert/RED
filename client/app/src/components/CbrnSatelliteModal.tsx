@@ -1,0 +1,241 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { cbrnRadiation, RadiationTelemetry } from "../lib/sensors/CbrnRadiationEngine";
+import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/SatelliteMeshGatewayEngine";
+import { useRedStore } from "../store/useRedStore";
+import { toast } from "./Toast";
+
+export function CbrnSatelliteModal() {
+    const { navigate } = useRedStore();
+    const [cbrn, setCbrn] = useState<RadiationTelemetry>(() => cbrnRadiation.getTelemetry());
+    const [sat, setSat] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
+    const [activeTab, setActiveTab] = useState<"cbrn" | "satellite">("cbrn");
+
+    useEffect(() => {
+        cbrnRadiation.startMonitoring();
+        const unsubCbrn = cbrnRadiation.subscribe(setCbrn);
+        const unsubSat = satelliteMeshGateway.subscribe(setSat);
+
+        return () => {
+            unsubCbrn();
+            unsubSat();
+            cbrnRadiation.stopMonitoring();
+        };
+    }, []);
+
+    const handleSimulateDose = (rate: number) => {
+        cbrnRadiation.setDoseRate(rate);
+        toast.info(`Tasa de radiación calibrada a: ${rate} µSv/h`);
+    };
+
+    const handleTriggerSatBurst = () => {
+        const success = satelliteMeshGateway.triggerSatelliteBurst();
+        if (success) {
+            toast.success("🛰️ Ráfaga DTN inyectada a la constelación LEO exitosamente");
+        } else {
+            toast.error("Sin satélites en rango cenital (Elevación < 25°)");
+        }
+    };
+
+    return (
+        <div style={{
+            position: "fixed", inset: 0, zIndex: 1100,
+            background: "#050812", color: "#FFF",
+            display: "flex", flexDirection: "column",
+            fontFamily: "JetBrains Mono, monospace"
+        }}>
+            {/* Header */}
+            <div style={{
+                padding: "12px 16px", background: "rgba(10, 15, 30, 0.95)",
+                borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
+                display: "flex", justifyContent: "space-between", alignItems: "center"
+            }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "1.2rem" }}>☢️</span>
+                    <div>
+                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
+                            TELEMETRÍA CBRN & ENLACE SATELITAL LEO
+                        </div>
+                        <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
+                            Dosimetría Nuclear y Pasarela Espacial DTN Store-and-Forward
+                        </div>
+                    </div>
+                </div>
+                <button
+                    onClick={() => navigate("commandCenter")}
+                    style={{
+                        background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
+                        color: "#FFF", padding: "6px 12px", borderRadius: "8px",
+                        cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
+                    }}
+                >
+                    ✕ CERRAR
+                </button>
+            </div>
+
+            {/* Tab Selector */}
+            <div style={{ display: "flex", background: "rgba(15, 23, 42, 0.8)", padding: "6px 16px", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <button
+                    onClick={() => setActiveTab("cbrn")}
+                    style={{
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        background: activeTab === "cbrn" ? "#FFB300" : "transparent",
+                        color: activeTab === "cbrn" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                    }}
+                >
+                    ☢️ Dosímetro Nuclear CBRN
+                </button>
+                <button
+                    onClick={() => setActiveTab("satellite")}
+                    style={{
+                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.76rem", fontWeight: 800,
+                        background: activeTab === "satellite" ? "#00E5FF" : "transparent",
+                        color: activeTab === "satellite" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                    }}
+                >
+                    🛰️ Constelación Satelital ({sat.activePasses.filter(s => s.isInAos).length} en AOS)
+                </button>
+            </div>
+
+            {/* Content Body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "14px", maxWidth: "640px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
+                
+                {/* ── TAB 1: CBRN NUCLEAR DOSIMETRY ── */}
+                {activeTab === "cbrn" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        {/* Radiation Rate Display */}
+                        <div style={{
+                            background: "rgba(0, 0, 0, 0.5)", border: `1.5px solid ${cbrn.threatLevel === "LETHAL" ? "#FF3355" : cbrn.threatLevel === "HAZARDOUS" ? "#FF9100" : cbrn.threatLevel === "ELEVATED" ? "#FFD600" : "#00E676"}`,
+                            borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.74rem", color: "#AAA", fontWeight: 800 }}>TASA DE DOSIS INSTANTÁNEA</span>
+                                <span style={{
+                                    fontSize: "0.68rem", fontWeight: 900, padding: "2px 8px", borderRadius: "6px",
+                                    background: cbrn.threatLevel === "SAFE_BACKGROUND" ? "rgba(0,230,118,0.2)" : "rgba(232,33,58,0.3)",
+                                    color: cbrn.threatLevel === "SAFE_BACKGROUND" ? "#00E676" : "#FF3355"
+                                }}>
+                                    {cbrn.threatLevel}
+                                </span>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                                <span style={{ fontSize: "2.4rem", fontWeight: 900, color: "#FFF" }}>
+                                    {cbrn.doseRateUsVh}
+                                </span>
+                                <span style={{ fontSize: "1rem", color: "#FFB300", fontWeight: 800 }}>
+                                    µSv/h
+                                </span>
+                                <span style={{ fontSize: "0.85rem", color: "#888", marginLeft: "auto" }}>
+                                    {cbrn.countsPerMinuteCpm} CPM
+                                </span>
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "#DDD", lineHeight: "1.4" }}>
+                                {cbrn.arsRiskDescription}
+                            </div>
+                        </div>
+
+                        {/* Cumulative Dose & Safe Stay Time */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "10px", padding: "12px" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>DOSIS ACUMULADA</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    {cbrn.cumulativeDoseMsv} mSv
+                                </div>
+                                <div style={{ fontSize: "0.62rem", color: "#888" }}>Límite civil: 50 mSv</div>
+                            </div>
+                            <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "10px", padding: "12px" }}>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>TIEMPO SEGURO (T_stay)</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#00E676" }}>
+                                    {cbrn.safeStayTimeMinutes > 9999 ? "∞" : `${cbrn.safeStayTimeMinutes} min`}
+                                </div>
+                                <div style={{ fontSize: "0.62rem", color: "#888" }}>Hasta umbral de riesgo</div>
+                            </div>
+                        </div>
+
+                        {/* Test Calibration Rates */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            <div style={{ fontSize: "0.7rem", color: "#AAA", fontWeight: 800 }}>CALIBRACIÓN / PRUEBA DE SENSORES:</div>
+                            <div style={{ display: "flex", gap: "6px" }}>
+                                <button onClick={() => handleSimulateDose(0.12)} style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(0,230,118,0.15)", border: "1px solid #00E676", color: "#00E676", fontSize: "0.72rem", cursor: "pointer" }}>
+                                    Fondo (0.12)
+                                </button>
+                                <button onClick={() => handleSimulateDose(5.50)} style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(255,179,0,0.15)", border: "1px solid #FFB300", color: "#FFB300", fontSize: "0.72rem", cursor: "pointer" }}>
+                                    Elevado (5.5)
+                                </button>
+                                <button onClick={() => handleSimulateDose(65.0)} style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(232,33,58,0.15)", border: "1px solid #FF3355", color: "#FF3355", fontSize: "0.72rem", cursor: "pointer" }}>
+                                    Hazmat (65.0)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── TAB 2: SATELLITE LEO GATEWAY ── */}
+                {activeTab === "satellite" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{
+                            background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.2)",
+                            borderRadius: "12px", padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    UPLINK SATELITAL DISPONIBLE
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>
+                                    {sat.queuedOutboundPackets} paquetes encolados · {sat.totalUplinksTransmitted} ráfagas enviadas
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleTriggerSatBurst}
+                                style={{
+                                    padding: "10px 16px", borderRadius: "8px",
+                                    background: sat.isUplinkAvailable ? "#00E5FF" : "rgba(255,255,255,0.1)",
+                                    color: sat.isUplinkAvailable ? "#000" : "#888",
+                                    fontWeight: 900, fontSize: "0.76rem", border: "none", cursor: "pointer"
+                                }}
+                            >
+                                ⚡ DISPARAR UPLINK
+                            </button>
+                        </div>
+
+                        {/* Visible Satellites Pass List */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                            <div style={{ fontSize: "0.7rem", color: "#AAA", fontWeight: 800 }}>CONSTELACIONES EN SEGUIMIENTO ORBITAL:</div>
+                            {sat.activePasses.map(s => (
+                                <div
+                                    key={s.satelliteId}
+                                    style={{
+                                        padding: "10px 12px", borderRadius: "10px",
+                                        background: s.isInAos ? "rgba(0, 229, 255, 0.08)" : "rgba(255, 255, 255, 0.02)",
+                                        border: `1px solid ${s.isInAos ? "#00E5FF" : "rgba(255, 255, 255, 0.08)"}`,
+                                        display: "flex", justifyContent: "space-between", alignItems: "center"
+                                    }}
+                                >
+                                    <div>
+                                        <div style={{ fontWeight: 800, fontSize: "0.8rem", color: s.isInAos ? "#00E5FF" : "#FFF" }}>
+                                            {s.satelliteId} ({s.constellation})
+                                        </div>
+                                        <div style={{ fontSize: "0.65rem", color: "#888" }}>
+                                            Az: {s.azimuthDeg}° · Elev: {s.elevationDeg}° · {s.uplinkFrequencyMhz} MHz
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{
+                                            fontSize: "0.65rem", fontWeight: 900, padding: "2px 6px", borderRadius: "4px",
+                                            background: s.isInAos ? "rgba(0,230,118,0.2)" : "rgba(255,255,255,0.05)",
+                                            color: s.isInAos ? "#00E676" : "#AAA"
+                                        }}>
+                                            {s.isInAos ? `AOS (${s.passDurationSec}s)` : `Próximo: ${s.timeToAosSec}s`}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+            </div>
+        </div>
+    );
+}

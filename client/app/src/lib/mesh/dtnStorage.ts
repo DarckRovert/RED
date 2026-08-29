@@ -1,8 +1,8 @@
 /**
- * RED DTN (Delay-Tolerant Networking) Persistent Storage
+ * RED DTN (Delay-Tolerant Networking) Persistent Storage — IndexedDB Enterprise Vault
  * 
- * Manages persistent Store-and-Forward packet queuing across app reboots,
- * background mode transitions, and intermittent network blackouts.
+ * Manages high-capacity Store-and-Forward packet queuing across app reboots,
+ * background mode transitions, and multi-week network blackouts.
  * Retains undelivered packets with exponential backoff and cryptographic delivery ACK confirmation.
  */
 
@@ -28,49 +28,154 @@ export interface DtnQueueItem {
   priority: number;
 }
 
-const STORAGE_KEY = 'red_dtn_pending_queue_v1';
-const DEFAULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days retention for sovereign mesh DTN
-const MAX_QUEUE_SIZE = 1000;
+const DB_NAME = 'red_dtn_storage_vault';
+const STORE_NAME = 'packets';
+const DB_VERSION = 1;
+const STORAGE_KEY_FALLBACK = 'red_dtn_pending_queue_v1';
+const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days retention for sovereign mesh DTN
+const MAX_QUEUE_SIZE = 5000;
 
 class DtnStorage {
   private cache: DtnQueueItem[] | null = null;
+  private dbPromise: Promise<IDBDatabase | null> | null = null;
+  private isInitialized = false;
 
-  private getItems(): DtnQueueItem[] {
-    if (this.cache !== null) return this.cache;
-    if (typeof window === 'undefined') return [];
+  constructor() {
+    if (typeof window !== 'undefined') {
+      this.initAsync();
+    }
+  }
 
+  private getDB(): Promise<IDBDatabase | null> {
+    if (this.dbPromise) return this.dbPromise;
+
+    this.dbPromise = new Promise((resolve) => {
+      if (typeof window === 'undefined' || !window.indexedDB) {
+        return resolve(null);
+      }
+
+      const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onupgradeneeded = (e: any) => {
+        const db = e.target.result as IDBDatabase;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+          store.createIndex('targetRecipient', 'targetRecipient', { unique: false });
+          store.createIndex('priority', 'priority', { unique: false });
+          store.createIndex('expiresAt', 'expiresAt', { unique: false });
+        }
+      };
+
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => {
+        console.warn('[DtnStorage] IndexedDB open error, falling back to memory/local storage');
+        resolve(null);
+      };
+    });
+
+    return this.dbPromise;
+  }
+
+  private async initAsync() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const db = await this.getDB();
+      if (db) {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.getAll();
+
+        req.onsuccess = () => {
+          if (Array.isArray(req.result) && req.result.length > 0) {
+            this.cache = req.result;
+          } else {
+            // Check fallback localStorage
+            this.loadFromLocalStorageFallback();
+          }
+          this.isInitialized = true;
+        };
+        req.onerror = () => {
+          this.loadFromLocalStorageFallback();
+          this.isInitialized = true;
+        };
+      } else {
+        this.loadFromLocalStorageFallback();
+        this.isInitialized = true;
+      }
+    } catch {
+      this.loadFromLocalStorageFallback();
+      this.isInitialized = true;
+    }
+  }
+
+  private loadFromLocalStorageFallback() {
+    if (typeof window === 'undefined') {
+      this.cache = [];
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_FALLBACK);
       if (raw) {
         this.cache = JSON.parse(raw);
         if (!Array.isArray(this.cache)) this.cache = [];
       } else {
         this.cache = [];
       }
-    } catch (e) {
-      console.warn('[DtnStorage] Failed to parse DTN queue from storage:', e);
+    } catch {
       this.cache = [];
     }
-    return this.cache;
+  }
+
+  private getItems(): DtnQueueItem[] {
+    if (this.cache !== null) return this.cache;
+    this.loadFromLocalStorageFallback();
+    return this.cache || [];
+  }
+
+  private async saveItemToDB(item: DtnQueueItem) {
+    try {
+      const db = await this.getDB();
+      if (db) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put(item);
+      }
+    } catch (e) {
+      console.warn('[DtnStorage] IndexedDB saveItem error:', e);
+    }
+  }
+
+  private async removeItemFromDB(id: string) {
+    try {
+      const db = await this.getDB();
+      if (db) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(id);
+      }
+    } catch (e) {
+      console.warn('[DtnStorage] IndexedDB removeItem error:', e);
+    }
+  }
+
+  private async clearDB() {
+    try {
+      const db = await this.getDB();
+      if (db) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).clear();
+      }
+    } catch (e) {
+      console.warn('[DtnStorage] IndexedDB clear error:', e);
+    }
   }
 
   private saveItems(items: DtnQueueItem[]) {
     this.cache = items;
     if (typeof window === 'undefined') return;
 
+    // Persist small subset into localStorage fallback
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-    } catch (e) {
-      console.warn('[DtnStorage] Storage quota reached, pruning expired and lowest priority packets:', e);
-      try {
-        const now = Date.now();
-        const pruned = items.filter(it => it.expiresAt > now).slice(-200);
-        this.cache = pruned;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(pruned));
-      } catch (inner) {
-        console.error('[DtnStorage] Critical storage error, keeping in-memory queue only:', inner);
-      }
-    }
+      const topItems = items.slice(-100);
+      localStorage.setItem(STORAGE_KEY_FALLBACK, JSON.stringify(topItems));
+    } catch {}
   }
 
   private uint8ToHex(bytes: Uint8Array): string {
@@ -143,12 +248,20 @@ class DtnStorage {
     // If queue is overflowing, prune lowest priority / oldest items
     if (items.length >= MAX_QUEUE_SIZE) {
       items.sort((a, b) => a.priority === b.priority ? a.createdAt - b.createdAt : a.priority - b.priority);
-      items.shift();
+      const dropped = items.shift();
+      if (dropped) {
+        this.removeItemItemAsync(dropped.id);
+      }
     }
 
     items.push(item);
     this.saveItems(items);
+    this.saveItemToDB(item);
     console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} (Priority: ${calculatedPriority}) for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
+  }
+
+  private removeItemItemAsync(id: string) {
+    this.removeItemFromDB(id);
   }
 
   public getItemsToRetry(): DtnQueueItem[] {
@@ -170,8 +283,9 @@ class DtnStorage {
 
     if (success) {
       // Remove successfully delivered item
-      items.splice(idx, 1);
+      const removed = items.splice(idx, 1)[0];
       this.saveItems(items);
+      if (removed) this.removeItemFromDB(removed.id);
       console.log(`[DtnStorage] Packet ${nonce.slice(0, 8)} delivered and removed from DTN queue`);
     } else {
       // Calculate exponential backoff: 3s, 6s, 12s, 24s... capped at 5 minutes
@@ -181,6 +295,7 @@ class DtnStorage {
       const backoffSec = Math.min(300, Math.pow(2, Math.min(item.attempts, 8)) * 2);
       item.nextRetryAfter = Date.now() + backoffSec * 1000;
       this.saveItems(items);
+      this.saveItemToDB(item);
     }
   }
 
@@ -190,6 +305,7 @@ class DtnStorage {
     const filtered = items.filter(it => it.id !== nonce);
     if (filtered.length !== initialLen) {
       this.saveItems(filtered);
+      this.removeItemFromDB(nonce);
       return true;
     }
     return false;
@@ -197,9 +313,18 @@ class DtnStorage {
 
   public removeByRecipient(recipient: string): void {
     const items = this.getItems();
-    const filtered = items.filter(it => it.targetRecipient !== recipient && !it.targetRecipient.startsWith(recipient));
+    const toRemove: string[] = [];
+    const filtered = items.filter(it => {
+      if (it.targetRecipient === recipient || it.targetRecipient.startsWith(recipient)) {
+        toRemove.push(it.id);
+        return false;
+      }
+      return true;
+    });
+
     if (filtered.length !== items.length) {
       this.saveItems(filtered);
+      toRemove.forEach(id => this.removeItemFromDB(id));
     }
   }
 
@@ -207,9 +332,18 @@ class DtnStorage {
     const now = Date.now();
     const items = this.getItems();
     const initialLen = items.length;
-    const active = items.filter(it => it.expiresAt > now);
+    const toRemove: string[] = [];
+    const active = items.filter(it => {
+      if (it.expiresAt <= now) {
+        toRemove.push(it.id);
+        return false;
+      }
+      return true;
+    });
+
     if (active.length !== initialLen) {
       this.saveItems(active);
+      toRemove.forEach(id => this.removeItemFromDB(id));
       const purged = initialLen - active.length;
       console.log(`[DtnStorage] Purged ${purged} expired DTN packets`);
       return purged;
@@ -235,6 +369,7 @@ class DtnStorage {
 
   public clear(): void {
     this.saveItems([]);
+    this.clearDB();
   }
 }
 

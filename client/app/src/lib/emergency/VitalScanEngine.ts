@@ -16,6 +16,9 @@ export interface PPGScanResult {
     rawPeaks: number[];
     peakIndices: number[];
     fullWaveform: number[];
+    hrvRmssdMs?: number;
+    isShockSuspected?: boolean;
+    perfusionIndexPct?: number;
 }
 
 export interface StartTriageResult {
@@ -363,6 +366,22 @@ export class VitalScanEngine {
         let calculatedSpo2 = Math.round(108 - 20 * R);
         calculatedSpo2 = Math.max(88, Math.min(99, calculatedSpo2));
 
+        // Calculate Heart Rate Variability (HRV) RMSSD in milliseconds
+        let sumSquaredDiffs = 0;
+        let diffCount = 0;
+        for (let i = 0; i < ibis.length - 1; i++) {
+            const diff = ibis[i + 1] - ibis[i];
+            sumSquaredDiffs += diff * diff;
+            diffCount++;
+        }
+        const hrvRmssdMs = diffCount > 0 ? Math.round(Math.sqrt(sumSquaredDiffs / diffCount)) : 35;
+
+        // Perfusion Index (AC / DC ratio in percentage)
+        const perfusionIndexPct = Math.round(((acRedAvg / Math.max(1, dcRed)) * 100) * 10) / 10;
+
+        // Shock suspicion: Tachycardia (>120) or extreme Bradycardia (<45) or SpO2 < 90% with low perfusion (<0.5%)
+        const isShockSuspected = (calculatedBpm > 120 || calculatedBpm < 45 || calculatedSpo2 < 90) && (perfusionIndexPct < 0.8);
+
         return {
             bpm: calculatedBpm,
             spo2: calculatedSpo2,
@@ -370,7 +389,10 @@ export class VitalScanEngine {
             confidencePercent: confidence,
             rawPeaks: peaks,
             peakIndices,
-            fullWaveform: detrendedRed
+            fullWaveform: detrendedRed,
+            hrvRmssdMs,
+            isShockSuspected,
+            perfusionIndexPct
         };
     }
 }

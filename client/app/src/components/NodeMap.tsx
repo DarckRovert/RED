@@ -10,6 +10,11 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { HiveMindEngine } from "../lib/hiveMindEngine";
 import { toast } from "./Toast";
 import { OffGridNavigationEngine, TacticalTarget } from "../lib/OffGridNavigationEngine";
+import { offlineTileCacheEngine, DownloadProgress, TileCacheStats } from "../lib/storage/OfflineTileCacheEngine";
+import { tacticalGeofence } from "../lib/sensors/TacticalGeofenceEngine";
+import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
+import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
+import { sitrepEngine } from "../lib/tactical/SitrepEngine";
 
 function getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000;
@@ -106,6 +111,63 @@ export default function NodeMap() {
     const [realGPS, setRealGPS] = useState(false);
     const [selectedPeer, setSelectedPeer] = useState<CanonicalNode | null>(null);
     const [showTelemetryDrawer, setShowTelemetryDrawer] = useState(false);
+    const [showVaultModal, setShowVaultModal] = useState(false);
+    const [vaultRadiusKm, setVaultRadiusKm] = useState(10);
+    const [vaultStats, setVaultStats] = useState<TileCacheStats | null>(null);
+    const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+    const [isDownloadingVault, setIsDownloadingVault] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    const loadVaultStats = async () => {
+        const stats = await offlineTileCacheEngine.getCacheStats();
+        setVaultStats(stats);
+    };
+
+    const handleStartVaultDownload = async () => {
+        if (gpsData.lat === 0 && gpsData.lng === 0) {
+            toast.warning("Esperando coordenadas GPS válidas para calcular el centro de la zona.");
+            return;
+        }
+
+        setIsDownloadingVault(true);
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        try {
+            await offlineTileCacheEngine.downloadRegion(
+                gpsData.lat,
+                gpsData.lng,
+                vaultRadiusKm,
+                11,
+                16,
+                (progress) => {
+                    setDownloadProgress(progress);
+                },
+                controller.signal
+            );
+            toast.success("¡Zona táctica descargada en la bóveda local!");
+            loadVaultStats();
+        } catch (e: any) {
+            toast.info(e.message || "Descarga detenida.");
+        } finally {
+            setIsDownloadingVault(false);
+            abortControllerRef.current = null;
+        }
+    };
+
+    const handleCancelVaultDownload = () => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+        setIsDownloadingVault(false);
+    };
+
+    const handleClearVault = async () => {
+        await offlineTileCacheEngine.clearCache();
+        loadVaultStats();
+        toast.info("Bóveda de mapas offline vaciada");
+    };
 
     // Tactical Target Navigation State (Synchronized with OffGridCompassModal)
     const [target, setTarget] = useState<TacticalTarget | null>(() => {
@@ -370,10 +432,59 @@ export default function NodeMap() {
                     attributionControl: false
                 });
 
-                // Teselas oscuras tácticas CartoDB
-                L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+                // Capa de Teselas Tácticas con prioridad de Bóveda Offline (IndexedDB)
+                const OfflineTileLayer = (L.TileLayer as any).extend({
+                    createTile(coords: any, done: any) {
+                        const tile = document.createElement('img');
+                        L.DomEvent.on(tile, 'load', L.Util.bind((this as any)._tileOnLoad, this, done, tile));
+                        L.DomEvent.on(tile, 'error', L.Util.bind((this as any)._tileOnError, this, done, tile));
+
+                        if ((this as any).options.crossOrigin || (this as any).options.crossOrigin === '') {
+                            tile.crossOrigin = (this as any).options.crossOrigin === true ? '' : (this as any).options.crossOrigin;
+                        }
+
+                        tile.alt = '';
+                        tile.setAttribute('role', 'presentation');
+
+                        // 1. Consultar primero la bóveda IndexedDB
+                        offlineTileCacheEngine.getTile(coords.z, coords.x, coords.y).then((cachedBlob) => {
+                            if (cachedBlob) {
+                                tile.src = URL.createObjectURL(cachedBlob);
+                            } else {
+                                const url = (this as any).getTileUrl(coords);
+                                tile.src = url;
+                                // Guardar en caché automáticamente si se descarga de la red
+                                fetch(url).then(res => res.ok ? res.blob() : null).then(blob => {
+                                    if (blob) offlineTileCacheEngine.saveTile(coords.z, coords.x, coords.y, blob);
+                                }).catch(() => {});
+                            }
+                        }).catch(() => {
+                            tile.src = (this as any).getTileUrl(coords);
+                        });
+
+                        return tile;
+                    }
+                });
+
+                const osmLayer = new OfflineTileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
                     maxZoom: 19,
-                }).addTo(mapInstance);
+                    className: "tactical-dark-tile",
+                    errorTileUrl: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.2' fill='none'/%3E%3C/svg%3E"
+                });
+
+                // Fallback a Esri World Dark Gray Base si OSM experimenta latencia o desconexión
+                osmLayer.on("tileerror", () => {
+                    if (!mapInstance) return;
+                    try {
+                        const fallbackLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+                            maxZoom: 16,
+                            className: "tactical-dark-tile"
+                        });
+                        fallbackLayer.addTo(mapInstance);
+                    } catch {}
+                });
+
+                osmLayer.addTo(mapInstance);
 
                 // Listener de fijación de Objetivo Táctico con click
                 mapInstance.on("click", (e: any) => {
@@ -419,19 +530,21 @@ export default function NodeMap() {
                     }).addTo(markersGroupRef.current);
                 });
 
-                // Marcadores de Nodos de la Malla
+                // Marcadores de Nodos de la Malla (MIL-STD-2525D Blue-Force Tracking)
                 peers.forEach((p) => {
                     const pos = derivePeerPosition(gpsData.lat, gpsData.lng, p);
                     const isMulti = p.transports.length > 1;
-                    const peerColor = isMulti 
-                        ? "#00E5FF" 
-                        : (p.transports.includes("wifi") ? "#00E676" : p.transports.includes("lora") ? "#B388FF" : "#00E5FF");
+                    const milSvg = milStd2525.generateSvg({
+                        affiliation: 'FRIEND',
+                        role: isMulti ? 'COMMAND_HQ' : 'INFANTRY',
+                        size: 26
+                    });
                     
                     const peerIcon = L.divIcon({
                         className: "custom-peer-marker",
-                        html: `<div style="width:20px;height:20px;border-radius:50%;background:${peerColor};border:2px solid #fff;box-shadow:0 0 14px ${peerColor};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#000;">${isMulti ? "⚡" : "●"}</div>`,
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10]
+                        html: `<div style="filter:drop-shadow(0 0 8px #00E5FF);cursor:pointer;">${milSvg}</div>`,
+                        iconSize: [26, 26],
+                        iconAnchor: [13, 13]
                     });
 
                     const m = L.marker([pos.lat, pos.lng], { icon: peerIcon }).addTo(markersGroupRef.current);
@@ -448,16 +561,21 @@ export default function NodeMap() {
                         waypoints.forEach((wp: any) => {
                             if (typeof wp.lat === "number" && typeof wp.lon === "number") {
                                 const dist = getHaversineDistanceMeters(gpsData.lat, gpsData.lng, wp.lat, wp.lon);
+                                const wpSvg = milStd2525.generateSvg({
+                                    affiliation: 'NEUTRAL',
+                                    role: 'SUPPLY_AMMO',
+                                    size: 24
+                                });
                                 const wpIcon = L.divIcon({
                                     className: "custom-waypoint-marker",
-                                    html: `<div style="width:24px;height:24px;border-radius:50%;background:#FFB300;border:2px solid #fff;box-shadow:0 0 16px #FFB300;display:flex;align-items:center;justify-content:center;font-size:12px;">🚩</div>`,
+                                    html: `<div style="filter:drop-shadow(0 0 8px #00E676);">${wpSvg}</div>`,
                                     iconSize: [24, 24],
                                     iconAnchor: [12, 12]
                                 });
                                 const wpMarker = L.marker([wp.lat, wp.lon], { icon: wpIcon }).addTo(markersGroupRef.current);
                                 wpMarker.bindPopup(`
                                     <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
-                                        <strong>🚩 ${wp.name || 'Waypoint'}</strong><br/>
+                                        <strong>🚩 ${wp.name || 'Waypoint'} (MIL-STD-2525D)</strong><br/>
                                         Distancia: ${dist}m<br/>
                                         Rumbo: ${wp.bearingDegrees || 0}°
                                     </div>
@@ -467,13 +585,18 @@ export default function NodeMap() {
                     }
                 } catch {}
 
-                // Marcador y Vector del Objetivo Táctico Activo
+                // Marcador y Vector del Objetivo Táctico Activo (MIL-STD-2525D Hostile Threat)
                 if (target) {
+                    const targetSvg = milStd2525.generateSvg({
+                        affiliation: 'HOSTILE',
+                        role: 'RECON_DRONE',
+                        size: 32
+                    });
                     const targetIcon = L.divIcon({
                         className: "custom-target-marker",
-                        html: `<div style="width:28px;height:28px;border-radius:50%;background:#E8213A;border:3px solid #FFF;box-shadow:0 0 20px #E8213A;display:flex;align-items:center;justify-content:center;font-size:13px;animation:pulse 1.2s infinite;color:#FFF;">🎯</div>`,
-                        iconSize: [28, 28],
-                        iconAnchor: [14, 14]
+                        html: `<div style="filter:drop-shadow(0 0 12px #FF3355);animation:pulse 1.2s infinite;">${targetSvg}</div>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16]
                     });
                     const targetMarker = L.marker([target.lat, target.lon], { icon: targetIcon }).addTo(markersGroupRef.current);
                     
@@ -496,6 +619,63 @@ export default function NodeMap() {
                         }).addTo(markersGroupRef.current);
                     }
                 }
+
+                // Marcadores de Geocercas Tácticas
+                try {
+                    const geofences = tacticalGeofence.getZones().filter(z => z.active);
+                    geofences.forEach(zone => {
+                        const colorMap: Record<string, string> = {
+                            'EXCLUSION_ZONE': '#E8213A',
+                            'RF_SILENCE': '#00E5FF',
+                            'SAFE_HAVEN': '#00E676',
+                            'DEFENSIVE_PERIMETER': '#FFB300'
+                        };
+                        const zoneColor = colorMap[zone.category] || '#00E5FF';
+
+                        if (zone.geometryType === 'CIRCULAR' && zone.centerLat && zone.centerLon) {
+                            L.circle([zone.centerLat, zone.centerLon], {
+                                radius: zone.radiusMeters,
+                                color: zoneColor,
+                                weight: 2,
+                                fillColor: zoneColor,
+                                fillOpacity: 0.12,
+                                dashArray: '4, 6'
+                            }).bindPopup(`
+                                <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                    <strong>🛡️ ${zone.name}</strong><br/>
+                                    Tipo: ${zone.category}<br/>
+                                    Radio: ${zone.radiusMeters}m
+                                </div>
+                            `).addTo(markersGroupRef.current);
+                        }
+                    });
+                } catch {}
+
+                // Marcadores de Geocachés Dead-Drop Cifrados
+                try {
+                    const deadDrops = deadDropVault.getDeadDrops();
+                    deadDrops.forEach(drop => {
+                        const hasGps = gpsData.lat !== 0 && gpsData.lng !== 0;
+                        const dist = hasGps ? getHaversineDistanceMeters(gpsData.lat, gpsData.lng, drop.lat, drop.lon) : 999999;
+                        const isNearby = hasGps && dist <= drop.unlockRadiusMeters;
+                        const dropIcon = L.divIcon({
+                            className: "custom-deaddrop-marker",
+                            html: `<div style="width:24px;height:24px;border-radius:50%;background:${drop.isUnlocked ? '#00E676' : isNearby ? '#00E5FF' : '#B388FF'};border:2px solid #fff;box-shadow:0 0 16px ${drop.isUnlocked ? '#00E676' : '#B388FF'};display:flex;align-items:center;justify-content:center;font-size:12px;">${drop.isUnlocked ? '🔓' : isNearby ? '📦' : '🔒'}</div>`,
+                            iconSize: [24, 24],
+                            iconAnchor: [12, 12]
+                        });
+                        const m = L.marker([drop.lat, drop.lon], { icon: dropIcon }).addTo(markersGroupRef.current);
+                        m.bindPopup(`
+                            <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#000;padding:2px;">
+                                <strong>📦 Dead-Drop: ${drop.title}</strong><br/>
+                                Categoría: ${drop.category}<br/>
+                                Distancia: ${hasGps ? `${dist}m` : 'Buscando GPS...'} (Radio: ${drop.unlockRadiusMeters}m)<br/>
+                                Estado: <strong>${drop.isUnlocked ? 'DESBLOQUEADO' : isNearby ? 'LISTO PARA DESBLOQUEO' : 'FUERA DE RANGO'}</strong><br/>
+                                ${drop.isUnlocked && drop.plaintextPayload ? `<div style="margin-top:4px;padding:4px;background:#eef;border-radius:4px;word-break:break-all;">${drop.plaintextPayload}</div>` : ''}
+                            </div>
+                        `);
+                    });
+                } catch {}
             }
         };
 
@@ -553,6 +733,14 @@ export default function NodeMap() {
                 </div>
 
                 <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
+                    <button
+                        onClick={() => { setShowVaultModal(true); loadVaultStats(); }}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 9px", fontSize: "0.74rem" }}
+                        title="Bóveda de Mapas Offline"
+                    >
+                        📥
+                    </button>
                     <button
                         onClick={() => setShowTelemetryDrawer(!showTelemetryDrawer)}
                         className={`btn-tactical-${showTelemetryDrawer ? "primary" : "secondary"}`}
@@ -850,6 +1038,143 @@ export default function NodeMap() {
                                 </div>
                             ))
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Táctico: Bóveda de Mapas Offline */}
+            {showVaultModal && (
+                <div style={{
+                    position: "absolute", inset: 0, zIndex: 1100,
+                    background: "rgba(2, 4, 10, 0.85)", backdropFilter: "blur(20px)",
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+                }}>
+                    <div className="card-tactical animate-pop" style={{
+                        width: "100%", maxWidth: "440px",
+                        background: "rgba(10, 14, 26, 0.98)", border: "1.5px solid var(--accent-cyan)",
+                        borderRadius: "16px", padding: "20px", display: "flex", flexDirection: "column", gap: "16px",
+                        boxShadow: "0 16px 40px rgba(0,0,0,0.8), 0 0 30px rgba(0,229,255,0.2)"
+                    }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "1.3rem" }}>📥</span>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--text-primary)" }}>
+                                        Bóveda de Mapas Offline
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        PERSISTENCIA LOCAL 100% OFF-GRID
+                                    </div>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => { handleCancelVaultDownload(); setShowVaultModal(false); }}
+                                className="btn-icon" style={{ width: 28, height: 28 }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {/* Telemetría actual de la bóveda */}
+                        <div style={{
+                            background: "rgba(0,0,0,0.4)", border: "1px solid var(--glass-border)",
+                            borderRadius: "10px", padding: "10px 14px", display: "flex", justifyContent: "space-between"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 700 }}>TESELAS EN BÓVEDA</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {vaultStats ? vaultStats.totalTiles : "…"}
+                                </div>
+                            </div>
+                            <div style={{ textAlign: "right" }}>
+                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 700 }}>ESPACIO EN DISCO</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {vaultStats ? vaultStats.formattedSize : "…"}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Selector de Radio Táctico */}
+                        <div>
+                            <label style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontWeight: 800, display: "block", marginBottom: "6px" }}>
+                                RADIO DE DESCARGA DESDE POSICIÓN ACTUAL:
+                            </label>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+                                {[5, 10, 25, 50].map(r => (
+                                    <button
+                                        key={r}
+                                        onClick={() => setVaultRadiusKm(r)}
+                                        disabled={isDownloadingVault}
+                                        style={{
+                                            padding: "8px", borderRadius: "8px",
+                                            background: vaultRadiusKm === r ? "var(--accent-cyan)" : "rgba(255,255,255,0.06)",
+                                            color: vaultRadiusKm === r ? "#000" : "var(--text-primary)",
+                                            fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer"
+                                        }}
+                                    >
+                                        {r} km
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                                Niveles de zoom: 11 (visión estratégica) a 16 (detalle topográfico táctico).
+                            </div>
+                        </div>
+
+                        {/* Barra de progreso de descarga */}
+                        {downloadProgress && isDownloadingVault && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace" }}>
+                                    <span style={{ color: "var(--accent-cyan)" }}>Progreso: {downloadProgress.percent}%</span>
+                                    <span style={{ color: "var(--text-muted)" }}>{downloadProgress.downloaded} / {downloadProgress.total} ({downloadProgress.formattedBytes})</span>
+                                </div>
+                                <div style={{ height: "6px", background: "rgba(255,255,255,0.1)", borderRadius: "3px", overflow: "hidden" }}>
+                                    <div style={{
+                                        width: `${downloadProgress.percent}%`,
+                                        height: "100%",
+                                        background: "linear-gradient(90deg, #00E5FF, #00E676)",
+                                        transition: "width 0.2s linear"
+                                    }} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Botones de acción */}
+                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                            {isDownloadingVault ? (
+                                <button
+                                    onClick={handleCancelVaultDownload}
+                                    style={{
+                                        flex: 1, padding: "10px", borderRadius: "8px",
+                                        background: "rgba(255, 60, 95, 0.2)", border: "1px solid var(--accent-crimson)",
+                                        color: "#FFF", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer"
+                                    }}
+                                >
+                                    🛑 Detener Descarga
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={handleStartVaultDownload}
+                                    className="btn-tactical-primary"
+                                    style={{ flex: 1, padding: "10px", fontSize: "0.82rem", fontWeight: 800 }}
+                                >
+                                    📥 Descargar Zona ({vaultRadiusKm} km)
+                                </button>
+                            )}
+
+                            <button
+                                onClick={handleClearVault}
+                                disabled={isDownloadingVault}
+                                style={{
+                                    padding: "10px 14px", borderRadius: "8px",
+                                    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)",
+                                    color: "var(--text-muted)", fontWeight: 700, fontSize: "0.78rem", cursor: "pointer"
+                                }}
+                                title="Vaciar caché de mapas"
+                            >
+                                🗑️
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

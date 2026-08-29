@@ -136,6 +136,60 @@ export class RedAppRegistry {
             this.saveToStorage();
         }
     }
+
+    /**
+     * Exporta un bundle de aplicación en formato serializado transportable por la malla
+     */
+    public exportAppPackage(appId: string): string | null {
+        const entry = this.apps.get(appId);
+        if (!entry) return null;
+
+        const pkg = {
+            format: 'RED_APP_PACKAGE_V1',
+            exportedAt: Date.now(),
+            bundle: entry.bundle,
+            manifest: entry.manifest
+        };
+
+        const json = JSON.stringify(pkg);
+        const encoded = typeof btoa !== 'undefined' ? btoa(unescape(encodeURIComponent(json))) : Buffer.from(json).toString('base64');
+        return `RED_APP_V1:${encoded}`;
+    }
+
+    /**
+     * Importa y valida un paquete .redapp recibido de la malla o de un archivo
+     */
+    public importAppPackage(rawPackage: string): { bundle: RedAppBundle; isValid: boolean; error?: string } {
+        try {
+            let encoded = rawPackage.trim();
+            if (encoded.startsWith('RED_APP_V1:')) {
+                encoded = encoded.substring(11);
+            }
+
+            const json = typeof atob !== 'undefined' ? decodeURIComponent(escape(atob(encoded))) : Buffer.from(encoded, 'base64').toString('utf8');
+            const parsed = JSON.parse(json);
+
+            if (!parsed.bundle || !parsed.bundle.manifest || !parsed.bundle.manifest.id || !parsed.bundle.html) {
+                return { bundle: null as any, isValid: false, error: 'Estructura de paquete inválida o manifiesto corrupto.' };
+            }
+
+            const manifest: RedAppManifest = parsed.bundle.manifest;
+            if (!manifest.name || !manifest.version) {
+                return { bundle: null as any, isValid: false, error: 'El manifiesto no especifica nombre o versión.' };
+            }
+
+            return {
+                bundle: parsed.bundle,
+                isValid: true
+            };
+        } catch (e: any) {
+            return {
+                bundle: null as any,
+                isValid: false,
+                error: e.message || 'Error al decodificar paquete de aplicación.'
+            };
+        }
+    }
 }
 
 export const redAppRegistry = RedAppRegistry.getInstance();

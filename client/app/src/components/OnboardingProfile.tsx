@@ -17,7 +17,7 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
     const { identity, fetchData, navigate } = useRedStore();
 
     const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
-    const [displayName, setDisplayName] = useState("");
+    const [displayName, setDisplayName] = useState("Operador-RED");
     const [avatarColor, setAvatarColor] = useState("#FF3355");
     const [saving, setSaving] = useState(false);
     // Step 4: QR real generado desde la librería qrcode
@@ -112,9 +112,10 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
 
     return (
         <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            minHeight: "100dvh", width: "100%", background: "radial-gradient(ellipse at top, #14182B 0%, #080A12 100%)",
-            color: "var(--text-primary)", padding: "20px 16px", boxSizing: "border-box", position: "relative"
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start",
+            minHeight: "100dvh", maxHeight: "100dvh", width: "100%", background: "radial-gradient(ellipse at top, #14182B 0%, #080A12 100%)",
+            color: "var(--text-primary)", padding: "70px 16px 40px 16px", boxSizing: "border-box", position: "relative",
+            overflowY: "auto", WebkitOverflowScrolling: "touch"
         }}>
             {/* Top Step Indicator */}
             <div style={{

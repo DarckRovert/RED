@@ -41,6 +41,18 @@ const LiveStreamViewer      = dynamic(() => import("../components/LiveStreamView
 const OffGridCompassModal   = dynamic(() => import("../components/OffGridCompassModal").then(m => ({ default: m.OffGridCompassModal })), { ssr: false, loading: () => <AppLoader /> });
 const VitalScanModal       = dynamic(() => import("../components/VitalScanModal").then(m => ({ default: m.VitalScanModal })),       { ssr: false, loading: () => <AppLoader /> });
 const SurvivalBeaconModal  = dynamic(() => import("../components/SurvivalBeaconModal").then(m => ({ default: m.SurvivalBeaconModal })),  { ssr: false, loading: () => <AppLoader /> });
+const TacticalVisionScanModal = dynamic(() => import("../components/TacticalVisionScanModal").then(m => ({ default: m.TacticalVisionScanModal })), { ssr: false, loading: () => <AppLoader /> });
+const ShamirRecoveryModal   = dynamic(() => import("../components/ShamirRecoveryModal").then(m => ({ default: m.ShamirRecoveryModal })),   { ssr: false, loading: () => <AppLoader /> });
+const CbrnSatelliteModal    = dynamic(() => import("../components/CbrnSatelliteModal").then(m => ({ default: m.CbrnSatelliteModal })),    { ssr: false, loading: () => <AppLoader /> });
+const ZkBarterSubsurfaceModal = dynamic(() => import("../components/ZkBarterSubsurfaceModal").then(m => ({ default: m.ZkBarterSubsurfaceModal })), { ssr: false, loading: () => <AppLoader /> });
+const TcccBallisticsModal    = dynamic(() => import("../components/TcccBallisticsModal").then(m => ({ default: m.TcccBallisticsModal })),    { ssr: false, loading: () => <AppLoader /> });
+const C4isrEmpDrillModal     = dynamic(() => import("../components/C4isrEmpDrillModal").then(m => ({ default: m.C4isrEmpDrillModal })),     { ssr: false, loading: () => <AppLoader /> });
+const AirGapStegoModal       = dynamic(() => import("../components/AirGapStegoModal").then(m => ({ default: m.AirGapStegoModal })),       { ssr: false, loading: () => <AppLoader /> });
+const CelestialPdrModal      = dynamic(() => import("../components/CelestialPdrModal").then(m => ({ default: m.CelestialPdrModal })),      { ssr: false, loading: () => <AppLoader /> });
+const AcousticWarfareModal   = dynamic(() => import("../components/AcousticWarfareModal").then(m => ({ default: m.AcousticWarfareModal })),   { ssr: false, loading: () => <AppLoader /> });
+const VitalResourcesModal    = dynamic(() => import("../components/VitalResourcesModal").then(m => ({ default: m.VitalResourcesModal })),    { ssr: false, loading: () => <AppLoader /> });
+const SonarSeismicModal      = dynamic(() => import("../components/SonarSeismicModal").then(m => ({ default: m.SonarSeismicModal })),      { ssr: false, loading: () => <AppLoader /> });
+const TacticalFoxhuntModal   = dynamic(() => import("../components/TacticalFoxhuntModal").then(m => ({ default: m.TacticalFoxhuntModal })),   { ssr: false, loading: () => <AppLoader /> });
 const RfSpectrumModal      = dynamic(() => import("../components/RfSpectrumModal").then(m => ({ default: m.RfSpectrumModal })),      { ssr: false, loading: () => <AppLoader /> });
 const StegoVaultModal      = dynamic(() => import("../components/StegoVaultModal").then(m => ({ default: m.StegoVaultModal })),      { ssr: false, loading: () => <AppLoader /> });
 const ShakePairModal       = dynamic(() => import("../components/ShakePairModal").then(m => ({ default: m.ShakePairModal })),       { ssr: false, loading: () => <AppLoader /> });
@@ -426,6 +438,30 @@ export default function AppRouter() {
     };
   }, []);
 
+  const handleCalculatorUnlock = async (pin: string) => {
+    try {
+      const { getSecurePin } = await import("../lib/crypto/BiometricLockEngine");
+      const masterPin = await getSecurePin("master_pin");
+      const decoyPin = await getSecurePin("decoy_pin");
+      const panicPin = await getSecurePin("panic_pin");
+
+      if (panicPin && pin === panicPin) {
+        if (typeof window !== "undefined") {
+          localStorage.clear();
+          sessionStorage.clear();
+        }
+        useRedStore.setState({ isAuthenticated: false, messages: [], contacts: [] });
+        return false;
+      }
+
+      if ((masterPin && pin === masterPin) || (decoyPin && pin === decoyPin)) {
+        goBack();
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+
   if (!mounted) return <FullScreenTacticalLoader />;
 
   if (showLanding) {
@@ -504,6 +540,18 @@ export default function AppRouter() {
                 {(currentScreen === "offGridCompass" || currentScreen === "compass") && <OffGridCompassModal />}
                 {currentScreen === "vitalScan" && <VitalScanModal />}
                 {(currentScreen === "survivalBeacon" || currentScreen === "sos") && <SurvivalBeaconModal />}
+                {currentScreen === "tacticalVisionScan" && <TacticalVisionScanModal />}
+                {currentScreen === "shamirRecovery" && <ShamirRecoveryModal />}
+                {currentScreen === "cbrnSatellite" && <CbrnSatelliteModal />}
+                {currentScreen === "zkBarterSubsurface" && <ZkBarterSubsurfaceModal />}
+                {currentScreen === "tcccBallistics" && <TcccBallisticsModal />}
+                {currentScreen === "c4isrEmpDrill" && <C4isrEmpDrillModal />}
+                {currentScreen === "airGapStego" && <AirGapStegoModal />}
+                {currentScreen === "celestialPdr" && <CelestialPdrModal />}
+                {currentScreen === "acousticWarfare" && <AcousticWarfareModal />}
+                {currentScreen === "vitalResources" && <VitalResourcesModal />}
+                {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
+                {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
                 {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
                 {currentScreen === "stegoVault" && <StegoVaultModal />}
                 {currentScreen === "shakePair" && <ShakePairModal />}
@@ -525,6 +573,8 @@ export default function AppRouter() {
                 {currentScreen === "hyperBrowser" && (
                   <RedHyperBrowserModal
                     userDid={identity?.identity_hash || 'did:red:guest'}
+                    nickname={identity?.nickname || 'Operador'}
+                    publicKey={identity?.identity_hash || 'pk_00'}
                     onClose={goBack}
                     onLaunchMiniApp={(bundle) => launchMiniApp(bundle)}
                   />
@@ -545,7 +595,7 @@ export default function AppRouter() {
                     onClose={goBack}
                   />
                 )}
-                {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
+                {currentScreen === "calculator" && <CalculatorScreen onUnlock={handleCalculatorUnlock} />}
                 {currentScreen === "landing" && <RedShowcaseLanding onEnterApp={() => navigate("sidebar")} onEnterVault={() => navigate("sidebar")} />}
               </div>
             </div>
@@ -584,6 +634,18 @@ export default function AppRouter() {
               {(currentScreen === "offGridCompass" || currentScreen === "compass") && <OffGridCompassModal />}
               {currentScreen === "vitalScan" && <VitalScanModal />}
               {(currentScreen === "survivalBeacon" || currentScreen === "sos") && <SurvivalBeaconModal />}
+              {currentScreen === "tacticalVisionScan" && <TacticalVisionScanModal />}
+              {currentScreen === "shamirRecovery" && <ShamirRecoveryModal />}
+              {currentScreen === "cbrnSatellite" && <CbrnSatelliteModal />}
+              {currentScreen === "zkBarterSubsurface" && <ZkBarterSubsurfaceModal />}
+              {currentScreen === "tcccBallistics" && <TcccBallisticsModal />}
+              {currentScreen === "c4isrEmpDrill" && <C4isrEmpDrillModal />}
+              {currentScreen === "airGapStego" && <AirGapStegoModal />}
+              {currentScreen === "celestialPdr" && <CelestialPdrModal />}
+              {currentScreen === "acousticWarfare" && <AcousticWarfareModal />}
+              {currentScreen === "vitalResources" && <VitalResourcesModal />}
+              {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
+              {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
               {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
               {currentScreen === "stegoVault" && <StegoVaultModal />}
               {currentScreen === "shakePair" && <ShakePairModal />}
@@ -591,7 +653,7 @@ export default function AppRouter() {
               {currentScreen === "blackout" && <BlackoutSimulatorModal onClose={goBack} />}
               {(currentScreen === "health" || currentScreen === "systemHealth") && <SystemHealthModal onClose={goBack} />}
               {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
-              {currentScreen === "calculator" && <CalculatorScreen onUnlock={() => goBack()} />}
+              {currentScreen === "calculator" && <CalculatorScreen onUnlock={handleCalculatorUnlock} />}
               {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
               {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
               {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && <WebCompanionLinkModal onClose={goBack} />}
@@ -603,6 +665,8 @@ export default function AppRouter() {
               {currentScreen === "hyperBrowser" && (
                 <RedHyperBrowserModal
                   userDid={identity?.identity_hash || 'did:red:guest'}
+                  nickname={identity?.nickname || 'Operador'}
+                  publicKey={identity?.identity_hash || 'pk_00'}
                   onClose={goBack}
                   onLaunchMiniApp={(bundle) => launchMiniApp(bundle)}
                 />

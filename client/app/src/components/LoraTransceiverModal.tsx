@@ -78,17 +78,43 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-            <div className="relative w-full max-w-2xl bg-neutral-950/95 border border-emerald-500/40 rounded-2xl shadow-2xl overflow-hidden text-neutral-200">
+        <div 
+            style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
+                background: "rgba(2, 4, 10, 0.90)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "16px",
+                userSelect: "none"
+            }}
+        >
+            <div 
+                style={{
+                    position: "relative",
+                    width: "100%",
+                    maxWidth: "680px",
+                    background: "linear-gradient(180deg, rgba(14,18,34,0.98) 0%, rgba(6,8,16,0.99) 100%)",
+                    border: "1.5px solid rgba(0, 230, 118, 0.35)",
+                    borderRadius: "20px",
+                    boxShadow: "0 16px 50px rgba(0,0,0,0.85), 0 0 30px rgba(0, 230, 118, 0.15)",
+                    overflow: "hidden",
+                    color: "#FFFFFF"
+                }}
+            >
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-900/60">
-                    <div className="flex items-center gap-3">
-                        <div className={`w-3.5 h-3.5 rounded-full ${telemetry.connected ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)] animate-pulse" : "bg-neutral-600"}`} />
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(6, 8, 16, 0.95)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: telemetry.connected ? "var(--accent-emerald)" : "#666666", boxShadow: telemetry.connected ? "0 0 12px var(--accent-emerald)" : "none" }} />
                         <div>
-                            <h2 className="text-lg font-bold tracking-wider text-emerald-400 font-mono">
+                            <h2 style={{ fontSize: "0.95rem", fontWeight: 900, letterSpacing: "0.5px", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", margin: 0 }}>
                                 📡 TRANSCEPTOR LORA TÁCTICO (SX1262)
                             </h2>
-                            <p className="text-xs text-neutral-400 font-mono">
+                            <p style={{ fontSize: "0.7rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0" }}>
                                 Enlace de Largo Alcance (15–25 km) · Frecuencia ISM 915/868 MHz
                             </p>
                         </div>
@@ -96,40 +122,70 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     {onClose && (
                         <button
                             onClick={onClose}
-                            className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors"
+                            style={{
+                                background: "rgba(255, 255, 255, 0.08)",
+                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                color: "#FFFFFF",
+                                width: "30px",
+                                height: "30px",
+                                borderRadius: "8px",
+                                cursor: "pointer",
+                                fontSize: "0.85rem",
+                                fontWeight: 900
+                            }}
                         >
                             ✕
                         </button>
                     )}
                 </div>
 
-                <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto font-mono text-xs">
+                <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px", maxHeight: "80vh", overflowY: "auto", fontFamily: "JetBrains Mono, monospace", fontSize: "0.75rem" }}>
                     {/* Connection Panel */}
-                    <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-900/40 flex flex-wrap items-center justify-between gap-4">
+                    <div style={{ padding: "14px", borderRadius: "14px", border: "1px solid rgba(255, 255, 255, 0.12)", background: "rgba(0, 0, 0, 0.5)", display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                         <div>
-                            <div className="text-neutral-400">ESTADO DEL HARDWARE:</div>
-                            <div className="text-sm font-bold text-neutral-100 flex items-center gap-2 mt-0.5">
+                            <div style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>ESTADO DEL HARDWARE:</div>
+                            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
                                 {telemetry.connected ? (
-                                    <span className="text-emerald-400">CONECTADO ({telemetry.transportType})</span>
+                                    <span style={{ color: "var(--accent-emerald)" }}>CONECTADO ({telemetry.transportType})</span>
                                 ) : (
-                                    <span className="text-amber-400">SIN DISPOSITIVO HARDWARE USB</span>
+                                    <span style={{ color: "var(--accent-amber)" }}>SIN DISPOSITIVO HARDWARE USB</span>
                                 )}
                             </div>
                         </div>
 
-                        <div className="flex gap-2">
+                        <div style={{ display: "flex", gap: "8px" }}>
                             {!telemetry.connected ? (
                                 <button
                                     onClick={handleConnectUSB}
                                     disabled={isConnecting}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-bold transition-all shadow-md active:scale-95 flex items-center gap-2"
+                                    style={{
+                                        padding: "8px 16px",
+                                        background: "linear-gradient(135deg, #00E676 0%, #00E5FF 100%)",
+                                        color: "#000000",
+                                        borderRadius: "10px",
+                                        fontWeight: 900,
+                                        fontSize: "0.75rem",
+                                        border: "none",
+                                        cursor: isConnecting ? "not-allowed" : "pointer",
+                                        opacity: isConnecting ? 0.6 : 1,
+                                        boxShadow: "0 0 12px rgba(0, 230, 118, 0.3)"
+                                    }}
                                 >
                                     {isConnecting ? "CONECTANDO..." : "CONECTAR USB-OTG"}
                                 </button>
                             ) : (
                                 <button
                                     onClick={handleDisconnect}
-                                    className="px-4 py-2 bg-red-900/80 hover:bg-red-800 text-red-200 border border-red-700/50 rounded-lg font-bold transition-all active:scale-95"
+                                    style={{
+                                        padding: "8px 16px",
+                                        background: "rgba(232, 33, 58, 0.2)",
+                                        border: "1px solid var(--accent-crimson)",
+                                        color: "#FF8599",
+                                        borderRadius: "10px",
+                                        fontWeight: 800,
+                                        fontSize: "0.75rem",
+                                        cursor: "pointer"
+                                    }}
                                 >
                                     DESCONECTAR
                                 </button>
@@ -138,14 +194,15 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     </div>
 
                     {/* Radio RF Configuration Matrix */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px" }}>
                         {/* Frequency */}
-                        <div className="p-3 bg-neutral-900/60 rounded-xl border border-neutral-800">
-                            <label className="text-[10px] text-neutral-400 block mb-1">FRECUENCIA (MHz)</label>
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                            <label style={{ fontSize: "0.65rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>FRECUENCIA (MHz)</label>
                             <select
                                 value={config.frequencyMhz}
                                 onChange={(e) => handleConfigChange("frequencyMhz", parseFloat(e.target.value))}
-                                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-emerald-400 text-xs focus:outline-none focus:border-emerald-500"
+                                className="tactical-input"
+                                style={{ width: "100%", color: "var(--accent-emerald)", padding: "4px 6px", fontSize: "0.72rem" }}
                             >
                                 <option value={915.0}>915.0 MHz (América)</option>
                                 <option value={868.0}>868.0 MHz (Europa)</option>
@@ -154,25 +211,26 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                         </div>
 
                         {/* TX Power */}
-                        <div className="p-3 bg-neutral-900/60 rounded-xl border border-neutral-800">
-                            <label className="text-[10px] text-neutral-400 block mb-1">POTENCIA TX ({config.txPowerDbm} dBm)</label>
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                            <label style={{ fontSize: "0.65rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>POTENCIA TX ({config.txPowerDbm} dBm)</label>
                             <input
                                 type="range"
                                 min={2}
                                 max={22}
                                 value={config.txPowerDbm}
                                 onChange={(e) => handleConfigChange("txPowerDbm", parseInt(e.target.value))}
-                                className="w-full accent-emerald-500 mt-1 cursor-pointer"
+                                style={{ width: "100%", accentColor: "var(--accent-emerald)", marginTop: "4px", cursor: "pointer" }}
                             />
                         </div>
 
                         {/* Spreading Factor */}
-                        <div className="p-3 bg-neutral-900/60 rounded-xl border border-neutral-800">
-                            <label className="text-[10px] text-neutral-400 block mb-1">SPREADING FACTOR</label>
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                            <label style={{ fontSize: "0.65rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>SPREADING FACTOR</label>
                             <select
                                 value={config.spreadingFactor}
                                 onChange={(e) => handleConfigChange("spreadingFactor", parseInt(e.target.value))}
-                                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-emerald-400 text-xs focus:outline-none focus:border-emerald-500"
+                                className="tactical-input"
+                                style={{ width: "100%", color: "var(--accent-emerald)", padding: "4px 6px", fontSize: "0.72rem" }}
                             >
                                 <option value={7}>SF7 (Rápido / 5.4 kbps)</option>
                                 <option value={8}>SF8 (Equilibrado)</option>
@@ -184,12 +242,13 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                         </div>
 
                         {/* Bandwidth */}
-                        <div className="p-3 bg-neutral-900/60 rounded-xl border border-neutral-800">
-                            <label className="text-[10px] text-neutral-400 block mb-1">ANCHO BANDA (kHz)</label>
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                            <label style={{ fontSize: "0.65rem", color: "var(--text-muted)", display: "block", marginBottom: "4px" }}>ANCHO BANDA (kHz)</label>
                             <select
                                 value={config.bandwidthKhz}
                                 onChange={(e) => handleConfigChange("bandwidthKhz", parseInt(e.target.value))}
-                                className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-2 py-1.5 text-emerald-400 text-xs focus:outline-none focus:border-emerald-500"
+                                className="tactical-input"
+                                style={{ width: "100%", color: "var(--accent-emerald)", padding: "4px 6px", fontSize: "0.72rem" }}
                             >
                                 <option value={125}>125 kHz (Largo Alcance)</option>
                                 <option value={250}>250 kHz (Recomendado)</option>
@@ -199,43 +258,54 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     </div>
 
                     {/* Telemetry Metrics */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="p-3 bg-neutral-900/30 rounded-xl border border-neutral-800 text-center">
-                            <div className="text-[10px] text-neutral-400">PAQUETES TX</div>
-                            <div className="text-base font-bold text-emerald-400 mt-0.5">{telemetry.packetsSent}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "10px" }}>
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.3)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", textAlign: "center" }}>
+                            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>PAQUETES TX</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-emerald)", marginTop: "2px" }}>{telemetry.packetsSent}</div>
                         </div>
-                        <div className="p-3 bg-neutral-900/30 rounded-xl border border-neutral-800 text-center">
-                            <div className="text-[10px] text-neutral-400">PAQUETES RX</div>
-                            <div className="text-base font-bold text-cyan-400 mt-0.5">{telemetry.packetsReceived}</div>
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.3)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", textAlign: "center" }}>
+                            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>PAQUETES RX</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-cyan)", marginTop: "2px" }}>{telemetry.packetsReceived}</div>
                         </div>
-                        <div className="p-3 bg-neutral-900/30 rounded-xl border border-neutral-800 text-center">
-                            <div className="text-[10px] text-neutral-400">ÚLTIMO RSSI</div>
-                            <div className="text-base font-bold text-amber-400 mt-0.5">
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.3)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", textAlign: "center" }}>
+                            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>ÚLTIMO RSSI</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-amber)", marginTop: "2px" }}>
                                 {telemetry.lastRssiDbm ? `${telemetry.lastRssiDbm} dBm` : "N/D"}
                             </div>
                         </div>
-                        <div className="p-3 bg-neutral-900/30 rounded-xl border border-neutral-800 text-center">
-                            <div className="text-[10px] text-neutral-400">ÚLTIMO SNR</div>
-                            <div className="text-base font-bold text-purple-400 mt-0.5">
+                        <div style={{ padding: "10px", background: "rgba(0, 0, 0, 0.3)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", textAlign: "center" }}>
+                            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>ÚLTIMO SNR</div>
+                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "#C084FC", marginTop: "2px" }}>
                                 {telemetry.lastSnrDb ? `${telemetry.lastSnrDb} dB` : "N/D"}
                             </div>
                         </div>
                     </div>
 
                     {/* Beacon Transmission */}
-                    <div className="p-4 bg-neutral-900/40 rounded-xl border border-neutral-800 space-y-3">
-                        <label className="text-neutral-300 font-bold block">EMISIÓN DE BALIZA TÁCTICA LORA</label>
-                        <div className="flex gap-2">
+                    <div style={{ padding: "14px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "14px", border: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <label style={{ color: "#FFFFFF", fontWeight: 800, fontSize: "0.75rem" }}>EMISIÓN DE BALIZA TÁCTICA LORA</label>
+                        <div style={{ display: "flex", gap: "8px" }}>
                             <input
                                 type="text"
                                 value={beaconMessage}
                                 onChange={(e) => setBeaconMessage(e.target.value)}
-                                className="flex-1 bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-neutral-200 text-xs focus:outline-none focus:border-emerald-500"
+                                className="tactical-input"
+                                style={{ flex: 1 }}
                                 placeholder="Mensaje de baliza de largo alcance..."
                             />
                             <button
                                 onClick={handleSendBeacon}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition-all shadow-md active:scale-95"
+                                style={{
+                                    padding: "8px 16px",
+                                    background: "linear-gradient(135deg, #00E676 0%, #00E5FF 100%)",
+                                    color: "#000000",
+                                    borderRadius: "10px",
+                                    fontWeight: 900,
+                                    fontSize: "0.75rem",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    boxShadow: "0 0 12px rgba(0, 230, 118, 0.3)"
+                                }}
                             >
                                 TRANSMITIR
                             </button>
@@ -243,14 +313,14 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                     </div>
 
                     {/* Real-Time Frame Logs */}
-                    <div className="space-y-2">
-                        <div className="text-neutral-400 font-bold">REGISTRO DE TRAMAS EN TIEMPO REAL:</div>
-                        <div className="p-3 bg-neutral-950 rounded-xl border border-neutral-800 h-36 overflow-y-auto space-y-1 text-[11px]">
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <div style={{ color: "var(--text-secondary)", fontWeight: 800, fontSize: "0.72rem" }}>REGISTRO DE TRAMAS EN TIEMPO REAL:</div>
+                        <div style={{ padding: "12px", background: "#020306", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.1)", height: "140px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px", fontSize: "0.7rem" }}>
                             {logs.length === 0 ? (
-                                <div className="text-neutral-600 italic">Esperando tráfico RF en frecuencia configurada...</div>
+                                <div style={{ color: "var(--text-muted)", fontStyle: "italic" }}>Esperando tráfico RF en frecuencia configurada...</div>
                             ) : (
                                 logs.map((log, i) => (
-                                    <div key={i} className={log.startsWith("[TX]") ? "text-emerald-400" : "text-cyan-400"}>
+                                    <div key={i} style={{ color: log.startsWith("[TX]") ? "var(--accent-emerald)" : "var(--accent-cyan)" }}>
                                         {log}
                                     </div>
                                 ))

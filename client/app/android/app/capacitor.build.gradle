@@ -15,6 +15,7 @@ dependencies {
     implementation project(':capacitor-community-bluetooth-le')
     implementation project(':capacitor-community-privacy-screen')
     implementation project(':capacitor-app')
+    implementation project(':capacitor-browser')
     implementation project(':capacitor-camera')
     implementation project(':capacitor-clipboard')
     implementation project(':capacitor-filesystem')

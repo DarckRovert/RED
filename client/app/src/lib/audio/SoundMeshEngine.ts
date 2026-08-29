@@ -57,6 +57,63 @@ export class SoundMeshEngine {
     }
 
     /**
+     * Codifica un nibble (4 bits) en una palabra código Hamming (7,4) de 7 bits con bit de paridad global (8 bits)
+     */
+    public static encodeHamming74(nibble: number): number {
+        const d1 = (nibble >> 3) & 1;
+        const d2 = (nibble >> 2) & 1;
+        const d3 = (nibble >> 1) & 1;
+        const d4 = nibble & 1;
+
+        const p1 = d1 ^ d2 ^ d4;
+        const p2 = d1 ^ d3 ^ d4;
+        const p3 = d2 ^ d3 ^ d4;
+
+        // Formato de 7 bits: [p1, p2, d1, p3, d2, d3, d4]
+        const code7 = (p1 << 6) | (p2 << 5) | (d1 << 4) | (p3 << 3) | (d2 << 2) | (d3 << 1) | d4;
+        return code7;
+    }
+
+    /**
+     * Decodifica y corrige errores de 1 bit en una palabra código Hamming (7,4)
+     */
+    public static decodeHamming74(code7: number): { nibble: number; corrected: boolean } {
+        const p1 = (code7 >> 6) & 1;
+        const p2 = (code7 >> 5) & 1;
+        const d1 = (code7 >> 4) & 1;
+        const p3 = (code7 >> 3) & 1;
+        const d2 = (code7 >> 2) & 1;
+        const d3 = (code7 >> 1) & 1;
+        const d4 = code7 & 1;
+
+        // Calcular síndrome de error
+        const s1 = p1 ^ d1 ^ d2 ^ d4;
+        const s2 = p2 ^ d1 ^ d3 ^ d4;
+        const s3 = p3 ^ d2 ^ d3 ^ d4;
+        const syndrome = (s3 << 2) | (s2 << 1) | s1;
+
+        let corrected = false;
+        let c = code7;
+
+        if (syndrome !== 0) {
+            // Invertir bit erróneo según síndrome (1-indexado de izquierda a derecha)
+            const bitToFlip = 7 - syndrome;
+            if (bitToFlip >= 0 && bitToFlip < 7) {
+                c ^= (1 << bitToFlip);
+                corrected = true;
+            }
+        }
+
+        const recD1 = (c >> 4) & 1;
+        const recD2 = (c >> 2) & 1;
+        const recD3 = (c >> 1) & 1;
+        const recD4 = c & 1;
+
+        const nibble = (recD1 << 3) | (recD2 << 2) | (recD3 << 1) | recD4;
+        return { nibble, corrected };
+    }
+
+    /**
      * Packages payload into a framed byte stream:
      * [Sync1 (0xD3), Sync2 (0x91), Length (1B), Payload (NB), CRC_High (1B), CRC_Low (1B)]
      */

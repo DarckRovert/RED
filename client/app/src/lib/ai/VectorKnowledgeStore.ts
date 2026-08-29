@@ -36,24 +36,44 @@ export class VectorKnowledgeStore {
         return VectorKnowledgeStore.instance;
     }
 
-    // ─── Generador Determinista de Embeddings Cuantizados INT8 ──────────────────
+    // ─── Generador Determinista de Embeddings Cuantizados INT8 con N-Grams ─────
 
     public static generateEmbedding(text: string, dimensions = 64): Int8Array {
         const vec = new Int8Array(dimensions);
         const clean = text.toLowerCase().replace(/[^a-z0-9áéíóúñ]/g, ' ');
-        const words = clean.split(/\s+/).filter(w => w.length > 2);
+        const words = clean.split(/\s+/).filter(w => w.length > 1);
 
-        for (const word of words) {
-            let hash = 0;
-            for (let i = 0; i < word.length; i++) {
-                hash = ((hash << 5) - hash) + word.charCodeAt(i);
-                hash |= 0;
-            }
-            const dim = Math.abs(hash) % dimensions;
-            vec[dim] = Math.max(-128, Math.min(127, vec[dim] + 35));
+        const tokens: string[] = [];
+
+        // 1. Unigramas
+        words.forEach(w => tokens.push(w));
+
+        // 2. Bigramas de palabras
+        for (let i = 0; i < words.length - 1; i++) {
+            tokens.push(`${words[i]}_${words[i + 1]}`);
         }
 
-        // Normalización L2 en escala INT8
+        // 3. Trigramas de caracteres para palabras clave
+        words.forEach(w => {
+            if (w.length >= 3) {
+                for (let i = 0; i <= w.length - 3; i++) {
+                    tokens.push(w.substring(i, i + 3));
+                }
+            }
+        });
+
+        // 4. Dispersión FNV-1a Hash de 32/64 bits sobre las dimensiones
+        for (const token of tokens) {
+            let fnv = 0x811c9dc5;
+            for (let i = 0; i < token.length; i++) {
+                fnv ^= token.charCodeAt(i);
+                fnv = Math.imul(fnv, 0x01000193);
+            }
+            const dim = Math.abs(fnv) % dimensions;
+            vec[dim] = Math.max(-128, Math.min(127, vec[dim] + 28));
+        }
+
+        // Normalización L2 en escala INT8 [-127, 127]
         let normSq = 0;
         for (let i = 0; i < dimensions; i++) {
             normSq += vec[i] * vec[i];

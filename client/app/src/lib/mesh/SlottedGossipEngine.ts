@@ -131,6 +131,60 @@ export class SlottedGossipEngine {
         return (this.bloomFilter[byteIndex] & (1 << bitOffset)) !== 0;
     }
 
+    // ─── Camuflaje RF: Dummy Traffic Padding a Tasa Constante ───────────────
+
+    private dummyTimer: any = null;
+
+    /**
+     * Genera un paquete señuelo de tasa constante con entropía criptográfica
+     */
+    public generateDummyPacket(targetSize = 128): Uint8Array {
+        const packet = new Uint8Array(targetSize);
+        if (typeof window !== 'undefined' && window.crypto) {
+            window.crypto.getRandomValues(packet);
+        } else {
+            for (let i = 0; i < targetSize; i++) packet[i] = Math.floor(Math.random() * 256);
+        }
+
+        // Marca de agua táctica efímera en los primeros 4 bytes ("DUMM")
+        packet[0] = 0x44; // 'D'
+        packet[1] = 0x55; // 'U'
+        packet[2] = 0x4D; // 'M'
+        packet[3] = 0x4D; // 'M'
+        return packet;
+    }
+
+    /**
+     * Identifica si un paquete recibido es tráfico señuelo para descarte inmediato
+     */
+    public isDummyPacket(bytes: Uint8Array): boolean {
+        return bytes.length >= 4 &&
+            bytes[0] === 0x44 &&
+            bytes[1] === 0x55 &&
+            bytes[2] === 0x4D &&
+            bytes[3] === 0x4D;
+    }
+
+    /**
+     * Inicia la inyección periódica de paquetes señuelo para neutralizar análisis SIGINT
+     */
+    public startDummyPadding(sendCallback: (packet: Uint8Array) => Promise<any> | any, intervalMs = 15000) {
+        if (this.dummyTimer) clearInterval(this.dummyTimer);
+        this.dummyTimer = setInterval(() => {
+            try {
+                const dummy = this.generateDummyPacket(128);
+                sendCallback(dummy);
+            } catch {}
+        }, intervalMs);
+    }
+
+    public stopDummyPadding() {
+        if (this.dummyTimer) {
+            clearInterval(this.dummyTimer);
+            this.dummyTimer = null;
+        }
+    }
+
     private pruneSeen() {
         const cutoff = Date.now() - (5 * 60 * 1000); // 5 minutos TTL
         for (const [hash, entry] of this.seenCounts.entries()) {

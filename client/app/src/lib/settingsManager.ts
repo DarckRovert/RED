@@ -222,6 +222,8 @@ export interface UserPreferences {
     noiseSuppression: boolean;
     autoSpeakerVideo: boolean;
     biometricLock: boolean;
+    // Operational Context Mode (v66.0.0+)
+    operationalMode?: 'stealth' | 'scotopic_red' | 'solar' | 'survival' | 'offgrid';
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -247,6 +249,7 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
     noiseSuppression: true,
     autoSpeakerVideo: true,
     biometricLock: false,
+    operationalMode: 'stealth',
 };
 
 const STORAGE_KEY = 'red_user_preferences_v1';
@@ -369,6 +372,16 @@ export class SettingsManager {
             root.classList.add('reduced-motion');
         } else {
             root.classList.remove('reduced-motion');
+        }
+
+        // 4.1 Modos Operacionales Tácticos (v66.0.0+)
+        root.classList.remove('mode-scotopic-red', 'mode-solar-contrast', 'mode-defcon-survival');
+        if (prefs.operationalMode === 'scotopic_red') {
+            root.classList.add('mode-scotopic-red');
+        } else if (prefs.operationalMode === 'solar') {
+            root.classList.add('mode-solar-contrast');
+        } else if (prefs.operationalMode === 'survival') {
+            root.classList.add('mode-defcon-survival');
         }
 
         // 5. Protección de Privacidad Nativa (FLAG_SECURE en Android)

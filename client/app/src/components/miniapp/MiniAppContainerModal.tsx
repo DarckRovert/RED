@@ -110,73 +110,139 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md animate-fade-in p-2 sm:p-4">
-            <div className={`bg-slate-950 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col transition-all ${
-                isFullscreen ? 'w-full h-full rounded-none border-none' : 'w-full max-w-4xl h-[90vh] max-h-[850px]'
-            }`}>
-                {/* Header Bar */}
-                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between select-none">
-                    <div className="flex items-center gap-2.5">
-                        <span className="text-xl">{bundle.manifest.icon || '📱'}</span>
+        <div 
+            style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 9999,
+                background: "rgba(2, 4, 10, 0.90)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: isFullscreen ? "0" : "12px",
+                userSelect: "none"
+            }}
+        >
+            <div 
+                style={{
+                    width: "100%",
+                    maxWidth: isFullscreen ? "100vw" : "1024px",
+                    height: isFullscreen ? "100vh" : "92vh",
+                    maxHeight: isFullscreen ? "100vh" : "880px",
+                    borderRadius: isFullscreen ? "0" : "20px",
+                    boxShadow: "0 16px 50px rgba(0,0,0,0.85), 0 0 30px rgba(0, 229, 255, 0.15)",
+                    display: "flex",
+                    flexDirection: "column",
+                    overflow: "hidden",
+                    border: isFullscreen ? "none" : "1.5px solid rgba(0, 229, 255, 0.35)",
+                    background: "linear-gradient(180deg, rgba(14,18,34,0.98) 0%, rgba(6,8,16,0.99) 100%)"
+                }}
+            >
+                {/* ── HEADER TÁCTICO DEL SANDBOX ── */}
+                <div style={{ padding: "12px 16px", background: "rgba(6, 8, 16, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.12)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ width: "40px", height: "40px", borderRadius: "12px", background: "rgba(0, 0, 0, 0.6)", border: "1px solid rgba(255, 255, 255, 0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem" }}>
+                            {bundle.manifest.icon || '📱'}
+                        </div>
                         <div>
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-sm font-bold text-white tracking-wide">{bundle.manifest.name}</h2>
-                                <span className="text-[10px] px-1.5 py-0.5 bg-blue-950 border border-blue-800 text-blue-400 rounded-md font-mono font-bold">
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <h2 style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px", margin: 0 }}>
+                                    {bundle.manifest.name}
+                                </h2>
+                                <span style={{ fontSize: "0.65rem", padding: "2px 6px", background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.5)", color: "var(--accent-cyan)", borderRadius: "4px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
                                     v{bundle.manifest.version}
                                 </span>
+                                <span style={{ fontSize: "0.62rem", padding: "2px 6px", background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.5)", color: "var(--accent-emerald)", borderRadius: "6px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                                    🛡️ ARENA AISLADA
+                                </span>
                             </div>
-                            <p className="text-[11px] text-slate-400 font-mono truncate max-w-xs">{bundle.manifest.id}</p>
+                            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", margin: "2px 0 0 0" }}>{bundle.manifest.id}</p>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                        {/* Permissions Button */}
+                    {/* Actions */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <button
                             type="button"
                             onClick={() => setShowPermissionsModal(!showPermissionsModal)}
-                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                            style={{
+                                padding: "6px 12px",
+                                borderRadius: "10px",
+                                fontSize: "0.75rem",
+                                fontWeight: 800,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                cursor: "pointer",
+                                border: showPermissionsModal ? "1px solid var(--accent-emerald)" : "1px solid rgba(255, 255, 255, 0.15)",
+                                background: showPermissionsModal ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 255, 255, 0.06)",
+                                color: showPermissionsModal ? "var(--accent-emerald)" : "#FFFFFF"
+                            }}
                             title="Gestionar permisos del sandbox"
                         >
                             <span>🛡️ Permisos</span>
-                            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--accent-emerald)" }}></span>
                         </button>
 
-                        {/* Reload Button */}
                         <button
                             type="button"
                             onClick={handleReload}
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg text-xs transition"
+                            style={{
+                                padding: "6px 10px",
+                                background: "rgba(255, 255, 255, 0.06)",
+                                border: "1px solid rgba(255, 255, 255, 0.14)",
+                                borderRadius: "10px",
+                                color: "#FFFFFF",
+                                cursor: "pointer"
+                            }}
                             title="Recargar Mini-App"
                         >
                             🔄
                         </button>
 
-                        {/* Fullscreen Button */}
                         <button
                             type="button"
                             onClick={() => setIsFullscreen(!isFullscreen)}
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-lg text-xs transition"
+                            style={{
+                                padding: "6px 10px",
+                                background: "rgba(255, 255, 255, 0.06)",
+                                border: "1px solid rgba(255, 255, 255, 0.14)",
+                                borderRadius: "10px",
+                                color: "#FFFFFF",
+                                cursor: "pointer"
+                            }}
                             title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
                         >
                             {isFullscreen ? '🗗' : '🗖'}
                         </button>
 
-                        {/* Close Button */}
                         <button
                             type="button"
                             onClick={onClose}
-                            className="p-1.5 bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded-lg text-xs font-bold transition ml-1"
-                            title="Cerrar Mini-App"
+                            style={{
+                                padding: "6px 12px",
+                                background: "rgba(232, 33, 58, 0.2)",
+                                border: "1px solid var(--accent-crimson)",
+                                borderRadius: "10px",
+                                color: "#FF8599",
+                                fontSize: "0.82rem",
+                                fontWeight: 900,
+                                cursor: "pointer",
+                                marginLeft: "4px"
+                            }}
+                            title="Cerrar Sandbox"
                         >
                             ✕
                         </button>
                     </div>
                 </div>
 
-                {/* Permissions Flyout Drawer */}
+                {/* ── PERMISSIONS FLYOUT DRAWER ── */}
                 {showPermissionsModal && (
-                    <div className="bg-slate-900 border-b border-slate-800 p-3 animate-fade-in flex flex-wrap gap-2 items-center text-xs">
-                        <span className="font-semibold text-slate-300 mr-2">Permisos Sandbox:</span>
+                    <div style={{ background: "rgba(10, 14, 28, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", padding: "10px 16px", display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center", fontSize: "0.75rem" }}>
+                        <span style={{ fontWeight: 800, color: "var(--text-secondary)", marginRight: "8px", fontFamily: "JetBrains Mono, monospace" }}>Permisos Concedidos:</span>
                         {bundle.manifest.permissions.map(scope => {
                             const isGranted = grantedPermissions.has(scope);
                             return (
@@ -184,11 +250,21 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
                                     key={scope}
                                     type="button"
                                     onClick={() => togglePermission(scope)}
-                                    className={`px-2.5 py-1 rounded-md border flex items-center gap-1.5 font-mono text-[11px] transition ${
-                                        isGranted 
-                                            ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300' 
-                                            : 'bg-slate-800 border-slate-700 text-slate-500 line-through'
-                                    }`}
+                                    style={{
+                                        padding: "4px 10px",
+                                        borderRadius: "8px",
+                                        border: isGranted ? "1px solid var(--accent-emerald)" : "1px solid rgba(255, 255, 255, 0.1)",
+                                        background: isGranted ? "rgba(0, 230, 118, 0.2)" : "rgba(0, 0, 0, 0.4)",
+                                        color: isGranted ? "var(--accent-emerald)" : "var(--text-muted)",
+                                        fontFamily: "JetBrains Mono, monospace",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 800,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        cursor: "pointer",
+                                        textDecoration: isGranted ? "none" : "line-through"
+                                    }}
                                 >
                                     <span>{isGranted ? '✓' : '✗'}</span>
                                     <span>{scope}</span>
@@ -198,8 +274,8 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
                     </div>
                 )}
 
-                {/* Sandboxed Iframe Container */}
-                <div className="flex-1 bg-slate-950 relative overflow-hidden">
+                {/* ── SANDBOXED IFRAME VIEWPORT ── */}
+                <div style={{ flex: 1, background: "#020306", position: "relative", overflow: "hidden" }}>
                     {blobUrl ? (
                         <iframe
                             ref={iframeRef}
@@ -207,11 +283,11 @@ export const MiniAppContainerModal: React.FC<MiniAppContainerModalProps> = ({
                             title={bundle.manifest.name}
                             sandbox="allow-scripts allow-forms"
                             onLoad={handleIframeLoad}
-                            className="w-full h-full border-none bg-slate-950"
+                            style={{ width: "100%", height: "100%", border: "none", background: "#020306" }}
                         />
                     ) : (
-                        <div className="flex items-center justify-center h-full text-slate-500 text-sm">
-                            Cargando Sandbox Soberano...
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)", fontSize: "0.85rem", fontFamily: "JetBrains Mono, monospace" }}>
+                            Inicializando Sandbox Soberano...
                         </div>
                     )}
                 </div>

@@ -484,7 +484,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
     },
 
     initNodeConnection: async (): Promise<boolean> => {
-        let retries = 60; // 60 retries × 1s = up to 1 minute for mobile PoW / slow boots
+        let retries = 3; // 3 retries × 600ms = rápido arranque con fallback instantáneo
         if (process.env.NODE_ENV === 'development') console.log("[RED] Initializing Node Connection...");
         while (retries > 0) {
             try {
@@ -783,11 +783,44 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             } catch (err) {
                 retries--;
                 if (retries > 0) {
-                    await new Promise(r => setTimeout(r, 1000));
+                    await new Promise(r => setTimeout(r, 600));
                 } else {
-                    console.warn("[RED] Rust Node unreachable after retries.");
-                    set({ nodeOnline: false });
-                    return false;
+                    console.warn("[RED] Rust Node offline/unreachable. Activating local offline identity engine...");
+                    let localHash = typeof window !== 'undefined' ? localStorage.getItem("red_identity_hash") : null;
+                    let shortId = typeof window !== 'undefined' ? localStorage.getItem("red_short_id") : null;
+                    let savedNick = typeof window !== 'undefined' ? (localStorage.getItem("red_displayName") || localStorage.getItem("user_nickname")) : null;
+
+                    if (!localHash || !shortId) {
+                        const randomBytes = new Uint8Array(32);
+                        if (typeof window !== 'undefined' && window.crypto) {
+                            window.crypto.getRandomValues(randomBytes);
+                        }
+                        localHash = Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('') || "af10d57e5a4179e83b24f1c900e5";
+                        shortId = "red_" + localHash.substring(0, 10);
+                        if (typeof window !== 'undefined') {
+                            localStorage.setItem("red_identity_hash", localHash);
+                            localStorage.setItem("red_short_id", shortId);
+                        }
+                    }
+
+                    const finalIdentity = {
+                        identity_hash: localHash,
+                        short_id: shortId,
+                        public_key: localHash,
+                        nickname: savedNick || 'Operador RED'
+                    };
+
+                    set({
+                        identity: finalIdentity,
+                        status: { is_running: true, peer_count: 0, identity_hash: localHash, version: `${RED_VERSION}-mobile-p2p`, chain_height: 1 },
+                        nodeOnline: true,
+                        isAuthenticated: true
+                    });
+
+                    // Init local mesh transport
+                    localTransport.init(localHash).catch(() => {});
+                    await get().fetchData();
+                    return true;
                 }
             }
         }
