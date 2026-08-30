@@ -55,20 +55,27 @@ async function getExtractor() {
     return embeddingPipeline;
 }
 
-async function getGenerator() {
-    if (!generatorPipeline) {
+let currentGeneratorModel: string | null = null;
+
+async function getGenerator(modelId?: string) {
+    const targetModel = modelId || 'onnx-community/Qwen2.5-0.5B-Instruct';
+    if (!generatorPipeline || currentGeneratorModel !== targetModel) {
         const tf = await getTransformers();
         if (tf) {
             try {
-                generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', { quantized: true });
+                generatorPipeline = await tf.pipeline('text-generation', targetModel, { quantized: true });
+                currentGeneratorModel = targetModel;
             } catch {
                 try {
                     generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/SmolLM2-360M-Instruct', { quantized: true });
+                    currentGeneratorModel = 'onnx-community/SmolLM2-360M-Instruct';
                 } catch {
                     try {
                         generatorPipeline = await tf.pipeline('text-generation', 'Xenova/LaMini-GPT-124M', { quantized: true });
+                        currentGeneratorModel = 'Xenova/LaMini-GPT-124M';
                     } catch {
                         generatorPipeline = await tf.pipeline('text-generation', 'Xenova/distilgpt2', { quantized: true });
+                        currentGeneratorModel = 'Xenova/distilgpt2';
                     }
                 }
             }
@@ -130,15 +137,16 @@ if (typeof self !== 'undefined') {
 
         } else if (type === 'GENERATE_COPILOT') {
             const prompt = String(payload?.prompt || '').trim();
+            const requestedModel = payload?.modelId || payload?.modelName;
             let answer = '';
             let topicCategory = 'Inferencia Neuronal Compacta';
 
             try {
-                const generator = await getGenerator();
+                const generator = await getGenerator(requestedModel);
                 if (generator) {
                     const genOutput = await generator(prompt, { max_new_tokens: 120, temperature: 0.7 });
                     if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
-                        answer = `🤖 COPILOTO IA NEURONAL REAL (Qwen / SmolLM ONNX WASM)\n\n${genOutput[0].generated_text}`;
+                        answer = `🤖 COPILOTO IA NEURONAL REAL (${currentGeneratorModel || 'ONNX WASM'})\n\n${genOutput[0].generated_text}`;
                     }
                 }
             } catch {}
@@ -149,7 +157,7 @@ if (typeof self !== 'undefined') {
 
             self.postMessage({
                 id, type: 'GENERATE_COPILOT_RESULT', success: true,
-                data: { answer, topicCategory, confidence: 0.98, modelInfo: 'onnx-community/Qwen2.5-0.5B-Instruct' },
+                data: { answer, topicCategory, confidence: 0.98, modelInfo: currentGeneratorModel || 'ONNX WASM Local' },
                 executionTimeMs: Math.round(performance.now() - start)
             });
 

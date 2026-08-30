@@ -107,6 +107,13 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     }
 ];
 
+export interface DeviceMemoryBudget {
+    totalDeviceRamMb: number;
+    recommendedMaxModelMb: number;
+    threadCount: number;
+    performanceTier: 'ultra-low' | 'balanced' | 'high-performance';
+}
+
 function uint8ArrayToBase64(bytes: Uint8Array): string {
     let binary = '';
     const len = bytes.byteLength;
@@ -119,10 +126,80 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
 class ModelManagerClass {
     private models: Map<string, LocalModelMetaData> = new Map();
     private activeDownloads: Map<string, AbortController> = new Map();
+    private listeners: Set<(activeModel: LocalModelMetaData | null, allModels: LocalModelMetaData[]) => void> = new Set();
 
     constructor() {
         SUPPORTED_MODELS.forEach(m => this.models.set(m.id, { ...m }));
+        this.restoreCustomModels();
         this.checkLocalModelsStatus();
+    }
+
+    /** Subscribes to model status / selection changes */
+    public subscribe(cb: (activeModel: LocalModelMetaData | null, allModels: LocalModelMetaData[]) => void): () => void {
+        this.listeners.add(cb);
+        cb(this.getActiveModel(), this.getModels());
+        return () => this.listeners.delete(cb);
+    }
+
+    private notify() {
+        const active = this.getActiveModel();
+        const all = this.getModels();
+        this.listeners.forEach(cb => {
+            try { cb(active, all); } catch {}
+        });
+    }
+
+    /** Restores custom sideloaded GGUF models from persistent storage */
+    private restoreCustomModels() {
+        if (typeof window === 'undefined') return;
+        try {
+            const customKeys = Object.keys(localStorage).filter(k => k.startsWith('red_custom_model_meta_'));
+            for (const k of customKeys) {
+                const raw = localStorage.getItem(k);
+                if (raw) {
+                    const parsed: LocalModelMetaData = JSON.parse(raw);
+                    if (parsed && parsed.id) {
+                        this.models.set(parsed.id, parsed);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[ModelManager] Error restaurando modelos personalizados:', e);
+        }
+    }
+
+    /** Calculates dynamic RAM allocation budget for device */
+    public getDeviceMemoryBudget(): DeviceMemoryBudget {
+        let ramGb = 4;
+        let threads = 2;
+
+        if (typeof navigator !== 'undefined') {
+            if ('deviceMemory' in navigator) {
+                ramGb = (navigator as any).deviceMemory || 4;
+            }
+            if ('hardwareConcurrency' in navigator) {
+                threads = Math.max(1, Math.min(4, Math.floor((navigator.hardwareConcurrency || 2) / 2)));
+            }
+        }
+
+        const totalDeviceRamMb = ramGb * 1024;
+        let performanceTier: DeviceMemoryBudget['performanceTier'] = 'balanced';
+        let recommendedMaxModelMb = Math.round(totalDeviceRamMb * 0.45);
+
+        if (totalDeviceRamMb <= 2048) {
+            performanceTier = 'ultra-low';
+            recommendedMaxModelMb = 650;
+        } else if (totalDeviceRamMb >= 6144) {
+            performanceTier = 'high-performance';
+            recommendedMaxModelMb = 3500;
+        }
+
+        return {
+            totalDeviceRamMb,
+            recommendedMaxModelMb,
+            threadCount: threads,
+            performanceTier
+        };
     }
 
     /** Checks persistent storage for installed models */
@@ -166,6 +243,7 @@ class ModelManagerClass {
                 console.warn(`[ModelManager] Error verificando estado de ${id}:`, e);
             }
         }
+        this.notify();
         return Array.from(this.models.values());
     }
 
@@ -178,30 +256,36 @@ class ModelManagerClass {
         return this.models.get(id);
     }
 
-    /** Returns currently selected active model if downloaded */
+    /** Returns currently selected active model if downloaded, otherwise user selected model */
     public getActiveModel(): LocalModelMetaData | null {
         if (typeof window === 'undefined') return null;
-        const activeId = localStorage.getItem('red_active_model_id') || 'smollm-360m-q4';
-        const model = this.models.get(activeId);
-        if (model && model.isDownloaded) {
-            return model;
+        const activeId = localStorage.getItem('red_active_model_id');
+        
+        if (activeId && this.models.has(activeId)) {
+            const m = this.models.get(activeId)!;
+            return m;
         }
+
+        // Si no hay selección explícita, buscar el primer modelo descargado
         for (const m of this.models.values()) {
             if (m.isDownloaded) return m;
         }
-        return null;
+
+        // Fallback a modelo ultraligero por defecto
+        return this.models.get('qwen-2.5-0.5b-q4') || this.models.get('smollm-360m-q4') || null;
     }
 
-    /** Sets the primary active model */
+    /** Sets the primary active model without forcing uninstalled defaults */
     public setActiveModel(modelId: string): void {
         const target = this.models.get(modelId);
         if (target) {
-            target.isDownloaded = true;
             if (typeof window !== 'undefined') {
                 localStorage.setItem(`red_model_${modelId}_ready`, 'true');
                 localStorage.setItem('red_active_model_id', modelId);
             }
+            target.isDownloaded = true;
             this.ensureTokenizerDownloaded(modelId).catch(() => {});
+            this.notify();
         }
     }
 
@@ -467,10 +551,12 @@ class ModelManagerClass {
             if (typeof window !== 'undefined') {
                 localStorage.removeItem(`red_model_${modelId}_ready`);
                 localStorage.removeItem(`red_model_${modelId}_path`);
+                localStorage.removeItem(`red_custom_model_meta_${modelId}`);
                 if (localStorage.getItem('red_active_model_id') === modelId) {
                     localStorage.removeItem('red_active_model_id');
                 }
             }
+            this.notify();
             return true;
         } catch (e) {
             console.error(`[ModelManager] Error deleting model ${modelId}:`, e);
@@ -573,9 +659,11 @@ class ModelManagerClass {
         if (typeof window !== 'undefined') {
             localStorage.setItem(`red_model_${cleanId}_ready`, 'true');
             localStorage.setItem(`red_model_${cleanId}_path`, localUri);
+            localStorage.setItem(`red_custom_model_meta_${cleanId}`, JSON.stringify(newModel));
             localStorage.setItem('red_active_model_id', cleanId);
         }
 
+        this.notify();
         console.log(`[ModelManager] ✅ Modelo importado con éxito: ${newModel.name} (${fileSizeMb} MB)`);
         return newModel;
     }

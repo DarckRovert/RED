@@ -1,12 +1,12 @@
-# 🛡️ RED — Sovereign Mesh OS v75.0.0
+# 🛡️ RED — Sovereign Mesh OS v76.0.0
 
 > **RED** (Red Criptográfica Off-Grid & P2P Mesh) es la plataforma de comunicaciones tácticas, descentralizadas y soberanas más avanzada del mundo. Diseñada desde su origen para operar bajo escenarios de apagón tecnológico, censura estatal, desastres naturales o denegación de servicios, RED no depende de servidores centrales, infraestructuras celulares ni conexión a Internet.
 
-[![Descargar APK Oficial RED v75.0.0](https://img.shields.io/badge/Descargar_APK_v75.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v75.0.0)
+[![Descargar APK Oficial RED v76.0.0](https://img.shields.io/badge/Descargar_APK_v76.0.0-GitHub_Releases-E8213A?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED/releases/tag/v76.0.0)
 [![Página Web Oficial GitHub Pages](https://img.shields.io/badge/Web_App-GitHub_Pages-38BDF8?style=for-the-badge&logo=github)](https://darckrovert.github.io/RED/)
 [![Licencia AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-purple?style=for-the-badge&logo=gnu)](https://github.com/DarckRovert/RED/blob/main/LICENSE)
 [![TypeScript Strict](https://img.shields.io/badge/TypeScript-0_Errors_Strict-00D97E?style=for-the-badge&logo=typescript)](https://github.com/DarckRovert/RED)
-[![Rust Workspace](https://img.shields.io/badge/Rust_Cargo-118_Tests_Pass-DEA584?style=for-the-badge&logo=rust)](https://github.com/DarckRovert/RED)
+[![Rust Workspace](https://img.shields.io/badge/Rust_Cargo-Workspace_Pass-DEA584?style=for-the-badge&logo=rust)](https://github.com/DarckRovert/RED)
 [![Android Gradle Build](https://img.shields.io/badge/Android_APK-BUILD_SUCCESSFUL-00E676?style=for-the-badge&logo=android)](https://github.com/DarckRovert/RED)
 
 ---
@@ -15,7 +15,7 @@
 
 Accede a la documentación técnica y operativa completa del proyecto:
 
-- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 42 módulos para operadores finales.
+- 📖 **[Manual de Usuario Táctico (USER_MANUAL.md)](USER_MANUAL.md)**: Guía de uso paso a paso de los 8 Hubs Tácticos Consolidados para operadores finales.
 - ⚙️ **[Manual de Administración y Nodos (ADMIN_MANUAL.md)](ADMIN_MANUAL.md)**: Configuración de nodos de escritorio en PC, relays y túneles.
 - 📐 **[Arquitectura de Protocolos (ARCHITECTURE.md)](ARCHITECTURE.md)**: Diagramas formales de ingeniería, stack de capas y matrices criptográficas.
 - 📜 **[Historial de Versiones (CHANGELOG.md)](CHANGELOG.md)**: Registro exhaustivo de cambios y novedades de cada release.
@@ -29,7 +29,7 @@ Accede a la documentación técnica y operativa completa del proyecto:
 2. [Arquitectura del Sistema & Mapa Visual](#arquitectura-sistema)
 3. [Autenticación Biométrica Universal & Seguridad Zero-Trust](#autenticacion-biometrica)
 4. [Conectividad Global & Red Malla Descentralizada](#conectividad-global)
-5. [Catálogo Completo de los 42 Módulos Tácticos](#catalogo-modulos)
+5. [Consolidación en 8 Hubs Tácticos Soberanos](#catalogo-modulos)
 6. [Criptografía Post-Cuántica & Privacidad en Capas](#criptografia-post-cuantica)
 7. [Tokenomics & Proof-of-Relay](#tokenomics)
 8. [Guía de Compilación & Despliegue ADB](#guia-compilacion)
@@ -41,10 +41,12 @@ Accede a la documentación técnica y operativa completa del proyecto:
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v75.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v76.0.0 |
 |---|---|---|
+| **Interfaz & UX** | Saturada y con menús dispersos | **Minimalista Táctica: 8 Hubs Consolidados + Dock Fijo de 5 Pilares** |
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
 | **Operación Off-Grid** | Imposible sin Internet | **Totalmente funcional mediante BLE GATT, WiFi Direct, LoRa 915MHz y SoundMesh Ultrasónico** |
+| **IA Local Adaptativa** | Requiere APIs en la nube / Defaults fijos | **Asignación Dinámica de RAM (`DeviceMemoryBudget`), Inferencia WASM Qwen/SmolLM & RAG INT8 (<5ms)** |
 | **Llaves Biométricas** | Dependiente de cuenta/SMS | **Universal: Huella, Rostro, Iris, Windows Hello, Touch ID y Passkeys WebAuthn** |
 | **Aislamiento de Red** | Endpoints expuestos a LAN | **Zero-Trust: Servidor Axum estrictamente enlazado a Loopback `127.0.0.1:7333`** |
 | **Validación de Bóveda** | Generación efímera insegura | **Verificación estricta de desencriptación en Sled DB con aborto fatal ante PIN erróneo** |

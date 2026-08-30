@@ -1,5 +1,24 @@
 # Changelog
 
+## [76.0.0-minimalist-ui-dynamic-ai-master] - 2026-08-30
+
+### 🛡️ Minimalist UI & Dynamic AI Master Edition (Release Oficial v76.0.0)
+
+- **Rediseño Arquitectónico Minimalista & 8 Hubs Tácticos Consolidados:**
+  - **Cajón de Comandos Unificado:** Sustitución de los 52 accesos planos desordenados por **8 Hubs Tácticos Cohesivos** (Mensajería P2P, Radar y Mapa GPS, Radio Vocal y SoundMesh, Copiloto IA, Bóveda PQC y Finanzas, Ciberdefensa DEFCON, Defensa Civil y Triage SOS, Mini-Apps y Sistema).
+  - **Dock Táctico Fijo de 5 Pilares:** Acceso instantáneo con micro-animaciones OLED a Chats, Radar, Hubs, Copiloto IA y Bóveda.
+  - **Búsqueda Instantánea en Tiempo Real:** Filtrado de herramientas por palabra clave y selector rápido de Modos Operacionales (Sigilo, Luz Roja, Solar, Apagón, Off-Grid).
+- **Asignación Dinámica de Memoria para IA Local (Cero Hardcoding):**
+  - **Presupuesto Adaptativo de Hardware (`DeviceMemoryBudget`):** Detección en tiempo real de núcleos CPU y memoria RAM del dispositivo (`navigator.deviceMemory`, `hardwareConcurrency`) para balancear la carga de inferencia.
+  - **Liberación de Tensores en Memoria (`disposePipelines()`):** Descarga limpia de modelos y liberador de memoria WASM al alternar entre Qwen 2.5 0.5B, SmolLM2 360M, Llama 3.2 1B y modelos GGUF personalizados.
+- **Saneamiento Integral de Diccionarios de Localización (`i18n`):**
+  - Esquema estricto tipado (`I18nSchema`) sincronizado al 100% en los 12 idiomas oficiales (`es`, `en`, `ar`, `de`, `fr`, `it`, `ja`, `ko`, `pt`, `qu`, `ru`, `zh`), erradicando todas las cadenas huérfanas o no traducidas.
+- **Validación y Despliegue en Hardware Real:**
+  - Despliegue en limpio verificado vía ADB en **Motorola Moto G22** (`ZT322B386P`) y **Lenovo Tablet TB305XU** (`HA2CHKZ2`), validado con `adb logcat` en tiempo real.
+- **Versión Oficial:** `76.0.0` / `versionCode 76000` / `SHA-256 79CFA82A882F3542C73FD6E3AA708486C1D687C0F2916129F30E25A98E84DE1A`.
+
+---
+
 ## [75.0.0-tactical-c4isr-sovereign-survival-master] - 2026-08-30
 
 ### 🛡️ Tactical C4ISR & Sovereign Survival Master Edition (Hardened Gold Master)

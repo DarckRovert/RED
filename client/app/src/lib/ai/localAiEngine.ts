@@ -82,14 +82,30 @@ class LocalAIEngineClass {
             // WASM runtime files at http://localhost/ort-wasm/
             const wasmBasePath = typeof window !== 'undefined' ? `${window.location.origin}/ort-wasm/` : '/ort-wasm/';
 
+            const budget = ModelManager.getDeviceMemoryBudget();
             if (mod.env.backends?.onnx?.wasm) {
                 mod.env.backends.onnx.wasm.wasmPaths = wasmBasePath;
-                (mod.env.backends.onnx.wasm as any).numThreads = 1;
+                (mod.env.backends.onnx.wasm as any).numThreads = budget.threadCount;
             }
 
             this.transformersLib = mod;
         }
         return this.transformersLib;
+    }
+
+    private currentLoadedGeneratorId: string | null = null;
+
+    /** Disposes loaded WASM pipelines to free memory upon switching models or low RAM warning */
+    public disposePipelines() {
+        this.generatorPipeline = null;
+        this.currentLoadedGeneratorId = null;
+        this.classifierPipeline = null;
+        this.embeddingPipeline = null;
+        this.asrPipeline = null;
+        if (typeof window !== 'undefined' && (window as any).gc) {
+            try { (window as any).gc(); } catch {}
+        }
+        console.log('[LocalAIEngine] 🧹 Pipelines de IA liberados de memoria.');
     }
 
     /** Utility to bound any async AI operation with a strict timeout */
@@ -137,41 +153,47 @@ class LocalAIEngineClass {
         return this.embeddingPipeline;
     }
 
-    /** Real Offline Compact Generative Pipeline (Qwen 0.5B / SmolLM 360M / LaMini 124M) */
+    /** Real Offline Dynamic Generative Pipeline matching Active Selected Model */
     private async getGenerator() {
-        if (!this.generatorPipeline) {
-            const tf = await this.getTransformers();
-            if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
+        const activeModel = ModelManager.getActiveModel();
+        const activeId = activeModel ? activeModel.id : 'qwen-2.5-0.5b-q4';
 
-            const devMem = typeof navigator !== 'undefined' && (navigator as any).deviceMemory ? (navigator as any).deviceMemory : 4;
-            const isLowMemDevice = devMem <= 4;
+        if (this.generatorPipeline && this.currentLoadedGeneratorId === activeId) {
+            return this.generatorPipeline;
+        }
 
-            // On devices with <=4GB RAM (e.g. Moto G22 / Redmi Note 14), prioritize compact lightweight SLMs to prevent OOM
-            const preferredModels = isLowMemDevice
-                ? [
-                    'onnx-community/SmolLM2-360M-Instruct',
-                    'Xenova/LaMini-GPT-124M',
-                    'onnx-community/Qwen2.5-0.5B-Instruct',
-                    'Xenova/distilgpt2'
-                ]
-                : [
-                    'onnx-community/Qwen2.5-0.5B-Instruct',
-                    'onnx-community/SmolLM2-360M-Instruct',
-                    'Xenova/LaMini-GPT-124M',
-                    'Xenova/distilgpt2'
-                ];
+        const tf = await this.getTransformers();
+        if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
 
-            for (const modelId of preferredModels) {
-                try {
-                    this.generatorPipeline = await tf.pipeline('text-generation', modelId, {
-                        quantized: true,
-                    });
-                    break;
-                } catch {
-                    // Try fallback model
-                }
+        // Map local model IDs to lightweight ONNX pipelines
+        const modelPipelineMap: Record<string, string[]> = {
+            'qwen-2.5-0.5b-q4': ['onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct', 'Xenova/LaMini-GPT-124M'],
+            'smollm-360m-q4': ['onnx-community/SmolLM2-360M-Instruct', 'Xenova/LaMini-GPT-124M', 'Xenova/distilgpt2'],
+            'qwen-2.5-1.5b-q4': ['onnx-community/Qwen2.5-1.5B-Instruct', 'onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct'],
+            'llama-3.2-1b-q4': ['onnx-community/Llama-3.2-1B-Instruct', 'onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct'],
+            'gemma-2b-q4': ['onnx-community/gemma-2-2b-it', 'onnx-community/Qwen2.5-0.5B-Instruct'],
+            'phi-3-mini-q4': ['onnx-community/Phi-3-mini-4k-instruct', 'onnx-community/Qwen2.5-0.5B-Instruct']
+        };
+
+        const candidates = modelPipelineMap[activeId] || [
+            'onnx-community/Qwen2.5-0.5B-Instruct',
+            'onnx-community/SmolLM2-360M-Instruct',
+            'Xenova/LaMini-GPT-124M'
+        ];
+
+        for (const candidate of candidates) {
+            try {
+                this.generatorPipeline = await tf.pipeline('text-generation', candidate, {
+                    quantized: true,
+                });
+                this.currentLoadedGeneratorId = activeId;
+                console.log(`[LocalAIEngine] ✅ Pipeline de inferencia cargado para: ${activeModel?.name || candidate}`);
+                break;
+            } catch (err) {
+                console.warn(`[LocalAIEngine] No se pudo inicializar pipeline para ${candidate}:`, err);
             }
         }
+
         return this.generatorPipeline;
     }
 
@@ -550,13 +572,17 @@ class LocalAIEngineClass {
         ];
 
         const totalExecTime = Math.round(performance.now() - start);
+        const activeModel = ModelManager.getActiveModel();
+        const activeModelName = activeModel?.name || 'Qwen 2.5 0.5B Instruct';
+        const activeModelTag = activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : 'Qwen 2.5 0.5B + Vector INT8 (100% Offline)';
+        const memoryUsedMb = activeModel?.fileSizeMb ? Math.round(activeModel.fileSizeMb * 1.15) : 64;
 
         const telemetryPayload: NeuralTelemetryData = {
-            modelName: 'multilingual-e5-small + SmolLM2 INT4',
+            modelName: `${activeModelName} + e5-small INT8`,
             executionTimeMs: totalExecTime,
             tokensPerSecond: Math.round((finalAnswer.length / 4) / ((totalExecTime / 1000) || 0.05)),
             tokensGenerated: Math.round(finalAnswer.length / 4),
-            memoryUsedMb: 64,
+            memoryUsedMb,
             cosineSimilarity: highestSim,
             matchedProtocol: ragTitle || undefined,
             safetyScore: safetyEval.confidence,
@@ -571,7 +597,7 @@ class LocalAIEngineClass {
             answer: finalAnswer,
             topicCategory,
             confidence: matchedFrag ? Math.max(0.95, highestSim) : 0.98,
-            modelInfo: 'SmolLM2-360M + e5-small (ONNX WASM Local)',
+            modelInfo: activeModelTag,
             executionTimeMs: totalExecTime,
             thoughtChain: telemetryPayload
         };

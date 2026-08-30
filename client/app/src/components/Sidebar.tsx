@@ -7,30 +7,35 @@ import { GlobalSearchModal } from "./GlobalSearchModal";
 import StoriesBar from "./stories/StoriesBar";
 import StoryCreator from "./stories/StoryCreator";
 import StoryViewer from "./stories/StoryViewer";
-import { LiveStreamViewer } from "./LiveStreamViewer";
-import { RED_VERSION, RED_APK_NAME } from "../lib/version";
+import { RED_VERSION } from "../lib/version";
 import { meshRouter } from "../lib/mesh/meshRouter";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { useTranslation } from "../lib/i18n/i18nEngine";
-import { avatarStyle, formatTime } from "./sidebar/types";
 import { SidebarHeader, ChatFilterType } from "./sidebar/SidebarHeader";
 import { ConversationList } from "./sidebar/ConversationList";
 import { ContactList } from "./sidebar/ContactList";
 
+interface TacticalHubItem {
+    id: string;
+    title: string;
+    desc: string;
+    icon: string;
+    primaryAction: ScreenView;
+    badge: string;
+    tools: Array<{ icon: string; label: string; action: ScreenView }>;
+}
+
 export default function Sidebar() {
     const { t } = useTranslation();
     const { 
-        identity, conversations: rawConvs, contacts: rawConts, groups: rawGrps, nodeOnline, navigate, fetchData,
-        pinnedChatIds: rawPinned, archivedChatIds: rawArchived, togglePinChat, toggleArchiveChat, peerStories,
-        addContact, deleteContact, blockNode, pendingContactRequests: rawPending,
-        acceptContactRequest, rejectContactRequest, preferences, updatePreferences,
+        conversations: rawConvs, contacts: rawConts, groups: rawGrps, navigate,
+        peerStories, addContact, pendingContactRequests: rawPending,
+        preferences, updatePreferences,
     } = useRedStore();
 
     const conversations = Array.isArray(rawConvs) ? rawConvs : [];
     const contacts = Array.isArray(rawConts) ? rawConts : [];
     const groups = Array.isArray(rawGrps) ? rawGrps : [];
-    const pinnedChatIds = Array.isArray(rawPinned) ? rawPinned : [];
-    const archivedChatIds = Array.isArray(rawArchived) ? rawArchived : [];
     const pendingContactRequests = Array.isArray(rawPending) ? rawPending : [];
     const pendingCount = pendingContactRequests.length;
 
@@ -70,7 +75,6 @@ export default function Sidebar() {
     const [activeTab, setActiveTab] = useState<"chats" | "contacts">("chats");
     const [chatFilter, setChatFilter] = useState<ChatFilterType>("all");
     const [searchQuery, setSearchQuery] = useState("");
-    const [searchOpen, setSearchOpen] = useState(false);
     const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
     const [addContactOpen, setAddContactOpen] = useState(false);
     const [newContactInput, setNewContactInput] = useState("");
@@ -79,6 +83,7 @@ export default function Sidebar() {
     const [menuOpen, setMenuOpen] = useState(false);
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
+    const [drawerSearch, setDrawerSearch] = useState("");
 
     const unreadTotal = useMemo(() => {
         return conversations.reduce((acc: number, c: any) => acc + (c.unread_count || 0), 0);
@@ -142,132 +147,161 @@ export default function Sidebar() {
         return deduped;
     }, [contacts, searchQuery]);
 
-    const menuCategories = [
+    // 8 Hubs Tácticos Consolidados
+    const tacticalHubs: TacticalHubItem[] = [
         {
-            title: t('modules.cat_miniapps') || "🏪 Mini-Apps Soberanas & Navegación Web",
-            items: [
-                { icon: "🛒", label: t('modules.app_store') || "Sovereign App Store (Mini-Apps)", action: "appStore" },
-                { icon: "🌐", label: t('modules.hyper_browser') || "RED Hyper-Browser Mesh", action: "hyperBrowser" },
+            id: "comms",
+            title: "1. Mensajería & Escuadrones",
+            desc: "Chats P2P Double Ratchet, SenderKeys, Canales #, Feed Social y Pizarra",
+            icon: "💬",
+            primaryAction: "channels",
+            badge: "P2P E2E",
+            tools: [
+                { icon: "📻", label: "Canales Malla (#)", action: "channels" },
+                { icon: "👥", label: "Escuadrones P2P", action: "groups" },
+                { icon: "🌍", label: "Feed Social Táctico", action: "socialFeed" },
+                { icon: "🎨", label: "Pizarra Táctica", action: "canvas" },
+                { icon: "📺", label: "Transmisión en Vivo", action: "liveStream" },
+                { icon: "📢", label: "Difusión Privada", action: "broadcast" },
             ]
         },
         {
-            title: t('modules.cat_messaging'),
-            items: [
-                { icon: "📻", label: t('modules.channels'), action: "channels" },
-                { icon: "🌍", label: t('modules.social_feed'), action: "socialFeed" },
-                { icon: "📢", label: t('modules.broadcast'), action: "broadcast" },
-                { icon: "🎙️", label: t('modules.walkie'), action: "walkie" },
-                { icon: "🎨", label: t('modules.canvas'), action: "canvas" },
-                { icon: "📺", label: t('modules.live_stream'), action: "liveStream" },
+            id: "radar",
+            title: "2. Radar, Mapa & Navegación",
+            desc: "Radar Multicapa (BLE/LoRa/WiFi), Mapa Offline GPS y Brújula Táctica",
+            icon: "🧭",
+            primaryAction: "radar",
+            badge: "OFF-GRID",
+            tools: [
+                { icon: "📡", label: "Radar Swarm BLE/WiFi", action: "radar" },
+                { icon: "🗺️", label: "Mapa GPS Offline", action: "nodemap" },
+                { icon: "🧭", label: "Brújula Topográfica", action: "offGridCompass" },
+                { icon: "📳", label: "Shake & Pair (Acelerómetro)", action: "shakePair" },
+                { icon: "📻", label: "Transceptor LoRa 25km", action: "loraTransceiver" },
             ]
         },
         {
-            title: t('modules.cat_mesh_radar'),
-            items: [
-                { icon: "📳", label: t('modules.shake_pair'), action: "shakePair" },
-                { icon: "🧭", label: t('modules.off_grid_compass'), action: "offGridCompass" },
-                { icon: "🗺️", label: t('modules.nodemap'), action: "nodemap" },
-                { icon: "📡", label: t('modules.nearby'), action: "nearby" },
-                { icon: "🛡️", label: t('modules.rf_spectrum'), action: "rfSpectrum" },
-                { icon: "🌊", label: t('modules.proximity'), action: "proximity" },
-                { icon: "🌤️", label: t('modules.weather'), action: "weather" },
-                { icon: "🔋", label: t('modules.eco_mesh'), action: "ecoMesh" },
-                { icon: "🌐", label: t('modules.network'), action: "network" },
-                { icon: "📻", label: "Transceptor LoRa (Hardware 25km)", action: "loraTransceiver" },
-                { icon: "🧭", label: "Brújula P2P Mesh", action: "p2pCompass" },
+            id: "voice",
+            title: "3. Radio Vocal & SoundMesh",
+            desc: "Walkie PTT códec LPC militar 1.2kbps, SoundMesh 18-20kHz y Espectro RF",
+            icon: "🎙️",
+            primaryAction: "walkie",
+            badge: "1.2 KBPS",
+            tools: [
+                { icon: "🎙️", label: "Walkie-Talkie Push-To-Talk", action: "walkie" },
+                { icon: "📞", label: "Llamadas Cifradas WebRTC", action: "call" },
+                { icon: "🛡️", label: "Analizador Espectro RF", action: "rfSpectrum" },
             ]
         },
         {
-            title: t('modules.cat_identity_web3'),
-            items: [
-                { icon: "⚡", label: t('modules.commercial_hub'), action: "commercialHub" },
-                { icon: "🦊", label: t('modules.web3_vault'), action: "web3Vault" },
-                { icon: "🪪", label: t('modules.id_vault'), action: "idVault" },
-                { icon: "💳", label: t('modules.p2p_pay'), action: "p2pPay" },
-                { icon: "🔐", label: t('modules.crypto'), action: "crypto" },
-                { icon: "⛓️", label: t('modules.explorer'), action: "explorer" },
-                { icon: "💻", label: t('modules.companion_link'), action: "webCompanionLink" },
-                { icon: "🖼️", label: t('modules.stego_vault'), action: "stegoVault" },
-                { icon: "💾", label: t('modules.backup'), action: "backup" },
+            id: "ai",
+            title: "4. Copiloto IA & RAG INT8",
+            desc: "Inferencia Local WASM Qwen/SmolLM, RAG Vectorial <5ms y Firewall Guardian",
+            icon: "🤖",
+            primaryAction: "aiCopilot",
+            badge: "100% OFFLINE",
+            tools: [
+                { icon: "🤖", label: "Copiloto Táctico", action: "aiCopilot" },
+                { icon: "🛡️", label: "Guardián IA Firewall", action: "guardian" },
             ]
         },
         {
-            title: t('modules.cat_defense_shield') || "🛡️ Seguridad & Guerra Electrónica",
-            items: [
-                { icon: "🛡️", label: t('modules.global_shield') || "Escudo Global DEFCON", action: "globalShield" },
-                { icon: "🛰️", label: "Matriz C4ISR & Caos EMP", action: "c4isrEmpDrill" },
-                { icon: "🦊", label: "Radiogoniometría RDF & Caza Foxhunt", action: "tacticalFoxhunt" },
-                { icon: "🔇", label: "Guerra Acústica & Ondas Binaurales", action: "acousticWarfare" },
-                { icon: "🎞️", label: "Transferencia Air-Gap & Audio Stego", action: "airGapStego" },
-                { icon: "🔑", label: "Recuperación Social Shamir (SSS)", action: "shamirRecovery" },
-                { icon: "👁️", label: "Visión Edge Táctica & HUD Térmico", action: "tacticalVisionScan" },
-                { icon: "⚡", label: t('modules.blackout') || "Simulador Blackout", action: "blackout" },
-                { icon: "💀", label: t('modules.dms') || "Hombre Caído (Dead-Man's Switch)", action: "dms" },
-                { icon: "🛡️", label: t('modules.security') || "Centro de Seguridad", action: "security" },
+            id: "vault",
+            title: "5. Bóveda PQC, Identidad & Vales",
+            desc: "Firmas NIST ML-DSA-65, Kyber ML-KEM-768, Vales P2P y Respaldo Shamir SSS",
+            icon: "🪪",
+            primaryAction: "idVault",
+            badge: "POST-QUANTUM",
+            tools: [
+                { icon: "🪪", label: "Perfil & Identidad DID", action: "idVault" },
+                { icon: "💳", label: "Vales & Pagos P2P", action: "p2pPay" },
+                { icon: "⚡", label: "Hub Comercial & Recompensas", action: "commercialHub" },
+                { icon: "🔐", label: "Bóveda Criptográfica PQC", action: "crypto" },
+                { icon: "🦊", label: "Bóveda Web3 & MetaMask", action: "web3Vault" },
+                { icon: "⛓️", label: "Explorador Blockchain", action: "explorer" },
+                { icon: "🖼️", label: "Bóveda Esteganográfica", action: "stegoVault" },
+                { icon: "🔑", label: "Respaldo Shamir (SSS)", action: "shamirRecovery" },
+                { icon: "💾", label: "Copias de Seguridad Cifradas", action: "backup" },
+                { icon: "💻", label: "Vincular con PC (Web Companion)", action: "webCompanionLink" },
             ]
         },
         {
-            title: t('modules.cat_emergency_health') || "🚨 Supervivencia, Rescate & Salud Táctica",
-            items: [
-                { icon: "🫀", label: t('modules.vital_scan') || "Escáner Biovital", action: "vitalScan" },
-                { icon: "🩸", label: "TCCC Triage MARCH-PAWS & Balística", action: "tcccBallistics" },
-                { icon: "☢️", label: "Dosimetría CBRN & Pasarela Satelital", action: "cbrnSatellite" },
-                { icon: "💧", label: "Recursos Vitales: Agua & Energía", action: "vitalResources" },
-                { icon: "📡", label: "Sonar Acústico & Sismología de Rescate", action: "sonarSeismic" },
-                { icon: "☀️", label: "Navegación Celeste & PDR Inercial", action: "celestialPdr" },
-                { icon: "🤝", label: "Canje Anónimo ZK & Baliza Sísmica VLF", action: "zkBarterSubsurface" },
-                { icon: "💨", label: "Espectrometría de Gas & AQI", action: "atmosphericSafety" },
-                { icon: "🚨", label: t('modules.survival_beacon') || "Baliza SOS de Malla", action: "survivalBeacon" },
-                { icon: "🟠", label: t('modules.amber') || "Alerta Amber P2P", action: "amber" },
+            id: "defense",
+            title: "6. Ciberdefensa & Escudo DEFCON",
+            desc: "Matriz DEFCON 1-5, Simulador Apagón, Dead-Man's Switch y Modo Calculadora",
+            icon: "🛡️",
+            primaryAction: "globalShield",
+            badge: "DEFCON",
+            tools: [
+                { icon: "🛡️", label: "Escudo Global DEFCON", action: "globalShield" },
+                { icon: "⚡", label: "Simulador de Apagón", action: "blackout" },
+                { icon: "💀", label: "Hombre Muerto (DMS)", action: "dms" },
+                { icon: "🛡️", label: "Centro de Seguridad Zero-Trust", action: "security" },
+                { icon: "📑", label: "Reporte de Auditoría", action: "secReport" },
+                { icon: "🧮", label: "Calculadora Señuelo (Camuflaje)", action: "calculator" },
             ]
         },
         {
-            title: t('modules.cat_ai'),
-            items: [
-                { icon: "🤖", label: t('modules.ai_copilot'), action: "aiCopilot" },
-                { icon: "🛡️", label: t('modules.guardian'), action: "guardian" },
+            id: "emergency",
+            title: "7. Defensa Civil, Triage & SOS",
+            desc: "Triaje START/MARCH-PAWS, Baliza SOS multimodal, Alerta AMBER y Barómetro",
+            icon: "🚨",
+            primaryAction: "vitalScan",
+            badge: "EMERGENCIA",
+            tools: [
+                { icon: "🫀", label: "Signos Vitales & Triage START", action: "vitalScan" },
+                { icon: "🚨", label: "Baliza SOS Ultrasonido", action: "survivalBeacon" },
+                { icon: "🟠", label: "Alerta AMBER P2P", action: "amber" },
+                { icon: "🌤️", label: "Barómetro & Alertas CAP", action: "weather" },
             ]
         },
         {
-            title: t('modules.cat_tools_system'),
-            items: [
-                { icon: "⚙️", label: t('modules.settings'), action: "settings" },
-                { icon: "🚀", label: t('modules.updater'), action: "updater" },
-                { icon: "📊", label: t('modules.health'), action: "health" },
-                { icon: "📋", label: t('modules.node_logs'), action: "nodeLogs" },
-                { icon: "🧮", label: t('modules.calculator'), action: "calculator" },
-                { icon: "📑", label: t('modules.sec_report'), action: "secReport" },
-                { icon: "🛡️", label: t('modules.security'), action: "security" },
+            id: "system",
+            title: "8. Mini-Apps Soberanas & Sistema",
+            desc: "App Store P2P, Hyper-Browser Mesh, Diagnóstico de Salud y Ajustes Soberanos",
+            icon: "🏪",
+            primaryAction: "appStore",
+            badge: "SANDBOX",
+            tools: [
+                { icon: "🛒", label: "App Store P2P (Mini-Apps)", action: "appStore" },
+                { icon: "🌐", label: "RED Hyper-Browser Mesh", action: "hyperBrowser" },
+                { icon: "📊", label: "Diagnóstico de Salud", action: "health" },
+                { icon: "📋", label: "Logs del Nodo Rust SSE", action: "nodeLogs" },
+                { icon: "⚙️", label: "Ajustes del Sistema", action: "settings" },
+                { icon: "🚀", label: "Actualizador OTA", action: "updater" },
             ]
-        }
+        },
     ];
 
-    const [drawerSearch, setDrawerSearch] = useState("");
-    const filteredMenuCategories = useMemo(() => {
-        if (!drawerSearch.trim()) return menuCategories;
+    const filteredHubs = useMemo(() => {
+        if (!drawerSearch.trim()) return tacticalHubs;
         const q = drawerSearch.toLowerCase();
-        return menuCategories.map(cat => ({
-            ...cat,
-            items: cat.items.filter(i => i.label.toLowerCase().includes(q))
-        })).filter(cat => cat.items.length > 0);
+        return tacticalHubs.map(hub => {
+            const matchesHub = hub.title.toLowerCase().includes(q) || hub.desc.toLowerCase().includes(q);
+            const matchingTools = hub.tools.filter(t => t.label.toLowerCase().includes(q));
+            if (matchesHub) return hub;
+            if (matchingTools.length > 0) {
+                return { ...hub, tools: matchingTools };
+            }
+            return null;
+        }).filter(Boolean) as TacticalHubItem[];
     }, [drawerSearch]);
 
-    const totalModules = menuCategories.reduce((acc, cat) => acc + cat.items.length, 0);
+    const totalToolsCount = tacticalHubs.reduce((acc, h) => acc + h.tools.length, 0);
 
     return (
         <aside style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "var(--bg-void)", position: "relative", overflow: "hidden" }}>
 
-
-            {/* Tactical Slide-Over Command Drawer */}
+            {/* Tactical Slide-Over Command Drawer: 8 Hubs Tácticos */}
             {menuOpen && (
                 <div
-                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", display: "flex", justifyContent: "flex-end" }}
+                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(14px)", display: "flex", justifyContent: "flex-end" }}
                     onClick={() => setMenuOpen(false)}
                 >
                     <div
                         className="animate-enter"
                         style={{
-                            width: "100%", maxWidth: "360px", height: "100%",
+                            width: "100%", maxWidth: "380px", height: "100%",
                             background: "linear-gradient(180deg, rgba(14, 16, 28, 0.98) 0%, rgba(6, 8, 16, 0.99) 100%)",
                             borderLeft: "1px solid var(--glass-border)",
                             boxShadow: "-12px 0 40px rgba(0,0,0,0.85)",
@@ -283,9 +317,9 @@ export default function Sidebar() {
                             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                                 <span style={{ fontSize: "1.4rem" }}>🛡️</span>
                                 <div>
-                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>{t('dock.modules') || "Centro de Control RED"}</div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>Centro de Comando Táctico</div>
                                     <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                                        {totalModules} {t('dock.modules')?.toUpperCase() || "MÓDULOS"}
+                                        8 HUBS · {totalToolsCount} HERRAMIENTAS ACTIVAS
                                     </div>
                                 </div>
                             </div>
@@ -310,7 +344,7 @@ export default function Sidebar() {
                                     type="text"
                                     value={drawerSearch}
                                     onChange={e => setDrawerSearch(e.target.value)}
-                                    placeholder="Buscar módulo o herramienta..."
+                                    placeholder="Buscar hub, protocolo o herramienta..."
                                     style={{
                                         flex: 1, background: "transparent", border: "none", outline: "none",
                                         color: "var(--text-primary)", fontSize: "0.82rem"
@@ -322,7 +356,7 @@ export default function Sidebar() {
                             </div>
                         </div>
 
-                        {/* Quick Action Highlights v66.0.0 */}
+                        {/* Quick Action Highlights */}
                         <div style={{ padding: "0 16px 8px 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", flexShrink: 0 }}>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("appStore"); }}
@@ -333,9 +367,9 @@ export default function Sidebar() {
                                     border: "1px solid rgba(0, 230, 118, 0.35)", borderRadius: "var(--radius-md)", textAlign: "center"
                                 }}
                             >
-                                <span style={{ fontSize: "1.4rem" }}>🛒</span>
-                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-emerald)" }}>App Store P2P</span>
-                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS</span>
+                                <span style={{ fontSize: "1.3rem" }}>🛒</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-emerald)" }}>App Store P2P</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS</span>
                             </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("hyperBrowser"); }}
@@ -346,9 +380,9 @@ export default function Sidebar() {
                                     border: "1px solid rgba(0, 229, 255, 0.35)", borderRadius: "var(--radius-md)", textAlign: "center"
                                 }}
                             >
-                                <span style={{ fontSize: "1.4rem" }}>🌐</span>
-                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-cyan)" }}>Hyper-Browser</span>
-                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MESH HTTP</span>
+                                <span style={{ fontSize: "1.3rem" }}>🌐</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan)" }}>Hyper-Browser</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MESH HTTP</span>
                             </button>
                         </div>
 
@@ -395,35 +429,52 @@ export default function Sidebar() {
                             </div>
                         </div>
 
-                        {/* Modules Scrollable Area */}
-                        <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 16px 36px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
-                            {filteredMenuCategories.map((cat: { title: string; items: Array<{ icon: string; label: string; action: string }> }) => (
-                                <div key={cat.title} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                    <div style={{
-                                        fontSize: "0.68rem", color: "var(--accent-emerald)", textTransform: "uppercase",
-                                        fontWeight: 900, padding: "4px 8px", background: "rgba(0,230,118,0.06)",
-                                        borderRadius: "6px", fontFamily: "JetBrains Mono, monospace",
-                                        display: "flex", justifyContent: "space-between", alignItems: "center"
-                                    }}>
-                                        <span>{cat.title}</span>
-                                        <span style={{ opacity: 0.7 }}>{cat.items.length}</span>
+                        {/* 8 Tactical Hubs Scrollable List */}
+                        <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 16px 36px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                            {filteredHubs.map(hub => (
+                                <div
+                                    key={hub.id}
+                                    style={{
+                                        background: "rgba(18, 20, 36, 0.75)",
+                                        border: "1px solid var(--glass-border)",
+                                        borderRadius: "10px",
+                                        padding: "12px",
+                                        display: "flex", flexDirection: "column", gap: "8px"
+                                    }}
+                                >
+                                    <div
+                                        onClick={() => { setMenuOpen(false); navigate(hub.primaryAction); }}
+                                        style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer" }}
+                                        className="hover-bright"
+                                    >
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <span style={{ fontSize: "1.2rem" }}>{hub.icon}</span>
+                                            <div>
+                                                <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#fff" }}>{hub.title}</div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "2px" }}>{hub.desc}</div>
+                                            </div>
+                                        </div>
+                                        <span className="badge-live-cyan" style={{ fontSize: "0.58rem", padding: "2px 5px", flexShrink: 0 }}>
+                                            {hub.badge}
+                                        </span>
                                     </div>
-                                    <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "4px" }}>
-                                        {cat.items.map((item: { icon: string; label: string; action: string }) => (
+
+                                    {/* Tool Chips */}
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                        {hub.tools.map(tool => (
                                             <button
-                                                key={item.action}
-                                                onClick={e => { e.preventDefault(); navigate(item.action as ScreenView); setMenuOpen(false); }}
-                                                className="card-tactical-interactive"
+                                                key={tool.action}
+                                                onClick={() => { setMenuOpen(false); navigate(tool.action); }}
+                                                className="btn-ghost hover-bright"
                                                 style={{
-                                                    display: "flex", alignItems: "center", gap: "12px",
-                                                    padding: "10px 12px", background: "rgba(18, 20, 36, 0.6)",
-                                                    border: "1px solid rgba(255,255,255,0.06)", borderRadius: "var(--radius-sm)",
-                                                    fontSize: "0.84rem", fontWeight: 700, textAlign: "left"
+                                                    padding: "4px 8px", fontSize: "0.72rem",
+                                                    background: "rgba(255,255,255,0.03)",
+                                                    border: "1px solid rgba(255,255,255,0.08)",
+                                                    borderRadius: "6px", display: "flex", alignItems: "center", gap: "4px"
                                                 }}
                                             >
-                                                <span style={{ fontSize: "1.1rem", width: 24, textAlign: "center" }}>{item.icon}</span>
-                                                <span style={{ flex: 1, color: "var(--text-primary)" }}>{item.label}</span>
-                                                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", opacity: 0.5 }}>›</span>
+                                                <span>{tool.icon}</span>
+                                                <span>{tool.label}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -482,7 +533,6 @@ export default function Sidebar() {
                 </div>
             )}
 
-
             <SidebarHeader
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
@@ -493,7 +543,7 @@ export default function Sidebar() {
                 setGlobalSearchOpen={setGlobalSearchOpen}
                 menuOpen={menuOpen}
                 setMenuOpen={setMenuOpen}
-                totalModules={totalModules}
+                totalModules={8}
                 filteredConvsCount={filteredConvs.length}
                 filteredContactsCount={filteredContacts.length}
                 pendingCount={pendingCount}
@@ -527,10 +577,10 @@ export default function Sidebar() {
                 )}
             </div>
 
-            {/* ── Fixed Bottom Tactical HUD Dock (6 Key Modules) ── */}
+            {/* ── Fixed Bottom Tactical HUD Dock (5 Key Pillars) ── */}
             <nav style={{
                 position: "sticky", bottom: 0, left: 0, right: 0,
-                minHeight: "58px",
+                minHeight: "56px",
                 background: "linear-gradient(180deg, rgba(14, 16, 30, 0.95) 0%, rgba(6, 8, 16, 0.98) 100%)",
                 backdropFilter: "blur(24px)",
                 WebkitBackdropFilter: "blur(24px)",
@@ -542,9 +592,8 @@ export default function Sidebar() {
                 {[
                     { id: "chats", icon: "💬", label: t.dock?.chats || "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen },
                     { id: "radar", icon: "📡", label: t.dock?.radar || "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
-                    { id: "modules", icon: "⚡", label: t.dock?.modules || "Módulos", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: String(totalModules), isModulesBtn: true },
+                    { id: "modules", icon: "⚡", label: "Hubs", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: "8", isModulesBtn: true },
                     { id: "ai", icon: "🤖", label: t.dock?.ai || "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
-                    { id: "compass", icon: "🧭", label: t.dock?.compass || "Brújula", action: () => { setMenuOpen(false); navigate("offGridCompass"); } },
                     { id: "vault", icon: "🪪", label: t.dock?.vault || "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
                 ].map(item => (
                     <button
@@ -759,4 +808,3 @@ export default function Sidebar() {
         </aside>
     );
 }
-

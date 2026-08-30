@@ -4,8 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { queryAICopilot, CopilotResponse, summarizeChannelAI } from "../lib/api";
 import { LocalAIEngine } from "../lib/localAiEngine";
-import { ModelManager, LocalModelMetaData } from "../lib/modelManager";
-import { EmergencyGlossaryEngine, GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
+import { ModelManager, LocalModelMetaData, DeviceMemoryBudget } from "../lib/modelManager";
+import { GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { NeuralThoughtViewer, NeuralTelemetryData } from "./ai/NeuralThoughtViewer";
@@ -24,16 +24,6 @@ interface ChatMessage {
 }
 
 const CHAT_HISTORY_KEY = "red_copilot_chat_history_v2";
-
-const TACTICAL_PRESETS = [
-    { icon: "🚨", label: "Triage START", query: "Explica el protocolo de Triage START en combate y desastres paso a paso con códigos de color." },
-    { icon: "🩹", label: "Torniquete & Hemorragias", query: "Protocolo de aplicación de torniquete táctico y control de hemorragia exanguinante en zona caliente." },
-    { icon: "💧", label: "Purificar Agua", query: "¿Cómo potabilizar agua de río o estancada en situación de supervivencia extrema (filtrado, ebullición, cloro)?" },
-    { icon: "📻", label: "Morse SOS & Frecuencias", query: "Códigos Morse de auxilio SOS (... --- ...) y frecuencias de radio de emergencia internacional VHF/UHF." },
-    { icon: "📡", label: "Diagnóstico Mesh P2P", query: "¿Cómo funciona el enrutamiento tolerante a retrasos DTN y los saltos Onion en la red RED?" },
-    { icon: "⚡", label: "Apagón Eléctrico", query: "Protocolo de supervivencia inmediata ante un colapso de infraestructura eléctrica y comunicaciones." },
-    { icon: "🛡️", label: "Cifrado Noise XK", query: "¿Cómo protegen las llaves efímeras Curve25519 y ChaCha20-Poly1305 los mensajes contra intercepción?" }
-];
 
 export const AICopilotModal: React.FC = () => {
     const {
@@ -68,7 +58,7 @@ export const AICopilotModal: React.FC = () => {
     const [activeTab, setActiveTab] = useState<CopilotTab>("chat");
     const [input, setInput] = useState("");
     const [loading, setLoading] = useState(false);
-    const [includeTacticalContext, setIncludeTacticalContext] = useState(true);
+    const [includeTacticalContext] = useState(true);
     const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
     const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<any>(null);
@@ -88,11 +78,11 @@ export const AICopilotModal: React.FC = () => {
                 id: "initial_ai_msg",
                 sender: "ai",
                 text: "🤖 ¡Saludos, Operador! Soy el Copiloto IA de RED.\n\nEstoy completamente operativo en tu dispositivo, funcionando 100% desconectado de Internet. Puedo asistirte en tiempo real con protocolos de supervivencia, triage médico TCCC, radiocomunicaciones de emergencia, navegación táctica y ciberdefensa.\n\nPuedes pulsar en '🧠 PENSAMIENTO INTERNO' en cualquier respuesta para inspeccionar en vivo cómo proceso tus consultas.",
-                modelTag: "SmolLM2-360M + e5-small (100% Offline)",
+                modelTag: "Qwen 2.5 0.5B + e5-small (100% Offline)",
                 timestamp: Date.now(),
                 latencyMs: 14,
                 thoughtChain: {
-                    modelName: "multilingual-e5-small + SmolLM2 INT4",
+                    modelName: "multilingual-e5-small + Qwen 2.5 INT8",
                     executionTimeMs: 14,
                     tokensPerSecond: 180,
                     tokensGenerated: 75,
@@ -137,9 +127,10 @@ export const AICopilotModal: React.FC = () => {
         ];
     });
 
-    // Active Model State
+    // Active Model & Memory Budget State
     const [activeModel, setActiveModel] = useState<LocalModelMetaData | null>(null);
     const [availableModels, setAvailableModels] = useState<LocalModelMetaData[]>([]);
+    const [memoryBudget, setMemoryBudget] = useState<DeviceMemoryBudget>(() => ModelManager.getDeviceMemoryBudget());
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [downloadProgress, setDownloadProgress] = useState<number>(0);
     const [downloadBytes, setDownloadBytes] = useState<{ loaded: number; total: number }>({ loaded: 0, total: 0 });
@@ -188,17 +179,15 @@ export const AICopilotModal: React.FC = () => {
         }
     }, []);
 
-    // Load Models on Mount
-    const refreshModels = useCallback(async () => {
-        const models = await ModelManager.checkLocalModelsStatus();
-        setAvailableModels([...models]);
-        const currentActive = ModelManager.getActiveModel();
-        setActiveModel(currentActive);
-    }, []);
-
+    // Subscribe to ModelManager state changes
     useEffect(() => {
-        refreshModels();
-    }, [refreshModels]);
+        setMemoryBudget(ModelManager.getDeviceMemoryBudget());
+        const unsub = ModelManager.subscribe((active, all) => {
+            setActiveModel(active);
+            setAvailableModels([...all]);
+        });
+        return () => unsub();
+    }, []);
 
     // Auto-scroll on new messages
     useEffect(() => {
@@ -218,15 +207,15 @@ export const AICopilotModal: React.FC = () => {
         utterance.lang = targetLang === "en" ? "en-US" : targetLang === "fr" ? "fr-FR" : "es-ES";
         utterance.rate = 1.0;
         window.speechSynthesis.speak(utterance);
-        toast.info("🔊 Reproduciendo respuesta táctica...");
-    }, [targetLang]);
+        toast.info(t.copilot?.playing_audio || "🔊 Reproduciendo respuesta táctica...");
+    }, [targetLang, t]);
 
     // Copy Text to Clipboard
     const copyToClipboard = (text: string, msgId: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
             setCopiedMsgId(msgId);
-            toast.success("📋 Directiva copiada al portapapeles");
+            toast.success(t.copilot?.directive_copied || "📋 Directiva copiada al portapapeles");
             setTimeout(() => setCopiedMsgId(null), 2000);
         }
     };
@@ -236,7 +225,7 @@ export const AICopilotModal: React.FC = () => {
         if (sendMessage) {
             const formatted = `🤖 [Directiva Copiloto IA]:\n${text}`;
             sendMessage(formatted);
-            toast.success("🚀 Directiva enviada al canal de chat activo");
+            toast.success(t.copilot?.sent_to_chat || "🚀 Directiva transmitida al chat activo");
         } else {
             toast.error("Canal de chat no disponible");
         }
@@ -326,7 +315,7 @@ export const AICopilotModal: React.FC = () => {
 
             const res: CopilotResponse = await queryAICopilot(text, contextStr);
             const latency = Math.round(performance.now() - startTime);
-            const tag = res.source || (activeModel && activeModel.isDownloaded ? `${activeModel.name} (ARM64 Nativo)` : "SmolLM2-360M + Vector INT8 (100% Offline)");
+            const tag = res.source || (activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : "Qwen 2.5 0.5B + Vector INT8 (100% Offline)");
 
             const aiMsg: ChatMessage = {
                 id: `msg_${Date.now()}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`,
@@ -354,16 +343,17 @@ export const AICopilotModal: React.FC = () => {
     };
 
     const handleSelectModel = (modelId: string) => {
+        // Liberar pipelines previos de memoria antes de cargar el nuevo modelo
+        LocalAIEngine.disposePipelines();
         ModelManager.setActiveModel(modelId);
         const selected = ModelManager.getActiveModel();
         setActiveModel(selected);
-        setAvailableModels([...ModelManager.getModels()]);
         if (selected) {
-            toast.success(`Motor activo: ${selected.name}`);
+            toast.success(`${t.copilot?.model_switched || "Motor activo"}: ${selected.name}`);
             const switchMsg: ChatMessage = {
                 id: "msg_switch_" + Date.now().toString(36),
                 sender: "ai",
-                text: `🔄 Motor neural cambiado a: ${selected.name}.\nLas consultas se ejecutarán con aceleración nativa local.`,
+                text: `🔄 Motor neural cambiado a: ${selected.name}.\nAsignación de memoria dinámica actualizada: ${selected.recommendedMinRamMb} MB recomendados.`,
                 modelTag: selected.name,
                 timestamp: Date.now()
             };
@@ -380,8 +370,8 @@ export const AICopilotModal: React.FC = () => {
                 setDownloadProgress(pct);
                 setDownloadBytes({ loaded, total });
             });
+            LocalAIEngine.disposePipelines();
             ModelManager.setActiveModel(modelId);
-            await refreshModels();
             toast.success("Modelo descargado y activado");
         } catch {
             toast.error("Error al descargar modelo");
@@ -393,14 +383,14 @@ export const AICopilotModal: React.FC = () => {
     const handleCancelDownload = (modelId: string) => {
         ModelManager.cancelDownload(modelId);
         setDownloadingId(null);
-        toast.info("Descarga cancelada");
+        toast.info(t.copilot?.cancel_btn || "Descarga cancelada");
     };
 
     const handleDeleteModel = async (modelId: string) => {
+        LocalAIEngine.disposePipelines();
         const ok = await ModelManager.deleteModel(modelId);
         if (ok) {
-            await refreshModels();
-            toast.success("Modelo eliminado para liberar espacio");
+            toast.success(t.copilot?.delete_success || "Modelo eliminado para liberar espacio");
         } else {
             toast.error("No se pudo eliminar el archivo");
         }
@@ -414,10 +404,10 @@ export const AICopilotModal: React.FC = () => {
         setImportProgress(0);
         try {
             toast.info(`Importando modelo local: ${file.name}...`);
+            LocalAIEngine.disposePipelines();
             const imported = await ModelManager.importModelFromLocalFile(file, (progress) => {
                 setImportProgress(progress);
             });
-            await refreshModels();
             handleSelectModel(imported.id);
             toast.success(`✅ Modelo ${imported.name} importado y activado`);
         } catch (err: any) {
@@ -432,7 +422,7 @@ export const AICopilotModal: React.FC = () => {
         toast.info("Preparando paquete P2P...");
         const ok = await ModelManager.exportModel(modelId);
         if (ok) {
-            toast.success("✅ Modelo compartido vía P2P / AirDrop");
+            toast.success(t.copilot?.export_success || "✅ Modelo compartido vía P2P / AirDrop");
         } else {
             toast.error("No se pudo iniciar la transferencia P2P");
         }
@@ -493,7 +483,7 @@ export const AICopilotModal: React.FC = () => {
             timestamp: Date.now()
         };
         setMessages([initialMsg]);
-        toast.info("Historial de chat vaciado");
+        toast.info(t.copilot?.history_cleared || "Historial de chat vaciado");
     };
 
     const filteredGlossary = selectedCategory === "all"
@@ -504,7 +494,7 @@ export const AICopilotModal: React.FC = () => {
 
     return (
         <div className="modal-screen-container">
-            {/* Header Táctico */}
+            {/* Header Táctico Minimalista */}
             <header className="safe-header" style={{
                 padding: "10px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -529,20 +519,23 @@ export const AICopilotModal: React.FC = () => {
                             <span className="badge-live-cyan" style={{ fontSize: "0.62rem", padding: "2px 6px" }}>100% OFFLINE</span>
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                            Motor: <span style={{ color: "var(--accent-cyan)", fontWeight: 700 }}>{activeModel?.name || "Copiloto Táctico (RAG 384-D + SmolLM2)"}</span>
+                            Motor: <span style={{ color: "var(--accent-cyan)", fontWeight: 700 }}>{activeModel?.name || "Qwen 2.5 0.5B Instruct"}</span>
                         </div>
                     </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <div className="badge-live-emerald" style={{ fontSize: "0.65rem", padding: "3px 8px", fontFamily: "JetBrains Mono, monospace" }}>
+                        RAM: {(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB
+                    </div>
                     {activeTab === "chat" && (
                         <button
                             onClick={handleClearChat}
                             className="btn-ghost"
                             style={{ padding: "4px 8px", fontSize: "0.72rem", color: "var(--text-muted)" }}
-                            title={t.common?.cancel || "Limpiar"}
+                            title={t.copilot?.clean_history || "Limpiar"}
                         >
-                            🗑️ {t.common?.cancel || "Limpiar"}
+                            🗑️
                         </button>
                     )}
                 </div>
@@ -580,7 +573,7 @@ export const AICopilotModal: React.FC = () => {
             {/* PESTAÑA 1: CHAT CON IA NEURONAL */}
             {activeTab === "chat" && (
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "calc(100% - 105px)", overflow: "hidden" }}>
-                    {/* Barra de Presets Tácticos de 1 Toque */}
+                    {/* Barra de Presets Tácticos */}
                     <div style={{
                         display: "flex", gap: "6px", padding: "8px 12px",
                         overflowX: "auto", background: "rgba(0,229,255,0.03)",
@@ -638,12 +631,12 @@ export const AICopilotModal: React.FC = () => {
                                         }}
                                     >
                                         <div style={{
-                                            fontSize: "0.86rem",
-                                            lineHeight: 1.5,
-                                            whiteSpace: "pre-wrap",
-                                            wordBreak: "break-word",
-                                            fontWeight: isAI ? 400 : 600
-                                        }}>
+                                             fontSize: "0.86rem",
+                                             lineHeight: 1.5,
+                                             whiteSpace: "pre-wrap",
+                                             wordBreak: "break-word",
+                                             fontWeight: isAI ? 400 : 600
+                                         }}>
                                             {msg.text}
                                         </div>
 
@@ -665,7 +658,7 @@ export const AICopilotModal: React.FC = () => {
                                                         style={{ padding: "2px 6px", fontSize: "0.68rem" }}
                                                         title="Copiar"
                                                     >
-                                                        {isCopied ? "✓ Copiado" : "📋 Copiar"}
+                                                        {isCopied ? "✓" : "📋"}
                                                     </button>
                                                     <button
                                                         onClick={() => shareToChannel(msg.text)}
@@ -673,7 +666,7 @@ export const AICopilotModal: React.FC = () => {
                                                         style={{ padding: "2px 6px", fontSize: "0.68rem", color: "var(--accent-cyan)" }}
                                                         title="Enviar a canal de chat activo"
                                                     >
-                                                        🚀 Enviar a Chat
+                                                        🚀
                                                     </button>
                                                     <button
                                                         onClick={() => speakText(msg.text)}
@@ -688,7 +681,7 @@ export const AICopilotModal: React.FC = () => {
                                         )}
                                     </div>
 
-                                    {/* Chain of Thought / Pensamiento Interno en Vivo */}
+                                    {/* Chain of Thought */}
                                     {isAI && msg.thoughtChain && (
                                         <div style={{ width: "100%", marginTop: "4px" }}>
                                             <NeuralThoughtViewer telemetry={msg.thoughtChain} isGenerating={false} />
@@ -754,16 +747,16 @@ export const AICopilotModal: React.FC = () => {
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Traductor Táctico & Glosario de Supervivencia</div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>{t.copilot?.translator_title || "Traductor Táctico & Glosario de Supervivencia"}</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Traducción determinista 100% offline para 6 idiomas con fonética Quechua y definiciones militares.
+                                    {t.copilot?.translator_desc || "Traducción determinista 100% offline para 6 idiomas con fonética Quechua y definiciones militares."}
                                 </div>
                             </div>
 
                             {/* Selector de Idioma */}
                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                 <label style={{ fontSize: "0.76rem", fontWeight: 800, color: "var(--accent-cyan)", textTransform: "uppercase" }}>
-                                    Idioma Destino:
+                                    {t.copilot?.target_lang || "Idioma Destino"}:
                                 </label>
                                 <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
                                     {([
@@ -802,7 +795,7 @@ export const AICopilotModal: React.FC = () => {
                                     className="btn-tactical-primary"
                                     style={{ padding: "8px 16px", fontSize: "0.78rem" }}
                                 >
-                                    {isTranslating ? "..." : "Traducir"}
+                                    {isTranslating ? "..." : (t.copilot?.translate_btn || "Traducir")}
                                 </button>
                             </div>
 
@@ -879,9 +872,9 @@ export const AICopilotModal: React.FC = () => {
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
                             <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Resumidor Táctico de Canales y Malla</div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>{t.copilot?.summarizer_title || "Resumidor Táctico de Canales y Malla"}</div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Extrae inteligencia clave, puntos de situación, bajas y eventos críticos de los mensajes activos.
+                                    {t.copilot?.summarizer_desc || "Extrae inteligencia clave, puntos de situación y eventos críticos de los mensajes activos."}
                                 </div>
                             </div>
 
@@ -910,7 +903,7 @@ export const AICopilotModal: React.FC = () => {
                                 className="btn-tactical-primary"
                                 style={{ padding: "12px", fontSize: "0.85rem" }}
                             >
-                                {isSummarizing ? "⚙️ Sintetizando Inteligencia con IA..." : "📋 GENERAR RESUMEN TÁCTICO"}
+                                {isSummarizing ? (t.copilot?.summarizing || "⚙️ Sintetizando Inteligencia con IA...") : (t.copilot?.summarize_btn || "📋 GENERAR RESUMEN TÁCTICO")}
                             </button>
 
                             {summaryResult && (
@@ -944,17 +937,25 @@ export const AICopilotModal: React.FC = () => {
                 <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
                         <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Modelos Neuronales GGUF (Inferencia ARM64)</div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Modelos Neuronales GGUF / ONNX (Offline)</div>
                                     <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Ejecución 100% nativa fuera de red en el procesador de tu dispositivo.
+                                        Ejecución 100% nativa fuera de red sin dependencia de servidores centrales.
                                     </div>
                                 </div>
-                                <div style={{ textAlign: "right" }}>
-                                    <span style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>Almacenamiento ocupado:</span>
-                                    <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                        {totalStorageMb} MB
+                                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{t.copilot?.storage_used || "Almacenamiento"}:</span>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            {totalStorageMb} MB
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: "right" }}>
+                                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{t.copilot?.memory_budget || "Presupuesto RAM"}:</span>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
+                                            {memoryBudget.recommendedMaxModelMb} MB máx
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -969,13 +970,13 @@ export const AICopilotModal: React.FC = () => {
                                 flexDirection: "column",
                                 gap: "8px"
                             }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
                                     <div>
                                         <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                            📂 SIDELOADING OFFLINE (USB OTG / SD / P2P)
+                                            {t.copilot?.sideload_title || "📂 SIDELOADING OFFLINE (USB OTG / SD / P2P)"}
                                         </div>
                                         <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                            Importa cualquier modelo .GGUF desde tu almacenamiento sin conexión a internet.
+                                            {t.copilot?.sideload_desc || "Importa cualquier modelo .GGUF desde tu almacenamiento sin conexión a internet."}
                                         </div>
                                     </div>
                                     <button
@@ -984,7 +985,7 @@ export const AICopilotModal: React.FC = () => {
                                         className="btn-tactical-primary"
                                         style={{ padding: "6px 12px", fontSize: "0.74rem" }}
                                     >
-                                        {isImportingModel ? `Importando ${importProgress}%...` : "📂 Cargar .GGUF"}
+                                        {isImportingModel ? `Importando ${importProgress}%...` : (t.copilot?.load_gguf_btn || "📂 Cargar .GGUF")}
                                     </button>
                                     <input
                                         ref={fileInputRef}
@@ -1008,11 +1009,13 @@ export const AICopilotModal: React.FC = () => {
                                 )}
                             </div>
 
+                            {/* Lista de Modelos */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                                 {(availableModels ?? []).map(model => {
                                     const isActive = activeModel?.id === model.id;
                                     const isDownloading = downloadingId === model.id;
                                     const isReady = model.isDownloaded || model.is_downloaded;
+                                    const isRamOk = model.recommendedMinRamMb <= memoryBudget.totalDeviceRamMb;
 
                                     return (
                                         <div
@@ -1025,12 +1028,24 @@ export const AICopilotModal: React.FC = () => {
                                                 display: "flex", flexDirection: "column", gap: "8px"
                                             }}
                                         >
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
                                                 <div>
-                                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: isActive ? "var(--accent-cyan)" : "var(--text-primary)" }}>
-                                                        {model.name} {isActive && "★ (ACTIVO)"}
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                                        <span style={{ fontSize: "0.88rem", fontWeight: 800, color: isActive ? "var(--accent-cyan)" : "var(--text-primary)" }}>
+                                                            {model.name}
+                                                        </span>
+                                                        {isActive && (
+                                                            <span className="badge-live-cyan" style={{ fontSize: "0.60rem", padding: "2px 6px" }}>
+                                                                {t.copilot?.active_btn || "ACTIVO"}
+                                                            </span>
+                                                        )}
+                                                        {!isRamOk && (
+                                                            <span className="badge-live-amber" style={{ fontSize: "0.58rem", padding: "2px 5px" }}>
+                                                                RAM ALTA
+                                                            </span>
+                                                        )}
                                                     </div>
-                                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
                                                         Parámetros: {model.parameterCount} · Tamaño: {model.fileSizeMb} MB · RAM Mín: {model.recommendedMinRamMb} MB
                                                     </div>
                                                 </div>
@@ -1044,7 +1059,7 @@ export const AICopilotModal: React.FC = () => {
                                                                 className={isActive ? "glow-pill-active" : "btn-tactical-secondary"}
                                                                 style={{ padding: "6px 12px", fontSize: "0.74rem" }}
                                                             >
-                                                                {isActive ? "Activo" : "Seleccionar"}
+                                                                {isActive ? (t.copilot?.active_btn || "Activo") : (t.copilot?.select_btn || "Seleccionar")}
                                                             </button>
                                                             <button
                                                                 onClick={() => handleExportModel(model.id)}
@@ -1071,7 +1086,7 @@ export const AICopilotModal: React.FC = () => {
                                                                     className="btn-tactical-secondary"
                                                                     style={{ padding: "6px 12px", fontSize: "0.74rem", color: "var(--accent-crimson)" }}
                                                                 >
-                                                                    Cancelar
+                                                                    {t.copilot?.cancel_btn || "Cancelar"}
                                                                 </button>
                                                             ) : (
                                                                 <button
@@ -1079,7 +1094,7 @@ export const AICopilotModal: React.FC = () => {
                                                                     className="btn-tactical-primary"
                                                                     style={{ padding: "6px 12px", fontSize: "0.74rem" }}
                                                                 >
-                                                                    Descargar ({model.fileSizeMb} MB)
+                                                                    {t.copilot?.download_btn || "Descargar"} ({model.fileSizeMb} MB)
                                                                 </button>
                                                             )}
                                                         </>
