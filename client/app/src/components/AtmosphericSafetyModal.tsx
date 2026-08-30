@@ -108,7 +108,7 @@ export function AtmosphericSafetyModal() {
                 distressType: "NATURAL_DISASTER",
                 triageColor: telemetry.aqiIndex > 200 ? "RED" : "YELLOW",
                 note: `ALERTA TOXICIDAD ATMOSFÉRICA: AQI ${telemetry.aqiIndex} (${telemetry.severity}), PM2.5 ${telemetry.pm25Ugm3} ug/m3, CO ${telemetry.estimatedCoPpm} ppm. ${telemetry.recommendedMask}`,
-                batteryLevel: 85
+                batteryLevel: typeof window !== 'undefined' ? (window as any).__red_last_battery ?? 100 : 100
             }, "LOCAL_HAZMAT", "Sensor Óptico AQI");
             toast.success("🚨 Alerta de Toxicidad Atmosférica transmitida por Malla SOS");
         });

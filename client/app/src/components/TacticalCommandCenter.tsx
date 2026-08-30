@@ -5,10 +5,8 @@ import { useRedStore, ScreenView } from '../store/useRedStore';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { globalShield } from '../lib/network/GlobalShieldEngine';
 import { MonetizationEngine } from '../lib/network/MonetizationEngine';
-import { TacticalAudioEngine } from '../lib/audio/TacticalAudioEngine';
 import { meshSosBeacon } from '../lib/emergency/MeshSosBeaconEngine';
 import { rfSigintWatchdog, SigintTelemetry } from '../lib/sensors/RfSigintWatchdogEngine';
-import { forensicBlackBox } from '../lib/security/ForensicBlackBoxEngine';
 import { dynamicBearerGovernor, SwarmHealthTelemetry } from '../lib/mesh/DynamicBearerGovernor';
 import { SwarmHealthHUD } from './SwarmHealthHUD';
 import { GlobalSearchModal } from './GlobalSearchModal';
@@ -24,12 +22,12 @@ interface ModuleCardItem {
     subtitle: string;
     badge?: string;
     badgeColor?: string;
-    accentClass?: string;
+    accentGlow?: string;
 }
 
 export const TacticalCommandCenter: React.FC = () => {
     const { t } = useTranslation();
-    const { navigate, identity, nodeOnline, conversations, contacts } = useRedStore();
+    const { navigate, identity, nodeOnline } = useRedStore();
     const [activeDomain, setActiveDomain] = useState<CommandDomain>('favs');
     const [searchQuery, setSearchQuery] = useState('');
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -66,7 +64,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 if (saved) return JSON.parse(saved);
             } catch {}
         }
-        return ["channels", "walkie", "offGridCompass", "vitalScan", "nearby", "idVault"];
+        return ["channels", "walkie", "offGridCompass", "vitalScan", "nearby", "idVault", "aiCopilot", "appStore"];
     });
 
     const toggleFavorite = (e: React.MouseEvent, modId: string) => {
@@ -82,16 +80,6 @@ export const TacticalCommandCenter: React.FC = () => {
     };
 
     const shieldTelemetry = globalShield.getTelemetry();
-    const proStatus = MonetizationEngine.getProStatus();
-
-    const domainCategories: { id: CommandDomain; label: string; icon: string; count: number }[] = [
-        { id: 'favs', label: 'Favoritos', icon: '⭐', count: favoriteModules.length },
-        { id: 'comms', label: 'Comunicaciones', icon: '💬', count: 6 },
-        { id: 'nav', label: 'Navegación & Sensores', icon: '🧭', count: 6 },
-        { id: 'survival', label: 'Supervivencia & Salud', icon: '🚨', count: 4 },
-        { id: 'security', label: 'Seguridad & Bóvedas', icon: '🛡️', count: 6 },
-        { id: 'economy', label: 'Economía & Sistema', icon: '⚡', count: 6 },
-    ];
 
     const modulesByDomain: Record<Exclude<CommandDomain, 'favs'>, ModuleCardItem[]> = {
         comms: [
@@ -102,18 +90,18 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Canales Mesh Públicos',
                 subtitle: 'Difusión y sintonización por radio y Bluetooth sin Internet.',
                 badge: 'OFF-GRID',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
                 id: 'walkie',
                 action: 'walkie',
                 icon: '🎙️',
                 title: 'Walkie-Talkie P2P',
-                subtitle: 'Voz en tiempo real semidúplex con baja latencia y compresión Opus.',
+                subtitle: 'Voz en tiempo real semidúplex con baja latencia y compresión LPC.',
                 badge: 'VOZ DIRECTA',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             },
             {
                 id: 'socialFeed',
@@ -122,8 +110,8 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Muro Social Descentralizado',
                 subtitle: 'Microblogging y publicaciones multimedia sobre la malla táctica.',
                 badge: 'P2P FEED',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
             },
             {
                 id: 'liveStream',
@@ -132,8 +120,8 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Live Stream Multicast',
                 subtitle: 'Transmisión de video táctico P2P con compresión adaptativa.',
                 badge: 'STREAM',
-                badgeColor: 'var(--accent-crimson)',
-                accentClass: 'glow-border-crimson'
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.2)'
             },
             {
                 id: 'canvas',
@@ -142,8 +130,8 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Lienzo Táctico Colaborativo',
                 subtitle: 'Pizarra gráfica sincronizada para mapas, marcas y notas de misión.',
                 badge: 'CANVAS',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
             },
             {
                 id: 'broadcast',
@@ -152,8 +140,8 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Difusión de Alertas Masivas',
                 subtitle: 'Inyección de anuncios de alta prioridad en todos los nodos de la malla.',
                 badge: 'EMERGENCIA',
-                badgeColor: 'var(--accent-crimson)',
-                accentClass: 'glow-border-crimson'
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.2)'
             },
             {
                 id: 'loraTransceiver',
@@ -161,9 +149,9 @@ export const TacticalCommandCenter: React.FC = () => {
                 icon: '📻',
                 title: 'Transceptor LoRa RF',
                 subtitle: 'Radio de largo alcance (25km) via Web Serial API o WebBluetooth. Sin Internet.',
-                badge: 'LORA HW',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
+                badge: 'LORA 915MHz',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
             }
         ],
         nav: [
@@ -173,834 +161,493 @@ export const TacticalCommandCenter: React.FC = () => {
                 icon: '📡',
                 title: 'Radar de Proximidad Mesh',
                 subtitle: 'Descubrimiento táctico de nodos en rango mediante BLE y Wi-Fi Direct.',
-                badge: 'RADAR',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
-                id: 'offGridCompass',
-                action: 'offGridCompass',
-                icon: '🧭',
-                title: 'Brújula Off-Grid & Azimut Solar',
-                subtitle: 'Navegación astronómica y magnética sin necesidad de satélites GPS.',
-                badge: 'AZIMUT',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
+                badge: 'RADAR 360°',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
                 id: 'nodemap',
                 action: 'nodemap',
                 icon: '🗺️',
-                title: 'Mapa Topológico de Nodos',
-                subtitle: 'Visualización geoespacial de la red malla y saltos de enrutamiento.',
-                badge: 'TOPOLOGÍA',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
+                title: 'Mapa de Nodos & Topología',
+                subtitle: 'Cartografía táctica offline con renderizado vectorial y rutas dinámicas.',
+                badge: 'GPS OFFLINE',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             },
             {
-                id: 'rfSpectrum',
-                action: 'rfSpectrum',
-                icon: '📊',
-                title: 'Espectro RF & Anti-Jamming',
-                subtitle: 'Monitoreo de densidad espectral y detección de interferencias hostiles.',
-                badge: 'ESPECTRO',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
+                id: 'offGridCompass',
+                action: 'offGridCompass',
+                icon: '🧭',
+                title: 'Brújula & PDR Táctico',
+                subtitle: 'Navegación inercial y azimut magnético para orientación en campo.',
+                badge: 'AZIMUT',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
+            },
+            {
+                id: 'p2pCompass',
+                action: 'p2pCompass',
+                icon: '🎯',
+                title: 'Brújula P2P (Búsqueda de Pares)',
+                subtitle: 'Rastreo direccional hacia nodos aliados mediante señales de radio.',
+                badge: 'TRACKING',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'shakePair',
+                action: 'shakePair',
+                icon: '📳',
+                title: 'Shake & Pair (Acelerómetro)',
+                subtitle: 'Emparejamiento criptográfico instantáneo agitando ambos dispositivos.',
+                badge: 'CINÉTICO',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
+            },
+            {
+                id: 'proximityWave',
+                action: 'proximityWave',
+                icon: '🌊',
+                title: 'Ola de Proximidad Ultrasónica',
+                subtitle: 'Descubrimiento sonoro en la banda de 18 a 20 kHz sin radios activos.',
+                badge: 'ULTRASONIDO',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            }
+        ],
+        survival: [
+            {
+                id: 'vitalScan',
+                action: 'vitalScan',
+                icon: '🫀',
+                title: 'Escaneo Vital & Triage START',
+                subtitle: 'Evaluación rápida de pulso (rPPG fotopletismografía) y clasificación de heridos.',
+                badge: 'TRIAGE USAR',
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.25)'
+            },
+            {
+                id: 'survivalBeacon',
+                action: 'survivalBeacon',
+                icon: '🚨',
+                title: 'Baliza SOS Multimodal',
+                subtitle: 'Emisión acústica, lumínica en código Morse y paquetes SOS en la malla.',
+                badge: 'SOS CRÍTICO',
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.25)'
             },
             {
                 id: 'weather',
                 action: 'weather',
                 icon: '🌤️',
-                title: 'Clima & Barómetro CAP',
-                subtitle: 'Presión atmosférica, alertas meteorológicas CAP y predicción local.',
-                badge: 'SENSOR',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
-            },
-            {
-                id: 'ecoMesh',
-                action: 'ecoMesh',
-                icon: '🔋',
-                title: 'Eco-Mesh & Gestión de Energía',
-                subtitle: 'Control inteligente de duty-cycle y potencia de radio para autonomía extrema.',
-                badge: 'BATERÍA',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
-            },
-            {
-                id: 'p2pCompass',
-                action: 'p2pCompass',
-                icon: '🧭',
-                title: 'Brújula P2P Mesh',
-                subtitle: 'Orientación táctica relativa entre nodos mesh con triangulación de señal.',
-                badge: 'P2P NAV',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            }
-        ],
-        survival: [
-            {
-                id: 'survivalBeacon',
-                action: 'survivalBeacon',
-                icon: '🚨',
-                title: 'Baliza SOS de Emergencia',
-                subtitle: 'Transmisión acústica SoundMesh, Morse LED de hardware y SOS mesh.',
-                badge: 'CRÍTICO',
-                badgeColor: 'var(--accent-crimson)',
-                accentClass: 'glow-border-crimson'
-            },
-            {
-                id: 'vitalScan',
-                action: 'vitalScan',
-                icon: '🫀',
-                title: 'Triaje START & VitalScan PPG',
-                subtitle: 'Lectura fotopletismográfica de pulso, SpO2 y clasificación médica.',
-                badge: 'SALUD',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
+                title: 'Alertas Meteorológicas & Barómetro',
+                subtitle: 'Lectura barométrica de hardware y predicción de tormentas sin Internet.',
+                badge: 'BARÓMETRO',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
                 id: 'amber',
                 action: 'amber',
                 icon: '🟠',
-                title: 'Alertas Amber & Rescate Táctico',
-                subtitle: 'Protocolo de búsqueda y rescate de personas desaparecidas en zona cero.',
-                badge: 'SAR',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
-            },
-            {
-                id: 'blackout',
-                action: 'blackout',
-                icon: '⚡',
-                title: 'Simulador de Apagón Total',
-                subtitle: 'Pruebas de estrés y resiliencia ante pérdida absoluta de infraestructura.',
-                badge: 'SIMULACRO',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
-            },
-            {
-                id: 'tacticalVisionScan',
-                action: 'tacticalVisionScan',
-                icon: '👁️',
-                title: 'Visión Táctica Edge AI',
-                subtitle: 'Escaneo y reconocimiento de amenazas en vivo con filtros NVG, FLIR y bounding boxes.',
-                badge: 'EDGE AI',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
-                id: 'cbrnSatellite',
-                action: 'cbrnSatellite',
-                icon: '☢️',
-                title: 'Telemetría CBRN & Satélite LEO',
-                subtitle: 'Dosimetría nuclear en µSv/h, dosis biológica acumulada y enlace orbital DTN.',
-                badge: 'CBRN / LEO',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
-            },
-            {
-                id: 'tcccBallistics',
-                action: 'tcccBallistics',
-                icon: '🩸',
-                title: 'TCCC Triage & Balística Mil-Dot',
-                subtitle: 'Protocolo MARCH-PAWS, temporizadores de torniquetes CAT y cálculo balístico MRAD.',
-                badge: 'TCCC / MRAD',
-                badgeColor: 'var(--accent-crimson)',
-                accentClass: 'glow-border-crimson'
-            },
-            {
-                id: 'celestialPdr',
-                action: 'celestialPdr',
-                icon: '☀️',
-                title: 'Navegación Celeste & PDR',
-                subtitle: 'Efemérides Sol/Luna, coordenadas por mediodía solar y navegación inercial sin GNSS.',
-                badge: 'CELESTE / PDR',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
-            },
-            {
-                id: 'vitalResources',
-                action: 'vitalResources',
-                icon: '💧',
-                title: 'Recursos Vitales: Agua & Energía',
-                subtitle: 'Dosimetría de purificación química/SODIS de H2O y cálculo de autonomía de batería.',
-                badge: 'H2O / POWER',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
-                id: 'sonarSeismic',
-                action: 'sonarSeismic',
-                icon: '📡',
-                title: 'Sonar Acústico & Sismología',
-                subtitle: 'Medición FMCW ToF de cavidades y triangulación sísmica TDoA de supervivientes.',
-                badge: 'SONAR / SÍSMICO',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
-            },
-            {
-                id: 'atmosphericSafety',
-                action: 'atmosphericSafety',
-                icon: '💨',
-                title: 'Espectrometría de Gas & Calidad de Aire',
-                subtitle: 'Detección óptica de humo, PM2.5/PM10, CO ppm y cálculo de índice AQI por cámara.',
-                badge: 'AQI / HAZMAT',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
+                title: 'Protocolo de Alerta AMBER P2P',
+                subtitle: 'Búsqueda descentralizada comunitaria con propagación epidémica de fichas.',
+                badge: 'AMBER RESCUE',
+                badgeColor: '#FF9100',
+                accentGlow: 'rgba(255, 145, 0, 0.2)'
             }
         ],
         security: [
+            {
+                id: 'idVault',
+                action: 'idVault',
+                icon: '🪪',
+                title: 'Bóveda de Identidad & Claves',
+                subtitle: 'Gestor de credenciales soberanas, claves de sesión y respaldos BIP-39.',
+                badge: 'SOBERANO',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'crypto',
+                action: 'crypto',
+                icon: '🔐',
+                title: 'Criptografía Post-Cuántica (PQC)',
+                subtitle: 'Cifrado híbrido ML-KEM-768 (Kyber) y firmas digitales cuántico-resistentes.',
+                badge: 'FIPS 203',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
+            },
             {
                 id: 'globalShield',
                 action: 'globalShield',
                 icon: '🛡️',
                 title: 'Escudo Global DEFCON',
-                subtitle: 'Ofuscación de tráfico con ruido criptográfico CSPRNG y anti-análisis.',
-                badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
+                subtitle: 'Monitoreo de integridad perimetral, firewall local y detección de ataques.',
+                badge: 'DEFCON 1',
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.2)'
+            },
+            {
+                id: 'blackout',
+                action: 'blackout',
+                icon: '⚡',
+                title: 'Simulador de Apagón Tecnológico',
+                subtitle: 'Pruebas de estrés y corte deliberado de interfaces para validar resiliencia.',
+                badge: 'CHAOS DRILL',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
             },
             {
                 id: 'dms',
                 action: 'dms',
                 icon: '💀',
-                title: "Dead Man's Switch (DMS)",
-                subtitle: 'Temporizador de hombre muerto con purga criptográfica automática.',
-                badge: 'ANTI-CAPTURA',
-                badgeColor: 'var(--accent-crimson)',
-                accentClass: 'glow-border-crimson'
+                title: "Dead-Man's Switch (Hombre Muerto)",
+                subtitle: 'Activación automática de protocolos de contingencia o borrado seguro.',
+                badge: 'PANIC WIPER',
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.2)'
             },
             {
                 id: 'calculator',
                 action: 'calculator',
                 icon: '🧮',
-                title: 'Pantalla Antiforense (Calculadora)',
-                subtitle: 'Camuflaje visual que oculta la interfaz detrás de una calculadora real.',
-                badge: 'SEÑUELO',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
-            },
-            {
-                id: 'stegoVault',
-                action: 'stegoVault',
-                icon: '🖼️',
-                title: 'Bóveda Esteganográfica',
-                subtitle: 'Incrustación de archivos y mensajes secretos en píxeles LSB con AES-256.',
-                badge: 'ESTEGANOGRAFÍA',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
-            },
-            {
-                id: 'idVault',
-                action: 'idVault',
-                icon: '🪪',
-                title: 'Bóveda Identidad & PQC ML-KEM',
-                subtitle: 'Criptografía post-cuántica ML-KEM-768, Shamir Secret Sharing y ficha médica.',
-                badge: 'POST-CUÁNTICO',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
-            },
-            {
-                id: 'guardian',
-                action: 'guardian',
-                icon: '🤖',
-                title: 'Guardián IA & Auditoría',
-                subtitle: 'Detección local de anomalías, ataques Sybil y telemetría de red.',
-                badge: 'IA LOCAL',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
-                id: 'shamirRecovery',
-                action: 'shamirRecovery',
-                icon: '🧩',
-                title: 'Recuperación Social Shamir',
-                subtitle: 'Bóveda umbral 3-de-5 con distribución polinómica de claves a 5 guardianes.',
-                badge: 'SHAMIR SSS',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
-            },
-            {
-                id: 'c4isrEmpDrill',
-                action: 'c4isrEmpDrill',
-                icon: '🛰️',
-                title: 'Matriz C4ISR & Caos EMP',
-                subtitle: 'Teatro militar unificado, informe ejecutivo C4ISR y ejercicios de estrés frente a EMP.',
-                badge: 'C4ISR / EMP',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
-                id: 'airGapStego',
-                action: 'airGapStego',
-                icon: '🎞️',
-                title: 'Transferencia Air-Gap & Audio Stego',
-                subtitle: 'Flujo óptico QR animado a alta velocidad y ocultación psicoacústica en audio WAV.',
-                badge: 'AIR-GAP / AUDIO',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
-            },
-            {
-                id: 'acousticWarfare',
-                action: 'acousticWarfare',
-                icon: '🔇',
-                title: 'Guerra Acústica & Ondas Binaurales',
-                subtitle: 'Perturbador ultrasónico anti-micrófonos MEMS y ondas binaurales Gamma/Beta para combate.',
-                badge: 'AUDIO JAM / BRAIN',
-                badgeColor: 'var(--accent-crimson)',
-                accentClass: 'glow-border-crimson'
-            },
-            {
-                id: 'tacticalFoxhunt',
-                action: 'tacticalFoxhunt',
-                icon: '🦊',
-                title: 'Radiogoniometría RDF & Caza Foxhunt',
-                subtitle: 'Localización polar y triangulación LOB de emisores hostiles, jammers y balizas.',
-                badge: 'RDF / FOXHUNT',
-                badgeColor: 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
+                title: 'Calculadora Señuelo (Camuflaje)',
+                subtitle: 'Interfaz señuelo funcional para ocultar la bóveda bajo coacción.',
+                badge: 'STEALTH PIN',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             }
         ],
         economy: [
             {
-                id: 'p2pPay',
-                action: 'p2pPay',
-                icon: '💳',
-                title: 'Billetera de Pagos P2P & Vales',
-                subtitle: 'Transacciones y vales firmados digitalmente sin conexión a Internet.',
-                badge: 'OFFLINE PAY',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
-            },
-            {
-                id: 'zkBarterSubsurface',
-                action: 'zkBarterSubsurface',
-                icon: '🪙',
-                title: 'Canje zk-Barter & Rescate VLF',
-                subtitle: 'Pruebas ZK de pertenencia Merkle anónimas y baliza acústica sub-estructural.',
-                badge: 'ZK / VLF',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
-                id: 'web3Vault',
-                action: 'web3Vault',
-                icon: '🦊',
-                title: 'Bóveda Web3 Soberana',
-                subtitle: 'Gestión local de claves privadas, firma de transacciones y tokens.',
-                badge: 'WEB3',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
-            },
-            {
-                id: 'explorer',
-                action: 'explorer',
-                icon: '⛓️',
-                title: 'Explorador Blockchain',
-                subtitle: 'Inspección de bloques PoA, árbol de consenso y validadores del nodo.',
-                badge: 'DAG / PoS',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
-            },
-            {
                 id: 'commercialHub',
                 action: 'commercialHub',
                 icon: '⚡',
-                title: 'Hub Comercial & Beneficios Pro',
-                subtitle: 'Catálogo dinámico de hardware, recompensas y canje de créditos.',
-                badge: proStatus.isPro ? 'PRO ACTIVO' : 'CRÉDITOS',
-                badgeColor: proStatus.isPro ? 'var(--accent-emerald)' : 'var(--accent-amber)',
-                accentClass: 'glow-border-amber'
+                title: 'Hub Comercial & Trueque P2P',
+                subtitle: 'Vales firmados con Ed25519 y mercado offline en conocimiento cero.',
+                badge: 'ZK-BARTER',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             },
             {
-                id: 'health',
-                action: 'health',
-                icon: '📊',
-                title: 'Diagnóstico de Salud del Nodo',
-                subtitle: 'Telemetría de sockets WebRTC/BLE, base de datos Sled y memoria.',
-                badge: 'DIAGNÓSTICO',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
+                id: 'p2pPay',
+                action: 'p2pPay',
+                icon: '💳',
+                title: 'RED Pay (Pagos Malla P2P)',
+                subtitle: 'Transferencias de crédito seguras entre pares sin conexión a bancos.',
+                badge: 'VALES P2P',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
-                id: 'backup',
-                action: 'backup',
-                icon: '💾',
-                title: 'Copia de Seguridad Blindada',
-                subtitle: 'Exportación e importación de bóvedas cifradas con Argon2id.',
-                badge: 'ENCRIPTADO',
-                badgeColor: 'var(--accent-purple)',
-                accentClass: 'glow-border-purple'
+                id: 'aiCopilot',
+                action: 'aiCopilot',
+                icon: '🧠',
+                title: 'Copiloto de IA Táctico Offline',
+                subtitle: 'Inferencia local WASM con memoria dinámica y RAG para supervivencia.',
+                badge: 'DYNAMIC AI',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
                 id: 'appStore',
                 action: 'appStore',
-                icon: '🛒',
-                title: 'Sovereign App Store',
-                subtitle: 'Instala, crea y publica Mini-Apps P2P soberanas con pagos multi-rail integrados.',
-                badge: 'MINI-APPS',
-                badgeColor: 'var(--accent-emerald)',
-                accentClass: 'glow-border-emerald'
+                icon: '🏪',
+                title: 'App Store P2P (Mini-Apps)',
+                subtitle: 'Ecosistema de micro-aplicaciones descentralizadas seguras y aisladas.',
+                badge: 'SANDBOX',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
             },
             {
                 id: 'hyperBrowser',
                 action: 'hyperBrowser',
                 icon: '🌐',
-                title: 'RED Hyper-Browser',
-                subtitle: 'Navega red:// y https:// sobre malla satelital. Sin censura, sin ISP.',
+                title: 'RED Hyper-Browser Mesh',
+                subtitle: 'Navegación web descentralizada mediante enrutamiento P2P por saltos.',
                 badge: 'MESH HTTP',
-                badgeColor: 'var(--accent-cyan)',
-                accentClass: 'glow-border-cyan'
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'health',
+                action: 'health',
+                icon: '📊',
+                title: 'Diagnóstico & Salud del Sistema',
+                subtitle: 'Métricas de CPU, memoria, almacenamiento y estado de la batería.',
+                badge: 'DIAGNÓSTICO',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             }
         ]
     };
 
-    const handleCardClick = (action: ScreenView) => {
-        TacticalAudioEngine.playTap();
-        navigate(action);
-    };
-
-    const allModulesList: ModuleCardItem[] = useMemo(() => {
-        const lists = Object.values(modulesByDomain) as ModuleCardItem[][];
-        return lists.flat();
+    const allFlatModules: ModuleCardItem[] = useMemo(() => {
+        return Object.values(modulesByDomain).flat();
     }, []);
 
-    const currentModules: ModuleCardItem[] = useMemo(() => {
-        if (activeDomain === 'favs') {
-            const favs = allModulesList.filter(m => favoriteModules.includes(m.id));
-            return favs.length > 0 ? favs : allModulesList.slice(0, 6);
-        }
-        return (modulesByDomain as Record<string, ModuleCardItem[]>)[activeDomain] || [];
-    }, [activeDomain, favoriteModules, allModulesList]);
-
-    const searchFilteredModules: ModuleCardItem[] | null = searchQuery.trim() 
-        ? allModulesList.filter(m => {
+    const displayedModules = useMemo(() => {
+        if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase();
-            return m.title.toLowerCase().includes(q) ||
-                   m.subtitle.toLowerCase().includes(q) ||
-                   (m.badge && m.badge.toLowerCase().includes(q));
-          })
-        : null;
+            return allFlatModules.filter(m =>
+                m.title.toLowerCase().includes(q) ||
+                m.subtitle.toLowerCase().includes(q) ||
+                (m.badge && m.badge.toLowerCase().includes(q))
+            );
+        }
+
+        if (activeDomain === 'favs') {
+            return allFlatModules.filter(m => favoriteModules.includes(m.id));
+        }
+
+        return modulesByDomain[activeDomain] || [];
+    }, [activeDomain, searchQuery, favoriteModules, allFlatModules]);
+
+    const domainCategories: { id: CommandDomain; label: string; icon: string; count: number }[] = [
+        { id: 'favs', label: 'Favoritos', icon: '⭐', count: favoriteModules.length },
+        { id: 'comms', label: 'Comunicaciones', icon: '💬', count: modulesByDomain.comms.length },
+        { id: 'nav', label: 'Navegación & Sensores', icon: '🧭', count: modulesByDomain.nav.length },
+        { id: 'survival', label: 'Supervivencia & Salud', icon: '🚨', count: modulesByDomain.survival.length },
+        { id: 'security', label: 'Seguridad & Bóvedas', icon: '🛡️', count: modulesByDomain.security.length },
+        { id: 'economy', label: 'Economía & Sistema', icon: '⚡', count: modulesByDomain.economy.length },
+    ];
 
     return (
-        <div className="command-center-container animate-fade-in">
-            {/* Header Táctico Superior */}
-            <header style={{
-                padding: '16px 20px',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                background: 'linear-gradient(180deg, rgba(14, 18, 28, 0.96) 0%, rgba(8, 10, 18, 0.98) 100%)',
-                backdropFilter: 'blur(24px)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                zIndex: 20
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                        width: '42px',
-                        height: '42px',
-                        borderRadius: '12px',
-                        background: 'linear-gradient(135deg, #00F0FF 0%, #0077B6 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.3rem',
-                        boxShadow: '0 0 20px rgba(0, 240, 255, 0.4)'
-                    }}>
-                        ⚡
-                    </div>
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h1 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, letterSpacing: '0.3px', color: '#FFFFFF' }}>
-                                Centro de Comando Táctico
-                            </h1>
-                            <span style={{
-                                width: '8px', height: '8px', borderRadius: '50%',
-                                background: nodeOnline ? 'var(--accent-emerald)' : 'var(--accent-amber)',
-                                boxShadow: `0 0 8px ${nodeOnline ? 'var(--accent-emerald)' : 'var(--accent-amber)'}`
-                            }} />
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.6)', fontFamily: 'JetBrains Mono, monospace' }}>
-                            {identity?.display_name || 'Operador'} · Nodo {identity?.identity_hash ? identity.identity_hash.substring(0, 10) : 'Offline'} · DEFCON {shieldTelemetry.currentDefcon}
-                        </div>
-                    </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button
-                        onClick={() => setShowSwarmHUD(!showSwarmHUD)}
-                        className="btn-icon"
-                        style={{
-                            width: '38px', height: '38px', borderRadius: '10px',
-                            background: showSwarmHUD ? 'rgba(0, 229, 255, 0.25)' : undefined,
-                            border: showSwarmHUD ? '1px solid #00E5FF' : undefined
-                        }}
-                        title="Enjambre Multi-Bearer & EW C2"
-                    >
-                        🌐
-                    </button>
-                    <button
-                        onClick={() => setIsSearchOpen(true)}
-                        className="btn-icon"
-                        style={{ width: '38px', height: '38px', borderRadius: '10px' }}
-                        title="Búsqueda Universal (Ctrl+K)"
-                    >
-                        🔍
-                    </button>
-                    <button
-                        onClick={() => navigate('settings')}
-                        className="btn-icon"
-                        style={{ width: '38px', height: '38px', borderRadius: '10px' }}
-                        title="Configuración de Nodo"
-                    >
-                        ⚙️
-                    </button>
-                </div>
-            </header>
-
-            {/* Modal Overlay / Dropdown de Swarm Health HUD */}
-            {showSwarmHUD && (
-                <div style={{ padding: '12px 20px', background: 'rgba(5, 8, 18, 0.95)', borderBottom: '1px solid rgba(0, 229, 255, 0.3)' }}>
-                    <SwarmHealthHUD onClose={() => setShowSwarmHUD(false)} />
-                </div>
-            )}
-
-            {/* Alerta SIGINT Drone C-UAS Banner */}
-            {sigintTelemetry.threatLevel !== 'CLEAR' && (
-                <div style={{
-                    padding: '10px 16px', background: sigintTelemetry.threatLevel === 'DRONE_DETECTED' ? 'rgba(232,33,58,0.25)' : 'rgba(255,179,0,0.18)',
-                    borderBottom: `1px solid ${sigintTelemetry.threatLevel === 'DRONE_DETECTED' ? 'var(--accent-crimson)' : 'var(--accent-amber)'}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px'
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', fontWeight: 800, color: '#fff' }}>
-                        <span>{sigintTelemetry.threatLevel === 'DRONE_DETECTED' ? '🛸' : '📡'}</span>
-                        <span>
-                            {sigintTelemetry.threatLevel === 'DRONE_DETECTED' 
-                                ? `ALERTA SIGINT: DRONE / OPEN-DRONE-ID DETECTADO (~${sigintTelemetry.closestDrone?.estimatedDistanceMeters}m)` 
-                                : `ALERTA SIGINT: VIGILANCIA RF SOSPECHOSA (${sigintTelemetry.suspiciousEmittersCount} balizas activas)`}
-                        </span>
-                    </div>
-                    <span className="badge-tactical badge-tactical-crimson" style={{ fontSize: '0.65rem' }}>
-                        {sigintTelemetry.threatLevel}
-                    </span>
-                </div>
-            )}
-
-            {/* Barra HUD de Acciones Críticas 1-Tap */}
+        <div style={{
+            display: 'flex', flexDirection: 'column', height: '100%', width: '100%',
+            background: 'linear-gradient(180deg, #050814 0%, #03050B 100%)',
+            color: '#FFFFFF', fontFamily: 'JetBrains Mono, monospace', overflow: 'hidden'
+        }}>
+            {/* Header Táctico C4ISR */}
             <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
-                gap: '8px',
-                padding: '12px 20px',
-                background: 'rgba(10, 14, 24, 0.85)',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-                backdropFilter: 'blur(16px)'
+                padding: 'calc(8px + var(--safe-top, 0px)) 16px 10px 16px',
+                background: 'linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)',
+                borderBottom: '1.5px solid rgba(0, 229, 255, 0.3)',
+                boxShadow: '0 4px 25px rgba(0, 0, 0, 0.8)',
+                display: 'flex', flexDirection: 'column', gap: '10px',
+                flexShrink: 0, zIndex: 10
             }}>
-                <button
-                    onClick={() => handleCardClick('survivalBeacon')}
-                    className="btn-tactical-danger"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
-                >
-                    <span>🚨</span> <span>SOS Malla {activeSosCount > 0 && `(${activeSosCount})`}</span>
-                </button>
-                <button
-                    onClick={() => handleCardClick('walkie')}
-                    className="btn-tactical-primary"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
-                >
-                    <span>🎙️</span> <span>Walkie P2P</span>
-                </button>
-                <button
-                    onClick={() => handleCardClick('offGridCompass')}
-                    className="btn-tactical-secondary"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
-                >
-                    <span>🧭</span> <span>Brújula</span>
-                </button>
-                <button
-                    onClick={() => handleCardClick('nearby')}
-                    className="btn-tactical-secondary"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
-                >
-                    <span>📡</span> <span>Radar BLE</span>
-                </button>
-                <button
-                    onClick={() => handleCardClick('aiCopilot')}
-                    className="btn-tactical-secondary"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
-                >
-                    <span>🤖</span> <span>Copilot IA</span>
-                </button>
-                <button
-                    onClick={() => handleCardClick('p2pPay')}
-                    className="btn-tactical-secondary"
-                    style={{ padding: '8px 10px', fontSize: '0.74rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '10px', textTransform: 'uppercase' }}
-                >
-                    <span>💳</span> <span>Vales P2P</span>
-                </button>
-            </div>
-
-            {/* Selector de Dominios Operativos (Chips Horizontales) */}
-            <div style={{
-                display: 'flex',
-                gap: '8px',
-                padding: '12px 20px',
-                background: 'rgba(6, 8, 14, 0.65)',
-                borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
-                overflowX: 'auto',
-                WebkitOverflowScrolling: 'touch',
-                flexShrink: 0
-            }}>
-                {domainCategories.map((cat) => (
-                    <button
-                        key={cat.id}
-                        onClick={() => {
-                            TacticalAudioEngine.playTap();
-                            setActiveDomain(cat.id);
-                            setSearchQuery('');
-                        }}
-                        className={`domain-pill-chip ${activeDomain === cat.id && !searchQuery ? 'active' : ''}`}
-                    >
-                        <span>{cat.icon}</span>
-                        <span>{cat.label}</span>
-                        <span style={{
-                            fontSize: '10px',
-                            padding: '1px 6px',
-                            borderRadius: '8px',
-                            background: activeDomain === cat.id && !searchQuery ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.1)',
-                            fontWeight: 800,
-                            fontFamily: 'JetBrains Mono, monospace'
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                            width: '38px', height: '38px', borderRadius: '12px',
+                            background: 'rgba(0, 229, 255, 0.15)', border: '1px solid rgba(0, 229, 255, 0.4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
+                            boxShadow: '0 0 15px rgba(0, 229, 255, 0.2)'
                         }}>
-                            {cat.count}
-                        </span>
-                    </button>
-                ))}
-            </div>
+                            ⚡
+                        </div>
+                        <div>
+                            <h1 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, letterSpacing: '0.8px', color: '#FFFFFF' }}>
+                                CENTRO DE COMANDO C4ISR
+                            </h1>
+                            <p style={{ margin: 0, fontSize: '0.68rem', color: 'var(--accent-cyan, #00E5FF)', fontWeight: 800 }}>
+                                SOVEREIGN MESH OPERATIONAL MATRIX
+                            </p>
+                        </div>
+                    </div>
 
-            {/* Quick Filter Search Input */}
-            <div style={{ padding: '10px 20px 0 20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                            onClick={() => setIsSearchOpen(true)}
+                            style={{
+                                padding: '6px 12px', borderRadius: '10px',
+                                background: 'rgba(0, 229, 255, 0.12)', border: '1px solid rgba(0, 229, 255, 0.35)',
+                                color: 'var(--accent-cyan, #00E5FF)', fontSize: '0.75rem', fontWeight: 900,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                            }}
+                        >
+                            <span>🔍</span> <span className="hidden sm:inline">BUSCAR</span>
+                        </button>
+
+                        <button
+                            onClick={() => setShowSwarmHUD(true)}
+                            style={{
+                                padding: '6px 12px', borderRadius: '10px',
+                                background: 'rgba(0, 230, 118, 0.12)', border: '1px solid rgba(0, 230, 118, 0.35)',
+                                color: 'var(--accent-emerald, #00E676)', fontSize: '0.75rem', fontWeight: 900,
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
+                            }}
+                        >
+                            <span>🌐</span> <span className="hidden sm:inline">ENJAMBRE</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Telemetry HUD Bar */}
                 <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '8px 14px',
-                    borderRadius: '12px',
-                    background: 'rgba(255, 255, 255, 0.04)',
+                    display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px',
+                    background: 'rgba(0, 0, 0, 0.5)', padding: '8px', borderRadius: '12px',
                     border: '1px solid rgba(255, 255, 255, 0.08)'
                 }}>
-                    <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>🔍</span>
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Filtrar módulos, sensores o protocolos tácticos..."
-                        style={{
-                            flex: 1,
-                            background: 'transparent',
-                            border: 'none',
-                            outline: 'none',
-                            color: '#FFFFFF',
-                            fontSize: '0.82rem'
-                        }}
-                    />
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '12px' }}
-                        >
-                            ✕
-                        </button>
-                    )}
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>SIGINT RF</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: sigintTelemetry.activeEmittersCount > 0 ? '#FFB300' : '#00E676' }}>
+                            {sigintTelemetry.activeEmittersCount} ACTIVAS
+                        </div>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>BALIZAS SOS</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: activeSosCount > 0 ? '#FF3355' : '#00E676' }}>
+                            {activeSosCount > 0 ? `🚨 ${activeSosCount}` : '0 ALERTAS'}
+                        </div>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>DEFCON</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#00E5FF' }}>
+                            NIVEL {shieldTelemetry.currentDefcon || 4}
+                        </div>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                        <div style={{ fontSize: '0.6rem', color: '#94A3B8', fontWeight: 800 }}>FAILOVERS</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 900, color: '#00E676' }}>
+                            {swarmTelemetry.totalFailoversExecuted} EJEC
+                        </div>
+                    </div>
+                </div>
+
+                {/* Categorías de Dominios */}
+                <div style={{
+                    display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px',
+                    scrollbarWidth: 'none', msOverflowStyle: 'none'
+                }}>
+                    {domainCategories.map(cat => {
+                        const isSelected = activeDomain === cat.id && !searchQuery.trim();
+                        return (
+                            <button
+                                key={cat.id}
+                                onClick={() => { setSearchQuery(''); setActiveDomain(cat.id); }}
+                                style={{
+                                    padding: '7px 12px', borderRadius: '10px',
+                                    background: isSelected ? 'linear-gradient(135deg, rgba(0, 229, 255, 0.22) 0%, rgba(10, 25, 45, 0.85) 100%)' : 'rgba(255, 255, 255, 0.03)',
+                                    border: isSelected ? '1.5px solid var(--accent-cyan, #00E5FF)' : '1px solid rgba(255, 255, 255, 0.08)',
+                                    color: isSelected ? '#00E5FF' : 'var(--text-secondary, #94A3B8)',
+                                    fontSize: '0.74rem', fontWeight: isSelected ? 900 : 700,
+                                    cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                    transition: 'all 0.15s ease',
+                                    boxShadow: isSelected ? '0 0 15px rgba(0, 229, 255, 0.25)' : 'none'
+                                }}
+                            >
+                                <span>{cat.icon}</span>
+                                <span>{cat.label}</span>
+                                <span style={{
+                                    fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px',
+                                    background: isSelected ? 'rgba(0, 229, 255, 0.2)' : 'rgba(255, 255, 255, 0.08)',
+                                    fontWeight: 900
+                                }}>
+                                    {cat.count}
+                                </span>
+                            </button>
+                        );
+                    })}
                 </div>
             </div>
 
-            {/* Cuadrícula de Módulos (Bento Grid Táctico) */}
+            {/* Grid de Módulos */}
             <div className="scroll-container" style={{
-                flex: 1,
-                padding: '16px 20px 80px 20px',
-                overflowY: 'auto',
+                flex: 1, padding: '16px', overflowY: 'auto',
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: '14px',
-                alignContent: 'start'
+                gap: '14px', alignContent: 'start'
             }}>
-                {(searchFilteredModules || currentModules).map((mod) => (
-                    <div
-                        key={mod.id}
-                        onClick={() => handleCardClick(mod.action)}
-                        className={`card-tactical-glass card-tactical-interactive ${mod.accentClass || ''}`}
-                        style={{
-                            padding: '18px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            gap: '12px',
-                            minHeight: '140px'
-                        }}
-                    >
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{
-                                    width: '38px',
-                                    height: '38px',
-                                    borderRadius: '10px',
-                                    background: 'rgba(255, 255, 255, 0.06)',
-                                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '1.25rem',
-                                    flexShrink: 0
-                                }}>
-                                    {mod.icon}
+                {displayedModules.map(mod => {
+                    const isFav = favoriteModules.includes(mod.id);
+                    return (
+                        <div
+                            key={mod.id}
+                            onClick={() => navigate(mod.action)}
+                            style={{
+                                background: 'linear-gradient(135deg, rgba(16, 22, 44, 0.85) 0%, rgba(8, 12, 28, 0.95) 100%)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                borderRadius: '16px',
+                                padding: '16px',
+                                display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                                gap: '12px', cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.6)',
+                                position: 'relative'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <div style={{
+                                        width: '42px', height: '42px', borderRadius: '12px',
+                                        background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(255, 255, 255, 0.12)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem'
+                                    }}>
+                                        {mod.icon}
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '0.9rem', fontWeight: 900, color: '#FFFFFF', letterSpacing: '0.3px' }}>
+                                            {mod.title}
+                                        </div>
+                                        {mod.badge && (
+                                            <span style={{
+                                                fontSize: '0.58rem', fontWeight: 900, padding: '2px 6px', borderRadius: '4px',
+                                                background: `${mod.badgeColor || '#00E5FF'}18`,
+                                                color: mod.badgeColor || '#00E5FF',
+                                                border: `1px solid ${mod.badgeColor || '#00E5FF'}40`,
+                                                display: 'inline-block', marginTop: '3px'
+                                            }}>
+                                                {mod.badge}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 style={{ margin: 0, fontSize: '0.94rem', fontWeight: 800, color: '#FFFFFF' }}>
-                                        {mod.title}
-                                    </h3>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+
                                 <button
                                     onClick={(e) => toggleFavorite(e, mod.id)}
                                     style={{
-                                        background: 'transparent',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '1rem',
-                                        padding: '2px',
-                                        color: favoriteModules.includes(mod.id) ? '#FFD700' : 'rgba(255,255,255,0.25)',
-                                        transition: 'transform 0.15s ease',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center'
+                                        background: 'transparent', border: 'none',
+                                        fontSize: '1.1rem', cursor: 'pointer', padding: '4px',
+                                        color: isFav ? '#FFD600' : 'rgba(255, 255, 255, 0.2)',
+                                        transition: 'all 0.15s ease'
                                     }}
-                                    title={favoriteModules.includes(mod.id) ? "Quitar de favoritos" : "Fijar en favoritos"}
+                                    title={isFav ? "Quitar de favoritos" : "Fijar en favoritos"}
                                 >
-                                    {favoriteModules.includes(mod.id) ? '⭐' : '☆'}
+                                    ★
                                 </button>
-                                {mod.badge && (
-                                    <span style={{
-                                        fontSize: '9px',
-                                        fontWeight: 800,
-                                        padding: '2px 8px',
-                                        borderRadius: '10px',
-                                        background: 'rgba(255, 255, 255, 0.08)',
-                                        color: mod.badgeColor || 'var(--text-secondary)',
-                                        border: `1px solid ${mod.badgeColor || 'rgba(255,255,255,0.15)'}40`,
-                                        fontFamily: 'JetBrains Mono, monospace',
-                                        whiteSpace: 'nowrap'
-                                    }}>
-                                        {mod.badge}
-                                    </span>
-                                )}
+                            </div>
+
+                            <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--text-secondary, #94A3B8)', lineHeight: 1.4 }}>
+                                {mod.subtitle}
+                            </p>
+
+                            <div style={{
+                                display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+                                paddingTop: '8px', borderTop: '1px solid rgba(255, 255, 255, 0.06)'
+                            }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 900, color: 'var(--accent-cyan, #00E5FF)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    EJECUTAR MÓDULO →
+                                </span>
                             </div>
                         </div>
-
-                        <p style={{
-                            margin: 0,
-                            fontSize: '0.76rem',
-                            color: 'rgba(255, 255, 255, 0.65)',
-                            lineHeight: 1.4
-                        }}>
-                            {mod.subtitle}
-                        </p>
-
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            fontSize: '0.74rem',
-                            fontWeight: 700,
-                            color: 'var(--accent-cyan)',
-                            gap: '4px'
-                        }}>
-                            <span>Ejecutar módulo</span>
-                            <span>→</span>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
 
-            {/* Dock Inferior de Navegación Rápida */}
-            <nav className="command-dock">
-                <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        navigate('sidebar');
-                    }}
-                    className="command-dock-btn"
-                >
-                    <span style={{ fontSize: '1.1rem' }}>💬</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>Chats ({conversations.length})</span>
-                </button>
-
-                <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        setActiveDomain('comms');
-                    }}
-                    className={`command-dock-btn ${activeDomain === 'comms' ? 'active' : ''}`}
-                >
-                    <span style={{ fontSize: '1.1rem' }}>📻</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>Comms</span>
-                </button>
-
-                <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        setActiveDomain('nav');
-                    }}
-                    className={`command-dock-btn ${activeDomain === 'nav' ? 'active' : ''}`}
-                >
-                    <span style={{ fontSize: '1.1rem' }}>🧭</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>Radar</span>
-                </button>
-
-                <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        setActiveDomain('survival');
-                    }}
-                    className={`command-dock-btn ${activeDomain === 'survival' ? 'active' : ''}`}
-                >
-                    <span style={{ fontSize: '1.1rem' }}>🚨</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>SOS</span>
-                </button>
-
-                <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        setActiveDomain('security');
-                    }}
-                    className={`command-dock-btn ${activeDomain === 'security' ? 'active' : ''}`}
-                >
-                    <span style={{ fontSize: '1.1rem' }}>🛡️</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>Escudo</span>
-                </button>
-
-                <button
-                    onClick={() => {
-                        TacticalAudioEngine.playTap();
-                        setActiveDomain('economy');
-                    }}
-                    className={`command-dock-btn ${activeDomain === 'economy' ? 'active' : ''}`}
-                >
-                    <span style={{ fontSize: '1.1rem' }}>⚡</span>
-                    <span style={{ fontSize: '0.68rem', fontWeight: 700 }}>Bóvedas</span>
-                </button>
-            </nav>
-
             {/* Modal de Búsqueda Global */}
-            {isSearchOpen && (
-                <GlobalSearchModal
-                    onClose={() => setIsSearchOpen(false)}
-                />
+            {isSearchOpen && <GlobalSearchModal onClose={() => setIsSearchOpen(false)} />}
+
+            {/* Modal de Enjambre Multi-Bearer */}
+            {showSwarmHUD && (
+                <div
+                    style={{
+                        position: 'fixed', inset: 0, zIndex: 9999,
+                        background: 'rgba(2, 4, 12, 0.88)', backdropFilter: 'blur(25px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px',
+                        animation: 'fadeIn 0.2s ease'
+                    }}
+                    onClick={() => setShowSwarmHUD(false)}
+                >
+                    <div style={{ width: '100%', maxWidth: '520px' }} onClick={e => e.stopPropagation()}>
+                        <SwarmHealthHUD onClose={() => setShowSwarmHUD(false)} />
+                    </div>
+                </div>
             )}
         </div>
     );
 };
-
-export default TacticalCommandCenter;

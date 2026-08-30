@@ -16,7 +16,7 @@ import { EmptyState } from "./ui/EmptyState";
 type WalkieTab = "ptt" | "bursts";
 
 export const P2PWalkieTalkieModal: React.FC = () => {
-    const { navigate, identity } = useRedStore();
+    const { navigate, identity, goBack } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<WalkieTab>("ptt");
     const [isRecording, setIsRecording] = useState(false);
@@ -40,7 +40,6 @@ export const P2PWalkieTalkieModal: React.FC = () => {
 
     const myNickname = identity?.nickname || "Operador RED";
 
-    // Helper object to safely interact with VoiceRecorder without returning the proxy from async functions
     const NativeAudio = {
         async requestPermission(): Promise<boolean> {
             try {
@@ -79,7 +78,6 @@ export const P2PWalkieTalkieModal: React.FC = () => {
         }
     };
 
-    // Request microphone permission & initialize DSP Audio Context
     useEffect(() => {
         const requestPerm = async () => {
             try {
@@ -94,7 +92,7 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                 }
             } catch {
                 setPermissionGranted(false);
-                setStatusMsg("⚠️ Permiso de micrófono denegado. Actívalo en Configuración > Aplicaciones > RED.");
+                setStatusMsg("⚠️ Permiso de micrófono denegado.");
             }
         };
         requestPerm();
@@ -121,7 +119,6 @@ export const P2PWalkieTalkieModal: React.FC = () => {
         return () => clearInterval(interval);
     }, [loadBursts]);
 
-    // Recording timer & VAD Voice Activity Detector Loop
     useEffect(() => {
         let timer: any;
         let animationFrame: any;
@@ -143,349 +140,237 @@ export const P2PWalkieTalkieModal: React.FC = () => {
             setRecordingTime(0);
             setVadLevel(0);
         }
+
         return () => {
             clearInterval(timer);
-            if (animationFrame) cancelAnimationFrame(animationFrame);
+            cancelAnimationFrame(animationFrame);
         };
     }, [isRecording]);
 
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-
-    const handleStartRecording = async () => {
+    const handleToggleRecording = async () => {
         if (!permissionGranted) {
-            toast.error("Permiso de micrófono no otorgado.");
+            toast.warning("Permiso de micrófono no otorgado.");
             return;
         }
-        setStatusMsg(null);
-        setCompressionInfo(null);
 
-        try {
-            // Audio context analyzer for VAD
-            const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-            const ctx = new AudioCtx();
-            audioContextRef.current = ctx;
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const source = ctx.createMediaStreamSource(stream);
-            const analyser = ctx.createAnalyser();
-            analyser.fftSize = 64;
-            source.connect(analyser);
-            analyserRef.current = analyser;
-
-            audioChunksRef.current = [];
-            const mr = new MediaRecorder(stream);
-            mediaRecorderRef.current = mr;
-            mr.ondataavailable = (e) => {
-                if (e.data.size > 0) audioChunksRef.current.push(e.data);
-            };
-            mr.start(100);
-            setIsRecording(true);
-        } catch (e: any) {
-            console.error("Recording start error:", e);
-            setStatusMsg("Error al iniciar captura de audio.");
-        }
-    };
-
-    const handleToggleRecording = () => {
-        if (isProcessingStop) return;
-        if (isRecording) {
-            handleStopRecording(false);
-        } else {
-            handleStartRecording();
-        }
-    };
-
-    const handleStopRecording = async (isEmergency: boolean = false) => {
-        if (!isRecording || isProcessingStop) return;
-        setIsProcessingStop(true);
-        setIsRecording(false);
-
-        if (audioContextRef.current) {
-            try { audioContextRef.current.close(); } catch {}
-            audioContextRef.current = null;
-        }
-        analyserRef.current = null;
-
-        try {
-            let base64Audio = "";
-            const durationMs = Math.max(1000, recordingTime * 1000);
-
-            if (mediaRecorderRef.current) {
-                const mr = mediaRecorderRef.current;
-                if (mr.state !== "inactive") {
-                    mr.stop();
-                    mr.stream.getTracks().forEach(t => t.stop());
-                    // Timeout fallback to avoid deadlocks if onstop never fires
-                    await Promise.race([
-                        new Promise((resolve) => {
-                            mr.onstop = resolve;
-                        }),
-                        new Promise((resolve) => setTimeout(resolve, 500))
-                    ]);
-                }
-
-                if (audioChunksRef.current.length > 0) {
-                    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-                    const reader = new FileReader();
-                    base64Audio = await new Promise((resolve) => {
-                        reader.onloadend = () => {
-                            const res = reader.result as string;
-                            resolve(res.split(",")[1] || "");
-                        };
-                        reader.readAsDataURL(blob);
-                    });
-                }
-            }
-
-            if (!base64Audio || base64Audio.length < 50) {
-                setStatusMsg("⚠️ Ráfaga de audio demasiado corta.");
-                setIsProcessingStop(false);
-                return;
-            }
-
-            let finalPayload = base64Audio;
-
-            if (useTacticalVocoder) {
-                try {
-                    // Decode WebM into PCM AudioBuffer and compress with LowBitrateVocoder
+        if (!isRecording) {
+            try {
+                TacticalAudioEngine.playTap();
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    await NativeAudio.start();
+                } else {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-                    const dCtx = new AudioCtx();
-                    const binStr = atob(base64Audio);
-                    const bytes = new Uint8Array(binStr.length);
-                    for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
-                    const decodedBuffer = await dCtx.decodeAudioData(bytes.buffer);
-                    const voc = LowBitrateVocoder.compressAudioBuffer(decodedBuffer);
-                    dCtx.close().catch(() => {});
-
-                    finalPayload = `VOX:${voc.base64}`;
-                    setCompressionInfo(`Vocoder 8kHz IMA-ADPCM: ${base64Audio.length}B → ${voc.compressedSizeBytes}B (-${voc.compressionRatioPercent}%)`);
-
-                    if (acousticBroadcast) {
-                        toast.info("🔊 Transmitiendo ráfaga acústica ultrasónica...");
-                        SoundMeshEngine.transmitVocoderVoiceBurst(voc.base64).catch(() => {});
-                    }
-                } catch (err) {
-                    console.warn("Vocoder DSP fallback to WebM:", err);
-                    const rawBytes = base64Audio.length;
-                    const compressed = await PayloadCompressor.compress(base64Audio);
-                    const compRatio = ((1 - compressed.length / rawBytes) * 100).toFixed(0);
-                    setCompressionInfo(`Opus Pack: ${rawBytes}B → ${compressed.length}B (-${compRatio}%)`);
-                    finalPayload = base64Audio;
+                    audioContextRef.current = new AudioCtx();
+                    const source = audioContextRef.current.createMediaStreamSource(stream);
+                    analyserRef.current = audioContextRef.current.createAnalyser();
+                    analyserRef.current.fftSize = 64;
+                    source.connect(analyserRef.current);
                 }
-            } else {
-                const rawBytes = base64Audio.length;
-                const compressed = await PayloadCompressor.compress(base64Audio);
-                const compRatio = ((1 - compressed.length / rawBytes) * 100).toFixed(0);
-                setCompressionInfo(`Opus Pack: ${rawBytes}B → ${compressed.length}B (-${compRatio}%)`);
+                setIsRecording(true);
+                setStatusMsg("🎙️ Transmitiendo por canal de voz...");
+            } catch (err: any) {
+                toast.error(`Error al iniciar audio: ${err.message}`);
             }
+        } else {
+            setIsProcessingStop(true);
+            setIsRecording(false);
+            TacticalAudioEngine.playRogerBeep();
 
-            const res = await sendVoiceBurst({
-                audio_opus_b64: finalPayload,
-                duration_seconds: Math.max(1, Math.round(durationMs / 1000)),
-                sender_name: myNickname,
-            });
+            try {
+                let base64Audio = "";
+                let duration = recordingTime;
 
-            if (res && res.ok) {
-                TacticalAudioEngine.playRogerBeep();
-                setTimeout(() => TacticalAudioEngine.playSquelchTail(), 100);
-                toast.success(isEmergency ? "🚨 RÁFAGA DE EMERGENCIA EMITIDA" : "🎙️ Ráfaga PTT transmitida por la malla");
-                await loadBursts();
-            } else {
-                toast.error("Error al propagar ráfaga en la red.");
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const result = await NativeAudio.stop();
+                    if (result) {
+                        base64Audio = result.base64;
+                        duration = Math.round(result.durationMs / 1000) || recordingTime;
+                    }
+                }
+
+                if (base64Audio) {
+                    const res = await sendVoiceBurst({
+                        audio_opus_b64: base64Audio,
+                        duration_seconds: duration,
+                        sender_name: myNickname
+                    });
+                    if (res && res.burst) {
+                        setBursts(prev => [res.burst, ...prev]);
+                    }
+                    toast.success("Ráfaga de voz transmitida a la malla");
+                }
+            } catch (err: any) {
+                toast.error(`Error al procesar audio: ${err.message}`);
+            } finally {
+                setIsProcessingStop(false);
+                setStatusMsg(null);
             }
-        } catch (e: any) {
-            console.error("Recording stop error:", e);
-            setStatusMsg("Fallo al procesar audio grabado.");
-        } finally {
-            setIsProcessingStop(false);
-            mediaRecorderRef.current = null;
-            audioChunksRef.current = [];
         }
     };
 
-    const handlePlayBurst = async (burst: VoiceBurst) => {
-        const id = burst.id;
-
-        // Stop active AudioBufferSourceNode if running
-        if (activeAudioBufferNodeRef.current) {
-            try { activeAudioBufferNodeRef.current.stop(); } catch {}
-            activeAudioBufferNodeRef.current = null;
-        }
-
-        const currentAudio = audioRefs.current.get(id);
-
-        if (playingBurstId === id) {
-            if (currentAudio) currentAudio.pause();
+    const handlePlayBurst = (burst: VoiceBurst) => {
+        if (playingBurstId === burst.id) {
+            const audio = audioRefs.current.get(burst.id);
+            if (audio) audio.pause();
             setPlayingBurstId(null);
             return;
         }
 
-        // Pause any other playing HTMLAudioElement
-        if (playingBurstId) {
-            const prev = audioRefs.current.get(playingBurstId);
-            if (prev) prev.pause();
-        }
-
-        const audioData = burst.audio_base64 || "";
-        if (!audioData) {
-            toast.error("Ráfaga sin datos de audio disponibles");
-            return;
-        }
-
-        // Check if Vocoder compressed audio
-        if (audioData.startsWith("VOX:")) {
-            try {
-                const vocoderBase64 = audioData.slice(4);
-                const bytes = LowBitrateVocoder.base64ToBytes(vocoderBase64);
-                const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-                const ctx = new AudioCtx();
-                const audioBuffer = LowBitrateVocoder.createAudioBufferFromEncoded(ctx, bytes);
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(ctx.destination);
-                source.onended = () => {
-                    setPlayingBurstId(null);
-                    ctx.close().catch(() => {});
-                };
-                activeAudioBufferNodeRef.current = source;
-                source.start(0);
-                setPlayingBurstId(id);
-                return;
-            } catch (e) {
-                console.error("Vocoder playback error:", e);
-                toast.error("Error al sintetizar audio de Vocoder");
-            }
-        }
-
-        if (!currentAudio) {
-            const audio = new Audio(`data:audio/webm;base64,${audioData}`);
-            audio.onended = () => setPlayingBurstId(null);
-            audioRefs.current.set(id, audio);
-            audio.play();
-            setPlayingBurstId(id);
-        } else {
-            currentAudio.currentTime = 0;
-            currentAudio.play();
-            setPlayingBurstId(id);
-        }
+        const audio = new Audio(`data:audio/webm;base64,${burst.audio_opus_b64}`);
+        audio.onended = () => setPlayingBurstId(null);
+        audioRefs.current.set(burst.id, audio);
+        audio.play();
+        setPlayingBurstId(burst.id);
     };
 
-    const handleDeleteBurst = async (id: string) => {
+    const handleDelete = async (id: string) => {
         try {
             await deleteVoiceBurst(id);
             setBursts(prev => prev.filter(b => b.id !== id));
-            toast.info("Ráfaga de voz eliminada de Sled DB");
+            toast.info("Ráfaga eliminada");
         } catch {
-            toast.error("Error al eliminar ráfaga");
+            toast.error("Error al eliminar");
         }
     };
 
     return (
         <div style={{
             position: "fixed", inset: 0, zIndex: 9999,
-            background: "var(--bg-void)", color: "var(--text-primary)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace",
+            display: "flex", flexDirection: "column", overflow: "hidden"
         }}>
             {/* Header Táctico */}
             <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(255, 112, 67, 0.35)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #FF7043 0%, #E64A19 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(255, 112, 67, 0.25) 0%, rgba(230, 74, 25, 0.15) 100%)",
+                        border: "1px solid rgba(255, 112, 67, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(255,112,67,0.35)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(255, 112, 67, 0.25)"
                     }}>🎙️</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t('walkie.title')}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            {t('walkie.title') || "WALKIE-TALKIE PTT"}
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {t('walkie.subtitle')}
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-amber, #FFB300)", fontWeight: 800 }}>
+                            {t('walkie.subtitle') || "RADIO VOCAL 1.6 KBPS · HALF-DUPLEX"}
                         </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => navigate("sidebar")}
-                    className="btn-icon"
-                    title={t('common.close')}
-                    style={{ width: 38, height: 38 }}
-                >
-                    ✕
-                </button>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <span style={{
+                        fontSize: "0.62rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                        background: isRecording ? "rgba(255, 51, 85, 0.2)" : "rgba(0, 230, 118, 0.15)",
+                        color: isRecording ? "#FF3355" : "#00E676",
+                        border: `1px solid ${isRecording ? '#FF3355' : '#00E676'}50`
+                    }}>
+                        {isRecording ? "TRANSMITIENDO" : "STANDBY"}
+                    </span>
+                </div>
             </header>
 
-            {/* Selector de Pestañas Segmentadas Tácticas */}
+            {/* Selector de Pestañas Segmentadas */}
             <div style={{
-                padding: "10px 16px",
-                display: "flex", gap: "8px",
-                background: "rgba(10, 10, 20, 0.85)",
-                borderBottom: "1px solid var(--glass-border)",
-                overflowX: "auto", flexShrink: 0
+                display: "flex", padding: "8px 16px", gap: "6px",
+                background: "rgba(8, 10, 20, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                flexShrink: 0
             }}>
                 <button
                     onClick={() => setActiveTab("ptt")}
-                    className={activeTab === "ptt" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    style={{
+                        flex: 1, padding: "8px 14px", borderRadius: "10px",
+                        background: activeTab === "ptt" ? "linear-gradient(135deg, rgba(255, 112, 67, 0.25) 0%, rgba(200, 50, 20, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "ptt" ? "1.5px solid #FF7043" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "ptt" ? "#FF7043" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                    }}
                 >
-                    🎙️ {t('walkie.live_tab')}
+                    <span>🎙️</span> {t('walkie.live_tab') || "PTT EN VIVO"}
                 </button>
                 <button
                     onClick={() => setActiveTab("bursts")}
-                    className={activeTab === "bursts" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    style={{
+                        flex: 1, padding: "8px 14px", borderRadius: "10px",
+                        background: activeTab === "bursts" ? "linear-gradient(135deg, rgba(255, 112, 67, 0.25) 0%, rgba(200, 50, 20, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "bursts" ? "1.5px solid #FF7043" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "bursts" ? "#FF7043" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                    }}
                 >
-                    📻 {t('walkie.bursts_tab')} ({bursts.length})
+                    <span>📻</span> {t('walkie.bursts_tab') || "RÁFAGAS GUARDADAS"} ({bursts.length})
                 </button>
             </div>
 
-            {/* Contenido Principal con Scroll Seguro */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                    {/* ─── TAB 1: TRANSMISOR PTT ───────────────────────────────── */}
+                    {/* TAB 1: PTT */}
                     {activeTab === "ptt" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "24px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "20px" }}>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(255, 112, 67, 0.35)", borderRadius: "22px", padding: "24px",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: "20px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(255, 112, 67, 0.15)"
+                        }}>
                             <div style={{ textAlign: "center" }}>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                                    Canal de Ráfagas de Voz Half-Duplex
+                                <div style={{ fontSize: "1rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                    CANAL DE VOZ HALF-DUPLEX MIL-STD
                                 </div>
-                                <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    Toca para hablar. Toca de nuevo para comprimir y emitir.
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                    Toca para transmitir ráfaga de voz. El audio se comprime con el Vocoder LPC y se propaga por la malla.
                                 </div>
                             </div>
 
-                            {/* VAD Dynamic Equalizer Level Bar */}
+                            {/* VAD Dynamic Modulation Bar */}
                             <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                    <span>VAD MODULATION</span>
-                                    <span>{vadLevel}% LEVEL</span>
+                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                    <span>MODULACIÓN VAD</span>
+                                    <span>{vadLevel}% NIVEL</span>
                                 </div>
-                                <div style={{ width: "100%", height: "8px", background: "rgba(255,255,255,0.06)", borderRadius: "4px", overflow: "hidden" }}>
+                                <div style={{ width: "100%", height: "8px", background: "rgba(0, 0, 0, 0.5)", borderRadius: "4px", overflow: "hidden", border: "1px solid rgba(255, 255, 255, 0.1)" }}>
                                     <div style={{
                                         width: `${vadLevel}%`, height: "100%",
-                                        background: vadLevel > 70 ? "var(--accent-crimson-bright)" : vadLevel > 30 ? "var(--accent-emerald)" : "var(--accent-cyan)",
-                                        transition: "width 0.05s linear"
+                                        background: vadLevel > 70 ? "#FF3355" : vadLevel > 30 ? "#00E676" : "#00E5FF",
+                                        transition: "width 0.05s linear",
+                                        boxShadow: `0 0 10px ${vadLevel > 70 ? '#FF3355' : '#00E676'}`
                                     }} />
                                 </div>
                             </div>
 
                             {/* Botón PTT Circular Táctico */}
-                            <div style={{ position: "relative", width: "180px", height: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <div style={{ position: "relative", width: "190px", height: "190px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 {isRecording && (
                                     <div style={{
-                                        position: "absolute", inset: -12, borderRadius: "50%",
-                                        border: "2px solid var(--accent-crimson)",
-                                        animation: "pulseGlowCrimson 1.5s infinite"
+                                        position: "absolute", inset: -14, borderRadius: "50%",
+                                        border: "2px solid #FF3355",
+                                        animation: "pulse 1.2s infinite",
+                                        boxShadow: "0 0 30px rgba(255, 51, 85, 0.5)"
                                     }} />
                                 )}
 
@@ -493,183 +378,123 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                                     onClick={handleToggleRecording}
                                     disabled={isProcessingStop}
                                     style={{
-                                        width: "150px", height: "150px", borderRadius: "50%",
+                                        width: "160px", height: "160px", borderRadius: "50%",
                                         background: isRecording
                                             ? "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)"
-                                            : "linear-gradient(135deg, #1E1E34 0%, #121222 100%)",
-                                        border: isRecording ? "3px solid #FFF" : "2px solid rgba(255,255,255,0.15)",
+                                            : "linear-gradient(135deg, rgba(30, 36, 60, 0.95) 0%, rgba(14, 18, 36, 0.98) 100%)",
+                                        border: isRecording ? "3px solid #FFFFFF" : "2px solid rgba(255, 112, 67, 0.4)",
                                         boxShadow: isRecording
-                                            ? "0 0 35px rgba(232,33,58,0.6)"
-                                            : "0 10px 30px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.1)",
-                                        color: "#FFF", display: "flex", flexDirection: "column",
+                                            ? "0 0 40px rgba(255, 51, 85, 0.7)"
+                                            : "0 10px 30px rgba(0, 0, 0, 0.8), inset 0 2px 0 rgba(255, 255, 255, 0.1)",
+                                        color: "#FFFFFF", display: "flex", flexDirection: "column",
                                         alignItems: "center", justifyContent: "center", gap: "6px",
-                                        cursor: isProcessingStop ? "wait" : "pointer", userSelect: "none", touchAction: "none",
-                                        opacity: isProcessingStop ? 0.7 : 1
+                                        cursor: isProcessingStop ? "wait" : "pointer"
                                     }}
                                 >
-                                    <span style={{ fontSize: "2.4rem" }}>
+                                    <span style={{ fontSize: "2.5rem" }}>
                                         {isProcessingStop ? "⏳" : (isRecording ? "⏹️" : "🎙️")}
                                     </span>
                                     <span style={{ fontSize: "0.85rem", fontWeight: 900, letterSpacing: "0.5px" }}>
-                                        {isProcessingStop ? "PROCESANDO" : (isRecording ? `${recordingTime}s REC (STOP)` : "TAP PTT")}
+                                        {isProcessingStop ? "PROCESANDO" : (isRecording ? `${recordingTime}s REC` : "PULSAR PTT")}
                                     </span>
                                 </button>
                             </div>
 
-                            {/* Selector de Códec Táctico y Módem Acústico */}
+                            {/* Selector de Códec Táctico */}
                             <div style={{
-                                width: "100%", padding: "12px 14px", borderRadius: "12px",
-                                background: "rgba(255,255,255,0.03)", border: "1px solid var(--glass-border)",
+                                width: "100%", padding: "14px", borderRadius: "14px",
+                                background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)",
                                 display: "flex", flexDirection: "column", gap: "10px"
                             }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                     <div>
-                                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                                            🎙️ Modo Códec: {useTacticalVocoder ? "Vocoder Militar 8kHz IMA-ADPCM" : "Estándar Opus/WebM"}
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>
+                                            🎙️ Modo Códec: {useTacticalVocoder ? "Vocoder Militar 8kHz ADPCM" : "Estándar Opus"}
                                         </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                            {useTacticalVocoder ? "1.6–3.2 kbps · Optimizado para LoRaWAN y Módem Acústico (<800B)" : "32–64 kbps · Mayor fidelidad para redes Wi-Fi/Ethernet"}
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                            {useTacticalVocoder ? "1.6 kbps · Ideal para LoRa y radio acústica" : "32 kbps · Alta fidelidad en Wi-Fi"}
                                         </div>
                                     </div>
                                     <button
                                         onClick={() => setUseTacticalVocoder(!useTacticalVocoder)}
-                                        className="btn-ghost"
                                         style={{
-                                            padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700,
-                                            border: useTacticalVocoder ? "1px solid var(--accent-emerald)" : "1px solid var(--glass-border)",
-                                            color: useTacticalVocoder ? "var(--accent-emerald)" : "var(--text-muted)"
+                                            padding: "5px 12px", borderRadius: "8px",
+                                            background: useTacticalVocoder ? "rgba(0, 230, 118, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                                            border: useTacticalVocoder ? "1px solid #00E676" : "1px solid rgba(255, 255, 255, 0.1)",
+                                            color: useTacticalVocoder ? "#00E676" : "var(--text-secondary)",
+                                            fontWeight: 900, fontSize: "0.72rem", cursor: "pointer"
                                         }}
                                     >
                                         {useTacticalVocoder ? "ACTIVO" : "OFF"}
                                     </button>
                                 </div>
-
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "8px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                                    <div>
-                                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text-primary)" }}>
-                                            🔊 Emisión Acústica Ultrasónica SoundMesh
-                                        </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                            Emite el tono FSK (18.5kHz-20.5kHz) por el altavoz físico
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setAcousticBroadcast(!acousticBroadcast)}
-                                        className="btn-ghost"
-                                        style={{
-                                            padding: "4px 10px", fontSize: "0.72rem", fontWeight: 700,
-                                            border: acousticBroadcast ? "1px solid var(--accent-cyan)" : "1px solid var(--glass-border)",
-                                            color: acousticBroadcast ? "var(--accent-cyan)" : "var(--text-muted)"
-                                        }}
-                                    >
-                                        {acousticBroadcast ? "ON" : "OFF"}
-                                    </button>
-                                </div>
                             </div>
-
-                            {/* Botón de Ráfaga de Emergencia Instantánea */}
-                            <button
-                                onClick={() => {
-                                    handleStartRecording();
-                                    setTimeout(() => handleStopRecording(true), 3000);
-                                }}
-                                disabled={isRecording}
-                                className="btn-tactical-secondary"
-                                style={{ width: "100%", padding: "10px", borderColor: "rgba(232,33,58,0.4)", color: "var(--accent-crimson-bright)" }}
-                            >
-                                🚨 RÁFAGA AUTOMÁTICA SOS (3s)
-                            </button>
-
-                            {/* Mensajes de Estado */}
-                            {statusMsg && (
-                                <div style={{ fontSize: "0.78rem", color: "var(--accent-crimson-bright)", textAlign: "center" }}>
-                                    {statusMsg}
-                                </div>
-                            )}
-
-                            {compressionInfo && (
-                                <div className="badge-tactical badge-tactical-emerald animate-pop">
-                                    ⚡ {compressionInfo}
-                                </div>
-                            )}
                         </div>
                     )}
 
-                    {/* ─── TAB 2: RÁFAGAS EN MALLA ─────────────────────────────── */}
+                    {/* TAB 2: RÁFAGAS GUARDADAS */}
                     {activeTab === "bursts" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                                        📻 Ráfagas de Voz Recibidas en Malla
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                            {bursts.length === 0 ? (
+                                <div style={{
+                                    textAlign: "center", padding: "30px 16px",
+                                    background: "rgba(14, 18, 38, 0.9)", borderRadius: "18px",
+                                    border: "1px dashed rgba(255, 255, 255, 0.12)"
+                                }}>
+                                    <div style={{ fontSize: "2rem", marginBottom: "6px" }}>📻</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                        Sin Ráfagas de Voz Registradas
                                     </div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                        Historial de transmisiones de audio persistidas en Sled DB
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                        Usa la pestaña PTT para emitir o recibir ráfagas de audio en la malla.
                                     </div>
                                 </div>
-                                <span className="badge-tactical badge-tactical-emerald">SLED PERSISTED</span>
-                            </div>
-
-                            {isLoadingBursts ? (
-                                <SkeletonCard count={2} />
-                            ) : burstsError ? (
-                                <ErrorBanner message={burstsError} onRetry={loadBursts} />
-                            ) : bursts.length === 0 ? (
-                                <EmptyState 
-                                    title="Sin Ráfagas de Audio" 
-                                    description="No se han recibido notas de voz PTT en la red malla aún." 
-                                    icon="📻" 
-                                />
                             ) : (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {bursts.map((b) => (
-                                        <div
-                                            key={b.id}
-                                            className="card-tactical"
-                                            style={{
-                                                padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
-                                                borderLeft: b.is_emergency ? "4px solid var(--accent-crimson)" : "4px solid var(--accent-cyan)"
-                                            }}
-                                        >
-                                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                                                <button
-                                                    onClick={() => handlePlayBurst(b)}
-                                                    className="btn-icon"
-                                                    style={{
-                                                        width: 40, height: 40,
-                                                        background: playingBurstId === b.id ? "var(--accent-emerald)" : "var(--glass-bg)",
-                                                        color: playingBurstId === b.id ? "#000" : "#fff"
-                                                    }}
-                                                >
-                                                    {playingBurstId === b.id ? "⏸️" : "▶️"}
-                                                </button>
-
-                                                <div>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                        <strong style={{ fontSize: "0.88rem", color: b.is_emergency ? "var(--accent-crimson-bright)" : "var(--text-primary)" }}>
-                                                            {b.is_emergency ? "🚨 [SOS] " : "🎙️ "}{b.sender_name}
-                                                        </strong>
-                                                        <span className="badge-tactical" style={{ fontSize: "0.68rem" }}>
-                                                            {((b.duration_ms || (b.duration_seconds ? b.duration_seconds * 1000 : 3000)) / 1000).toFixed(1)}s
-                                                        </span>
-                                                    </div>
-                                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", marginTop: "2px", fontFamily: "JetBrains Mono, monospace" }}>
-                                                        {new Date(b.timestamp).toLocaleTimeString()} · Sled DB Stored
-                                                    </div>
-                                                </div>
+                                bursts.map(b => (
+                                    <div
+                                        key={b.id}
+                                        style={{
+                                            padding: "14px 16px", borderRadius: "14px",
+                                            background: "linear-gradient(135deg, rgba(16, 22, 44, 0.9) 0%, rgba(8, 12, 28, 0.95) 100%)",
+                                            border: "1px solid rgba(255, 112, 67, 0.25)",
+                                            display: "flex", justifyContent: "space-between", alignItems: "center"
+                                        }}
+                                    >
+                                        <div>
+                                            <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                                {b.sender_nickname || "Operador RED"} · {b.duration_seconds}s
                                             </div>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                {new Date(b.timestamp).toLocaleTimeString()}
+                                            </div>
+                                        </div>
 
+                                        <div style={{ display: "flex", gap: "8px" }}>
                                             <button
-                                                onClick={() => handleDeleteBurst(b.id)}
-                                                className="btn-icon"
-                                                title="Eliminar de Sled"
-                                                style={{ width: 32, height: 32, color: "var(--accent-crimson-bright)" }}
+                                                onClick={() => handlePlayBurst(b)}
+                                                style={{
+                                                    padding: "6px 14px", borderRadius: "8px",
+                                                    background: playingBurstId === b.id ? "rgba(255, 51, 85, 0.2)" : "rgba(0, 229, 255, 0.15)",
+                                                    border: `1px solid ${playingBurstId === b.id ? '#FF3355' : '#00E5FF'}`,
+                                                    color: playingBurstId === b.id ? "#FF3355" : "var(--accent-cyan, #00E5FF)",
+                                                    fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
+                                                }}
+                                            >
+                                                {playingBurstId === b.id ? "⏹️ STOP" : "▶️ REPRODUCIR"}
+                                            </button>
+                                            <button
+                                                onClick={() => handleDelete(b.id)}
+                                                style={{
+                                                    padding: "6px 10px", borderRadius: "8px",
+                                                    background: "rgba(255, 51, 85, 0.1)", border: "1px solid rgba(255, 51, 85, 0.3)",
+                                                    color: "#FF3355", cursor: "pointer", fontSize: "0.74rem"
+                                                }}
                                             >
                                                 🗑️
                                             </button>
                                         </div>
-                                    ))}
-                                </div>
+                                    </div>
+                                ))
                             )}
                         </div>
                     )}

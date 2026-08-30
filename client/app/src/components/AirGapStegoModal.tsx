@@ -6,9 +6,11 @@ import { psychoacousticStego } from "../lib/crypto/PsychoacousticStegoEngine";
 import { opticalMorseRxEngine, MorseRxState } from "../lib/sensors/OpticalMorseRxEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export function AirGapStegoModal() {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
+    const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<"animatedQr" | "audioStego" | "morseRx">("animatedQr");
 
     // Morse RX State
@@ -140,248 +142,258 @@ export function AirGapStegoModal() {
     return (
         <div style={{
             position: "fixed", inset: 0, zIndex: 1100,
-            background: "#050812", color: "#FFF",
-            display: "flex", flexDirection: "column",
-            fontFamily: "JetBrains Mono, monospace"
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", display: "flex", flexDirection: "column",
+            fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
         }}>
-            {/* Header */}
-            <div style={{
-                padding: "12px 16px", background: "rgba(10, 15, 30, 0.95)",
-                borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
-                display: "flex", justifyContent: "space-between", alignItems: "center"
+            {/* Header Táctico */}
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "1.2rem" }}>🎞️</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
+                    <div style={{
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 229, 255, 0.5)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)"
+                    }}>🎞️</div>
                     <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
-                            TRANSFERENCIA AIR-GAP & ESTEGANOGRAFÍA DE AUDIO
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            ENLACE AIR-GAP & ESTEGANOGRAFÍA
                         </div>
-                        <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
-                            Flujo Óptico QR Animado, Audio Psicoacústico y Decodificador Morse RX
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
+                            QR ANIMADO · ESTEGANOGRAFÍA DE AUDIO · MORSE RX
                         </div>
                     </div>
                 </div>
-                <button
-                    onClick={() => navigate("commandCenter")}
-                    style={{
-                        background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
-                        color: "#FFF", padding: "6px 12px", borderRadius: "8px",
-                        cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
-                    }}
-                >
-                    ✕ CERRAR
-                </button>
-            </div>
 
-            {/* Tab Selector */}
-            <div style={{ display: "flex", background: "rgba(15, 23, 42, 0.8)", padding: "6px 16px", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <span style={{
+                        fontSize: "0.65rem", fontWeight: 900, padding: "4px 8px", borderRadius: "6px",
+                        background: "rgba(0, 229, 255, 0.15)", color: "#00E5FF", border: "1px solid rgba(0, 229, 255, 0.3)"
+                    }}>
+                        ZERO-RF
+                    </span>
+                </div>
+            </header>
+
+            {/* Selector de Pestañas Segmentadas */}
+            <div style={{
+                display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                flexShrink: 0
+            }}>
                 <button
                     onClick={() => setActiveTab("animatedQr")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
-                        background: activeTab === "animatedQr" ? "#00E5FF" : "transparent",
-                        color: activeTab === "animatedQr" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        background: activeTab === "animatedQr" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "animatedQr" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "animatedQr" ? "#00E5FF" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    🎞️ QR Animado ({qrChunks.length})
+                    <span>🎞️</span> QR ANIMADO ({qrChunks.length})
                 </button>
                 <button
                     onClick={() => setActiveTab("morseRx")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
-                        background: activeTab === "morseRx" ? "#00E676" : "transparent",
-                        color: activeTab === "morseRx" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        background: activeTab === "morseRx" ? "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(10, 60, 35, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "morseRx" ? "1.5px solid #00E676" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "morseRx" ? "#00E676" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    💡 Decodificador Morse RX {morseState.isLightOn && "●"}
+                    <span>💡</span> DECODIFICADOR MORSE RX {morseState.isLightOn && "●"}
                 </button>
                 <button
                     onClick={() => setActiveTab("audioStego")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
-                        background: activeTab === "audioStego" ? "#FF3355" : "transparent",
-                        color: activeTab === "audioStego" ? "#FFF" : "#AAA", border: "none", cursor: "pointer"
+                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        background: activeTab === "audioStego" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "audioStego" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "audioStego" ? "#FF3355" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.76rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                     }}
                 >
-                    🎧 Audio WAV
+                    <span>🎧</span> AUDIO STEGO
                 </button>
             </div>
 
-            {/* Content Body */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "14px", maxWidth: "640px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-                
-                {/* ── TAB 1: ANIMATED QR AIR-GAP ── */}
-                {activeTab === "animatedQr" && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px", alignItems: "center" }}>
-                        <div style={{ width: "100%", background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "12px", padding: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <label style={{ fontSize: "0.7rem", color: "#AAA" }}>CARGA ÚTIL A TRANSMITIR (AIR-GAP):</label>
-                            <textarea
-                                value={qrText}
-                                onChange={(e) => setQrText(e.target.value)}
-                                rows={3}
-                                style={{ width: "100%", padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.72rem", resize: "none", boxSizing: "border-box" }}
-                            />
-                        </div>
-
-                        {/* Animated QR Player Screen */}
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    
+                    {/* TAB 1: ANIMATED QR AIR-GAP */}
+                    {activeTab === "animatedQr" && (
                         <div style={{
-                            background: "#050812", border: "2px solid #00E5FF", borderRadius: "16px",
-                            padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
-                            boxShadow: "0 0 20px rgba(0, 229, 255, 0.2)"
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px", alignItems: "center",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
                         }}>
-                            <div style={{ fontSize: "0.75rem", fontWeight: 900, color: "#00E5FF" }}>
-                                FRAME {currentChunkIdx + 1} / {qrChunks.length}
+                            <div style={{ width: "100%" }}>
+                                <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
+                                    CARGA ÚTIL A TRANSMITIR (FLUJO ÓPTICO AIR-GAP)
+                                </label>
+                                <textarea
+                                    value={qrText}
+                                    onChange={(e) => setQrText(e.target.value)}
+                                    rows={3}
+                                    style={{
+                                        width: "100%", padding: "10px 14px", borderRadius: "10px",
+                                        background: "rgba(0,0,0,0.6)", color: "#FFF",
+                                        border: "1px solid rgba(0, 229, 255, 0.4)", fontSize: "0.78rem", resize: "none", boxSizing: "border-box"
+                                    }}
+                                />
                             </div>
-                            {qrDataUrl ? (
-                                <img src={qrDataUrl} alt="AirGap QR Frame" style={{ width: "220px", height: "220px", borderRadius: "8px" }} />
-                            ) : (
-                                <div style={{ width: "220px", height: "220px", display: "flex", alignItems: "center", justifyContent: "center", color: "#888", fontSize: "0.75rem" }}>
-                                    Generando frame...
-                                </div>
-                            )}
-                            <button
-                                onClick={() => setIsStreaming(!isStreaming)}
-                                style={{
-                                    padding: "6px 14px", borderRadius: "8px",
-                                    background: isStreaming ? "rgba(232, 33, 58, 0.2)" : "rgba(0, 230, 118, 0.2)",
-                                    border: `1px solid ${isStreaming ? "#E8213A" : "#00E676"}`,
-                                    color: isStreaming ? "#FF3355" : "#00E676", fontWeight: 800, fontSize: "0.72rem", cursor: "pointer"
-                                }}
-                            >
-                                {isStreaming ? "⏸ PAUSAR FLUJO" : "▶ REANUDAR FLUJO"}
-                            </button>
-                        </div>
-                    </div>
-                )}
 
-                {/* ── TAB 2: AUDIO STEGANOGRAPHY ── */}
-                {activeTab === "audioStego" && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                            <label style={{ fontSize: "0.7rem", color: "#AAA" }}>MENSAJE SECRETO A OCULTAR EN AUDIO:</label>
-                            <input
-                                type="text"
-                                value={secretMessage}
-                                onChange={(e) => setSecretMessage(e.target.value)}
-                                style={{ width: "100%", padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.74rem", boxSizing: "border-box" }}
-                            />
+                            {/* Animated QR Player Screen */}
+                            <div style={{
+                                background: "#050812", border: "2px solid #00E5FF", borderRadius: "16px",
+                                padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+                                boxShadow: "0 0 30px rgba(0, 229, 255, 0.25)"
+                            }}>
+                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    FRAME {currentChunkIdx + 1} / {qrChunks.length}
+                                </div>
+                                {qrDataUrl ? (
+                                    <img src={qrDataUrl} alt="AirGap QR Frame" style={{ width: "220px", height: "220px", borderRadius: "8px" }} />
+                                ) : (
+                                    <div style={{ width: "220px", height: "220px", display: "flex", alignItems: "center", justifyContent: "center", color: "#888", fontSize: "0.75rem" }}>
+                                        Generando frame...
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => setIsStreaming(!isStreaming)}
+                                    style={{
+                                        padding: "8px 16px", borderRadius: "10px",
+                                        background: isStreaming ? "rgba(255, 51, 85, 0.15)" : "rgba(0, 230, 118, 0.15)",
+                                        border: `1px solid ${isStreaming ? "#FF3355" : "#00E676"}`,
+                                        color: isStreaming ? "#FF3355" : "#00E676", fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
+                                    }}
+                                >
+                                    {isStreaming ? "⏸ PAUSAR FLUJO" : "▶ REANUDAR FLUJO"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 2: MORSE RX */}
+                    {activeTab === "morseRx" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 230, 118, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
+                                    DECODIFICADOR ÓPTICO MORSE / LI-FI RX
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                    Apunta la cámara a pulsos de luz para decodificar texto en tiempo real.
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                                <video ref={videoRef} playsInline muted style={{ width: "160px", height: "120px", borderRadius: "10px", background: "#000", objectFit: "cover" }} />
+                                <canvas ref={canvasRef} width={64} height={48} style={{ display: "none" }} />
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>LUMINANCIA CENTRO:</div>
+                                    <div style={{ fontSize: "1.4rem", fontWeight: 900, color: morseState.isLightOn ? "#00E676" : "#FFFFFF" }}>
+                                        {Math.round(morseState.currentLuminance)} / 255
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: morseState.isLightOn ? "#00E676" : "var(--text-secondary)" }}>
+                                        {morseState.isLightOn ? "💡 LUZ DETECTADA" : "🌑 OSCURO"}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{
+                                background: "rgba(0,0,0,0.5)", border: "1px solid rgba(0,230,118,0.3)",
+                                borderRadius: "12px", padding: "14px"
+                            }}>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>TEXTO DECODIFICADO:</div>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#00E676", marginTop: "4px", minHeight: "28px" }}>
+                                    {morseState.decodedText || "Esperando pulsos ópticos..."}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 3: AUDIO STEGANOGRAPHY */}
+                    {activeTab === "audioStego" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(255, 51, 85, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FF3355" }}>
+                                    ESTEGANOGRAFÍA DE AUDIO WAV
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                    Oculta cargas útiles de texto dentro de archivos WAV usando modulación de fase inaudible.
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
+                                    MENSAJE A OCULTAR
+                                </label>
+                                <input
+                                    value={secretMessage}
+                                    onChange={e => setSecretMessage(e.target.value)}
+                                    style={{
+                                        width: "100%", padding: "10px 14px", background: "rgba(0,0,0,0.6)",
+                                        border: "1px solid rgba(255, 51, 85, 0.4)", borderRadius: "10px",
+                                        color: "#FFFFFF", fontSize: "0.82rem"
+                                    }}
+                                />
+                            </div>
+
                             <button
                                 onClick={handleSynthesizeAudio}
                                 style={{
-                                    padding: "12px", borderRadius: "10px",
-                                    background: "linear-gradient(135deg, #FF3355, #E8213A)",
-                                    color: "#FFF", fontWeight: 900, fontSize: "0.82rem", border: "none", cursor: "pointer"
+                                    padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                    color: "#FFFFFF", fontWeight: 900, fontSize: "0.85rem", border: "none", borderRadius: "12px", cursor: "pointer"
                                 }}
                             >
                                 🎵 GENERAR PORTADORA DE AUDIO WAV
                             </button>
-                        </div>
 
-                        {carrierAudioUrl && (
-                            <div style={{ background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.2)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "#00E5FF" }}>REPRODUCTOR DE AUDIO CAMUFLADO:</div>
-                                <audio controls src={carrierAudioUrl} style={{ width: "100%" }} />
-                                <div style={{ fontSize: "0.68rem", color: "#AAA", background: "rgba(0,0,0,0.4)", padding: "8px", borderRadius: "6px" }}>
-                                    ✓ Carga oculta verificada: <span style={{ color: "#00E676" }}>{extractedMessage}</span>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* ── TAB 3: OPTICAL MORSE CODE RX DECODER ── */}
-                {activeTab === "morseRx" && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        <div style={{ background: "rgba(0, 230, 118, 0.08)", border: "1px solid rgba(0, 230, 118, 0.3)", borderRadius: "12px", padding: "12px", fontSize: "0.74rem", color: "#DDD" }}>
-                            Apunta la cámara a la fuente de luz pulsante (linterna LED, faro o espejo heliógrafo). El decodificador mide la duración en milisegundos de los pulsos ópticos y traduce el código ITU Morse a texto en vivo.
-                        </div>
-
-                        {/* Camera Optical Scope Viewport */}
-                        <div style={{
-                            position: "relative", height: "180px", borderRadius: "12px",
-                            overflow: "hidden", border: `2px solid ${morseState.isLightOn ? "#00E676" : "#444"}`,
-                            background: "#000", display: "flex", alignItems: "center", justifyContent: "center"
-                        }}>
-                            <video ref={videoRef} playsInline muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                            <canvas ref={canvasRef} width={64} height={48} style={{ display: "none" }} />
-
-                            {/* Reticle Target */}
-                            <div style={{
-                                position: "absolute", inset: 0,
-                                background: "radial-gradient(circle, transparent 30%, rgba(0,0,0,0.7) 80%)",
-                                pointerEvents: "none", display: "flex", flexDirection: "column", justifyContent: "space-between", padding: "10px"
-                            }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: morseState.isLightOn ? "#00E676" : "#AAA" }}>
-                                    <span>OPTICAL MORSE RX: {morseState.isLightOn ? "LUZ DETECTADA" : "BUSCANDO PULSO"}</span>
-                                    <span>VELOCIDAD: ~{morseState.detectedWpm} WPM</span>
-                                </div>
+                            {carrierAudioUrl && (
                                 <div style={{
-                                    alignSelf: "center", width: "50px", height: "50px",
-                                    border: `2px solid ${morseState.isLightOn ? "#00E676" : "rgba(255,255,255,0.4)"}`,
-                                    borderRadius: "50%", boxShadow: morseState.isLightOn ? "0 0 15px #00E676" : "none"
-                                }} />
-                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "#AAA" }}>
-                                    <span>LUMA: {morseState.currentLuminance}</span>
-                                    <span>UMBRAL ADAPTATIVO: {morseState.thresholdLuminance}</span>
+                                    background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,51,85,0.3)",
+                                    borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px"
+                                }}>
+                                    <audio controls src={carrierAudioUrl} style={{ width: "100%" }} />
+                                    <div style={{ fontSize: "0.72rem", color: "#00E676" }}>
+                                        ✓ Mensaje embebido exitosamente en audio portador.
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
-
-                        {/* Decoded Text Display Screen */}
-                        <div style={{
-                            background: "#050812", border: "1.5px solid #00E676", borderRadius: "12px",
-                            padding: "14px", display: "flex", flexDirection: "column", gap: "8px"
-                        }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ fontSize: "0.72rem", color: "#00E676", fontWeight: 800 }}>
-                                    MENSAJE ÓPTICO DECODIFICADO:
-                                </div>
-                                <div style={{ fontSize: "0.7rem", color: "#FFB300", fontFamily: "monospace" }}>
-                                    Buffer: [{morseState.currentSymbolBuffer || "·"}]
-                                </div>
-                            </div>
-                            <div style={{
-                                minHeight: "60px", padding: "10px", background: "rgba(0,0,0,0.6)",
-                                borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)",
-                                color: "#FFF", fontSize: "1.1rem", fontWeight: 900, letterSpacing: "1px",
-                                wordBreak: "break-all"
-                            }}>
-                                {morseState.decodedText || <span style={{ color: "#666", fontSize: "0.85rem", fontWeight: 400 }}>Esperando ráfagas luminosas...</span>}
-                            </div>
-                            <div style={{ display: "flex", gap: "8px" }}>
-                                <button
-                                    onClick={() => {
-                                        opticalMorseRxEngine.clearText();
-                                        toast.info("Buffer de texto Morse limpiado");
-                                    }}
-                                    style={{
-                                        flex: 1, padding: "8px", borderRadius: "6px",
-                                        background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
-                                        color: "#FFF", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer"
-                                    }}
-                                >
-                                    🗑️ LIMPIAR BUFFER
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        if (morseState.decodedText) {
-                                            navigator.clipboard.writeText(morseState.decodedText);
-                                            toast.success("📋 Texto Morse copiado al portapapeles");
-                                        }
-                                    }}
-                                    style={{
-                                        flex: 1, padding: "8px", borderRadius: "6px",
-                                        background: "rgba(0, 230, 118, 0.2)", border: "1px solid #00E676",
-                                        color: "#00E676", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer"
-                                    }}
-                                >
-                                    📋 COPIAR TEXTO
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
+                    )}
+                </div>
             </div>
         </div>
     );

@@ -24,7 +24,7 @@ export class KineticDutyGovernor {
     private static instance: KineticDutyGovernor | null = null;
     private listeners: Set<(telemetry: KineticTelemetry) => void> = new Set();
 
-    private batteryLevel: number = 85;
+    private batteryLevel: number = 100;
     private isCharging: boolean = false;
     private isStationary: boolean = true;
     private kineticEnergyScore: number = 0;
@@ -51,12 +51,25 @@ export class KineticDutyGovernor {
     private async initSensors() {
         if (typeof window === "undefined") return;
 
-        // 1. Hardware Battery Listener
+        // 1. Hardware Battery Listener (Capacitor Native Bridge + Web API)
+        try {
+            const cap = (window as any).Capacitor;
+            if (cap && cap.Plugins && cap.Plugins.Device) {
+                const info = await cap.Plugins.Device.getBatteryInfo();
+                if (info && typeof info.batteryLevel === 'number') {
+                    this.batteryLevel = Math.round(info.batteryLevel * 100);
+                    this.isCharging = !!info.isCharging;
+                    this.evaluateProfile();
+                }
+            }
+        } catch {}
+
         try {
             if ("getBattery" in navigator) {
                 const battery: any = await (navigator as any).getBattery();
                 this.batteryLevel = Math.round(battery.level * 100);
                 this.isCharging = !!battery.charging;
+                this.evaluateProfile();
 
                 battery.addEventListener("levelchange", () => {
                     this.batteryLevel = Math.round(battery.level * 100);

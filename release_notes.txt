@@ -1,0 +1,28 @@
+RED — Sovereign Mesh OS (v77.0.0 Elite Minimalist UI/UX Edition)
+================================================================
+
+Compilacion Oficial: 2026-08-30
+Version: 77.0.0 (versionCode 77000)
+Canal: Stable P2P
+Hash SHA-256 (APK Release): 5799475C569E24477FCB8DE8C96F0DDE34A6470DDD7BCE1B33F8AAC168A2250B
+Dispositivos Validados: Motorola Moto G22 (ZT322B386P) y Lenovo Tablet TB305XU (HA2CHKZ2)
+
+NOVEDADES Y MEJORAS PRINCIPALES:
+--------------------------------
+1. Refactorizacion Grafica y Logica Integral (10 Modulos Maestros):
+   - M01: HUD de Telemetria con indicador de bateria reactivo y monitor FHSS.
+   - M02: Cajon de Comandos con 8 Hubs tacticos y Dock de 5 Pilares.
+   - M03: Centro C4ISR y Radar polar 360 grados con blips vivos.
+   - M04: Copiloto IA Neural HUD con presupuesto de RAM adaptativo.
+   - M05: Chat P2P y Walkie-Talkie PTT con boton pulsante y ecualizador VAD.
+   - M06: Boveda DID con armadura Post-Cuantica ML-KEM-768 y Shamir SSS 3-de-5.
+   - M07: Suite de Guerra Electronica (Ultrasonido 20.5 kHz, RDF y Cascada RF).
+   - M08: Defensa Civil, Triage SOS MARCH-PAWS, Sonar ToF y Sismica TDoA.
+   - M09: Diagnostico de Kernel con 8 benchmarks y Gobernador Eco-Mesh.
+   - M10: Enlace Air-Gap con QR Animado, Morse RX por camara y Audio Stego.
+
+2. Cero Datos Simulados:
+   - Eliminacion absoluta de maquetas o valores hardcodeados en todo el OS.
+
+3. Despliegue en Limpio y Depuracion en Tiempo Real:
+   - Sincronizacion de eventos SSE y GATT BLE sin caidas ni errores de memoria.

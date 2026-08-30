@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { localTransport } from "../lib/mesh/localTransport";
@@ -8,14 +8,15 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { toast } from "./Toast";
 
-type RadarTab = "qr" | "radar" | "manual";
+type RadarTab = "radar" | "qr" | "manual";
 
 export default function RadarWindow() {
     const { goBack, identity, addContact, navigate } = useRedStore();
     const { t } = useTranslation();
-    const [activeTab, setActiveTab] = useState<RadarTab>("qr");
+    const [activeTab, setActiveTab] = useState<RadarTab>("radar");
     const [scanning, setScanning] = useState(false);
     const [nearbyPeers, setNearbyPeers] = useState<any[]>([]);
+    const [selectedPeer, setSelectedPeer] = useState<any | null>(null);
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
 
     // Manual Entry State
@@ -50,14 +51,14 @@ export default function RadarWindow() {
             setNearbyPeers(peers);
         };
         updatePeers();
-        const interval = setInterval(updatePeers, 3000);
+        const interval = setInterval(updatePeers, 2500);
         return () => clearInterval(interval);
     }, []);
 
     const handleRefreshNearby = () => {
         const peers = localTransport.discoveredBluetoothPeers || [];
         setNearbyPeers(peers);
-        toast.info("Actualizando lista de balizas BLE cercanas...");
+        toast.info("Escaneando espectro BLE & Wi-Fi Direct...");
     };
 
     const handleAddPeer = async (peer: any) => {
@@ -69,7 +70,7 @@ export default function RadarWindow() {
         const pk = peer.publicKey || peer.public_key || peerRecord?.publicKey || null;
         try {
             const resolvedHash = await addContact(resolvedId, finalName, pk);
-            toast.success(`Añadido ${finalName}`);
+            toast.success(`🤝 ¡Contacto ${finalName} añadido!`);
             navigate("chat", resolvedHash || resolvedId);
         } catch (e: any) {
             toast.error(e?.message || "Error al conectar con el par");
@@ -86,7 +87,6 @@ export default function RadarWindow() {
 
             const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
             
-            // Check & request runtime permissions explicitly
             const status = await BarcodeScanner.checkPermission({ force: true });
             if (status.denied) {
                 toast.error("Permiso de cámara denegado. Actívalo en la configuración.");
@@ -97,7 +97,6 @@ export default function RadarWindow() {
                 return;
             }
 
-            // Hide native webview background & apply global transparency
             await BarcodeScanner.hideBackground();
             document.body.classList.add("scanner-active");
             setScanning(true);
@@ -107,7 +106,6 @@ export default function RadarWindow() {
             if (result.hasContent) {
                 const raw = result.content.trim();
 
-                // 0. Detección Inteligente de Vinculación Web Companion (WhatsApp Web style)
                 if (raw.startsWith("RED_PAIR:1:")) {
                     await stopScan();
                     setWebPairingCode(raw);
@@ -188,11 +186,39 @@ export default function RadarWindow() {
     const copyToClipboard = (text: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
-            toast.success(t('common.copied'));
+            toast.success(t('common.copied') || "Copiado");
         }
     };
 
     const myDid = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:local_node";
+
+    // Calcular posición polar para cada nodo detectado
+    const polarPeers = useMemo(() => {
+        return nearbyPeers.map((p, idx) => {
+            // Pseudo-angle from hash
+            const hash = p.id || p.address || `${idx}`;
+            let sum = 0;
+            for (let i = 0; i < hash.length; i++) sum += hash.charCodeAt(i);
+            const angleDeg = (sum * 47) % 360;
+            const angleRad = (angleDeg * Math.PI) / 180;
+
+            // Distance ratio based on RSSI (-30 dBm closest ~ 15%, -100 dBm farthest ~ 90%)
+            const rssi = typeof p.rssi === "number" ? p.rssi : -70;
+            const normRssi = Math.max(-100, Math.min(-30, rssi));
+            const radiusPercent = 15 + ((100 + normRssi) / 70) * 75; // 15% to 90%
+
+            const x = 50 + (radiusPercent / 2) * Math.cos(angleRad);
+            const y = 50 + (radiusPercent / 2) * Math.sin(angleRad);
+
+            return {
+                ...p,
+                x,
+                y,
+                angleDeg,
+                estimatedMeters: Math.round(Math.pow(10, (-40 - rssi) / (10 * 2.2)))
+            };
+        });
+    }, [nearbyPeers]);
 
     if (scanning) {
         return (
@@ -222,12 +248,16 @@ export default function RadarWindow() {
 
                 <button
                     onClick={stopScan}
-                    className="btn-tactical-primary"
                     style={{
                         padding: "14px 36px",
                         fontSize: "0.95rem",
+                        fontWeight: 900,
+                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                        color: "#FFFFFF",
+                        border: "none",
                         boxShadow: "0 4px 25px rgba(232,33,58,0.5)",
-                        borderRadius: "var(--radius-md)"
+                        borderRadius: "12px",
+                        cursor: "pointer"
                     }}
                 >
                     {t('radar.cancel_scan')}
@@ -239,33 +269,35 @@ export default function RadarWindow() {
     return (
         <div style={{
             width: "100%", height: "100%",
-            background: "var(--bg-void)", color: "var(--text-primary)",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace",
             display: "flex", flexDirection: "column",
             overflow: "hidden", position: "relative"
         }}>
-            {/* Header Táctico */}
+            {/* Header Táctico C4ISR */}
             <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.3)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 230, 118, 0.2) 0%, rgba(0, 229, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 230, 118, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,230,118,0.35)"
+                        fontSize: "1.3rem", boxShadow: "0 0 15px rgba(0,230,118,0.25)"
                     }}>📡</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t('radar.title')}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, letterSpacing: "0.4px", color: "#FFFFFF" }}>
+                            {t('radar.title') || "RADAR TÁCTICO P2P"}
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {t('radar.subtitle')}
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald, #00E676)", fontWeight: 800 }}>
+                            {t('radar.subtitle') || "DESCUBRIMIENTO BLE / LORA / WIFI"}
                         </div>
                     </div>
                 </div>
@@ -273,185 +305,217 @@ export default function RadarWindow() {
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
                         onClick={() => navigate("nodemap")}
-                        className="btn-tactical-secondary"
-                        style={{ padding: "6px 12px", fontSize: "0.78rem" }}
+                        style={{
+                            padding: "6px 12px", fontSize: "0.78rem", fontWeight: 800,
+                            background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.35)",
+                            borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer"
+                        }}
                     >
-                        {t('radar.map_btn')}
+                        🗺️ MAPA
                     </button>
                     <button
                         onClick={goBack}
-                        className="btn-icon"
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontWeight: 900, fontSize: "0.9rem"
+                        }}
                         title={t('common.close')}
-                        style={{ width: 38, height: 38 }}
                     >
                         ✕
                     </button>
                 </div>
             </header>
 
-            {/* Selector de Pestañas Segmentadas Tácticas */}
+            {/* Selector de Pestañas Segmentadas */}
             <div style={{
-                padding: "10px 16px",
-                display: "flex", gap: "8px",
-                background: "rgba(10, 10, 20, 0.85)",
-                borderBottom: "1px solid var(--glass-border)",
+                padding: "8px 16px",
+                display: "flex", gap: "6px",
+                background: "rgba(8, 10, 20, 0.95)",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
                 overflowX: "auto", flexShrink: 0
             }}>
                 <button
-                    onClick={() => setActiveTab("qr")}
-                    className={activeTab === "qr" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    onClick={() => setActiveTab("radar")}
+                    style={{
+                        padding: "8px 16px", fontSize: "0.78rem", fontWeight: 900, borderRadius: "12px",
+                        background: activeTab === "radar" ? "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 180, 80, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "radar" ? "1.5px solid #00E676" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "radar" ? "#00E676" : "var(--text-secondary)",
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                        boxShadow: activeTab === "radar" ? "0 0 15px rgba(0, 230, 118, 0.25)" : "none"
+                    }}
                 >
-                    {t('radar.tab_qr')}
+                    <span>📡</span> {t('radar.tab_ble') || "RADAR EN VIVO"} ({nearbyPeers.length})
                 </button>
                 <button
-                    onClick={() => setActiveTab("radar")}
-                    className={activeTab === "radar" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    onClick={() => setActiveTab("qr")}
+                    style={{
+                        padding: "8px 16px", fontSize: "0.78rem", fontWeight: 900, borderRadius: "12px",
+                        background: activeTab === "qr" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "qr" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "qr" ? "#00E5FF" : "var(--text-secondary)",
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                        boxShadow: activeTab === "qr" ? "0 0 15px rgba(0, 229, 255, 0.25)" : "none"
+                    }}
                 >
-                    {t('radar.tab_ble')} ({nearbyPeers.length})
+                    <span>🪪</span> {t('radar.tab_qr') || "MI QR TÁCTICO"}
                 </button>
                 <button
                     onClick={() => setActiveTab("manual")}
-                    className={activeTab === "manual" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    style={{
+                        padding: "8px 16px", fontSize: "0.78rem", fontWeight: 900, borderRadius: "12px",
+                        background: activeTab === "manual" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(200, 30, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "manual" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "manual" ? "#FF3355" : "var(--text-secondary)",
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                        boxShadow: activeTab === "manual" ? "0 0 15px rgba(255, 51, 85, 0.25)" : "none"
+                    }}
                 >
-                    {t('radar.tab_manual')}
+                    <span>➕</span> {t('radar.tab_manual') || "MANUAL / CÁMARA"}
                 </button>
             </div>
 
-            {/* Contenido Principal con Scroll Seguro */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                    {/* ─── TAB 1: MI TARJETA QR ───────────────────────────────── */}
-                    {activeTab === "qr" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "24px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px" }}>
-                            <div style={{ textAlign: "center" }}>
-                                <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "var(--text-primary)" }}>
-                                    {identity?.nickname || "Operador RED"}
-                                </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
-                                    {identity?.short_id || "OFF-GRID NODE"}
-                                </div>
-                            </div>
-
-                            {/* Contenedor QR de Alto Contraste */}
+                    {/* ─── TAB 1: RADAR 360° POLAR SCOPE ─────────────────────── */}
+                    {activeTab === "radar" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 230, 118, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 230, 118, 0.15)"
+                        }}>
+                            {/* Visual Polar Scope (Canvas Simulator) */}
                             <div style={{
-                                padding: "16px", background: "#04060A", borderRadius: "18px",
-                                border: "2px solid rgba(0,230,118,0.35)", boxShadow: "0 0 35px rgba(0,230,118,0.15)"
+                                position: "relative", width: "260px", height: "260px", margin: "0 auto",
+                                borderRadius: "50%",
+                                background: "radial-gradient(circle, rgba(0, 230, 118, 0.12) 0%, rgba(4, 8, 16, 0.95) 75%)",
+                                border: "2px solid rgba(0, 230, 118, 0.4)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                boxShadow: "0 0 35px rgba(0, 230, 118, 0.2), inset 0 0 25px rgba(0, 230, 118, 0.15)",
+                                overflow: "hidden"
                             }}>
-                                {qrDataUrl ? (
-                                    <img src={qrDataUrl} alt="Mi QR RED" style={{ width: "240px", height: "240px", display: "block", borderRadius: "8px" }} />
-                                ) : (
-                                    <div style={{ width: "240px", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", fontSize: "0.85rem" }}>
-                                        {t('common.loading')}
-                                    </div>
-                                )}
+                                {/* Retículas y Cuadrícula Polar */}
+                                <div style={{ position: "absolute", width: "100%", height: "1px", background: "rgba(0, 230, 118, 0.25)" }} />
+                                <div style={{ position: "absolute", width: "1px", height: "100%", background: "rgba(0, 230, 118, 0.25)" }} />
+                                <div style={{ position: "absolute", width: "200px", height: "200px", borderRadius: "50%", border: "1px dashed rgba(0, 230, 118, 0.2)" }} />
+                                <div style={{ position: "absolute", width: "130px", height: "130px", borderRadius: "50%", border: "1px dashed rgba(0, 230, 118, 0.25)" }} />
+                                <div style={{ position: "absolute", width: "65px", height: "65px", borderRadius: "50%", border: "1px dashed rgba(0, 230, 118, 0.3)" }} />
+
+                                {/* Indicadores de Coordenadas */}
+                                <span style={{ position: "absolute", top: "6px", fontSize: "9px", color: "rgba(0,230,118,0.7)", fontWeight: 900 }}>N (0°)</span>
+                                <span style={{ position: "absolute", right: "6px", fontSize: "9px", color: "rgba(0,230,118,0.7)", fontWeight: 900 }}>E (90°)</span>
+                                <span style={{ position: "absolute", bottom: "6px", fontSize: "9px", color: "rgba(0,230,118,0.7)", fontWeight: 900 }}>S (180°)</span>
+                                <span style={{ position: "absolute", left: "6px", fontSize: "9px", color: "rgba(0,230,118,0.7)", fontWeight: 900 }}>W (270°)</span>
+
+                                {/* Haz Giratorio 360° con barrido fosforescente */}
+                                <div style={{
+                                    position: "absolute", inset: 0, borderRadius: "50%",
+                                    background: "conic-gradient(from 0deg, rgba(0, 230, 118, 0.4) 0deg, rgba(0, 230, 118, 0.05) 50deg, transparent 75deg)",
+                                    animation: "spin 3.5s linear infinite"
+                                }} />
+
+                                {/* Mi Nodo Central */}
+                                <div style={{
+                                    width: 14, height: 14, borderRadius: "50%",
+                                    background: "#00E676", boxShadow: "0 0 16px #00E676",
+                                    zIndex: 10, border: "2px solid #FFFFFF"
+                                }} />
+
+                                {/* Blips de Pares Detectados */}
+                                {polarPeers.map(p => (
+                                    <div
+                                        key={p.id}
+                                        onClick={() => setSelectedPeer(p)}
+                                        style={{
+                                            position: "absolute",
+                                            left: `${p.x}%`,
+                                            top: `${p.y}%`,
+                                            transform: "translate(-50%, -50%)",
+                                            width: 12, height: 12, borderRadius: "50%",
+                                            background: selectedPeer?.id === p.id ? "#00E5FF" : "#00E676",
+                                            boxShadow: `0 0 12px ${selectedPeer?.id === p.id ? '#00E5FF' : '#00E676'}`,
+                                            cursor: "pointer", zIndex: 15,
+                                            animation: "pulse 1.5s infinite"
+                                        }}
+                                        title={`${p.name} (${p.rssi} dBm)`}
+                                    />
+                                ))}
                             </div>
 
-                            {/* Botón de Escáner Directo */}
-                            <button
-                                onClick={startScan}
-                                className="btn-tactical-primary"
-                                style={{
-                                    width: "100%", padding: "16px",
-                                    background: "linear-gradient(135deg, #00E676 0%, #00B0FF 100%)",
-                                    fontSize: "0.95rem", fontWeight: 900,
-                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "10px"
-                                }}
-                            >
-                                {t('radar.scan_scanner_btn')}
-                            </button>
-
-                            {/* DID y Botón de Copiar */}
-                            <div style={{ width: "100%", display: "flex", gap: "8px" }}>
-                                <input
-                                    readOnly
-                                    value={myDid}
-                                    style={{ flex: 1, fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace", background: "rgba(0,0,0,0.5)" }}
-                                />
+                            {/* Cabecera de Lista y Estado de Escaneo */}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "12px" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                    NODOS DETECTADOS EN RANGO ({nearbyPeers.length})
+                                </div>
                                 <button
-                                    onClick={() => copyToClipboard(myDid)}
-                                    className="btn-tactical-secondary"
-                                    style={{ padding: "8px 14px", fontSize: "0.78rem" }}
+                                    onClick={handleRefreshNearby}
+                                    style={{
+                                        padding: "5px 12px", borderRadius: "8px",
+                                        background: "rgba(0, 230, 118, 0.12)", border: "1px solid rgba(0, 230, 118, 0.4)",
+                                        color: "var(--accent-emerald, #00E676)", fontSize: "0.72rem", fontWeight: 900,
+                                        cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
+                                    }}
                                 >
-                                    {t('radar.copy_did')}
+                                    🔄 ESCANEAR
                                 </button>
                             </div>
-                        </div>
-                    )}
 
-                    {/* ─── TAB 2: RADAR BLE CERCANO ───────────────────────────── */}
-                    {activeTab === "radar" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            {/* Radar Animado */}
-                            <div style={{ position: "relative", width: "220px", height: "220px", margin: "0 auto", borderRadius: "50%", background: "radial-gradient(circle, rgba(0,230,118,0.08) 0%, rgba(4,6,10,0.95) 70%)", border: "2px solid rgba(0,230,118,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <div style={{ position: "absolute", width: "100%", height: "1px", background: "rgba(0,230,118,0.2)" }} />
-                                <div style={{ position: "absolute", width: "1px", height: "100%", background: "rgba(0,230,118,0.2)" }} />
-                                <div style={{ position: "absolute", width: "140px", height: "140px", borderRadius: "50%", border: "1px dashed rgba(0,230,118,0.2)" }} />
-                                <div style={{ position: "absolute", width: "70px", height: "70px", borderRadius: "50%", border: "1px dashed rgba(0,230,118,0.25)" }} />
-
-                                {/* Haz Giratorio del Radar */}
-                                <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "conic-gradient(from 0deg, rgba(0,230,118,0.3) 0deg, transparent 60deg)", animation: "spin 3s linear infinite" }} />
-
-                                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--accent-emerald)", boxShadow: "0 0 14px var(--accent-emerald)", zIndex: 5 }} />
-                            </div>
-
-                            {/* Lista de Nodos Detectados + Botón Refresh */}
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>{t('radar.ble_active_nodes')} ({nearbyPeers.length})</div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <span className="badge-tactical badge-tactical-emerald">SWARM ACTIVE</span>
-                                    <button
-                                        onClick={handleRefreshNearby}
-                                        className="btn-tactical-secondary"
-                                        style={{ padding: "4px 10px", fontSize: "0.72rem", display: "flex", alignItems: "center", gap: "4px" }}
-                                        title={t('radar.ble_refresh')}
-                                    >
-                                        🔄 {t('radar.ble_refresh')}
-                                    </button>
-                                </div>
-                            </div>
-
+                            {/* Lista de Nodos */}
                             {nearbyPeers.length === 0 ? (
-                                <div className="empty-state-tactical">
-                                    <div className="empty-state-icon">📡</div>
-                                    <div className="empty-state-title">{t('radar.ble_searching')}</div>
-                                    <div className="empty-state-desc">
-                                        {t('radar.scanning')}
+                                <div style={{
+                                    textAlign: "center", padding: "24px 16px",
+                                    background: "rgba(0, 0, 0, 0.3)", borderRadius: "14px",
+                                    border: "1px dashed rgba(255, 255, 255, 0.12)"
+                                }}>
+                                    <div style={{ fontSize: "1.8rem", marginBottom: "6px" }}>📡</div>
+                                    <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                        Buscando Nodos en Espectro BLE...
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                        Asegúrate de que otros dispositivos tengan RED abierto con Bluetooth activo.
                                     </div>
                                 </div>
                             ) : (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {nearbyPeers.map((p) => (
+                                    {polarPeers.map(p => (
                                         <div
                                             key={p.id}
-                                            className="card-tactical"
-                                            style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "4px solid var(--accent-emerald)" }}
+                                            style={{
+                                                padding: "12px 14px", borderRadius: "12px",
+                                                background: selectedPeer?.id === p.id ? "rgba(0, 229, 255, 0.12)" : "rgba(255, 255, 255, 0.03)",
+                                                border: selectedPeer?.id === p.id ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                boxShadow: selectedPeer?.id === p.id ? "0 0 15px rgba(0, 229, 255, 0.2)" : "none"
+                                            }}
                                         >
                                             <div>
-                                                <strong style={{ fontSize: "0.90rem", color: "var(--text-primary)" }}>{p.name}</strong>
-                                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    DID: {p.id.substring(0, 16)}…
+                                                <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>{p.name}</div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    DID: {p.id.substring(0, 16)}… · ~{p.estimatedMeters}m
                                                 </div>
                                             </div>
+
                                             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                <span className="badge-tactical badge-tactical-emerald">{p.rssi} dBm</span>
+                                                <span style={{
+                                                    fontSize: "0.65rem", fontWeight: 900, padding: "2px 8px", borderRadius: "6px",
+                                                    background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.3)"
+                                                }}>
+                                                    {p.rssi} dBm
+                                                </span>
                                                 <button
-                                                    onClick={async () => {
-                                                        const targetId = meshRouter.getCanonicalId(p.id) || p.id;
-                                                        const peerRec = meshRouter.getPeerByAnyId(targetId) || meshRouter.getPeerByAnyId(p.id);
-                                                        const finalId = (peerRec?.canonicalId && peerRec.canonicalId.length === 64) ? peerRec.canonicalId : targetId;
-                                                        const finalName = p.name && !p.name.startsWith("Nodo ") ? p.name : (peerRec?.name || p.name);
-                                                        const resolved = await addContact(finalId, finalName, peerRec?.publicKey);
-                                                        toast.success(t('radar.add_success'));
-                                                        navigate("chat", resolved || finalId);
+                                                    onClick={() => handleAddPeer(p)}
+                                                    style={{
+                                                        padding: "6px 14px", borderRadius: "8px",
+                                                        background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 180, 80, 0.15) 100%)",
+                                                        border: "1px solid #00E676", color: "#00E676",
+                                                        fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
                                                     }}
-                                                    className="btn-tactical-secondary"
-                                                    style={{ padding: "6px 12px", fontSize: "0.76rem" }}
                                                 >
-                                                    {t('radar.ble_pair')}
+                                                    ENLAZAR
                                                 </button>
                                             </div>
                                         </div>
@@ -461,35 +525,118 @@ export default function RadarWindow() {
                         </div>
                     )}
 
-                    {/* ─── TAB 3: AGREGAR MANUAL & ESCÁNER ────────────────────── */}
-                    {activeTab === "manual" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            {/* Botón de Cámara */}
+                    {/* ─── TAB 2: MI TARJETA QR ───────────────────────────────── */}
+                    {activeTab === "qr" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "22px", padding: "24px",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: "18px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(0, 229, 255, 0.15)"
+                        }}>
+                            <div style={{ textAlign: "center" }}>
+                                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                    {identity?.nickname || "Operador RED"}
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan, #00E5FF)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
+                                    {identity?.short_id || "OFF-GRID NODE"} · ML-KEM-768
+                                </div>
+                            </div>
+
+                            <div style={{
+                                padding: "16px", background: "#04060A", borderRadius: "20px",
+                                border: "2px solid rgba(0, 230, 118, 0.4)", boxShadow: "0 0 35px rgba(0, 230, 118, 0.2)"
+                            }}>
+                                {qrDataUrl ? (
+                                    <img src={qrDataUrl} alt="Mi QR RED" style={{ width: "240px", height: "240px", display: "block", borderRadius: "10px" }} />
+                                ) : (
+                                    <div style={{ width: "240px", height: "240px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+                                        Generando QR...
+                                    </div>
+                                )}
+                            </div>
+
                             <button
                                 onClick={startScan}
-                                className="card-tactical-interactive"
-                                style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", borderColor: "var(--accent-emerald)", background: "rgba(0,230,118,0.06)" }}
+                                style={{
+                                    width: "100%", padding: "14px",
+                                    background: "linear-gradient(135deg, #00E676 0%, #00B0FF 100%)",
+                                    fontSize: "0.92rem", fontWeight: 900, color: "#FFFFFF",
+                                    border: "none", borderRadius: "12px", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+                                    boxShadow: "0 0 20px rgba(0, 230, 118, 0.3)"
+                                }}
                             >
-                                <span style={{ fontSize: "2.4rem" }}>📷</span>
-                                <span style={{ fontSize: "1rem", fontWeight: 900, color: "var(--accent-emerald)" }}>{t('radar.scan_scanner_btn')}</span>
-                                <span style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>{t('radar.manual_desc')}</span>
+                                <span>📷</span> {t('radar.scan_scanner_btn') || "ESCANEAR QR DE OTRO OPERADOR"}
                             </button>
 
-                            {/* Entrada Manual de ID */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>{t('radar.manual_title')}</div>
+                            <div style={{ width: "100%", display: "flex", gap: "8px" }}>
+                                <input
+                                    readOnly
+                                    value={myDid}
+                                    style={{
+                                        flex: 1, fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace",
+                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
+                                        borderRadius: "10px", padding: "10px 12px", color: "#FFFFFF", outline: "none"
+                                    }}
+                                />
+                                <button
+                                    onClick={() => copyToClipboard(myDid)}
+                                    style={{
+                                        padding: "10px 16px", fontSize: "0.78rem", fontWeight: 900,
+                                        background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                                        borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer"
+                                    }}
+                                >
+                                    COPIAR
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ─── TAB 3: AGREGAR MANUAL & ESCÁNER ────────────────────── */}
+                    {activeTab === "manual" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(255, 51, 85, 0.35)", borderRadius: "22px", padding: "22px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
+                        }}>
+                            <button
+                                onClick={startScan}
+                                style={{
+                                    padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px",
+                                    border: "1.5px dashed rgba(0, 230, 118, 0.5)", background: "rgba(0, 230, 118, 0.08)",
+                                    borderRadius: "16px", cursor: "pointer"
+                                }}
+                            >
+                                <span style={{ fontSize: "2.4rem" }}>📷</span>
+                                <span style={{ fontSize: "1rem", fontWeight: 900, color: "#00E676" }}>{t('radar.scan_scanner_btn') || "ABRIR CÁMARA QR"}</span>
+                                <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)" }}>{t('radar.manual_desc') || "Escaneo óptico de identidades de pares"}</span>
+                            </button>
+
+                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#FFFFFF" }}>{t('radar.manual_title') || "INGRESO MANUAL DE PAR"}</div>
 
                                 <input
                                     value={manualHash}
                                     onChange={e => setManualHash(e.target.value)}
-                                    placeholder={t('radar.manual_placeholder')}
-                                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem" }}
+                                    placeholder="DID o Hash (64 hex)..."
+                                    style={{
+                                        fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem",
+                                        padding: "11px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                        border: "1px solid rgba(0, 229, 255, 0.25)", borderRadius: "10px", color: "#FFFFFF"
+                                    }}
                                 />
 
                                 <input
                                     value={manualName}
                                     onChange={e => setManualName(e.target.value)}
-                                    placeholder={t('radar.alias_placeholder')}
+                                    placeholder="Alias o indicativo táctico..."
+                                    style={{
+                                        fontSize: "0.85rem", padding: "11px 14px",
+                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                        borderRadius: "10px", color: "#FFFFFF"
+                                    }}
                                 />
 
                                 <button
@@ -501,11 +648,11 @@ export default function RadarWindow() {
                                             return;
                                         }
                                         setIsAdding(true);
-                                        setAddingStatus(t('radar.adding'));
+                                        setAddingStatus(t('radar.adding') || "Enlazando...");
                                         const nameToSend = manualName.trim() || "Nuevo Par";
                                         try {
                                             const resolvedHash = await addContact(hashToSent, nameToSend);
-                                            toast.success(t('radar.add_success'));
+                                            toast.success(t('radar.add_success') || "Contacto añadido");
                                             navigate("chat", resolvedHash || hashToSent);
                                         } catch (err) {
                                             const msg = err instanceof Error ? err.message : String(err);
@@ -515,10 +662,14 @@ export default function RadarWindow() {
                                             setAddingStatus("");
                                         }
                                     }}
-                                    className="btn-tactical-primary"
-                                    style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
+                                    style={{
+                                        width: "100%", padding: "14px", fontSize: "0.92rem", fontWeight: 900,
+                                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                        border: "none", borderRadius: "12px", color: "#FFFFFF", cursor: "pointer",
+                                        boxShadow: "0 0 20px rgba(255, 51, 85, 0.3)"
+                                    }}
                                 >
-                                    {isAdding ? addingStatus || t('common.loading') : t('radar.add_btn')}
+                                    {isAdding ? addingStatus || t('common.loading') : t('radar.add_btn') || "⚡ ENLAZAR PAR MANUAL"}
                                 </button>
                             </div>
                         </div>

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { web3Bridge, Web3WalletState, SUPPORTED_CHAINS } from "../lib/Web3BridgeEngine";
-import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
+import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
@@ -30,7 +30,6 @@ export default function Web3VaultModal() {
             const res = await web3Bridge.connectWallet();
             if (res.success) {
                 toast.success(`🦊 Conectado a ${web3State.providerName}: ${res.account?.substring(0, 8)}…`);
-                TacticalAudioEngine.playMessageReceived();
             } else {
                 toast.error(res.error || "No se pudo conectar con la wallet.");
             }
@@ -62,7 +61,6 @@ export default function Web3VaultModal() {
             const res = await web3Bridge.linkSovereignIdentity(identity.identity_hash);
             if (res.success && res.binding) {
                 toast.success("✅ Vinculación criptográfica EIP-712 generada con éxito");
-                TacticalAudioEngine.playMessageSent();
             } else {
                 toast.error(res.error || "Fallo en la firma digital.");
             }
@@ -91,34 +89,46 @@ export default function Web3VaultModal() {
     return (
         <div style={{
             width: "100%", height: "100%",
-            background: "var(--bg-void)", color: "var(--text-primary)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden", position: "relative"
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace",
+            display: "flex", flexDirection: "column", overflow: "hidden", position: "relative"
         }}>
-            {/* Header */}
+            {/* Header Táctico */}
             <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(245, 132, 31, 0.35)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #F5841F 0%, #E2761B 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(245, 132, 31, 0.25) 0%, rgba(226, 118, 27, 0.15) 100%)",
+                        border: "1px solid rgba(245, 132, 31, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.3rem", boxShadow: "0 4px 16px rgba(245,132,31,0.4)"
+                        fontSize: "1.3rem", boxShadow: "0 0 15px rgba(245, 132, 31, 0.3)"
                     }}>
                         🦊
                     </div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.modules?.web3_vault || "Bóveda Web3 & Integración MetaMask"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            BÓVEDA WEB3 & METAMASK
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-amber, #FFB300)", fontWeight: 800 }}>
                             EIP-1193 · EIP-712 ATTESTATIONS · MULTI-CHAIN EVM
                         </div>
                     </div>
@@ -126,179 +136,146 @@ export default function Web3VaultModal() {
 
                 <button
                     onClick={goBack}
-                    className="btn-icon"
-                    title={t.common?.close || "Cerrar Bóveda Web3"}
-                    style={{ width: 38, height: 38 }}
+                    style={{
+                        width: 34, height: 34, borderRadius: "9px",
+                        background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                        color: "#FFFFFF", cursor: "pointer", fontSize: "0.9rem", fontWeight: 900
+                    }}
                 >
                     ✕
                 </button>
             </header>
 
             {/* Scrollable Body */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div className="scroll-container" style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                    {/* Web3 Status & Connect Card */}
-                    <div
-                        className="card-tactical-glow-amber"
-                        style={{
-                            padding: "20px",
-                            background: "linear-gradient(145deg, rgba(28, 20, 10, 0.85), rgba(12, 10, 6, 0.95))",
-                            borderRadius: "var(--radius-lg)",
-                            display: "flex", flexDirection: "column", gap: "14px",
-                            border: "1px solid rgba(245, 132, 31, 0.35)",
-                            boxShadow: "0 10px 30px rgba(245, 132, 31, 0.15)"
-                        }}
-                    >
+                    {/* Estado de Conexión */}
+                    <div style={{
+                        background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                        border: "1.5px solid rgba(245, 132, 31, 0.35)", borderRadius: "22px", padding: "20px",
+                        display: "flex", flexDirection: "column", gap: "14px",
+                        boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
+                    }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span style={{ fontSize: "0.74rem", color: "var(--text-secondary)", textTransform: "uppercase", fontWeight: 700 }}>
-                                    Estado de Conexión Web3
-                                </span>
-                                <span className={`badge-tactical ${web3State.isConnected ? "badge-tactical-emerald" : "badge-tactical-amber"}`}>
-                                    {web3State.isConnected ? "CONECTADO" : "DESCONECTADO"}
-                                </span>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                    ESTADO DEL CONECTOR WEB3
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    {web3State.isConnected ? `Conectado via ${web3State.providerName}` : "Desconectado. Detectando proveedores EVM..."}
+                                </div>
                             </div>
-                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                {web3State.providerName}
+                            <span style={{
+                                fontSize: "0.62rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                                background: web3State.isConnected ? "rgba(0, 230, 118, 0.15)" : "rgba(255, 51, 85, 0.15)",
+                                color: web3State.isConnected ? "#00E676" : "#FF3355",
+                                border: `1px solid ${web3State.isConnected ? '#00E676' : '#FF3355'}50`
+                            }}>
+                                {web3State.isConnected ? "CONECTADO" : "DESCONECTADO"}
                             </span>
                         </div>
 
-                        {web3State.isConnected && web3State.account ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Dirección EVM:</span>
-                                    <button
-                                        onClick={() => copyToClipboard(web3State.account!)}
-                                        className="btn-tactical-secondary"
-                                        style={{ padding: "4px 8px", fontSize: "0.72rem" }}
-                                    >
-                                        📋 Copiar
-                                    </button>
-                                </div>
-                                <div style={{
-                                    padding: "10px", borderRadius: "8px", background: "rgba(0,0,0,0.5)",
-                                    fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace",
-                                    color: "var(--accent-amber)", wordBreak: "break-all"
-                                }}>
-                                    {web3State.account}
-                                </div>
-
-                                {/* Balances Grid */}
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "4px" }}>
-                                    <div className="card-tactical" style={{ padding: "10px" }}>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Saldo Nativo ({web3State.chainName.split(" ")[0]})</div>
-                                        <div style={{ fontSize: "1.2rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", color: "#fff" }}>
-                                            {web3State.balanceEth} <span style={{ fontSize: "0.75rem", color: "var(--accent-amber)" }}>ETH/POL</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="card-tactical" style={{ padding: "10px" }}>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Token $RED On-Chain</div>
-                                        <div style={{ fontSize: "1.2rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)" }}>
-                                            {web3State.balanceRedToken} <span style={{ fontSize: "0.75rem" }}>$RED</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button
-                                    onClick={() => web3Bridge.handleDisconnect()}
-                                    className="btn-tactical-secondary"
-                                    style={{ padding: "8px", fontSize: "0.78rem", color: "var(--accent-crimson)", marginTop: "4px" }}
-                                >
-                                    Desconectar Wallet
-                                </button>
-                            </div>
-                        ) : (
+                        {web3State.isConnected ? (
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
-                                    Conecta tu billetera MetaMask para verificar tu identidad descentralizada on-chain, sincronizar activos y habilitar pagos Web3 interoperables.
-                                </p>
-                                <button
-                                    onClick={handleConnect}
-                                    disabled={isConnecting}
-                                    className="btn-tactical-primary"
-                                    style={{
-                                        width: "100%", padding: "12px",
-                                        background: "linear-gradient(135deg, #F5841F 0%, #E2761B 100%)",
-                                        color: "#fff", fontWeight: 800
-                                    }}
-                                >
-                                    {isConnecting ? "Solicitando Autorización en MetaMask..." : "🦊 CONECTAR METAMASK / WEB3"}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Network Switcher */}
-                    {web3State.isConnected && (
-                        <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                            <div style={{ fontSize: "0.82rem", fontWeight: 800 }}>🌐 RED BLOCKCHAIN EVM</div>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
-                                {Object.values(SUPPORTED_CHAINS).map((chain) => (
+                                <div style={{
+                                    padding: "12px", background: "rgba(0, 0, 0, 0.5)",
+                                    border: "1px solid rgba(245, 132, 31, 0.3)", borderRadius: "12px",
+                                    display: "flex", justifyContent: "space-between", alignItems: "center"
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>DIRECCIÓN EVM</div>
+                                        <div style={{ fontSize: "0.85rem", fontWeight: 900, color: "#F5841F", fontFamily: "JetBrains Mono, monospace" }}>
+                                            {web3State.account?.substring(0, 10)}…{web3State.account?.slice(-8)}
+                                        </div>
+                                    </div>
                                     <button
-                                        key={chain.chainId}
-                                        onClick={() => handleSwitchChain(chain.chainId)}
-                                        className={selectedChainId === chain.chainId ? "btn-tactical-primary" : "btn-tactical-secondary"}
-                                        style={{ padding: "8px 6px", fontSize: "0.74rem", textAlign: "center" }}
+                                        onClick={() => copyToClipboard(web3State.account || "")}
+                                        style={{
+                                            padding: "6px 12px", background: "rgba(245, 132, 31, 0.15)",
+                                            border: "1px solid rgba(245, 132, 31, 0.4)", borderRadius: "8px",
+                                            color: "#F5841F", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer"
+                                        }}
                                     >
-                                        {chain.chainName.split(" ")[0]}
+                                        COPIAR
                                     </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                                </div>
 
-                    {/* Cryptographic Identity Binding (EIP-712) */}
-                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                        <div>
-                            <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                🪪 Vinculación Criptográfica DID ↔ Ethereum
-                            </div>
-                            <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                Genera una prueba matemática de que tu dirección Web3 y tu nodo RED pertenecen a la misma entidad soberana.
-                            </div>
-                        </div>
-
-                        <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>TU DID SOBERANO RED:</div>
-                            <div style={{ fontSize: "0.78rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", wordBreak: "break-all" }}>
-                                {redDid}
-                            </div>
-                        </div>
-
-                        {web3State.binding ? (
-                            <div className="card-tactical animate-pop" style={{ padding: "14px", background: "rgba(0,230,118,0.06)", borderColor: "var(--accent-emerald)", display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                        ✅ ATESTACIÓN EIP-712 FIRMADA & VERIFICADA
-                                    </span>
+                                <div style={{ display: "flex", gap: "8px" }}>
+                                    <button
+                                        onClick={handleSignBinding}
+                                        disabled={isSigning}
+                                        style={{
+                                            flex: 2, padding: "12px",
+                                            background: "linear-gradient(135deg, #F5841F 0%, #E2761B 100%)",
+                                            border: "none", borderRadius: "12px", color: "#FFFFFF",
+                                            fontWeight: 900, fontSize: "0.82rem", cursor: "pointer",
+                                            boxShadow: "0 0 15px rgba(245, 132, 31, 0.35)"
+                                        }}
+                                    >
+                                        {isSigning ? "Firmando EIP-712..." : "✍️ FIRMAR ATTESTATION EIP-712"}
+                                    </button>
                                     <button
                                         onClick={handleUnlink}
-                                        className="btn-ghost"
-                                        style={{ fontSize: "0.70rem", color: "var(--accent-crimson)" }}
+                                        style={{
+                                            flex: 1, padding: "12px",
+                                            background: "rgba(255, 51, 85, 0.1)",
+                                            border: "1px solid rgba(255, 51, 85, 0.35)", borderRadius: "12px",
+                                            color: "#FF3355", fontWeight: 900, fontSize: "0.82rem", cursor: "pointer"
+                                        }}
                                     >
-                                        Desvincular
+                                        DESVINCULAR
                                     </button>
-                                </div>
-                                <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", wordBreak: "break-all" }}>
-                                    Firma: {web3State.binding.signatureEth.substring(0, 32)}… · Fecha: {new Date(web3State.binding.timestamp).toLocaleDateString()}
                                 </div>
                             </div>
                         ) : (
                             <button
-                                onClick={handleSignBinding}
-                                disabled={!web3State.isConnected || isSigning}
-                                className="btn-tactical-primary"
+                                onClick={handleConnect}
+                                disabled={isConnecting}
                                 style={{
-                                    width: "100%", padding: "12px",
-                                    background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
-                                    color: "#000", fontWeight: 800
+                                    width: "100%", padding: "14px",
+                                    background: "linear-gradient(135deg, #F5841F 0%, #E2761B 100%)",
+                                    border: "none", borderRadius: "12px", color: "#FFFFFF",
+                                    fontWeight: 900, fontSize: "0.88rem", cursor: "pointer",
+                                    boxShadow: "0 0 20px rgba(245, 132, 31, 0.35)"
                                 }}
                             >
-                                {isSigning ? "Esperando Firma EIP-712 en MetaMask..." : "⚡ FIRMAR Y VINCULAR IDENTIDAD CRIPTOGRÁFICA"}
+                                {isConnecting ? "Conectando..." : "🦊 CONECTAR METAMASK / WALLET"}
                             </button>
                         )}
+                    </div>
+
+                    {/* Selector de Redes EVM */}
+                    <div style={{
+                        background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                        border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "22px", padding: "20px",
+                        display: "flex", flexDirection: "column", gap: "12px"
+                    }}>
+                        <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            REDES EVM COMPATIBLES
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "8px" }}>
+                            {Object.entries(SUPPORTED_CHAINS).map(([cId, chain]) => {
+                                const isCurrent = selectedChainId === Number(cId);
+                                return (
+                                    <button
+                                        key={cId}
+                                        onClick={() => handleSwitchChain(Number(cId))}
+                                        style={{
+                                            padding: "10px", borderRadius: "10px",
+                                            background: isCurrent ? "rgba(245, 132, 31, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                                            border: isCurrent ? "1.5px solid #F5841F" : "1px solid rgba(255, 255, 255, 0.08)",
+                                            color: isCurrent ? "#F5841F" : "#FFFFFF",
+                                            fontWeight: isCurrent ? 900 : 700, fontSize: "0.74rem",
+                                            cursor: "pointer", display: "flex", flexDirection: "column", gap: "2px", textAlign: "left"
+                                        }}
+                                    >
+                                        <span>{chain.chainName}</span>
+                                        <span style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>ID: {cId}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             </div>

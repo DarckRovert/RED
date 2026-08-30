@@ -22,6 +22,7 @@ interface TacticalHubItem {
     icon: string;
     primaryAction: ScreenView;
     badge: string;
+    badgeColor?: string;
     tools: Array<{ icon: string; label: string; action: ScreenView }>;
 }
 
@@ -147,7 +148,7 @@ export default function Sidebar() {
         return deduped;
     }, [contacts, searchQuery]);
 
-    // 8 Hubs Tácticos Consolidados
+    // 8 Hubs Tácticos Consolidados (Arquitectura Minimalista)
     const tacticalHubs: TacticalHubItem[] = [
         {
             id: "comms",
@@ -156,6 +157,7 @@ export default function Sidebar() {
             icon: "💬",
             primaryAction: "channels",
             badge: "P2P E2E",
+            badgeColor: "#00E5FF",
             tools: [
                 { icon: "📻", label: "Canales Malla (#)", action: "channels" },
                 { icon: "👥", label: "Escuadrones P2P", action: "groups" },
@@ -172,6 +174,7 @@ export default function Sidebar() {
             icon: "🧭",
             primaryAction: "radar",
             badge: "OFF-GRID",
+            badgeColor: "#00E676",
             tools: [
                 { icon: "📡", label: "Radar Swarm BLE/WiFi", action: "radar" },
                 { icon: "🗺️", label: "Mapa GPS Offline", action: "nodemap" },
@@ -187,6 +190,7 @@ export default function Sidebar() {
             icon: "🎙️",
             primaryAction: "walkie",
             badge: "1.2 KBPS",
+            badgeColor: "#FFB300",
             tools: [
                 { icon: "🎙️", label: "Walkie-Talkie Push-To-Talk", action: "walkie" },
                 { icon: "📞", label: "Llamadas Cifradas WebRTC", action: "call" },
@@ -197,9 +201,10 @@ export default function Sidebar() {
             id: "ai",
             title: "4. Copiloto IA & RAG INT8",
             desc: "Inferencia Local WASM Qwen/SmolLM, RAG Vectorial <5ms y Firewall Guardian",
-            icon: "🤖",
+            icon: "🧠",
             primaryAction: "aiCopilot",
             badge: "100% OFFLINE",
+            badgeColor: "#00E5FF",
             tools: [
                 { icon: "🤖", label: "Copiloto Táctico", action: "aiCopilot" },
                 { icon: "🛡️", label: "Guardián IA Firewall", action: "guardian" },
@@ -211,7 +216,8 @@ export default function Sidebar() {
             desc: "Firmas NIST ML-DSA-65, Kyber ML-KEM-768, Vales P2P y Respaldo Shamir SSS",
             icon: "🪪",
             primaryAction: "idVault",
-            badge: "POST-QUANTUM",
+            badge: "PQC FIPS-203",
+            badgeColor: "#B388FF",
             tools: [
                 { icon: "🪪", label: "Perfil & Identidad DID", action: "idVault" },
                 { icon: "💳", label: "Vales & Pagos P2P", action: "p2pPay" },
@@ -231,7 +237,8 @@ export default function Sidebar() {
             desc: "Matriz DEFCON 1-5, Simulador Apagón, Dead-Man's Switch y Modo Calculadora",
             icon: "🛡️",
             primaryAction: "globalShield",
-            badge: "DEFCON",
+            badge: "DEFCON 1",
+            badgeColor: "#FF3355",
             tools: [
                 { icon: "🛡️", label: "Escudo Global DEFCON", action: "globalShield" },
                 { icon: "⚡", label: "Simulador de Apagón", action: "blackout" },
@@ -247,7 +254,8 @@ export default function Sidebar() {
             desc: "Triaje START/MARCH-PAWS, Baliza SOS multimodal, Alerta AMBER y Barómetro",
             icon: "🚨",
             primaryAction: "vitalScan",
-            badge: "EMERGENCIA",
+            badge: "SOS ACTIVE",
+            badgeColor: "#FF3355",
             tools: [
                 { icon: "🫀", label: "Signos Vitales & Triage START", action: "vitalScan" },
                 { icon: "🚨", label: "Baliza SOS Ultrasonido", action: "survivalBeacon" },
@@ -262,6 +270,7 @@ export default function Sidebar() {
             icon: "🏪",
             primaryAction: "appStore",
             badge: "SANDBOX",
+            badgeColor: "#00E676",
             tools: [
                 { icon: "🛒", label: "App Store P2P (Mini-Apps)", action: "appStore" },
                 { icon: "🌐", label: "RED Hyper-Browser Mesh", action: "hyperBrowser" },
@@ -295,16 +304,22 @@ export default function Sidebar() {
             {/* Tactical Slide-Over Command Drawer: 8 Hubs Tácticos */}
             {menuOpen && (
                 <div
-                    style={{ position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.82)", backdropFilter: "blur(14px)", display: "flex", justifyContent: "flex-end" }}
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 10000,
+                        background: "rgba(2, 4, 12, 0.88)",
+                        backdropFilter: "blur(25px)", WebkitBackdropFilter: "blur(25px)",
+                        display: "flex", justifyContent: "flex-end",
+                        animation: "fadeIn 0.2s ease"
+                    }}
                     onClick={() => setMenuOpen(false)}
                 >
                     <div
                         className="animate-enter"
                         style={{
-                            width: "100%", maxWidth: "380px", height: "100%",
-                            background: "linear-gradient(180deg, rgba(14, 16, 28, 0.98) 0%, rgba(6, 8, 16, 0.99) 100%)",
-                            borderLeft: "1px solid var(--glass-border)",
-                            boxShadow: "-12px 0 40px rgba(0,0,0,0.85)",
+                            width: "100%", maxWidth: "420px", height: "100%",
+                            background: "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                            borderLeft: "1.5px solid rgba(0, 229, 255, 0.35)",
+                            boxShadow: "-15px 0 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 229, 255, 0.15)",
                             display: "flex", flexDirection: "column",
                             paddingTop: "var(--safe-top, 0px)",
                             paddingBottom: "var(--safe-bottom, 0px)",
@@ -313,33 +328,44 @@ export default function Sidebar() {
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Drawer Header */}
-                        <div style={{ padding: "16px 20px 12px 20px", borderBottom: "1px solid var(--glass-border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                <span style={{ fontSize: "1.4rem" }}>🛡️</span>
+                        <div style={{ padding: "16px 20px 14px 20px", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                <div style={{
+                                    width: "40px", height: "40px", borderRadius: "12px",
+                                    background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.3rem"
+                                }}>
+                                    🛡️
+                                </div>
                                 <div>
-                                    <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#fff", letterSpacing: "0.5px" }}>Centro de Comando Táctico</div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                                        8 HUBS · {totalToolsCount} HERRAMIENTAS ACTIVAS
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.6px", textTransform: "uppercase" }}>
+                                        Centro de Comando Táctico
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                                        8 HUBS CONSOLIDADOS · {totalToolsCount} MÓDULOS
                                     </div>
                                 </div>
                             </div>
                             <button
                                 onClick={() => setMenuOpen(false)}
-                                className="btn-icon"
-                                style={{ width: 34, height: 34, fontSize: "0.9rem" }}
+                                style={{
+                                    background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#FFFFFF",
+                                    width: "32px", height: "32px", borderRadius: "9px", cursor: "pointer", fontSize: "0.9rem",
+                                    fontWeight: 900
+                                }}
                             >
                                 ✕
                             </button>
                         </div>
 
                         {/* Drawer Search Filter */}
-                        <div style={{ padding: "12px 16px 8px 16px", flexShrink: 0 }}>
+                        <div style={{ padding: "12px 18px 8px 18px", flexShrink: 0 }}>
                             <div style={{
-                                display: "flex", alignItems: "center", gap: "8px",
-                                background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)",
-                                borderRadius: "var(--radius-md)", padding: "8px 12px"
+                                display: "flex", alignItems: "center", gap: "10px",
+                                background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
+                                borderRadius: "12px", padding: "9px 14px"
                             }}>
-                                <span style={{ fontSize: "0.85rem", opacity: 0.6 }}>🔍</span>
+                                <span style={{ fontSize: "0.9rem", color: "#00E5FF" }}>🔍</span>
                                 <input
                                     type="text"
                                     value={drawerSearch}
@@ -347,7 +373,7 @@ export default function Sidebar() {
                                     placeholder="Buscar hub, protocolo o herramienta..."
                                     style={{
                                         flex: 1, background: "transparent", border: "none", outline: "none",
-                                        color: "var(--text-primary)", fontSize: "0.82rem"
+                                        color: "#FFFFFF", fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace"
                                     }}
                                 />
                                 {drawerSearch && (
@@ -357,41 +383,41 @@ export default function Sidebar() {
                         </div>
 
                         {/* Quick Action Highlights */}
-                        <div style={{ padding: "0 16px 8px 16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", flexShrink: 0 }}>
+                        <div style={{ padding: "0 18px 10px 18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", flexShrink: 0 }}>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("appStore"); }}
-                                className="card-tactical-interactive"
                                 style={{
-                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
-                                    background: "linear-gradient(135deg, rgba(0, 230, 118, 0.15) 0%, rgba(0, 229, 255, 0.08) 100%)",
-                                    border: "1px solid rgba(0, 230, 118, 0.35)", borderRadius: "var(--radius-md)", textAlign: "center"
+                                    padding: "12px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                                    background: "linear-gradient(135deg, rgba(0, 230, 118, 0.16) 0%, rgba(0, 229, 255, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "14px", textAlign: "center",
+                                    cursor: "pointer", transition: "all 0.15s ease", boxShadow: "0 0 15px rgba(0, 230, 118, 0.15)"
                                 }}
                             >
-                                <span style={{ fontSize: "1.3rem" }}>🛒</span>
-                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-emerald)" }}>App Store P2P</span>
-                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS</span>
+                                <span style={{ fontSize: "1.4rem" }}>🛒</span>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)" }}>App Store P2P</span>
+                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS SANDBOX</span>
                             </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("hyperBrowser"); }}
-                                className="card-tactical-interactive"
                                 style={{
-                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
-                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(138, 43, 226, 0.08) 100%)",
-                                    border: "1px solid rgba(0, 229, 255, 0.35)", borderRadius: "var(--radius-md)", textAlign: "center"
+                                    padding: "12px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(138, 43, 226, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "14px", textAlign: "center",
+                                    cursor: "pointer", transition: "all 0.15s ease", boxShadow: "0 0 15px rgba(0, 229, 255, 0.15)"
                                 }}
                             >
-                                <span style={{ fontSize: "1.3rem" }}>🌐</span>
-                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan)" }}>Hyper-Browser</span>
-                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MESH HTTP</span>
+                                <span style={{ fontSize: "1.4rem" }}>🌐</span>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>Hyper-Browser</span>
+                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>P2P MESH HTTP</span>
                             </button>
                         </div>
 
                         {/* Operational Mode Quick Selector */}
-                        <div style={{ padding: "0 16px 10px 16px", display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
-                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, textTransform: "uppercase" }}>
-                                MODO OPERACIONAL
+                        <div style={{ padding: "0 18px 12px 18px", display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
+                            <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, textTransform: "uppercase" }}>
+                                PERFIL OPERACIONAL MIL-STD
                             </div>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "4px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "5px" }}>
                                 {[
                                     { id: 'stealth', icon: '🕶️', label: 'Sigilo' },
                                     { id: 'scotopic_red', icon: '🔴', label: 'Luz Roja' },
@@ -406,11 +432,11 @@ export default function Sidebar() {
                                             type="button"
                                             onClick={() => updatePreferences({ operationalMode: m.id as any })}
                                             style={{
-                                                padding: "6px 4px",
-                                                borderRadius: "var(--radius-sm)",
-                                                border: isSel ? "1px solid var(--accent-cyan)" : "1px solid var(--glass-border)",
-                                                background: isSel ? "rgba(0, 229, 255, 0.18)" : "rgba(255,255,255,0.03)",
-                                                color: isSel ? "#FFF" : "var(--text-secondary)",
+                                                padding: "7px 4px",
+                                                borderRadius: "8px",
+                                                border: isSel ? "1.5px solid var(--accent-cyan, #00E5FF)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                                background: isSel ? "rgba(0, 229, 255, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                                                color: isSel ? "#FFFFFF" : "var(--text-secondary)",
                                                 fontSize: "0.68rem",
                                                 fontWeight: 800,
                                                 display: "flex",
@@ -418,7 +444,8 @@ export default function Sidebar() {
                                                 justifyContent: "center",
                                                 gap: "4px",
                                                 cursor: "pointer",
-                                                fontFamily: "JetBrains Mono, monospace"
+                                                fontFamily: "JetBrains Mono, monospace",
+                                                boxShadow: isSel ? "0 0 10px rgba(0, 229, 255, 0.25)" : "none"
                                             }}
                                         >
                                             <span>{m.icon}</span>
@@ -430,47 +457,54 @@ export default function Sidebar() {
                         </div>
 
                         {/* 8 Tactical Hubs Scrollable List */}
-                        <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 16px 36px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                        <div className="scroll-container" style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "8px 18px 36px 18px", display: "flex", flexDirection: "column", gap: "12px" }}>
                             {filteredHubs.map(hub => (
                                 <div
                                     key={hub.id}
                                     style={{
-                                        background: "rgba(18, 20, 36, 0.75)",
-                                        border: "1px solid var(--glass-border)",
-                                        borderRadius: "10px",
-                                        padding: "12px",
-                                        display: "flex", flexDirection: "column", gap: "8px"
+                                        background: "linear-gradient(135deg, rgba(20, 26, 50, 0.8) 0%, rgba(10, 14, 30, 0.9) 100%)",
+                                        border: "1px solid rgba(255, 255, 255, 0.1)",
+                                        borderRadius: "14px",
+                                        padding: "14px",
+                                        display: "flex", flexDirection: "column", gap: "10px",
+                                        boxShadow: "0 4px 15px rgba(0, 0, 0, 0.5)"
                                     }}
                                 >
                                     <div
                                         onClick={() => { setMenuOpen(false); navigate(hub.primaryAction); }}
                                         style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer" }}
-                                        className="hover-bright"
                                     >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                            <span style={{ fontSize: "1.2rem" }}>{hub.icon}</span>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                            <span style={{ fontSize: "1.4rem" }}>{hub.icon}</span>
                                             <div>
-                                                <div style={{ fontSize: "0.84rem", fontWeight: 800, color: "#fff" }}>{hub.title}</div>
-                                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "2px" }}>{hub.desc}</div>
+                                                <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.2px" }}>{hub.title}</div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px", lineHeight: 1.3 }}>{hub.desc}</div>
                                             </div>
                                         </div>
-                                        <span className="badge-live-cyan" style={{ fontSize: "0.58rem", padding: "2px 5px", flexShrink: 0 }}>
+                                        <span style={{
+                                            fontSize: "0.6rem", fontWeight: 900, padding: "2px 6px", borderRadius: "6px",
+                                            background: `${hub.badgeColor || '#00E5FF'}20`,
+                                            color: hub.badgeColor || '#00E5FF',
+                                            border: `1px solid ${hub.badgeColor || '#00E5FF'}50`,
+                                            flexShrink: 0,
+                                            fontFamily: "JetBrains Mono, monospace"
+                                        }}>
                                             {hub.badge}
                                         </span>
                                     </div>
 
                                     {/* Tool Chips */}
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", paddingTop: "8px", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
                                         {hub.tools.map(tool => (
                                             <button
                                                 key={tool.action}
                                                 onClick={() => { setMenuOpen(false); navigate(tool.action); }}
-                                                className="btn-ghost hover-bright"
                                                 style={{
-                                                    padding: "4px 8px", fontSize: "0.72rem",
-                                                    background: "rgba(255,255,255,0.03)",
-                                                    border: "1px solid rgba(255,255,255,0.08)",
-                                                    borderRadius: "6px", display: "flex", alignItems: "center", gap: "4px"
+                                                    padding: "5px 9px", fontSize: "0.72rem", fontWeight: 700,
+                                                    background: "rgba(255, 255, 255, 0.04)",
+                                                    border: "1px solid rgba(255, 255, 255, 0.1)",
+                                                    borderRadius: "8px", display: "flex", alignItems: "center", gap: "5px",
+                                                    color: "#FFFFFF", cursor: "pointer", transition: "all 0.15s ease"
                                                 }}
                                             >
                                                 <span>{tool.icon}</span>
@@ -483,24 +517,28 @@ export default function Sidebar() {
                         </div>
 
                         {/* Drawer Footer */}
-                        <div style={{ padding: "12px 16px", borderTop: "1px solid var(--glass-border)", background: "rgba(10,12,22,0.9)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <div style={{ padding: "14px 18px", borderTop: "1px solid rgba(255, 255, 255, 0.1)", background: "rgba(8, 10, 20, 0.95)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                                 <button
                                     onClick={() => { setMenuOpen(false); navigate("settings"); }}
-                                    className="btn-tactical-secondary"
                                     style={{
                                         display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                                        padding: "10px 8px", fontSize: "0.76rem", fontWeight: 800
+                                        padding: "10px 8px", fontSize: "0.78rem", fontWeight: 800,
+                                        background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                        borderRadius: "10px", color: "#FFFFFF", cursor: "pointer"
                                     }}
                                 >
                                     <span>⚙️</span> Ajustes
                                 </button>
                                 <button
                                     onClick={() => { setMenuOpen(false); navigate("updater"); }}
-                                    className="btn-tactical-primary"
                                     style={{
                                         display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                                        padding: "10px 8px", fontSize: "0.76rem", fontWeight: 900
+                                        padding: "10px 8px", fontSize: "0.78rem", fontWeight: 900,
+                                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.2) 0%, rgba(0, 150, 255, 0.1) 100%)",
+                                        border: "1px solid rgba(0, 229, 255, 0.5)",
+                                        borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer",
+                                        boxShadow: "0 0 12px rgba(0, 229, 255, 0.2)"
                                     }}
                                 >
                                     <span>🚀</span> Actualizador
@@ -515,9 +553,9 @@ export default function Sidebar() {
                                     }
                                 }}
                                 style={{
-                                    width: "100%", padding: "8px", borderRadius: "var(--radius-sm)",
+                                    width: "100%", padding: "9px", borderRadius: "10px",
                                     background: "rgba(0, 240, 255, 0.08)", border: "1px solid rgba(0, 240, 255, 0.25)",
-                                    color: "var(--accent-cyan)", fontSize: "0.74rem", fontWeight: 800,
+                                    color: "var(--accent-cyan, #00E5FF)", fontSize: "0.75rem", fontWeight: 800,
                                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
                                 }}
                             >
@@ -526,7 +564,7 @@ export default function Sidebar() {
 
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px" }}>
                                 <span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>v{RED_VERSION}</span>
-                                <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>● LIBP2P MESH</span>
+                                <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan, #00E5FF)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>● SOVEREIGN MESH OS</span>
                             </div>
                         </div>
                     </div>
@@ -580,21 +618,22 @@ export default function Sidebar() {
             {/* ── Fixed Bottom Tactical HUD Dock (5 Key Pillars) ── */}
             <nav style={{
                 position: "sticky", bottom: 0, left: 0, right: 0,
-                minHeight: "56px",
-                background: "linear-gradient(180deg, rgba(14, 16, 30, 0.95) 0%, rgba(6, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(24px)",
-                WebkitBackdropFilter: "blur(24px)",
-                borderTop: "1px solid var(--glass-border)",
+                minHeight: "58px",
+                background: "linear-gradient(180deg, rgba(12, 16, 32, 0.96) 0%, rgba(4, 6, 16, 0.99) 100%)",
+                backdropFilter: "blur(25px)",
+                WebkitBackdropFilter: "blur(25px)",
+                borderTop: "1px solid rgba(0, 229, 255, 0.2)",
+                boxShadow: "0 -4px 25px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
                 display: "flex", alignItems: "center", justifyContent: "space-around",
                 padding: "4px 4px max(6px, env(safe-area-inset-bottom, 6px)) 4px",
                 zIndex: 40, flexShrink: 0
             }}>
                 {[
-                    { id: "chats", icon: "💬", label: t.dock?.chats || "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen },
-                    { id: "radar", icon: "📡", label: t.dock?.radar || "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
+                    { id: "chats", icon: "💬", label: t('dock.chats') || "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen, badgeNum: unreadTotal },
+                    { id: "radar", icon: "📡", label: t('dock.radar') || "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
                     { id: "modules", icon: "⚡", label: "Hubs", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: "8", isModulesBtn: true },
-                    { id: "ai", icon: "🤖", label: t.dock?.ai || "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
-                    { id: "vault", icon: "🪪", label: t.dock?.vault || "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
+                    { id: "ai", icon: "🧠", label: t('dock.ai') || "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
+                    { id: "vault", icon: "🪪", label: t('dock.vault') || "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
                 ].map(item => (
                     <button
                         key={item.id}
@@ -602,15 +641,16 @@ export default function Sidebar() {
                         style={{
                             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                             gap: "3px", 
-                            background: item.isModulesBtn && item.active ? "rgba(0, 229, 255, 0.18)" : "transparent",
-                            border: item.isModulesBtn ? (item.active ? "1px solid rgba(0, 229, 255, 0.6)" : "1px solid rgba(255, 255, 255, 0.12)") : "none",
-                            color: item.active ? (item.isModulesBtn ? "var(--accent-cyan)" : "var(--accent-crimson)") : (item.highlight ? "var(--accent-cyan)" : (item.isModulesBtn ? "var(--accent-amber)" : "var(--text-secondary)")),
-                            cursor: "pointer", padding: "6px 8px", borderRadius: "12px",
+                            background: item.isModulesBtn && item.active ? "rgba(0, 229, 255, 0.2)" : (item.active ? "rgba(255, 255, 255, 0.06)" : "transparent"),
+                            border: item.isModulesBtn ? (item.active ? "1px solid rgba(0, 229, 255, 0.7)" : "1px solid rgba(255, 255, 255, 0.15)") : (item.active ? "1px solid rgba(0, 229, 255, 0.3)" : "none"),
+                            color: item.active ? (item.isModulesBtn ? "#00E5FF" : "#FFFFFF") : (item.highlight ? "#00E5FF" : (item.isModulesBtn ? "#FFB300" : "var(--text-secondary)")),
+                            cursor: "pointer", padding: "6px 8px", borderRadius: "14px",
                             transition: "all 0.15s ease", position: "relative",
-                            minWidth: "48px", minHeight: "48px"
+                            minWidth: "52px", minHeight: "50px",
+                            boxShadow: item.active ? "0 0 15px rgba(0, 229, 255, 0.2)" : "none"
                         }}
                     >
-                        <span style={{ fontSize: "1.25rem", filter: item.active ? "drop-shadow(0 0 10px rgba(0,229,255,0.7))" : "none" }}>
+                        <span style={{ fontSize: "1.3rem", filter: item.active ? "drop-shadow(0 0 10px rgba(0,229,255,0.8))" : "none" }}>
                             {item.icon}
                         </span>
                         <span style={{ fontSize: "0.72rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.3px", whiteSpace: "nowrap" }}>
@@ -620,18 +660,31 @@ export default function Sidebar() {
                             <span style={{
                                 position: "absolute", top: 1, right: 2,
                                 fontSize: "0.58rem", fontWeight: 900,
-                                background: "var(--accent-amber)", color: "#000",
-                                padding: "1px 4px", borderRadius: "6px",
-                                boxShadow: "0 0 8px var(--accent-amber)"
+                                background: "var(--accent-amber, #FFB300)", color: "#000",
+                                padding: "1px 5px", borderRadius: "6px",
+                                boxShadow: "0 0 8px var(--accent-amber, #FFB300)"
                             }}>
                                 {item.badgeText}
+                            </span>
+                        )}
+                        {typeof item.badgeNum === "number" && item.badgeNum > 0 && (
+                            <span style={{
+                                position: "absolute", top: 2, right: 4,
+                                minWidth: 14, height: 14, borderRadius: 7,
+                                background: "#FF3355", color: "#FFFFFF",
+                                fontSize: "0.58rem", fontWeight: 900,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                padding: "0 3px",
+                                boxShadow: "0 0 8px #FF3355"
+                            }}>
+                                {item.badgeNum}
                             </span>
                         )}
                         {typeof item.count === "number" && item.count > 0 && (
                             <span style={{
                                 position: "absolute", top: 2, right: 6,
                                 width: 7, height: 7, borderRadius: "50%",
-                                background: "var(--accent-emerald)", boxShadow: "0 0 6px var(--accent-emerald)"
+                                background: "var(--accent-emerald, #00E676)", boxShadow: "0 0 8px var(--accent-emerald, #00E676)"
                             }} />
                         )}
                     </button>
@@ -643,31 +696,37 @@ export default function Sidebar() {
                 <div 
                     style={{
                         position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-                        background: "rgba(0,0,0,0.8)", backdropFilter: "blur(8px)",
+                        background: "rgba(2, 4, 12, 0.88)", backdropFilter: "blur(20px)",
+                        WebkitBackdropFilter: "blur(20px)",
                         zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
-                        padding: "16px"
+                        padding: "16px",
+                        animation: "fadeIn 0.2s ease"
                     }}
                     onClick={() => setAddContactOpen(false)}
                 >
                     <div 
-                        className="card-tactical animate-enter modal-card-scrollable"
+                        className="animate-enter modal-card-scrollable"
                         style={{
-                            maxWidth: "460px", width: "100%", padding: "24px",
+                            maxWidth: "480px", width: "100%", padding: "24px",
                             display: "flex", flexDirection: "column", gap: "16px",
-                            border: "1px solid var(--glass-border)", background: "rgba(12,14,24,0.98)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", background: "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                            borderRadius: "22px",
+                            boxShadow: "0 15px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 229, 255, 0.15)",
                             maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
                         }}
                         onClick={e => e.stopPropagation()}
                     >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#fff", display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span>➕</span>
-                                <span>{t.sidebar?.add_contact_btn || "Agregar Contacto / Nuevo Chat"}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "12px" }}>
+                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "10px" }}>
+                                <div style={{ width: 34, height: 34, borderRadius: "10px", background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                    ➕
+                                </div>
+                                <span>{t('sidebar.add_contact_btn') || "AGREGAR CONTACTO / NUEVO CHAT"}</span>
                             </div>
-                            <button onClick={() => setAddContactOpen(false)} className="btn-icon" style={{ width: 32, height: 32 }}>✕</button>
+                            <button onClick={() => setAddContactOpen(false)} style={{ background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#FFFFFF", width: 30, height: 30, borderRadius: "8px", cursor: "pointer", fontWeight: 900 }}>✕</button>
                         </div>
-                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
-                            Pega el DID Soberano, Hash (64 hex) o escanea el código QR del perfil de otro usuario para iniciar un canal cifrado.
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
+                            Pega el DID Soberano, Hash (64 hex) o escanea el código QR del perfil de otro usuario para iniciar un canal cifrado post-cuántico.
                         </div>
 
                         {/* Botón Principal: Escáner QR de Contacto */}
@@ -676,17 +735,17 @@ export default function Sidebar() {
                                 setAddContactOpen(false);
                                 navigate("radar");
                             }}
-                            className="btn-tactical-secondary"
                             style={{
-                                width: "100%", padding: "12px 14px", fontSize: "0.85rem", fontWeight: 800,
+                                width: "100%", padding: "12px 14px", fontSize: "0.85rem", fontWeight: 900,
                                 display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-                                borderColor: "rgba(0, 230, 118, 0.6)", color: "#00E676",
-                                background: "rgba(0, 230, 118, 0.08)",
-                                borderRadius: "var(--radius-md)"
+                                border: "1px solid rgba(0, 230, 118, 0.6)", color: "#00E676",
+                                background: "rgba(0, 230, 118, 0.1)",
+                                borderRadius: "12px", cursor: "pointer",
+                                boxShadow: "0 0 15px rgba(0, 230, 118, 0.15)"
                             }}
                         >
                             <span>📷</span>
-                            <span>{t.radar?.scan_scanner_btn || "ESCANEAR QR DE CONTACTO (CÁMARA)"}</span>
+                            <span>{t('radar.scan_scanner_btn') || "ESCANEAR QR DE CONTACTO (CÁMARA)"}</span>
                         </button>
 
                         {/* Enlace Directo a Vinculación con PC */}
@@ -697,48 +756,59 @@ export default function Sidebar() {
                             }}
                             style={{
                                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                                padding: "8px 12px", borderRadius: "8px",
-                                background: "rgba(0, 229, 255, 0.06)", border: "1px dashed rgba(0, 229, 255, 0.3)",
-                                cursor: "pointer", fontSize: "0.76rem", color: "var(--accent-cyan)",
-                                transition: "all 0.2s ease"
+                                padding: "10px 14px", borderRadius: "10px",
+                                background: "rgba(0, 229, 255, 0.08)", border: "1px dashed rgba(0, 229, 255, 0.35)",
+                                cursor: "pointer", fontSize: "0.78rem", color: "var(--accent-cyan, #00E5FF)",
+                                transition: "all 0.15s ease"
                             }}
                         >
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                 <span>💻</span>
                                 <span>¿Quieres vincular tu cuenta con tu PC?</span>
                             </div>
-                            <span style={{ fontWeight: 800 }}>Vincular Web →</span>
+                            <span style={{ fontWeight: 900 }}>Vincular Web →</span>
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div>
-                                <label style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-secondary)", marginBottom: "4px", display: "block", letterSpacing: "0.5px" }}>
-                                    O INGRESA DID / CLAVE PÚBLICA MANUALMENTE
+                                <label style={{ fontSize: "0.72rem", fontWeight: 900, color: "var(--text-secondary)", marginBottom: "5px", display: "block", letterSpacing: "0.5px" }}>
+                                    DID O CLAVE PÚBLICA MANUAL
                                 </label>
                                 <input
                                     value={newContactInput}
                                     onChange={e => setNewContactInput(e.target.value)}
                                     placeholder="Ej: did:red:af10... o 3a7f8b9c..."
-                                    style={{ width: "100%", fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem", padding: "10px 12px" }}
+                                    style={{
+                                        width: "100%", fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem", padding: "11px 14px",
+                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
+                                        borderRadius: "10px", color: "#FFFFFF", outline: "none"
+                                    }}
                                     autoFocus
                                 />
                             </div>
                             <div>
-                                <label style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-secondary)", marginBottom: "4px", display: "block", letterSpacing: "0.5px" }}>
-                                    ALIAS / NOMBRE TÁCTICO
+                                <label style={{ fontSize: "0.72rem", fontWeight: 900, color: "var(--text-secondary)", marginBottom: "5px", display: "block", letterSpacing: "0.5px" }}>
+                                    ALIAS O INDICATIVO TÁCTICO
                                 </label>
                                 <input
                                     value={newContactAlias}
                                     onChange={e => setNewContactAlias(e.target.value)}
-                                    placeholder="Ej: Alfa-1 Web, Operador Base..."
-                                    style={{ width: "100%", fontSize: "0.85rem", padding: "10px 12px" }}
+                                    placeholder="Ej: Alfa-1 Base, Operador Central..."
+                                    style={{
+                                        width: "100%", fontSize: "0.85rem", padding: "11px 14px",
+                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                        borderRadius: "10px", color: "#FFFFFF", outline: "none"
+                                    }}
                                 />
                             </div>
                             <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
                                 <button
                                     onClick={() => setAddContactOpen(false)}
-                                    className="btn-tactical-secondary"
-                                    style={{ flex: 1, padding: "12px", fontSize: "0.85rem" }}
+                                    style={{
+                                        flex: 1, padding: "12px", fontSize: "0.85rem", fontWeight: 800,
+                                        background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                        borderRadius: "10px", color: "#FFFFFF", cursor: "pointer"
+                                    }}
                                 >
                                     Cancelar
                                 </button>
@@ -748,7 +818,7 @@ export default function Sidebar() {
                                         const input = newContactInput.trim();
                                         const alias = newContactAlias.trim();
 
-                                        // Detección Inteligente de Vinculación RED Web Companion
+                                        // Detección de Vinculación RED Web Companion
                                         if (input.startsWith("RED_PAIR:1:")) {
                                             setAddContactOpen(false);
                                             setNewContactInput("");
@@ -773,8 +843,12 @@ export default function Sidebar() {
                                             setIsSubmittingContact(false);
                                         }
                                     }}
-                                    className="btn-tactical-primary"
-                                    style={{ flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900 }}
+                                    style={{
+                                        flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900,
+                                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                        border: "none", borderRadius: "10px", color: "#FFFFFF", cursor: "pointer",
+                                        boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)"
+                                    }}
                                 >
                                     {isSubmittingContact ? "Conectando..." : "⚡ CREAR CHAT O VINCULAR"}
                                 </button>

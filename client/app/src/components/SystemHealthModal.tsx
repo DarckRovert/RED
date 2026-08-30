@@ -516,27 +516,40 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
 
     return (
         <div className="modal-screen-container">
-            <header className="safe-header" style={{
-                padding: "12px 20px",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+            {/* Header Táctico */}
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(0, 230, 118, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={handleClose}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #10B981 0%, #059669 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 230, 118, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(16,185,129,0.4)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 230, 118, 0.3)"
                     }}>💚</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.health_module?.title || "Diagnóstico de Salud & Kernel Telemetry"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            {t.health_module?.title || "DIAGNÓSTICO & KERNEL"}
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {RED_VERSION_NAME} · {t.health_module?.subtitle || "REAL BENCHMARKS & HARDWARE I/O"}
+                        <div style={{ fontSize: "0.68rem", color: "#00E676", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                            {RED_VERSION_NAME} · {t.health_module?.subtitle || "BENCHMARKS DE HARDWARE & I/O"}
                         </div>
                     </div>
                 </div>
@@ -545,19 +558,13 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
                     <button
                         onClick={runDiagnostics}
                         disabled={isRunningAll}
-                        className="btn-tactical-secondary"
-                        style={{ padding: "8px 14px", fontSize: "0.78rem" }}
-                        title="Reejecutar todos los benchmarks empíricos"
+                        style={{
+                            padding: "6px 12px", borderRadius: "10px",
+                            background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.4)",
+                            color: "#00E676", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer"
+                        }}
                     >
-                        {isRunningAll ? "Diagnosticando..." : `⚡ ${t.health_module?.run_diagnostics || "Reejecutar"}`}
-                    </button>
-                    <button
-                        onClick={handleClose}
-                        className="btn-icon"
-                        title={t.common?.close || "Cerrar"}
-                        style={{ width: 38, height: 38 }}
-                    >
-                        ✕
+                        {isRunningAll ? "DIAGNOSTICANDO..." : `⚡ ${t.health_module?.run_diagnostics || "REEJECUTAR"}`}
                     </button>
                 </div>
             </header>

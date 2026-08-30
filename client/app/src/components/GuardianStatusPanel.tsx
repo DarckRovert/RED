@@ -130,61 +130,85 @@ export default function GuardianStatusPanel({ onClose }: GuardianStatusPanelProp
     return (
         <div className="modal-screen-container">
             {/* Header Táctico */}
-            <header className="safe-header" style={{
-                padding: "12px 20px",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={handleClose}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 229, 255, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.4)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.3)"
                     }}>🛡️</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.guardian_module?.title || "Centinela Guardián & Firewall IA"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            {t.guardian_module?.title || "CENTINELA GUARDIÁN"}
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {t.guardian_module?.subtitle || "CONTENT MODERATION · ZERO-LEAKAGE FORENSICS"}
+                        <div style={{ fontSize: "0.68rem", color: "#00E5FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                            {t.guardian_module?.subtitle || "FIREWALL DE CONTENIDO & FORENSE LOCAL"}
                         </div>
                     </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <div style={{ display: "flex", gap: "4px", background: "rgba(0,0,0,0.4)", padding: "3px", borderRadius: "var(--radius-full)", border: "1px solid var(--glass-border)" }}>
+                    <div style={{ display: "flex", gap: "4px", background: "rgba(0,0,0,0.4)", padding: "3px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.1)" }}>
                         <button
                             onClick={() => setActiveTab("testing")}
-                            className={activeTab === "testing" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
+                            style={{
+                                padding: "4px 10px", fontSize: "0.72rem", borderRadius: "8px", fontWeight: 800,
+                                background: activeTab === "testing" ? "#00E5FF" : "transparent",
+                                color: activeTab === "testing" ? "#000" : "var(--text-secondary)", border: "none", cursor: "pointer"
+                            }}
                         >
                             🧪 Pruebas
                         </button>
                         <button
                             onClick={() => setActiveTab("config")}
-                            className={activeTab === "config" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
+                            style={{
+                                padding: "4px 10px", fontSize: "0.72rem", borderRadius: "8px", fontWeight: 800,
+                                background: activeTab === "config" ? "#00E5FF" : "transparent",
+                                color: activeTab === "config" ? "#000" : "var(--text-secondary)", border: "none", cursor: "pointer"
+                            }}
                         >
                             ⚙️ Blindaje
                         </button>
                         <button
                             onClick={() => setActiveTab("auditLog")}
-                            className={activeTab === "auditLog" ? "glow-pill-active" : "btn-ghost"}
-                            style={{ padding: "4px 12px", fontSize: "0.76rem", borderRadius: "var(--radius-full)" }}
+                            style={{
+                                padding: "4px 10px", fontSize: "0.72rem", borderRadius: "8px", fontWeight: 800,
+                                background: activeTab === "auditLog" ? "#00E5FF" : "transparent",
+                                color: activeTab === "auditLog" ? "#000" : "var(--text-secondary)", border: "none", cursor: "pointer"
+                            }}
                         >
-                            📑 Auditoría ({auditLogs.length})
+                            📑 Logs ({auditLogs.length})
                         </button>
                     </div>
 
                     <button
                         onClick={handleClose}
-                        className="btn-icon"
-                        title={t.common?.close || "Cerrar panel"}
-                        style={{ width: 38, height: 38 }}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "0.9rem", fontWeight: 800,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
                     >
                         ✕
                     </button>

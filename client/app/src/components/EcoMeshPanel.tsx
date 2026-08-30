@@ -97,36 +97,50 @@ export const EcoMeshPanel: React.FC = () => {
         }}>
             {/* Header Táctico */}
             <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(0, 230, 118, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #00E676 0%, #00B0FF 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 230, 118, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,230,118,0.4)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 230, 118, 0.3)"
                     }}>🔋</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.eco_module?.title || "Gobernador Cinemático Eco-Mesh"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            {t.eco_module?.title || "GOBERNADOR ECO-MESH"}
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {telemetry.isStationary ? (t.eco_module?.subtitle || "MODO ESTACIONARIO DETECTADO") : (t.eco_module?.subtitle || "MOVIMIENTO CINÉTICO ACTIVO")}
+                        <div style={{ fontSize: "0.68rem", color: "#00E676", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                            {telemetry.isStationary ? "MODO ESTACIONARIO (AHORRO MÁXIMO)" : "MOVIMIENTO CINÉTICO ACTIVO"}
                         </div>
                     </div>
                 </div>
 
                 <button
                     onClick={goBack}
-                    className="btn-icon"
-                    title={t.common?.close || "Cerrar gobernador"}
-                    style={{ width: 38, height: 38 }}
+                    style={{
+                        width: 34, height: 34, borderRadius: "9px",
+                        background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                        color: "#FFFFFF", cursor: "pointer", fontSize: "0.9rem", fontWeight: 800,
+                        display: "flex", alignItems: "center", justifyContent: "center"
+                    }}
                 >
                     ✕
                 </button>

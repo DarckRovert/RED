@@ -16,7 +16,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 type RfTab = "spectrum" | "jamming" | "devices";
 
 export function RfSpectrumModal() {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<RfTab>("spectrum");
 
@@ -36,7 +36,7 @@ export function RfSpectrumModal() {
     const analyserRef = useRef<AnalyserNode | null>(null);
     const micStreamRef = useRef<MediaStream | null>(null);
 
-    // ── 0. Carga de Telemetría Real de Radiofrecuencia desde Rust ───────────────────
+    // Carga de Telemetría Real de Radiofrecuencia desde Rust
     const loadRfMetrics = useCallback(async () => {
         try {
             const data = await getRfMetrics();
@@ -52,7 +52,7 @@ export function RfSpectrumModal() {
         return () => clearInterval(interval);
     }, [loadRfMetrics]);
 
-    // ── 1. Captura Real BLE & Telemetría Red P2P ──────────────────────────────────
+    // Captura Real BLE & Telemetría Red P2P
     useEffect(() => {
         if (!isScanning) return;
 
@@ -72,7 +72,7 @@ export function RfSpectrumModal() {
         }
     }, [bandMode, isScanning]);
 
-    // ── 2. Captura Real de Micrófono Web Audio API FFT ─────────────────────────────
+    // Captura Real de Micrófono Web Audio API FFT
     const cleanupAudio = () => {
         if (audioCtxRef.current) {
             try { audioCtxRef.current.close(); } catch {}
@@ -133,13 +133,14 @@ export function RfSpectrumModal() {
                         channels.push({
                             channelNumber: ch + 1,
                             frequencyMhz: Number((targetFreq / 1000).toFixed(1)),
+                            rssiDb: rssiCalculated,
                             rssiCurrentDbm: rssiCalculated,
                             rssiMaxHoldDbm: rssiCalculated,
                             signalQualityPct: Math.round((rawAmp / 255) * 100),
                             isOccupied: rawAmp > 60,
+                            noiseFloorDb: -105,
                             noiseFloorDbm: -105,
-                            snrDb: Math.max(0, rssiCalculated - (-105)),
-                            detectedDevicesCount: rawAmp > 70 ? 1 : 0
+                            occupiedByProtocol: rawAmp > 60 ? "SoundMesh Ultra" : undefined
                         });
                     }
 
@@ -149,103 +150,87 @@ export function RfSpectrumModal() {
 
                 updateAcousticFft();
             } catch {
-                toast.error("Permiso de micrófono denegado para análisis FFT.");
+                // Mic permission fallback
             }
         };
 
         initAudioMic();
 
         return () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            cancelAnimationFrame(animationFrameId);
             cleanupAudio();
         };
     }, [bandMode, isScanning]);
 
-    // ── 3. Motor de Análisis de Espectro ──────────────────────────────────────────
+    // Motor de Análisis de Espectro Continuo
     useEffect(() => {
-        let timer: any;
-        if (isScanning) {
-            timer = setInterval(() => {
-                if (bandMode === "ACOUSTIC_FFT") {
-                    const acousticMetrics = RfSpectrumAnalyzerEngine.processAcousticChannels(acousticChannels);
-                    setMetrics(acousticMetrics);
-                } else {
-                    const freshMetrics = RfSpectrumAnalyzerEngine.analyzeSpectrum(
-                        bandMode,
-                        Array.from(scannedBleDevices.values())
-                    );
-                    setMetrics(freshMetrics);
-                }
-            }, 600);
-        }
-        return () => clearInterval(timer);
+        if (!isScanning) return;
+
+        const interval = setInterval(() => {
+            const currentBleList = Array.from(scannedBleDevices.values());
+            const currentAcousticList = acousticChannels;
+
+            const nextMetrics = bandMode === "ACOUSTIC_FFT"
+                ? RfSpectrumAnalyzerEngine.processAcousticChannels(currentAcousticList)
+                : RfSpectrumAnalyzerEngine.analyzeSpectrum(bandMode, currentBleList);
+            setMetrics(nextMetrics);
+        }, 1200);
+
+        return () => clearInterval(interval);
     }, [bandMode, isScanning, scannedBleDevices, acousticChannels]);
 
-    // ── 4. Renderizado Canvas Waterfall Espectrograma HiDPI ────────────────────────
+    // Waterfall Canvas Renderer
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        const dpr = window.devicePixelRatio || 1;
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.scale(dpr, dpr);
+        const width = canvas.width;
+        const height = canvas.height;
+        const chCount = metrics.channels.length;
+        if (chCount === 0) return;
 
-        const w = rect.width;
-        const h = rect.height;
+        const barWidth = (width - (chCount - 1) * 4) / chCount;
 
-        // Limpiar fondo
-        ctx.fillStyle = "#04060A";
-        ctx.fillRect(0, 0, w, h);
+        ctx.clearRect(0, 0, width, height);
 
-        // Cuadrícula y escala en dBm (-110 a -30)
-        ctx.strokeStyle = "rgba(255,255,255,0.06)";
+        // Background Grid Lines
+        ctx.strokeStyle = "rgba(0, 229, 255, 0.1)";
         ctx.lineWidth = 1;
-        for (let db = -110; db <= -30; db += 20) {
-            const y = h - ((db - (-110)) / 80) * (h - 30) - 20;
-            ctx.beginPath(); ctx.moveTo(40, y); ctx.lineTo(w - 10, y); ctx.stroke();
-            ctx.fillStyle = "rgba(255,255,255,0.4)";
-            ctx.font = "10px 'JetBrains Mono', monospace";
-            ctx.fillText(`${db}dB`, 5, y + 3);
+        for (let y = 0; y < height; y += 25) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+            ctx.stroke();
         }
 
-        // Barras de espectro por canal
-        const channels = metrics.channels;
-        if (channels.length > 0) {
-            const chWidth = (w - 60) / channels.length;
+        // Render Channel Bars
+        metrics.channels.forEach((ch, idx) => {
+            const x = idx * (barWidth + 4);
+            const rawRssi = ch.rssiCurrentDbm ?? ch.rssiDb ?? -100;
+            const normRssi = Math.max(0, Math.min(100, (rawRssi + 120) * 1.25));
+            const barHeight = (normRssi / 100) * (height - 20);
+            const y = height - barHeight;
 
-            channels.forEach((ch, idx) => {
-                const x = 50 + idx * chWidth;
-                const chRssi = ch.rssiCurrentDbm ?? ch.rssiDb ?? -90;
-                const normalizedVal = Math.min(1, Math.max(0, (chRssi - (-110)) / 80));
-                const barHeight = normalizedVal * (h - 40);
-                const y = h - barHeight - 20;
+            const grad = ctx.createLinearGradient(0, height, 0, y);
+            if (ch.isOccupied) {
+                grad.addColorStop(0, "rgba(255, 51, 85, 0.2)");
+                grad.addColorStop(1, "rgba(255, 51, 85, 0.9)");
+            } else {
+                grad.addColorStop(0, "rgba(0, 229, 255, 0.15)");
+                grad.addColorStop(1, "rgba(0, 229, 255, 0.85)");
+            }
 
-                // Gradiente según intensidad
-                const grad = ctx.createLinearGradient(0, y, 0, h - 20);
-                if (chRssi > -60) {
-                    grad.addColorStop(0, "#FF3355");
-                    grad.addColorStop(1, "rgba(232,33,58,0.2)");
-                } else if (chRssi > -80) {
-                    grad.addColorStop(0, "#00E5FF");
-                    grad.addColorStop(1, "rgba(0,229,255,0.2)");
-                } else {
-                    grad.addColorStop(0, "#00E676");
-                    grad.addColorStop(1, "rgba(0,230,118,0.2)");
-                }
+            ctx.fillStyle = grad;
+            ctx.fillRect(x, y, barWidth, barHeight);
 
-                ctx.fillStyle = grad;
-                ctx.fillRect(x + 2, y, chWidth - 4, barHeight);
-
-                // Etiqueta de canal
-                ctx.fillStyle = "rgba(255,255,255,0.6)";
-                ctx.font = "9px 'JetBrains Mono', monospace";
-                ctx.fillText(`C${ch.channelNumber}`, x + 2, h - 6);
-            });
-        }
+            // Channel Label
+            ctx.fillStyle = ch.isOccupied ? "#FF3355" : "rgba(255, 255, 255, 0.6)";
+            ctx.font = "9px 'JetBrains Mono', monospace";
+            ctx.textAlign = "center";
+            ctx.fillText(`CH${ch.channelNumber}`, x + barWidth / 2, height - 4);
+        });
     }, [metrics]);
 
     const handleTriggerHop = async () => {
@@ -253,29 +238,26 @@ export function RfSpectrumModal() {
         try {
             const res = await triggerChannelHop();
             if (res && res.ok) {
-                toast.success(`⚡ Salto ejecutado: Nuevo Canal ${res.current_channel_mhz} MHz.`);
+                toast.success(`⚡ Salto forzado a canal: ${res.new_channel}`);
                 await loadRfMetrics();
-            } else {
-                toast.error("Error al forzar salto de frecuencia.");
             }
         } catch {
-            toast.error("Error de comunicación con Rust.");
+            toast.error("Error al forzar salto FHSS");
         } finally {
             setIsHopping(false);
         }
     };
 
-    const handleToggleFec = async () => {
-        const nextMode = rfState?.fec_mode === "FEC_REED_SOLOMON_2X" ? "FEC_CONVOLUTIONAL_1_2" : "FEC_REED_SOLOMON_2X";
+    const handleSetFec = async (fec: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME') => {
         setIsUpdatingFec(true);
         try {
-            const res = await setRfFecMode(nextMode);
+            const res = await setRfFecMode(fec);
             if (res && res.ok) {
-                toast.success(`🛡️ FEC actualizado: ${nextMode}`);
+                toast.success(`🛡️ FEC actualizado a: ${res.fec_mode}`);
                 await loadRfMetrics();
             }
         } catch {
-            toast.error("Fallo al cambiar modo FEC.");
+            toast.error("Error al configurar FEC");
         } finally {
             setIsUpdatingFec(false);
         }
@@ -283,254 +265,201 @@ export function RfSpectrumModal() {
 
     return (
         <div style={{
-            width: "100%", height: "100%",
-            background: "var(--bg-void)", color: "var(--text-primary)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden", position: "relative"
+            position: "fixed", inset: 0, zIndex: 1100,
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", display: "flex", flexDirection: "column",
+            fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
         }}>
             {/* Header Táctico */}
             <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: metrics.isJammingSuspected ? "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)" : "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 229, 255, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: metrics.isJammingSuspected ? "0 0 20px rgba(232,33,58,0.6)" : "0 4px 16px rgba(0,229,255,0.35)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)"
                     }}>📊</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.rf_module?.title || "Analizador de Espectro RF & Anti-Jamming"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            ANALIZADOR DE ESPECTRO RF
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: metrics.isJammingSuspected ? "var(--accent-crimson-bright)" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            {metrics.isJammingSuspected ? "⚠️ ALERTA DE INHIBICIÓN DETECTADA" : (t.rf_module?.subtitle || "ESPECTRO NOMINAL · ESCANEANDO")}
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
+                            BLE 2.4 GHZ · LORA SUB-GHZ · ULTRASONIDO FFT
                         </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => navigate("sidebar")}
-                    className="btn-icon"
-                    title={t.common?.close || "Cerrar analizador"}
-                    style={{ width: 38, height: 38 }}
-                >
-                    ✕
-                </button>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                        onClick={handleTriggerHop}
+                        disabled={isHopping}
+                        style={{
+                            padding: "6px 12px", borderRadius: "10px",
+                            background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                            color: "var(--accent-cyan, #00E5FF)", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer"
+                        }}
+                    >
+                        {isHopping ? "SALTANDO..." : "⚡ SALTO FHSS"}
+                    </button>
+                </div>
             </header>
 
-            {/* Selector de Pestañas Segmentadas Tácticas */}
+            {/* Selector de Pestañas Segmentadas */}
             <div style={{
-                padding: "10px 16px",
-                display: "flex", gap: "8px",
-                background: "rgba(10, 10, 20, 0.85)",
-                borderBottom: "1px solid var(--glass-border)",
-                overflowX: "auto", flexShrink: 0
+                display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                flexShrink: 0
             }}>
                 <button
                     onClick={() => setActiveTab("spectrum")}
-                    className={activeTab === "spectrum" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    style={{
+                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        background: activeTab === "spectrum" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "spectrum" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "spectrum" ? "#00E5FF" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                    }}
                 >
-                    📊 {t.rf_module?.waterfall || "Espectro Waterfall"}
+                    <span>📊</span> CASCADA ESPECTRAL
                 </button>
                 <button
                     onClick={() => setActiveTab("jamming")}
-                    className={activeTab === "jamming" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
+                    style={{
+                        flex: 1, padding: "8px 12px", borderRadius: "10px",
+                        background: activeTab === "jamming" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "jamming" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "jamming" ? "#FF3355" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                    }}
                 >
-                    🛡️ Guerra Electrónica & Salto
-                </button>
-                <button
-                    onClick={() => setActiveTab("devices")}
-                    className={activeTab === "devices" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    📡 {t.rf_module?.signals_detected || "Dispositivos RF"} ({scannedBleDevices.size})
+                    <span>🛡️</span> JAMMING & FEC {metrics.isJammingSuspected && "🚨"}
                 </button>
             </div>
 
-            {/* Contenido Principal con Scroll Seguro */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
-
-                    {/* ─── TAB 1: ESPECTRO WATERFALL ──────────────────────────── */}
+                    
+                    {/* TAB 1: SPECTRUM WATERFALL */}
                     {activeTab === "spectrum" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
+                        }}>
                             {/* Selector de Banda */}
-                            <div style={{ display: "flex", gap: "6px" }}>
-                                {[
-                                    { id: "BLE_2_4GHZ", label: "BLE 2.4 GHz" },
-                                    { id: "LORA_915MHZ", label: "LoRa 915 MHz" },
-                                    { id: "ACOUSTIC_FFT", label: "Ultrasonido FFT" }
-                                ].map((b) => (
-                                    <button
-                                        key={b.id}
-                                        onClick={() => setBandMode(b.id as RfBandMode)}
-                                        className="btn-tactical-secondary"
-                                        style={{
-                                            flex: 1, padding: "8px", fontSize: "0.78rem",
-                                            borderColor: bandMode === b.id ? "var(--accent-cyan)" : "var(--glass-border)",
-                                            background: bandMode === b.id ? "rgba(0,229,255,0.15)" : "var(--bg-lifted)",
-                                            color: bandMode === b.id ? "var(--accent-cyan)" : "var(--text-primary)",
-                                            fontWeight: 700
-                                        }}
-                                    >
-                                        {b.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Canvas del Espectrograma */}
-                            <div style={{ width: "100%", height: "200px", borderRadius: "10px", overflow: "hidden", border: "1px solid var(--glass-border)", background: "#04060A" }}>
-                                <canvas ref={canvasRef} style={{ width: "100%", height: "100%", display: "block" }} />
-                            </div>
-
-                            {/* Telemetría Instantánea del Espectro */}
-                            <div className="hud-grid">
-                                <div className="hud-metric">
-                                    <div className="hud-metric-label">SNR Promedio</div>
-                                    <div className="hud-metric-val" style={{ fontSize: "0.95rem", color: "var(--accent-emerald)" }}>
-                                        {metrics.avgSnrDb.toFixed(1)} dB
-                                    </div>
-                                </div>
-                                <div className="hud-metric">
-                                    <div className="hud-metric-label">Congestión del Espectro</div>
-                                    <div className="hud-metric-val" style={{ fontSize: "0.95rem", color: metrics.congestionPct > 60 ? "var(--accent-crimson-bright)" : "var(--accent-amber)" }}>
-                                        {metrics.congestionPct}%
-                                    </div>
-                                </div>
-                                <div className="hud-metric">
-                                    <div className="hud-metric-label">Canal Óptimo</div>
-                                    <div className="hud-metric-val" style={{ fontSize: "0.95rem", color: "var(--accent-cyan)" }}>
-                                        CH {metrics.optimalChannelNumber}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ─── TAB 2: GUERRA ELECTRÓNICA & ANTI-JAMMING ───────────── */}
-                    {activeTab === "jamming" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                    🛡️ Contramedidas Electrónicas & Salto de Frecuencia
-                                </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                    Maniobras dinámicas para evadir guerra electrónica, jamming o interferencia severa
-                                </div>
-                            </div>
-
-                            {/* Estado del Canal Actual en Rust */}
-                            <div className="card-tactical" style={{ padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                    <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                                        Frecuencia de Malla Asignada
-                                    </div>
-                                    <div style={{ fontSize: "1.4rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-emerald)" }}>
-                                        {rfState?.current_channel_mhz || 2402} MHz
-                                    </div>
-                                </div>
-
-                                <div style={{ textAlign: "right" }}>
-                                    <span className="badge-tactical badge-tactical-emerald">FHSS ACTIVO</span>
-                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                                        Saltos: {rfState?.total_hops_count || 0}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Disparo de Salto de Canal Pseudoaleatorio */}
-                            <button
-                                onClick={handleTriggerHop}
-                                disabled={isHopping}
-                                className="btn-tactical-primary"
-                                style={{
-                                    width: "100%", padding: "14px", fontSize: "0.95rem",
-                                    background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)", color: "#000"
-                                }}
-                            >
-                                {isHopping ? "Sincronizando salto..." : "⚡ FORZAR SALTO DE FRECUENCIA ANTI-JAMMING"}
-                            </button>
-
-                            {/* Modo FEC Convolucional / Reed-Solomon */}
-                            <div
-                                onClick={handleToggleFec}
-                                className="card-tactical-interactive"
-                                style={{ padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                            >
-                                <div>
-                                    <div style={{ fontWeight: 800, fontSize: "0.88rem" }}>Corrección de Errores (FEC)</div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                        {rfState?.fec_mode || "FEC_CONVOLUTIONAL_1_2"}
-                                    </div>
-                                </div>
-                                <span className="badge-tactical badge-tactical-cyan">
-                                    {isUpdatingFec ? "..." : "CAMBIAR"}
-                                </span>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ─── TAB 3: DISPOSITIVOS DETECTADOS ──────────────────────── */}
-                    {activeTab === "devices" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                                        📡 Nodos y Balizas BLE en Cobertura
-                                    </div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                        Dispositivos físicos capturados por el adaptador Bluetooth
-                                    </div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>BANDA DE MONITOREO</div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>{bandMode} · ISM & SoundMesh</div>
                                 </div>
-                                <span className="badge-tactical badge-tactical-emerald">RADIO HARDWARE</span>
+                                <select
+                                    value={bandMode}
+                                    onChange={e => setBandMode(e.target.value as RfBandMode)}
+                                    style={{
+                                        background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                                        color: "#FFFFFF", borderRadius: "8px", padding: "6px 10px", fontSize: "0.75rem",
+                                        fontFamily: "JetBrains Mono, monospace"
+                                    }}
+                                >
+                                    <option value="BLE_2_4GHZ">Bluetooth LE (2.4 GHz)</option>
+                                    <option value="LORA_433MHZ">LoRaWAN (433 MHz)</option>
+                                    <option value="LORA_915MHZ">LoRaWAN (915 MHz)</option>
+                                    <option value="ACOUSTIC_FFT">SoundMesh Acústico (16-20 kHz)</option>
+                                </select>
                             </div>
 
-                            {scannedBleDevices.size === 0 ? (
-                                <div className="empty-state-tactical">
-                                    <div className="empty-state-icon">📡</div>
-                                    <div className="empty-state-title">Escaneando Espectro BLE...</div>
-                                    <div className="empty-state-desc">
-                                        Buscando paquetes de descubrimiento en la frecuencia de 2.4 GHz.
+                            {/* Canvas Waterfall Spectrum */}
+                            <div style={{
+                                width: "100%", height: "160px", background: "rgba(0, 0, 0, 0.6)",
+                                border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "12px",
+                                overflow: "hidden", position: "relative"
+                            }}>
+                                <canvas
+                                    ref={canvasRef}
+                                    width={640}
+                                    height={160}
+                                    style={{ width: "100%", height: "100%", display: "block" }}
+                                />
+                            </div>
+
+                            {/* Spectrum Stats */}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", textAlign: "center" }}>
+                                <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>RSSI PROMEDIO</div>
+                                    <div style={{ fontSize: "1rem", fontWeight: 900, color: "#00E5FF", marginTop: "2px" }}>{metrics.averageRssiDb} dBm</div>
+                                </div>
+                                <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>CANAL ÓPTIMO</div>
+                                    <div style={{ fontSize: "1rem", fontWeight: 900, color: "#00E676", marginTop: "2px" }}>CH {metrics.optimalChannelNumber}</div>
+                                </div>
+                                <div style={{ padding: "10px", background: "rgba(0,0,0,0.4)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                                    <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>ESTADO BANDA</div>
+                                    <div style={{ fontSize: "1rem", fontWeight: 900, color: metrics.isJammingSuspected ? "#FF3355" : "#00E676", marginTop: "2px" }}>
+                                        {metrics.isJammingSuspected ? "JAMMED" : "CLEAR"}
                                     </div>
                                 </div>
-                            ) : (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {Array.from(scannedBleDevices.values()).map((dev) => (
-                                        <div
-                                            key={dev.id}
-                                            className="card-tactical"
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB 2: JAMMING & FEC CONTROLLER */}
+                    {activeTab === "jamming" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(255, 51, 85, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FF3355" }}>
+                                    CONTROLADOR DE CORRECCIÓN DE ERRORES (FEC)
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    Ajusta la redundancia Reed-Solomon en tiempo real para sobrevivir a interferencia intencional (Jamming).
+                                </div>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                {(["LOW", "MEDIUM", "HIGH", "EXTREME"] as const).map(f => {
+                                    const isCurrent = rfState?.fec_mode === f;
+                                    return (
+                                        <button
+                                            key={f}
+                                            onClick={() => handleSetFec(f)}
+                                            disabled={isUpdatingFec}
                                             style={{
-                                                padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
-                                                borderLeft: "4px solid var(--accent-cyan)"
+                                                padding: "12px", borderRadius: "10px",
+                                                background: isCurrent ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 255, 255, 0.03)",
+                                                border: isCurrent ? "1.5px solid #00E676" : "1px solid rgba(255, 255, 255, 0.08)",
+                                                color: isCurrent ? "#00E676" : "#FFFFFF",
+                                                fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
                                             }}
                                         >
-                                            <div>
-                                                <strong style={{ fontSize: "0.90rem", color: "var(--text-primary)" }}>
-                                                    {dev.name || "Nodo Anónimo"}
-                                                </strong>
-                                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    MAC: {dev.id}
-                                                </div>
-                                            </div>
-
-                                            <div style={{ textAlign: "right", fontFamily: "JetBrains Mono, monospace" }}>
-                                                <span className="badge-tactical badge-tactical-cyan">
-                                                    {dev.rssi !== undefined ? `${dev.rssi} dBm` : "ACTIVO"}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                            FEC {f}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
                 </div>

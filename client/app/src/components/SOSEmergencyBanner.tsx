@@ -4,12 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRedStore } from '../store/useRedStore';
 import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
 import { toast } from './Toast';
-import { ErrorBanner } from './ui/ErrorBanner';
 import { useTranslation } from '../lib/i18n/i18nEngine';
-
-// NOTE: @capacitor/geolocation is imported dynamically inside getGpsCoords()
-// to guarantee it is always resolved before use, avoiding the race condition
-// where a module-level async import may not complete before the function fires.
 
 export const SOSEmergencyBanner: React.FC = () => {
     const { navigate, identity, isAuthenticated, currentScreen, activeSosBeacons, setSosBeacons } = useRedStore();
@@ -35,10 +30,8 @@ export const SOSEmergencyBanner: React.FC = () => {
     useEffect(() => {
         if (!isAuthenticated) return;
         loadBeacons();
-        // Polling erradicado: Los eventos SSE 'sos_beacon' y 'sos_resolved' actualizan el store en tiempo real (<1ms).
     }, [loadBeacons, isAuthenticated]);
 
-    // Open trigger modal automatically when user selects SOS from menu
     useEffect(() => {
         if (currentScreen === 'sos') {
             setIsTriggering(true);
@@ -48,7 +41,6 @@ export const SOSEmergencyBanner: React.FC = () => {
     const getGpsCoords = async (): Promise<{ lat: number; lon: number }> => {
         setGpsStatus('locating');
 
-        // Fast non-blocking GPS attempt (2500ms max timeout)
         return new Promise((resolve) => {
             let done = false;
 
@@ -60,13 +52,10 @@ export const SOSEmergencyBanner: React.FC = () => {
                 resolve(coords);
             };
 
-            // Fast fallback timer: 2.5s max wait for GPS
             const timer = setTimeout(() => {
                 finish({ lat: 0, lon: 0 }, 'error');
             }, 2500);
 
-            // FIX 1.5: Import Geolocation dynamically HERE, not at module level.
-            // Module-level async import may not complete before this function fires.
             import('@capacitor/geolocation').then(({ Geolocation: GeoPlugin }) => {
                 GeoPlugin.getCurrentPosition({ enableHighAccuracy: false, timeout: 2000 })
                     .then((pos: any) => {
@@ -77,7 +66,6 @@ export const SOSEmergencyBanner: React.FC = () => {
                         }, 'ok');
                     })
                     .catch(() => {
-                        // Web fallback
                         if (typeof navigator !== 'undefined' && navigator.geolocation) {
                             navigator.geolocation.getCurrentPosition(
                                 (pos) => {
@@ -99,7 +87,6 @@ export const SOSEmergencyBanner: React.FC = () => {
                         }
                     });
             }).catch(() => {
-                // Capacitor not available (web) — fall back to browser geolocation
                 if (typeof navigator !== 'undefined' && navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (pos) => {
@@ -127,216 +114,175 @@ export const SOSEmergencyBanner: React.FC = () => {
         try {
             const coords = await getGpsCoords();
 
-            let batteryLevel = 90;
-            try {
-                if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+            let batteryLevel = 100;
+            if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+                try {
                     const battery: any = await (navigator as any).getBattery();
                     batteryLevel = Math.round(battery.level * 100);
-                }
-            } catch {}
+                } catch {}
+            }
 
+            const senderName = identity?.nickname || 'Operador RED';
             const res = await emitSos({
-                sender_name: identity?.nickname || 'Usuario RED',
+                sender_name: senderName,
                 lat: coords.lat,
                 lon: coords.lon,
-                battery_level: batteryLevel,
-                note: noteText || 'EMERGENCIA SOS AUXILIO'
+                note: noteText.trim() || 'Emergencia médica / Auxilio táctico',
+                battery_level: batteryLevel
             });
 
-            setIsTriggering(false);
-            if (currentScreen === 'sos') {
-                navigate('sidebar');
+            if (res && res.ok && res.sos) {
+                setSosBeacons([res.sos, ...beacons]);
+                toast.error('🚨 ¡BALIZA SOS DIFUNDIDA A TODA LA MALLA P2P!');
+                setIsTriggering(false);
             }
-            await loadBeacons();
-            toast.success(`🚨 ¡BALIZA SOS EMITIDA! Operador: ${identity?.nickname || 'RED'}`);
-        } catch (e: any) {
-            setIsTriggering(false);
-            if (currentScreen === 'sos') {
-                navigate('sidebar');
-            }
-            toast.error(`Error al emitir SOS: ${e.message}`);
+        } catch (err: any) {
+            toast.error(`Error al emitir SOS: ${err.message}`);
         }
     };
 
-    const handleResolve = async (id: string) => {
+    const handleResolve = async (beaconId: string) => {
         try {
-            await resolveSos(id);
-            await loadBeacons();
-            toast.info("Baliza SOS resuelta y archivada");
-        } catch (e: any) {
-            toast.error(`Error al resolver SOS: ${e.message}`);
+            await resolveSos(beaconId);
+            setSosBeacons(beacons.filter(b => b.beacon_id !== beaconId));
+            toast.success('Baliza SOS resuelta y desactivada');
+        } catch {
+            toast.error('Error al resolver SOS');
         }
     };
 
+    if (beacons.length === 0 && !isTriggering) {
+        return null;
+    }
 
     return (
-        <>
-            {/* ACTIVE SOS BANNER */}
-            {loadError ? (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999 }}>
-                    <ErrorBanner message={loadError} onRetry={loadBeacons} />
+        <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10000,
+            background: 'linear-gradient(180deg, rgba(232, 33, 58, 0.98) 0%, rgba(160, 15, 35, 0.95) 100%)',
+            color: '#FFFFFF', padding: '10px 16px', borderBottom: '2px solid #FFFFFF',
+            boxShadow: '0 4px 25px rgba(232, 33, 58, 0.6)', backdropFilter: 'blur(16px)'
+        }}>
+            {/* Banner de Emergencia Activo */}
+            {beacons.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '1.4rem', animation: 'pulse 1s infinite' }}>🚨</span>
+                        <div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 900, letterSpacing: '0.5px' }}>
+                                ALERTA SOS ACTIVA ({beacons.length} BALIZAS EN MALLA)
+                            </div>
+                            <div style={{ fontSize: '0.68rem', opacity: 0.9, fontFamily: 'JetBrains Mono, monospace' }}>
+                                {beacons[0].sender_name}: {beacons[0].note || 'Auxilio inmediato requerido'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                            onClick={() => navigate('survivalBeacon')}
+                            style={{
+                                padding: '6px 12px', borderRadius: '8px', background: '#FFFFFF',
+                                color: '#E8213A', fontWeight: 900, fontSize: '0.74rem', border: 'none', cursor: 'pointer'
+                            }}
+                        >
+                            VER RADAR SOS
+                        </button>
+                        {beacons[0].is_mine && (
+                            <button
+                                onClick={() => handleResolve(beacons[0].beacon_id)}
+                                style={{
+                                    padding: '6px 10px', borderRadius: '8px', background: 'rgba(0,0,0,0.4)',
+                                    color: '#FFFFFF', fontWeight: 800, fontSize: '0.74rem', border: '1px solid rgba(255,255,255,0.3)', cursor: 'pointer'
+                                }}
+                            >
+                                RESOLVER
+                            </button>
+                        )}
+                    </div>
                 </div>
-            ) : (() => {
-                const safeBeacons = Array.isArray(beacons) ? beacons : [];
-                if (safeBeacons.length === 0) return null;
-                const active = safeBeacons[0];
-                return (
+            )}
+
+            {/* Modal de Disparo de SOS */}
+            {isTriggering && (
+                <div style={{
+                    position: 'fixed', inset: 0, zIndex: 10001,
+                    background: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(20px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px'
+                }}>
                     <div style={{
-                        position: 'fixed',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        zIndex: 9999,
-                        background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                        color: '#fff',
-                        padding: '12px 20px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        flexWrap: 'wrap',
-                        gap: '10px',
-                        boxShadow: '0 4px 20px rgba(239,68,68,0.5)'
+                        maxWidth: '440px', width: '100%',
+                        background: 'linear-gradient(180deg, #18080C 0%, #080305 100%)',
+                        border: '2px solid #FF3355', borderRadius: '22px', padding: '24px',
+                        display: 'flex', flexDirection: 'column', gap: '16px',
+                        boxShadow: '0 0 50px rgba(255, 51, 85, 0.4)'
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ fontSize: '1.4rem', animation: 'pulse 1s infinite' }}>🚨</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                                width: 44, height: 44, borderRadius: '12px',
+                                background: 'rgba(255, 51, 85, 0.2)', border: '1px solid #FF3355',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '1.5rem'
+                            }}>🚨</div>
                             <div>
-                                <div style={{ fontWeight: 900, fontSize: '0.9rem', letterSpacing: '0.5px' }}>
-                                    {t.sos_module?.active_banner || '¡ALERTA SOS DE AUXILIO ACTIVA!'} ({safeBeacons.length})
+                                <div style={{ fontSize: '1.05rem', fontWeight: 900, color: '#FF3355' }}>
+                                    EMISIÓN DE AUXILIO SOS
                                 </div>
-                                <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>
-                                    {active.sender_name || 'Operador'}: {active.note || 'Auxilio'}
-                                    {active.lat !== 0 && ` · GPS: ${active.lat}, ${active.lon}`}
+                                <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)' }}>
+                                    Propagación de emergencia por radio LoRa, BLE y SoundMesh.
                                 </div>
                             </div>
                         </div>
-                        <button
-                            onClick={() => handleResolve(active.id)}
-                            style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 800, cursor: 'pointer' }}
-                        >
-                            ✓ {t.sos_module?.resolve_btn || 'Marcar a Salvo'}
-                        </button>
-                    </div>
-                );
-            })()}
 
-            {/* FULLSCREEN SOS TRIGGER MODAL */}
-            {isTriggering && (
-                <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 10000,
-                    background: 'rgba(3,7,18,0.95)',
-                    backdropFilter: 'blur(12px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '20px'
-                }}>
-                    <div style={{
-                        width: '100%',
-                        maxWidth: '420px',
-                        background: '#0f172a',
-                        border: '2px solid #ef4444',
-                        borderRadius: '20px',
-                        padding: '24px',
-                        textAlign: 'center',
-                        boxShadow: '0 0 40px rgba(239,68,68,0.3)'
-                    }}>
-                        <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🚨</div>
-                        <h2 style={{ color: '#ef4444', fontWeight: 900, marginBottom: '8px', fontSize: '1.1rem' }}>{t.sos_module?.trigger_btn || 'EMITIR SOS TÁCTICO'}</h2>
-                        <p style={{ color: '#94a3b8', fontSize: '0.82rem', marginBottom: '12px', lineHeight: '1.4' }}>
-                            {t.sos_module?.beacon_active_desc || 'Se transmitirá una baliza de socorro con tu ubicación GPS real a todos los nodos P2P en rango radio.'}
-                        </p>
+                        <div>
+                            <label style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', fontWeight: 900, display: 'block', marginBottom: '4px' }}>
+                                MENSAJE DE EMERGENCIA / TRIAGE
+                            </label>
+                            <input
+                                value={noteText}
+                                onChange={e => setNoteText(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '10px 14px', background: 'rgba(0,0,0,0.6)',
+                                    border: '1px solid rgba(255, 51, 85, 0.4)', borderRadius: '10px',
+                                    color: '#FFFFFF', fontSize: '0.85rem', outline: 'none'
+                                }}
+                            />
+                        </div>
 
-                        {/* GPS STATUS INDICATOR */}
                         <div style={{
-                            padding: '8px 12px',
-                            borderRadius: '8px',
-                            marginBottom: '14px',
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            background: gpsStatus === 'ok'
-                                ? 'rgba(34,197,94,0.1)'
-                                : gpsStatus === 'error'
-                                ? 'rgba(239,68,68,0.1)'
-                                : gpsStatus === 'locating'
-                                ? 'rgba(56,189,248,0.1)'
-                                : 'rgba(255,255,255,0.05)',
-                            border: `1px solid ${gpsStatus === 'ok' ? '#22c55e' : gpsStatus === 'error' ? '#ef4444' : gpsStatus === 'locating' ? '#38bdf8' : 'rgba(255,255,255,0.1)'}`,
-                            color: gpsStatus === 'ok' ? '#4ade80' : gpsStatus === 'error' ? '#fca5a5' : gpsStatus === 'locating' ? '#7dd3fc' : '#94a3b8'
+                            padding: '10px 14px', background: 'rgba(0,0,0,0.5)',
+                            borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)',
+                            fontSize: '0.72rem', color: 'var(--text-secondary)'
                         }}>
-                            {gpsStatus === 'idle' && '📍 GPS se obtendrá al transmitir'}
-                            {gpsStatus === 'locating' && '📡 Obteniendo ubicación GPS...'}
-                            {gpsStatus === 'ok' && gpsCoords && `✅ GPS: ${gpsCoords.lat}, ${gpsCoords.lon}`}
-                            {gpsStatus === 'error' && '❌ GPS no disponible — se emitirá sin coordenadas'}
+                            GPS: {gpsStatus === 'locating' ? 'Obteniendo coordenadas satelitales...' : `${gpsCoords.lat.toFixed(4)}, ${gpsCoords.lon.toFixed(4)}`}
                         </div>
 
-                        {/* SMART SOS NOTE SUGGESTION CHIPS */}
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px', justifyContent: 'center' }}>
-                            <button
-                                onClick={() => setNoteText('🚑 HEMORRAGIA ACTIVA — Requiero torniquete y atención médica urgente')}
-                                style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
-                            >
-                                🚑 Médica
-                            </button>
-                            <button
-                                onClick={() => setNoteText('🏚️ ATRAPADO EN ESTRUCTURA — Inmueble con riesgo de colapso')}
-                                style={{ background: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fcd34d', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
-                            >
-                                🏚️ Rescate
-                            </button>
-                            <button
-                                onClick={() => setNoteText('🔥 EVACUACIÓN POR INCENDIO — Visibilidad nula y humo denso')}
-                                style={{ background: 'rgba(234,88,12,0.15)', border: '1px solid #ea580c', color: '#fdba74', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
-                            >
-                                🔥 Incendio
-                            </button>
-                            <button
-                                onClick={() => setNoteText('⚡ SIN ENERGÍA NI COMUNICACIÓN — Transmitiendo por malla radio RED')}
-                                style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid #38bdf8', color: '#7dd3fc', padding: '4px 8px', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
-                            >
-                                ⚡ Apagón
-                            </button>
-                        </div>
-
-                        <textarea
-
-                            value={noteText}
-                            onChange={(e) => setNoteText(e.target.value)}
-                            rows={3}
-                            style={{
-                                width: '100%',
-                                background: 'rgba(0,0,0,0.5)',
-                                border: '1px solid rgba(255,255,255,0.15)',
-                                borderRadius: '10px',
-                                padding: '10px',
-                                color: '#fff',
-                                fontSize: '0.85rem',
-                                marginBottom: '20px',
-                                boxSizing: 'border-box'
-                            }}
-                        />
-
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            <button
-                                onClick={() => { setIsTriggering(false); setGpsStatus('idle'); setGpsCoords({ lat: 0, lon: 0 }); if (currentScreen === 'sos') navigate('sidebar'); }}
-                                disabled={gpsStatus === 'locating'}
-                                style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', color: '#94a3b8', fontWeight: 700, cursor: 'pointer' }}
-                            >
-
-                                Cancelar
-                            </button>
+                        <div style={{ display: 'flex', gap: '10px' }}>
                             <button
                                 onClick={handleBroadcastSos}
-                                disabled={gpsStatus === 'locating'}
-                                style={{ flex: 1, padding: '12px', borderRadius: '10px', background: 'linear-gradient(135deg, #ef4444, #b91c1c)', border: 'none', color: '#fff', fontWeight: 900, cursor: 'pointer', opacity: gpsStatus === 'locating' ? 0.6 : 1 }}
+                                style={{
+                                    flex: 2, padding: '14px', borderRadius: '12px',
+                                    background: 'linear-gradient(135deg, #FF3355 0%, #E8213A 100%)',
+                                    color: '#FFFFFF', fontWeight: 900, fontSize: '0.85rem', border: 'none', cursor: 'pointer',
+                                    boxShadow: '0 0 20px rgba(255, 51, 85, 0.5)'
+                                }}
                             >
-                                {gpsStatus === 'locating' ? '📡 Localizando...' : 'Transmitir SOS'}
+                                🚨 EMITIR SOS AHORA
+                            </button>
+                            <button
+                                onClick={() => setIsTriggering(false)}
+                                style={{
+                                    flex: 1, padding: '14px', borderRadius: '12px',
+                                    background: 'rgba(255, 255, 255, 0.08)',
+                                    color: '#FFFFFF', fontWeight: 800, fontSize: '0.85rem',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)', cursor: 'pointer'
+                                }}
+                            >
+                                CANCELAR
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-        </>
+        </div>
     );
 };

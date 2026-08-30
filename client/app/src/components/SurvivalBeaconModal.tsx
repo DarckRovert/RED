@@ -362,27 +362,38 @@ export function SurvivalBeaconModal() {
             transition: screenFlashActive ? "background 0.15s ease" : "none"
         }}>
             {/* Header Táctico */}
-            <header className="safe-header" style={{
-                padding: "12px 20px",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(255, 51, 85, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={() => navigate("sidebar")}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
+                        width: 38, height: 38, borderRadius: "12px",
                         background: meshSosActive ? "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)" : "linear-gradient(135deg, #FFB300 0%, #FF8F00 100%)",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: "1.25rem",
                         boxShadow: meshSosActive ? "0 0 20px rgba(232,33,58,0.6)" : "0 4px 16px rgba(255,179,0,0.3)"
                     }}>🚨</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.sos_module?.title || "Baliza Táctica SOS & Rescate"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            {t.sos_module?.title || "BALIZA SOS & RESCATE"}
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: meshSosActive ? "var(--accent-crimson-bright)" : "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
+                        <div style={{ fontSize: "0.68rem", color: meshSosActive ? "#FF3355" : "#FFB300", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
                             {meshSosActive ? `● ${t.sos_module?.active_banner || "TRANSMISIÓN SOS ACTIVA EN MALLA"}` : "MODO GUARDIA · STANDBY"}
                         </div>
                     </div>
@@ -390,9 +401,12 @@ export function SurvivalBeaconModal() {
 
                 <button
                     onClick={() => navigate("sidebar")}
-                    className="btn-icon"
-                    title={t.common?.close || "Cerrar baliza"}
-                    style={{ width: 38, height: 38 }}
+                    style={{
+                        width: 34, height: 34, borderRadius: "9px",
+                        background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                        color: "#FFFFFF", cursor: "pointer", fontSize: "0.9rem", fontWeight: 800,
+                        display: "flex", alignItems: "center", justifyContent: "center"
+                    }}
                 >
                     ✕
                 </button>

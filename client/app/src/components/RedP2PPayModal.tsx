@@ -9,7 +9,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 type WalletTab = "emit" | "redeem" | "ledger";
 
 export const RedP2PPayModal: React.FC = () => {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
     const { t } = useTranslation();
     const [balance, setBalance] = useState<number>(0);
     const [totalSpent, setTotalSpent] = useState<number>(0);
@@ -23,7 +23,6 @@ export const RedP2PPayModal: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-    // 1. Cargar saldo real e historial de vouchers desde el nodo Rust
     const loadWallet = useCallback(async () => {
         try {
             const res = await getP2PWallet();
@@ -35,7 +34,6 @@ export const RedP2PPayModal: React.FC = () => {
                 setVouchers(res.vouchers || []);
             }
         } catch {
-            // Silencioso en reintentos periódicos
         } finally {
             setIsLoading(false);
         }
@@ -47,7 +45,6 @@ export const RedP2PPayModal: React.FC = () => {
         return () => clearInterval(interval);
     }, [loadWallet]);
 
-    // 2. Emitir Voucher Criptográfico Real firmado por el nodo Rust
     const handleCreateVoucher = async () => {
         const val = parseFloat(amountInput);
         if (isNaN(val) || val <= 0) {
@@ -70,7 +67,6 @@ export const RedP2PPayModal: React.FC = () => {
                 setBalance(res.new_balance);
                 setVouchers(prev => [res.voucher, ...prev]);
 
-                // Generar QR interoperable con la firma criptográfica Ed25519 real
                 const qrString = `RED_PAY:${res.voucher.id}:${res.voucher.amount}:${res.voucher.signature}`;
                 setActiveQrString(qrString);
 
@@ -98,7 +94,6 @@ export const RedP2PPayModal: React.FC = () => {
         }
     };
 
-    // 3. Canjear Voucher P2P recibido (escaneado o pegado)
     const handleRedeemVoucher = async () => {
         const payload = redeemInput.trim();
         if (!payload) {
@@ -136,350 +131,267 @@ export const RedP2PPayModal: React.FC = () => {
         }
     };
 
-    const pasteFromClipboard = async () => {
-        if (typeof navigator !== "undefined" && navigator.clipboard) {
-            try {
-                const text = await navigator.clipboard.readText();
-                if (text) {
-                    setRedeemInput(text);
-                    toast.info("Cadena pegada del portapapeles");
-                }
-            } catch {
-                toast.error("No se pudo leer el portapapeles");
-            }
-        }
-    };
-
-    const setQuickAmount = (val: number) => {
-        setAmountInput(val.toString());
-    };
-
     return (
         <div style={{
-            width: "100%", height: "100%",
-            background: "var(--bg-void)", color: "var(--text-primary)",
-            display: "flex", flexDirection: "column",
-            overflow: "hidden", position: "relative"
+            display: "flex", flexDirection: "column", height: "100%", width: "100%",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
         }}>
             {/* Header Táctico */}
             <header style={{
-                padding: "16px 20px",
-                height: "var(--header-h)",
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(0, 230, 118, 0.35)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 150, 80, 0.15) 100%)",
+                        border: "1px solid rgba(0, 230, 118, 0.5)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,230,118,0.35)"
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 230, 118, 0.25)"
                     }}>💳</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            Pagos Soberanos P2P & Vouchers
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            RED P2P PAY · OFF-GRID CASH
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            ED25519 SIGNED · ZERO-KNOWLEDGE OFFLINE · SLED PERSISTED
+                        <div style={{ fontSize: "0.68rem", color: "#00E676", fontWeight: 800 }}>
+                            VALES DE TRUEQUE CIFRADOS CON ED25519
                         </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => navigate("sidebar")}
-                    className="btn-icon"
-                    title="Cerrar pagos"
-                    style={{ width: 38, height: 38 }}
-                >
-                    ✕
-                </button>
+                <div style={{
+                    fontSize: "0.75rem", padding: "4px 10px", borderRadius: "8px",
+                    background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.4)",
+                    color: "#00E676", fontWeight: 900
+                }}>
+                    {balance.toLocaleString()} CRÉDITOS
+                </div>
             </header>
 
-            {/* Tarjeta Metálica de Saldo Soberano */}
-            <div style={{ padding: "16px 20px 6px 20px", flexShrink: 0 }}>
-                <div
-                    className="card-tactical-glow-emerald"
-                    style={{
-                        padding: "18px 20px",
-                        background: "linear-gradient(145deg, rgba(14, 30, 24, 0.85), rgba(8, 16, 12, 0.95))",
-                        borderRadius: "var(--radius-lg)",
-                        display: "flex", justifyContent: "space-between", alignItems: "center",
-                        border: "1px solid rgba(0, 230, 118, 0.4)",
-                        boxShadow: "0 10px 30px rgba(0, 230, 118, 0.15)"
-                    }}
-                >
-                    <div>
-                        <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700 }}>
-                            Saldo Soberano en Bóveda Off-Grid
-                        </div>
-                        <div style={{ fontSize: "1.8rem", fontWeight: 900, fontFamily: "JetBrains Mono, monospace", color: "#fff", display: "flex", alignItems: "baseline", gap: "6px", marginTop: "2px" }}>
-                            <span>{isLoading ? "..." : balance.toFixed(2)}</span>
-                            <span style={{ fontSize: "0.9rem", color: "var(--accent-emerald)", fontWeight: 800 }}>CRÉDITOS RED</span>
-                        </div>
-                    </div>
-
-                    <div style={{ textAlign: "right" }}>
-                        <span className="badge-tactical badge-tactical-emerald">SLED WALLET</span>
-                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                            Emitido: {totalSpent.toFixed(2)} RED
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Selector de Pestañas Segmentadas Tácticas */}
+            {/* Selector de Pestañas Segmentadas */}
             <div style={{
-                padding: "10px 16px",
-                display: "flex", gap: "8px",
-                background: "rgba(10, 10, 20, 0.85)",
-                borderBottom: "1px solid var(--glass-border)",
-                overflowX: "auto", flexShrink: 0
+                display: "flex", padding: "8px 16px", gap: "6px",
+                background: "rgba(8, 10, 20, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                flexShrink: 0
             }}>
-                <button
-                    onClick={() => setActiveTab("emit")}
-                    className={activeTab === "emit" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    💳 {t.pay_module?.issue_voucher || "Emitir Vale"}
-                </button>
-                <button
-                    onClick={() => setActiveTab("redeem")}
-                    className={activeTab === "redeem" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    📥 {t.pay_module?.redeem_voucher || "Canjear Vale"}
-                </button>
-                <button
-                    onClick={() => setActiveTab("ledger")}
-                    className={activeTab === "ledger" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    📜 {t.pay_module?.tx_history || "Libro Contable"} ({vouchers.length})
-                </button>
+                {[
+                    { id: "emit", icon: "📤", label: "EMITIR VALE" },
+                    { id: "redeem", icon: "📥", label: "CANJEAR VALE" },
+                    { id: "ledger", icon: "📑", label: `LIBRO MAYOR (${vouchers.length})` }
+                ].map(tab => {
+                    const isSel = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as WalletTab)}
+                            style={{
+                                flex: 1, padding: "8px 12px", borderRadius: "10px",
+                                background: isSel ? "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(10, 35, 25, 0.85) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                border: isSel ? "1.5px solid #00E676" : "1px solid rgba(255, 255, 255, 0.08)",
+                                color: isSel ? "#00E676" : "var(--text-secondary)",
+                                fontWeight: isSel ? 900 : 700, fontSize: "0.76rem",
+                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                            }}
+                        >
+                            <span>{tab.icon}</span> <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
-            {/* Contenido Principal con Scroll Seguro */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                    {/* ─── TAB 1: EMITIR VALE CRIPTOGRÁFICO ─────────────────────── */}
+                    {/* TAB 1: EMITIR VALE */}
                     {activeTab === "emit" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 230, 118, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
+                        }}>
                             <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                    💳 Emisión de Vale Criptográfico Offline
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
+                                    EMISOR DE VALES DE TRUEQUE DIGITAL
                                 </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                    Firma digitalmente el vale con tu clave privada Ed25519 para intercambio sin conexión
-                                </div>
-                            </div>
-
-                            {/* Monto y Botones Rápidos */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    MONTO A TRANSFERIR:
-                                </label>
-                                <input
-                                    type="number"
-                                    value={amountInput}
-                                    onChange={e => setAmountInput(e.target.value)}
-                                    placeholder="0.00 Créditos"
-                                    style={{ fontSize: "1.2rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace" }}
-                                />
-
-                                <div style={{ display: "flex", gap: "6px" }}>
-                                    {[10, 25, 50, 100].map((num) => (
-                                        <button
-                                            key={num}
-                                            onClick={() => setQuickAmount(num)}
-                                            className="btn-tactical-secondary"
-                                            style={{ flex: 1, padding: "6px", fontSize: "0.76rem", fontFamily: "JetBrains Mono, monospace" }}
-                                        >
-                                            +{num}
-                                        </button>
-                                    ))}
-                                    <button
-                                        onClick={() => setQuickAmount(balance)}
-                                        className="btn-tactical-secondary"
-                                        style={{ padding: "6px 12px", fontSize: "0.76rem", color: "var(--accent-emerald)" }}
-                                    >
-                                        MAX
-                                    </button>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    Crea un cheque portador firmado con la llave Ed25519 de tu nodo Rust, canjeable sin conexión.
                                 </div>
                             </div>
 
-                            {/* Destinatario Opcional */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    DESTINATARIO (OPCIONAL / ANÓNIMO):
-                                </label>
-                                <input
-                                    value={recipientInput}
-                                    onChange={e => setRecipientInput(e.target.value)}
-                                    placeholder="Nombre o Hash del destinatario"
-                                />
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>CANTIDAD DE CRÉDITOS</label>
+                                    <input
+                                        type="number"
+                                        value={amountInput}
+                                        onChange={e => setAmountInput(e.target.value)}
+                                        placeholder="Ej: 50, 100, 500..."
+                                        style={{
+                                            width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(0, 230, 118, 0.3)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.9rem", outline: "none", fontFamily: "JetBrains Mono, monospace"
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>DESTINATARIO (OPCIONAL / AL PORTADOR)</label>
+                                    <input
+                                        value={recipientInput}
+                                        onChange={e => setRecipientInput(e.target.value)}
+                                        placeholder="DID o Hash del destinatario (dejar vacío para cheque al portador)..."
+                                        style={{
+                                            width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.82rem", outline: "none"
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleCreateVoucher}
+                                    disabled={isSubmitting || !amountInput}
+                                    style={{
+                                        padding: "12px", background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                                        border: "none", borderRadius: "12px", color: "#000000",
+                                        fontWeight: 900, fontSize: "0.85rem", cursor: "pointer",
+                                        boxShadow: "0 0 15px rgba(0, 230, 118, 0.35)"
+                                    }}
+                                >
+                                    {isSubmitting ? "Emitiendo y firmando en Rust..." : "⚡ EMITIR VALE CIFRADO"}
+                                </button>
                             </div>
 
-                            {/* Botón de Emisión */}
-                            <button
-                                onClick={handleCreateVoucher}
-                                disabled={isSubmitting || parseFloat(amountInput) <= 0 || parseFloat(amountInput) > balance}
-                                className="btn-tactical-primary"
-                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem", background: "linear-gradient(135deg, #00E676 0%, #00B359 100%)", color: "#000" }}
-                            >
-                                {isSubmitting ? "Firmando con Ed25519..." : "⚡ GENERAR VALE FIRMADO EN RUST"}
-                            </button>
-
-                            {/* Código QR Resultante */}
                             {activeQr && (
-                                <div className="card-tactical animate-pop" style={{ padding: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", background: "rgba(0,0,0,0.65)" }}>
-                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                        ✅ Código QR de Pago Listo para Escaneo
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", paddingTop: "12px", borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                                    <img src={activeQr} alt="QR Vale" style={{ width: 220, height: 220, borderRadius: "12px", border: "2px solid #00E676" }} />
+                                    <div style={{ fontSize: "0.7rem", color: "var(--text-secondary)", textAlign: "center" }}>
+                                        Muestra este código QR para que el receptor lo escanee y canjee los fondos.
                                     </div>
-                                    <div style={{ padding: "12px", background: "#04060A", borderRadius: "12px", border: "2px solid rgba(0,230,118,0.4)" }}>
-                                        <img src={activeQr} alt="QR de Pago" style={{ width: "240px", height: "240px", display: "block" }} />
-                                    </div>
-
                                     {activeQrString && (
-                                        <div style={{ display: "flex", gap: "8px", width: "100%" }}>
-                                            <input
-                                                readOnly
-                                                value={activeQrString}
-                                                style={{ flex: 1, fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace", background: "rgba(0,0,0,0.5)" }}
-                                            />
-                                            <button
-                                                onClick={() => copyToClipboard(activeQrString)}
-                                                className="btn-tactical-secondary"
-                                                style={{ padding: "8px 14px", fontSize: "0.78rem" }}
-                                            >
-                                                📋 Copiar
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={() => copyToClipboard(activeQrString)}
+                                            style={{
+                                                padding: "6px 14px", background: "rgba(0, 230, 118, 0.15)",
+                                                border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "8px",
+                                                color: "#00E676", fontSize: "0.72rem", fontWeight: 900, cursor: "pointer"
+                                            }}
+                                        >
+                                            COPIAR CADENA CRIPTOGRÁFICA
+                                        </button>
                                     )}
                                 </div>
                             )}
                         </div>
                     )}
 
-                    {/* ─── TAB 2: CANJEAR VALE RECIBIDO ─────────────────────────── */}
+                    {/* TAB 2: CANJEAR VALE */}
                     {activeTab === "redeem" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
                             <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                    📥 Canje de Vales Criptográficos P2P
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E5FF" }}>
+                                    CANJE DE VALE CIFRADO
                                 </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                    Verifica la firma Ed25519 del emisor y añade los créditos a tu saldo local
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    Pega la cadena RED_PAY:... recibida de otro operador para acreditarla en tu saldo local.
                                 </div>
                             </div>
 
-                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    CADENA CRIPTOGRÁFICA DEL VOUCHER:
-                                </label>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                                 <textarea
                                     value={redeemInput}
                                     onChange={e => setRedeemInput(e.target.value)}
-                                    rows={4}
-                                    placeholder="RED_PAY:VOUCHER_ID:AMOUNT:SIGNATURE..."
-                                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem" }}
+                                    placeholder="Pega la cadena RED_PAY:id:monto:firma..."
+                                    rows={3}
+                                    style={{
+                                        padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                        border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "10px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", outline: "none", fontFamily: "JetBrains Mono, monospace"
+                                    }}
                                 />
-
-                                <div style={{ display: "flex", gap: "8px" }}>
-                                    <button
-                                        onClick={pasteFromClipboard}
-                                        className="btn-tactical-secondary"
-                                        style={{ flex: 1, padding: "8px" }}
-                                    >
-                                        📋 Pegar del Portapapeles
-                                    </button>
-                                    <button
-                                        onClick={() => setRedeemInput("")}
-                                        className="btn-tactical-secondary"
-                                        style={{ padding: "8px 16px" }}
-                                    >
-                                        Limpiar
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={handleRedeemVoucher}
+                                    disabled={isSubmitting || !redeemInput.trim()}
+                                    style={{
+                                        padding: "12px", background: "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                        border: "none", borderRadius: "12px", color: "#000000",
+                                        fontWeight: 900, fontSize: "0.85rem", cursor: "pointer",
+                                        boxShadow: "0 0 15px rgba(0, 229, 255, 0.35)"
+                                    }}
+                                >
+                                    {isSubmitting ? "Validando firma en Rust..." : "🎉 CANJEAR Y ACREDITAR FONDOS"}
+                                </button>
                             </div>
-
-                            <button
-                                onClick={handleRedeemVoucher}
-                                disabled={isSubmitting || !redeemInput.trim()}
-                                className="btn-tactical-primary"
-                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem", background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)", color: "#000" }}
-                            >
-                                {isSubmitting ? "Verificando en Rust..." : "🔓 VALIDAR FIRMA Y ACREDITAR SALDO"}
-                            </button>
                         </div>
                     )}
 
-                    {/* ─── TAB 3: LIBRO CONTABLE ───────────────────────────────── */}
+                    {/* TAB 3: LIBRO MAYOR DE VALES */}
                     {activeTab === "ledger" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
-                                        📜 Libro Mayor de Transacciones
-                                    </div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                        Historial de vales emitidos, canjeados y recibidos en Sled DB
-                                    </div>
-                                </div>
-                                <span className="badge-tactical badge-tactical-emerald">AUDITED</span>
-                            </div>
-
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                             {vouchers.length === 0 ? (
-                                <div className="empty-state-tactical">
-                                    <div className="empty-state-icon">💳</div>
-                                    <div className="empty-state-title">Sin Transacciones Aún</div>
-                                    <div className="empty-state-desc">
-                                        No has emitido ni canjeado vales criptográficos en esta sesión.
+                                <div style={{
+                                    textAlign: "center", padding: "30px 16px",
+                                    background: "rgba(14, 18, 38, 0.9)", borderRadius: "18px",
+                                    border: "1px dashed rgba(255, 255, 255, 0.12)"
+                                }}>
+                                    <div style={{ fontSize: "2rem", marginBottom: "6px" }}>📑</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                        Sin Transacciones en el Libro Mayor
+                                    </div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+                                        Emite o canjea vales para ver el historial de transacciones locales.
                                     </div>
                                 </div>
                             ) : (
-                                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                    {vouchers.map((v) => (
-                                        <div
-                                            key={v.id}
-                                            className="card-tactical"
-                                            style={{
-                                                padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center",
-                                                borderLeft: v.is_outgoing ? "4px solid var(--accent-crimson)" : "4px solid var(--accent-emerald)"
-                                            }}
-                                        >
-                                            <div>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                                    <strong style={{ fontSize: "0.92rem", fontFamily: "JetBrains Mono, monospace", color: v.is_outgoing ? "var(--accent-crimson-bright)" : "var(--accent-emerald)" }}>
-                                                        {v.is_outgoing ? `- ${v.amount.toFixed(2)}` : `+ ${v.amount.toFixed(2)}`} RED
-                                                    </strong>
-                                                    <span className={`badge-tactical ${v.is_outgoing ? "badge-tactical-crimson" : "badge-tactical-emerald"}`}>
-                                                        {v.is_outgoing ? "EMISIÓN" : "CANJEADO"}
-                                                    </span>
-                                                </div>
-
-                                                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    ID: {(v.id || v.voucher_id || "").substring(0, 18)}… · {new Date(v.timestamp || (v.created_at ? v.created_at * 1000 : Date.now())).toLocaleDateString()}
-                                                </div>
+                                vouchers.map(v => (
+                                    <div
+                                        key={v.id}
+                                        style={{
+                                            padding: "14px 16px", borderRadius: "14px",
+                                            background: "linear-gradient(135deg, rgba(16, 22, 44, 0.9) 0%, rgba(8, 12, 28, 0.95) 100%)",
+                                            border: `1px solid ${v.is_redeemed ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 230, 118, 0.3)'}`,
+                                            display: "flex", justifyContent: "space-between", alignItems: "center"
+                                        }}
+                                    >
+                                        <div>
+                                            <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                                {v.amount} CRÉDITOS · ID: {v.id.substring(0, 10)}…
                                             </div>
-
-                                            <button
-                                                onClick={() => {
-                                                    const str = `RED_PAY:${v.id || v.voucher_id}:${v.amount}:${v.signature || ""}`;
-                                                    copyToClipboard(str);
-                                                }}
-                                                className="btn-icon"
-                                                title="Copiar cadena de firma"
-                                                style={{ width: 32, height: 32 }}
-                                            >
-                                                📋
-                                            </button>
+                                            <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                {new Date(v.created_at).toLocaleDateString()} {new Date(v.created_at).toLocaleTimeString()}
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <span style={{
+                                            fontSize: "0.65rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                                            background: v.is_redeemed ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 230, 118, 0.15)",
+                                            color: v.is_redeemed ? "var(--text-secondary)" : "#00E676",
+                                            border: `1px solid ${v.is_redeemed ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 230, 118, 0.4)'}`
+                                        }}>
+                                            {v.is_redeemed ? "CANJEADO" : "VÁLIDO (DISPONIBLE)"}
+                                        </span>
+                                    </div>
+                                ))
                             )}
                         </div>
                     )}

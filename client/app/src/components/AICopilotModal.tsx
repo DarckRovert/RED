@@ -25,6 +25,17 @@ interface ChatMessage {
 
 const CHAT_HISTORY_KEY = "red_copilot_chat_history_v2";
 
+function getGlossaryTerm(entry: GlossaryEntry, lang: GlossaryLanguage): string {
+    switch (lang) {
+        case 'en': return entry.termEn;
+        case 'pt': return entry.termPt;
+        case 'fr': return entry.termFr;
+        case 'de': return entry.termDe;
+        case 'qu': return entry.termQu;
+        case 'es': default: return entry.termEs;
+    }
+}
+
 export const AICopilotModal: React.FC = () => {
     const {
         conversations,
@@ -39,13 +50,13 @@ export const AICopilotModal: React.FC = () => {
     const { t } = useTranslation();
 
     const tacticalPresets = [
-        { icon: "🚨", label: t.copilot?.preset_triage || "Triage START", query: "Explica el protocolo de Triage START en combate y desastres paso a paso con códigos de color." },
-        { icon: "🩹", label: t.copilot?.preset_tourniquet || "Torniquete & Hemorragias", query: "Protocolo de aplicación de torniquete táctico y control de hemorragia exanguinante en zona caliente." },
-        { icon: "💧", label: t.copilot?.preset_water || "Purificar Agua", query: "¿Cómo potabilizar agua de río o estancada en situación de supervivencia extrema (filtrado, ebullición, cloro)?" },
-        { icon: "📻", label: t.copilot?.preset_morse || "Morse SOS & Frecuencias", query: "Códigos Morse de auxilio SOS (... --- ...) y frecuencias de radio de emergencia internacional VHF/UHF." },
-        { icon: "📡", label: t.copilot?.preset_dtn || "Diagnóstico Mesh P2P", query: "¿Cómo funciona el enrutamiento tolerante a retrasos DTN y los saltos Onion en la red RED?" },
-        { icon: "⚡", label: t.copilot?.preset_blackout || "Apagón Eléctrico", query: "Protocolo de supervivencia inmediata ante un colapso de infraestructura eléctrica y comunicaciones." },
-        { icon: "🛡️", label: t.copilot?.preset_crypto || "Cifrado Noise XK", query: "¿Cómo protegen las llaves efímeras Curve25519 y ChaCha20-Poly1305 los mensajes contra intercepción?" }
+        { icon: "🚨", label: t('copilot.preset_triage') || "Triage START", query: "Explica el protocolo de Triage START en combate y desastres paso a paso con códigos de color." },
+        { icon: "🩹", label: t('copilot.preset_tourniquet') || "Torniquete & Hemorragias", query: "Protocolo de aplicación de torniquete táctico y control de hemorragia exanguinante en zona caliente." },
+        { icon: "💧", label: t('copilot.preset_water') || "Purificar Agua", query: "¿Cómo potabilizar agua de río o estancada en situación de supervivencia extrema (filtrado, ebullición, cloro)?" },
+        { icon: "📻", label: t('copilot.preset_morse') || "Morse SOS & Frecuencias", query: "Códigos Morse de auxilio SOS (... --- ...) y frecuencias de radio de emergencia internacional VHF/UHF." },
+        { icon: "📡", label: t('copilot.preset_dtn') || "Diagnóstico Mesh P2P", query: "¿Cómo funciona el enrutamiento tolerante a retrasos DTN y los saltos Onion en la red RED?" },
+        { icon: "⚡", label: t('copilot.preset_blackout') || "Apagón Eléctrico", query: "Protocolo de supervivencia inmediata ante un colapso de infraestructura eléctrica y comunicaciones." },
+        { icon: "🛡️", label: t('copilot.preset_crypto') || "Cifrado Noise XK", query: "¿Cómo protegen las llaves efímeras Curve25519 y ChaCha20-Poly1305 los mensajes contra intercepción?" }
     ];
 
     const effectiveChannels = conversations.length > 0
@@ -138,110 +149,95 @@ export const AICopilotModal: React.FC = () => {
     const [importProgress, setImportProgress] = useState<number>(0);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    // Translator State
+    // Offline Translator & Emergency Glossary State
     const [targetLang, setTargetLang] = useState<GlossaryLanguage>("en");
-    const [selectedCategory, setSelectedCategory] = useState<GlossaryEntry["category"] | "all">("all");
+    const [selectedCategory, setSelectedCategory] = useState<string>("all");
     const [translatorInput, setTranslatorInput] = useState("");
-    const [translatorOutput, setTranslatorOutput] = useState<string | null>(null);
+    const [translatorOutput, setTranslatorOutput] = useState("");
     const [isTranslating, setIsTranslating] = useState(false);
 
-    // Summarizer State
-    const [selectedChannelId, setSelectedChannelId] = useState<string>(activeConversationId || "general");
+    // Channel Summarizer State
+    const [selectedChannelId, setSelectedChannelId] = useState(activeConversationId || "general");
+    const [isSummarizing, setIsSummarizing] = useState(false);
     const [summaryResult, setSummaryResult] = useState<{
         bullets: string[];
         totalMessages: number;
-        sentiment: string;
+        sentiment?: string;
     } | null>(null);
-    const [isSummarizing, setIsSummarizing] = useState(false);
 
-    const chatContainerRef = useRef<HTMLDivElement | null>(null);
+    const chatContainerRef = useRef<HTMLDivElement>(null);
 
-    // Save Chat History
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            try {
-                localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages.slice(-50)));
-            } catch (e) {
-                console.error("[Copilot History Save Error]", e);
-            }
-        }
-    }, [messages]);
-
-    // Check for incoming quick queries from Chat context
-    useEffect(() => {
-        if (typeof window !== "undefined") {
-            const quickQuery = localStorage.getItem("red_copilot_quick_query");
-            if (quickQuery) {
-                setInput(`Analiza y asísteme con este mensaje: "${quickQuery}"`);
-                localStorage.removeItem("red_copilot_quick_query");
-                setActiveTab("chat");
-            }
-        }
-    }, []);
-
-    // Subscribe to ModelManager state changes
-    useEffect(() => {
-        setMemoryBudget(ModelManager.getDeviceMemoryBudget());
-        const unsub = ModelManager.subscribe((active, all) => {
-            setActiveModel(active);
-            setAvailableModels([...all]);
-        });
-        return () => unsub();
-    }, []);
-
-    // Auto-scroll on new messages
-    useEffect(() => {
+    const scrollToBottom = useCallback(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
-    }, [messages, loading]);
+    }, []);
 
-    // TTS Voice Synthesizer
-    const speakText = useCallback((textToSpeak: string) => {
-        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-            toast.error("Síntesis de voz no soportada en este dispositivo");
-            return;
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages, loading, scrollToBottom]);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
+        } catch (e) {
+            console.error("[Copilot History Save Error]", e);
         }
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(textToSpeak.slice(0, 400));
-        utterance.lang = targetLang === "en" ? "en-US" : targetLang === "fr" ? "fr-FR" : "es-ES";
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
-        toast.info(t.copilot?.playing_audio || "🔊 Reproduciendo respuesta táctica...");
-    }, [targetLang, t]);
+    }, [messages]);
 
-    // Copy Text to Clipboard
-    const copyToClipboard = (text: string, msgId: string) => {
+    const refreshModels = useCallback(() => {
+        const models = ModelManager.getModels();
+        setAvailableModels(models);
+        setActiveModel(ModelManager.getActiveModel());
+        setMemoryBudget(ModelManager.getDeviceMemoryBudget());
+    }, []);
+
+    useEffect(() => {
+        refreshModels();
+        const interval = setInterval(refreshModels, 3000);
+        return () => clearInterval(interval);
+    }, [refreshModels]);
+
+    const copyToClipboard = (text: string, id: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
             navigator.clipboard.writeText(text);
-            setCopiedMsgId(msgId);
-            toast.success(t.copilot?.directive_copied || "📋 Directiva copiada al portapapeles");
+            setCopiedMsgId(id);
+            toast.success(t('common.copied') || "Copiado al portapapeles");
             setTimeout(() => setCopiedMsgId(null), 2000);
         }
     };
 
-    // Share AI Answer to Active Chat Channel
     const shareToChannel = (text: string) => {
-        if (sendMessage) {
-            const formatted = `🤖 [Directiva Copiloto IA]:\n${text}`;
-            sendMessage(formatted);
-            toast.success(t.copilot?.sent_to_chat || "🚀 Directiva transmitida al chat activo");
+        sendMessage(`[Asistencia Copiloto IA RED]:\n${text}`);
+        toast.success(`Enviado al canal`);
+    };
+
+    const speakText = (text: string) => {
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = "es-ES";
+            utterance.rate = 1.05;
+            window.speechSynthesis.speak(utterance);
+            toast.info("Reproduciendo respuesta por voz...");
         } else {
-            toast.error("Canal de chat no disponible");
+            toast.warning("Síntesis de voz no disponible en este dispositivo");
         }
     };
 
-    // Voice Dictation Toggle (Speech-to-Text)
     const toggleVoiceInput = () => {
-        if (isListening) {
-            recognitionRef.current?.stop();
-            setIsListening(false);
+        if (typeof window === "undefined") return;
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            toast.error(t('copilot.voice_unsupported') || "Reconocimiento de voz no soportado");
             return;
         }
 
-        const SpeechRecognition = typeof window !== "undefined" && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-        if (!SpeechRecognition) {
-            toast.warning("Reconocimiento de voz no disponible en este dispositivo");
+        if (isListening) {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop();
+            }
+            setIsListening(false);
             return;
         }
 
@@ -249,23 +245,25 @@ export const AICopilotModal: React.FC = () => {
             const recognition = new SpeechRecognition();
             recognition.lang = "es-ES";
             recognition.continuous = false;
-            recognition.interimResults = true;
+            recognition.interimResults = false;
 
             recognition.onstart = () => {
                 setIsListening(true);
-                toast.info("🎙️ Escuchando comando...");
+                toast.info(t('copilot.listening') || "🎙️ Escuchando dictado...");
             };
 
             recognition.onresult = (event: any) => {
-                const transcript = Array.from(event.results)
-                    .map((r: any) => r[0].transcript)
-                    .join("");
-                setInput(transcript);
+                const transcript = event.results[0][0].transcript;
+                if (transcript) {
+                    setInput(prev => (prev ? `${prev} ${transcript}` : transcript));
+                }
+                setIsListening(false);
             };
 
-            recognition.onerror = (err: any) => {
-                console.warn("[Voice Input Error]", err);
+            recognition.onerror = (event: any) => {
+                console.error("[SpeechRecognition Error]", event.error);
                 setIsListening(false);
+                toast.error(`Error de voz: ${event.error}`);
             };
 
             recognition.onend = () => {
@@ -274,15 +272,15 @@ export const AICopilotModal: React.FC = () => {
 
             recognitionRef.current = recognition;
             recognition.start();
-        } catch (e: any) {
-            console.warn('[AICopilot] Speech recognition error:', e?.message || e);
+        } catch (e) {
+            console.error("[SpeechRecognition Init]", e);
             setIsListening(false);
         }
     };
 
-    const handleSend = async (customText?: string) => {
-        const text = (customText || input).trim();
-        if (!text) return;
+    const handleSend = async (manualQuery?: string) => {
+        const text = (manualQuery || input).trim();
+        if (!text || loading) return;
 
         const userMsg: ChatMessage = {
             id: `msg_${Date.now()}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`,
@@ -292,12 +290,12 @@ export const AICopilotModal: React.FC = () => {
         };
 
         setMessages(prev => [...prev, userMsg]);
-        if (!customText) setInput("");
+        if (!manualQuery) setInput("");
         setLoading(true);
 
         const startTime = performance.now();
+
         try {
-            // 1. Consulta RAG vectorial nativa offline (<5ms)
             const ragResults = await vectorKnowledgeStore.search(text, 1);
             let ragSnippet = "";
             if (ragResults.length > 0 && ragResults[0].similarityScore > 0.52) {
@@ -343,17 +341,16 @@ export const AICopilotModal: React.FC = () => {
     };
 
     const handleSelectModel = (modelId: string) => {
-        // Liberar pipelines previos de memoria antes de cargar el nuevo modelo
         LocalAIEngine.disposePipelines();
         ModelManager.setActiveModel(modelId);
         const selected = ModelManager.getActiveModel();
         setActiveModel(selected);
         if (selected) {
-            toast.success(`${t.copilot?.model_switched || "Motor activo"}: ${selected.name}`);
+            toast.success(`${t('copilot.model_switched') || "Motor activo"}: ${selected.name}`);
             const switchMsg: ChatMessage = {
                 id: "msg_switch_" + Date.now().toString(36),
                 sender: "ai",
-                text: `🔄 Motor neural cambiado a: ${selected.name}.\nAsignación de memoria dinámica actualizada: ${selected.recommendedMinRamMb} MB recomendados.`,
+                text: `🔄 Motor neural cambiado a: ${selected.name}.\nAsignación de memoria dinámica: ${selected.recommendedMinRamMb} MB recomendados.`,
                 modelTag: selected.name,
                 timestamp: Date.now()
             };
@@ -383,14 +380,14 @@ export const AICopilotModal: React.FC = () => {
     const handleCancelDownload = (modelId: string) => {
         ModelManager.cancelDownload(modelId);
         setDownloadingId(null);
-        toast.info(t.copilot?.cancel_btn || "Descarga cancelada");
+        toast.info(t('copilot.cancel_btn') || "Descarga cancelada");
     };
 
     const handleDeleteModel = async (modelId: string) => {
         LocalAIEngine.disposePipelines();
         const ok = await ModelManager.deleteModel(modelId);
         if (ok) {
-            toast.success(t.copilot?.delete_success || "Modelo eliminado para liberar espacio");
+            toast.success(t('copilot.delete_success') || "Modelo eliminado para liberar espacio");
         } else {
             toast.error("No se pudo eliminar el archivo");
         }
@@ -422,7 +419,7 @@ export const AICopilotModal: React.FC = () => {
         toast.info("Preparando paquete P2P...");
         const ok = await ModelManager.exportModel(modelId);
         if (ok) {
-            toast.success(t.copilot?.export_success || "✅ Modelo compartido vía P2P / AirDrop");
+            toast.success(t('copilot.export_success') || "✅ Modelo compartido vía P2P / AirDrop");
         } else {
             toast.error("No se pudo iniciar la transferencia P2P");
         }
@@ -483,7 +480,7 @@ export const AICopilotModal: React.FC = () => {
             timestamp: Date.now()
         };
         setMessages([initialMsg]);
-        toast.info(t.copilot?.history_cleared || "Historial de chat vaciado");
+        toast.info(t('copilot.history_cleared') || "Historial de chat vaciado");
     };
 
     const filteredGlossary = selectedCategory === "all"
@@ -493,47 +490,76 @@ export const AICopilotModal: React.FC = () => {
     const totalStorageMb = ModelManager.getTotalStorageUsedMb();
 
     return (
-        <div className="modal-screen-container">
-            {/* Header Táctico Minimalista */}
-            <header className="safe-header" style={{
-                padding: "10px 16px",
+        <div style={{
+            display: "flex", flexDirection: "column", height: "100%", width: "100%",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
+        }}>
+            {/* Header Táctico C4ISR */}
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.98) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.3)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <button onClick={goBack} className="btn-icon" title="Regresar" style={{ width: 34, height: 34 }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                        title="Regresar"
+                    >
                         ‹
                     </button>
                     <div style={{
                         width: 36, height: 36, borderRadius: "10px",
-                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 229, 255, 0.4)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.1rem", boxShadow: "0 2px 10px rgba(0,229,255,0.3)"
+                        fontSize: "1.2rem", boxShadow: "0 0 12px rgba(0, 229, 255, 0.25)"
                     }}>🤖</div>
                     <div>
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span style={{ fontSize: "0.92rem", fontWeight: 800, letterSpacing: "0.5px" }}>{t.copilot?.title?.toUpperCase() || "COPILOTO TÁCTICO RED"}</span>
-                            <span className="badge-live-cyan" style={{ fontSize: "0.62rem", padding: "2px 6px" }}>100% OFFLINE</span>
+                            <span style={{ fontSize: "0.92rem", fontWeight: 900, letterSpacing: "0.5px", color: "#FFFFFF" }}>
+                                {t('copilot.title')?.toUpperCase() || "COPILOTO TÁCTICO RED"}
+                            </span>
+                            <span style={{
+                                fontSize: "0.6rem", fontWeight: 900, padding: "1px 6px", borderRadius: "5px",
+                                background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)"
+                            }}>
+                                100% OFFLINE
+                            </span>
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                            Motor: <span style={{ color: "var(--accent-cyan)", fontWeight: 700 }}>{activeModel?.name || "Qwen 2.5 0.5B Instruct"}</span>
+                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                            Motor: <span style={{ color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>{activeModel?.name || "Qwen 2.5 0.5B Instruct"}</span>
                         </div>
                     </div>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <div className="badge-live-emerald" style={{ fontSize: "0.65rem", padding: "3px 8px", fontFamily: "JetBrains Mono, monospace" }}>
+                    <div style={{
+                        fontSize: "0.65rem", padding: "3px 8px", borderRadius: "6px",
+                        background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                        color: "var(--accent-cyan, #00E5FF)", fontWeight: 900
+                    }}>
                         RAM: {(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB
                     </div>
                     {activeTab === "chat" && (
                         <button
                             onClick={handleClearChat}
-                            className="btn-ghost"
-                            style={{ padding: "4px 8px", fontSize: "0.72rem", color: "var(--text-muted)" }}
-                            title={t.copilot?.clean_history || "Limpiar"}
+                            style={{
+                                padding: "4px 8px", fontSize: "0.8rem", borderRadius: "6px",
+                                background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)",
+                                color: "var(--text-secondary)", cursor: "pointer"
+                            }}
+                            title={t('copilot.clean_history') || "Limpiar"}
                         >
                             🗑️
                         </button>
@@ -541,33 +567,40 @@ export const AICopilotModal: React.FC = () => {
                 </div>
             </header>
 
-            {/* Selector de Pestañas Táctico */}
+            {/* Selector de Pestañas Segmentadas */}
             <div style={{
                 display: "flex",
-                background: "rgba(0,0,0,0.4)",
-                borderBottom: "1px solid var(--glass-border)",
-                padding: "4px 8px", gap: "4px", overflowX: "auto"
+                background: "rgba(8, 10, 20, 0.95)",
+                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                padding: "6px 8px", gap: "6px", overflowX: "auto", flexShrink: 0
             }}>
                 {([
-                    { id: "chat", icon: "💬", label: t.copilot?.tab_chat || "Copiloto" },
-                    { id: "translator", icon: "🌐", label: t.copilot?.tab_translator || "Traductor & Glosario" },
-                    { id: "summarizer", icon: "📋", label: t.copilot?.tab_summarizer || "Resumidor" },
-                    { id: "models", icon: "🧠", label: `${t.copilot?.tab_models || "Modelos"} ${totalStorageMb > 0 ? `(${totalStorageMb} MB)` : ""}` }
-                ] as const).map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id as CopilotTab)}
-                        className={activeTab === tab.id ? "glow-pill-active" : "btn-ghost"}
-                        style={{
-                            flex: 1, padding: "8px 10px", fontSize: "0.76rem",
-                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                            whiteSpace: "nowrap"
-                        }}
-                    >
-                        <span>{tab.icon}</span>
-                        <span>{tab.label}</span>
-                    </button>
-                ))}
+                    { id: "chat", icon: "💬", label: t('copilot.tab_chat') || "Copiloto" },
+                    { id: "translator", icon: "🌐", label: t('copilot.tab_translator') || "Traductor & Glosario" },
+                    { id: "summarizer", icon: "📋", label: t('copilot.tab_summarizer') || "Resumidor" },
+                    { id: "models", icon: "🧠", label: `${t('copilot.tab_models') || "Modelos"} ${totalStorageMb > 0 ? `(${totalStorageMb} MB)` : ""}` }
+                ] as const).map(tab => {
+                    const isSel = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as CopilotTab)}
+                            style={{
+                                flex: 1, padding: "8px 10px", fontSize: "0.76rem", fontWeight: isSel ? 900 : 700,
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
+                                whiteSpace: "nowrap", borderRadius: "10px", cursor: "pointer",
+                                background: isSel ? "linear-gradient(135deg, rgba(0, 229, 255, 0.22) 0%, rgba(10, 25, 45, 0.85) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                border: isSel ? "1.5px solid var(--accent-cyan, #00E5FF)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                color: isSel ? "#00E5FF" : "var(--text-secondary)",
+                                boxShadow: isSel ? "0 0 15px rgba(0, 229, 255, 0.25)" : "none",
+                                transition: "all 0.15s ease"
+                            }}
+                        >
+                            <span>{tab.icon}</span>
+                            <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
             {/* PESTAÑA 1: CHAT CON IA NEURONAL */}
@@ -576,20 +609,22 @@ export const AICopilotModal: React.FC = () => {
                     {/* Barra de Presets Tácticos */}
                     <div style={{
                         display: "flex", gap: "6px", padding: "8px 12px",
-                        overflowX: "auto", background: "rgba(0,229,255,0.03)",
-                        borderBottom: "1px solid var(--glass-border)",
-                        scrollbarWidth: "none"
+                        overflowX: "auto", background: "rgba(0, 229, 255, 0.04)",
+                        borderBottom: "1px solid rgba(0, 229, 255, 0.15)",
+                        scrollbarWidth: "none", flexShrink: 0
                     }}>
                         {tacticalPresets.map((p, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => handleSend(p.query)}
                                 disabled={loading}
-                                className="btn-tactical-secondary hover-bright"
                                 style={{
-                                    padding: "4px 10px", fontSize: "0.72rem",
-                                    whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "4px",
-                                    borderRadius: "14px", flexShrink: 0
+                                    padding: "5px 12px", fontSize: "0.72rem", fontWeight: 800,
+                                    whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "5px",
+                                    borderRadius: "14px", flexShrink: 0,
+                                    background: "rgba(20, 28, 50, 0.8)",
+                                    border: "1px solid rgba(0, 229, 255, 0.3)",
+                                    color: "#FFFFFF", cursor: "pointer", transition: "all 0.15s ease"
                                 }}
                             >
                                 <span>{p.icon}</span>
@@ -600,7 +635,7 @@ export const AICopilotModal: React.FC = () => {
 
                     {/* Mensajes de Chat */}
                     <div ref={chatContainerRef} className="scroll-container" style={{
-                        flex: 1, padding: "14px 14px 10px 14px",
+                        flex: 1, padding: "14px",
                         display: "flex", flexDirection: "column", gap: "12px",
                         overflowY: "auto"
                     }}>
@@ -615,19 +650,18 @@ export const AICopilotModal: React.FC = () => {
                                         display: "flex",
                                         flexDirection: "column",
                                         alignItems: isAI ? "flex-start" : "flex-end",
-                                        maxWidth: "85%",
+                                        maxWidth: "88%",
                                         alignSelf: isAI ? "flex-start" : "flex-end"
                                     }}
                                 >
                                     <div
-                                        className={isAI ? "card-tactical" : "card-tactical-active"}
                                         style={{
-                                            padding: "12px 14px",
-                                            borderRadius: isAI ? "12px 12px 12px 2px" : "12px 12px 2px 12px",
-                                            background: isAI ? "rgba(18, 18, 30, 0.95)" : "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
-                                            color: isAI ? "var(--text-primary)" : "#000",
-                                            border: isAI ? "1px solid var(--glass-border)" : "none",
-                                            boxShadow: isAI ? "0 4px 16px rgba(0,0,0,0.3)" : "0 4px 16px rgba(0,229,255,0.3)"
+                                            padding: "12px 16px",
+                                            borderRadius: isAI ? "14px 14px 14px 2px" : "14px 14px 2px 14px",
+                                            background: isAI ? "linear-gradient(135deg, rgba(16, 22, 44, 0.95) 0%, rgba(10, 14, 30, 0.98) 100%)" : "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                            color: "#FFFFFF",
+                                            border: isAI ? "1px solid rgba(0, 229, 255, 0.25)" : "none",
+                                            boxShadow: isAI ? "0 4px 20px rgba(0, 0, 0, 0.6)" : "0 4px 20px rgba(255, 51, 85, 0.35)"
                                         }}
                                     >
                                         <div style={{
@@ -635,7 +669,7 @@ export const AICopilotModal: React.FC = () => {
                                              lineHeight: 1.5,
                                              whiteSpace: "pre-wrap",
                                              wordBreak: "break-word",
-                                             fontWeight: isAI ? 400 : 600
+                                             fontWeight: isAI ? 400 : 700
                                          }}>
                                             {msg.text}
                                         </div>
@@ -643,35 +677,32 @@ export const AICopilotModal: React.FC = () => {
                                         {isAI && (
                                             <div style={{
                                                 marginTop: "8px", paddingTop: "6px",
-                                                borderTop: "1px solid rgba(255,255,255,0.06)",
+                                                borderTop: "1px solid rgba(255, 255, 255, 0.08)",
                                                 display: "flex", justifyContent: "space-between", alignItems: "center",
-                                                fontSize: "0.68rem", color: "var(--text-muted)"
+                                                fontSize: "0.68rem", color: "var(--text-secondary)"
                                             }}>
-                                                <span style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                                                <span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan, #00E5FF)" }}>
                                                     {msg.modelTag} {msg.latencyMs ? `· ${msg.latencyMs}ms` : ""}
                                                 </span>
 
                                                 <div style={{ display: "flex", gap: "6px" }}>
                                                     <button
                                                         onClick={() => copyToClipboard(msg.text, msg.id)}
-                                                        className="btn-ghost"
-                                                        style={{ padding: "2px 6px", fontSize: "0.68rem" }}
+                                                        style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", fontSize: "0.75rem" }}
                                                         title="Copiar"
                                                     >
                                                         {isCopied ? "✓" : "📋"}
                                                     </button>
                                                     <button
                                                         onClick={() => shareToChannel(msg.text)}
-                                                        className="btn-ghost"
-                                                        style={{ padding: "2px 6px", fontSize: "0.68rem", color: "var(--accent-cyan)" }}
+                                                        style={{ background: "none", border: "none", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer", fontSize: "0.75rem" }}
                                                         title="Enviar a canal de chat activo"
                                                     >
                                                         🚀
                                                     </button>
                                                     <button
                                                         onClick={() => speakText(msg.text)}
-                                                        className="btn-ghost"
-                                                        style={{ padding: "2px 6px", fontSize: "0.68rem" }}
+                                                        style={{ background: "none", border: "none", color: "#FFFFFF", cursor: "pointer", fontSize: "0.75rem" }}
                                                         title="Escuchar audio"
                                                     >
                                                         🔊
@@ -692,7 +723,7 @@ export const AICopilotModal: React.FC = () => {
                         })}
 
                         {loading && (
-                            <div style={{ width: "100%", maxWidth: "85%", alignSelf: "flex-start" }}>
+                            <div style={{ width: "100%", maxWidth: "88%", alignSelf: "flex-start" }}>
                                 <NeuralThoughtViewer telemetry={null} isGenerating={true} />
                             </div>
                         )}
@@ -701,18 +732,20 @@ export const AICopilotModal: React.FC = () => {
                     {/* Input Bar con Dictado por Voz y Enviar */}
                     <div style={{
                         padding: "10px 14px",
-                        background: "rgba(10, 10, 20, 0.98)",
-                        borderTop: "1px solid var(--glass-border)",
-                        display: "flex", alignItems: "center", gap: "8px"
+                        background: "rgba(10, 14, 28, 0.98)",
+                        borderTop: "1.5px solid rgba(0, 229, 255, 0.25)",
+                        display: "flex", alignItems: "center", gap: "8px",
+                        flexShrink: 0
                     }}>
                         <button
                             onClick={toggleVoiceInput}
-                            className={isListening ? "btn-tactical-primary" : "btn-icon"}
                             style={{
                                 width: 38, height: 38, borderRadius: "50%",
-                                background: isListening ? "var(--accent-crimson)" : "rgba(255,255,255,0.05)",
-                                color: isListening ? "#fff" : "var(--accent-cyan)",
-                                flexShrink: 0
+                                background: isListening ? "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)" : "rgba(255, 255, 255, 0.08)",
+                                border: isListening ? "none" : "1px solid rgba(0, 229, 255, 0.3)",
+                                color: isListening ? "#FFFFFF" : "var(--accent-cyan, #00E5FF)",
+                                cursor: "pointer", flexShrink: 0, fontSize: "1.1rem",
+                                display: "flex", alignItems: "center", justifyContent: "center"
                             }}
                             title={isListening ? "Detener grabación" : "Dictar por voz"}
                         >
@@ -724,18 +757,28 @@ export const AICopilotModal: React.FC = () => {
                             value={input}
                             onChange={e => setInput(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                            placeholder={isListening ? (t.copilot?.listening || "Escuchando dictado...") : (t.copilot?.input_placeholder || "Formula una consulta de emergencia, medicina o táctica...")}
-                            style={{ flex: 1, fontSize: "0.85rem", padding: "10px 14px" }}
+                            placeholder={isListening ? (t('copilot.listening') || "Escuchando dictado...") : (t('copilot.input_placeholder') || "Formula una consulta de emergencia, medicina o táctica...")}
+                            style={{
+                                flex: 1, fontSize: "0.85rem", padding: "10px 14px",
+                                background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
+                                borderRadius: "12px", color: "#FFFFFF", outline: "none",
+                                fontFamily: "JetBrains Mono, monospace"
+                            }}
                             disabled={loading}
                         />
 
                         <button
                             onClick={() => handleSend()}
                             disabled={!input.trim() || loading}
-                            className="btn-tactical-primary"
-                            style={{ padding: "10px 16px", fontSize: "0.85rem", opacity: (!input.trim() || loading) ? 0.5 : 1 }}
+                            style={{
+                                padding: "10px 18px", fontSize: "0.85rem", fontWeight: 900,
+                                background: "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                border: "none", borderRadius: "12px", color: "#000000",
+                                cursor: "pointer", opacity: (!input.trim() || loading) ? 0.5 : 1,
+                                boxShadow: "0 0 15px rgba(0, 229, 255, 0.3)"
+                            }}
                         >
-                            {loading ? "..." : (t.copilot?.send_btn || "Enviar ➔")}
+                            {loading ? "..." : (t('copilot.send_btn') || "Enviar ➔")}
                         </button>
                     </div>
                 </div>
@@ -743,122 +786,103 @@ export const AICopilotModal: React.FC = () => {
 
             {/* PESTAÑA 2: TRADUCTOR TÁCTICO OFF-GRID */}
             {activeTab === "translator" && (
-                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
+                <div className="scroll-container" style={{ flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
-                        <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>{t.copilot?.translator_title || "Traductor Táctico & Glosario de Supervivencia"}</div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    {t.copilot?.translator_desc || "Traducción determinista 100% offline para 6 idiomas con fonética Quechua y definiciones militares."}
-                                </div>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "20px", padding: "18px",
+                            display: "flex", flexDirection: "column", gap: "12px"
+                        }}>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                {t('copilot.translator_title') || "Traductor Táctico & Glosario de Supervivencia"}
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                                Inferencia de traducción local en 12 idiomas sin conexión externa para asistencia a refugiados y rescate internacional.
                             </div>
 
-                            {/* Selector de Idioma */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <label style={{ fontSize: "0.76rem", fontWeight: 800, color: "var(--accent-cyan)", textTransform: "uppercase" }}>
-                                    {t.copilot?.target_lang || "Idioma Destino"}:
-                                </label>
-                                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                                    {([
-                                        { id: "es", label: "🇪🇸 Español" },
-                                        { id: "en", label: "🇺🇸 English" },
-                                        { id: "pt", label: "🇧🇷 Português" },
-                                        { id: "fr", label: "🇫🇷 Français" },
-                                        { id: "de", label: "🇩🇪 Deutsch" },
-                                        { id: "qu", label: "🇵🇪 Quechua" }
-                                    ] as const).map(l => (
-                                        <button
-                                            key={l.id}
-                                            onClick={() => setTargetLang(l.id as GlossaryLanguage)}
-                                            className={targetLang === l.id ? "btn-tactical-primary" : "btn-tactical-secondary"}
-                                            style={{ padding: "4px 8px", fontSize: "0.72rem" }}
-                                        >
-                                            {l.label}
-                                        </button>
-                                    ))}
-                                </div>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-cyan, #00E5FF)" }}>IDIOMA DESTINO:</span>
+                                <select
+                                    value={targetLang}
+                                    onChange={e => setTargetLang(e.target.value as GlossaryLanguage)}
+                                    style={{
+                                        background: "rgba(0, 0, 0, 0.6)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                                        color: "#FFFFFF", borderRadius: "8px", padding: "6px 10px", fontSize: "0.78rem",
+                                        fontFamily: "JetBrains Mono, monospace"
+                                    }}
+                                >
+                                    <option value="en">English (Inglés)</option>
+                                    <option value="pt">Português (Portugués)</option>
+                                    <option value="fr">Français (Francés)</option>
+                                    <option value="de">Deutsch (Alemán)</option>
+                                    <option value="qu">Runasimi (Quechua)</option>
+                                    <option value="es">Español (Nativo)</option>
+                                </select>
                             </div>
 
-                            {/* Input de Traducción */}
-                            <div style={{ display: "flex", gap: "8px" }}>
-                                <input
-                                    type="text"
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <textarea
                                     value={translatorInput}
                                     onChange={e => setTranslatorInput(e.target.value)}
-                                    onKeyDown={e => { if (e.key === "Enter") handleTranslate(); }}
-                                    placeholder="Escribe un término (ej: 'Torniquete', 'Evacuación', 'Agua potable')..."
-                                    style={{ flex: 1, fontSize: "0.85rem" }}
+                                    placeholder="Escribe o pega texto en español para traducir..."
+                                    rows={3}
+                                    style={{
+                                        width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
+                                        border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", outline: "none"
+                                    }}
                                 />
                                 <button
                                     onClick={() => handleTranslate()}
-                                    disabled={!translatorInput.trim() || isTranslating}
-                                    className="btn-tactical-primary"
-                                    style={{ padding: "8px 16px", fontSize: "0.78rem" }}
+                                    disabled={isTranslating || !translatorInput.trim()}
+                                    style={{
+                                        padding: "10px", background: "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                        color: "#000000", border: "none", borderRadius: "10px", fontWeight: 900,
+                                        fontSize: "0.82rem", cursor: "pointer"
+                                    }}
                                 >
-                                    {isTranslating ? "..." : (t.copilot?.translate_btn || "Traducir")}
+                                    {isTranslating ? "Traduciendo..." : "⚡ TRADUCIR EN TIEMPO REAL"}
                                 </button>
                             </div>
 
                             {translatorOutput && (
-                                <div className="card-tactical animate-pop" style={{ padding: "14px", background: "rgba(0,229,255,0.04)", borderColor: "var(--accent-cyan)" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <span style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--accent-cyan)" }}>RESULTADO TÁCTICO:</span>
-                                        <button
-                                            onClick={() => speakText(translatorOutput)}
-                                            className="btn-ghost"
-                                            style={{ padding: "2px 6px", fontSize: "0.70rem" }}
-                                            title="Pronunciar"
-                                        >
-                                            🔊 Pronunciar
-                                        </button>
+                                <div style={{
+                                    padding: "12px", background: "rgba(0, 230, 118, 0.1)",
+                                    border: "1px solid rgba(0, 230, 118, 0.35)", borderRadius: "10px"
+                                }}>
+                                    <div style={{ fontSize: "0.68rem", fontWeight: 900, color: "#00E676", marginBottom: "4px" }}>
+                                        TRADUCCIÓN RESULTANTE ({targetLang.toUpperCase()}):
                                     </div>
-                                    <div style={{ fontSize: "0.82rem", lineHeight: 1.5, marginTop: "6px", whiteSpace: "pre-wrap" }}>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "#FFFFFF" }}>
                                         {translatorOutput}
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        {/* Glosario de Supervivencia por Categorías */}
-                        <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div style={{ fontSize: "0.88rem", fontWeight: 800 }}>Términos Críticos Indexados ({filteredGlossary.length})</div>
-                                <div style={{ display: "flex", gap: "4px" }}>
-                                    {(["all", "medical", "rescue", "hazard", "defense", "communication"] as const).map(c => (
-                                        <button
-                                            key={c}
-                                            onClick={() => setSelectedCategory(c)}
-                                            className={selectedCategory === c ? "glow-pill-active" : "btn-ghost"}
-                                            style={{ padding: "2px 6px", fontSize: "0.68rem" }}
-                                        >
-                                            {c === "all" ? "Todos" : c.toUpperCase()}
-                                        </button>
-                                    ))}
-                                </div>
+                        {/* Glosario Rápido */}
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "20px", padding: "18px",
+                            display: "flex", flexDirection: "column", gap: "10px"
+                        }}>
+                            <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                FRASES RÁPIDAS DE RESCATE & EMERGENCIA
                             </div>
-
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "8px", maxHeight: "300px", overflowY: "auto" }}>
-                                {filteredGlossary.map(entry => (
-                                    <div
-                                        key={entry.id}
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "8px" }}>
+                                {filteredGlossary.slice(0, 12).map((entry, idx) => (
+                                    <button
+                                        key={idx}
                                         onClick={() => handleSelectGlossaryEntry(entry)}
                                         style={{
-                                            padding: "8px 10px",
-                                            background: "rgba(255,255,255,0.03)",
-                                            border: "1px solid var(--glass-border)",
-                                            borderRadius: "6px",
-                                            cursor: "pointer",
-                                            display: "flex", flexDirection: "column", gap: "2px"
+                                            padding: "8px 10px", borderRadius: "8px",
+                                            background: "rgba(255, 255, 255, 0.04)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                            color: "#FFFFFF", textAlign: "left", fontSize: "0.75rem", cursor: "pointer"
                                         }}
-                                        className="hover-bright"
                                     >
-                                        <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--accent-cyan)" }}>
-                                            {entry.termEs}
-                                        </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                            EN: {entry.termEn} | QU: {entry.termQu}
-                                        </div>
-                                    </div>
+                                        <div style={{ fontWeight: 800 }}>{entry.termEs}</div>
+                                        <div style={{ fontSize: "0.65rem", color: "var(--accent-cyan, #00E5FF)" }}>{getGlossaryTerm(entry, targetLang)}</div>
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -866,65 +890,65 @@ export const AICopilotModal: React.FC = () => {
                 </div>
             )}
 
-            {/* PESTAÑA 3: RESUMIDOR DE CANAL */}
+            {/* PESTAÑA 3: RESUMIDOR DE CANALES */}
             {activeTab === "summarizer" && (
-                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
+                <div className="scroll-container" style={{ flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
-                        <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>{t.copilot?.summarizer_title || "Resumidor Táctico de Canales y Malla"}</div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                    {t.copilot?.summarizer_desc || "Extrae inteligencia clave, puntos de situación y eventos críticos de los mensajes activos."}
-                                </div>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "20px", padding: "18px",
+                            display: "flex", flexDirection: "column", gap: "12px"
+                        }}>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                {t('copilot.summarizer_title') || "Resumidor Táctico de Canales"}
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
+                                Condensa hilos extensos de radio y chat en viñetas clave de inteligencia táctica sin enviar datos fuera de tu dispositivo.
                             </div>
 
-                            {/* Selector de Canal */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", fontWeight: 800, color: "var(--accent-cyan)", textTransform: "uppercase" }}>
-                                    Seleccionar Canal para Sintetizar:
-                                </label>
-                                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                                    {(effectiveChannels ?? []).map((ch: any) => (
-                                        <button
-                                            key={ch.id}
-                                            onClick={() => setSelectedChannelId(ch.id)}
-                                            className={selectedChannelId === ch.id ? "btn-tactical-primary" : "btn-tactical-secondary"}
-                                            style={{ padding: "6px 12px", fontSize: "0.74rem" }}
-                                        >
-                                            #{ch.name}
-                                        </button>
+                            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-cyan, #00E5FF)" }}>CANAL / CHAT:</span>
+                                <select
+                                    value={selectedChannelId}
+                                    onChange={e => setSelectedChannelId(e.target.value)}
+                                    style={{
+                                        flex: 1, background: "rgba(0, 0, 0, 0.6)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                                        color: "#FFFFFF", borderRadius: "8px", padding: "6px 10px", fontSize: "0.78rem",
+                                        fontFamily: "JetBrains Mono, monospace"
+                                    }}
+                                >
+                                    {effectiveChannels.map(c => (
+                                        <option key={c.id} value={c.id}>#{c.name}</option>
                                     ))}
-                                </div>
+                                </select>
                             </div>
 
                             <button
                                 onClick={handleSummarizeChannel}
                                 disabled={isSummarizing}
-                                className="btn-tactical-primary"
-                                style={{ padding: "12px", fontSize: "0.85rem" }}
+                                style={{
+                                    padding: "12px", background: "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                    color: "#000000", border: "none", borderRadius: "10px", fontWeight: 900,
+                                    fontSize: "0.82rem", cursor: "pointer"
+                                }}
                             >
-                                {isSummarizing ? (t.copilot?.summarizing || "⚙️ Sintetizando Inteligencia con IA...") : (t.copilot?.summarize_btn || "📋 GENERAR RESUMEN TÁCTICO")}
+                                {isSummarizing ? "Generando resumen táctico..." : "⚡ GENERAR RESUMEN CON IA LOCAL"}
                             </button>
 
                             {summaryResult && (
-                                <div className="card-tactical animate-pop" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                        <span style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                            ✅ RESUMEN EJECUTIVO TÁCTICO
-                                        </span>
-                                        <span style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                            {summaryResult.totalMessages} mensajes analizados · Sentimiento: {summaryResult.sentiment}
-                                        </span>
+                                <div style={{
+                                    padding: "14px", background: "rgba(0, 229, 255, 0.08)",
+                                    border: "1px solid rgba(0, 229, 255, 0.35)", borderRadius: "12px",
+                                    display: "flex", flexDirection: "column", gap: "8px"
+                                }}>
+                                    <div style={{ fontSize: "0.72rem", fontWeight: 900, color: "#00E5FF" }}>
+                                        MENSAJES ANALIZADOS: {summaryResult.totalMessages} · SENTIMIENTO: {summaryResult.sentiment || "NEUTRO"}
                                     </div>
-
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                        {(summaryResult?.bullets ?? []).map((b, idx) => (
-                                            <div key={idx} style={{ fontSize: "0.80rem", lineHeight: 1.4, display: "flex", gap: "6px" }}>
-                                                <span style={{ color: "var(--accent-cyan)" }}>•</span>
-                                                <span>{b}</span>
-                                            </div>
+                                    <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "0.82rem", lineHeight: 1.5, color: "#FFFFFF" }}>
+                                        {summaryResult.bullets.map((b, idx) => (
+                                            <li key={idx}>{b}</li>
                                         ))}
-                                    </div>
+                                    </ul>
                                 </div>
                             )}
                         </div>
@@ -932,202 +956,184 @@ export const AICopilotModal: React.FC = () => {
                 </div>
             )}
 
-            {/* PESTAÑA 4: GESTOR DE MODELOS GGUF / ONNX */}
+            {/* PESTAÑA 4: GESTOR DE MODELOS & HARDWARE */}
             {activeTab === "models" && (
-                <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
+                <div className="scroll-container" style={{ flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: "16px", overflowY: "auto" }}>
                     <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "14px" }}>
-                        <div className="card-tactical animate-enter" style={{ padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
-                                <div>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 800 }}>Modelos Neuronales GGUF / ONNX (Offline)</div>
-                                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
-                                        Ejecución 100% nativa fuera de red sin dependencia de servidores centrales.
-                                    </div>
+                        {/* Hardware Card */}
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 230, 118, 0.35)", borderRadius: "20px", padding: "18px",
+                            display: "flex", flexDirection: "column", gap: "10px"
+                        }}>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
+                                📊 PRESUPUESTO DE MEMORIA & HARDWARE LOCAL
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                                <div style={{ textAlign: "center", padding: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "8px" }}>
+                                    <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>RAM DISPOSITIVO</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#FFFFFF" }}>{(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB</div>
                                 </div>
-                                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                                    <div style={{ textAlign: "right" }}>
-                                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{t.copilot?.storage_used || "Almacenamiento"}:</span>
-                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                            {totalStorageMb} MB
-                                        </div>
-                                    </div>
-                                    <div style={{ textAlign: "right" }}>
-                                        <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{t.copilot?.memory_budget || "Presupuesto RAM"}:</span>
-                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
-                                            {memoryBudget.recommendedMaxModelMb} MB máx
-                                        </div>
-                                    </div>
+                                <div style={{ textAlign: "center", padding: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "8px" }}>
+                                    <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>MAX MODELO</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E676" }}>{(memoryBudget.recommendedMaxModelMb / 1024).toFixed(1)} GB</div>
+                                </div>
+                                <div style={{ textAlign: "center", padding: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "8px" }}>
+                                    <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>NIVEL DISPOSITIVO</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>{memoryBudget.performanceTier.toUpperCase()}</div>
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Banner de Sideloading Offline P2P */}
-                            <div style={{
-                                padding: "12px",
-                                background: "rgba(0, 229, 255, 0.05)",
-                                border: "1px dashed rgba(0, 229, 255, 0.3)",
-                                borderRadius: "8px",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "8px"
-                            }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                                    <div>
-                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                            {t.copilot?.sideload_title || "📂 SIDELOADING OFFLINE (USB OTG / SD / P2P)"}
-                                        </div>
-                                        <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
-                                            {t.copilot?.sideload_desc || "Importa cualquier modelo .GGUF desde tu almacenamiento sin conexión a internet."}
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={isImportingModel}
-                                        className="btn-tactical-primary"
-                                        style={{ padding: "6px 12px", fontSize: "0.74rem" }}
+                        {/* Import Button */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                MODELOS NEURALES DISPONIBLES
+                            </div>
+                            <div>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleImportGgufFile}
+                                    style={{ display: "none" }}
+                                    accept=".gguf,.onnx,.bin"
+                                />
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isImportingModel}
+                                    style={{
+                                        padding: "6px 12px", borderRadius: "8px",
+                                        background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                                        color: "var(--accent-cyan, #00E5FF)", fontSize: "0.72rem", fontWeight: 900,
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    {isImportingModel ? `Importando ${importProgress}%...` : "📁 IMPORTAR GGUF/ONNX"}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Models List */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                            {availableModels.map(m => {
+                                const isCurrent = activeModel?.id === m.id;
+                                const isDownloading = downloadingId === m.id;
+                                const size = m.fileSizeMb || m.size_mb || 0;
+
+                                return (
+                                    <div
+                                        key={m.id}
+                                        style={{
+                                            padding: "16px", borderRadius: "16px",
+                                            background: isCurrent ? "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(10, 25, 45, 0.8) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                            border: isCurrent ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                                            display: "flex", flexDirection: "column", gap: "8px",
+                                            boxShadow: isCurrent ? "0 0 20px rgba(0, 229, 255, 0.2)" : "none"
+                                        }}
                                     >
-                                        {isImportingModel ? `Importando ${importProgress}%...` : (t.copilot?.load_gguf_btn || "📂 Cargar .GGUF")}
-                                    </button>
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept=".gguf"
-                                        style={{ display: "none" }}
-                                        onChange={handleImportGgufFile}
-                                    />
-                                </div>
-                                {isImportingModel && (
-                                    <div style={{
-                                        height: "4px", width: "100%", background: "rgba(255,255,255,0.1)",
-                                        borderRadius: "2px", overflow: "hidden"
-                                    }}>
-                                        <div style={{
-                                            height: "100%", width: `${importProgress}%`,
-                                            background: "linear-gradient(90deg, #00E5FF, #4ADE80)",
-                                            transition: "width 0.2s"
-                                        }} />
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Lista de Modelos */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                {(availableModels ?? []).map(model => {
-                                    const isActive = activeModel?.id === model.id;
-                                    const isDownloading = downloadingId === model.id;
-                                    const isReady = model.isDownloaded || model.is_downloaded;
-                                    const isRamOk = model.recommendedMinRamMb <= memoryBudget.totalDeviceRamMb;
-
-                                    return (
-                                        <div
-                                            key={model.id}
-                                            style={{
-                                                padding: "14px",
-                                                background: isActive ? "rgba(0,229,255,0.06)" : "rgba(255,255,255,0.02)",
-                                                border: `1px solid ${isActive ? "var(--accent-cyan)" : "var(--glass-border)"}`,
-                                                borderRadius: "10px",
-                                                display: "flex", flexDirection: "column", gap: "8px"
-                                            }}
-                                        >
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
-                                                <div>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                                        <span style={{ fontSize: "0.88rem", fontWeight: 800, color: isActive ? "var(--accent-cyan)" : "var(--text-primary)" }}>
-                                                            {model.name}
-                                                        </span>
-                                                        {isActive && (
-                                                            <span className="badge-live-cyan" style={{ fontSize: "0.60rem", padding: "2px 6px" }}>
-                                                                {t.copilot?.active_btn || "ACTIVO"}
-                                                            </span>
-                                                        )}
-                                                        {!isRamOk && (
-                                                            <span className="badge-live-amber" style={{ fontSize: "0.58rem", padding: "2px 5px" }}>
-                                                                RAM ALTA
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace", marginTop: "2px" }}>
-                                                        Parámetros: {model.parameterCount} · Tamaño: {model.fileSizeMb} MB · RAM Mín: {model.recommendedMinRamMb} MB
-                                                    </div>
-                                                </div>
-
-                                                <div style={{ display: "flex", gap: "6px" }}>
-                                                    {isReady ? (
-                                                        <>
-                                                            <button
-                                                                onClick={() => handleSelectModel(model.id)}
-                                                                disabled={isActive}
-                                                                className={isActive ? "glow-pill-active" : "btn-tactical-secondary"}
-                                                                style={{ padding: "6px 12px", fontSize: "0.74rem" }}
-                                                            >
-                                                                {isActive ? (t.copilot?.active_btn || "Activo") : (t.copilot?.select_btn || "Seleccionar")}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleExportModel(model.id)}
-                                                                className="btn-ghost"
-                                                                style={{ padding: "6px 8px", fontSize: "0.74rem", color: "var(--accent-cyan)" }}
-                                                                title="Compartir modelo vía P2P / AirDrop"
-                                                            >
-                                                                📤
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteModel(model.id)}
-                                                                className="btn-ghost"
-                                                                style={{ padding: "6px 8px", fontSize: "0.74rem", color: "var(--accent-crimson)" }}
-                                                                title="Eliminar modelo para liberar espacio"
-                                                            >
-                                                                🗑️
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            {isDownloading ? (
-                                                                <button
-                                                                    onClick={() => handleCancelDownload(model.id)}
-                                                                    className="btn-tactical-secondary"
-                                                                    style={{ padding: "6px 12px", fontSize: "0.74rem", color: "var(--accent-crimson)" }}
-                                                                >
-                                                                    {t.copilot?.cancel_btn || "Cancelar"}
-                                                                </button>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => handleDownloadModel(model.id)}
-                                                                    className="btn-tactical-primary"
-                                                                    style={{ padding: "6px 12px", fontSize: "0.74rem" }}
-                                                                >
-                                                                    {t.copilot?.download_btn || "Descargar"} ({model.fileSizeMb} MB)
-                                                                </button>
-                                                            )}
-                                                        </>
-                                                    )}
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                            <div>
+                                                <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFFFFF" }}>{m.name}</div>
+                                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    Tamaño: {size} MB · RAM Min: {m.recommendedMinRamMb} MB · {m.parameterCount}
                                                 </div>
                                             </div>
-
-                                            {isDownloading && (
-                                                <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                                                    <div style={{
-                                                        height: "6px", width: "100%", background: "rgba(255,255,255,0.1)",
-                                                        borderRadius: "3px", overflow: "hidden"
-                                                    }}>
-                                                        <div style={{
-                                                            height: "100%", width: `${downloadProgress}%`,
-                                                            background: "linear-gradient(90deg, #00E5FF, #0284C7)",
-                                                            transition: "width 0.2s"
-                                                        }} />
-                                                    </div>
-                                                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.66rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                        <span>Descargando: {downloadProgress}%</span>
-                                                        <span>{downloadBytes.total > 0 ? `${(downloadBytes.loaded / (1024*1024)).toFixed(1)} / ${(downloadBytes.total / (1024*1024)).toFixed(1)} MB` : ""}</span>
-                                                    </div>
-                                                </div>
+                                            {isCurrent && (
+                                                <span style={{
+                                                    fontSize: "0.6rem", fontWeight: 900, padding: "2px 8px", borderRadius: "6px",
+                                                    background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)"
+                                                }}>
+                                                    ACTIVO
+                                                </span>
                                             )}
-
-                                            <div style={{ fontSize: "0.74rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                                                {model.description}
-                                            </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
+
+                                        <p style={{ margin: 0, fontSize: "0.74rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
+                                            {m.description}
+                                        </p>
+
+                                        {isDownloading && (
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                                <div style={{ width: "100%", height: "6px", background: "rgba(0,0,0,0.5)", borderRadius: "3px", overflow: "hidden" }}>
+                                                    <div style={{ width: `${downloadProgress}%`, height: "100%", background: "#00E5FF" }} />
+                                                </div>
+                                                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--accent-cyan, #00E5FF)" }}>
+                                                    <span>Descargando: {downloadProgress.toFixed(0)}%</span>
+                                                    <span>{(downloadBytes.loaded / 1024 / 1024).toFixed(1)} / {(downloadBytes.total / 1024 / 1024).toFixed(1)} MB</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", paddingTop: "6px", borderTop: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                                            {m.isDownloaded ? (
+                                                <>
+                                                    {!isCurrent && (
+                                                        <button
+                                                            onClick={() => handleSelectModel(m.id)}
+                                                            style={{
+                                                                padding: "6px 14px", borderRadius: "8px",
+                                                                background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                                                                border: "1px solid #00E5FF", color: "#00E5FF",
+                                                                fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
+                                                            }}
+                                                        >
+                                                            ACTIVAR
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleExportModel(m.id)}
+                                                        style={{
+                                                            padding: "6px 12px", borderRadius: "8px",
+                                                            background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)",
+                                                            color: "#FFFFFF", fontSize: "0.74rem", cursor: "pointer"
+                                                        }}
+                                                        title="Compartir modelo P2P"
+                                                    >
+                                                        📤 COMPARTIR
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteModel(m.id)}
+                                                        style={{
+                                                            padding: "6px 12px", borderRadius: "8px",
+                                                            background: "rgba(255, 51, 85, 0.1)", border: "1px solid rgba(255, 51, 85, 0.3)",
+                                                            color: "#FF3355", fontSize: "0.74rem", cursor: "pointer"
+                                                        }}
+                                                    >
+                                                        🗑️ ELIMINAR
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {isDownloading ? (
+                                                        <button
+                                                            onClick={() => handleCancelDownload(m.id)}
+                                                            style={{
+                                                                padding: "6px 14px", borderRadius: "8px",
+                                                                background: "rgba(255, 51, 85, 0.15)", border: "1px solid rgba(255, 51, 85, 0.4)",
+                                                                color: "#FF3355", fontWeight: 800, fontSize: "0.74rem", cursor: "pointer"
+                                                            }}
+                                                        >
+                                                            CANCELAR
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleDownloadModel(m.id)}
+                                                            style={{
+                                                                padding: "6px 14px", borderRadius: "8px",
+                                                                background: "linear-gradient(135deg, rgba(0, 230, 118, 0.25) 0%, rgba(0, 180, 80, 0.15) 100%)",
+                                                                border: "1px solid #00E676", color: "#00E676",
+                                                                fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
+                                                            }}
+                                                        >
+                                                            DESCARGAR ({size} MB)
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -1135,5 +1141,3 @@ export const AICopilotModal: React.FC = () => {
         </div>
     );
 };
-
-export default AICopilotModal;

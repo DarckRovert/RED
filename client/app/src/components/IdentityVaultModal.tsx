@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { ShamirSecretSharingEngine, SecretShare } from "../lib/ShamirSecretSharingEngine";
 import { PqcCryptoEngine, HybridKeyPair } from "../lib/PqcCryptoEngine";
@@ -18,7 +18,7 @@ interface VaultData {
 type IdentityTab = "profile" | "pqc" | "shamir" | "medical";
 
 export const IdentityVaultModal: React.FC = () => {
-    const { navigate, identity, setProfile } = useRedStore();
+    const { navigate, identity, setProfile, goBack } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<IdentityTab>("profile");
 
@@ -129,7 +129,6 @@ export const IdentityVaultModal: React.FC = () => {
         const idHash = identity?.identity_hash || "ANONYMOUS_NODE";
         const timestamp = Date.now();
 
-        // Generar firma digital criptográfica de la ficha médica con WebCrypto / Ed25519
         let signatureHex = "SIG_ED25519_FALLBACK";
         if (typeof window !== "undefined" && window.crypto?.subtle) {
             try {
@@ -140,73 +139,24 @@ export const IdentityVaultModal: React.FC = () => {
             } catch {}
         }
 
-        const signedCredential = {
-            version: "RED_TAC_MED_V1",
-            identityHash: idHash,
-            bloodType: bloodType || "ND",
-            allergies: allergies || "ND",
-            emergencyContact: emergencyContact || "ND",
-            timestamp,
-            signature: signatureHex
-        };
+        const medicalPayload = `RED_MED_V1:${idHash}:${bloodType || 'N/A'}:${allergies || 'N/A'}:${emergencyContact || 'N/A'}:${signatureHex}`;
+
+        try {
+            const QRCode = await import("qrcode");
+            const dataUrl = await QRCode.toDataURL(medicalPayload, {
+                width: 280, margin: 1,
+                color: { dark: "#FF3355", light: "#04060A" }
+            });
+            setQrCodeData(dataUrl);
+        } catch {
+            setQrCodeData(null);
+        }
 
         if (typeof window !== "undefined") {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-            localStorage.setItem("red_signed_medical_credential", JSON.stringify(signedCredential));
         }
 
-        // Generar QR interoperable táctico con firma criptográfica
-        const medString = `RED_MED_V1:${idHash.slice(0, 12)}:${bloodType || "ND"}:${allergies || "ND"}:${emergencyContact || "ND"}:${signatureHex.slice(0, 12)}`;
-        import("qrcode").then(QRCode => {
-            QRCode.toDataURL(medString, { width: 260, margin: 1, color: { dark: "#00E676", light: "#04060A" } })
-                .then(url => setQrCodeData(url))
-                .catch(() => {});
-        }).catch(() => {});
-
-        toast.success("🛡️ Ficha Médica Criptográfica Firmada y Guardada para Baliza SOS");
-    };
-
-    const handleSplitSecret = () => {
-        if (!secretToSplit.trim()) {
-            toast.warning("Ingresa la clave o secreto que deseas fragmentar");
-            return;
-        }
-
-        try {
-            const shares = ShamirSecretSharingEngine.splitSecret(secretToSplit.trim(), 5, 3);
-            setSssShares(shares);
-            toast.success("🧬 Clave fragmentada en 5 partes (Umbral: 3 partes requeridas)");
-        } catch {
-            toast.error("Error al calcular fragmentos Shamir");
-        }
-    };
-
-    const handleReconstruct = () => {
-        try {
-            const rawLines = sharesToReconstruct.split("\n").map(l => l.trim()).filter(Boolean);
-            if (rawLines.length < 3) {
-                toast.warning("Se requieren al menos 3 fragmentos para reconstruir");
-                return;
-            }
-
-            const parsedShares: SecretShare[] = rawLines.map(line => {
-                const parts = line.split(":");
-                return {
-                    shareIndex: parseInt(parts[0], 10),
-                    shareHex: parts[1] || "",
-                    x: parseInt(parts[0], 10),
-                    yHex: parts[1] || "",
-                    threshold: 3,
-                    totalShares: 5
-                };
-            });
-
-            const recovered = ShamirSecretSharingEngine.reconstructSecret(parsedShares);
-            setReconstructedSecret(recovered);
-            toast.success("🔓 ¡Secreto reconstruido con éxito!");
-        } catch {
-            toast.error("Error al reconstruir el secreto. Verifica los fragmentos.");
-        }
+        toast.success("🛡️ Ficha Médica Cifrada Guardada");
     };
 
     const handleGeneratePqcKeys = async () => {
@@ -217,67 +167,71 @@ export const IdentityVaultModal: React.FC = () => {
             if (typeof window !== "undefined") {
                 localStorage.setItem("red_pqc_hybrid_keys", JSON.stringify(keys));
             }
-            toast.success("🔐 Par de llaves híbridas ML-KEM-768 + ECDH generado con éxito");
+            toast.success("🔑 Par de llaves híbridas FIPS-203 ML-KEM-768 generadas");
         } catch (e: any) {
-            toast.error(`Error al generar llaves post-cuánticas: ${e.message || e}`);
+            toast.error(`Fallo al generar llaves PQC: ${e.message}`);
         } finally {
             setIsPqcGenerating(false);
         }
     };
 
-    const handleRunPqcBenchmark = async () => {
-        let keysToUse = pqcKeys;
-        if (!keysToUse) {
-            setIsPqcGenerating(true);
-            try {
-                keysToUse = await PqcCryptoEngine.generateHybridKeyPair();
-                setPqcKeys(keysToUse);
-                if (typeof window !== "undefined") {
-                    localStorage.setItem("red_pqc_hybrid_keys", JSON.stringify(keysToUse));
-                }
-            } catch (e: any) {
-                toast.error(`Error al auto-generar llaves: ${e.message || e}`);
-                setIsPqcGenerating(false);
-                return;
-            }
-            setIsPqcGenerating(false);
-        }
-
+    const handleRunBenchmark = async () => {
         setIsBenchmarking(true);
-        setBenchmarkResult(null);
         try {
-            const t0 = performance.now();
-            const encap = await PqcCryptoEngine.encapsulateSharedSecret(
-                keysToUse.kyberPublicKeyHex,
-                keysToUse.x25519PublicKeyHex
-            );
-            const t1 = performance.now();
+            const startGen = performance.now();
+            const pair = await PqcCryptoEngine.generateHybridKeyPair();
+            const startEncap = performance.now();
+            const encap = await PqcCryptoEngine.encapsulateSharedSecret(pair.kyberPublicKeyHex, pair.x25519PublicKeyHex);
+            const encapTime = Math.round(performance.now() - startEncap);
+            const startDecap = performance.now();
+            const secret = await PqcCryptoEngine.decapsulateSharedSecret(encap.ciphertextHex, pair.kyberPrivateKeyHex, pair.x25519PrivateKeyHex);
+            const decapTime = Math.round(performance.now() - startDecap);
 
-            const t2 = performance.now();
-            const decap = await PqcCryptoEngine.decapsulateSharedSecret(
-                encap.ciphertextHex,
-                keysToUse.kyberPrivateKeyHex,
-                keysToUse.x25519PrivateKeyHex
-            );
-            const t3 = performance.now();
-
-            const isMatch = encap.sharedSecretHex.toLowerCase() === decap.toLowerCase();
-            if (isMatch) {
-                setBenchmarkResult({
-                    encapTimeMs: Math.round((t1 - t0) * 100) / 100,
-                    decapTimeMs: Math.round((t3 - t2) * 100) / 100,
-                    ciphertextBytes: encap.ciphertextHex.length / 2,
-                    sharedSecretPreview: encap.sharedSecretHex.substring(0, 32) + "…",
-                    success: true
-                });
-                toast.success("✅ ¡Cifrado híbrido ML-KEM-768 verificado bit a bit!");
-            } else {
-                toast.error("❌ Discrepancia en secreto compartido");
-            }
+            setBenchmarkResult({
+                encapTimeMs: encapTime || 1,
+                decapTimeMs: decapTime || 1,
+                ciphertextBytes: Math.round(encap.ciphertextHex.length / 2),
+                sharedSecretPreview: secret.substring(0, 16) + "…",
+                success: secret === encap.sharedSecretHex
+            });
+            toast.success(`⚡ Benchmark PQC: Encap ${encapTime}ms · Decap ${decapTime}ms`);
         } catch (e: any) {
-            toast.error(`Fallo en el benchmark: ${e.message || e}`);
+            toast.error(`Error en benchmark: ${e.message}`);
         } finally {
             setIsBenchmarking(false);
+        }
+    };
+
+    const handleSplitSecret = () => {
+        if (!secretToSplit.trim()) {
+            toast.warning("Ingresa un secreto o semilla BIP-39 para dividir.");
+            return;
+        }
+        try {
+            const hex = Array.from(new TextEncoder().encode(secretToSplit.trim())).map(b => b.toString(16).padStart(2, '0')).join('');
+            const shares = ShamirSecretSharingEngine.splitSecret(hex, 3, 5);
+            setSssShares(shares);
+            setSecretToSplit("");
+            toast.success("🔐 Secreto dividido en 5 fragmentos (Umbral: 3)");
+        } catch (e: any) {
+            toast.error(`Error al dividir secreto: ${e.message}`);
+        }
+    };
+
+    const handleReconstructSecret = () => {
+        if (!sharesToReconstruct.trim()) {
+            toast.warning("Pega al menos 3 fragmentos en formato JSON.");
+            return;
+        }
+        try {
+            const parsed = JSON.parse(sharesToReconstruct.trim());
+            const secretHex = ShamirSecretSharingEngine.reconstructSecret(parsed);
+            const bytes = new Uint8Array(secretHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
+            const secret = new TextDecoder().decode(bytes);
+            setReconstructedSecret(secret);
+            toast.success("🎉 ¡Secreto reconstruido exitosamente!");
+        } catch (e: any) {
+            toast.error(`Fallo en reconstrucción: ${e.message}`);
         }
     };
 
@@ -288,488 +242,446 @@ export const IdentityVaultModal: React.FC = () => {
         }
     };
 
-    const did = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:sovereign_node";
+    const myDid = identity?.identity_hash ? `did:red:${identity.identity_hash}` : "did:red:offline";
 
     return (
-        <div className="modal-screen-container">
+        <div style={{
+            display: "flex", flexDirection: "column", height: "100%", width: "100%",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF", fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
+        }}>
             {/* Header Táctico */}
-            <header className="safe-header" style={{
-                padding: "12px 20px",
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                borderBottom: "1px solid var(--glass-border)",
-                background: "linear-gradient(180deg, rgba(14, 14, 26, 0.95) 0%, rgba(8, 8, 16, 0.98) 100%)",
-                backdropFilter: "blur(20px)",
-                zIndex: 10, flexShrink: 0,
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.3)",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
                     <div style={{
-                        width: 40, height: 40, borderRadius: "12px",
-                        background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)",
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 150, 255, 0.15) 100%)",
+                        border: "1px solid rgba(0, 229, 255, 0.4)",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "1.25rem", boxShadow: "0 4px 16px rgba(0,229,255,0.35)"
-                    }}>🔐</div>
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(0, 229, 255, 0.25)"
+                    }}>🪪</div>
                     <div>
-                        <div style={{ fontSize: "1.05rem", fontWeight: 800, letterSpacing: "0.2px" }}>
-                            {t.modules?.id_vault || "Bóveda de Identidad & Soberanía"}
+                        <div style={{ fontSize: "0.98rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            BÓVEDA DE IDENTIDAD SOBERANA
                         </div>
-                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                            ED25519 · NOISE PROTOCOL · SHAMIR SSS VAULT
+                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>
+                            DID SOBERANO · NIST FIPS-203 · SHAMIR SSS
                         </div>
                     </div>
                 </div>
 
-                <button
-                    onClick={() => navigate("sidebar")}
-                    className="btn-icon"
-                    title={t.common?.close || "Cerrar bóveda"}
-                    style={{ width: 38, height: 38 }}
-                >
-                    ✕
-                </button>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <button
+                        onClick={() => navigate("web3Vault")}
+                        style={{
+                            padding: "6px 12px", borderRadius: "10px",
+                            background: "rgba(245, 132, 31, 0.15)", border: "1px solid rgba(245, 132, 31, 0.4)",
+                            color: "#F5841F", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: "4px"
+                        }}
+                    >
+                        <span>🦊</span> WEB3
+                    </button>
+                </div>
             </header>
 
-            {/* Selector de Pestañas Segmentadas Tácticas */}
+            {/* Selector de Pestañas Segmentadas */}
             <div style={{
-                padding: "10px 16px",
-                display: "flex", gap: "8px",
-                background: "rgba(10, 10, 20, 0.85)",
-                borderBottom: "1px solid var(--glass-border)",
+                display: "flex", padding: "8px 16px", gap: "6px",
+                background: "rgba(8, 10, 20, 0.95)", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
                 overflowX: "auto", flexShrink: 0
             }}>
-                <button
-                    onClick={() => setActiveTab("profile")}
-                    className={activeTab === "profile" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    👤 {t.profile?.title || "Perfil Operador"}
-                </button>
-                <button
-                    onClick={() => setActiveTab("pqc")}
-                    className={activeTab === "pqc" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    🔐 Post-Cuántica (ML-KEM)
-                </button>
-                <button
-                    onClick={() => setActiveTab("shamir")}
-                    className={activeTab === "shamir" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    🧬 Fragmentación Shamir
-                </button>
-                <button
-                    onClick={() => setActiveTab("medical")}
-                    className={activeTab === "medical" ? "glow-pill-active" : "btn-ghost"}
-                    style={{ padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, borderRadius: "var(--radius-full)", whiteSpace: "nowrap" }}
-                >
-                    🚑 {t.vital_scan?.title ? "Ficha Médica" : "Ficha Médica"}
-                </button>
+                {[
+                    { id: "profile", icon: "👤", label: "PERFIL DID" },
+                    { id: "pqc", icon: "🔐", label: "PQC KYBER" },
+                    { id: "shamir", icon: "🔑", label: "SHAMIR SSS" },
+                    { id: "medical", icon: "🫀", label: "FICHA MÉDICA" }
+                ].map(tab => {
+                    const isSel = activeTab === tab.id;
+                    return (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id as IdentityTab)}
+                            style={{
+                                flex: 1, padding: "8px 12px", borderRadius: "10px",
+                                background: isSel ? "linear-gradient(135deg, rgba(0, 229, 255, 0.22) 0%, rgba(10, 25, 45, 0.85) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                border: isSel ? "1.5px solid var(--accent-cyan, #00E5FF)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                color: isSel ? "#00E5FF" : "var(--text-secondary)",
+                                fontWeight: isSel ? 900 : 700, fontSize: "0.74rem",
+                                cursor: "pointer", whiteSpace: "nowrap",
+                                boxShadow: isSel ? "0 0 15px rgba(0, 229, 255, 0.25)" : "none",
+                                transition: "all 0.15s ease"
+                            }}
+                        >
+                            <span>{tab.icon}</span> <span>{tab.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
-            {/* Contenido Principal con Scroll Seguro */}
-            <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
 
-                    {/* ─── TAB 1: PERFIL DEL OPERADOR ──────────────────────────── */}
+                    {/* TAB 1: PERFIL SOBERANO */}
                     {activeTab === "profile" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            {/* Tarjeta DID Soberana */}
-                            <div className="card-tactical" style={{ padding: "14px", background: "rgba(0,0,0,0.5)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <div>
-                                    <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", textTransform: "uppercase" }}>
-                                        Identificador Descentralizado (DID)
-                                    </div>
-                                    <div style={{ fontSize: "0.82rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", fontWeight: 700, marginTop: "2px" }}>
-                                        {did.substring(0, 28)}…
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px",
+                            boxShadow: "0 10px 40px rgba(0, 0, 0, 0.8)"
+                        }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                                <div style={{
+                                    width: 52, height: 52, borderRadius: "50%",
+                                    background: "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: "1.4rem", fontWeight: 900, color: "#000000",
+                                    border: "2px solid #FFFFFF", boxShadow: "0 0 20px rgba(0, 229, 255, 0.4)"
+                                }}>
+                                    {(nickname || "O").charAt(0).toUpperCase()}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF" }}>{nickname}</div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan, #00E5FF)", fontFamily: "JetBrains Mono, monospace" }}>
+                                        {identity?.short_id || "OFF-GRID NODE"} · ED25519 + ML-DSA-65
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => copyToClipboard(did)}
-                                    className="btn-tactical-secondary"
-                                    style={{ padding: "6px 12px", fontSize: "0.76rem" }}
-                                >
-                                    📋 Copiar
-                                </button>
                             </div>
 
+                            {/* DID String */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    NICKNAME DEL OPERADOR:
+                                <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>
+                                    IDENTIFICADOR DESCENTRALIZADO (DID)
                                 </label>
-                                <input
-                                    value={nickname}
-                                    onChange={e => setNickname(e.target.value)}
-                                    placeholder="Nombre de guerra o identificador"
-                                />
-                            </div>
-
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    BIOGRAFÍA / ESPECIALIDAD TÁCTICA:
-                                </label>
-                                <textarea
-                                    value={bio}
-                                    onChange={e => setBio(e.target.value)}
-                                    rows={3}
-                                    placeholder="Operador de enlace P2P, médico de campo, etc."
-                                />
-                            </div>
-
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    TELÉFONO DE ENLACE DE EMERGENCIA (OPCIONAL):
-                                </label>
-                                <input
-                                    value={phoneNumber}
-                                    onChange={e => setPhoneNumber(e.target.value)}
-                                    placeholder="+54 9 11 ..."
-                                />
-                            </div>
-
-                            <button
-                                onClick={handleSaveProfile}
-                                className="btn-tactical-primary"
-                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem" }}
-                            >
-                                {isProfileSaved ? "✅ GUARDADO" : "💾 ACTUALIZAR PERFIL DE OPERADOR"}
-                            </button>
-
-                            {/* Enlace Directo a Respaldo & Nube */}
-                            <button
-                                onClick={() => navigate("backup")}
-                                className="btn-tactical-secondary"
-                                style={{
-                                    width: "100%", padding: "12px", fontSize: "0.85rem", fontWeight: 800,
-                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
-                                    background: "rgba(56, 189, 248, 0.08)", borderColor: "rgba(56, 189, 248, 0.3)", color: "var(--accent-cyan)"
-                                }}
-                            >
-                                <span>☁️</span> Respaldo Soberano en Google Drive / IPFS / Frase Semilla ➔
-                            </button>
-
-                            {/* Código QR Táctico de Identidad */}
-                            <div className="card-tactical" style={{ padding: "16px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 230, 118, 0.2)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", textAlign: "center" }}>
-                                <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-green)", display: "flex", alignItems: "center", gap: "6px" }}>
-                                    <span>📡</span> CÓDIGO QR TÁCTICO DE ENLACE DIRECTO
-                                </div>
-                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", maxWidth: "340px" }}>
-                                    Escanea este código desde la app móvil RED o la versión Web para vincular este terminal inmediatamente con su nombre real y clave pública.
-                                </div>
-                                {identityQrCodeData ? (
-                                    <div style={{ padding: "12px", background: "#04060A", borderRadius: "12px", border: "1px solid var(--accent-green)" }}>
-                                        <img 
-                                            src={identityQrCodeData} 
-                                            alt="Código QR de Identidad RED" 
-                                            style={{ width: "200px", height: "200px", display: "block", borderRadius: "8px" }} 
-                                        />
-                                    </div>
-                                ) : (
-                                    <div style={{ padding: "40px", color: "var(--text-muted)", fontSize: "0.80rem" }}>
-                                        Generando código QR criptográfico...
-                                    </div>
-                                )}
-                                <div style={{ fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", wordBreak: "break-all" }}>
-                                    {nickname} • {identity?.identity_hash ? `${identity.identity_hash.substring(0, 16)}…` : 'Cargando...'}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ─── TAB 2: CRIPTOGRAFÍA POST-CUÁNTICA ML-KEM-768 ───────── */}
-                    {activeTab === "pqc" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                    <span style={{ fontSize: "1.2rem" }}>🔐</span>
-                                    <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                        Criptografía Post-Cuántica NIST ML-KEM-768
-                                    </div>
-                                </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
-                                    Protección híbrida contra computadoras cuánticas (FIPS 203 Kyber-768 + ECDH P-256). Inmune a ataques de interceptación <em>"Harvest Now, Decrypt Later"</em>.
-                                </div>
-                            </div>
-
-                            {/* Status Card */}
-                            <div className="card-tactical" style={{ padding: "14px", background: "rgba(0, 240, 255, 0.05)", border: "1px solid rgba(0, 240, 255, 0.25)", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>
-                                        ESTADO DEL MOTOR CRIPTOGRÁFICO
-                                    </div>
-                                    <span className="mesh-badge" style={{ background: "rgba(0, 230, 118, 0.2)", color: "var(--accent-emerald)", border: "1px solid var(--accent-emerald)", fontSize: "0.68rem" }}>
-                                        {pqcKeys ? "ACTIVO · FIPS 203" : "NO INICIALIZADO"}
-                                    </span>
-                                </div>
-
-                                {pqcKeys ? (
-                                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                        <div>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                                LLAVE PÚBLICA ML-KEM-768 (1184 BYTES NTT POLYNOMIAL):
-                                            </div>
-                                            <div style={{
-                                                padding: "8px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.6)",
-                                                fontFamily: "JetBrains Mono, monospace", fontSize: "0.68rem", color: "var(--accent-cyan)",
-                                                wordBreak: "break-all", marginTop: "4px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px"
-                                            }}>
-                                                <span>{pqcKeys.kyberPublicKeyHex.substring(0, 48)}…{pqcKeys.kyberPublicKeyHex.slice(-16)}</span>
-                                                <button
-                                                    onClick={() => copyToClipboard(pqcKeys.kyberPublicKeyHex)}
-                                                    className="btn-tactical-secondary"
-                                                    style={{ padding: "3px 8px", fontSize: "0.65rem", flexShrink: 0 }}
-                                                >
-                                                    📋 Copiar
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                                LLAVE EFÍMERA ECDH P-256 (65 BYTES RAW UNCOMPRESSED):
-                                            </div>
-                                            <div style={{
-                                                padding: "8px 10px", borderRadius: "6px", background: "rgba(0,0,0,0.6)",
-                                                fontFamily: "JetBrains Mono, monospace", fontSize: "0.68rem", color: "var(--accent-emerald)",
-                                                wordBreak: "break-all", marginTop: "4px"
-                                            }}>
-                                                {pqcKeys.x25519PublicKeyHex.substring(0, 48)}…
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", padding: "10px" }}>
-                                        Genera tu par de llaves post-cuánticas para habilitar el encapsulamiento seguro sobre la malla.
-                                    </div>
-                                )}
-
-                                <div style={{ display: "flex", gap: "10px", marginTop: "4px" }}>
+                                <div style={{ display: "flex", gap: "6px" }}>
+                                    <input
+                                        readOnly
+                                        value={myDid}
+                                        style={{
+                                            flex: 1, padding: "10px 12px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(0, 229, 255, 0.25)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace"
+                                        }}
+                                    />
                                     <button
-                                        onClick={handleGeneratePqcKeys}
-                                        disabled={isPqcGenerating}
-                                        className="btn-tactical-secondary"
-                                        style={{ flex: 1, padding: "10px", fontSize: "0.78rem", fontWeight: 700 }}
+                                        onClick={() => copyToClipboard(myDid)}
+                                        style={{
+                                            padding: "10px 14px", background: "rgba(0, 229, 255, 0.15)",
+                                            border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "10px",
+                                            color: "var(--accent-cyan, #00E5FF)", fontWeight: 900, fontSize: "0.74rem", cursor: "pointer"
+                                        }}
                                     >
-                                        {isPqcGenerating ? "Generando…" : pqcKeys ? "🔄 Regenerar Par Híbrido" : "⚡ Generar Llaves ML-KEM-768"}
+                                        COPIAR
                                     </button>
                                 </div>
                             </div>
 
-                            {/* Benchmark Live Test */}
-                            <div className="card-tactical" style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#fff" }}>
-                                    🧪 Test en Tiempo Real: Encapsulación & Decapsulación KEM
+                            {/* Form Fields */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
+                                        NICKNAME / INDICATIVO TÁCTICO
+                                    </label>
+                                    <input
+                                        value={nickname}
+                                        onChange={e => setNickname(e.target.value)}
+                                        style={{
+                                            width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.85rem", outline: "none"
+                                        }}
+                                    />
                                 </div>
-                                <div style={{ fontSize: "0.70rem", color: "var(--text-secondary)", lineHeight: 1.4 }}>
-                                    Ejecuta un ciclo completo de encapsulamiento lattice sobre el hardware de este dispositivo para medir latencia y confirmar derivación simétrica AES-256.
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900, display: "block", marginBottom: "4px" }}>
+                                        BIO / ESTADO TÁCTICO
+                                    </label>
+                                    <input
+                                        value={bio}
+                                        onChange={e => setBio(e.target.value)}
+                                        placeholder="Ej: Operador de Enlace, Frecuencia 433 MHz..."
+                                        style={{
+                                            width: "100%", padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.85rem", outline: "none"
+                                        }}
+                                    />
                                 </div>
-
                                 <button
-                                    onClick={handleRunPqcBenchmark}
-                                    disabled={isBenchmarking || isPqcGenerating}
-                                    className="btn-tactical-primary"
+                                    onClick={handleSaveProfile}
                                     style={{
-                                        padding: "12px", fontSize: "0.84rem", fontWeight: 800,
-                                        background: "linear-gradient(135deg, #00F0FF 0%, #00B0FF 100%)", color: "#000"
+                                        width: "100%", padding: "12px", background: isProfileSaved ? "linear-gradient(135deg, #00E676 0%, #00897B 100%)" : "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                        border: "none", borderRadius: "12px", color: "#000000",
+                                        fontWeight: 900, fontSize: "0.85rem", cursor: "pointer",
+                                        boxShadow: "0 0 15px rgba(0, 229, 255, 0.3)"
                                     }}
                                 >
-                                    {isBenchmarking ? "Ejecutando NTT & Lattice KEM…" : "⚡ Ejecutar Benchmark Criptográfico"}
+                                    {isProfileSaved ? "✓ PERFIL GUARDADO" : "⚡ GUARDAR Y FIRMAR PERFIL"}
                                 </button>
-
-                                {benchmarkResult && (
-                                    <div className="card-tactical animate-pop" style={{
-                                        padding: "12px", background: "rgba(0, 230, 118, 0.08)",
-                                        border: "1px solid rgba(0, 230, 118, 0.35)", display: "flex", flexDirection: "column", gap: "6px"
-                                    }}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                            <span style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                                ✅ Ciclo KEM Exitoso (100% Coincidencia Bit a Bit)
-                                            </span>
-                                            <span style={{ fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)" }}>
-                                                Total: {Math.round((benchmarkResult.encapTimeMs + benchmarkResult.decapTimeMs) * 100) / 100}ms
-                                            </span>
-                                        </div>
-
-                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginTop: "4px" }}>
-                                            <div style={{ padding: "6px", background: "rgba(0,0,0,0.4)", borderRadius: "4px", textAlign: "center" }}>
-                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>ENCAPSULACIÓN</div>
-                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    {benchmarkResult.encapTimeMs}ms
-                                                </div>
-                                            </div>
-                                            <div style={{ padding: "6px", background: "rgba(0,0,0,0.4)", borderRadius: "4px", textAlign: "center" }}>
-                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>DECAPSULACIÓN</div>
-                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    {benchmarkResult.decapTimeMs}ms
-                                                </div>
-                                            </div>
-                                            <div style={{ padding: "6px", background: "rgba(0,0,0,0.4)", borderRadius: "4px", textAlign: "center" }}>
-                                                <div style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>TAMAÑO CT</div>
-                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    {benchmarkResult.ciphertextBytes} B
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div style={{ fontSize: "0.65rem", fontFamily: "JetBrains Mono, monospace", color: "var(--text-muted)", marginTop: "4px" }}>
-                                            KDF 256-bit Key: {benchmarkResult.sharedSecretPreview}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     )}
 
-                    {/* ─── TAB 3: SHAMIR SECRET SHARING ────────────────────────── */}
-                    {activeTab === "shamir" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
-                                    🧬 Custodia Distribuida de Claves (Shamir's SSS)
+                    {/* TAB 2: POST-QUANTUM CRYPTOGRAPHY */}
+                    {activeTab === "pqc" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(179, 136, 255, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#B388FF" }}>
+                                        ARMADURA POST-CUÁNTICA (NIST FIPS 203)
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                        Cifrado de celosías ML-KEM-768 resistente a computación cuántica.
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                    Divide una clave secreta en 5 partes matemáticas. Se necesitan 3 partes cualesquiera para reconstruirla.
+                                <span style={{
+                                    fontSize: "0.6rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                                    background: "rgba(179, 136, 255, 0.15)", color: "#B388FF", border: "1px solid rgba(179, 136, 255, 0.4)"
+                                }}>
+                                    KYBER-768
+                                </span>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                <button
+                                    onClick={handleGeneratePqcKeys}
+                                    disabled={isPqcGenerating}
+                                    style={{
+                                        padding: "12px", background: "linear-gradient(135deg, rgba(179, 136, 255, 0.25) 0%, rgba(120, 80, 220, 0.15) 100%)",
+                                        border: "1px solid #B388FF", borderRadius: "12px", color: "#B388FF",
+                                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
+                                    }}
+                                >
+                                    {isPqcGenerating ? "Generando..." : "🔑 GENERAR LLAVES PQC"}
+                                </button>
+                                <button
+                                    onClick={handleRunBenchmark}
+                                    disabled={isBenchmarking}
+                                    style={{
+                                        padding: "12px", background: "rgba(255, 255, 255, 0.05)",
+                                        border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "12px", color: "#FFFFFF",
+                                        fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
+                                    }}
+                                >
+                                    {isBenchmarking ? "Probando..." : "⚡ BENCHMARK LOCAL"}
+                                </button>
+                            </div>
+
+                            {benchmarkResult && (
+                                <div style={{
+                                    padding: "14px", background: "rgba(0, 0, 0, 0.4)",
+                                    border: "1px solid rgba(179, 136, 255, 0.3)", borderRadius: "12px",
+                                    display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", textAlign: "center"
+                                }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>ENCAPSULACIÓN</div>
+                                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E676" }}>{benchmarkResult.encapTimeMs} ms</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>DESENCAPSULACIÓN</div>
+                                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E676" }}>{benchmarkResult.decapTimeMs} ms</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>TAMAÑO CIPHERTEXT</div>
+                                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#B388FF" }}>{benchmarkResult.ciphertextBytes} B</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* TAB 3: SHAMIR SECRET SHARING */}
+                    {activeTab === "shamir" && (
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 230, 118, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
+                            <div>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
+                                    DIVISIÓN DE SECRETOS SHAMIR (SSS 3-OF-5)
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    Divide tu semilla o clave en 5 fragmentos matemáticos; se requieren 3 cualesquiera para reconstruirla.
                                 </div>
                             </div>
 
-                            {/* Creador de Fragmentos */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    CLAVE O FRASE SEMILLA A FRAGMENTAR:
-                                </label>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                 <input
-                                    type="password"
                                     value={secretToSplit}
                                     onChange={e => setSecretToSplit(e.target.value)}
-                                    placeholder="Ingresa la clave privada o secreto..."
+                                    placeholder="Ingresa semilla mnemónica o secreto a dividir..."
+                                    style={{
+                                        padding: "10px 14px", background: "rgba(0, 0, 0, 0.5)",
+                                        border: "1px solid rgba(0, 230, 118, 0.3)", borderRadius: "10px",
+                                        color: "#FFFFFF", fontSize: "0.82rem", outline: "none"
+                                    }}
                                 />
+                                <button
+                                    onClick={handleSplitSecret}
+                                    style={{
+                                        padding: "12px", background: "linear-gradient(135deg, #00E676 0%, #00897B 100%)",
+                                        border: "none", borderRadius: "10px", color: "#000000",
+                                        fontWeight: 900, fontSize: "0.82rem", cursor: "pointer"
+                                    }}
+                                >
+                                    🔐 DIVIDIR EN 5 FRAGMENTOS
+                                </button>
                             </div>
 
-                            <button
-                                onClick={handleSplitSecret}
-                                className="btn-tactical-primary"
-                                style={{ width: "100%", padding: "12px", fontSize: "0.90rem", background: "linear-gradient(135deg, #00E5FF 0%, #0284C7 100%)", color: "#000" }}
-                            >
-                                ⚡ FRAGMENTAR CLAVE (3-DE-5)
-                            </button>
-
-                            {/* Lista de Fragmentos Generados */}
                             {sssShares.length > 0 && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                    <div style={{ fontSize: "0.76rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                        Fragmentos Generados (Distribuye uno a cada custodio):
-                                    </div>
-                                    {sssShares.map((s, i) => (
+                                    <div style={{ fontSize: "0.72rem", color: "#00E676", fontWeight: 900 }}>FRAGMENTOS GENERADOS:</div>
+                                    {sssShares.map(s => (
                                         <div
-                                            key={i}
-                                            className="card-tactical"
-                                            style={{ padding: "10px", display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: "JetBrains Mono, monospace", fontSize: "0.75rem" }}
+                                            key={s.shareIndex}
+                                            onClick={() => copyToClipboard(JSON.stringify(s))}
+                                            style={{
+                                                padding: "8px 12px", background: "rgba(0,0,0,0.5)",
+                                                border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px",
+                                                fontSize: "0.68rem", cursor: "pointer", display: "flex", justifyContent: "space-between"
+                                            }}
                                         >
-                                            <span>Parte {s.x || s.shareIndex}: {(s.yHex || s.shareHex || "").substring(0, 20)}…</span>
-                                            <button
-                                                onClick={() => copyToClipboard(`${s.x || s.shareIndex}:${s.yHex || s.shareHex || ""}`)}
-                                                className="btn-tactical-secondary"
-                                                style={{ padding: "4px 8px", fontSize: "0.70rem" }}
-                                            >
-                                                📋 Copiar
-                                            </button>
+                                            <span>Fragmento #{s.shareIndex}: {s.shareHex.substring(0, 16)}…</span>
+                                            <span style={{ color: "var(--accent-cyan, #00E5FF)" }}>COPIAR</span>
                                         </div>
                                     ))}
                                 </div>
                             )}
 
-                            {/* Reconstructor de Secreto */}
-                            <div style={{ borderTop: "1px solid var(--glass-border)", paddingTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <div style={{ fontSize: "0.85rem", fontWeight: 800 }}>
-                                    🔓 Reconstruir Secreto (Pega al menos 3 fragmentos)
-                                </div>
+                            <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "12px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFFFFF" }}>RECONSTRUIR SECRETO</div>
                                 <textarea
                                     value={sharesToReconstruct}
                                     onChange={e => setSharesToReconstruct(e.target.value)}
-                                    rows={3}
-                                    placeholder="Pega un fragmento por línea (ej: 1:a9f0b2...)"
-                                    style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.78rem" }}
+                                    placeholder="Pega array JSON de al menos 3 fragmentos..."
+                                    rows={2}
+                                    style={{
+                                        padding: "8px 12px", background: "rgba(0,0,0,0.5)",
+                                        border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px",
+                                        color: "#FFFFFF", fontSize: "0.75rem", outline: "none"
+                                    }}
                                 />
                                 <button
-                                    onClick={handleReconstruct}
-                                    className="btn-tactical-secondary"
-                                    style={{ padding: "10px", fontSize: "0.85rem" }}
+                                    onClick={handleReconstructSecret}
+                                    style={{
+                                        padding: "10px", background: "rgba(0, 229, 255, 0.15)",
+                                        border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "8px",
+                                        color: "var(--accent-cyan, #00E5FF)", fontWeight: 900, fontSize: "0.78rem", cursor: "pointer"
+                                    }}
                                 >
-                                    🔓 RECONSTRUIR SECRETO
+                                    🎉 RECONSTRUIR SECRETO ORIGINAL
                                 </button>
-
                                 {reconstructedSecret && (
-                                    <div className="card-tactical animate-pop" style={{ padding: "12px", background: "rgba(0,230,118,0.1)", borderColor: "var(--accent-emerald)" }}>
-                                        <div style={{ fontSize: "0.72rem", color: "var(--accent-emerald)", fontWeight: 700 }}>
-                                            SECRETO RECONSTRUIDO:
-                                        </div>
-                                        <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", marginTop: "2px" }}>
-                                            {reconstructedSecret}
-                                        </div>
+                                    <div style={{ padding: "10px", background: "rgba(0, 230, 118, 0.15)", border: "1px solid #00E676", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 900, color: "#00E676" }}>
+                                        Secreto: {reconstructedSecret}
                                     </div>
                                 )}
                             </div>
                         </div>
                     )}
 
-                    {/* ─── TAB 3: FICHA MÉDICA DE EMERGENCIA ───────────────────── */}
+                    {/* TAB 4: FICHA MÉDICA DE EMERGENCIA */}
                     {activeTab === "medical" && (
-                        <div className="card-tactical animate-enter" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                            border: "1.5px solid rgba(255, 51, 85, 0.35)", borderRadius: "22px", padding: "20px",
+                            display: "flex", flexDirection: "column", gap: "16px"
+                        }}>
                             <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--accent-crimson-bright)" }}>
-                                    🚑 Ficha Médica para Rescate Offline
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FF3355" }}>
+                                    FICHA MÉDICA DE RESCATE (ED25519 FIRMADA)
                                 </div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                    Datos vitales accesibles mediante código QR en caso de inconsciencia o rescate
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                    Información vital accesible por rescatistas en caso de inconsciencia o triaje START.
                                 </div>
                             </div>
 
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    GRUPO SANGUÍNEO & FACTOR RH:
-                                </label>
-                                <input
-                                    value={bloodType}
-                                    onChange={e => setBloodType(e.target.value)}
-                                    placeholder="Ej: O+, A-, AB+..."
-                                />
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "10px" }}>
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>GRUPO SANGUÍNEO</label>
+                                    <input
+                                        value={bloodType}
+                                        onChange={e => setBloodType(e.target.value)}
+                                        placeholder="Ej: O+, A-, B+..."
+                                        style={{
+                                            width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.85rem", outline: "none"
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>ALERGIAS CRÍTICAS</label>
+                                    <input
+                                        value={allergies}
+                                        onChange={e => setAllergies(e.target.value)}
+                                        placeholder="Ej: Penicilina, Látex, Ninguna..."
+                                        style={{
+                                            width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.85rem", outline: "none"
+                                        }}
+                                    />
+                                </div>
                             </div>
 
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    ALERGIAS O CONDICIONES CRÍTICAS:
-                                </label>
-                                <input
-                                    value={allergies}
-                                    onChange={e => setAllergies(e.target.value)}
-                                    placeholder="Ej: Penicilina, Diabético, Asma..."
-                                />
-                            </div>
-
-                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                <label style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontWeight: 700 }}>
-                                    CONTACTO DE EMERGENCIA / ICE:
-                                </label>
+                            <div>
+                                <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 900 }}>CONTACTO DE EMERGENCIA</label>
                                 <input
                                     value={emergencyContact}
                                     onChange={e => setEmergencyContact(e.target.value)}
-                                    placeholder="Nombre y teléfono de contacto familiar"
+                                    placeholder="Nombre y teléfono o DID de contacto..."
+                                    style={{
+                                        width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
+                                        border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "10px",
+                                        color: "#FFFFFF", fontSize: "0.85rem", outline: "none"
+                                    }}
                                 />
                             </div>
 
                             <button
                                 onClick={handleSaveMedical}
-                                className="btn-tactical-primary"
-                                style={{ width: "100%", padding: "14px", fontSize: "0.95rem", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)" }}
+                                style={{
+                                    width: "100%", padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                                    border: "none", borderRadius: "12px", color: "#FFFFFF",
+                                    fontWeight: 900, fontSize: "0.85rem", cursor: "pointer",
+                                    boxShadow: "0 0 15px rgba(255, 51, 85, 0.35)"
+                                }}
                             >
-                                💾 GUARDAR & GENERAR QR MÉDICO
+                                🫀 GENERAR CÓDIGO QR MÉDICO
                             </button>
 
                             {qrCodeData && (
-                                <div className="card-tactical animate-pop" style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", background: "#04060A" }}>
-                                    <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
-                                        QR de Triaje Médico Listo
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", paddingTop: "10px" }}>
+                                    <img src={qrCodeData} alt="QR Médico" style={{ width: 220, height: 220, borderRadius: "12px", border: "2px solid #FF3355" }} />
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", textAlign: "center" }}>
+                                        Escaneable ópticamente por cualquier lector de emergencias sin conexión.
                                     </div>
-                                    <img src={qrCodeData} alt="QR Médico" style={{ width: "180px", height: "180px", display: "block", borderRadius: "8px" }} />
                                 </div>
                             )}
                         </div>
