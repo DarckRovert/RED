@@ -35,9 +35,30 @@ import {
 } from './meshProtocol';
 
 import { RedAPI } from '../api';
+import { slottedGossip } from './SlottedGossipEngine';
 
-const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000; // 72 hours
+const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
+const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
 const MAX_DEDUP_CACHE = 50_000;
+
+/**
+ * W6: Returns the appropriate deduplication window for a given nonce.
+ * Control/protocol packets are long-lived (72h) to prevent replays across
+ * reboots. Chat message packets only need a 30-minute window since the
+ * dispatcher handles semantic deduplication independently.
+ */
+function dedupWindowFor(nonce: string): number {
+  // Protocol packets are identified by a prefix that includes the type indicator
+  // embedded by createPacket: nonces for DATA payloads start with 'pkt_'
+  // Control nonces always contain a type string injected during creation.
+  // As a safe heuristic: if the nonce has no embedded timestamp (pure hex),
+  // treat it as a control nonce (72h). Otherwise use the short window.
+  if (!nonce) return DEDUP_WINDOW_MS;
+  // Hex-only nonces (e.g. from DELIVERY_ACK / identity payloads) — long window
+  if (/^[0-9a-f]{16,}$/.test(nonce)) return DEDUP_WINDOW_MS;
+  // Nonces with decimal timestamps embedded (msg_<ts>_...) — short window
+  return DEDUP_WINDOW_MSG_MS;
+}
 
 /**
  * Normalizes any identity format (DID, short-id, MAC, with prefixes or uppercase)
@@ -169,6 +190,10 @@ class MeshRouter {
     return map;
   })();
 
+  private purgeInterval: any = null;
+  private flushInterval: any = null;
+  private isStarted = false;
+
   /** Pending identity query promises keyed by hardware device ID or sender hash */
   private pendingIdentityQueries: Map<string, PendingIdentityQuery[]> = new Map();
 
@@ -238,7 +263,8 @@ class MeshRouter {
   }
 
   async start() {
-    if (!this.wifi) return;
+    if (!this.wifi || this.isStarted) return;
+    this.isStarted = true;
 
     // Connect to local WebRTC signaling & global relays
     try {
@@ -254,14 +280,37 @@ class MeshRouter {
       this.flushPendingQueue().catch(() => {});
     });
 
-    // Schedule dedup cache purge every 5 minutes
-    setInterval(() => this.purgeDedup(), 5 * 60 * 1000);
+    // Schedule dedup cache purge every 5 minutes (clean previous if any)
+    if (this.purgeInterval) clearInterval(this.purgeInterval);
+    this.purgeInterval = setInterval(() => this.purgeDedup(), 5 * 60 * 1000);
 
     // Actively retry unacknowledged DTN pending packets every 6 seconds
-    setInterval(() => this.flushPendingQueue(), 6000);
+    if (this.flushInterval) clearInterval(this.flushInterval);
+    this.flushInterval = setInterval(() => this.flushPendingQueue(), 6000);
 
     // Initial DTN flush on boot
     setTimeout(() => this.flushPendingQueue(), 1500);
+  }
+
+  public stop() {
+    this.isStarted = false;
+    if (this.purgeInterval) { clearInterval(this.purgeInterval); this.purgeInterval = null; }
+    if (this.flushInterval) { clearInterval(this.flushInterval); this.flushInterval = null; }
+    if (this.persistNoncesTimer) { clearTimeout(this.persistNoncesTimer); this.persistNoncesTimer = null; }
+    if (this.unsubscribeNetwork) { this.unsubscribeNetwork(); this.unsubscribeNetwork = null; }
+    for (const queries of this.pendingIdentityQueries.values()) {
+      for (const q of queries) {
+        if (q.timer) clearTimeout(q.timer);
+      }
+    }
+    this.pendingIdentityQueries.clear();
+    if (this.wifi) {
+      this.wifi.disconnect();
+    }
+  }
+
+  public destroy() {
+    this.stop();
   }
 
   private handleNetworkChange(state: NetworkState) {
@@ -839,9 +888,11 @@ class MeshRouter {
 
     // Dedup check
     if (this.isDuplicate(packet.nonce)) {
+      slottedGossip.recordHeardFromPeer(packet.nonce);
       return; // Already seen this packet — drop silently
     }
     this.markSeen(packet.nonce);
+    slottedGossip.recordHeardFromPeer(packet.nonce);
 
     // Bind packet sender to transport ID if provided
     if (packet.sender && packet.sender.length === 64) {
@@ -1089,8 +1140,16 @@ class MeshRouter {
       // If we are a Gateway with internet and the packet is addressed to a remote DID, uplink it!
       const forwarded = relay(packet);
       if (forwarded) {
-        console.log(`[MeshRouter] Relaying packet → ${packet.recipient.slice(0, 8)} (TTL ${forwarded.ttl})`);
         const encoded = encode(forwarded);
+
+        // Slotted Backoff Gossip anti-storm suppression in dense RF topologies
+        const shouldRelay = await slottedGossip.shouldRelayPacket(packet.nonce, encoded.length, this.peers.size);
+        if (!shouldRelay) {
+          console.log(`[MeshRouter] SlottedGossip suppressed redundant relay for packet ${packet.nonce.slice(0, 8)}`);
+          return;
+        }
+
+        console.log(`[MeshRouter] Relaying packet → ${packet.recipient.slice(0, 8)} (TTL ${forwarded.ttl})`);
 
         // Broadcast to local mesh peers
         await this.broadcast(encoded, fromTransportId);
@@ -1319,16 +1378,7 @@ class MeshRouter {
     const cleanId = normalizeIdentity(id);
     let resolvedCanonical = canonicalId ? normalizeIdentity(canonicalId) : this.deviceToCanonicalMap.get(cleanId);
 
-    // If no explicit canonical ID, check if a peer with the same or similar name already exists
-    if (!resolvedCanonical && name && !name.startsWith('Dispositivo RED') && !name.startsWith('Nodo ') && !name.startsWith('Operador ')) {
-      for (const [k, p] of this.peers.entries()) {
-        if (p.name && isNameSimilar(p.name, name)) {
-          resolvedCanonical = k;
-          this.deviceToCanonicalMap.set(cleanId, k);
-          break;
-        }
-      }
-    }
+    // Cryptographic & explicit ID resolution only: do not guess/merge disparate devices based on name strings
     if (!resolvedCanonical) {
       resolvedCanonical = cleanId;
     }
@@ -1455,39 +1505,59 @@ class MeshRouter {
 
   // ─── Deduplication ────────────────────────────────────────────────────────────
 
+  private persistNoncesTimer: any = null;
+
   private isDuplicate(nonce: string): boolean {
-    return this.seenNonces.has(nonce);
+    if (!this.seenNonces.has(nonce)) return false;
+    // W6: Re-check if the entry has expired under its own adaptive window
+    const ts = this.seenNonces.get(nonce)!;
+    const window = dedupWindowFor(nonce);
+    if (Date.now() - ts > window) {
+      this.seenNonces.delete(nonce);
+      return false;
+    }
+    return true;
   }
 
   private markSeen(nonce: string) {
     this.seenNonces.set(nonce, Date.now());
     if (this.seenNonces.size > MAX_DEDUP_CACHE) {
-      const oldest = Array.from(this.seenNonces.entries())
-        .sort(([, a], [, b]) => a - b)
-        .slice(0, 1000)
-        .map(([k]) => k);
-      oldest.forEach(k => this.seenNonces.delete(k));
+      // Evict oldest 1000 entries (insertion-order is O(1) in V8 Map)
+      let count = 0;
+      for (const k of this.seenNonces.keys()) {
+        this.seenNonces.delete(k);
+        count++;
+        if (count >= 1000) break;
+      }
     }
-    // Persist most recent nonces to storage periodically/on change
-    if (typeof window !== 'undefined') {
+    this.schedulePersistSeenNonces();
+  }
+
+  private schedulePersistSeenNonces() {
+    if (typeof window === 'undefined') return;
+    if (this.persistNoncesTimer) return;
+    this.persistNoncesTimer = setTimeout(() => {
+      this.persistNoncesTimer = null;
       try {
-        const recent = Array.from(this.seenNonces.entries()).slice(-1000);
+        // W6: Only persist nonces within their adaptive window (skip expired short-window entries)
+        const now = Date.now();
+        const recent = Array.from(this.seenNonces.entries())
+          .filter(([k, ts]) => (now - ts) < dedupWindowFor(k))
+          .slice(-1000);
         localStorage.setItem('red_seen_nonces', JSON.stringify(recent));
       } catch {}
-    }
+    }, 5000);
   }
 
   private purgeDedup() {
-    const cutoff = Date.now() - DEDUP_WINDOW_MS;
+    const now = Date.now();
     for (const [nonce, ts] of this.seenNonces) {
-      if (ts < cutoff) this.seenNonces.delete(nonce);
+      // W6: Each nonce expires against its own adaptive window
+      if (now - ts > dedupWindowFor(nonce)) {
+        this.seenNonces.delete(nonce);
+      }
     }
-    if (typeof window !== 'undefined') {
-      try {
-        const recent = Array.from(this.seenNonces.entries()).slice(-1000);
-        localStorage.setItem('red_seen_nonces', JSON.stringify(recent));
-      } catch {}
-    }
+    this.schedulePersistSeenNonces();
   }
 
   // ─── Event Handlers ────────────────────────────────────────────────────────────

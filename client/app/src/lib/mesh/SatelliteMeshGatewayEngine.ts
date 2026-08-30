@@ -90,6 +90,7 @@ export class SatelliteMeshGatewayEngine {
     }
 
     private startOrbitalTracker() {
+        if (this.updateInterval) clearInterval(this.updateInterval);
         this.updateInterval = setInterval(() => {
             // Dinámica orbital en tiempo real
             this.satellites.forEach(sat => {
@@ -112,6 +113,14 @@ export class SatelliteMeshGatewayEngine {
             });
             this.notify();
         }, 1000);
+    }
+
+    public stop() {
+        if (this.updateInterval) {
+            clearInterval(this.updateInterval);
+            this.updateInterval = null;
+        }
+        this.listeners.clear();
     }
 
     public enqueueOutboundUplink(payload: string, priority: number = 5): string {

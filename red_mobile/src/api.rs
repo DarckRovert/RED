@@ -625,8 +625,8 @@ fn signaling_channel() -> broadcast::Sender<String> {
 
 pub fn build_router(state: ApiState) -> Router {
     let origins = [
-        "http://localhost".parse::<HeaderValue>().unwrap(),
-        "http://127.0.0.1".parse::<HeaderValue>().unwrap(),
+        HeaderValue::from_static("http://localhost"),
+        HeaderValue::from_static("http://127.0.0.1"),
     ];
 
     let cors = CorsLayer::new()
@@ -941,7 +941,7 @@ async fn handle_send_message(
             let node = state.node.lock().await;
             let peers = node.get_peers().await.unwrap_or_default();
             if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
-                p.identity_hash.clone().unwrap()
+                p.identity_hash.clone().unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
             } else {
                 let mut bytes = [0u8; 32];
                 let sb = short.as_bytes();
@@ -981,7 +981,7 @@ async fn handle_send_message(
         content,
         timestamp: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_millis() as u64,
         reply_to,
         status: red_core::protocol::MessageStatus::Pending,
@@ -1176,7 +1176,7 @@ async fn handle_add_contact(
             let node = state.node.lock().await;
             let peers = node.get_peers().await.unwrap_or_default();
             if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
-                p.identity_hash.clone().unwrap()
+                p.identity_hash.clone().unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
             } else {
                 return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("No se encontró un peer activo con el ID corto {}", short)}))).into_response();
             }
@@ -1227,7 +1227,7 @@ async fn handle_add_contact(
         display_name,
         public_key: if pub_key_bytes != [0u8; 32] { pub_key_bytes } else { existing.map(|e| e.public_key).unwrap_or([0u8; 32]) },
         added_at: std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
         verified: false,
         blocked: false,
         notes: None,
@@ -1273,7 +1273,7 @@ async fn handle_create_group(
                         public_key: red_core::crypto::keys::PublicKey::from_bytes([0u8; 32]),
                         joined_at: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
+                            .unwrap_or_default()
                             .as_secs(),
                         role: red_core::protocol::MemberRole::Member,
                         muted: false,
@@ -3841,10 +3841,10 @@ async fn handle_social_post(State(state): State<ApiState>, Json(req): Json<Creat
         author_name: sender_name,
         content: req.content,
         media_data: req.media_data,
-        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
         reply_to: req.reply_to,
     };
-    let data = serde_json::to_vec(&payload).unwrap();
+    let data = serde_json::to_vec(&payload).unwrap_or_default();
     let msg_type = red_core::protocol::MessageType::SocialPost(data.clone());
     let out_msg = red_core::protocol::Message {
         id: red_core::protocol::MessageId::generate(),
@@ -3957,7 +3957,7 @@ async fn handle_contact_sync(State(state): State<ApiState>, axum::extract::Path(
             sender: my_hash,
             recipient,
             content: red_core::protocol::MessageType::ProfileSyncRequest,
-            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
+            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
             reply_to: None,
             status: red_core::protocol::MessageStatus::Sent,
             edited: false,
@@ -4044,7 +4044,7 @@ async fn handle_create_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
     let creator_hash = node.identity_hash().clone();
     let creator_name = s.get_profile().map(|p| p.display_name).unwrap_or_else(|| "Nodo Soberano".to_string());
     let recipient = req.recipient.unwrap_or_else(|| "Anónimo".to_string());
-    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
     let hash_hex = creator_hash.to_hex();
     let short_id = if hash_hex.len() >= 6 { &hash_hex[..6] } else { "RED" };
     let voucher_id = format!("VOUCHER_{}_{}", timestamp, short_id);
@@ -4129,7 +4129,7 @@ async fn handle_redeem_p2p_voucher(State(state): State<ApiState>, Json(req): Jso
     }
 
     let my_hash = node.identity_hash().clone();
-    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    let timestamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
 
     let voucher_record = red_core::storage::P2PVoucherRecord {
         id: voucher_id.clone(),

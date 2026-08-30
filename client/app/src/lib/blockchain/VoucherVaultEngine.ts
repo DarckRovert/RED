@@ -7,7 +7,7 @@
  */
 
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '../mesh/meshProtocol';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { LocalChainLedger } from './LocalChainLedger';
 
@@ -287,6 +287,10 @@ export class VoucherVaultEngine {
 
     public isNullifierSpent(nullifierHash: string): boolean {
         return this.spentNullifiers.has(nullifierHash);
+    }
+
+    public destroy(): void {
+        this.listeners.clear();
     }
 }
 

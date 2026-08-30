@@ -97,6 +97,7 @@ export function useSquadCallMesh({
 
     // ── 2. VAD (Voice Activity Detection) ────────────────────────────────────
     const setupVAD = () => {
+        if (typeof window === 'undefined') return;
         try {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             if (!AudioContextClass) return;
@@ -258,6 +259,31 @@ export function useSquadCallMesh({
         return pc;
     };
 
+    // ── 4. SDP Bitrate Throttling — Tactical Voice (16 kbps Opus Mono) ────────
+    /**
+     * Applies tactical audio SDP constraints to limit Opus to 16 kbps mono voice mode.
+     * Injected into every Offer and Answer before setLocalDescription().
+     * Reduces per-peer audio bandwidth by ~65% (from 32-64 kbps to 16 kbps),
+     * preventing audio dropouts in squad calls over Wi-Fi Direct ad-hoc networks.
+     *
+     * Reference SDP lines injected:
+     *   a=fmtp:111 minptime=20;useinbandfec=1;maxaveragebitrate=16000;stereo=0;sprop-stereo=0
+     *   b=AS:20  (session-level 20 kbps aggregate cap)
+     */
+    const applyTacticalSdpConstraints = (sdp: string): string => {
+        return sdp
+            // Constrain Opus (payload type 111) to mono voice at 16 kbps with FEC
+            .replace(
+                /a=fmtp:111 ([^\r\n]*)/g,
+                'a=fmtp:111 minptime=20;useinbandfec=1;maxaveragebitrate=16000;stereo=0;sprop-stereo=0'
+            )
+            // Add session-level bandwidth cap (20 kbps) for the audio m-line
+            .replace(
+                /m=audio (\d+) ([^\r\n]*)/g,
+                (match: string) => `${match}\r\nb=AS:20`
+            );
+    };
+
     // ── 5. Process Incoming Signaling FIFO Queue ─────────────────────────────
     useEffect(() => {
         if (!callSignalQueue || callSignalQueue.length === 0) return;
@@ -287,25 +313,35 @@ export function useSquadCallMesh({
             if (signal.type === 'group_call_join') {
                 // Incoming new peer joined room -> We initiate an offer to them
                 const pc = getOrCreatePeerConnection(senderHash);
-                const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-                await pc.setLocalDescription(offer);
+                const rawOffer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+                // Apply tactical voice SDP constraints before sending
+                const tacticalOffer = new RTCSessionDescription({
+                    type: rawOffer.type,
+                    sdp: applyTacticalSdpConstraints(rawOffer.sdp || ''),
+                });
+                await pc.setLocalDescription(tacticalOffer);
                 sendSignalToPeer(senderHash, {
                     type: 'group_call_offer',
                     groupId,
                     senderHash: myIdentityHash,
-                    offer,
+                    offer: tacticalOffer,
                 });
             } else if (signal.type === 'group_call_offer') {
                 // Incoming offer from peer -> We respond with answer
                 const pc = getOrCreatePeerConnection(senderHash);
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
+                const rawAnswer = await pc.createAnswer();
+                // Apply tactical voice SDP constraints before sending
+                const tacticalAnswer = new RTCSessionDescription({
+                    type: rawAnswer.type,
+                    sdp: applyTacticalSdpConstraints(rawAnswer.sdp || ''),
+                });
+                await pc.setLocalDescription(tacticalAnswer);
                 sendSignalToPeer(senderHash, {
                     type: 'group_call_answer',
                     groupId,
                     senderHash: myIdentityHash,
-                    answer,
+                    answer: tacticalAnswer,
                 });
             } else if (signal.type === 'group_call_answer') {
                 const pc = peerConnectionsRef.current.get(senderHash);
@@ -423,9 +459,13 @@ export function useSquadCallMesh({
     };
 
     const cleanupAll = () => {
-        if (vadIntervalRef.current) clearInterval(vadIntervalRef.current);
+        if (vadIntervalRef.current) {
+            clearInterval(vadIntervalRef.current);
+            vadIntervalRef.current = null;
+        }
         if (audioContextRef.current) {
             audioContextRef.current.close().catch(() => {});
+            audioContextRef.current = null;
         }
 
         broadcastSignal({

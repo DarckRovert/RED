@@ -33,6 +33,8 @@ export class MqttRelayTransport {
     'wss://broker.hivemq.com:8884/mqtt',
   ];
 
+  private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
   private cleanId(raw: string): string {
     if (!raw) return '';
     let clean = raw.trim();
@@ -51,9 +53,89 @@ export class MqttRelayTransport {
   public updateIdentity(myId: string) {
     if (!myId) return;
     const clean = this.cleanId(myId);
+    if (this.myId && this.myId !== clean) {
+      this.unsubscribeFromTopics(this.myId);
+    }
     if (this.myId !== clean) {
       this.myId = clean;
       this.subscribeToMyTopics();
+    }
+  }
+
+  private unsubscribeFromTopics(oldId: string, targetWs?: WebSocket) {
+    if (!oldId) return;
+    const topics: string[] = [
+      `red/v65/dm/${oldId}`,
+      `red/v65/sig/${oldId}`,
+      `red/v65/mb/${oldId}`,
+      `red/mesh/dm/${oldId}`,
+      `red/mesh/sig/${oldId}`,
+      `red/v40/dm/${oldId}`,
+      `red/v40/sig/${oldId}`,
+      `red/v40/mb/${oldId}`,
+      `red/v32/dm/${oldId}`,
+      `red/v32/sig/${oldId}`,
+      `red/v32/mb/${oldId}`
+    ];
+
+    if (oldId.length >= 8) {
+      const short = oldId.slice(0, 8);
+      topics.push(`red/v65/dm/${short}`);
+      topics.push(`red/v65/sig/${short}`);
+      topics.push(`red/v65/mb/${short}`);
+      topics.push(`red/mesh/dm/${short}`);
+      topics.push(`red/mesh/sig/${short}`);
+      topics.push(`red/v40/dm/${short}`);
+      topics.push(`red/v40/sig/${short}`);
+      topics.push(`red/v40/mb/${short}`);
+      topics.push(`red/v32/dm/${short}`);
+      topics.push(`red/v32/sig/${short}`);
+      topics.push(`red/v32/mb/${short}`);
+    }
+
+    topics.forEach(t => this.unsubscribe(t, targetWs));
+    console.log(`[MqttRelay] Unsubscribed from ${topics.length} routing topics for old DID ${oldId.slice(0, 8)}`);
+  }
+
+  private unsubscribe(topic: string, targetWs?: WebSocket) {
+    const topicBytes = new TextEncoder().encode(topic);
+    const packetId = Math.floor(Math.random() * 65535) + 1;
+    const remainingLen = 2 + (2 + topicBytes.length);
+
+    const lenBytes: number[] = [];
+    let tempLen = remainingLen;
+    do {
+      let encodedByte = tempLen % 128;
+      tempLen = Math.floor(tempLen / 128);
+      if (tempLen > 0) encodedByte |= 128;
+      lenBytes.push(encodedByte);
+    } while (tempLen > 0);
+
+    const packet = new Uint8Array(1 + lenBytes.length + remainingLen);
+    let offset = 0;
+
+    packet[offset++] = 0xA2; // UNSUBSCRIBE (QoS 1 header)
+    for (const b of lenBytes) packet[offset++] = b;
+
+    // Packet ID
+    packet[offset++] = (packetId >> 8) & 0xFF;
+    packet[offset++] = packetId & 0xFF;
+
+    // Topic
+    packet[offset++] = (topicBytes.length >> 8) & 0xFF;
+    packet[offset++] = topicBytes.length & 0xFF;
+    packet.set(topicBytes, offset);
+
+    if (targetWs) {
+      if (targetWs.readyState === WebSocket.OPEN) {
+        try { targetWs.send(packet.buffer); } catch {}
+      }
+    } else {
+      for (const [, entry] of this.brokerSockets) {
+        if (entry.ws.readyState === WebSocket.OPEN) {
+          try { entry.ws.send(packet.buffer); } catch {}
+        }
+      }
     }
   }
 
@@ -391,8 +473,9 @@ export class MqttRelayTransport {
       // Deduplicate identical MQTT payloads delivered across multiple topic subscriptions & brokers
       let hash = '';
       const sampleLen = Math.min(payload.length, 32);
+      const lut = MqttRelayTransport.HEX_LUT;
       for (let i = 0; i < sampleLen; i++) {
-        hash += payload[i].toString(16).padStart(2, '0');
+        hash += lut[payload[i]];
       }
       hash += '_' + payload.length;
       if (this.seenMqttHashes.has(hash)) return;
@@ -504,6 +587,30 @@ export class MqttRelayTransport {
 
   public onSignaling(callback: (msg: any) => void) {
     this.signalingListeners.push(callback);
+  }
+
+  public disconnect() {
+    this.isConnected = false;
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    for (const [, timer] of this.reconnectTimers) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimers.clear();
+    for (const [, entry] of this.brokerSockets) {
+      try {
+        entry.ws.onclose = null;
+        entry.ws.onerror = null;
+        entry.ws.close();
+      } catch {}
+    }
+    this.brokerSockets.clear();
+    this.messageListeners = [];
+    this.signalingListeners = [];
+    this.connectListeners = [];
+    this.seenMqttHashes.clear();
   }
 }
 

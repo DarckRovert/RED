@@ -162,6 +162,28 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Genera un token de sesión local de 32 bytes (256 bits) usando el CSPRNG del OS.
+/// Persiste en `path`. Retorna el token como hex de 64 caracteres.
+fn generate_session_token(path: &std::path::Path) -> String {
+    use std::io::Write;
+    let mut bytes = [0u8; 32];
+    if getrandom::getrandom(&mut bytes).is_err() {
+        // Fallback mínimo: timestamp + PID si getrandom falla (raro en Android)
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let pid = std::process::id() as u128;
+        for (i, b) in bytes.iter_mut().enumerate() {
+            *b = ((t >> (i % 16)) ^ (pid >> (i % 8))) as u8;
+        }
+    }
+    let token: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
+    if let Ok(mut f) = std::fs::File::create(path) {
+        let _ = f.write_all(token.as_bytes());
+    }
+    token
+}
 async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> anyhow::Result<()> {
     // Initialize storage
     let mut storage = Storage::new(data_dir.join("storage"), get_storage_key());
@@ -260,7 +282,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                 };
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs();
                 if now > last_activity + (days_limit * 24 * 3600) {
                     warn!("🔴 DEAD MAN'S SWITCH TRIGGERED. INACTIVITY LIMIT EXCEEDED.");
@@ -298,7 +320,9 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     tokio::spawn(async move {
         // En Linux, el puerto 53 requiere root. En desarrollo usamos 5353
         let port = if std::env::var("RED_DNS_PORT").is_ok() {
-            std::env::var("RED_DNS_PORT").unwrap().parse().unwrap_or(5353)
+            std::env::var("RED_DNS_PORT").ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5353)
         } else {
             5353
         };
@@ -344,13 +368,31 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                 );
                 let fallback = data_dir_amber.join("amber_fallback");
                 std::sync::Arc::new(
-                    amber::AmberStore::open(&fallback)
-                        .expect("No se pudo abrir AmberStore de fallback"),
+                    match amber::AmberStore::open(&fallback) {
+                        Ok(s) => s,
+                        Err(e2) => {
+                            error!("❌ AmberStore fallback también falló: {} — continuando sin persistencia AMBER", e2);
+                            // Crear directorio de último recurso
+                            let last_resort = std::env::temp_dir().join("red_amber_emergency");
+                            amber::AmberStore::open(&last_resort)
+                                .expect("[FATAL] No se pudo abrir AmberStore en ninguna ruta")
+                        }
+                    }
                 )
             }
         };
 
-        let shared_sled = std::sync::Arc::new(sled::open(data_dir_amber.join("sled_db")).unwrap());
+        let shared_sled = match sled::open(data_dir_amber.join("sled_db")) {
+            Ok(db) => std::sync::Arc::new(db),
+            Err(e) => {
+                error!("❌ Error abriendo sled_db: {} — creando DB temporal en memoria", e);
+                // sled no tiene modo in-memory puro; intentar un directorio temporal
+                let tmp = std::env::temp_dir().join("red_sled_emergency");
+                std::sync::Arc::new(sled::open(&tmp).unwrap_or_else(|e2| {
+                    panic!("[FATAL] No se pudo abrir DB sled ni en emergencia: {}", e2);
+                }))
+            }
+        };
 
         let sos_store = std::sync::Arc::new(sos::SosStore::new(Some(shared_sled.clone())));
         let channel_store = std::sync::Arc::new(channels::ChannelStore::new(Some(shared_sled.clone())));
@@ -362,6 +404,17 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
         let battery = std::sync::Arc::new(battery::BatteryOptimizer::new(Some((*shared_sled).clone())));
         let ai_summarizer = std::sync::Arc::new(ai_summarizer::AISummarizerEngine::new());
         let ai_translator = std::sync::Arc::new(ai_translator::AITranslatorEngine::new());
+
+        // ── v70.1: Token de sesión local ─────────────────────────────────────
+        // Genera o reutiliza un token de 32 bytes hex para autenticar el WebView → Nodo.
+        let token_path = data_dir_amber.join("session.token");
+        let session_token = if let Ok(existing) = std::fs::read_to_string(&token_path) {
+            let tok = existing.trim().to_string();
+            if tok.len() == 64 { tok } else { generate_session_token(&token_path) }
+        } else {
+            generate_session_token(&token_path)
+        };
+        info!("🔑 Token de sesión local listo ({}...)", &session_token[..8]);
 
         let state = ApiState {
             node: http_node.clone(),
@@ -384,6 +437,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
             ai_summarizer,
             ai_translator,
             social_store: std::sync::Arc::new(social::SocialStore::new(Some(shared_sled.clone()))),
+            session_token: std::sync::Arc::new(session_token),
         };
 
         let my_identity_hash = {
@@ -579,31 +633,30 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let mut n = node_ref.lock().await;
                                 match n.send_message(msg.recipient.clone(), msg).await {
                                     Ok(_) => {
-                                        let resp = bincode::serialize(&NodeResponse::Ok).unwrap();
-                                        if let Err(e) = socket.write_all(&resp).await {
-                                            error!("Failed to write to socket; err = {:?}", e);
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Ok) {
+                                            let _ = socket.write_all(&resp).await;
                                         }
                                     }
                                     Err(e) => {
                                         error!("Failed to send message: {:?}", e);
-                                        let resp = bincode::serialize(&NodeResponse::Error(
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                                             format!("{:?}", e),
-                                        ))
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        )) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
                             ClientCommand::GetStatus => {
                                 let n = node_ref.lock().await;
                                 let peer_count = n.transport_peer_count();
-                                let resp = bincode::serialize(&NodeResponse::Status {
+                                if let Ok(resp) = bincode::serialize(&NodeResponse::Status {
                                     peer_count,
                                     is_running: n.is_running(),
                                     identity_hash: n.identity_hash().clone(),
-                                })
-                                .unwrap();
-                                let _ = socket.write_all(&resp).await;
+                                }) {
+                                    let _ = socket.write_all(&resp).await;
+                                }
                             }
                             ClientCommand::Subscribe => {
                                 info!("New subscription from client");
@@ -614,10 +667,11 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                         msg = receiver.recv() => {
                                             match msg {
                                                 Ok(message) => {
-                                                    let resp = bincode::serialize(&NodeResponse::NewMessage(message)).unwrap();
-                                                    if let Err(e) = socket.write_all(&resp).await {
-                                                        error!("Failed to send subscriber message: {:?}", e);
-                                                        break;
+                                                    if let Ok(resp) = bincode::serialize(&NodeResponse::NewMessage(message)) {
+                                                        if let Err(e) = socket.write_all(&resp).await {
+                                                            error!("Failed to send subscriber message: {:?}", e);
+                                                            break;
+                                                        }
                                                     }
                                                 }
                                                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
@@ -643,17 +697,16 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let mut n = node_ref.lock().await;
                                 match n.create_group(name).await {
                                     Ok(group) => {
-                                        let resp =
-                                            bincode::serialize(&NodeResponse::GroupInfo(group))
-                                                .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::GroupInfo(group)) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                                             format!("{:?}", e),
-                                        ))
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        )) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -682,16 +735,17 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 // SenderKey and delivers individually via onion routing.
                                 match n.send_group_message(group_id, content).await {
                                     Ok(_) => {
-                                        let resp = bincode::serialize(&NodeResponse::Ok).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Ok) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
                                         error!("Failed to send group message: {:?}", e);
-                                        let resp = bincode::serialize(&NodeResponse::Error(
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                                             format!("{:?}", e),
-                                        ))
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        )) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -718,17 +772,16 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let n = node_ref.lock().await;
                                 match n.generate_pairing_code(name).await {
                                     Ok(code) => {
-                                        let resp =
-                                            bincode::serialize(&NodeResponse::PairingCode(code))
-                                                .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::PairingCode(code)) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                                             format!("{:?}", e),
-                                        ))
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        )) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -736,15 +789,16 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let mut n = node_ref.lock().await;
                                 match n.authorize_device(name, code).await {
                                     Ok(_) => {
-                                        let resp = bincode::serialize(&NodeResponse::Ok).unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Ok) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                                             format!("{:?}", e),
-                                        ))
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        )) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -771,20 +825,20 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                                 let n = node_ref.lock().await;
                                 match n.get_sync_payload().await {
                                     Ok((contacts, groups, conversations)) => {
-                                        let resp = bincode::serialize(&NodeResponse::SyncPayload {
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::SyncPayload {
                                             contacts,
                                             groups,
                                             conversations,
-                                        })
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        }) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                     Err(e) => {
-                                        let resp = bincode::serialize(&NodeResponse::Error(
+                                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                                             format!("{:?}", e),
-                                        ))
-                                        .unwrap();
-                                        let _ = socket.write_all(&resp).await;
+                                        )) {
+                                            let _ = socket.write_all(&resp).await;
+                                        }
                                     }
                                 }
                             }
@@ -792,11 +846,11 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
                     }
                     Err(e) => {
                         error!("Failed to deserialize command from client: {:?}", e);
-                        let resp = bincode::serialize(&NodeResponse::Error(
+                        if let Ok(resp) = bincode::serialize(&NodeResponse::Error(
                             "Invalid command format".to_string(),
-                        ))
-                        .unwrap();
-                        let _ = socket.write_all(&resp).await;
+                        )) {
+                            let _ = socket.write_all(&resp).await;
+                        }
                     }
                 }
             }

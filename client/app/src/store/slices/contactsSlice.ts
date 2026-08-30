@@ -6,6 +6,17 @@ import { meshRouter, normalizeIdentity, isNameSimilar } from '../../lib/mesh/mes
 import { toast } from '../../components/Toast';
 
 const _processedHandshakes = new Set<string>();
+const MAX_PROCESSED_HANDSHAKES = 1000;
+
+function trackProcessedHandshake(key: string): void {
+    if (_processedHandshakes.size >= MAX_PROCESSED_HANDSHAKES) {
+        const firstKey = _processedHandshakes.values().next().value;
+        if (firstKey) {
+            _processedHandshakes.delete(firstKey);
+        }
+    }
+    _processedHandshakes.add(key);
+}
 
 export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({
     contacts: [],
@@ -59,7 +70,6 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             });
             RedAPI.sendMessage(req.senderHash, respPayload, { msg_type: 'contact_response' }).catch(() => {});
             try {
-                const { meshRouter } = await import('../../lib/mesh/meshRouter');
                 const rawBytes = new TextEncoder().encode(JSON.stringify({
                     id: `cres_${Date.now()}`,
                     content: respPayload,
@@ -68,7 +78,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     msg_type: 'contact_response',
                     timestamp: Date.now() / 1000
                 }));
-                meshRouter.broadcast(rawBytes).catch(() => {});
+                meshRouter.send(req.senderHash, rawBytes).catch(() => {});
             } catch {}
         }
         toast.success(`✅ ${req.senderName} agregado a tus contactos`);
@@ -252,15 +262,8 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             const cCanonical = meshRouter.getCanonicalId(cHash);
             if (cCanonical && targetHash && cCanonical === targetHash) return true;
 
-            // C. Prefix match for 64-char hashes
-            if (cHash.length === 64 && targetHash.length === 64 && cHash.slice(0, 16) === targetHash.slice(0, 16)) return true;
-
-            // D. Non-generic display name match
-            if (!isGenericName(cleanName) && !isGenericName(c.display_name)) {
-                if (isNameSimilar(c.display_name, cleanName)) {
-                    return true;
-                }
-            }
+            // C. Exact 64-char hex match
+            if (cHash.length === 64 && targetHash.length === 64 && cHash === targetHash) return true;
 
             return false;
         });
@@ -308,23 +311,15 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             updatedContacts.push(localContact);
         }
 
-        // Final strict deduplication pass on updatedContacts
+        // Final strict deduplication pass on updatedContacts based on canonical cryptographic DID
         const finalDedupedConts: any[] = [];
         const seenH = new Set<string>();
         for (const ct of updatedContacts) {
             const h = normalizeIdentity(ct.identity_hash || '');
-            if (!h || seenH.has(h)) continue;
-            const isDup = finalDedupedConts.some(f => {
-                const fH = normalizeIdentity(f.identity_hash || '');
-                if (fH === h) return true;
-                if (h.length >= 16 && fH.length >= 16 && (h.startsWith(fH.slice(0, 16)) || fH.startsWith(h.slice(0, 16)))) return true;
-                if (isNameSimilar(f.display_name, ct.display_name)) return true;
-                return false;
-            });
-            if (!isDup) {
-                seenH.add(h);
-                finalDedupedConts.push(ct);
-            }
+            const canonicalH = meshRouter.getCanonicalId(h) || h;
+            if (!canonicalH || seenH.has(canonicalH)) continue;
+            seenH.add(canonicalH);
+            finalDedupedConts.push({ ...ct, identity_hash: canonicalH });
         }
         updatedContacts = finalDedupedConts;
 
@@ -371,7 +366,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
         const myIdentity = get().identity;
         const myName = myIdentity?.nickname || 'Operador RED';
         if (myIdentity?.identity_hash) {
-            _processedHandshakes.add(`${cleanHash.toLowerCase()}_res`);
+            trackProcessedHandshake(`${cleanHash.toLowerCase()}_res`);
             const reqPayload = JSON.stringify({
                 type: 'contact_request',
                 id: `creq_${Date.now()}_${myIdentity.identity_hash.slice(0, 8)}`,
@@ -392,7 +387,7 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     msg_type: 'contact_request',
                     timestamp: Date.now() / 1000
                 }));
-                meshRouter.broadcast(rawBytes).catch(() => {});
+                meshRouter.send(cleanHash, rawBytes).catch(() => {});
             } catch {}
         }
 

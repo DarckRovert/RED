@@ -204,7 +204,10 @@ impl GuardianEngine {
         let text_lower = current_msg.to_lowercase();
         
         // El semáforo restringe a 1 inferencia concurrente máxima para proteger la memoria RAM (Anti-OOM)
-        let _permit = self.semaphore.acquire().await.unwrap();
+        let _permit = match self.semaphore.acquire().await {
+            Ok(p) => p,
+            Err(_) => return GuardianVerdict::Allow,
+        };
 
         let context_str = if !context.is_empty() {
             format!("Contexto reciente:\n{}\n", context.join("\n"))
@@ -289,7 +292,7 @@ impl GuardianEngine {
     }
 
     pub fn get_stats(&self) -> GuardianStats {
-        self.stats.lock().unwrap().clone()
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn is_active(&self) -> bool {
@@ -319,7 +322,7 @@ impl GuardianEngine {
     }
 
     fn get_from_cache(&self, key: &str) -> Option<GuardianVerdict> {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(entry) = cache.get(key) {
             if entry.created_at.elapsed().as_secs() < CACHE_TTL_SECS {
                 return Some(entry.verdict.clone());
@@ -329,7 +332,7 @@ impl GuardianEngine {
     }
 
     fn cache_verdict(&self, key: String, verdict: GuardianVerdict) {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
         if cache.len() >= MAX_CACHE_ENTRIES {
             let oldest_key = cache
                 .iter()
@@ -349,29 +352,29 @@ impl GuardianEngine {
     }
 
     fn increment_analyzed(&self) {
-        let mut s = self.stats.lock().unwrap();
+        let mut s = self.stats.lock().unwrap_or_else(|e| e.into_inner());
         s.messages_analyzed += 1;
         s.api_calls_made += 1;
     }
 
     fn increment_blocked(&self) {
-        self.stats.lock().unwrap().messages_blocked += 1;
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).messages_blocked += 1;
     }
 
     fn increment_flagged(&self) {
-        self.stats.lock().unwrap().messages_flagged += 1;
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).messages_flagged += 1;
     }
 
     fn increment_images_analyzed(&self) {
-        self.stats.lock().unwrap().images_analyzed += 1;
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).images_analyzed += 1;
     }
 
     fn increment_images_blocked(&self) {
-        self.stats.lock().unwrap().images_blocked += 1;
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).images_blocked += 1;
     }
 
     fn increment_cache_hits(&self) {
-        self.stats.lock().unwrap().cache_hits += 1;
+        self.stats.lock().unwrap_or_else(|e| e.into_inner()).cache_hits += 1;
     }
 }
 

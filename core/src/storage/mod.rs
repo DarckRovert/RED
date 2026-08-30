@@ -259,6 +259,49 @@ impl Storage {
         Ok(results)
     }
 
+    /// Paginated variant of fetch_all — materialises at most `page_size` records starting from
+    /// `cursor_key` (exclusive). Returns (records, next_cursor) where next_cursor is None when
+    /// the last page has been reached.
+    ///
+    /// Use this for large collections (contacts, conversations) to avoid blocking the Tokio
+    /// async runtime with a full O(N) heap allocation on startup or export operations.
+    fn fetch_paged<V: DeserializeOwned>(
+        &self,
+        tree_name: &str,
+        cursor_key: Option<&[u8]>,
+        page_size: usize,
+    ) -> StorageResult<(Vec<V>, Option<Vec<u8>>)> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+
+        let iter: Box<dyn Iterator<Item = sled::Result<(sled::IVec, sled::IVec)>>> =
+            match cursor_key {
+                // Range starting AFTER the cursor key (exclusive lower bound)
+                Some(key) => Box::new(tree.range::<&[u8], _>((std::ops::Bound::Excluded(key), std::ops::Bound::Unbounded))),
+                None       => Box::new(tree.iter()),
+            };
+
+
+        let mut results = Vec::with_capacity(page_size);
+        let mut last_key: Option<Vec<u8>> = None;
+
+        for item in iter.take(page_size) {
+            let (k, encrypted_data) = item.map_err(|e| StorageError::DatabaseError(e.to_string()))?;
+            let encrypted = EncryptedData::from_bytes(&encrypted_data)?;
+            let decrypted = decrypt(&self.encryption_key, &encrypted)?;
+            let value = bincode::deserialize(&decrypted)
+                .map_err(|e| StorageError::SerializationError(e.to_string()))?;
+            results.push(value);
+            last_key = Some(k.to_vec());
+        }
+
+        // If we received a full page, there may be more records — return the last key as cursor
+        let next_cursor = if results.len() == page_size { last_key } else { None };
+        Ok((results, next_cursor))
+    }
+
+
+
     fn delete(&self, tree_name: &str, key: &[u8]) -> StorageResult<()> {
         let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
         let tree = db.open_tree(tree_name).map_err(|e| StorageError::DatabaseError(e.to_string()))?;
@@ -275,6 +318,94 @@ impl Storage {
         let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
         db.flush().map_err(|e| StorageError::DatabaseError(e.to_string()))?;
         Ok(())
+    }
+
+    /// Prunes expired emergency beacons and voice bursts to compact flash storage on mobile nodes.
+    pub fn prune_expired_records(&self, max_age_seconds: u64) -> StorageResult<usize> {
+        let db = self.db.as_ref().ok_or_else(|| StorageError::DatabaseError("DB not open".into()))?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let cutoff = now.saturating_sub(max_age_seconds);
+        let mut pruned = 0;
+
+        // 1. Prune inactive emergency beacons older than cutoff
+        if let Ok(tree) = db.open_tree("emergency_beacons") {
+            let mut to_remove = Vec::new();
+            for item in tree.iter() {
+                if let Ok((k, encrypted_data)) = item {
+                    if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
+                        if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
+                            if let Ok(b) = bincode::deserialize::<EmergencyBeaconRecord>(&decrypted) {
+                                if !b.active && b.timestamp < cutoff {
+                                    to_remove.push(k);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for k in to_remove {
+                if tree.remove(k).is_ok() {
+                    pruned += 1;
+                }
+            }
+            let _ = tree.flush();
+        }
+
+        // 2. Prune old voice bursts older than cutoff
+        if let Ok(tree) = db.open_tree("voice_bursts") {
+            let mut to_remove = Vec::new();
+            for item in tree.iter() {
+                if let Ok((k, encrypted_data)) = item {
+                    if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
+                        if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
+                            if let Ok(b) = bincode::deserialize::<VoiceBurstRecord>(&decrypted) {
+                                if b.timestamp < cutoff {
+                                    to_remove.push(k);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for k in to_remove {
+                if tree.remove(k).is_ok() {
+                    pruned += 1;
+                }
+            }
+            let _ = tree.flush();
+        }
+
+        // 3. Prune obsolete proximity node sightings older than cutoff.
+        //    Uses the standard AES-256-GCM pipeline (EncryptedData + bincode) so that
+        //    geographic coordinates and peer DIDs are never stored in readable form on NAND.
+        if let Ok(tree) = db.open_tree("proximity_nodes") {
+            let mut to_remove = Vec::new();
+            for item in tree.iter() {
+                if let Ok((k, encrypted_data)) = item {
+                    if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
+                        if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
+                            if let Ok(record) = bincode::deserialize::<ProximityNodeRecord>(&decrypted) {
+                                if record.last_seen < cutoff {
+                                    to_remove.push(k);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            for k in to_remove {
+                if tree.remove(k).is_ok() {
+                    pruned += 1;
+                }
+            }
+            let _ = tree.flush();
+        }
+
+        let _ = db.flush();
+        Ok(pruned)
     }
 
     // Config
@@ -296,8 +427,22 @@ impl Storage {
     pub fn get_contacts(&self) -> Vec<Contact> {
         self.fetch_all("contacts").unwrap_or_default()
     }
+    /// Paginated contact fetch — prefer over get_contacts() for large address books (> 100 contacts).
+    /// Returns (contacts_page, next_cursor_key). Pass next_cursor_key back as cursor for the next page.
+    pub fn get_contacts_paged(
+        &self,
+        cursor: Option<&[u8]>,
+        page_size: usize,
+    ) -> StorageResult<(Vec<Contact>, Option<Vec<u8>>)> {
+        self.fetch_paged("contacts", cursor, page_size)
+    }
     pub fn contact_count(&self) -> usize {
-        self.get_contacts().len()
+        if let Some(db) = self.db.as_ref() {
+            if let Ok(tree) = db.open_tree("contacts") {
+                return tree.len();
+            }
+        }
+        0
     }
     pub fn remove_contact(&mut self, hash: &IdentityHash) -> StorageResult<()> {
         self.delete("contacts", hash.as_bytes())

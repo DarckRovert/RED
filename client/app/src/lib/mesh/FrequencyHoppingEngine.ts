@@ -64,7 +64,8 @@ export class FrequencyHoppingEngine {
         const hash = sha256(new TextEncoder().encode(payload));
         // Tomar los primeros 2 bytes para determinar el canal 0..63
         const val = (hash[0] << 8) | hash[1];
-        return val % this.totalChannels;
+        const total = Math.max(1, this.totalChannels);
+        return val % total;
     }
 
     /**
@@ -82,6 +83,14 @@ export class FrequencyHoppingEngine {
         }
 
         return hops;
+    }
+
+    public reset(): void {
+        this.swarmSeed = 'RED_TACTICAL_SWARM_FHSS_KEY_V1';
+    }
+
+    public destroy(): void {
+        this.reset();
     }
 }
 

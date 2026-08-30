@@ -90,8 +90,25 @@ impl AICopilotEngine {
             };
         }
 
+        // --- Guarda de Memoria OOM: Previene que Android LMK mate el proceso ---
+        if let Ok(meta) = std::fs::metadata(path) {
+            const MAX_SAFE_MOBILE_MODEL_BYTES: u64 = 2_200_000_000; // ~2.2 GB límite de seguridad móvil
+            if meta.len() > MAX_SAFE_MOBILE_MODEL_BYTES {
+                return CopilotResponse {
+                    answer: format!(
+                        "⚠️ [Protección de Memoria OOM]: El modelo GGUF ({:.2} GB) supera el umbral seguro en terminales móviles (2.2 GB). Utiliza un modelo cuantizado ligero (ej. Qwen2.5-0.5B-Q4_K_M o SmolLM-135M) para garantizar estabilidad total sin consumir la RAM del sistema operativo.",
+                        meta.len() as f64 / (1024.0 * 1024.0 * 1024.0)
+                    ),
+                    topic_category: "Protección OOM".to_string(),
+                    source: "Candle Memory Guard".to_string(),
+                    model_used: model_name,
+                    execution_time_ms: start.elapsed().as_millis() as u64,
+                };
+            }
+        }
+
         // --- Inicio de Integración Real con Candle GGUF ---
-        let mut st = state.lock().unwrap();
+        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
         if !st.is_loaded || st.active_model_path != model_path {
             st.is_loaded = true;
             st.active_model_path = model_path.clone();
@@ -248,7 +265,7 @@ impl AICopilotEngine {
 
         // Buscamos un tokenizer adjunto
         let tokenizer_path = path.with_extension("").with_extension("json");
-        let tokenizer_path_alt = path.parent().unwrap().join("tokenizer.json");
+        let tokenizer_path_alt = path.parent().unwrap_or_else(|| std::path::Path::new(".")).join("tokenizer.json");
         
         let tokenizer_file = if tokenizer_path.exists() {
             Some(tokenizer_path)

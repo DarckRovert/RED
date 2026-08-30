@@ -47,12 +47,20 @@ export class ShamirSecretSharingEngine {
         const secretBytes = this.hexToBytes(secretHex);
         const shares: Uint8Array[] = Array.from({ length: n }, () => new Uint8Array(secretBytes.length));
 
+        const cryptoObj = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
+
         for (let byteIdx = 0; byteIdx < secretBytes.length; byteIdx++) {
             const secretByte = secretBytes[byteIdx];
             // Generate random polynomial coefficients f(x) = secret + a1*x + a2*x^2 + ... + a(k-1)*x^(k-1)
             const coeffs = new Uint8Array(k);
             coeffs[0] = secretByte;
-            crypto.getRandomValues(coeffs.subarray(1));
+            if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+                cryptoObj.getRandomValues(coeffs.subarray(1));
+            } else {
+                for (let c = 1; c < k; c++) {
+                    coeffs[c] = Math.floor(Math.random() * 256);
+                }
+            }
 
             // Evaluate polynomial at x = 1..n
             for (let x = 1; x <= n; x++) {
@@ -80,29 +88,40 @@ export class ShamirSecretSharingEngine {
     }
 
     public static reconstructSecret(shares: SecretShare[]): string {
-        const normalized = shares.map(s => ({
-            shareIndex: s.shareIndex || s.x || 1,
-            shareHex: s.shareHex || s.yHex || ""
-        }));
-        if (normalized.length < 3) {
-            throw new Error("Insufficient shares for SSS 3-of-5 reconstruction");
+        if (!Array.isArray(shares)) {
+            throw new Error("Se requiere un arreglo de fragmentos para la reconstrucción");
         }
 
-        const shareLength = this.hexToBytes(normalized[0].shareHex).length;
+        // Deduplicar fragmentos por shareIndex / x para prevenir división por cero en Lagrange
+        const uniqueMap = new Map<number, { shareIndex: number; shareHex: string }>();
+        for (const s of shares) {
+            const idx = s.shareIndex || s.x || 1;
+            const hex = s.shareHex || s.yHex || "";
+            if (hex.trim().length > 0 && !uniqueMap.has(idx)) {
+                uniqueMap.set(idx, { shareIndex: idx, shareHex: hex.trim() });
+            }
+        }
+
+        const uniqueShares = Array.from(uniqueMap.values());
+        if (uniqueShares.length < 3) {
+            throw new Error("Se requieren al menos 3 fragmentos distintos (índices únicos) para la reconstrucción SSS");
+        }
+
+        const shareLength = this.hexToBytes(uniqueShares[0].shareHex).length;
         const secretBytes = new Uint8Array(shareLength);
 
-        const xValues = normalized.map(s => s.shareIndex);
-        const yValues = normalized.map(s => this.hexToBytes(s.shareHex));
+        const xValues = uniqueShares.map(s => s.shareIndex);
+        const yValues = uniqueShares.map(s => this.hexToBytes(s.shareHex));
 
         for (let byteIdx = 0; byteIdx < shareLength; byteIdx++) {
             let secretByte = 0;
 
-            for (let i = 0; i < shares.length; i++) {
+            for (let i = 0; i < uniqueShares.length; i++) {
                 const xi = xValues[i];
                 const yi = yValues[i][byteIdx];
                 let lagrangeCoeff = 1;
 
-                for (let j = 0; j < shares.length; j++) {
+                for (let j = 0; j < uniqueShares.length; j++) {
                     if (i === j) continue;
                     const xj = xValues[j];
                     // Li(0) = prod(xj / (xj ^ xi))
@@ -120,14 +139,23 @@ export class ShamirSecretSharingEngine {
         return this.bytesToHex(secretBytes);
     }
 
+    private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
     private static bytesToHex(bytes: Uint8Array): string {
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        let hex = '';
+        const lut = this.HEX_LUT;
+        for (let i = 0; i < bytes.length; i++) {
+            hex += lut[bytes[i]];
+        }
+        return hex;
     }
 
     private static hexToBytes(hex: string): Uint8Array {
-        const bytes = new Uint8Array(Math.ceil(hex.length / 2));
-        for (let i = 0; i < bytes.length; i++) {
-            bytes[i] = parseInt(hex.substr(i * 2, 2), 16) || 0;
+        const clean = (hex || '').replace(/[^0-9a-fA-F]/g, '');
+        const len = clean.length >>> 1;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
         }
         return bytes;
     }

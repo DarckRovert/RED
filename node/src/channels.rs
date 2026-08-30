@@ -23,7 +23,7 @@ impl ChannelStore {
     fn load_from_db(&self) {
         if let Some(db) = &self.db {
             if let Ok(tree) = db.open_tree("public_channels") {
-                let mut map = self.messages.write().unwrap();
+                let mut map = self.messages.write().unwrap_or_else(|e| e.into_inner());
                 for item in tree.iter().flatten() {
                     if let Ok(msg) = serde_json::from_slice::<ChannelMessage>(&item.1) {
                         map.entry(msg.channel_id.clone()).or_default().push(msg);
@@ -57,7 +57,7 @@ impl ChannelStore {
             is_moderated: true,
         };
 
-        let mut map = self.messages.write().unwrap();
+        let mut map = self.messages.write().unwrap_or_else(|e| e.into_inner());
         map.entry(req.channel_id.clone())
             .or_default()
             .push(msg.clone());
@@ -74,7 +74,7 @@ impl ChannelStore {
     }
 
     pub fn get_channel_messages(&self, channel_id: &str, limit: usize) -> Vec<ChannelMessage> {
-        let map = self.messages.read().unwrap();
+        let map = self.messages.read().unwrap_or_else(|e| e.into_inner());
         if let Some(list) = map.get(channel_id) {
             let mut sorted = list.clone();
             sorted.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
@@ -85,7 +85,7 @@ impl ChannelStore {
     }
 
     pub fn list_active_channels(&self) -> Vec<String> {
-        let map = self.messages.read().unwrap();
+        let map = self.messages.read().unwrap_or_else(|e| e.into_inner());
         let mut keys: Vec<String> = map.keys().cloned().collect();
         if !keys.contains(&"red-local-general".to_string()) {
             keys.push("red-local-general".to_string());

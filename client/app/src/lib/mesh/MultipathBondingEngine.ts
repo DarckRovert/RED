@@ -15,6 +15,7 @@ export interface BondedShard {
     originalLength: number;
     isParity: boolean;
     data: Uint8Array;
+    integrityHash: string; // 32-bit FNV-1a hex checksum to detect and discard corrupted shards
 }
 
 export interface TransportAllocation {
@@ -32,6 +33,16 @@ export class MultipathBondingEngine {
             MultipathBondingEngine.instance = new MultipathBondingEngine();
         }
         return MultipathBondingEngine.instance;
+    }
+
+    /** Computes a fast 32-bit FNV-1a checksum of the shard payload */
+    public static computeChecksum(data: Uint8Array): string {
+        let fnv = 0x811c9dc5;
+        for (let i = 0; i < data.length; i++) {
+            fnv ^= data[i];
+            fnv = Math.imul(fnv, 0x01000193);
+        }
+        return (fnv >>> 0).toString(16).padStart(8, '0');
     }
 
     /**
@@ -67,6 +78,7 @@ export class MultipathBondingEngine {
                 originalLength: payload.length,
                 isParity: false,
                 data: shardData,
+                integrityHash: this.computeChecksum(shardData),
             });
         }
 
@@ -91,6 +103,7 @@ export class MultipathBondingEngine {
                 originalLength: payload.length,
                 isParity: true,
                 data: parityData,
+                integrityHash: this.computeChecksum(parityData),
             });
         }
 
@@ -99,22 +112,31 @@ export class MultipathBondingEngine {
 
     /**
      * Reconstruye el payload original a partir de cualquier conjunto de fragmentos que contenga
-     * al menos los K fragmentos de datos requeridos.
+     * al menos los K fragmentos de datos requeridos. Descarta fragmentos con checksum inválido.
      */
     public static reconstruct(shards: BondedShard[]): Uint8Array | null {
         if (shards.length === 0) return null;
 
-        const dataShardsCount = shards[0].dataShards;
-        const originalLength = shards[0].originalLength;
-        const shardSize = shards[0].data.length;
+        // Filtrar y validar integridad de cada fragmento
+        const validShards = shards.filter(s => {
+            if (!s.integrityHash) return true; // compatibilidad hacia atrás
+            return this.computeChecksum(s.data) === s.integrityHash;
+        });
+
+        if (validShards.length === 0) return null;
+
+        const dataShardsCount = validShards[0].dataShards;
+        const originalLength = validShards[0].originalLength;
+        const shardSize = validShards[0].data.length;
 
         // Comprobar si tenemos todos los fragmentos directos de datos (0 a K-1)
         const directData = new Map<number, Uint8Array>();
-        for (const s of shards) {
+        for (const s of validShards) {
             if (!s.isParity && s.shardIndex < dataShardsCount) {
                 directData.set(s.shardIndex, s.data);
             }
         }
+
 
         // Si tenemos los K fragmentos de datos directamente
         if (directData.size === dataShardsCount) {

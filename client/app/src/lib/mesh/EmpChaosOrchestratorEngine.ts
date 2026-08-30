@@ -101,6 +101,7 @@ export class EmpChaosOrchestratorEngine {
             this.timer = null;
         }
 
+        globalShield.setDefcon(4);
         this.notify();
     }
 

@@ -144,7 +144,9 @@ export class TacticalGeofenceEngine {
      * Evalúa la posición GPS del operador respecto a todas las geocercas activas
      */
     public evaluatePosition(userLat: number, userLon: number): GeofenceEvaluation {
-        if (!userLat || !userLon) return this.lastEvaluation;
+        if (typeof userLat !== 'number' || typeof userLon !== 'number' || isNaN(userLat) || isNaN(userLon)) {
+            return this.lastEvaluation;
+        }
 
         const activeZones = Array.from(this.zones.values()).filter(z => z.active);
         const insideZones: TacticalGeofenceZone[] = [];
@@ -213,6 +215,10 @@ export class TacticalGeofenceEngine {
                   Math.sin(dLon / 2) * Math.sin(dLon / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return Math.round(R * c);
+    }
+
+    public destroy(): void {
+        this.listeners.clear();
     }
 }
 

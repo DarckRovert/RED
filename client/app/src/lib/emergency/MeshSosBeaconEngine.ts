@@ -221,15 +221,28 @@ export class MeshSosBeaconEngine {
     }
 
     public getMeshSosBeacons(): SosBeaconPacket[] {
-        // Filtrar balizas con menos de 72 horas
+        // Filtrar y podar balizas con más de 72 horas
         const cutoff = Date.now() - (72 * 3600 * 1000);
+        for (const [id, beacon] of this.meshBeacons.entries()) {
+            if (beacon.timestamp <= cutoff) {
+                this.meshBeacons.delete(id);
+            }
+        }
         return Array.from(this.meshBeacons.values())
-            .filter(b => b.timestamp > cutoff)
             .sort((a, b) => b.timestamp - a.timestamp);
     }
 
     public getActiveDistressCount(): number {
         return this.getMeshSosBeacons().filter(b => b.active).length;
+    }
+
+    public destroy(): void {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+        this.listeners.clear();
+        MeshSosBeaconEngine.instance = null;
     }
 
     private startHeartbeatLoop() {

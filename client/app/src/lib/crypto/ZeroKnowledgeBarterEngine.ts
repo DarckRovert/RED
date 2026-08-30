@@ -139,6 +139,9 @@ export class ZeroKnowledgeBarterEngine {
      * Verifica matemáticamente que el compromiso pertenezca al Merkle Root sin conocer el secreto
      */
     public verifyProof(proof: ZkBarterProof): boolean {
+        if (!proof || typeof proof !== 'object') return false;
+        if (typeof proof.commitment !== 'string' || typeof proof.nullifierHash !== 'string' || typeof proof.merkleRoot !== 'string') return false;
+        if (!Array.isArray(proof.proofSteps) || typeof proof.amount !== 'number' || proof.amount <= 0) return false;
         if (this.isSpent(proof.nullifierHash)) {
             return false; // Nullifier ya gastado (intento de doble gasto)
         }
@@ -146,6 +149,7 @@ export class ZeroKnowledgeBarterEngine {
         let currentHash = proof.commitment;
 
         for (const step of proof.proofSteps) {
+            if (!step || typeof step.hash !== 'string') return false;
             if (step.position === 'left') {
                 currentHash = this.hashPair(step.hash, currentHash);
             } else {
@@ -161,12 +165,23 @@ export class ZeroKnowledgeBarterEngine {
     }
 
     /**
-     * Consume la prueba y registra el nullifier para evitar doble gasto
+     * Consume la prueba y registra el nullifier para evitar doble gasto.
+     * El set está limitado a 5,000 entradas FIFO: los nullifiers más antiguos se eliminan
+     * primero para prevenir que el almacenamiento de 5 MB del WebView se sature y empiece
+     * a silenciar escrituras críticas (mensajes, claves, estado DEFCON).
      */
     public spendProof(proof: ZkBarterProof): boolean {
         if (!this.verifyProof(proof)) return false;
 
         this.spentNullifiers.add(proof.nullifierHash);
+
+        // Evicción FIFO: si el set supera el cap, eliminar la entrada más antigua
+        const MAX_SPENT_NULLIFIERS = 5_000;
+        if (this.spentNullifiers.size > MAX_SPENT_NULLIFIERS) {
+            const oldest = this.spentNullifiers.values().next().value;
+            if (oldest) this.spentNullifiers.delete(oldest);
+        }
+
         if (typeof window !== 'undefined') {
             try {
                 localStorage.setItem('red_spent_zk_nullifiers', JSON.stringify(Array.from(this.spentNullifiers)));

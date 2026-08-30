@@ -25,6 +25,9 @@ export interface DefconProfile {
     pqcStrictRatcheting: boolean;
     isolateWan: boolean;
     biometricInstantLock: boolean;
+    onionHops: number;
+    allowCleartext: boolean;
+    soundMesh: boolean;
 }
 
 export const DEFCON_PROFILES: Record<DefconLevel, DefconProfile> = {
@@ -40,6 +43,9 @@ export const DEFCON_PROFILES: Record<DefconLevel, DefconProfile> = {
         pqcStrictRatcheting: false,
         isolateWan: false,
         biometricInstantLock: false,
+        onionHops: 1,
+        allowCleartext: true,
+        soundMesh: false,
     },
     3: {
         level: 3,
@@ -53,6 +59,9 @@ export const DEFCON_PROFILES: Record<DefconLevel, DefconProfile> = {
         pqcStrictRatcheting: true,
         isolateWan: false,
         biometricInstantLock: false,
+        onionHops: 2,
+        allowCleartext: false,
+        soundMesh: false,
     },
     2: {
         level: 2,
@@ -62,10 +71,13 @@ export const DEFCON_PROFILES: Record<DefconLevel, DefconProfile> = {
         color: "#FF8008",
         powDifficulty: 4,
         sniObfuscationForced: true,
-        dnsTunnelFallbackForced: true,
+        dnsTunnelFallbackForced: false,
         pqcStrictRatcheting: true,
         isolateWan: false,
         biometricInstantLock: false,
+        onionHops: 3,
+        allowCleartext: false,
+        soundMesh: true,
     },
     1: {
         level: 1,
@@ -79,6 +91,9 @@ export const DEFCON_PROFILES: Record<DefconLevel, DefconProfile> = {
         pqcStrictRatcheting: true,
         isolateWan: true,
         biometricInstantLock: true,
+        onionHops: 5,
+        allowCleartext: false,
+        soundMesh: true,
     }
 };
 
@@ -111,6 +126,8 @@ export class GlobalShieldEngine {
     private dnsTunnelsCreated: number = 0;
     private lastDefconTransition: number = Date.now();
 
+    private unsubscribeKinetic: (() => void) | null = null;
+
     private constructor() {
         if (typeof window !== "undefined") {
             const saved = localStorage.getItem(STORAGE_DEFCON_KEY);
@@ -123,7 +140,7 @@ export class GlobalShieldEngine {
             this.applyDefconPolicies(this.currentDefcon);
 
             // Subscribe to KineticDutyGovernor
-            KineticDutyGovernor.getInstance().subscribe(() => {
+            this.unsubscribeKinetic = KineticDutyGovernor.getInstance().subscribe(() => {
                 this.notifyListeners();
             });
         }
@@ -152,8 +169,9 @@ export class GlobalShieldEngine {
     private applyDefconPolicies(level: DefconLevel): void {
         const profile = DEFCON_PROFILES[level];
         
-        // 1. Adjust PoW Difficulty Target
+        // 1. Adjust PoW Difficulty Target and Active Onion Hops
         MeshProofOfWork.DEFAULT_DIFFICULTY = profile.powDifficulty;
+        this.onionHopsActive = profile.onionHops;
 
         // 2. Enforce Biometric Lock if DEFCON 1
         if (profile.biometricInstantLock) {
@@ -164,6 +182,28 @@ export class GlobalShieldEngine {
         if (level <= 2) {
             KineticDutyGovernor.getInstance().triggerShakeBoost();
         }
+    }
+
+    /**
+     * Enforces the active DEFCON security policy on an outgoing packet
+     */
+    public enforceDefconPolicy(packet: { isEncrypted: boolean; payload?: any }): {
+        transmitted: boolean;
+        hopsAssigned?: number;
+        acousticCarrier?: boolean;
+        reason?: string;
+    } {
+        const profile = DEFCON_PROFILES[this.currentDefcon];
+
+        if (!profile.allowCleartext && !packet.isEncrypted) {
+            return { transmitted: false, reason: "Bloqueado por política DEFCON: Requiere cifrado" };
+        }
+
+        return {
+            transmitted: true,
+            hopsAssigned: profile.onionHops,
+            acousticCarrier: profile.soundMesh,
+        };
     }
 
     /**
@@ -265,6 +305,14 @@ export class GlobalShieldEngine {
         this.listeners.forEach(fn => {
             try { fn(telemetry); } catch (e: any) { console.warn('[GlobalShieldEngine] Listener error:', e?.message || e); }
         });
+    }
+
+    public destroy(): void {
+        if (this.unsubscribeKinetic) {
+            this.unsubscribeKinetic();
+            this.unsubscribeKinetic = null;
+        }
+        this.listeners.clear();
     }
 }
 

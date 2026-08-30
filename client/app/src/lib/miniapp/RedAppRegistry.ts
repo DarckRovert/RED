@@ -178,6 +178,17 @@ export class RedAppRegistry {
                 return { bundle: null as any, isValid: false, error: 'El manifiesto no especifica nombre o versión.' };
             }
 
+            const ID_REGEX = /^[a-zA-Z0-9_.-]{3,64}$/;
+            const SEMVER_REGEX = /^\d+\.\d+\.\d+/;
+
+            if (!ID_REGEX.test(manifest.id)) {
+                return { bundle: null as any, isValid: false, error: 'El identificador de la aplicación debe ser alfanumérico (3-64 caracteres).' };
+            }
+
+            if (!SEMVER_REGEX.test(manifest.version)) {
+                return { bundle: null as any, isValid: false, error: 'La versión de la aplicación debe seguir el formato SemVer (ej: 1.0.0).' };
+            }
+
             return {
                 bundle: parsed.bundle,
                 isValid: true

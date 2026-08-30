@@ -34,20 +34,32 @@ export default function Sidebar() {
     const pendingContactRequests = Array.isArray(rawPending) ? rawPending : [];
     const pendingCount = pendingContactRequests.length;
 
+    const peerNameIndex = useMemo(() => {
+        const map = new Map<string, string>();
+        for (const g of groups) {
+            if (g?.id) map.set(g.id.toLowerCase(), g.name || `Grupo ${g.id.substring(0, 6)}…`);
+        }
+        for (const c of contacts) {
+            if (c?.identity_hash && c.display_name) {
+                map.set(c.identity_hash.toLowerCase(), c.display_name);
+                if (c.identity_hash.length >= 8) {
+                    map.set(c.identity_hash.toLowerCase().substring(0, 8), c.display_name);
+                }
+            }
+        }
+        return map;
+    }, [groups, contacts]);
+
     function resolvePeerName(peerHash: string): string {
         if (!peerHash) return "Contacto P2P";
-        const canonical = meshRouter.getCanonicalId(peerHash) || peerHash;
-        const g = groups.find((g: any) => g && (g.id === peerHash || g.id === canonical));
-        if (g) return g.name || `Grupo ${peerHash.substring(0, 6)}…`;
-        const c = contacts.find((c: any) => c && (
-            c.identity_hash === peerHash ||
-            c.identity_hash === canonical ||
-            (canonical.length >= 8 && c.identity_hash?.startsWith(canonical.substring(0, 8))) ||
-            (c.identity_hash?.length >= 8 && canonical.startsWith(c.identity_hash.substring(0, 8)))
-        ));
-        if (c?.display_name) {
-            return c.display_name;
-        }
+        const clean = peerHash.toLowerCase();
+        const cached = peerNameIndex.get(clean);
+        if (cached) return cached;
+
+        const canonical = (meshRouter.getCanonicalId(peerHash) || peerHash).toLowerCase();
+        const canonCached = peerNameIndex.get(canonical) || peerNameIndex.get(canonical.substring(0, 8));
+        if (canonCached) return canonCached;
+
         const meshPeer = meshRouter.getPeerByAnyId(peerHash) || (canonical ? meshRouter.getPeerByAnyId(canonical) : undefined);
         if (meshPeer?.name && !meshPeer.name.startsWith('RED-') && !meshPeer.name.startsWith('Operador ') && !meshPeer.name.startsWith('Dispositivo RED')) {
             return meshPeer.name;
@@ -161,6 +173,8 @@ export default function Sidebar() {
                 { icon: "🌤️", label: t('modules.weather'), action: "weather" },
                 { icon: "🔋", label: t('modules.eco_mesh'), action: "ecoMesh" },
                 { icon: "🌐", label: t('modules.network'), action: "network" },
+                { icon: "📻", label: "Transceptor LoRa (Hardware 25km)", action: "loraTransceiver" },
+                { icon: "🧭", label: "Brújula P2P Mesh", action: "p2pCompass" },
             ]
         },
         {

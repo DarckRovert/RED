@@ -10,7 +10,7 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { HiveMindEngine } from "../lib/hiveMindEngine";
 import { toast } from "./Toast";
 import { OffGridNavigationEngine, TacticalTarget } from "../lib/OffGridNavigationEngine";
-import { offlineTileCacheEngine, DownloadProgress, TileCacheStats } from "../lib/storage/OfflineTileCacheEngine";
+import { offlineTileCacheEngine, TileDownloadProgress, TileCacheStats } from "../lib/storage/OfflineTileCacheEngine";
 import { tacticalGeofence } from "../lib/sensors/TacticalGeofenceEngine";
 import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
 import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
@@ -77,6 +77,7 @@ export interface CanonicalNode {
     isEstimated?: boolean;
     isContact: boolean;
     batteryLevel?: number;
+    activeModel?: string | null;
     cpuUsagePercent?: number;
     availableRamMb?: number;
     isCharging?: boolean;
@@ -118,7 +119,7 @@ export default function NodeMap() {
     const [showVaultModal, setShowVaultModal] = useState(false);
     const [vaultRadiusKm, setVaultRadiusKm] = useState(10);
     const [vaultStats, setVaultStats] = useState<TileCacheStats | null>(null);
-    const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+    const [downloadProgress, setDownloadProgress] = useState<TileDownloadProgress | null>(null);
     const [isDownloadingVault, setIsDownloadingVault] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -381,6 +382,7 @@ export default function NodeMap() {
                         existing.cpuUsagePercent = hiveCap.cpuUsagePercent;
                         existing.availableRamMb = hiveCap.availableRamMb;
                         existing.isCharging = hiveCap.isCharging;
+                        existing.activeModel = hiveCap.activeModel;
                     }
                 } else {
                     canonicalMap.set(targetKey, {
@@ -397,7 +399,8 @@ export default function NodeMap() {
                         batteryLevel: hiveCap?.batteryLevel,
                         cpuUsagePercent: hiveCap?.cpuUsagePercent,
                         availableRamMb: hiveCap?.availableRamMb,
-                        isCharging: hiveCap?.isCharging
+                        isCharging: hiveCap?.isCharging,
+                        activeModel: hiveCap?.activeModel
                     });
                 }
             };

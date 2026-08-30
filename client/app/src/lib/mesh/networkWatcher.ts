@@ -30,22 +30,26 @@ class NetworkWatcher {
   private isInitialized = false;
   private isProbing = false;
 
+  private handleOnline = () => this.handleNetworkEvent(true);
+  private handleOffline = () => this.handleNetworkEvent(false);
+  private handleConnectionChange = () => {
+    this.updateConnectionType();
+    this.probeInternetReachability();
+  };
+
   public init() {
     if (this.isInitialized || typeof window === 'undefined') return;
     this.isInitialized = true;
 
     // 1. Standard Browser Lifecycle Events
-    window.addEventListener('online', () => this.handleNetworkEvent(true));
-    window.addEventListener('offline', () => this.handleNetworkEvent(false));
+    window.addEventListener('online', this.handleOnline);
+    window.addEventListener('offline', this.handleOffline);
 
     // 2. Network Information API (if available)
     if ('connection' in navigator) {
       const conn = (navigator as any).connection;
       if (conn) {
-        conn.addEventListener('change', () => {
-          this.updateConnectionType();
-          this.probeInternetReachability();
-        });
+        conn.addEventListener('change', this.handleConnectionChange);
         this.updateConnectionType();
       }
     }
@@ -66,9 +70,29 @@ class NetworkWatcher {
 
     // 4. Initial probe and periodic heartbeat probe (every 15s)
     this.probeInternetReachability();
+    if (this.checkTimer) clearInterval(this.checkTimer);
     this.checkTimer = setInterval(() => this.probeInternetReachability(), 15000);
 
     console.log('[NetworkWatcher] Initialized — monitoring WiFi, Cellular and Mesh connectivity');
+  }
+
+  public destroy() {
+    if (this.checkTimer) {
+      clearInterval(this.checkTimer);
+      this.checkTimer = null;
+    }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', this.handleOnline);
+      window.removeEventListener('offline', this.handleOffline);
+      if ('connection' in navigator) {
+        const conn = (navigator as any).connection;
+        if (conn) {
+          conn.removeEventListener('change', this.handleConnectionChange);
+        }
+      }
+    }
+    this.isInitialized = false;
+    this.listeners.clear();
   }
 
   private updateConnectionType() {
@@ -160,6 +184,15 @@ class NetworkWatcher {
     if (previousInternet !== reach || previousType !== this.currentState.connectionType) {
       console.log(`[NetworkWatcher] Internet reachability changed: ${reach ? 'YES (Gateway Ready)' : 'NO (Mesh-Only)'}`);
       this.notifyListeners();
+
+      // Trigger immediate ICE restart on active WebRTC DataChannels to avoid 30s latency timeout
+      if (this.currentState.connected) {
+        import('./meshRouter').then(({ meshRouter }) => {
+          if (meshRouter && meshRouter.wifi) {
+            meshRouter.wifi.restartAllIce();
+          }
+        }).catch(() => {});
+      }
     }
 
     return reach;

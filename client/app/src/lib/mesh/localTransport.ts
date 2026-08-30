@@ -12,13 +12,11 @@
 import { bluetoothTransport, RedDevice } from './bluetoothTransport';
 import { WifiDirectTransport } from './wifiDirectTransport';
 import { meshRouter, MeshPeer, normalizeIdentity, isNameSimilar } from './meshRouter';
-import { createPacket, encode } from './meshProtocol';
-
-const RUST_NODE_URL = 'http://127.0.0.1:7333';
 
 class LocalTransport {
   private myIdentityHash: string = '';
   private isStarted = false;
+  private unsubscribeKinetic: (() => void) | null = null;
 
   /** Discovered BLE peers (from scanning) */
   public discoveredBluetoothPeers: RedDevice[] = [];
@@ -67,7 +65,8 @@ class LocalTransport {
 
     // Dynamic Sensor-Aware Battery & RF Duty Cycling
     import('../sensors/KineticDutyGovernor').then(({ KineticDutyGovernor }) => {
-        KineticDutyGovernor.getInstance().subscribe((telemetry) => {
+        if (!this.isStarted) return;
+        this.unsubscribeKinetic = KineticDutyGovernor.getInstance().subscribe((telemetry) => {
             this.setScanInterval(telemetry.bleScanIntervalMs);
         });
     }).catch(() => {});
@@ -84,6 +83,7 @@ class LocalTransport {
 
   private bleScanIntervalTimer: ReturnType<typeof setInterval> | null = null;
   private bleScanIntervalMs: number = 14000;
+  private wifiPeerPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // ─── BLE ─────────────────────────────────────────────────────────────────────
 
@@ -171,7 +171,8 @@ class LocalTransport {
   private hookWifiPeerEvents() {
     // WifiDirectTransport exposes onlinePeers as a Set.
     // We poll it every 5s and register any new peers with the MeshRouter.
-    setInterval(() => {
+    if (this.wifiPeerPollTimer) clearInterval(this.wifiPeerPollTimer);
+    this.wifiPeerPollTimer = setInterval(() => {
       const wifi = (meshRouter as any).wifi as WifiDirectTransport | null;
       if (!wifi) return;
       for (const peerId of wifi.onlinePeers) {
@@ -266,6 +267,7 @@ class LocalTransport {
     // Transport weight
     if (target.transport === 'wifi') score += 35;
     else if (target.transport === 'ble') score += 25;
+    else if (target.transport === 'lora') score += 20;
     else score += 15;
 
     // RSSI signal weight (-50 dBm = excellent, -95 = weak)
@@ -279,15 +281,44 @@ class LocalTransport {
     const finalScore = Math.min(100, Math.round(score));
     const trans = (target.transport || 'ble').toUpperCase();
     let rec = '';
-    if (finalScore >= 80) rec = `Enrutamiento Directo Óptimo vía ${trans} (Calidad ${finalScore}%)`;
-    else if (finalScore >= 50) rec = `Vía Estable. Transmitiendo por ${trans} (Calidad ${finalScore}%)`;
-    else rec = `Señal débil (${target.rssi || -85} dBm). Se recomienda modo Eco-Mesh.`;
+    if (target.transport === 'lora') {
+      rec = `Enlace Táctico LoRa de Largo Alcance (Calidad ${finalScore}%). Alta penetración RF.`;
+    } else if (finalScore >= 80) {
+      rec = `Enrutamiento Directo Óptimo vía ${trans} (Calidad ${finalScore}%)`;
+    } else if (finalScore >= 50) {
+      rec = `Vía Estable. Transmitiendo por ${trans} (Calidad ${finalScore}%)`;
+    } else {
+      rec = `Señal débil (${target.rssi || -85} dBm). Se recomienda modo Eco-Mesh.`;
+    }
 
     return {
       optimalTransport: trans,
       scorePct: finalScore,
       recommendation: rec
     };
+  }
+
+  public destroy(): void {
+    this.stop();
+  }
+
+  public stop(): void {
+    this.isStarted = false;
+    if (this.bleScanIntervalTimer) {
+      clearInterval(this.bleScanIntervalTimer);
+      this.bleScanIntervalTimer = null;
+    }
+    if (this.wifiPeerPollTimer) {
+      clearInterval(this.wifiPeerPollTimer);
+      this.wifiPeerPollTimer = null;
+    }
+    if (this.unsubscribeKinetic) {
+      this.unsubscribeKinetic();
+      this.unsubscribeKinetic = null;
+    }
+    this.connectingBleDevices.clear();
+    this.discoveredBluetoothPeers = [];
+    meshRouter.stop();
   }
 }
 

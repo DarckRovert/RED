@@ -126,6 +126,10 @@ export class SitrepEngine {
             `═══════════════════════════════════════════`
         ].join('\n');
     }
+
+    public destroy(): void {
+        this.listeners.clear();
+    }
 }
 
 export const sitrepEngine = SitrepEngine.getInstance();

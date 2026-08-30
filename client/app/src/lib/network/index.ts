@@ -8,3 +8,4 @@ export * from './hiveMindEngine';
 export * from './hiveMindProtocol';
 export * from './PayloadCompressor';
 export * from './GlobalShieldEngine';
+export * from './MeshGatewayEngine';

@@ -39,7 +39,42 @@ export function setStored<T>(key: string, val: T): void {
     if (typeof window === 'undefined') return;
     try {
         localStorage.setItem(key, JSON.stringify(val));
-    } catch {}
+    } catch (e) {
+        console.warn(`[RED:storage] No se pudo guardar ${key}:`, e);
+    }
+}
+
+// ── v70.1: Almacenamiento seguro cifrado (AES-256-GCM via Keystore de Android) ──
+// Claves sensibles que NO deben ir en localStorage en texto claro:
+export const SECURE_KEYS = new Set([
+    'red_guardian_reports', 'red_amber_alerts', 'red_sos_beacons',
+    'red_stego_capsules', 'red_triage_reports', 'red_blackout_status',
+    'red_emergency_beacons', 'red_p2p_wallet', 'red_p2p_vouchers',
+]);
+
+/** Lee un valor del almacenamiento seguro del OS (Keystore Android / Keychain iOS).
+ *  Fallback transparente a localStorage si no estamos en Capacitor nativo. */
+export async function getSecureStored<T>(key: string, defaultVal: T): Promise<T> {
+    try {
+        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+        const result = await SecureStoragePlugin.get({ key });
+        return JSON.parse(result.value) as T;
+    } catch {
+        // Fuera de Capacitor o clave no encontrada — usar localStorage como fallback
+        return getStored(key, defaultVal);
+    }
+}
+
+/** Escribe un valor en el almacenamiento seguro del OS.
+ *  Fallback transparente a localStorage si no estamos en Capacitor nativo. */
+export async function setSecureStored<T>(key: string, val: T): Promise<void> {
+    try {
+        const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+        await SecureStoragePlugin.set({ key, value: JSON.stringify(val) });
+    } catch {
+        // Fallback: localStorage (solo en browser/dev — en producción Android sí usa Keystore)
+        setStored(key, val);
+    }
 }
 
 export function getNodeUrl(): string {
@@ -51,7 +86,72 @@ export function getNodeUrl(): string {
     return 'http://127.0.0.1:7333';
 }
 
+// ── v70.1: Token de sesión local ─────────────────────────────────────────────
+// Cacheado en memoria — se carga una vez al inicio desde Capacitor Filesystem.
+let _sessionTokenCache: string | null = null;
+
+/** Lee el token de sesión del nodo desde el archivo session.token (Capacitor nativo).
+ *  En contexto web/browser retorna null (el nodo acepta sin token por loopback en dev). */
+async function getSessionToken(): Promise<string | null> {
+    if (_sessionTokenCache) return _sessionTokenCache;
+    try {
+        const { Filesystem, Directory } = await import('@capacitor/filesystem');
+        const result = await Filesystem.readFile({
+            path: 'red_node/session.token',
+            directory: Directory.Data,
+            encoding: 'utf8' as any,
+        });
+        const token = (result.data as string).trim();
+        if (token.length === 64) {
+            _sessionTokenCache = token;
+            return token;
+        }
+    } catch {
+        // En browser o si el nodo no ha arrancado todavía: operar sin token
+    }
+    return null;
+}
+
+/** Invalida el cache del token (útil cuando el nodo se reinicia). */
+export function invalidateSessionTokenCache(): void {
+    _sessionTokenCache = null;
+}
+
 /** Resilient helper for GET/POST API endpoints with local offline fallback engines */
+/** Fetch al nodo local con AbortController timeout (4s) y retry exponencial (2 intentos) */
+/** Fetch al nodo local con AbortController timeout (4s), token de sesión y retry exponencial (2 intentos) */
+async function fetchNodeWithRetry(url: string, options?: RequestInit): Promise<Response> {
+    const MAX_ATTEMPTS = 2;
+    let lastError: unknown;
+    // Obtener token de sesión una vez (cacheado en memoria tras el primer fetch)
+    const sessionToken = await getSessionToken();
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4000);
+        try {
+            const res = await fetch(url, {
+                ...options,
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    ...(sessionToken ? { 'X-Red-Session-Token': sessionToken } : {}),
+                    ...options?.headers
+                }
+            });
+            clearTimeout(timer);
+            return res;
+        } catch (e) {
+            clearTimeout(timer);
+            lastError = e;
+            if (attempt < MAX_ATTEMPTS - 1) {
+                await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+            }
+        }
+    }
+    throw lastError;
+}
+
 export async function fetchWithFallback<T>(
     path: string,
     options?: RequestInit,
@@ -59,19 +159,13 @@ export async function fetchWithFallback<T>(
 ): Promise<T> {
     try {
         const url = `${getNodeUrl()}${path}`;
-        const res = await fetch(url, {
-            ...options,
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-                ...options?.headers
-            }
-        });
+        const res = await fetchNodeWithRetry(url, options);
         if (res.ok) {
             return await res.json();
         }
-    } catch {
-        // Fallthrough to local fallback engine
+        console.warn(`[RED:node] ${path} → HTTP ${res.status}`);
+    } catch (e) {
+        console.warn(`[RED:node] ${path} → sin respuesta (${(e as Error)?.message ?? 'timeout'}). Usando engine local.`);
     }
 
     if (fallbackFn) {

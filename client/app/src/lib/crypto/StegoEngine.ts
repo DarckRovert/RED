@@ -45,23 +45,41 @@ export class StegoEngine {
         return hash >>> 0;
     }
 
-    /**
-     * Genera un conjunto de índices de píxeles pseudoaleatorios sin repetición
-     */
-    private static getPixelOrder(totalPixels: number, seed: number): number[] {
-        const rng = this.mulberry32(seed);
-        const indices = new Int32Array(totalPixels);
-        for (let i = 0; i < totalPixels; i++) indices[i] = i;
+    private static gcd(a: number, b: number): number {
+        while (b !== 0) {
+            const t = b;
+            b = a % b;
+            a = t;
+        }
+        return a;
+    }
 
-        // Fisher-Yates Shuffle determinista
-        for (let i = totalPixels - 1; i > 0; i--) {
-            const j = Math.floor(rng() * (i + 1));
-            const temp = indices[i];
-            indices[i] = indices[j];
-            indices[j] = temp;
+    /**
+     * Genera un conjunto acotado de índices de píxeles pseudoaleatorios sin repetición.
+     * En imágenes grandes (e.g. 12-50 Megapíxeles) utiliza un Generador de Permutación Congruencial
+     * de ciclo completo O(1) en memoria para evitar colapsar la RAM del dispositivo.
+     */
+    private static getPixelOrder(totalPixels: number, seed: number, neededPixels?: number): number[] {
+        const count = neededPixels ? Math.min(totalPixels, Math.max(1, neededPixels)) : totalPixels;
+
+        // Generador de Permutación Congruencial determinista de ciclo completo:
+        // x_{n+1} = (x_n + step) mod totalPixels, con gcd(step, totalPixels) = 1
+        const rng = this.mulberry32(seed);
+        const start = Math.floor(rng() * totalPixels);
+        let step = (Math.floor(rng() * totalPixels) | 1);
+        while (this.gcd(step, totalPixels) !== 1) {
+            step = (step + 2) % totalPixels;
+            if (step === 0) step = 1;
         }
 
-        return Array.from(indices);
+        const result: number[] = new Array(count);
+        let curr = start;
+        for (let i = 0; i < count; i++) {
+            result[i] = curr;
+            curr = (curr + step) % totalPixels;
+        }
+
+        return result;
     }
 
     /**
@@ -108,9 +126,10 @@ export class StegoEngine {
                     }
                 }
 
-                // Generar orden de píxeles dispersos
+                // Generar orden de píxeles dispersos acotado a los bits necesarios
+                const neededPixels = Math.ceil(totalBits / 3);
                 const seed = this.hashSeed(password);
-                const pixelOrder = this.getPixelOrder(totalPixels, seed);
+                const pixelOrder = this.getPixelOrder(totalPixels, seed, neededPixels);
 
                 let bitIdx = 0;
                 for (let p = 0; p < pixelOrder.length && bitIdx < bits.length; p++) {
@@ -148,37 +167,67 @@ export class StegoEngine {
                 const data = imageData.data;
                 const totalPixels = img.width * img.height;
 
-                // 1. Intentar extracción dispersa con REDSTEGO2
+                // 1. Intentar extracción dispersa con REDSTEGO2 (Lazy extraction acotada a cabecera + payload)
                 const seed = this.hashSeed(password);
-                const pixelOrder = this.getPixelOrder(totalPixels, seed);
 
-                const bits: number[] = [];
-                for (let p = 0; p < pixelOrder.length; p++) {
-                    const pixelIdx = pixelOrder[p] * 4;
-                    for (let c = 0; c < 3; c++) {
-                        bits.push(data[pixelIdx + c] & 1);
+                // Paso 1: Leer únicamente los primeros 64 bytes (512 bits) para parsear el header
+                const headerBitsNeeded = 64 * 8;
+                const headerPixelsNeeded = Math.ceil(headerBitsNeeded / 3);
+                const headerPixelOrder = this.getPixelOrder(totalPixels, seed, headerPixelsNeeded);
+
+                const headerBits: number[] = [];
+                let pIdx = 0;
+
+                while (pIdx < headerPixelOrder.length && headerBits.length < headerBitsNeeded) {
+                    const pixelIdx = headerPixelOrder[pIdx] * 4;
+                    for (let c = 0; c < 3 && headerBits.length < headerBitsNeeded; c++) {
+                        headerBits.push(data[pixelIdx + c] & 1);
                     }
+                    pIdx++;
                 }
 
-                const rawBytes = new Uint8Array(Math.floor(bits.length / 8));
-                for (let i = 0; i < rawBytes.length; i++) {
+                const headerRawBytes = new Uint8Array(Math.floor(headerBits.length / 8));
+                for (let i = 0; i < headerRawBytes.length; i++) {
                     let byteVal = 0;
                     for (let b = 0; b < 8; b++) {
-                        byteVal = (byteVal << 1) | (bits[i * 8 + b] || 0);
+                        byteVal = (byteVal << 1) | (headerBits[i * 8 + b] || 0);
                     }
-                    rawBytes[i] = byteVal;
+                    headerRawBytes[i] = byteVal;
                 }
 
-                const fullText = new TextDecoder().decode(rawBytes);
-                if (fullText.startsWith(this.HEADER_MAGIC)) {
-                    const firstColon = fullText.indexOf(":");
-                    const secondColon = fullText.indexOf(":", firstColon + 1);
+                const headerText = new TextDecoder().decode(headerRawBytes);
+                if (headerText.startsWith(this.HEADER_MAGIC)) {
+                    const firstColon = headerText.indexOf(":");
+                    const secondColon = headerText.indexOf(":", firstColon + 1);
 
                     if (firstColon !== -1 && secondColon !== -1) {
-                        const byteLen = parseInt(fullText.substring(firstColon + 1, secondColon), 10);
+                        const byteLen = parseInt(headerText.substring(firstColon + 1, secondColon), 10);
                         if (!isNaN(byteLen) && byteLen >= 0) {
-                            const headerLen = new TextEncoder().encode(fullText.substring(0, secondColon + 1)).length;
-                            const secret = rawBytes.subarray(headerLen, headerLen + byteLen);
+                            const headerLen = new TextEncoder().encode(headerText.substring(0, secondColon + 1)).length;
+                            const totalBytesNeeded = headerLen + byteLen;
+                            const totalBitsNeeded = totalBytesNeeded * 8;
+                            const totalPixelsNeeded = Math.ceil(totalBitsNeeded / 3);
+
+                            // Leer únicamente los bits exactos del payload sin cargar la imagen entera
+                            const fullPixelOrder = this.getPixelOrder(totalPixels, seed, totalPixelsNeeded);
+                            const allBits: number[] = [];
+                            for (let p = 0; p < fullPixelOrder.length && allBits.length < totalBitsNeeded; p++) {
+                                const pixelIdx = fullPixelOrder[p] * 4;
+                                for (let c = 0; c < 3 && allBits.length < totalBitsNeeded; c++) {
+                                    allBits.push(data[pixelIdx + c] & 1);
+                                }
+                            }
+
+                            const payloadRawBytes = new Uint8Array(totalBytesNeeded);
+                            for (let i = 0; i < totalBytesNeeded; i++) {
+                                let byteVal = 0;
+                                for (let b = 0; b < 8; b++) {
+                                    byteVal = (byteVal << 1) | (allBits[i * 8 + b] || 0);
+                                }
+                                payloadRawBytes[i] = byteVal;
+                            }
+
+                            const secret = payloadRawBytes.subarray(headerLen, headerLen + byteLen);
                             return resolve(new TextDecoder().decode(secret));
                         }
                     }
@@ -242,12 +291,16 @@ export class StegoEngine {
         try {
             const text = await this.extractTextFromImage(stegoImageDataUrl, password);
             if (text) {
+                const byteCount = new TextEncoder().encode(text).length;
+                const isEnc = text.startsWith("ENC:") || text.startsWith("{\"iv\":") || text.includes("\"ciphertext\":");
                 return {
                     success: true,
                     hidden_text: text,
                     secretPayload: text,
                     payloadText: text,
-                    bytes_recovered: text.length
+                    payloadBytes: byteCount,
+                    bytes_recovered: byteCount,
+                    wasEncrypted: isEnc
                 };
             }
             return {

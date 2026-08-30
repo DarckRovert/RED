@@ -155,6 +155,19 @@ export class AcousticScramblerEngine {
         this.notify();
     }
 
+    public destroy(): void {
+        this.stopScrambler();
+        if (this.gainNode) {
+            try { this.gainNode.disconnect(); } catch {}
+            this.gainNode = null;
+        }
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
+        }
+        this.listeners.clear();
+    }
+
     public setVolume(vol: number) {
         this.volume = Math.max(0, Math.min(1, vol));
         if (this.gainNode) {

@@ -7,6 +7,8 @@
  * and smart contract interface simulation for $RED Tokenomics.
  */
 
+import { bytesToHex } from '../mesh/meshProtocol';
+
 export interface Web3ChainConfig {
     chainId: number;
     hexChainId: string;
@@ -348,12 +350,21 @@ export class Web3BridgeEngine {
             // Convert to hex for standard personal_sign
             const encoder = new TextEncoder();
             const msgBytes = encoder.encode(statement);
-            const msgHex = "0x" + Array.from(msgBytes).map(b => b.toString(16).padStart(2, "0")).join("");
+            const msgHex = "0x" + bytesToHex(msgBytes);
 
-            const signatureEth = await provider.request({
-                method: "personal_sign",
-                params: [msgHex, this.state.account]
-            });
+            let signatureEth: string;
+            try {
+                signatureEth = await provider.request({
+                    method: "personal_sign",
+                    params: [msgHex, this.state.account]
+                });
+            } catch (errFirst: any) {
+                // Fallback de orden de parámetros [address, msgHex] para billeteras legacy/hardware
+                signatureEth = await provider.request({
+                    method: "personal_sign",
+                    params: [this.state.account, msgHex]
+                });
+            }
 
             const binding: Web3IdentityBinding = {
                 ethAddress: this.state.account,
@@ -396,6 +407,10 @@ export class Web3BridgeEngine {
         this.state.balanceRedToken = "0.00";
         localStorage.removeItem(STORAGE_LAST_ACCOUNT_KEY);
         this.notifyListeners();
+    }
+
+    public destroy(): void {
+        this.listeners.clear();
     }
 
     public getState(): Web3WalletState {

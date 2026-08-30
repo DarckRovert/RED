@@ -41,20 +41,48 @@ export class TacticalOnionRouter {
     }
 
     /**
-     * Construye un circuito anónimo de 3 saltos a partir de un conjunto de repetidores disponibles
+     * Construye un circuito anónimo de 3 saltos a partir de un conjunto de repetidores disponibles.
+     *
+     * Retorna null si el pool real de repetidores es insuficiente (< 3 nodos distintos al destino).
+     * Los llamadores DEBEN enviar en modo directo con flag 0x08 (DIRECT_FALLBACK) en ese caso.
+     * NO se insertan relays virtuales con Math.random() — esos nodos no existen y causan descarte
+     * silencioso de paquetes en el enrutamiento multi-salto.
      */
-    public buildCircuit(destinationDid: string, availableRelayDids: string[]): OnionCircuit {
+    public buildCircuit(destinationDid: string, availableRelayDids: string[]): OnionCircuit | null {
         const pool = availableRelayDids.filter(did => did !== destinationDid);
+
+        // Require at least 3 distinct, real relay nodes. Never fabricate phantom DIDs.
         if (pool.length < 3) {
-            // Fallback con nodos virtuales si el pool local es pequeño
-            while (pool.length < 3) {
-                pool.push(`did:red:relay_${Math.random().toString(36).substring(2, 8)}`);
-            }
+            console.warn(
+                `[TacticalOnionRouter] Pool insuficiente (${pool.length} relays). ` +
+                `Circuito onion imposible — usar modo directo (flag 0x08).`
+            );
+            return null;
         }
 
-        // Seleccionar 3 repetidores aleatorios y distintos
-        const shuffled = [...pool].sort(() => Math.random() - 0.5);
-        const circuitId = `onion-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        // Fisher-Yates CSPRNG shuffle para selección insesgada y criptográficamente segura
+        const shuffled = [...pool];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const randomBuf = new Uint32Array(1);
+            if (typeof window !== 'undefined' && window.crypto) {
+                window.crypto.getRandomValues(randomBuf);
+            } else {
+                // Node.js / server-side fallback — use crypto module, never Math.random()
+                try {
+                    const { randomFillSync } = require('crypto');
+                    randomFillSync(randomBuf);
+                } catch {
+                    randomBuf[0] = (Date.now() ^ (i * 0x9e3779b9)) >>> 0;
+                }
+            }
+            const j = randomBuf[0] % (i + 1);
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+
+        // Circuit ID uses crypto.randomUUID when available for true CSPRNG uniqueness
+        const circuitId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? `onion-${crypto.randomUUID()}`
+            : `onion-${Date.now()}-${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 
         return {
             circuitId,
@@ -66,17 +94,34 @@ export class TacticalOnionRouter {
         };
     }
 
+
+    /**
+     * Llena un buffer con bytes pseudoaleatorios criptográficamente seguros (CSPRNG)
+     */
+    private getRandomBytes(length: number): Uint8Array {
+        const buf = new Uint8Array(length);
+        const cryptoObj = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
+        if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+            cryptoObj.getRandomValues(buf);
+            return buf;
+        }
+        try {
+            const { randomFillSync } = require('crypto');
+            randomFillSync(buf);
+            return buf;
+        } catch {
+            for (let i = 0; i < length; i++) {
+                buf[i] = (Date.now() ^ (i * 0x9e3779b9) ^ Math.floor(Math.random() * 256)) & 0xFF;
+            }
+            return buf;
+        }
+    }
+
     /**
      * Genera una clave simétrica derivada pseudoaleatoria rápida de 256 bits
      */
     private generateKey(): Uint8Array {
-        const key = new Uint8Array(32);
-        if (typeof window !== 'undefined' && window.crypto) {
-            window.crypto.getRandomValues(key);
-        } else {
-            for (let i = 0; i < 32; i++) key[i] = Math.floor(Math.random() * 256);
-        }
-        return key;
+        return this.getRandomBytes(32);
     }
 
     /**
@@ -96,10 +141,7 @@ export class TacticalOnionRouter {
      * Envuelve el payload en 3 capas de piel de cebolla
      */
     public wrapLayers(payload: Uint8Array, circuit: OnionCircuit): { entryPacket: Uint8Array; firstHopDid: string } {
-        const iv = new Uint8Array(12);
-        if (typeof window !== 'undefined' && window.crypto) {
-            window.crypto.getRandomValues(iv);
-        }
+        const iv = this.getRandomBytes(12);
 
         // Capa 3: Exit Relay -> Destino Final
         const layer3Obj = {

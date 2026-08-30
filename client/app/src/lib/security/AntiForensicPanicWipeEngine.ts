@@ -7,6 +7,8 @@
  */
 
 import { meshSosBeacon } from '../emergency/MeshSosBeaconEngine';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '../mesh/meshProtocol';
 
 export interface DuressConfig {
     isDuressPinConfigured: boolean;
@@ -61,13 +63,9 @@ export class AntiForensicPanicWipeEngine {
      */
     public setDuressPin(pin: string): boolean {
         if (!pin || pin.length < 4) return false;
-        // Hash rápido SHA-256 para validación local
-        let hash = 0;
-        for (let i = 0; i < pin.length; i++) {
-            hash = ((hash << 5) - hash) + pin.charCodeAt(i);
-            hash |= 0;
-        }
-        this.config.duressPinHash = hash.toString(16);
+        const pinBytes = new TextEncoder().encode(`red_duress_salt:${pin}`);
+        const hashBytes = sha256(pinBytes);
+        this.config.duressPinHash = bytesToHex(hashBytes);
         this.config.isDuressPinConfigured = true;
         this.saveConfig();
         return true;
@@ -78,12 +76,9 @@ export class AntiForensicPanicWipeEngine {
      */
     public isDuressPin(pin: string): boolean {
         if (!this.config.isDuressPinConfigured || !this.config.duressPinHash) return false;
-        let hash = 0;
-        for (let i = 0; i < pin.length; i++) {
-            hash = ((hash << 5) - hash) + pin.charCodeAt(i);
-            hash |= 0;
-        }
-        return hash.toString(16) === this.config.duressPinHash;
+        const pinBytes = new TextEncoder().encode(`red_duress_salt:${pin}`);
+        const hashBytes = sha256(pinBytes);
+        return bytesToHex(hashBytes) === this.config.duressPinHash;
     }
 
     /**

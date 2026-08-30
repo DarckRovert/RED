@@ -248,6 +248,19 @@ impl GossipProtocol {
         // Cleanup old entries if cache is too large
         if self.seen_cache.len() >= MAX_CACHE_SIZE {
             self.cleanup_cache();
+            // If still full after expiry sweep (e.g. burst flood within cache_duration),
+            // drain oldest entries to ensure memory remains bounded
+            if self.seen_cache.len() >= MAX_CACHE_SIZE {
+                let excess = self.seen_cache.len() - (MAX_CACHE_SIZE * 3 / 4);
+                let mut entries: Vec<(MessageId, Instant)> = self.seen_cache
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.first_seen))
+                    .collect();
+                entries.sort_unstable_by_key(|(_, ts)| *ts);
+                for (k, _) in entries.into_iter().take(excess) {
+                    self.seen_cache.remove(&k);
+                }
+            }
         }
 
         self.seen_cache.insert(id.clone(), CacheEntry {
@@ -263,6 +276,7 @@ impl GossipProtocol {
             entry.first_seen.elapsed() < duration
         });
     }
+
 
     /// Get current statistics
     pub fn stats(&self) -> &GossipStats {

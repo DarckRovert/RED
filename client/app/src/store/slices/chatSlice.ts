@@ -158,8 +158,31 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
         const matchedGroup = allKnownGroups.find((g: any) => g && (g.id === cleanPeerHash || g.id === peerHash || g.group_id === cleanPeerHash || g.group_id === peerHash));
         const isGroupConv = Boolean(matchedGroup);
 
+        // Control messages (handshake, reactions, typing, signals) are not appended as visible chat bubbles
+        const isControlMessage = 
+            options?.msg_type === 'reaction' ||
+            options?.msg_type === 'typing' ||
+            options?.msg_type === 'typing_status' ||
+            options?.msg_type === 'read_receipt' ||
+            options?.msg_type === 'message_delete' ||
+            options?.msg_type === 'message_edit' ||
+            options?.msg_type === 'contact_request' ||
+            options?.msg_type === 'contact_response' ||
+            options?.msg_type === 'webrtc_signal' ||
+            options?.msg_type === 'location_ping' ||
+            options?.msg_type === 'timer_update' ||
+            options?.msg_type === 'group_invite' ||
+            options?.msg_type === 'status' ||
+            options?.msg_type === 'media_chunk' ||
+            (typeof content === 'string' && content.startsWith('{') && (
+                content.includes('"sender_hash"') || 
+                content.includes('"delete_for_everyone"') || 
+                content.includes('"read_up_to"') ||
+                content.includes('"status":')
+            ));
+
         // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
-        if (content && (!options?.msg_type || options.msg_type === 'text')) {
+        if (content && !isControlMessage && (!options?.msg_type || options.msg_type === 'text')) {
             const verdict = GuardianEngine.evaluateText(content);
             if (!verdict.allowed) {
                 toast.error(`⛔ RED Guardian: ${verdict.reason}`);
@@ -176,17 +199,6 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 }
             }
         }
-
-        // Control messages (handshake, reactions, typing, signals) are not appended as visible chat bubbles
-        const isControlMessage = 
-            options?.msg_type === 'reaction' ||
-            options?.msg_type === 'typing' ||
-            options?.msg_type === 'contact_request' ||
-            options?.msg_type === 'contact_response' ||
-            options?.msg_type === 'webrtc_signal' ||
-            options?.msg_type === 'location_ping' ||
-            options?.msg_type === 'timer_update' ||
-            (typeof content === 'string' && content.startsWith('{') && content.includes('"sender_hash"') && content.includes('"sender_pk"'));
 
         let tempId: string | null = null;
         const defaultTtlSec = SettingsManager.getAutoDestructSeconds(get().preferences?.autoDestructDefault);
@@ -306,11 +318,23 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 apiOptions.target_message_id = options.reply_to.id;
             }
 
-            // Compute Proof-of-Work to protect mesh from flooding
+            // Compute Proof-of-Work — anti-spam guard for the mesh.
+            // Aborted after 2.5s to prevent blocking UI on heavily-loaded devices (Moto G22).
+            // On timeout, the message still dispatches (graceful degradation) but logs a warning.
             try {
-                const powProof = await MeshProofOfWork.mineProof(content, myDid, 3);
+                const powAbort = new AbortController();
+                const powTimeout = setTimeout(() => powAbort.abort(), 2500);
+                const powProof = await MeshProofOfWork.mineProof(content, myDid, 3, powAbort.signal);
+                clearTimeout(powTimeout);
                 if (powProof) apiOptions.pow = powProof;
-            } catch {}
+            } catch (powErr: any) {
+                if (powErr?.message?.includes('abortada')) {
+                    console.warn('[PoW] Timeout 2.5s — mensaje enviado sin PoW (degradación controlada)');
+                } else {
+                    console.warn('[PoW] Error en minería:', powErr?.message);
+                }
+            }
+
 
             if (isGroupConv) {
                 // Group message → dedicated fan-out endpoint
@@ -428,14 +452,17 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             if (conv?.peer) recipients.add(conv.peer);
         }
 
-        // Broadcast to all unique peers
-        for (const peerHash of recipients) {
-            try {
-                await RedAPI.sendMessage(peerHash, content, payload);
-            } catch (e) {
-                console.warn(`[RED] Status no enviado a ${peerHash.substring(0, 8)}:`, e);
-            }
-        }
+        // Broadcast concurrently to all unique peers without blocking UI
+        const statusContent = content || 'Story';
+        await Promise.allSettled(
+            Array.from(recipients).map(async (peerHash) => {
+                try {
+                    await RedAPI.sendMessage(peerHash, statusContent, payload);
+                } catch (e) {
+                    console.warn(`[RED] Status no enviado a ${peerHash.substring(0, 8)}:`, e);
+                }
+            })
+        );
     },
 
     openLiveStream: (streamId: string) => {

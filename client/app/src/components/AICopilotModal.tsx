@@ -611,7 +611,7 @@ export const AICopilotModal: React.FC = () => {
                         display: "flex", flexDirection: "column", gap: "12px",
                         overflowY: "auto"
                     }}>
-                        {messages.map(msg => {
+                        {(messages ?? []).map(msg => {
                             const isAI = msg.sender === "ai";
                             const isCopied = copiedMsgId === msg.id;
 
@@ -891,7 +891,7 @@ export const AICopilotModal: React.FC = () => {
                                     Seleccionar Canal para Sintetizar:
                                 </label>
                                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                                    {effectiveChannels.map((ch: any) => (
+                                    {(effectiveChannels ?? []).map((ch: any) => (
                                         <button
                                             key={ch.id}
                                             onClick={() => setSelectedChannelId(ch.id)}
@@ -925,7 +925,7 @@ export const AICopilotModal: React.FC = () => {
                                     </div>
 
                                     <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                        {summaryResult.bullets.map((b, idx) => (
+                                        {(summaryResult?.bullets ?? []).map((b, idx) => (
                                             <div key={idx} style={{ fontSize: "0.80rem", lineHeight: 1.4, display: "flex", gap: "6px" }}>
                                                 <span style={{ color: "var(--accent-cyan)" }}>•</span>
                                                 <span>{b}</span>
@@ -1009,7 +1009,7 @@ export const AICopilotModal: React.FC = () => {
                             </div>
 
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                                {availableModels.map(model => {
+                                {(availableModels ?? []).map(model => {
                                     const isActive = activeModel?.id === model.id;
                                     const isDownloading = downloadingId === model.id;
                                     const isReady = model.isDownloaded || model.is_downloaded;

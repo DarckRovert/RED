@@ -92,6 +92,21 @@ class LocalAIEngineClass {
         return this.transformersLib;
     }
 
+    /** Utility to bound any async AI operation with a strict timeout */
+    private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+        let timeoutHandle: any;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+                reject(new Error(`[LocalAIEngine] Timeout (${timeoutMs}ms) en ${label}`));
+            }, timeoutMs);
+        });
+        try {
+            return await Promise.race([promise, timeoutPromise]);
+        } finally {
+            clearTimeout(timeoutHandle);
+        }
+    }
+
     /** Real Offline ONNX Toxic-BERT (multi-label) */
     private async getClassifier() {
         if (!this.classifierPipeline) {
@@ -122,31 +137,38 @@ class LocalAIEngineClass {
         return this.embeddingPipeline;
     }
 
-    /** Real Offline Compact Generative Pipeline (Qwen 0.5B / SmolLM 360M) */
+    /** Real Offline Compact Generative Pipeline (Qwen 0.5B / SmolLM 360M / LaMini 124M) */
     private async getGenerator() {
         if (!this.generatorPipeline) {
             const tf = await this.getTransformers();
             if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
 
-            try {
-                this.generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
-                    quantized: true,
-                });
-            } catch {
+            const devMem = typeof navigator !== 'undefined' && (navigator as any).deviceMemory ? (navigator as any).deviceMemory : 4;
+            const isLowMemDevice = devMem <= 4;
+
+            // On devices with <=4GB RAM (e.g. Moto G22 / Redmi Note 14), prioritize compact lightweight SLMs to prevent OOM
+            const preferredModels = isLowMemDevice
+                ? [
+                    'onnx-community/SmolLM2-360M-Instruct',
+                    'Xenova/LaMini-GPT-124M',
+                    'onnx-community/Qwen2.5-0.5B-Instruct',
+                    'Xenova/distilgpt2'
+                ]
+                : [
+                    'onnx-community/Qwen2.5-0.5B-Instruct',
+                    'onnx-community/SmolLM2-360M-Instruct',
+                    'Xenova/LaMini-GPT-124M',
+                    'Xenova/distilgpt2'
+                ];
+
+            for (const modelId of preferredModels) {
                 try {
-                    this.generatorPipeline = await tf.pipeline('text-generation', 'onnx-community/SmolLM2-360M-Instruct', {
+                    this.generatorPipeline = await tf.pipeline('text-generation', modelId, {
                         quantized: true,
                     });
+                    break;
                 } catch {
-                    try {
-                        this.generatorPipeline = await tf.pipeline('text-generation', 'Xenova/LaMini-GPT-124M', {
-                            quantized: true,
-                        });
-                    } catch {
-                        this.generatorPipeline = await tf.pipeline('text-generation', 'Xenova/distilgpt2', {
-                            quantized: true,
-                        });
-                    }
+                    // Try fallback model
                 }
             }
         }
@@ -217,9 +239,12 @@ class LocalAIEngineClass {
 
         try {
             const classifier = await this.getClassifier();
-            const results: Array<{ label: string; score: number }> = await classifier(trimmed, {
-                topk: null, // get all labels for multi-label
-            });
+            const results: Array<{ label: string; score: number }> = await this.withTimeout(
+                classifier(trimmed, { topk: null }),
+                15000,
+                'classifySafety'
+            );
+
 
             if (Array.isArray(results) && results.length > 0) {
                 // Find the toxic-related label with highest score
@@ -292,7 +317,9 @@ class LocalAIEngineClass {
         };
     }
 
-    /** Caché en memoria de vectores 384-D de la base de conocimiento para búsqueda O(1) */
+    /** Caché en memoria de vectores 384-D de la base de conocimiento para búsqueda O(1)
+     *  Cap: 256 entradas para prevenir OOM en dispositivos con RAM limitada (Moto G22, 4 GB) */
+    private static readonly KB_VECTOR_CACHE_MAX = 256;
     private static kbVectorCache = new Map<string, number[]>();
 
     /** RAG Táctico Offline: Búsqueda Semántica Vectorial Híbrida (Léxica + Embeddings 384-D) */
@@ -317,6 +344,11 @@ class LocalAIEngineClass {
                             const fragEmb = await this.extractEmbeddings(`${frag.title} ${frag.summary}`);
                             fragVec = fragEmb.fullVector;
                             if (fragVec && fragVec.length > 0) {
+                                // Evicción LRU: si el caché alcanza el límite, eliminar la entrada más antigua
+                                if (LocalAIEngineClass.kbVectorCache.size >= LocalAIEngineClass.KB_VECTOR_CACHE_MAX) {
+                                    const oldestKey = LocalAIEngineClass.kbVectorCache.keys().next().value;
+                                    if (oldestKey) LocalAIEngineClass.kbVectorCache.delete(oldestKey);
+                                }
                                 LocalAIEngineClass.kbVectorCache.set(fragKey, fragVec);
                             }
                         }
@@ -945,6 +977,21 @@ class LocalAIEngineClass {
             recommendations,
             executionTimeMs: Math.round(performance.now() - start),
         };
+    }
+
+    /**
+     * Libera todos los recursos retenidos por los pipelines ONNX WASM y limpia cachés estáticos.
+     * Debe invocarse al desmontar la aplicación o cuando el dispositivo reporte memoria crítica.
+     */
+    public destroy(): void {
+        this.classifierPipeline = null;
+        this.embeddingPipeline  = null;
+        this.generatorPipeline  = null;
+        this.asrPipeline        = null;
+        this.transformersLib    = null;
+        LocalAIEngineClass.kbVectorCache.clear();
+        LocalAIEngineClass.lastSyncCache.clear();
+        LocalAIEngineClass.sessionDialogHistory = [];
     }
 }
 

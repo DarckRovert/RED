@@ -1,3 +1,4 @@
+
 /**
  * StructuralHealthSeismicEngine.ts — RED Tactical Structural Health & Anti-Collapse Resonance Sentinel
  * 
@@ -40,6 +41,9 @@ export class StructuralHealthSeismicEngine {
         timestamp: Date.now(),
     };
 
+    private gravityEma: number = 9.81;
+    private lastAlarmTimeMs: number = 0;
+
     private constructor() {}
 
     public static getInstance(): StructuralHealthSeismicEngine {
@@ -47,6 +51,10 @@ export class StructuralHealthSeismicEngine {
             this.instance = new StructuralHealthSeismicEngine();
         }
         return this.instance;
+    }
+
+    public getTelemetry(): StructuralHealthTelemetry {
+        return { ...this.currentTelemetry };
     }
 
     public subscribe(cb: (t: StructuralHealthTelemetry) => void): () => void {
@@ -67,13 +75,23 @@ export class StructuralHealthSeismicEngine {
         this.sampleBuffer = [];
 
         this.motionListener = (e: DeviceMotionEvent) => {
-            const acc = e.accelerationIncludingGravity || e.acceleration;
-            if (!acc) return;
-            const x = acc.x || 0;
-            const y = acc.y || 0;
-            const z = (acc.z || 9.81) - 9.81; // Descontar 1g
+            let mag = 0;
+            if (e.acceleration && typeof e.acceleration.x === 'number' && typeof e.acceleration.y === 'number' && typeof e.acceleration.z === 'number') {
+                const x = e.acceleration.x || 0;
+                const y = e.acceleration.y || 0;
+                const z = e.acceleration.z || 0;
+                mag = Math.sqrt(x * x + y * y + z * z);
+            } else if (e.accelerationIncludingGravity) {
+                const acc = e.accelerationIncludingGravity;
+                const x = acc.x || 0;
+                const y = acc.y || 0;
+                const z = acc.z || 0;
+                const totalMag = Math.sqrt(x * x + y * y + z * z);
+                // Dynamic exponential moving average DC filter to isolate vibration regardless of tilt/orientation
+                this.gravityEma = 0.95 * this.gravityEma + 0.05 * (totalMag > 0 ? totalMag : 9.81);
+                mag = Math.abs(totalMag - this.gravityEma);
+            }
 
-            const mag = Math.sqrt(x * x + y * y + z * z);
             this.sampleBuffer.push(mag);
 
             if (this.sampleBuffer.length >= 64) {
@@ -95,9 +113,20 @@ export class StructuralHealthSeismicEngine {
         this.isMonitoring = false;
         if (typeof window !== 'undefined' && this.motionListener) {
             window.removeEventListener('devicemotion', this.motionListener, true);
+            this.motionListener = null;
         }
         this.currentTelemetry.isMonitoring = false;
         this.notify();
+    }
+
+    public destroy(): void {
+        this.stopMonitoring();
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
+        }
+        this.listeners.clear();
+        StructuralHealthSeismicEngine.instance = null;
     }
 
     public calibrateBaseline() {
@@ -171,13 +200,20 @@ export class StructuralHealthSeismicEngine {
     }
 
     private triggerEvacuationSiren() {
+        const now = Date.now();
+        if (now - this.lastAlarmTimeMs < 2500) {
+            return; // Throttle siren alerts to avoid AudioContext buffer exhaustion
+        }
+        this.lastAlarmTimeMs = now;
         try {
             if (typeof window !== 'undefined') {
-                if (!this.audioCtx) {
+                if (!this.audioCtx || this.audioCtx.state === 'closed') {
                     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                    this.audioCtx = new AudioContextClass();
+                    if (AudioContextClass) {
+                        this.audioCtx = new AudioContextClass();
+                    }
                 }
-                if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+                if (!this.audioCtx) return;
 
                 const osc = this.audioCtx.createOscillator();
                 const gain = this.audioCtx.createGain();

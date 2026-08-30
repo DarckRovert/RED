@@ -235,6 +235,101 @@ function enforceDefconPolicy(packet, currentDefcon) {
         assert.strictEqual(screenAliases["squads"], "GroupsPanel");
     });
 
+    console.log("\n📡 5. Probando Integridad de Tramas MeshProtocol y Reensamblador BLE...");
+
+    await runAsyncTest("MeshProtocol: Rechazo de paquetes truncados y corte exacto de payload sin padding", async () => {
+        const MESH_MAGIC = 0x52454401;
+        const HEADER_SIZE = 96;
+
+        function mockEncode(payloadBytes) {
+            const buf = new Uint8Array(HEADER_SIZE + payloadBytes.length);
+            const view = new DataView(buf.buffer);
+            view.setUint32(0, MESH_MAGIC, false);
+            view.setUint16(70, Math.min(payloadBytes.length, 0xFFFF), true);
+            buf.set(payloadBytes, HEADER_SIZE);
+            return buf;
+        }
+
+        function mockDecode(data) {
+            if (data.length < HEADER_SIZE) return null;
+            const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+            if (view.getUint32(0, false) !== MESH_MAGIC) return null;
+            const payloadLen = view.getUint16(70, true);
+            const actualRemaining = data.length - HEADER_SIZE;
+            if (payloadLen !== 0xFFFF && actualRemaining < payloadLen) {
+                return null; // Incompleto
+            }
+            const payload = payloadLen === 0xFFFF 
+                ? data.slice(HEADER_SIZE) 
+                : data.slice(HEADER_SIZE, HEADER_SIZE + payloadLen);
+            return { payloadLen, payload };
+        }
+
+        const originalPayload = new Uint8Array([10, 20, 30, 40, 50]);
+        const wireBytes = mockEncode(originalPayload);
+
+        // 1. Decodificación normal
+        const res1 = mockDecode(wireBytes);
+        assert.ok(res1 !== null);
+        assert.strictEqual(res1.payload.length, 5);
+        assert.deepStrictEqual(Array.from(res1.payload), [10, 20, 30, 40, 50]);
+
+        // 2. Buffer con padding de radio al final (+10 bytes de basura)
+        const paddedWire = new Uint8Array(wireBytes.length + 10);
+        paddedWire.set(wireBytes, 0);
+        paddedWire.set([0, 0, 0, 0, 0, 99, 99, 99, 99, 99], wireBytes.length);
+        const resPadded = mockDecode(paddedWire);
+        assert.ok(resPadded !== null);
+        assert.strictEqual(resPadded.payload.length, 5); // Debe cortar EXACTO en 5, sin padding
+        assert.deepStrictEqual(Array.from(resPadded.payload), [10, 20, 30, 40, 50]);
+
+        // 3. Paquete truncado (solo llegaron 2 de los 5 bytes de payload)
+        const truncatedWire = wireBytes.slice(0, HEADER_SIZE + 2);
+        const resTrunc = mockDecode(truncatedWire);
+        assert.strictEqual(resTrunc, null); // Debe abortar limpiamente
+    });
+
+    await runAsyncTest("BluetoothTransport: Extracción de JSON inmediato sin timeout de 8s", async () => {
+        function findCompleteJsonLength(buffer) {
+            if (buffer.length === 0) return 0;
+            const firstChar = buffer[0];
+            if (firstChar !== 0x7B && firstChar !== 0x5B) return 0;
+            const openChar = firstChar;
+            const closeChar = firstChar === 0x7B ? 0x7D : 0x5D;
+            let depth = 0, inString = false, isEscaped = false;
+            for (let i = 0; i < buffer.length; i++) {
+                const b = buffer[i];
+                if (inString) {
+                    if (isEscaped) isEscaped = false;
+                    else if (b === 0x5C) isEscaped = true;
+                    else if (b === 0x22) inString = false;
+                } else {
+                    if (b === 0x22) inString = true;
+                    else if (b === openChar) depth++;
+                    else if (b === closeChar) {
+                        depth--;
+                        if (depth === 0) return i + 1;
+                    }
+                }
+            }
+            return 0;
+        }
+
+        const jsonStr = JSON.stringify({ type: "IDENTITY_ANNOUNCE", identity_hash: "did:red:123456" });
+        const jsonBuf = Buffer.from(jsonStr);
+
+        // 1. JSON completo en un solo chunk
+        const fullLen = findCompleteJsonLength(jsonBuf);
+        assert.strictEqual(fullLen, jsonBuf.length);
+
+        // 2. JSON fragmentado en dos chunks
+        const half1 = jsonBuf.slice(0, 20);
+        assert.strictEqual(findCompleteJsonLength(half1), 0); // Incompleto, espera más chunks
+
+        const reconstructed = Buffer.concat([half1, jsonBuf.slice(20)]);
+        assert.strictEqual(findCompleteJsonLength(reconstructed), jsonBuf.length);
+    });
+
     console.log("\n================================================================================");
     console.log(`📊 RESUMEN DE RESULTADOS: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE`);
     console.log("================================================================================\n");

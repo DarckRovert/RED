@@ -213,8 +213,19 @@ if (typeof self !== 'undefined') {
             });
         }
     } catch (err: any) {
+        // El tipo de respuesta de error debe corresponder al tipo de solicitud
+        // para que el host pueda resolver correctamente la Promise pendiente.
+        const errorResponseType = (
+            type === 'CLASSIFY_SAFETY'    ? 'CLASSIFY_SAFETY_RESULT'    :
+            type === 'GENERATE_COPILOT'   ? 'GENERATE_COPILOT_RESULT'   :
+            type === 'SUMMARIZE_CHANNEL'  ? 'SUMMARIZE_CHANNEL_RESULT'  :
+            type === 'TRANSLATE_TEXT'     ? 'TRANSLATE_TEXT_RESULT'      :
+            type === 'DIAGNOSE_HEALTH'    ? 'DIAGNOSE_HEALTH_RESULT'     :
+            type === 'TRANSCRIBE_AUDIO'   ? 'TRANSCRIBE_AUDIO_RESULT'    :
+            'CLASSIFY_SAFETY_RESULT'
+        );
         self.postMessage({
-            id, type: 'CLASSIFY_SAFETY_RESULT', success: false,
+            id, type: errorResponseType, success: false,
             error: err?.message || 'Error en Inferencia Neuronal',
             executionTimeMs: Math.round(performance.now() - start)
         });

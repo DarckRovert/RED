@@ -28,7 +28,7 @@ impl SocialStore {
         if let Some(db) = &self.db {
             // Cargar 'following'
             if let Ok(tree) = db.open_tree("social_following") {
-                let mut follows = self.following.write().unwrap();
+                let mut follows = self.following.write().unwrap_or_else(|e| e.into_inner());
                 for item in tree.iter().flatten() {
                     if let Ok(key) = String::from_utf8(item.0.to_vec()) {
                         follows.insert(key);
@@ -38,7 +38,7 @@ impl SocialStore {
 
             // Cargar 'feed'
             if let Ok(tree) = db.open_tree("social_feed") {
-                let mut feed_list = self.feed.write().unwrap();
+                let mut feed_list = self.feed.write().unwrap_or_else(|e| e.into_inner());
                 for item in tree.iter().flatten() {
                     if let Ok(post) = serde_json::from_slice::<SocialPost>(&item.1) {
                         feed_list.push(post);
@@ -51,12 +51,12 @@ impl SocialStore {
     }
 
     pub fn is_following(&self, author_hash: &str) -> bool {
-        let follows = self.following.read().unwrap();
+        let follows = self.following.read().unwrap_or_else(|e| e.into_inner());
         follows.contains(author_hash)
     }
 
     pub fn follow(&self, author_hash: &str) {
-        let mut follows = self.following.write().unwrap();
+        let mut follows = self.following.write().unwrap_or_else(|e| e.into_inner());
         follows.insert(author_hash.to_string());
         
         if let Some(db) = &self.db {
@@ -67,7 +67,7 @@ impl SocialStore {
     }
 
     pub fn unfollow(&self, author_hash: &str) {
-        let mut follows = self.following.write().unwrap();
+        let mut follows = self.following.write().unwrap_or_else(|e| e.into_inner());
         follows.remove(author_hash);
         
         if let Some(db) = &self.db {
@@ -78,7 +78,7 @@ impl SocialStore {
     }
 
     pub fn get_following(&self) -> Vec<String> {
-        self.following.read().unwrap().iter().cloned().collect()
+        self.following.read().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect()
     }
 
     pub fn create_post(&self, author_hash: String, req: PostRequest) -> SocialPost {
@@ -106,9 +106,38 @@ impl SocialStore {
         post
     }
 
+    /// Creates and cryptographically signs a tactical social post using the author's Ed25519 identity.
+    pub fn create_signed_post(&self, identity: &red_core::identity::Identity, req: PostRequest) -> SocialPost {
+        let author_hash = identity.identity_hash().to_hex();
+        let timestamp = Utc::now().timestamp();
+        let hash_input = format!(
+            "{}:{}:{}:{}",
+            author_hash, req.content, timestamp, req.media_data.as_deref().unwrap_or("")
+        );
+        let hash = blake3::hash(hash_input.as_bytes()).to_hex().to_string();
+        let id = format!("post_{}", &hash[..12]);
+        let signature_bytes = identity.sign(hash.as_bytes());
+        let signature = hex::encode(signature_bytes);
+
+        let post = SocialPost {
+            id,
+            author_hash,
+            author_name: req.author_name,
+            content: req.content,
+            media_data: req.media_data,
+            timestamp,
+            reactions: HashMap::new(),
+            reply_to: None,
+            signature,
+        };
+
+        self.insert_post(post.clone());
+        post
+    }
+
     pub fn insert_post(&self, post: SocialPost) {
         // Evitar duplicados pero fusionar reacciones si el post ya existe
-        let mut feed_list = self.feed.write().unwrap();
+        let mut feed_list = self.feed.write().unwrap_or_else(|e| e.into_inner());
         if let Some(existing_idx) = feed_list.iter().position(|p| p.id == post.id) {
             // Fusionar reacciones (Merge)
             let mut existing = feed_list[existing_idx].clone();
@@ -159,12 +188,12 @@ impl SocialStore {
     }
 
     pub fn get_feed(&self, limit: usize) -> Vec<SocialPost> {
-        let feed = self.feed.read().unwrap();
+        let feed = self.feed.read().unwrap_or_else(|e| e.into_inner());
         feed.iter().take(limit).cloned().collect()
     }
     
     pub fn add_reaction(&self, post_id: &str, emoji: &str, reactor_hash: &str) -> Option<SocialPost> {
-        let mut feed_list = self.feed.write().unwrap();
+        let mut feed_list = self.feed.write().unwrap_or_else(|e| e.into_inner());
         if let Some(post) = feed_list.iter_mut().find(|p| p.id == post_id) {
             let entry = post.reactions.entry(emoji.to_string()).or_insert_with(Vec::new);
             if !entry.contains(&reactor_hash.to_string()) {

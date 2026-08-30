@@ -96,6 +96,10 @@ FECHA/HORA : ${new Date(s.timestamp).toISOString()}
   • Alerta de Isquemia  : ${s.hasIschemicAlert ? '⚠️ URGENTE: RETIRO REQUERIDO (>=120 min)' : '✓ DENTRO DE LÍMITE'}
 ══════════════════════════════════════════════════════`;
     }
+
+    public destroy(): void {
+        C4isrTacticalMatrixEngine.instance = null;
+    }
 }
 
 export const c4isrMatrix = C4isrTacticalMatrixEngine.getInstance();

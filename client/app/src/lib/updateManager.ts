@@ -202,61 +202,61 @@ export class UpdateManager {
         }
 
         // Modo Android Nativo: Descarga streaming en Java + FileProvider Intent
-        return new Promise(async (resolve, reject) => {
-            let progressSub: any = null;
+        let progressSub: any = null;
 
-            try {
-                // Suscribirse a eventos de progreso del plugin nativo
-                progressSub = await RedNode.addListener('apkDownloadProgress', (prog: any) => {
-                    if (prog.error) {
-                        onProgress({
-                            progress: 0,
-                            receivedBytes: 0,
-                            totalBytes: 0,
-                            speedKbps: 0,
-                            done: false,
-                            error: prog.error,
-                        });
-                        return;
-                    }
-
+        try {
+            // Suscribirse a eventos de progreso del plugin nativo
+            progressSub = await RedNode.addListener('apkDownloadProgress', (prog: any) => {
+                if (prog.error) {
                     onProgress({
-                        progress: typeof prog.progress === 'number' ? prog.progress : 0,
-                        receivedBytes: prog.receivedBytes || 0,
-                        totalBytes: prog.totalBytes || 0,
-                        speedKbps: prog.speedKbps || 0,
-                        done: !!prog.done,
-                        filePath: prog.filePath,
+                        progress: 0,
+                        receivedBytes: 0,
+                        totalBytes: 0,
+                        speedKbps: 0,
+                        done: false,
+                        error: prog.error,
                     });
-                });
-
-                // Iniciar descarga en hilo nativo
-                const downloadResult = await RedNode.downloadApk({
-                    url: apkUrl,
-                    fileName: 'red_update.apk',
-                });
-
-                if (!downloadResult?.success || !downloadResult?.filePath) {
-                    throw new Error('La descarga nativa no completó correctamente.');
+                    return;
                 }
 
-                // Iniciar instalación nativa
-                const installResult = await RedNode.installApk({
-                    filePath: downloadResult.filePath,
+                onProgress({
+                    progress: typeof prog.progress === 'number' ? prog.progress : 0,
+                    receivedBytes: prog.receivedBytes || 0,
+                    totalBytes: prog.totalBytes || 0,
+                    speedKbps: prog.speedKbps || 0,
+                    done: !!prog.done,
+                    filePath: prog.filePath,
                 });
+            });
 
-                if (progressSub && typeof progressSub.remove === 'function') {
-                    progressSub.remove();
-                }
+            // Iniciar descarga en hilo nativo
+            const downloadResult = await RedNode.downloadApk({
+                url: apkUrl,
+                fileName: 'red_update.apk',
+            });
 
-                resolve(true);
-
-            } catch (err: any) {
-                if (progressSub && typeof progressSub.remove === 'function') {
-                    try { progressSub.remove(); } catch {}
-                }
-                reject(err);
+            if (!downloadResult?.success || !downloadResult?.filePath) {
+                throw new Error('La descarga nativa no completó correctamente.');
             }
-        });
+
+            // Iniciar instalación nativa
+            await RedNode.installApk({
+                filePath: downloadResult.filePath,
+            });
+
+            if (progressSub && typeof progressSub.remove === 'function') {
+                progressSub.remove();
+                progressSub = null;
+            }
+
+            return true;
+
+        } catch (err: any) {
+            if (progressSub && typeof progressSub.remove === 'function') {
+                try { progressSub.remove(); } catch {}
+                progressSub = null;
+            }
+            throw err;
+        }
     }
 }

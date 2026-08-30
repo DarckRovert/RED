@@ -115,14 +115,24 @@ export class DtnStoreForwardEngine {
     }
 
     /**
-     * Stores a new bundle into the encrypted local DTN buffer
+     * Stores a new bundle into the encrypted local DTN buffer.
+     * Caps total bundles at 200 (dropping oldest/highest hop count bundles) to prevent
+     * encrypted storage bloat from exhausting localStorage quotas.
      */
     public static async storeBundle(bundle: DtnBundle): Promise<boolean> {
-        const bundles = await this.loadBundles();
+        let bundles = await this.loadBundles();
         if (bundles.some(b => b.bundleId === bundle.bundleId)) {
             return false; // Already present
         }
         bundles.push(bundle);
+
+        // Cap máximo a 200 bundles: descartar los más antiguos o con mayor conteo de saltos
+        const MAX_DTN_BUNDLES = 200;
+        if (bundles.length > MAX_DTN_BUNDLES) {
+            bundles.sort((a, b) => (b.createdAt - a.createdAt));
+            bundles = bundles.slice(0, MAX_DTN_BUNDLES);
+        }
+
         await this.saveBundles(bundles);
         return true;
     }

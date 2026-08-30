@@ -31,6 +31,7 @@ export class TacticalMicroBurstEngine {
     private history: MicroBurstRecord[] = [];
     private totalBursts: number = 0;
     private lastBurstDurationMs: number = 11;
+    private lastSilenceJitterMs: number = 12000;
     private nextBurstTimeout: any = null;
     private nextBurstTimestamp: number = Date.now() + 12000;
 
@@ -94,6 +95,7 @@ export class TacticalMicroBurstEngine {
 
         // Dispersión temporal aleatoria entre 6s y 25s
         const randomSilenceMs = Math.floor(6000 + Math.random() * 19000);
+        this.lastSilenceJitterMs = randomSilenceMs;
         this.nextBurstTimestamp = Date.now() + randomSilenceMs;
 
         this.nextBurstTimeout = setTimeout(() => {
@@ -123,7 +125,7 @@ export class TacticalMicroBurstEngine {
             timestamp: Date.now(),
             payloadLengthBytes: byteLen,
             burstDurationMs,
-            silenceJitterMs: Math.round(this.nextBurstTimestamp - Date.now()),
+            silenceJitterMs: this.lastSilenceJitterMs,
             status: 'TRANSMITTED',
         };
 
@@ -133,6 +135,14 @@ export class TacticalMicroBurstEngine {
         this.packetQueue = [];
         this.scheduleNextBurst();
         this.notify();
+    }
+
+    public destroy(): void {
+        if (this.nextBurstTimeout) {
+            clearTimeout(this.nextBurstTimeout);
+            this.nextBurstTimeout = null;
+        }
+        this.listeners.clear();
     }
 }
 

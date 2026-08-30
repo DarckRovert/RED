@@ -48,7 +48,7 @@ impl RateLimiter {
     /// Check if the given key (IP) is within the rate limit.
     /// Returns `true` if allowed, `false` if rate-limited.
     pub fn check(&self, key: &str) -> bool {
-        let mut map = self.inner.lock().unwrap();
+        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
 
         let entry = map.entry(key.to_string()).or_insert(BucketState {
@@ -72,7 +72,7 @@ impl RateLimiter {
 
     /// Periodically clean up old entries (call from a background task)
     pub fn cleanup(&self) {
-        let mut map = self.inner.lock().unwrap();
+        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         map.retain(|_, v| now.duration_since(v.window_start) < self.window * 2);
     }
@@ -92,7 +92,7 @@ pub async fn rate_limit_middleware(
 
     // We use a custom check with per-ip limit
     let allowed = {
-        let mut map = limiter.inner.lock().unwrap();
+        let mut map = limiter.inner.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         let entry = map.entry(ip.clone()).or_insert(BucketState {
             count: 0,

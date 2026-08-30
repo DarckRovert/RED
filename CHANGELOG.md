@@ -1,5 +1,21 @@
 # Changelog
 
+## [75.0.0-tactical-c4isr-sovereign-survival-master] - 2026-08-30
+
+### 🛡️ Tactical C4ISR & Sovereign Survival Master Edition (Hardened Gold Master)
+
+- **Hardening y Erradicación Integral de Fugas de Memoria (60 Ciclos de Auditoría):**
+  - **Singletons Blindados:** Nulificación de instancias y limpieza de eventos en todos los motores de sensores, acústica, IA, blockchain y telemetría (`destroy()` determinista).
+  - **Protección contra Fuga de Objetos Web:** Revocación estricta de Blob URLs (`URL.revokeObjectURL`) en el motor de empaquetado de Mini-Apps (`RedAppBundleEngine`).
+  - **Retención Persistente de Listeners SSE:** Registro dinámico de listeners en `RedAPIClient` para reconexiones transparentes sin pérdida de streams de eventos.
+  - **Prevención de Agotamiento de Cuota WebView (`localStorage`):** Cota FIFO de 5,000 nullifiers en `ZeroKnowledgeBarterEngine` y 200 paquetes en `DtnStoreForwardEngine`.
+  - **Seguridad Criptográfica en Vales:** Verificación de firmas Ed25519/SHA-256 previa al canje de créditos en `TokenomicsEngine`.
+  - **Cero Falsas Alarmas en Sensores:** Eliminación de listeners de acelerómetro duplicados en `ManDownDetectorEngine` y `StructuralHealthSeismicEngine`.
+  - **Despliegue Limpio Verificado en Hardware Real:** Probado en Motorola Moto G22 (`ZT322B386P`) y Tablet Lenovo TB305XU (`HA2CHKZ2`).
+- **Versión Oficial:** `75.0.0` / `versionCode 75000` / `SHA-256 4AEF92328A6BC46624C33FA91E141C3FBFE0D80F9165196ECAF7B72C82AE78DD`.
+
+---
+
 ## [70.0.0-tactical-c4isr-sovereign-survival-master] - 2026-08-29
 
 ### 🛡️ Tactical C4ISR & Sovereign Survival Master Edition (Fases P0 a P23)

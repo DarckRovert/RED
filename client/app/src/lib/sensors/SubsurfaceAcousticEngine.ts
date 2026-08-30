@@ -91,30 +91,47 @@ export class SubsurfaceAcousticEngine {
         this.notify();
     }
 
+    public destroy(): void {
+        this.stopBeacon();
+        this.listeners.clear();
+        SubsurfaceAcousticEngine.instance = null;
+    }
+
     private emitPulse() {
         this.pulsesEmitted++;
 
         // 1. Pulso de audio VLF subsónico
         try {
             if (typeof window !== 'undefined') {
-                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                if (AudioContextClass) {
-                    const ctx = new AudioContextClass();
+                if (!this.audioCtx || this.audioCtx.state === 'closed') {
+                    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                    if (AudioContextClass) {
+                        this.audioCtx = new AudioContextClass();
+                    }
+                }
+                if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume().catch(() => {});
+                }
+
+                if (this.audioCtx) {
+                    const ctx = this.audioCtx;
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
+                    const startTime = ctx.currentTime;
+                    const durationSec = this.config.pulseDurationMs / 1000;
 
                     osc.type = 'sine';
-                    osc.frequency.setValueAtTime(this.config.frequencyHz, ctx.currentTime);
+                    osc.frequency.setValueAtTime(this.config.frequencyHz, startTime);
 
-                    gain.gain.setValueAtTime(0.01, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.9, ctx.currentTime + 0.1);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (this.config.pulseDurationMs / 1000));
+                    gain.gain.setValueAtTime(0.01, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.9, startTime + 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.01, startTime + durationSec);
 
                     osc.connect(gain);
                     gain.connect(ctx.destination);
 
-                    osc.start();
-                    osc.stop(ctx.currentTime + (this.config.pulseDurationMs / 1000));
+                    osc.start(startTime);
+                    osc.stop(startTime + durationSec);
                 }
             }
         } catch {}

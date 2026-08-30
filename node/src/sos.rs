@@ -23,7 +23,7 @@ impl SosStore {
     fn load_from_db(&self) {
         if let Some(db) = &self.db {
             if let Ok(tree) = db.open_tree("sos_beacons") {
-                let mut map = self.beacons.write().unwrap();
+                let mut map = self.beacons.write().unwrap_or_else(|e| e.into_inner());
                 for item in tree.iter().flatten() {
                     if let Ok(beacon) = serde_json::from_slice::<SosBeacon>(&item.1) {
                         map.insert(beacon.id.clone(), beacon);
@@ -60,7 +60,7 @@ impl SosStore {
             signature,
         };
 
-        let mut map = self.beacons.write().unwrap();
+        let mut map = self.beacons.write().unwrap_or_else(|e| e.into_inner());
         map.insert(id.clone(), beacon.clone());
 
         if let Some(db) = &self.db {
@@ -75,7 +75,7 @@ impl SosStore {
     }
 
     pub fn resolve_sos(&self, sos_id: &str) -> bool {
-        let mut map = self.beacons.write().unwrap();
+        let mut map = self.beacons.write().unwrap_or_else(|e| e.into_inner());
         if let Some(beacon) = map.get_mut(sos_id) {
             beacon.is_active = false;
             if let Some(db) = &self.db {
@@ -92,14 +92,44 @@ impl SosStore {
     }
 
     pub fn get_active_beacons(&self) -> Vec<SosBeacon> {
-        let map = self.beacons.read().unwrap();
+        let map = self.beacons.read().unwrap_or_else(|e| e.into_inner());
         map.values().filter(|b| b.is_active).cloned().collect()
     }
 
     pub fn list_all(&self) -> Vec<SosBeacon> {
-        let map = self.beacons.read().unwrap();
+        let map = self.beacons.read().unwrap_or_else(|e| e.into_inner());
         let mut list: Vec<SosBeacon> = map.values().cloned().collect();
         list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         list
+    }
+
+    /// Prunes inactive or resolved emergency beacons older than `max_age_seconds`.
+    pub fn prune_stale_beacons(&self, max_age_seconds: i64) -> usize {
+        let now = Utc::now().timestamp();
+        let cutoff = now.saturating_sub(max_age_seconds);
+        let mut map = self.beacons.write().unwrap_or_else(|e| e.into_inner());
+        let mut to_remove = Vec::new();
+
+        for (id, beacon) in map.iter() {
+            if !beacon.is_active && beacon.timestamp < cutoff {
+                to_remove.push(id.clone());
+            }
+        }
+
+        let pruned_count = to_remove.len();
+        for id in &to_remove {
+            map.remove(id);
+            if let Some(db) = &self.db {
+                if let Ok(tree) = db.open_tree("sos_beacons") {
+                    let _ = tree.remove(id.as_bytes());
+                }
+            }
+        }
+
+        if let Some(db) = &self.db {
+            let _ = db.flush();
+        }
+
+        pruned_count
     }
 }

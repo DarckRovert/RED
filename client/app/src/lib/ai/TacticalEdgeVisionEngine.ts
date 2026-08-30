@@ -73,6 +73,9 @@ export class TacticalEdgeVisionEngine {
         let darkAerialPixels = 0;
         let minDroneX = 320, maxDroneX = 0, minDroneY = 240, maxDroneY = 0;
 
+        let movePixels = 0;
+        let minMoveX = 320, maxMoveX = 0, minMoveY = 240, maxMoveY = 0;
+
         // 2. Barrido de píxeles para segmentación óptica
         for (let y = 0; y < 240; y += 4) {
             for (let x = 0; x < 320; x += 4) {
@@ -98,8 +101,26 @@ export class TacticalEdgeVisionEngine {
                     if (y < minDroneY) minDroneY = y;
                     if (y > maxDroneY) maxDroneY = y;
                 }
+
+                // C. Detección de movimiento por delta de fotograma previo
+                if (this.prevFrameData) {
+                    const pr = this.prevFrameData[idx];
+                    const pg = this.prevFrameData[idx + 1];
+                    const pb = this.prevFrameData[idx + 2];
+                    const delta = Math.abs(r - pr) + Math.abs(g - pg) + Math.abs(b - pb);
+                    if (delta > 60) {
+                        movePixels++;
+                        if (x < minMoveX) minMoveX = x;
+                        if (x > maxMoveX) maxMoveX = x;
+                        if (y < minMoveY) minMoveY = y;
+                        if (y > maxMoveY) maxMoveY = y;
+                    }
+                }
             }
         }
+
+        // Guardar fotograma actual como referencia para el siguiente ciclo
+        this.prevFrameData = new Uint8ClampedArray(data);
 
         // Evaluar detección de Fuego
         if (firePixels > 25) {
@@ -135,6 +156,25 @@ export class TacticalEdgeVisionEngine {
                     height: bboxH,
                 },
                 label: 'DRON UAV / OBJETO AÉREO',
+                timestamp: Date.now(),
+            });
+        }
+
+        // Evaluar detección de Movimiento Anómalo (>= 40 bloques 4x4 cambiaron significativamente)
+        if (movePixels >= 40) {
+            const bboxW = Math.max(0.1, (maxMoveX - minMoveX) / 320);
+            const bboxH = Math.max(0.1, (maxMoveY - minMoveY) / 240);
+            detections.push({
+                id: `MOV-${Date.now()}`,
+                type: 'MOVEMENT_ANOMALY',
+                confidencePct: Math.min(95, Math.round(50 + movePixels / 2)),
+                bbox: {
+                    x: minMoveX / 320,
+                    y: minMoveY / 240,
+                    width: bboxW,
+                    height: bboxH,
+                },
+                label: 'MOVIMIENTO ANÓMALO DETECTADO',
                 timestamp: Date.now(),
             });
         }
@@ -222,6 +262,17 @@ export class TacticalEdgeVisionEngine {
             ctx.fillStyle = color;
             ctx.fillText(`${det.label} [${det.confidencePct}%]`, x + 4, Math.max(12, y - 5));
         });
+    }
+
+    /**
+     * Libera el canvas fuera de pantalla y elimina la referencia de la instancia singleton.
+     * Debe invocarse cuando el componente de visión táctica es desmontado.
+     */
+    public destroy(): void {
+        this.offscreenCtx = null;
+        this.offscreenCanvas = null;
+        this.prevFrameData = null;
+        TacticalEdgeVisionEngine.instance = null;
     }
 }
 

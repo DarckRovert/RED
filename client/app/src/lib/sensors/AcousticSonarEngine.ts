@@ -30,6 +30,8 @@ export class AcousticSonarEngine {
     private scanIntervalId: any = null;
     private currentMedium: SonarMediumType = 'AIR_20C';
     private lastResult: SonarPingResult | null = null;
+    private ambientTempC: number = 20.0;
+    private salinityPpt: number = 0.0;
 
     private listeners: Set<(r: SonarPingResult) => void> = new Set();
 
@@ -40,6 +42,34 @@ export class AcousticSonarEngine {
             this.instance = new AcousticSonarEngine();
         }
         return this.instance;
+    }
+
+    public setAmbientTemperature(tempC: number): void {
+        if (!isNaN(tempC) && tempC >= -50 && tempC <= 70) {
+            this.ambientTempC = tempC;
+        }
+    }
+
+    public setSalinityPpt(ppt: number): void {
+        if (!isNaN(ppt) && ppt >= 0 && ppt <= 45) {
+            this.salinityPpt = ppt;
+        }
+    }
+
+    public getEffectiveSpeedOfSound(medium: SonarMediumType): number {
+        const T = this.ambientTempC;
+        if (medium === 'AIR_20C') {
+            // Ecuación acústica de Laplace para aire: c = 331.3 * sqrt(1 + T / 273.15)
+            return Math.round((331.3 * Math.sqrt(1 + T / 273.15)) * 10) / 10;
+        }
+        if (medium === 'WATER') {
+            // Ecuación hidroacústica combinada de Bilaniuk-Wong y Mackenzie con corrección de salinidad
+            const cBase = 1402.4 + 5.01 * T - 0.055 * (T * T) + 0.00022 * (T * T * T);
+            const salinityCorrection = 1.34 * this.salinityPpt;
+            const c = cBase + salinityCorrection;
+            return Math.round(c * 10) / 10;
+        }
+        return AcousticSonarEngine.SPEED_OF_SOUND[medium] || 343.0;
     }
 
     public subscribe(cb: (r: SonarPingResult) => void): () => void {
@@ -58,18 +88,20 @@ export class AcousticSonarEngine {
     private initAudio() {
         if (!this.audioCtx) {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            this.audioCtx = new AudioContextClass();
+            if (AudioContextClass) {
+                this.audioCtx = new AudioContextClass();
+            }
         }
-        if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
-        }
+    }
+
+    public setMedium(medium: SonarMediumType) {
+        this.currentMedium = medium;
     }
 
     /**
      * Emite un chirp FMCW y computa la distancia por eco
      */
-    public async emitPing(medium: SonarMediumType = this.currentMedium): Promise<SonarPingResult> {
-        this.currentMedium = medium;
+    public emitPing(medium: SonarMediumType = this.currentMedium): SonarPingResult {
         if (typeof window === 'undefined') {
             return { distanceMeters: 0, timeOfFlightMs: 0, medium, confidencePct: 0, timestamp: Date.now() };
         }
@@ -77,6 +109,10 @@ export class AcousticSonarEngine {
         this.initAudio();
         if (!this.audioCtx) {
             return { distanceMeters: 0, timeOfFlightMs: 0, medium, confidencePct: 0, timestamp: Date.now() };
+        }
+
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume().catch(() => {});
         }
 
         const now = this.audioCtx.currentTime;
@@ -101,8 +137,8 @@ export class AcousticSonarEngine {
         osc.start(now);
         osc.stop(now + duration);
 
-        // Simulación acústica precisa de eco con variación física basada en el medio
-        const speed = AcousticSonarEngine.SPEED_OF_SOUND[medium];
+        // Simulación acústica precisa de eco con variación física basada en el medio y compensación térmica
+        const speed = this.getEffectiveSpeedOfSound(medium);
         // Rango típico: 0.5m a 25m en aire
         const simulatedDist = medium === 'AIR_20C' 
             ? Math.round((1.5 + Math.random() * 8.5) * 100) / 100
@@ -138,6 +174,16 @@ export class AcousticSonarEngine {
             this.scanIntervalId = null;
         }
         this.isScanning = false;
+    }
+
+    public destroy(): void {
+        this.stopContinuousScan();
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
+        }
+        this.listeners.clear();
+        AcousticSonarEngine.instance = null;
     }
 
     public getState(): { isScanning: boolean; lastResult: SonarPingResult | null; medium: SonarMediumType } {

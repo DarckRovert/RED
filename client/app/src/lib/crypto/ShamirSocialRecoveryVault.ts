@@ -145,7 +145,7 @@ export class ShamirSocialRecoveryVault {
             return null;
         }
         try {
-            return ShamirSecretSharingEngine.reconstructSecret(this.collectedShares.slice(0, 3));
+            return ShamirSecretSharingEngine.reconstructSecret(this.collectedShares);
         } catch (e) {
             console.error('[ShamirSocialRecoveryVault] Error reconstruyendo secreto:', e);
             return null;

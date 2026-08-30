@@ -49,6 +49,7 @@ pub unsafe extern "C" fn red_message_send(
 ) -> i32 {
     // SEC-3 FIX: Use safe string conversion — return error code instead of panicking
     let sender_str = {
+
         if sender_ptr.is_null() { return -1; }
         match CStr::from_ptr(sender_ptr).to_str() {
             Ok(s) => s,
@@ -65,7 +66,14 @@ pub unsafe extern "C" fn red_message_send(
     let text = {
         if text_ptr.is_null() { return -1; }
         match CStr::from_ptr(text_ptr).to_str() {
-            Ok(s) => s,
+            Ok(s) => {
+                // SEC-FIX 6.1: Bound incoming payload to 5MB to prevent OOM attacks
+                const MAX_PAYLOAD_SIZE: usize = 5 * 1024 * 1024;
+                if s.len() > MAX_PAYLOAD_SIZE {
+                    return -5;
+                }
+                s
+            },
             Err(_) => return -2,
         }
     };

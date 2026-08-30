@@ -1,5 +1,24 @@
 import { mqttRelay, MqttRelayTransport } from './mqttRelayTransport';
 
+const HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
+function bytesToHexFast(bytes: Uint8Array): string {
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+        hex += HEX_LUT[bytes[i]];
+    }
+    return hex;
+}
+
+function hexToBytesFast(hex: string): Uint8Array {
+    const len = hex.length;
+    const bytes = new Uint8Array(len >>> 1);
+    for (let i = 0; i < len; i += 2) {
+        bytes[i >>> 1] = parseInt(hex.substring(i, i + 2), 16);
+    }
+    return bytes;
+}
+
 export class WifiDirectTransport {
     private ws: WebSocket | null = null;
     private peerConnections: Map<string, RTCPeerConnection> = new Map();
@@ -301,14 +320,13 @@ export class WifiDirectTransport {
         switch (msg.type) {
             case 'registered':
             case 'room-joined': {
-                if (Array.isArray(msg.onlinePeers)) {
-                    for (const peerId of msg.onlinePeers) {
-                        if (peerId && peerId !== this.myId) {
-                            this.onlinePeers.add(peerId);
-                            // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
-                            if (this.myId > peerId && !this.peerConnections.has(peerId)) {
-                                this.createOffer(peerId).catch(() => {});
-                            }
+                const peerList = Array.isArray(msg.onlinePeers) ? msg.onlinePeers : (Array.isArray(msg.peers) ? msg.peers : []);
+                for (const peerId of peerList) {
+                    if (peerId && peerId !== this.myId) {
+                        this.onlinePeers.add(peerId);
+                        // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
+                        if (this.myId > peerId && !this.peerConnections.has(peerId)) {
+                            this.createOffer(peerId).catch(() => {});
                         }
                     }
                 }
@@ -316,13 +334,23 @@ export class WifiDirectTransport {
             }
 
             case 'peer-joined': {
-                if (msg.peerId && msg.peerId !== this.myId) {
-                    this.onlinePeers.add(msg.peerId);
-                    console.log(`[WebRtcTransport] Remote peer discovered on mesh: ${msg.peerId.slice(0, 8)}`);
+                const peerId = msg.peerId || msg.fromPeer || sender;
+                if (peerId && peerId !== this.myId) {
+                    this.onlinePeers.add(peerId);
+                    console.log(`[WebRtcTransport] Remote peer discovered on mesh: ${peerId.slice(0, 8)}`);
                     // Initiate P2P WebRTC offer if our ID is greater to avoid double glare
-                    if (this.myId > msg.peerId && !this.peerConnections.has(msg.peerId)) {
-                        this.createOffer(msg.peerId).catch(() => {});
+                    if (this.myId > peerId && !this.peerConnections.has(peerId)) {
+                        this.createOffer(peerId).catch(() => {});
                     }
+                }
+                break;
+            }
+
+            case 'peer-left': {
+                const peerId = msg.peerId || msg.fromPeer || sender;
+                if (peerId) {
+                    this.onlinePeers.delete(peerId);
+                    this.cleanupPeer(peerId);
                 }
                 break;
             }
@@ -342,44 +370,11 @@ export class WifiDirectTransport {
                     await this.handleIceCandidate(sender, msg.candidate);
                 }
                 break;
-            case 'peer-joined':
-                if (sender) {
-                    this.onlinePeers.add(sender);
-                    if (this.myId && sender && this.myId > sender) {
-                        this.createOffer(sender).catch(() => {});
-                    }
-                }
-                break;
-            case 'peer-left':
-                if (sender) {
-                    this.onlinePeers.delete(sender);
-                    this.cleanupPeer(sender);
-                }
-                break;
-            case 'room-joined':
-                if (Array.isArray(msg.peers)) {
-                    for (const p of msg.peers) {
-                        if (p && p !== this.myId) {
-                            this.onlinePeers.add(p);
-                            if (this.myId && this.myId > p) {
-                                this.createOffer(p).catch(() => {});
-                            }
-                        }
-                    }
-                }
-                break;
             case 'mesh-relay': {
                 const fromPeer = msg.fromPeer || sender;
                 const payloadHex = msg.payloadHex;
                 if (fromPeer && payloadHex && typeof payloadHex === 'string') {
-                    const match = payloadHex.match(/.{1,2}/g);
-                    let payloadBytes: Uint8Array;
-                    if (match) {
-                        payloadBytes = new Uint8Array(match.map((byte: string) => parseInt(byte, 16)));
-                    } else {
-                        return;
-                    }
-
+                    const payloadBytes = hexToBytesFast(payloadHex);
                     this.notifyMessageListeners(fromPeer, payloadBytes);
                 }
                 break;
@@ -387,14 +382,43 @@ export class WifiDirectTransport {
         }
     }
 
-    // ─── WebRTC Peer Connection & DataChannel Negotiation ─────────────────────
+    public static getIceServers(): RTCIceServer[] {
+        const list: RTCIceServer[] = [...WifiDirectTransport.ICE_SERVERS];
+
+        if (typeof window !== 'undefined') {
+            try {
+                const customTurn = localStorage.getItem('red_custom_turn_config');
+                if (customTurn) {
+                    const parsed = JSON.parse(customTurn);
+                    if (parsed && (parsed.urls || parsed.url)) {
+                        list.unshift(parsed);
+                    }
+                }
+            } catch (err) {
+                console.warn('[WebRtcTransport] Failed to parse custom TURN config:', err);
+            }
+        }
+
+        // Public OpenRelay TURN fallback for strict symmetric CGNAT on mobile cellular networks
+        list.push({
+            urls: [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:443?transport=tcp',
+            ],
+            username: 'openrelay',
+            credential: 'openrelay',
+        });
+
+        return list;
+    }
 
     private getOrCreatePeerConnection(peerId: string): RTCPeerConnection {
         let pc = this.peerConnections.get(peerId);
         if (pc && pc.signalingState !== 'closed') return pc;
 
         pc = new RTCPeerConnection({
-            iceServers: WifiDirectTransport.ICE_SERVERS,
+            iceServers: WifiDirectTransport.getIceServers(),
             iceCandidatePoolSize: 2,
         });
 
@@ -493,6 +517,23 @@ export class WifiDirectTransport {
 
     private isPolite(peerId: string): boolean {
         return (this.myId || '') < (peerId || '');
+    }
+
+    /**
+     * Triggers an immediate ICE Restart on all active peer connections upon network interface switch.
+     */
+    public restartAllIce(): void {
+        console.log('[WebRtcTransport] Network switch detected — triggering fast ICE Restart on all peer connections');
+        for (const [peerId, pc] of this.peerConnections) {
+            if (pc && pc.signalingState !== 'closed') {
+                if (typeof (pc as any).restartIce === 'function') {
+                    try {
+                        (pc as any).restartIce();
+                    } catch {}
+                }
+                this.createOffer(peerId, true).catch(() => {});
+            }
+        }
     }
 
     public async createOffer(peerId: string, iceRestart = false): Promise<void> {
@@ -627,15 +668,13 @@ export class WifiDirectTransport {
      * Uses direct WebRTC DataChannel if open; otherwise falls back to Encrypted Blind MQTT & WebSocket Relays.
      */
     async send(peerId: string, payload: Uint8Array): Promise<boolean> {
-        let sent = false;
-
-        // 1. Direct WebRTC DataChannel (P2P High Speed)
+        // 1. Direct WebRTC DataChannel (P2P High Speed, Zero Relay Overhead)
         const channel = this.dataChannels.get(peerId);
         if (channel && channel.readyState === 'open') {
             try {
                 const safeBuffer = payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength) as ArrayBuffer;
                 channel.send(safeBuffer);
-                sent = true;
+                return true;
             } catch (err) {
                 console.warn(`[WebRtcTransport] DataChannel send failed for ${peerId.slice(0, 8)}, falling back to relay:`, err);
             }
@@ -646,29 +685,67 @@ export class WifiDirectTransport {
             this.createOffer(peerId).catch(() => {});
         }
 
-        // 2. High-Availability Global MQTT Blind Relay
+        // 2. High-Availability Global MQTT Blind Relay (Fallback 1)
         const mqttSent = mqttRelay.sendPacket(peerId, payload);
-        if (mqttSent) sent = true;
+        if (mqttSent) {
+            return true;
+        }
 
-        // 3. Encrypted Blind WebSocket Relay Fallback (Zero-Knowledge)
+        // 3. Encrypted Blind WebSocket Relay Fallback (Fallback 2, Zero-Knowledge)
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
-                const hex = Array.from(payload).map(b => b.toString(16).padStart(2, '0')).join('');
+                const hex = bytesToHexFast(payload);
                 this.sendWs({
                     type: 'mesh-relay',
                     targetPeerId: peerId,
                     payloadHex: hex,
                 });
-                sent = true;
+                return true;
             } catch (err) {
                 console.warn(`[WebRtcTransport] Blind relay failed for ${peerId.slice(0, 8)}:`, err);
             }
         }
 
-        return sent;
+        return false;
     }
 
     onMessage(callback: (msg: { from: string; payload: Uint8Array }) => void) {
         this.messageListeners.push(callback);
+    }
+
+    public destroy(): void {
+        this.disconnect();
+    }
+
+    public disconnect(): void {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.ws) {
+            try {
+                this.ws.onclose = null;
+                this.ws.onerror = null;
+                this.ws.close();
+            } catch {}
+            this.ws = null;
+        }
+        this.dataChannels.forEach(channel => {
+            try { channel.close(); } catch {}
+        });
+        this.dataChannels.clear();
+        this.peerConnections.forEach(pc => {
+            try { pc.close(); } catch {}
+        });
+        this.peerConnections.clear();
+        this.pendingCandidates.clear();
+        this.onlinePeers.clear();
+        this.messageListeners = [];
+        this.isConnecting = false;
+        mqttRelay.disconnect();
     }
 }

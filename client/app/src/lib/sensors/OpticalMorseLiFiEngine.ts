@@ -212,7 +212,9 @@ export class OpticalMorseLiFiEngine {
         this.oscillator.type = 'sine';
         this.oscillator.frequency.setValueAtTime(700, now); // 700 Hz estándar sidetone
 
-        this.gainNode.gain.setValueAtTime(0.12, now);
+        // Envolvente de telegrafía con rampa de ataque de 4ms para evitar clicks acústicos
+        this.gainNode.gain.setValueAtTime(0.0001, now);
+        this.gainNode.gain.linearRampToValueAtTime(0.12, now + 0.004);
 
         this.oscillator.connect(this.gainNode);
         this.gainNode.connect(this.audioCtx.destination);
@@ -221,17 +223,38 @@ export class OpticalMorseLiFiEngine {
     }
 
     private stopAudioTone() {
-        if (this.oscillator) {
+        if (this.gainNode && this.audioCtx && this.audioCtx.state === 'running') {
             try {
-                this.oscillator.stop();
-                this.oscillator.disconnect();
+                const now = this.audioCtx.currentTime;
+                this.gainNode.gain.cancelScheduledValues(now);
+                this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+                this.gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.004);
             } catch {}
+        }
+        if (this.oscillator) {
+            const osc = this.oscillator;
+            const gn = this.gainNode;
             this.oscillator = null;
-        }
-        if (this.gainNode) {
-            try { this.gainNode.disconnect(); } catch {}
             this.gainNode = null;
+            setTimeout(() => {
+                try {
+                    osc.stop();
+                    osc.disconnect();
+                    gn?.disconnect();
+                } catch {}
+            }, 8);
         }
+    }
+
+    public destroy(): void {
+        this.stopTransmission();
+        this.stopAudioTone();
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
+        }
+        this.listeners.clear();
+        OpticalMorseLiFiEngine.instance = null;
     }
 
     private sleep(ms: number): Promise<void> {

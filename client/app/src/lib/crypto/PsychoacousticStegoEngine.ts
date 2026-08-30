@@ -9,6 +9,8 @@ export class PsychoacousticStegoEngine {
     private static instance: PsychoacousticStegoEngine | null = null;
     private static readonly PREAMBLE = 'RED_STEGO_V1::';
 
+    public static readonly FIXED_STRIDE = 16;
+
     private constructor() {}
 
     public static getInstance(): PsychoacousticStegoEngine {
@@ -35,14 +37,16 @@ export class PsychoacousticStegoEngine {
             }
         }
 
-        const stride = Math.max(2, Math.floor(out.length / (bits.length + 10)));
+        const stride = PsychoacousticStegoEngine.FIXED_STRIDE;
         let bitIdx = 0;
 
         for (let i = 100; i < out.length && bitIdx < bits.length; i += stride) {
-            // Modulación micro-perceptiva del LSB analógico (-0.002 a +0.002 de amplitud)
             const bit = bits[bitIdx];
-            const noise = (bit === 1 ? 0.002 : -0.002);
-            out[i] = Math.max(-1, Math.min(1, out[i] + noise));
+            if (bit === 1) {
+                out[i] = Math.abs(out[i]) + 0.005;
+            } else {
+                out[i] = -Math.abs(out[i]) - 0.005;
+            }
             bitIdx++;
         }
 
@@ -53,12 +57,12 @@ export class PsychoacousticStegoEngine {
      * Extrae una carga secreta desde un buffer de audio
      */
     public extractPayload(samples: Float32Array): string | null {
-        // En una portadora sintetizada, lee los bits modulados
+        // En una portadora sintetizada, lee los bits modulados con el mismo stride fijo
         const bits: number[] = [];
-        const stride = Math.max(2, Math.floor(samples.length / 2000));
+        const stride = PsychoacousticStegoEngine.FIXED_STRIDE;
 
         for (let i = 100; i < samples.length; i += stride) {
-            // Decodifica la desviación del punto medio
+            // Decodifica la polaridad del punto de muestreo
             const bit = samples[i] >= 0 ? 1 : 0;
             bits.push(bit);
         }
@@ -83,6 +87,55 @@ export class PsychoacousticStegoEngine {
         }
 
         return null;
+    }
+
+    /**
+     * Extrae directamente la carga secreta desde un archivo/buffer WAV RIFF 16-bit PCM
+     */
+    public extractFromWavBuffer(wavBuffer: ArrayBuffer): string | null {
+        if (!wavBuffer || wavBuffer.byteLength < 44) return null;
+        try {
+            const view = new DataView(wavBuffer);
+            // Verificar "RIFF" y "WAVE"
+            const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+            const wave = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
+            if (riff !== 'RIFF' || wave !== 'WAVE') return null;
+
+            // Localizar subchunk 'data'
+            let offset = 12;
+            let dataOffset = -1;
+            let dataLength = 0;
+
+            while (offset + 8 <= wavBuffer.byteLength) {
+                const chunkId = String.fromCharCode(
+                    view.getUint8(offset),
+                    view.getUint8(offset + 1),
+                    view.getUint8(offset + 2),
+                    view.getUint8(offset + 3)
+                );
+                const chunkSize = view.getUint32(offset + 4, true);
+                if (chunkId === 'data') {
+                    dataOffset = offset + 8;
+                    dataLength = Math.min(chunkSize, wavBuffer.byteLength - dataOffset);
+                    break;
+                }
+                offset += 8 + chunkSize;
+            }
+
+            if (dataOffset === -1 || dataLength <= 0) return null;
+
+            const sampleCount = Math.floor(dataLength / 2);
+            const samples = new Float32Array(sampleCount);
+
+            for (let i = 0; i < sampleCount; i++) {
+                const rawInt16 = view.getInt16(dataOffset + i * 2, true);
+                samples[i] = rawInt16 < 0 ? rawInt16 / 0x8000 : rawInt16 / 0x7FFF;
+            }
+
+            return this.extractPayload(samples);
+        } catch {
+            return null;
+        }
     }
 
     /**

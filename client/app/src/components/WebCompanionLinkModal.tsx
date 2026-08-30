@@ -138,9 +138,9 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
     // ── Control de Cámara para Escaneo en Móvil ──────────────────────────────
     const stopCamera = async () => {
+        document.body.classList.remove("scanner-active");
         if (!isScanningRef.current) return;
         isScanningRef.current = false;
-        document.body.classList.remove("scanner-active");
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
@@ -219,8 +219,12 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 }
             } catch {}
 
-            const convsToSync = Array.isArray(conversations) ? conversations.slice(0, 30) : [];
-            const contactsToSync = Array.isArray(contacts) ? contacts : [];
+            // Cap both arrays to prevent exceeding the 256 KB MQTT broker payload limit.
+            // HiveMQ/EMQX drop the WebSocket connection silently on oversized frames.
+            // Subsequent LIVE_CONTACT_UPDATE events handle incremental synchronization.
+            const convsToSync = Array.isArray(conversations) ? conversations.slice(0, 20) : [];
+            const contactsToSync = Array.isArray(contacts) ? contacts.slice(0, 50) : [];
+            const isPartialSync = (contacts?.length || 0) > 50 || (conversations?.length || 0) > 20;
 
             const payload: CompanionSyncPayload = {
                 version: 1,
@@ -233,8 +237,10 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 },
                 masterPin,
                 contacts: contactsToSync,
-                conversations: convsToSync
+                conversations: convsToSync,
+                preferences: { is_partial: isPartialSync, total_contacts: contacts?.length || 0 }
             };
+
 
             await companionSyncEngine.transmitMobileVaultToWeb(
                 rawCode,

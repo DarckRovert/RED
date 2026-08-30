@@ -373,11 +373,21 @@ class ModelManagerClass {
                 if (chunkBuffer.length > 0) {
                     const u8 = new Uint8Array(chunkBuffer);
                     const base64Data = uint8ArrayToBase64(u8);
-                    await Filesystem.appendFile({
-                        path: targetFilePath,
-                        data: base64Data,
-                        directory: Directory.Data
-                    });
+                    // Si isFirstWrite sigue en true, el modelo entero cabe en un solo chunk:
+                    // se debe usar writeFile, no appendFile (que fallaría si el archivo no existe aún).
+                    if (isFirstWrite) {
+                        await Filesystem.writeFile({
+                            path: targetFilePath,
+                            data: base64Data,
+                            directory: Directory.Data
+                        });
+                    } else {
+                        await Filesystem.appendFile({
+                            path: targetFilePath,
+                            data: base64Data,
+                            directory: Directory.Data
+                        });
+                    }
                 }
             }
 

@@ -78,6 +78,7 @@ const RedShowcaseLanding    = dynamic(() => import("../components/RedShowcaseLan
 const ToastProvider         = dynamic(() => import("../components/Toast").then(m => ({ default: m.ToastProvider })),         { ssr: false });
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
 const FloatingCallPIP       = dynamic(() => import("../components/FloatingCallPIP").then(m => ({ default: m.FloatingCallPIP })),       { ssr: false, loading: () => null });
+const LoraTransceiverModal  = dynamic(() => import("../components/LoraTransceiverModal").then(m => ({ default: m.LoraTransceiverModal })), { ssr: false, loading: () => <AppLoader /> });
 const BiometricShieldOverlay = dynamic(() => import("../components/BiometricShieldOverlay").then(m => ({ default: m.BiometricShieldOverlay })), { ssr: false, loading: () => null });
 const IncomingContactRequestModal = dynamic(() => import("../components/IncomingContactRequestModal").then(m => ({ default: m.IncomingContactRequestModal })), { ssr: false, loading: () => null });
 
@@ -554,6 +555,8 @@ export default function AppRouter() {
                 {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
                 {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
                 {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
+                {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
+                {currentScreen === "loraTransceiver" && <LoraTransceiverModal onClose={goBack} />}
                 {currentScreen === "stegoVault" && <StegoVaultModal />}
                 {currentScreen === "shakePair" && <ShakePairModal />}
                 {(currentScreen === "p2pPay" || currentScreen === "redP2PPay") && <RedP2PPayModal />}
@@ -648,6 +651,7 @@ export default function AppRouter() {
               {currentScreen === "sonarSeismic" && <SonarSeismicModal />}
               {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
               {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
+              {currentScreen === "loraTransceiver" && <LoraTransceiverModal onClose={goBack} />}
               {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
               {currentScreen === "stegoVault" && <StegoVaultModal />}
               {currentScreen === "shakePair" && <ShakePairModal />}

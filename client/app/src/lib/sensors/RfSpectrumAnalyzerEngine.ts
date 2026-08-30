@@ -151,8 +151,13 @@ export class RfSpectrumAnalyzerEngine {
         this.rssiHistory.push(...rssiList);
         if (this.rssiHistory.length > 60) this.rssiHistory = this.rssiHistory.slice(-60);
 
-        // Real calculations
-        const avgRssi = rssiList.reduce((a, b) => a + b, 0) / rssiList.length;
+        // Real EWMA calculations for ultra-fast EW/jammer detection (alpha = 0.35)
+        let ewmaRssi = rssiList[0];
+        const alpha = 0.35;
+        for (let i = 1; i < rssiList.length; i++) {
+            ewmaRssi = alpha * rssiList[i] + (1 - alpha) * ewmaRssi;
+        }
+        const avgRssi = ewmaRssi;
         const variance = rssiList.reduce((sum, r) => sum + Math.pow(r - avgRssi, 2), 0) / rssiList.length;
 
         const channels = baseChannels.map(ch => {

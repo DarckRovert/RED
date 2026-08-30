@@ -18,7 +18,7 @@ export interface TileCacheStats {
     formattedSize: string;
 }
 
-export interface DownloadProgress {
+export interface TileDownloadProgress {
     total: number;
     downloaded: number;
     failed: number;
@@ -49,7 +49,15 @@ class OfflineTileCacheEngineClass {
             request.onupgradeneeded = (e: any) => {
                 const db = e.target.result as IDBDatabase;
                 if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+                    const store = db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+                    // LRU index: allows efficient sort-by-last-access for eviction
+                    store.createIndex('lastAccessedAt', 'lastAccessedAt', { unique: false });
+                } else {
+                    // Migration for existing DBs: add index if missing
+                    const store = (e.target as IDBOpenDBRequest).transaction!.objectStore(STORE_NAME);
+                    if (!store.indexNames.contains('lastAccessedAt')) {
+                        store.createIndex('lastAccessedAt', 'lastAccessedAt', { unique: false });
+                    }
                 }
             };
 
@@ -87,16 +95,22 @@ class OfflineTileCacheEngineClass {
         const tiles: TileCoord[] = [];
         const seen = new Set<string>();
 
+        // 1. Clamping seguro de parámetros tácticos para evitar saturación de memoria en el cliente móvil
+        const safeRadiusKm = Math.min(30, Math.max(0.5, radiusKm));
+        const safeMinZoom = Math.max(8, Math.min(17, Math.floor(minZoom)));
+        const safeMaxZoom = Math.max(safeMinZoom, Math.min(17, Math.floor(maxZoom)));
+        const MAX_BATCH_TILES = 3500;
+
         // Approximate bounding box with safety margin
-        const latDelta = radiusKm / 111.0;
-        const lonDelta = radiusKm / (111.0 * Math.cos((centerLat * Math.PI) / 180));
+        const latDelta = safeRadiusKm / 111.0;
+        const lonDelta = safeRadiusKm / (111.0 * Math.cos((centerLat * Math.PI) / 180));
 
         const minLat = centerLat - latDelta;
         const maxLat = centerLat + latDelta;
         const minLon = centerLon - lonDelta;
         const maxLon = centerLon + lonDelta;
 
-        for (let z = minZoom; z <= maxZoom; z++) {
+        for (let z = safeMinZoom; z <= safeMaxZoom; z++) {
             const topLeft = this.latLonToTile(maxLat, minLon, z);
             const bottomRight = this.latLonToTile(minLat, maxLon, z);
 
@@ -111,6 +125,10 @@ class OfflineTileCacheEngineClass {
                     if (!seen.has(key)) {
                         seen.add(key);
                         tiles.push({ z, x, y, key });
+                        if (tiles.length >= MAX_BATCH_TILES) {
+                            console.warn(`[OfflineTileCache] Batch tile limit reached (${MAX_BATCH_TILES}) for radius ${safeRadiusKm}km`);
+                            return tiles;
+                        }
                     }
                 }
             }
@@ -120,19 +138,22 @@ class OfflineTileCacheEngineClass {
     }
 
     /**
-     * Retrieves a tile blob from IndexedDB by zoom, x, and y
+     * Retrieves a tile blob from IndexedDB by zoom, x, and y.
+     * Updates lastAccessedAt for LRU eviction tracking.
      */
     public async getTile(z: number, x: number, y: number): Promise<Blob | null> {
         try {
             const db = await this.getDB();
             const key = `${z}_${x}_${y}`;
             return new Promise((resolve) => {
-                const tx = db.transaction(STORE_NAME, 'readonly');
+                const tx = db.transaction(STORE_NAME, 'readwrite');
                 const store = tx.objectStore(STORE_NAME);
                 const req = store.get(key);
 
                 req.onsuccess = () => {
                     if (req.result && req.result.blob) {
+                        // Update access timestamp for LRU
+                        store.put({ ...req.result, lastAccessedAt: Date.now() });
                         resolve(req.result.blob);
                     } else {
                         resolve(null);
@@ -146,7 +167,7 @@ class OfflineTileCacheEngineClass {
     }
 
     /**
-     * Stores a tile blob into IndexedDB
+     * Stores a tile blob into IndexedDB with lastAccessedAt timestamp
      */
     public async saveTile(z: number, x: number, y: number, blob: Blob): Promise<void> {
         try {
@@ -162,6 +183,7 @@ class OfflineTileCacheEngineClass {
                     y,
                     blob,
                     timestamp: Date.now(),
+                    lastAccessedAt: Date.now(),
                     size: blob.size
                 });
 
@@ -174,6 +196,74 @@ class OfflineTileCacheEngineClass {
     }
 
     /**
+     * LRU Eviction: purges least-recently-used tiles when cache exceeds maxSizeBytes.
+     * Evicts in order of oldest lastAccessedAt until under the quota.
+     * Default cap: 500 MB.
+     */
+    public async pruneByLRU(maxSizeBytes = 500 * 1024 * 1024): Promise<number> {
+        try {
+            const stats = await this.getCacheStats();
+            if (stats.totalSizeBytes <= maxSizeBytes) return 0;
+
+            const db = await this.getDB();
+            // Collect all entries sorted by lastAccessedAt ASC (oldest first)
+            const entries: { key: string; size: number; lastAccessedAt: number }[] = await new Promise((resolve) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const result: any[] = [];
+                const req = store.openCursor();
+                req.onsuccess = (e: any) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        result.push({
+                            key: cursor.value.key,
+                            size: cursor.value.size || 0,
+                            lastAccessedAt: cursor.value.lastAccessedAt || cursor.value.timestamp || 0
+                        });
+                        cursor.continue();
+                    } else {
+                        resolve(result.sort((a, b) => a.lastAccessedAt - b.lastAccessedAt));
+                    }
+                };
+                req.onerror = () => resolve([]);
+            });
+
+            let freed = 0;
+            let prunedCount = 0;
+            let remaining = stats.totalSizeBytes;
+
+            const keysToDelete: string[] = [];
+            for (const entry of entries) {
+                if (remaining <= maxSizeBytes) break;
+                keysToDelete.push(entry.key);
+                freed += entry.size;
+                remaining -= entry.size;
+                prunedCount++;
+            }
+
+            if (keysToDelete.length > 0) {
+                await new Promise<void>((resolve) => {
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    const store = tx.objectStore(STORE_NAME);
+                    for (const k of keysToDelete) {
+                        store.delete(k);
+                    }
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => resolve();
+                });
+            }
+
+            if (prunedCount > 0) {
+                console.info(`[OfflineTileCache] LRU pruned ${prunedCount} tiles (${this.formatBytes(freed)} freed)`);
+            }
+            return prunedCount;
+        } catch (e) {
+            console.warn('[OfflineTileCache] LRU prune error:', e);
+            return 0;
+        }
+    }
+
+    /**
      * Pre-downloads all tiles for a specified geographic region with live progress callback
      */
     public async downloadRegion(
@@ -182,9 +272,9 @@ class OfflineTileCacheEngineClass {
         radiusKm: number,
         minZoom = 12,
         maxZoom = 16,
-        onProgress?: (p: DownloadProgress) => void,
+        onProgress?: (p: TileDownloadProgress) => void,
         abortSignal?: AbortSignal
-    ): Promise<DownloadProgress> {
+    ): Promise<TileDownloadProgress> {
         const tiles = this.calculateTilesForRadius(centerLat, centerLon, radiusKm, minZoom, maxZoom);
         const total = tiles.length;
         let downloaded = 0;
@@ -193,7 +283,7 @@ class OfflineTileCacheEngineClass {
 
         const report = (isFinished = false, err?: string) => {
             if (onProgress) {
-                const p: DownloadProgress = {
+                const p: TileDownloadProgress = {
                     total,
                     downloaded,
                     failed,
@@ -255,6 +345,9 @@ class OfflineTileCacheEngineClass {
         } catch (e: any) {
             report(true, e.message);
         }
+
+        // W5: LRU eviction — purge oldest tiles if cache exceeds 500 MB
+        void this.pruneByLRU(500 * 1024 * 1024);
 
         return {
             total,

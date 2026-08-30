@@ -87,8 +87,25 @@ impl AICopilotEngine {
             };
         }
 
+        // --- Guarda de Memoria OOM ---
+        if let Ok(meta) = std::fs::metadata(path) {
+            const MAX_SAFE_MODEL_BYTES: u64 = 8_500_000_000; // ~8.5 GB límite seguro en nodo de escritorio
+            if meta.len() > MAX_SAFE_MODEL_BYTES {
+                return CopilotResponse {
+                    answer: format!(
+                        "⚠️ [Protección de Memoria OOM]: El modelo GGUF ({:.2} GB) supera el umbral de seguridad (8.5 GB). Utiliza un modelo cuantizado de menor tamaño para prevenir agotamiento de memoria.",
+                        meta.len() as f64 / (1024.0 * 1024.0 * 1024.0)
+                    ),
+                    topic_category: "Protección OOM".to_string(),
+                    source: "Candle Memory Guard".to_string(),
+                    model_used: model_name,
+                    execution_time_ms: start.elapsed().as_millis() as u64,
+                };
+            }
+        }
+
         // --- Inicio de Integración Real con Candle GGUF ---
-        let mut st = state.lock().unwrap();
+        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
         if !st.is_loaded || st.active_model_path != model_path {
             st.is_loaded = true;
             st.active_model_path = model_path.clone();
@@ -203,15 +220,24 @@ impl AICopilotEngine {
         for index in 0..max_tokens {
             let context_size = if index > 0 { 1 } else { tokens.len() };
             let start_pos = tokens.len().saturating_sub(context_size);
-            let input = Tensor::new(&tokens[start_pos..], &device).unwrap().unsqueeze(0).unwrap();
+            let input = match Tensor::new(&tokens[start_pos..], &device).and_then(|t| t.unsqueeze(0)) {
+                Ok(inp) => inp,
+                Err(_) => break,
+            };
             
             let logits = match model.forward(&input, start_pos) {
                 Ok(l) => l,
                 Err(_) => break, // Fallo de inferencia, detenemos
             };
-            let logits = logits.squeeze(0).unwrap().squeeze(0).unwrap();
+            let logits = match logits.squeeze(0).and_then(|l| l.squeeze(0)) {
+                Ok(l) => l,
+                Err(_) => break,
+            };
             
-            let next_token = logits_processor.sample(&logits).unwrap();
+            let next_token = match logits_processor.sample(&logits) {
+                Ok(t) => t,
+                Err(_) => break,
+            };
             tokens.push(next_token);
             
             if let Ok(text) = tokenizer.decode(&[next_token], true) {

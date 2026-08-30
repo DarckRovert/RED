@@ -338,18 +338,21 @@ class MonetizationEngineService {
      * Si el dispositivo está fuera de línea (Off-Grid), activa la soberanía táctica sin bloquear.
      */
     public async showRewardedVideo(onRewarded?: (reward: AdMobRewardItem) => void): Promise<{ success: boolean; message: string }> {
-        if (onRewarded) {
-            this.onRewardCallbacks.push(onRewarded);
-        }
-
         // 1. Detección de Aislamiento de Red Off-Grid (Zero-Internet Sentinel)
+        // El callback NO se registra si el dispositivo está offline para no dejar
+        // entradas huérfanas en el array cuando el método retorna sin emitir recompensa.
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
             console.log('[MonetizationEngine] Dispositivo Off-Grid detectado — operando en Modo Soberano Puro');
-            this.onRewardCallbacks = [];
             return {
                 success: false,
                 message: 'Modo Soberano Activo: Nodo desconectado de Internet. Genera créditos mediante Proof-of-Relay en la malla P2P o canjea vales criptográficos offline.'
             };
+        }
+
+        // Registrar callback DESPUÉS de pasar la comprobación offline,
+        // garantizando que siempre se ejecute o se limpie en un path de error.
+        if (onRewarded) {
+            this.onRewardCallbacks.push(onRewarded);
         }
 
         if (!Capacitor.isNativePlatform()) {
@@ -394,6 +397,10 @@ class MonetizationEngineService {
                 return { success: true, message: 'Transmisión de prueba verificada iniciada.' };
             } catch (testErr: any) {
                 this.isAdLoading = false;
+                // Limpiar callbacks huérfanos: si ambos anuncios fallan, ningún
+                // RewardAdPluginEvents.Rewarded se disparará — vaciar el array
+                // para evitar que callbacks de esta sesión contaminen la siguiente.
+                this.onRewardCallbacks = [];
                 console.error('[MonetizationEngine] Failed to show rewarded video:', testErr);
                 return { 
                     success: false, 

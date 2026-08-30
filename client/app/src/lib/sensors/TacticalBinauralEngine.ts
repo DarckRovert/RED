@@ -136,26 +136,58 @@ export class TacticalBinauralEngine {
         this.rightOsc.connect(merger, 0, 1); // Canal 1
         merger.connect(this.gainNode);
 
-        this.leftOsc.start();
-        this.rightOsc.start();
+        // Rampa de entrada suave (fade-in) para evitar clicks
+        const now = this.audioCtx.currentTime;
+        this.gainNode.gain.cancelScheduledValues(now);
+        this.gainNode.gain.setValueAtTime(0.001, now);
+        this.gainNode.gain.linearRampToValueAtTime(this.volume, now + 0.05);
+
+        this.leftOsc.start(now);
+        this.rightOsc.start(now);
 
         this.notify();
     }
 
     public stopPreset() {
+        if (this.gainNode && this.audioCtx && this.audioCtx.state === 'running') {
+            try {
+                const now = this.audioCtx.currentTime;
+                this.gainNode.gain.cancelScheduledValues(now);
+                this.gainNode.gain.setValueAtTime(this.gainNode.gain.value, now);
+                this.gainNode.gain.linearRampToValueAtTime(0.001, now + 0.03);
+            } catch {}
+        }
         if (this.leftOsc) {
-            try { this.leftOsc.stop(); } catch {}
-            this.leftOsc.disconnect();
+            const l = this.leftOsc;
             this.leftOsc = null;
+            setTimeout(() => {
+                try { l.stop(); l.disconnect(); } catch {}
+            }, 35);
         }
         if (this.rightOsc) {
-            try { this.rightOsc.stop(); } catch {}
-            this.rightOsc.disconnect();
+            const r = this.rightOsc;
             this.rightOsc = null;
+            setTimeout(() => {
+                try { r.stop(); r.disconnect(); } catch {}
+            }, 35);
         }
         this.isRunning = false;
         this.currentPresetKey = null;
         this.notify();
+    }
+
+    public destroy(): void {
+        this.stopPreset();
+        if (this.gainNode) {
+            try { this.gainNode.disconnect(); } catch {}
+            this.gainNode = null;
+        }
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
+        }
+        this.listeners.clear();
+        TacticalBinauralEngine.instance = null;
     }
 
     public setVolume(vol: number) {

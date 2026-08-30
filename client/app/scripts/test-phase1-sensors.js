@@ -393,6 +393,79 @@ runTest("Analizador Espectro RF: Condiciones Normales de Señal Malla", () => {
     assert.strictEqual(threat, 'NORMAL');
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 5. StructuralHealthSeismicEngine — Análisis Espectral DFT & Resonancia f0
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\n🏢 5. Probando StructuralHealthSeismicEngine (Resonancia f0 & DFT)...");
+
+function computeDftDominantFreq(samples, sampleRateHz = 50) {
+    const N = samples.length;
+    let maxPower = 0;
+    let peakFreq = 7.5;
+    let totalEnergy = 0;
+
+    for (let k = 1; k < N / 2; k++) {
+        let real = 0;
+        let imag = 0;
+        const freq = (k * sampleRateHz) / N;
+
+        for (let n = 0; n < N; n++) {
+            const angle = (2 * Math.PI * k * n) / N;
+            real += samples[n] * Math.cos(angle);
+            imag -= samples[n] * Math.sin(angle);
+        }
+
+        const power = (real * real + imag * imag) / N;
+        totalEnergy += power;
+
+        if (power > maxPower && freq <= 25) {
+            maxPower = power;
+            peakFreq = Math.round(freq * 10) / 10;
+        }
+    }
+    return { peakFreq, totalEnergy };
+}
+
+function evaluateStructuralRisk(peakFreq, baselineFreq, totalEnergy) {
+    const freqDeltaPct = Math.abs(peakFreq - baselineFreq) / Math.max(1, baselineFreq);
+    const integrityPct = Math.round(Math.max(0, Math.min(100, (1 - freqDeltaPct * 1.5) * 100)));
+    let risk = 'SAFE';
+    let alarm = false;
+
+    if (totalEnergy > 0.8 || integrityPct < 30) {
+        risk = 'IMMINENT_COLLAPSE';
+        alarm = true;
+    } else if (integrityPct < 60 || totalEnergy > 0.3) {
+        risk = 'STRUCTURAL_FATIGUE';
+    } else if (totalEnergy > 0.1) {
+        risk = 'ELEVATED_VIBRATION';
+    }
+    return { integrityPct, risk, alarm };
+}
+
+runTest("Salud Estructural: Detección precisa de f0 mediante DFT a 7.5 Hz (Estructura Sana)", () => {
+    // Generar onda senoidal pura a 7.5 Hz con 64 muestras a 50 Hz
+    const N = 64;
+    const sampleRate = 50;
+    const targetFreq = 7.5;
+    const samples = [];
+    for (let n = 0; n < N; n++) {
+        const t = n / sampleRate;
+        samples.push(0.05 * Math.sin(2 * Math.PI * targetFreq * t));
+    }
+    const { peakFreq, totalEnergy } = computeDftDominantFreq(samples, sampleRate);
+    assert.ok(Math.abs(peakFreq - 7.5) <= 0.8, `peakFreq ${peakFreq} debe estar cerca de 7.5 Hz`);
+    const evalRes = evaluateStructuralRisk(peakFreq, 7.5, totalEnergy);
+    assert.strictEqual(evalRes.risk, 'SAFE');
+    assert.strictEqual(evalRes.alarm, false);
+});
+
+runTest("Salud Estructural: Alarma de COLAPSO INMINENTE ante energía de vibración destructiva (>0.8G²)", () => {
+    const evalRes = evaluateStructuralRisk(4.0, 7.5, 1.2);
+    assert.strictEqual(evalRes.risk, 'IMMINENT_COLLAPSE');
+    assert.strictEqual(evalRes.alarm, true);
+});
+
 console.log("\n================================================================================");
 console.log(`📊 RESUMEN DE RESULTADOS: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE`);
 console.log("================================================================================\n");

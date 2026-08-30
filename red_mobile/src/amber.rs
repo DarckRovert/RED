@@ -93,14 +93,14 @@ impl AmberStore {
             sighting_count: 0,
         };
 
-        self.alerts.write().unwrap().insert(id, alert.clone());
+        self.alerts.write().unwrap_or_else(|e| e.into_inner()).insert(id, alert.clone());
         Ok(alert)
     }
 
     pub fn list_active_alerts(&self) -> Vec<AmberAlert> {
         self.alerts
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|a| a.is_active())
             .cloned()
@@ -108,11 +108,11 @@ impl AmberStore {
     }
 
     pub fn list_all_alerts(&self) -> Vec<AmberAlert> {
-        self.alerts.read().unwrap().values().cloned().collect()
+        self.alerts.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
     }
 
     pub fn get_alert(&self, id: &str) -> Option<AmberAlert> {
-        self.alerts.read().unwrap().get(id).cloned()
+        self.alerts.read().unwrap_or_else(|e| e.into_inner()).get(id).cloned()
     }
 
     pub fn resolve_alert(
@@ -127,7 +127,7 @@ impl AmberStore {
             ));
         }
 
-        let mut alerts = self.alerts.write().unwrap();
+        let mut alerts = self.alerts.write().unwrap_or_else(|e| e.into_inner());
         let alert = alerts
             .get_mut(alert_id)
             .ok_or_else(|| AmberError::NotFound(alert_id.to_string()))?;
@@ -146,7 +146,7 @@ impl AmberStore {
         notes: Option<String>,
     ) -> Result<AmberSighting, AmberError> {
         {
-            let mut alerts = self.alerts.write().unwrap();
+            let mut alerts = self.alerts.write().unwrap_or_else(|e| e.into_inner());
             let alert = alerts
                 .get_mut(alert_id)
                 .ok_or_else(|| AmberError::NotFound(alert_id.to_string()))?;
@@ -166,7 +166,7 @@ impl AmberStore {
             notes,
         };
 
-        self.sightings.write().unwrap().push(sighting.clone());
+        self.sightings.write().unwrap_or_else(|e| e.into_inner()).push(sighting.clone());
         Ok(sighting)
     }
 }

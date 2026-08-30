@@ -24,11 +24,12 @@ class HiveMindEngineClass {
     private knownNodeCapabilities: Map<string, NodeCapacityAdvertisement> = new Map();
     private activeStreamListeners: Map<string, (chunk: HiveInferenceStreamChunk) => void> = new Map();
     private activeRequestResolvers: Map<string, (resp: HiveInferenceResponse) => void> = new Map();
+    private broadcastIntervalId: any = null;
 
     constructor() {
         this.listenToMesh();
         if (typeof window !== 'undefined') {
-            setInterval(() => this.broadcastCapacity(), 30_000);
+            this.broadcastIntervalId = setInterval(() => this.broadcastCapacity(), 30_000);
         }
     }
 
@@ -74,8 +75,16 @@ class HiveMindEngineClass {
         const batt = await this.getRealBattery();
         const activeModel = ModelManager.getActiveModel();
 
+        let myId = meshRouter.myIdentityHash;
+        if (!myId && typeof window !== 'undefined') {
+            try {
+                myId = localStorage.getItem('red_identity_hash') || '';
+            } catch {}
+        }
+        if (!myId) myId = 'local_node';
+
         const ad: NodeCapacityAdvertisement = {
-            nodeId: 'local_node',
+            nodeId: myId,
             availableRamMb,
             cpuUsagePercent: 10,
             batteryLevel: batt.level,
@@ -135,6 +144,7 @@ class HiveMindEngineClass {
     /** Executes local inference on behalf of a remote mesh peer */
     private async handleIncomingInferenceRequest(senderId: string, req: HiveInferenceRequest) {
         const start = performance.now();
+        let myId = meshRouter.myIdentityHash || (typeof window !== 'undefined' ? localStorage.getItem('red_identity_hash') : '') || 'local_node';
         try {
             const copilotRes = await LocalAIEngine.generateCopilotResponse(req.prompt);
             const execTime = Math.round(performance.now() - start);
@@ -142,7 +152,7 @@ class HiveMindEngineClass {
             const respPayload: HiveInferenceResponse = {
                 requestId: req.requestId,
                 fullAnswer: copilotRes.answer,
-                executorNodeId: 'local_node',
+                executorNodeId: myId,
                 modelUsed: copilotRes.modelInfo,
                 executionTimeMs: execTime,
                 tokensPerSecond: Math.round((copilotRes.answer.length / 4) / (execTime / 1000 || 1))
@@ -158,7 +168,7 @@ class HiveMindEngineClass {
             const errorResp: HiveInferenceResponse = {
                 requestId: req.requestId,
                 fullAnswer: `⚠️ Error en inferencia local del proveedor: ${err.message}`,
-                executorNodeId: 'local_node',
+                executorNodeId: myId,
                 modelUsed: 'Error',
                 executionTimeMs: Math.round(performance.now() - start),
                 tokensPerSecond: 0
@@ -198,10 +208,11 @@ class HiveMindEngineClass {
     ): Promise<HiveInferenceResponse> {
         const start = performance.now();
         const requestId = 'req_' + Math.random().toString(36).substring(2, 10);
+        let myId = meshRouter.myIdentityHash || (typeof window !== 'undefined' ? localStorage.getItem('red_identity_hash') : '') || 'local_node';
 
         const requestPayload: HiveInferenceRequest = {
             requestId,
-            senderId: 'local_node',
+            senderId: myId,
             targetNodeId: targetNode.nodeId,
             prompt,
             maxTokens: 512,
@@ -224,8 +235,8 @@ class HiveMindEngineClass {
             payload: requestPayload
         }));
 
-        await meshRouter.send(targetNode.nodeId, encodedReq);
-
+        // CRÍTICO: registrar el resolver ANTES de enviar el paquete para evitar la
+        // condición de carrera donde el peer responde antes de que el resolver esté en el mapa.
         return new Promise((resolve) => {
             const timeout = setTimeout(() => {
                 this.activeStreamListeners.delete(requestId);
@@ -244,12 +255,44 @@ class HiveMindEngineClass {
                 clearTimeout(timeout);
                 resolve(resp);
             });
+
+            // Envío diferido al tick siguiente para garantizar que el resolver ya esté
+            // registrado cuando el event loop procese cualquier respuesta inmediata.
+            meshRouter.send(targetNode.nodeId, encodedReq).catch((err) => {
+                clearTimeout(timeout);
+                this.activeStreamListeners.delete(requestId);
+                this.activeRequestResolvers.delete(requestId);
+                resolve({
+                    requestId,
+                    fullAnswer: `[HiveMind] Error de transporte: ${err?.message || 'fallo de envío mesh'}`,
+                    executorNodeId: targetNode.nodeId,
+                    modelUsed: targetNode.activeModel || 'Desconocido',
+                    executionTimeMs: Math.round(performance.now() - start),
+                    tokensPerSecond: 0
+                });
+            });
         });
     }
 
-    /** Returns all known capacities */
+    /** Returns all known capacities with automatic expiration pruning (> 90s) */
     public getKnownCapabilities(): NodeCapacityAdvertisement[] {
+        const now = Date.now();
+        for (const [nodeId, ad] of this.knownNodeCapabilities.entries()) {
+            if (now - ad.timestamp > 180_000) {
+                this.knownNodeCapabilities.delete(nodeId);
+            }
+        }
         return Array.from(this.knownNodeCapabilities.values());
+    }
+
+    public destroy(): void {
+        if (this.broadcastIntervalId) {
+            clearInterval(this.broadcastIntervalId);
+            this.broadcastIntervalId = null;
+        }
+        this.activeStreamListeners.clear();
+        this.activeRequestResolvers.clear();
+        this.knownNodeCapabilities.clear();
     }
 }
 

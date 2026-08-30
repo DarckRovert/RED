@@ -82,6 +82,10 @@ export class SurvivalTelemetryEngine {
             vaultIntegrity: 'secure'
         };
     }
+
+    public destroy(): void {
+        SurvivalTelemetryEngine.instance = null as any;
+    }
 }
 
 export const survivalTelemetryEngine = SurvivalTelemetryEngine.getInstance();

@@ -101,7 +101,7 @@ impl Chain {
 
     /// Get all registered identities
     pub fn get_all_identities(&self) -> Vec<([u8; 32], crate::chain::IdentityState)> {
-        let identities = self.identities.read().unwrap();
+        let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
         identities.iter().map(|(h, s)| (*h, s.clone())).collect()
     }
 
@@ -153,7 +153,7 @@ impl Chain {
                 verifying_key,
                 zk_proof,
             } => {
-                let mut identities = self.identities.write().unwrap();
+                let mut identities = self.identities.write().unwrap_or_else(|e| e.into_inner());
                 
                 if identities.contains_key(identity_hash) {
                     return Err(BlockchainError::InvalidTransaction(
@@ -186,7 +186,7 @@ impl Chain {
                 tracing::info!("Chain identity registry synchronized for {}", hex::encode(identity_hash));
             }
             TransactionType::RevokeIdentity { identity_hash, .. } => {
-                let mut identities = self.identities.write().unwrap();
+                let mut identities = self.identities.write().unwrap_or_else(|e| e.into_inner());
                 
                 if let Some(state) = identities.get_mut(identity_hash) {
                     state.revoked = true;
@@ -203,7 +203,7 @@ impl Chain {
                 new_verifying_key,
                 ..
             } => {
-                let mut identities = self.identities.write().unwrap();
+                let mut identities = self.identities.write().unwrap_or_else(|e| e.into_inner());
                 
                 // Get old identity
                 let old_state = identities.get(old_identity_hash)
@@ -219,7 +219,9 @@ impl Chain {
                 }
 
                 // Revoke old
-                identities.get_mut(old_identity_hash).unwrap().revoked = true;
+                if let Some(state) = identities.get_mut(old_identity_hash) {
+                    state.revoked = true;
+                }
 
                 // Register new — SEC-FIX C-7: use new_verifying_key, not the old one.
                 // Keeping the old key broke forward secrecy of signatures on rotation.
@@ -235,7 +237,7 @@ impl Chain {
                 });
             }
             TransactionType::CreateGroup { group_id, initial_state } => {
-                let mut groups = self.groups.write().unwrap();
+                let mut groups = self.groups.write().unwrap_or_else(|e| e.into_inner());
                 if groups.contains_key(group_id) {
                     return Err(BlockchainError::InvalidTransaction("Group already exists".to_string()));
                 }
@@ -246,14 +248,13 @@ impl Chain {
                 });
             }
             TransactionType::UpdateGroup { group_id, new_state, signature } => {
-                let mut groups = self.groups.write().unwrap();
+                let mut groups = self.groups.write().unwrap_or_else(|e| e.into_inner());
                 let group = groups.get_mut(group_id)
                     .ok_or_else(|| BlockchainError::InvalidTransaction("Group not found".to_string()))?;
 
                 // SEC-FIX A-2: Verify the Ed25519 signature using the sender's registered verifying_key.
-                // Previously this comment claimed "happens upstream" but nothing verified it anywhere.
                 {
-                    let identities = self.identities.read().unwrap();
+                    let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
                     let sender_state = identities.get(&tx.sender)
                         .ok_or_else(|| BlockchainError::InvalidTransaction(
                             "UpdateGroup sender not registered on chain".to_string()
@@ -280,17 +281,17 @@ impl Chain {
         }
 
         // Remove from mempool
-        self.mempool.write().unwrap().remove(&tx.hash());
+        self.mempool.write().unwrap_or_else(|e| e.into_inner()).remove(&tx.hash());
 
         Ok(())
     }
 
     /// Save state to block store
     pub fn save_state(&self) -> BlockchainResult<()> {
-        let identities = self.identities.read().unwrap();
+        let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
         self.store.save_state("identities", &*identities)?;
         
-        let groups = self.groups.read().unwrap();
+        let groups = self.groups.read().unwrap_or_else(|e| e.into_inner());
         self.store.save_state("groups", &*groups)?;
         
         Ok(())
@@ -301,14 +302,14 @@ impl Chain {
         tx.validate()?;
         
         let hash = tx.hash();
-        self.mempool.write().unwrap().insert(hash, tx);
+        self.mempool.write().unwrap_or_else(|e| e.into_inner()).insert(hash, tx);
         
         Ok(())
     }
 
     /// Get pending transactions
     pub fn get_pending_transactions(&self, limit: usize) -> Vec<Transaction> {
-        self.mempool.read().unwrap()
+        self.mempool.read().unwrap_or_else(|e| e.into_inner())
             .values()
             .take(limit)
             .cloned()
@@ -317,7 +318,7 @@ impl Chain {
 
     /// Check if identity is registered
     pub fn is_identity_registered(&self, identity_hash: &[u8; 32]) -> bool {
-        let identities = self.identities.read().unwrap();
+        let identities = self.identities.read().unwrap_or_else(|e| e.into_inner());
         identities.get(identity_hash)
             .map(|s| !s.revoked)
             .unwrap_or(false)
@@ -325,17 +326,35 @@ impl Chain {
 
     /// Get identity state
     pub fn get_identity(&self, identity_hash: &[u8; 32]) -> Option<IdentityState> {
-        self.identities.read().unwrap().get(identity_hash).cloned()
+        self.identities.read().unwrap_or_else(|e| e.into_inner()).get(identity_hash).cloned()
     }
 
     /// Get mempool size
     pub fn mempool_size(&self) -> usize {
-        self.mempool.read().unwrap().len()
+        self.mempool.read().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
+    /// Prune stale transactions from mempool older than max_age_seconds
+    pub fn prune_stale_mempool(&self, max_age_seconds: u64) -> usize {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        
+        let mut mempool = self.mempool.write().unwrap_or_else(|e| e.into_inner());
+        let initial_len = mempool.len();
+        mempool.retain(|_, tx| {
+            if tx.timestamp == 0 {
+                return true;
+            }
+            now.saturating_sub(tx.timestamp) <= max_age_seconds
+        });
+        initial_len.saturating_sub(mempool.len())
     }
 
     /// Get identity count
     pub fn identity_count(&self) -> usize {
-        self.identities.read().unwrap()
+        self.identities.read().unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|s| !s.revoked)
             .count()

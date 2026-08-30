@@ -122,6 +122,7 @@ export class DnsTunnelEngine {
         const res = await fetch(dohUrl, {
           headers: { Accept: "application/dns-json" },
           cache: "no-store",
+          signal: AbortSignal.timeout(3500),
         });
 
         const latencyMs = Math.round(performance.now() - startTime);

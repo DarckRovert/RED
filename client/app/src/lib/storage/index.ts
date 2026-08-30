@@ -5,3 +5,7 @@ export * from './indexedMediaVault';
 export * from './AutoDestructEngine';
 export * from './StateIntegrityEngine';
 export * from './DtnStoreForwardEngine';
+export * from './DeadDropVaultEngine';
+export * from './CrdtStateReconciler';
+export * from './BazaarSyncEngine';
+export * from './OfflineTileCacheEngine';

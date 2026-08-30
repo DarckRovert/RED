@@ -114,7 +114,7 @@ export class MeshUavRelayEngine {
      */
     public calculateCoverageRadiusKm(altitudeAglMeters: number): number {
         const earthRadiusKm = 6371;
-        const hKm = altitudeAglMeters / 1000;
+        const hKm = Math.max(0, altitudeAglMeters) / 1000;
         // R_cov = sqrt(2 * R_E * h + h^2)
         const radius = Math.sqrt(2 * earthRadiusKm * hKm + hKm * hKm);
         return Math.round(radius * 10) / 10;
@@ -131,12 +131,17 @@ export class MeshUavRelayEngine {
 
     public setAirborneMode(enabled: boolean, altitudeAgl: number = 50) {
         this.isAirborneRelayMode = enabled;
-        this.myAltitudeAgl = altitudeAgl;
+        this.myAltitudeAgl = Math.max(0, altitudeAgl);
         this.notify();
     }
 
     public isAirborne(): boolean {
         return this.isAirborneRelayMode;
+    }
+
+    public destroy(): void {
+        this.listeners.clear();
+        this.activeRelays.clear();
     }
 }
 

@@ -26,6 +26,14 @@ export class SlottedGossipEngine {
     private seenCounts: Map<string, { count: number; firstSeen: number; resolved: boolean }> = new Map();
     private bloomFilter: Uint8Array = new Uint8Array(256); // 2048 bits
 
+    // Dual CSPRNG-seeded hash constants — rotated every 5 min to defeat fingerprinting.
+    // An adversary sending probes with known hashes cannot correlate traffic across epochs.
+    private bloomSeed1 = 0;
+    private bloomSeed2 = 0;
+
+    private pruneTimer: any = null;
+    private dummyTimer: any = null;
+
     private metrics: GossipMetrics = {
         packetsEvaluated: 0,
         packetsRelayed: 0,
@@ -35,8 +43,10 @@ export class SlottedGossipEngine {
     };
 
     private constructor() {
-        // Limpieza periódica de Bloom filter y mapa de contadores
-        setInterval(() => this.pruneSeen(), 60 * 1000);
+        // Initialize Bloom seeds from CSPRNG at startup
+        this.rotateBloomSeeds();
+        // Periodic cleanup AND seed rotation (every 5 minutes)
+        this.pruneTimer = setInterval(() => this.pruneSeen(), 60 * 1000);
     }
 
     public static getInstance(): SlottedGossipEngine {
@@ -57,31 +67,35 @@ export class SlottedGossipEngine {
     ): Promise<boolean> {
         this.metrics.packetsEvaluated++;
 
+        // Cálculo dinámico de umbral de supresión y ventana de backoff según densidad RF
+        const effectiveThreshold = neighborDensity > 20 ? 2 : (neighborDensity > 10 ? 3 : this.suppressionThreshold);
+        const dynamicMinBackoff = neighborDensity > 20 ? 30 : (neighborDensity > 10 ? 20 : this.minBackoffMs);
+        const dynamicMaxBackoff = neighborDensity > 20 ? 140 : (neighborDensity > 10 ? 95 : this.maxBackoffMs);
+
         const now = Date.now();
         const existing = this.seenCounts.get(packetHash);
 
         if (existing) {
             existing.count++;
-            if (existing.count >= this.suppressionThreshold) {
-                // Ya suficientes vecinos lo tienen -> Suprimir
+            if (existing.count >= effectiveThreshold) {
+                // Ya suficientes vecinos lo tienen -> Suprimir retransmisión redundante
                 this.metrics.packetsSuppressed++;
                 this.metrics.rfBandwidthSavedBytes += payloadSize;
                 this.updateMetrics();
                 return false;
             }
         } else {
-            this.seenCounts.set(packetHash, { count: 1, firstSeen: now, resolved: false });
-            this.setBloomBit(packetHash);
+            this.insertSeen(packetHash, now);
         }
 
-        // Si hay alta densidad de vecinos, se aplica Slotted Backoff
+        // Si hay densidad de vecinos (> 2), se aplica Slotted Backoff estocástico
         if (neighborDensity > 2) {
-            const backoff = this.minBackoffMs + Math.floor(Math.random() * (this.maxBackoffMs - this.minBackoffMs));
+            const backoff = dynamicMinBackoff + Math.floor(Math.random() * (dynamicMaxBackoff - dynamicMinBackoff));
             await new Promise(resolve => setTimeout(resolve, backoff));
 
             // Verificar si durante la espera otros nodos ya retransmitieron
             const updated = this.seenCounts.get(packetHash);
-            if (updated && updated.count >= this.suppressionThreshold) {
+            if (updated && updated.count >= effectiveThreshold) {
                 this.metrics.packetsSuppressed++;
                 this.metrics.rfBandwidthSavedBytes += payloadSize;
                 this.updateMetrics();
@@ -102,38 +116,70 @@ export class SlottedGossipEngine {
         if (item) {
             item.count++;
         } else {
-            this.seenCounts.set(packetHash, { count: 1, firstSeen: Date.now(), resolved: false });
-            this.setBloomBit(packetHash);
+            this.insertSeen(packetHash, Date.now());
         }
+    }
+
+    private insertSeen(packetHash: string, firstSeen: number) {
+        if (this.seenCounts.size >= 5000) {
+            this.pruneSeen();
+            if (this.seenCounts.size >= 5000) {
+                const oldestKey = this.seenCounts.keys().next().value;
+                if (oldestKey) this.seenCounts.delete(oldestKey);
+            }
+        }
+        this.seenCounts.set(packetHash, { count: 1, firstSeen, resolved: false });
+        this.setBloomBit(packetHash);
     }
 
     private setBloomBit(key: string) {
-        let hash = 0;
-        for (let i = 0; i < key.length; i++) {
-            hash = ((hash << 5) - hash) + key.charCodeAt(i);
-            hash |= 0;
-        }
-        const bitIndex = Math.abs(hash) % 2048;
-        const byteIndex = Math.floor(bitIndex / 8);
-        const bitOffset = bitIndex % 8;
-        this.bloomFilter[byteIndex] |= (1 << bitOffset);
+        const bit1 = this.hashKey(key, this.bloomSeed1) % 2048;
+        const bit2 = this.hashKey(key, this.bloomSeed2) % 2048;
+        this.bloomFilter[Math.floor(bit1 / 8)] |= (1 << (bit1 % 8));
+        this.bloomFilter[Math.floor(bit2 / 8)] |= (1 << (bit2 % 8));
     }
 
     public isLikelySeen(key: string): boolean {
-        let hash = 0;
+        const bit1 = this.hashKey(key, this.bloomSeed1) % 2048;
+        const bit2 = this.hashKey(key, this.bloomSeed2) % 2048;
+        return (
+            (this.bloomFilter[Math.floor(bit1 / 8)] & (1 << (bit1 % 8))) !== 0 &&
+            (this.bloomFilter[Math.floor(bit2 / 8)] & (1 << (bit2 % 8))) !== 0
+        );
+    }
+
+    /**
+     * Keyed hash for Bloom filter — Murmur3-inspired, seeded via CSPRNG.
+     * With two independent seeds we get double hashing which reduces false positives
+     * compared to a single djb2 hash, and makes traffic correlation infeasible.
+     */
+    private hashKey(key: string, seed: number): number {
+        let h = seed;
         for (let i = 0; i < key.length; i++) {
-            hash = ((hash << 5) - hash) + key.charCodeAt(i);
-            hash |= 0;
+            h = Math.imul(h ^ key.charCodeAt(i), 0x9e3779b9);
+            h = ((h << 13) | (h >>> 19)) ^ (h >>> 11);
         }
-        const bitIndex = Math.abs(hash) % 2048;
-        const byteIndex = Math.floor(bitIndex / 8);
-        const bitOffset = bitIndex % 8;
-        return (this.bloomFilter[byteIndex] & (1 << bitOffset)) !== 0;
+        h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+        h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+        return Math.abs(h ^ (h >>> 16));
+    }
+
+    /** Rotates Bloom seeds from CSPRNG and clears the filter to prevent epoch-spanning correlation. */
+    private rotateBloomSeeds() {
+        const buf = new Uint32Array(2);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(buf);
+        } else {
+            buf[0] = (Date.now() & 0xFFFFFFFF) >>> 0;
+            buf[1] = ((Date.now() >> 11) & 0xFFFFFFFF) >>> 0;
+        }
+        this.bloomSeed1 = buf[0] || 0xDEADBEEF;
+        this.bloomSeed2 = buf[1] || 0xCAFEF00D;
+        // Clear filter — entries currently tracked in seenCounts will re-populate naturally
+        this.bloomFilter.fill(0);
     }
 
     // ─── Camuflaje RF: Dummy Traffic Padding a Tasa Constante ───────────────
-
-    private dummyTimer: any = null;
 
     /**
      * Genera un paquete señuelo de tasa constante con entropía criptográfica
@@ -192,6 +238,12 @@ export class SlottedGossipEngine {
                 this.seenCounts.delete(hash);
             }
         }
+        // Rotate Bloom seeds every prune cycle (every 5 min) to prevent inter-epoch fingerprinting
+        this.rotateBloomSeeds();
+        // Re-populate filter from surviving seenCounts entries
+        for (const hash of this.seenCounts.keys()) {
+            this.setBloomBit(hash);
+        }
     }
 
     private updateMetrics() {
@@ -214,6 +266,15 @@ export class SlottedGossipEngine {
             rfBandwidthSavedBytes: 0,
             currentSuppressionRate: 0,
         };
+    }
+
+    public destroy(): void {
+        if (this.pruneTimer) {
+            clearInterval(this.pruneTimer);
+            this.pruneTimer = null;
+        }
+        this.stopDummyPadding();
+        this.seenCounts.clear();
     }
 }
 

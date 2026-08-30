@@ -9,7 +9,7 @@
 import { TokenomicsEngine } from '../network/TokenomicsEngine';
 import { RedAPI } from '../api';
 import { sha256 as nobleSha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex } from '../mesh/meshProtocol';
 
 export interface ChainTransaction {
     id: string;
@@ -100,7 +100,7 @@ export class LocalChainLedger {
             try {
                 const buf = new TextEncoder().encode(data);
                 const digest = await window.crypto.subtle.digest('SHA-256', buf);
-                return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+                return bytesToHex(new Uint8Array(digest));
             } catch {}
         }
         const buf = new TextEncoder().encode(data);
@@ -419,6 +419,15 @@ export class LocalChainLedger {
             return true;
         }
         return false;
+    }
+
+    public destroy(): void {
+        if (this.autoForgeTimer) {
+            clearInterval(this.autoForgeTimer);
+            this.autoForgeTimer = null;
+        }
+        this.listeners.clear();
+        LocalChainLedger.instance = null;
     }
 }
 

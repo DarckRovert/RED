@@ -260,29 +260,27 @@ export default function ChatWindow() {
             return m;
         });
 
-        // Deterministic deduplication pass (eliminates duplicate bubbles from dual SSE + MeshRouter channels)
+        // Deterministic O(N) deduplication pass (eliminates duplicate bubbles from dual SSE + MeshRouter channels)
         const deduped: MessageItem[] = [];
         const seenIds = new Set<string>();
+        const contentWindowMap = new Map<string, { ts: number; index: number }>();
+
         for (const m of validMsgs) {
             if (m.id && seenIds.has(m.id)) continue;
 
             const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
-            const isDup = deduped.some(d => {
-                if (d.id && m.id && d.id === m.id) return true;
-                const dTs = d.timestamp ? (d.timestamp > 1e11 ? d.timestamp / 1000 : d.timestamp) : 0;
-                const timeDiff = Math.abs(dTs - mTs);
-                const dContent = (d.content || '').trim();
-                const mContent = (m.content || '').trim();
-                if (dContent === mContent && Boolean(d.is_mine) === Boolean(m.is_mine) && timeDiff < 30) {
-                    return true;
-                }
-                return false;
-            });
-
-            if (!isDup) {
-                if (m.id) seenIds.add(m.id);
-                deduped.push(m);
+            const contentKey = `${m.is_mine ? '1' : '0'}_${(m.content || '').trim()}`;
+            
+            const existingEntry = contentWindowMap.get(contentKey);
+            if (existingEntry && Math.abs(existingEntry.ts - mTs) < 30) {
+                // Duplicate within 30s window — skip redundant render bubble
+                continue;
             }
+
+            if (m.id) seenIds.add(m.id);
+            const newIndex = deduped.length;
+            deduped.push(m);
+            contentWindowMap.set(contentKey, { ts: mTs, index: newIndex });
         }
 
         // Sort chronologically — messages arrive out-of-order (own: optimistic, peer: SSE delay)
@@ -396,11 +394,14 @@ export default function ChatWindow() {
         }
     };
 
+    const isAtBottomRef = useRef(true);
+
     const handleScroll = useCallback(() => {
         const el = scrollContainerRef.current;
         if (!el) return;
         const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        const isUp = distFromBottom > 150;
+        const isUp = distFromBottom > 120;
+        isAtBottomRef.current = !isUp;
         setShowScrollBottomFab(isUp);
         if (!isUp) {
             setUnreadInChatCount(0);
@@ -409,6 +410,7 @@ export default function ChatWindow() {
 
     const scrollToBottom = useCallback((smooth = true) => {
         messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
+        isAtBottomRef.current = true;
     }, []);
 
     useEffect(() => {
@@ -417,13 +419,19 @@ export default function ChatWindow() {
         if (activeConversationId) markAsRead(activeConversationId);
     }, [activeConversationId]);
 
+    // Intelligent auto-scroll: only scroll to bottom if user is already at bottom or just sent a message
     useEffect(() => {
-        if (showScrollBottomFab) {
-            setUnreadInChatCount(c => c + 1);
-        } else {
+        const lastMsg = convMessages[convMessages.length - 1];
+        const isMine = lastMsg?.is_mine || lastMsg?.sender === 'me';
+
+        if (isMine || isAtBottomRef.current) {
             scrollToBottom(true);
+            setUnreadInChatCount(0);
+        } else {
+            setUnreadInChatCount(c => c + 1);
         }
     }, [convMessages.length]);
+
 
     const [replyTo, setReplyTo] = useState<MessageItem | null>(null);
     const [isRecording, setIsRecording] = useState(false);
@@ -784,7 +792,7 @@ export default function ChatWindow() {
         if (convMessages.length === 0) return;
         setIsSummarizing(true);
         try {
-            const msgStrings = convMessages.map(m => `${m.sender.substring(0, 6)}: ${m.content}`);
+            const msgStrings = (convMessages ?? []).map(m => `${m.sender.substring(0, 6)}: ${m.content}`);
             const summary = await summarizeChannelAI(activeConversationId || 'chat', msgStrings);
             if (summary?.summary_bullets?.length > 0) {
                 toast.info(`🤖 Resumen IA:\n${summary.summary_bullets.join('\n')}`);
@@ -801,7 +809,7 @@ export default function ChatWindow() {
         try {
             const payload = {
                 question: pollData.question,
-                options: pollData.options.map((text, idx) => ({ id: idx, text, votes: 0 })),
+                options: (pollData.options ?? []).map((text, idx) => ({ id: idx, text, votes: 0 })),
                 allow_multiple: Boolean(pollData.allowMultiple),
                 created_at: Math.floor(Date.now() / 1000),
             };
@@ -1130,7 +1138,7 @@ export default function ChatWindow() {
                         </div>
                     </div>
                 ) : (
-                    convMessages.map((msg, index) => {
+                    (convMessages ?? []).map((msg, index) => {
                         const isMine = Boolean(
                             msg.is_mine ||
                             msg.sender === "me" ||

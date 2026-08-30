@@ -59,8 +59,43 @@ export interface ActiveCompanionSession {
 
 // ── WebCrypto Helpers ─────────────────────────────────────────────────────────
 
+const HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, "0"));
+
+function bytesToHex(bytes: Uint8Array): string {
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) {
+        hex += HEX_LUT[bytes[i]];
+    }
+    return hex;
+}
+
+function hexToBytes(hex: string): Uint8Array {
+    if (!hex) return new Uint8Array(0);
+    const clean = hex.replace(/[^0-9a-fA-F]/g, '');
+    const len = clean.length >>> 1;
+    const u8 = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        u8[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
+    }
+    return u8;
+}
+
+function getSubtle(): SubtleCrypto {
+    const c = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
+    if (c?.subtle) return c.subtle;
+    throw new Error('WebCrypto subtle no disponible en este entorno');
+}
+
+function getRandomBytes(len: number): Uint8Array {
+    const buf = new Uint8Array(len);
+    const c = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
+    if (c?.getRandomValues) return c.getRandomValues(buf);
+    for (let i = 0; i < len; i++) buf[i] = Math.floor(Math.random() * 256);
+    return buf;
+}
+
 async function generateEcdhKeyPair(): Promise<CryptoKeyPair> {
-    return await window.crypto.subtle.generateKey(
+    return await getSubtle().generateKey(
         { name: "ECDH", namedCurve: "P-256" },
         true,
         ["deriveKey", "deriveBits"]
@@ -68,17 +103,15 @@ async function generateEcdhKeyPair(): Promise<CryptoKeyPair> {
 }
 
 async function exportPublicKeyHex(key: CryptoKey): Promise<string> {
-    const exported = await window.crypto.subtle.exportKey("raw", key);
-    return Array.from(new Uint8Array(exported))
-        .map(b => b.toString(16).padStart(2, "0"))
-        .join("");
+    const exported = await getSubtle().exportKey("raw", key);
+    return bytesToHex(new Uint8Array(exported));
 }
 
 async function importPublicKeyHex(hex: string): Promise<CryptoKey> {
-    const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-    return await window.crypto.subtle.importKey(
+    const bytes = hexToBytes(hex);
+    return await getSubtle().importKey(
         "raw",
-        bytes,
+        bytes as unknown as BufferSource,
         { name: "ECDH", namedCurve: "P-256" },
         true,
         []
@@ -86,7 +119,7 @@ async function importPublicKeyHex(hex: string): Promise<CryptoKey> {
 }
 
 async function deriveAesKey(privateKey: CryptoKey, peerPublicKey: CryptoKey): Promise<CryptoKey> {
-    return await window.crypto.subtle.deriveKey(
+    return await getSubtle().deriveKey(
         { name: "ECDH", public: peerPublicKey },
         privateKey,
         { name: "AES-GCM", length: 256 },
@@ -96,17 +129,15 @@ async function deriveAesKey(privateKey: CryptoKey, peerPublicKey: CryptoKey): Pr
 }
 
 async function exportAesKeyHex(key: CryptoKey): Promise<string> {
-    const exported = await window.crypto.subtle.exportKey("raw", key);
-    return Array.from(new Uint8Array(exported))
-        .map(b => b.toString(16).padStart(2, "0"))
-        .join("");
+    const exported = await getSubtle().exportKey("raw", key);
+    return bytesToHex(new Uint8Array(exported));
 }
 
 async function importAesKeyHex(hex: string): Promise<CryptoKey> {
-    const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map(byte => parseInt(byte, 16)));
-    return await window.crypto.subtle.importKey(
+    const bytes = hexToBytes(hex);
+    return await getSubtle().importKey(
         "raw",
-        bytes,
+        bytes as unknown as BufferSource,
         { name: "AES-GCM" },
         true,
         ["encrypt", "decrypt"]
@@ -114,26 +145,26 @@ async function importAesKeyHex(hex: string): Promise<CryptoKey> {
 }
 
 async function encryptData(key: CryptoKey, data: any): Promise<{ iv: string; ciphertext: string }> {
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const iv = getRandomBytes(12);
     const encoded = new TextEncoder().encode(JSON.stringify(data));
-    const cipherBuffer = await window.crypto.subtle.encrypt(
-        { name: "AES-GCM", iv },
+    const cipherBuffer = await getSubtle().encrypt(
+        { name: "AES-GCM", iv: iv as unknown as BufferSource },
         key,
-        encoded
+        encoded as unknown as BufferSource
     );
     return {
-        iv: Array.from(iv).map(b => b.toString(16).padStart(2, "0")).join(""),
-        ciphertext: Array.from(new Uint8Array(cipherBuffer)).map(b => b.toString(16).padStart(2, "0")).join("")
+        iv: bytesToHex(iv),
+        ciphertext: bytesToHex(new Uint8Array(cipherBuffer))
     };
 }
 
 async function decryptData(key: CryptoKey, ivHex: string, cipherHex: string): Promise<any> {
-    const iv = new Uint8Array(ivHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-    const cipherBytes = new Uint8Array(cipherHex.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-    const decryptedBuffer = await window.crypto.subtle.decrypt(
-        { name: "AES-GCM", iv },
+    const iv = hexToBytes(ivHex);
+    const cipherBytes = hexToBytes(cipherHex);
+    const decryptedBuffer = await getSubtle().decrypt(
+        { name: "AES-GCM", iv: iv as unknown as BufferSource },
         key,
-        cipherBytes
+        cipherBytes as unknown as BufferSource
     );
     const decodedStr = new TextDecoder().decode(decryptedBuffer);
     return JSON.parse(decodedStr);

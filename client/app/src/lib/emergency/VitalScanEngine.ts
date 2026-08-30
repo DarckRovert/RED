@@ -354,8 +354,15 @@ export class VitalScanEngine {
             validBeats++;
         }
 
-        const maxVal = Math.max(...detrendedRed);
-        const minVal = Math.min(...detrendedRed);
+        let maxVal = -Infinity;
+        let minVal = Infinity;
+        for (let i = 0; i < detrendedRed.length; i++) {
+            if (detrendedRed[i] > maxVal) maxVal = detrendedRed[i];
+            if (detrendedRed[i] < minVal) minVal = detrendedRed[i];
+        }
+        if (maxVal === -Infinity) maxVal = 0;
+        if (minVal === Infinity) minVal = 0;
+
         const acRedAvg = validBeats > 0 ? redACSum / validBeats : (maxVal - minVal);
         const acGreenAvg = validBeats > 0 ? greenACSum / validBeats : 1;
 

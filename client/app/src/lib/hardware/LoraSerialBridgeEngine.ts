@@ -309,13 +309,21 @@ export class LoraSerialBridgeEngine {
 
     public async disconnect() {
         this.telemetry.connected = false;
+        this.rxBuffer = [];
         if (this.serialReader) {
-            await this.serialReader.cancel();
+            await this.serialReader.cancel().catch(() => {});
+            this.serialReader = null;
         }
         if (this.serialPort) {
-            await this.serialPort.close();
+            await this.serialPort.close().catch(() => {});
             this.serialPort = null;
         }
+    }
+
+    public async destroy(): Promise<void> {
+        await this.disconnect();
+        this.rxCallbacks.clear();
+        LoraSerialBridgeEngine.instance = null as any;
     }
 }
 

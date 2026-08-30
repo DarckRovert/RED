@@ -128,17 +128,32 @@ export class CelestialNavigationEngine {
      */
     public estimatePositionFromSolarNoon(
         solarZenithUtcTimeStr: string,
-        maxMeasuredSolarAltitudeDeg: number
+        maxMeasuredSolarAltitudeDeg: number,
+        date: Date = new Date()
     ): { estimatedLat: number; estimatedLon: number } {
-        const [hStr, mStr] = solarZenithUtcTimeStr.split(':');
-        const utcHours = parseFloat(hStr) + parseFloat(mStr) / 60;
+        const parts = solarZenithUtcTimeStr.trim().split(':');
+        const h = parseFloat(parts[0] || '12');
+        const m = parseFloat(parts[1] || '0');
+        const s = parseFloat(parts[2] || '0');
+        const utcHours = isNaN(h) ? 12 : h + (isNaN(m) ? 0 : m / 60) + (isNaN(s) ? 0 : s / 3600);
 
         // Longitud = (12 - UTC_transit) * 15
         const estimatedLon = Math.round(((12 - utcHours) * 15) * 100) / 100;
         
-        // Declinación aproximada actual (ej: ~10° en agosto)
-        const declinationApprox = 9.5;
-        const estimatedLat = Math.round((90 - maxMeasuredSolarAltitudeDeg + declinationApprox) * 100) / 100;
+        // Declinación solar astronómica exacta para la fecha
+        const rad = Math.PI / 180;
+        const deg = 180 / Math.PI;
+        const time = date.getTime();
+        const julianDay = (time / 86400000) - (date.getTimezoneOffset() / 1440) + 2440587.5;
+        const d = julianDay - 2451545.0;
+        const L = (280.460 + 0.9856474 * d) % 360;
+        const g = ((357.528 + 0.9856003 * d) % 360) * rad;
+        const lambda = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+        const epsilon = (23.439 - 0.0000004 * d) * rad;
+        const sinDecl = Math.sin(epsilon) * Math.sin(lambda);
+        const declinationDeg = Math.asin(sinDecl) * deg;
+
+        const estimatedLat = Math.round((90 - maxMeasuredSolarAltitudeDeg + declinationDeg) * 100) / 100;
 
         return {
             estimatedLat,

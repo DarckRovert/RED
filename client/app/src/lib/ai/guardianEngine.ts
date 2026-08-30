@@ -55,7 +55,16 @@ export interface GuardianConfig {
 const STATS_KEY = 'red_guardian_real_stats_v2';
 const CONFIG_KEY = 'red_guardian_config_v2';
 const AUDIT_LOG_KEY = 'red_guardian_audit_log_v2';
+const MAX_GUARDIAN_CACHE = 1000;
 const MEMORY_CACHE = new Map<string, GuardianEvaluation>();
+
+function setMemoryCache(key: string, value: GuardianEvaluation): void {
+    if (MEMORY_CACHE.size >= MAX_GUARDIAN_CACHE) {
+        const oldestKey = MEMORY_CACHE.keys().next().value;
+        if (oldestKey) MEMORY_CACHE.delete(oldestKey);
+    }
+    MEMORY_CACHE.set(key, value);
+}
 
 // 1. Patrones de Explotación Infantil / CSAM (Tolerancia Cero Absoluta)
 const EXPLOITATION_PATTERNS = [
@@ -89,6 +98,17 @@ const LEET_MAP: Record<string, string> = {
     '4': 'a', '@': 'a', '3': 'e', '1': 'i', '!': 'i', '|': 'i',
     '0': 'o', '5': 's', '$': 's', '7': 't', '+': 't', '8': 'b',
 };
+
+// 6. Patrones de Triage Médico y Supervivencia Táctica Legítima (Lista Blanca Contextual)
+const TACTICAL_MEDICAL_PATTERNS = [
+    /\b(primeros\s*auxilios|torniquete|tccc|rcp|hemorragia|fractura|herida|atencion\s*medica|protocolo\s*de\s*emergencia|evacuacion|rescate|socorro|desfibrilador|inmovilizacion|quemadura|asfixia|vendaje|triage|triaje|signos\s*vitales|oxigeno|curacion)\b/i
+];
+
+export function isTacticalMedicalContext(text: string): boolean {
+    if (!text) return false;
+    const clean = text.toLowerCase();
+    return TACTICAL_MEDICAL_PATTERNS.some(p => p.test(clean));
+}
 
 /**
  * Normaliza texto eliminando acentos, caracteres repetidos y sustituciones leetspeak
@@ -281,6 +301,23 @@ export class GuardianEngineClass {
         this.stats.messages_analyzed++;
         this.stats.api_calls_made++;
 
+        // Exención contextual de Triage Médico y Emergencias Tácticas Legítimas
+        if (isTacticalMedicalContext(trimmed)) {
+            const medResult: GuardianEvaluation = {
+                allowed: true,
+                is_clean: true,
+                is_safe: true,
+                threat_score: 0,
+                toxicity_score: 0,
+                feedback: '✅ Protocolo de Emergencia / Triage Médico legítimo validado por Guardián.',
+                confidence: 1.0,
+                executionTimeMs: Math.round(performance.now() - start)
+            };
+            setMemoryCache(normalized, medResult);
+            this.saveState();
+            return medResult;
+        }
+
         // 1. Inferencia Neuronal Real toxic-bert ONNX WASM
         try {
             const neuralEval = await LocalAIEngine.classifySafety(trimmed);
@@ -299,7 +336,7 @@ export class GuardianEngineClass {
                     confidence: neuralEval.confidence,
                     executionTimeMs: Math.round(performance.now() - start),
                 };
-                MEMORY_CACHE.set(normalized, result);
+                setMemoryCache(normalized, result);
                 this.addAuditLog({
                     textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
                     category: neuralEval.category || 'threat',
@@ -336,6 +373,20 @@ export class GuardianEngineClass {
             };
         }
 
+        // Exención contextual de Triage Médico y Emergencias Tácticas Legítimas
+        if (isTacticalMedicalContext(trimmed)) {
+            return {
+                allowed: true,
+                is_clean: true,
+                is_safe: true,
+                threat_score: 0,
+                toxicity_score: 0,
+                feedback: '✅ Protocolo de Emergencia / Triage Médico legítimo validado por Guardián.',
+                confidence: 1.0,
+                executionTimeMs: Math.round(performance.now() - start)
+            };
+        }
+
         // Normalización y Desofuscación con IA Semántica Local
         const normalized = this.config.deobfuscateLeet ? normalizeAndDeobfuscate(trimmed) : trimmed.toLowerCase();
 
@@ -368,7 +419,7 @@ export class GuardianEngineClass {
                 confidence: neuralEval.confidence,
                 executionTimeMs: Math.round(performance.now() - start),
             };
-            MEMORY_CACHE.set(normalized, result);
+            setMemoryCache(normalized, result);
             this.addAuditLog({
                 textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
                 category: neuralEval.category || 'threat',
@@ -400,7 +451,7 @@ export class GuardianEngineClass {
                         confidence: 1.0,
                         executionTimeMs: Math.round(performance.now() - start),
                     };
-                    MEMORY_CACHE.set(normalized, result);
+                    setMemoryCache(normalized, result);
                     this.addAuditLog({
                         textSample: '[CONTENIDO_ILEGAL_CENSURADO]',
                         category: 'nsfw',
@@ -437,7 +488,7 @@ export class GuardianEngineClass {
                         confidence: 0.97,
                         executionTimeMs: Math.round(performance.now() - start),
                     };
-                    MEMORY_CACHE.set(normalized, result);
+                    setMemoryCache(normalized, result);
                     this.addAuditLog({
                         textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
                         category: 'threat',
@@ -474,7 +525,7 @@ export class GuardianEngineClass {
                         confidence: 0.93,
                         executionTimeMs: Math.round(performance.now() - start),
                     };
-                    MEMORY_CACHE.set(normalized, result);
+                    setMemoryCache(normalized, result);
                     this.addAuditLog({
                         textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
                         category: 'spam',
@@ -511,7 +562,7 @@ export class GuardianEngineClass {
                         confidence: 0.92,
                         executionTimeMs: Math.round(performance.now() - start),
                     };
-                    MEMORY_CACHE.set(normalized, result);
+                    setMemoryCache(normalized, result);
                     this.addAuditLog({
                         textSample: '[DATOS_PII_OFUSCADOS_****]',
                         category: 'pii',
@@ -539,7 +590,7 @@ export class GuardianEngineClass {
             confidence: 0.99,
             executionTimeMs: Math.round(performance.now() - start),
         };
-        MEMORY_CACHE.set(normalized, allowedResult);
+        setMemoryCache(normalized, allowedResult);
         this.addAuditLog({
             textSample: trimmed.length > 80 ? trimmed.substring(0, 77) + '...' : trimmed,
             category: 'general',

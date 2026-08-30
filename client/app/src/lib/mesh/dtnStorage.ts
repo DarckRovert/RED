@@ -6,7 +6,7 @@
  * Retains undelivered packets with exponential backoff and cryptographic delivery ACK confirmation.
  */
 
-import { MeshPacket } from './meshProtocol';
+import { MeshPacket, bytesToHex, hexToBytes } from './meshProtocol';
 
 export interface DtnQueueItem {
   id: string; // Packet nonce
@@ -76,27 +76,24 @@ class DtnStorage {
     return this.dbPromise;
   }
 
+  /**
+   * Startup load: loads up to 500 active, unexpired packets across all priority
+   * levels (1..10) via IDBCursor on the priority index (highest priority first).
+   * Ensures that standard direct messages (priority 4), identity handshakes,
+   * payments, and SOS broadcasts are all hydrated into memory across app restarts.
+   */
   private async initAsync() {
     try {
       const db = await this.getDB();
       if (db) {
-        const tx = db.transaction(STORE_NAME, 'readonly');
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-
-        req.onsuccess = () => {
-          if (Array.isArray(req.result) && req.result.length > 0) {
-            this.cache = req.result;
-          } else {
-            // Check fallback localStorage
-            this.loadFromLocalStorageFallback();
-          }
-          this.isInitialized = true;
-        };
-        req.onerror = () => {
+        const activeItems = await this.loadActiveFromDB(db, 500);
+        if (activeItems.length > 0) {
+          this.cache = this.sanitizeItems(activeItems);
+        } else {
+          // No active items in IDB — try localStorage fallback
           this.loadFromLocalStorageFallback();
-          this.isInitialized = true;
-        };
+        }
+        this.isInitialized = true;
       } else {
         this.loadFromLocalStorageFallback();
         this.isInitialized = true;
@@ -107,6 +104,67 @@ class DtnStorage {
     }
   }
 
+  /**
+   * IDBCursor-based loader. Opens the 'priority' index in descending order
+   * and collects up to `limit` unexpired records across all priority levels.
+   */
+  private loadActiveFromDB(
+    db: IDBDatabase,
+    limit: number
+  ): Promise<any[]> {
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const index = tx.objectStore(STORE_NAME).index('priority');
+        const cursor = index.openCursor(null, 'prev'); // highest priority first
+        const results: any[] = [];
+        const now = Date.now();
+
+        cursor.onsuccess = (e: any) => {
+          const cur: IDBCursorWithValue | null = e.target?.result;
+          if (cur && results.length < limit) {
+            const val = cur.value;
+            if (val && typeof val.expiresAt === 'number' && val.expiresAt > now) {
+              results.push(val);
+            }
+            cur.continue();
+          } else {
+            resolve(results);
+          }
+        };
+        cursor.onerror = () => resolve(results);
+      } catch {
+        resolve([]);
+      }
+    });
+  }
+
+  /**
+   * Sanitizes and validates DTN queue records, pruning corrupt or truncated items.
+   */
+  private sanitizeItems(rawList: any[]): DtnQueueItem[] {
+    if (!Array.isArray(rawList)) return [];
+    const validMap = new Map<string, DtnQueueItem>();
+    const now = Date.now();
+
+    for (const item of rawList) {
+      if (
+        item &&
+        typeof item.id === 'string' &&
+        item.id.length > 0 &&
+        item.packet &&
+        typeof item.packet.payloadHex === 'string' &&
+        typeof item.packet.recipient === 'string' &&
+        typeof item.expiresAt === 'number' &&
+        item.expiresAt > now
+      ) {
+        // Enforce valid schema & eliminate duplicates by nonce
+        validMap.set(item.id, item as DtnQueueItem);
+      }
+    }
+    return Array.from(validMap.values());
+  }
+
   private loadFromLocalStorageFallback() {
     if (typeof window === 'undefined') {
       this.cache = [];
@@ -115,8 +173,8 @@ class DtnStorage {
     try {
       const raw = localStorage.getItem(STORAGE_KEY_FALLBACK);
       if (raw) {
-        this.cache = JSON.parse(raw);
-        if (!Array.isArray(this.cache)) this.cache = [];
+        const parsed = JSON.parse(raw);
+        this.cache = this.sanitizeItems(parsed);
       } else {
         this.cache = [];
       }
@@ -136,11 +194,35 @@ class DtnStorage {
       const db = await this.getDB();
       if (db) {
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        tx.objectStore(STORE_NAME).put(item);
+        const req = tx.objectStore(STORE_NAME).put(item);
+        req.onerror = (err: any) => {
+          if (err?.target?.error?.name === 'QuotaExceededError') {
+            console.warn('[DtnStorage] QuotaExceededError detected: Purging low-priority packets');
+            this.purgeLowPriority();
+          }
+        };
       }
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.name === 'QuotaExceededError') {
+        this.purgeLowPriority();
+      }
       console.warn('[DtnStorage] IndexedDB saveItem error:', e);
     }
+  }
+
+  public purgeLowPriority(): number {
+    const items = this.getItems();
+    const initialLen = items.length;
+    // Preservar SOS (10), pagos (8) y handshakes de identidad (6); purgar chunks y telemetría (<=4)
+    const preserved = items.filter(it => it.priority > 4);
+    if (preserved.length !== initialLen) {
+      this.saveItems(preserved);
+      const dropped = items.filter(it => it.priority <= 4);
+      dropped.forEach(d => this.removeItemFromDB(d.id));
+      console.log(`[DtnStorage] Evicted ${dropped.length} low-priority packets to recover storage quota`);
+      return dropped.length;
+    }
+    return 0;
   }
 
   private async removeItemFromDB(id: string) {
@@ -179,36 +261,53 @@ class DtnStorage {
   }
 
   private uint8ToHex(bytes: Uint8Array): string {
-    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    return bytesToHex(bytes);
   }
 
   private hexToUint8(hex: string): Uint8Array {
-    const clean = hex.replace(/[^0-9a-fA-F]/g, '');
-    const len = Math.floor(clean.length / 2);
-    const u8 = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      u8[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);
-    }
-    return u8;
+    return hexToBytes(hex);
   }
 
+  /**
+   * Infers packet priority from clear-text binary header metadata — never from
+   * the encrypted payload (which is AES-GCM ciphertext and produces random bytes).
+   *
+   * Priority scale:
+   *   10 — SOS / broadcast (recipient = all-f broadcast address)
+   *   8  — ACK + encrypted flag set (protocol handshakes requiring timely delivery)
+   *   6  — ACK requested (DELIVERY_ACK / IDENTITY handshakes)
+   *   4  — Standard direct message (default)
+   *   2  — Large multimedia chunk (payload > 16 KB)
+   */
   private calculatePacketPriority(packet: MeshPacket): number {
-    try {
-      const text = new TextDecoder().decode(packet.payload);
-      if (text.includes('"sos"') || text.includes('SOS_BEACON') || text.includes('SOS_ALERT') || text.includes('DISTRESS')) {
-        return 10; // Máxima prioridad: Emergencias y auxilio
-      }
-      if (text.includes('p2p_payment') || text.includes('p2p_voucher') || text.includes('RED_PAY:') || text.includes('voucher')) {
-        return 8; // Alta prioridad: Pagos y transacciones P2P
-      }
-      if (text.includes('DELIVERY_ACK') || text.includes('IDENTITY_ANNOUNCE') || text.includes('IDENTITY_RESPONSE')) {
-        return 6; // Prioridad protocolo: Handshakes y confirmaciones
-      }
-      if (text.includes('"media_chunk"') || text.includes('"voice_chunk"') || text.includes('"file"')) {
-        return 2; // Baja prioridad: Chunks multimedia pesados
-      }
-    } catch {}
-    return 4; // Prioridad estándar para mensajes de texto directo
+    // Broadcast address: recipient is all-zero or all-ff (64 hex chars)
+    const isBroadcast =
+      packet.recipient === 'f'.repeat(64) ||
+      packet.recipient === '0'.repeat(64);
+    if (isBroadcast) {
+      return 10; // SOS / Beacon broadcast — highest priority
+    }
+
+    const hasAckFlag = (packet.flags & 0x02) !== 0;
+    const isEncrypted = (packet.flags & 0x01) !== 0;
+
+    // ACK + encrypted = protocol identity handshake or payment receipt
+    if (hasAckFlag && isEncrypted) {
+      return 8;
+    }
+
+    // ACK requested without encryption = delivery confirmation
+    if (hasAckFlag) {
+      return 6;
+    }
+
+    // Large payload → media chunk; keep at low priority to preserve queue
+    // for high-priority items when quota is tight
+    if (packet.payload.byteLength > 16384) {
+      return 2;
+    }
+
+    return 4; // Standard direct message
   }
 
   public enqueue(packet: MeshPacket, priority?: number, ttlMs = DEFAULT_RETENTION_MS): void {
@@ -245,12 +344,19 @@ class DtnStorage {
       priority: calculatedPriority,
     };
 
-    // If queue is overflowing, prune lowest priority / oldest items
+    // If queue is overflowing, prune lowest priority / oldest items without in-place array mutation
     if (items.length >= MAX_QUEUE_SIZE) {
-      items.sort((a, b) => a.priority === b.priority ? a.createdAt - b.createdAt : a.priority - b.priority);
-      const dropped = items.shift();
+      let lowestIdx = 0;
+      for (let i = 1; i < items.length; i++) {
+        const a = items[i];
+        const lowest = items[lowestIdx];
+        if (a.priority < lowest.priority || (a.priority === lowest.priority && a.createdAt < lowest.createdAt)) {
+          lowestIdx = i;
+        }
+      }
+      const dropped = items.splice(lowestIdx, 1)[0];
       if (dropped) {
-        this.removeItemItemAsync(dropped.id);
+        this.removeItemFromDB(dropped.id);
       }
     }
 
@@ -258,10 +364,6 @@ class DtnStorage {
     this.saveItems(items);
     this.saveItemToDB(item);
     console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} (Priority: ${calculatedPriority}) for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
-  }
-
-  private removeItemItemAsync(id: string) {
-    this.removeItemFromDB(id);
   }
 
   public getItemsToRetry(): DtnQueueItem[] {
@@ -365,6 +467,56 @@ class DtnStorage {
 
   public get count(): number {
     return this.getItems().length;
+  }
+
+  /**
+   * Generates comprehensive telemetry diagnostics for the store-and-forward queue.
+   */
+  public getQueueDiagnostics(): {
+    totalPackets: number;
+    highPriorityCount: number;
+    mediumPriorityCount: number;
+    lowPriorityCount: number;
+    avgAttempts: number;
+    oldestPacketAgeSec: number;
+  } {
+    const items = this.getItems();
+    const total = items.length;
+    if (total === 0) {
+      return {
+        totalPackets: 0,
+        highPriorityCount: 0,
+        mediumPriorityCount: 0,
+        lowPriorityCount: 0,
+        avgAttempts: 0,
+        oldestPacketAgeSec: 0,
+      };
+    }
+
+    const now = Date.now();
+    let high = 0;
+    let med = 0;
+    let low = 0;
+    let totalAttempts = 0;
+    let oldestCreated = now;
+
+    for (const it of items) {
+      if (it.priority >= 6) high++;
+      else if (it.priority >= 4) med++;
+      else low++;
+
+      totalAttempts += (it.attempts || 0);
+      if (it.createdAt < oldestCreated) oldestCreated = it.createdAt;
+    }
+
+    return {
+      totalPackets: total,
+      highPriorityCount: high,
+      mediumPriorityCount: med,
+      lowPriorityCount: low,
+      avgAttempts: +(totalAttempts / total).toFixed(1),
+      oldestPacketAgeSec: Math.max(0, Math.round((now - oldestCreated) / 1000)),
+    };
   }
 
   public clear(): void {

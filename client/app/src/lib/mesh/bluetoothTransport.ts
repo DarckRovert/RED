@@ -1,4 +1,5 @@
 import { BleClient, numberToUUID } from '@capacitor-community/bluetooth-le';
+import { dynamicBearerGovernor } from './DynamicBearerGovernor';
 
 const RED_BLE_SERVICE = "00001818-0000-1000-8000-00805f9b34fb";
 const RED_BLE_WRITE_CHAR = "00002a4d-0000-1000-8000-00805f9b34fb"; // Client writes here (matches native server txChar)
@@ -25,7 +26,6 @@ class BluetoothTransport {
     private isInitialized = false;
     private messageListeners: ((msg: {from: string, payload: Uint8Array}) => void)[] = [];
     private connectedDevices: Set<string> = new Set();
-    private incomingBuffer: Map<string, Uint8Array> = new Map();
     private linkMetrics: Map<string, LinkQualityMetrics> = new Map();
     private negotiatedMtu: Map<string, number> = new Map();
 
@@ -70,7 +70,11 @@ class BluetoothTransport {
         existing.lastSeen = Date.now();
         existing.lqs = this.calculateLqs(rssi, existing.lossRate);
         this.linkMetrics.set(deviceId, existing);
+
+        // Feed real physical radio RSSI into DynamicBearerGovernor
+        dynamicBearerGovernor.updateBearerRssi('BLE', rssi);
     }
+
 
     private unsupportedDevices: Map<string, number> = new Map();
 
@@ -197,6 +201,9 @@ class BluetoothTransport {
         } catch {}
         this.connectedDevices.delete(deviceId);
         this.negotiatedMtu.delete(deviceId);
+        const entry = this.incomingBuffers.get(deviceId);
+        if (entry?.timer) clearTimeout(entry.timer);
+        this.incomingBuffers.delete(deviceId);
     }
 
     async send(deviceId: string, payload: Uint8Array): Promise<boolean> {
@@ -231,27 +238,14 @@ class BluetoothTransport {
         try {
             const CHUNK_SIZE = this.negotiatedMtu.get(deviceId) || 128;
             const totalLength = payload.length;
-            const header = new Uint8Array(4);
-            header[0] = 0xAA;
-            header[1] = 0x55;
-            header[2] = (totalLength >> 8) & 0xFF;
-            header[3] = totalLength & 0xFF;
 
-            // Send header with first chunk if possible
+            // Direct streaming chunking without corrupting payload with ambiguous 0xAA 0x55 header
             let offset = 0;
             while (offset < totalLength) {
-                const isFirst = offset === 0;
-                const sliceLength = Math.min(CHUNK_SIZE - (isFirst ? 4 : 0), totalLength - offset);
-                
-                const chunk = new Uint8Array((isFirst ? 4 : 0) + sliceLength);
-                if (isFirst) {
-                    chunk.set(header, 0);
-                    chunk.set(payload.slice(offset, offset + sliceLength), 4);
-                } else {
-                    chunk.set(payload.slice(offset, offset + sliceLength), 0);
-                }
+                const sliceLength = Math.min(CHUNK_SIZE, totalLength - offset);
+                const chunk = payload.slice(offset, offset + sliceLength);
 
-                const dataView = new DataView(chunk.buffer);
+                const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
                 try {
                     await BleClient.write(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
                 } catch {
@@ -259,7 +253,7 @@ class BluetoothTransport {
                 }
                 offset += sliceLength;
                 
-                // Small delay to prevent GATT buffer overflow
+                // Small delay to prevent GATT buffer overflow on mobile controllers
                 await new Promise(r => setTimeout(r, 16));
             }
 
@@ -286,6 +280,47 @@ class BluetoothTransport {
 
     onMessage(callback: (msg: {from: string, payload: Uint8Array}) => void) {
         this.messageListeners.push(callback);
+    }
+
+    /**
+     * Helper to detect complete JSON frames in incoming buffer for immediate delivery
+     */
+    private findCompleteJsonLength(buffer: Uint8Array): number {
+        if (buffer.length === 0) return 0;
+        const firstChar = buffer[0];
+        if (firstChar !== 0x7B /* '{' */ && firstChar !== 0x5B /* '[' */) return 0;
+        
+        const openChar = firstChar;
+        const closeChar = firstChar === 0x7B ? 0x7D /* '}' */ : 0x5D /* ']' */;
+        
+        let depth = 0;
+        let inString = false;
+        let isEscaped = false;
+
+        for (let i = 0; i < buffer.length; i++) {
+            const b = buffer[i];
+            if (inString) {
+                if (isEscaped) {
+                    isEscaped = false;
+                } else if (b === 0x5C /* '\\' */) {
+                    isEscaped = true;
+                } else if (b === 0x22 /* '"' */) {
+                    inString = false;
+                }
+            } else {
+                if (b === 0x22 /* '"' */) {
+                    inString = true;
+                } else if (b === openChar) {
+                    depth++;
+                } else if (b === closeChar) {
+                    depth--;
+                    if (depth === 0) {
+                        return i + 1;
+                    }
+                }
+            }
+        }
+        return 0;
     }
 
     /**
@@ -319,35 +354,29 @@ class BluetoothTransport {
 
         // Process frames from accumulated buffer
         while (entry.buffer.length >= 4) {
-            if (entry.expectedLen === 0) {
-                // Check if buffer starts with 4-byte length prefix
-                const totalLen = ((entry.buffer[0] << 24) >>> 0) + (entry.buffer[1] << 16) + (entry.buffer[2] << 8) + entry.buffer[3];
-                const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
+            const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
 
-                // If magic starts at offset 0 (raw RED packet without 4-byte prefix)
+            if (entry.expectedLen === 0) {
+                // 1. Raw RED MeshPacket (Magic 0x52454401 at offset 0)
                 if (view.getUint32(0, false) === 0x52454401) {
                     if (entry.buffer.length >= 96) {
                         const payloadLen = view.getUint16(70, true);
                         entry.expectedLen = 96 + payloadLen;
                     } else {
-                        break; // Wait for full 96-byte header
+                        break; // Wait for full 96-byte RED header
                     }
-                } else if (totalLen > 0 && totalLen <= 10 * 1024 * 1024) {
-                    // Standard 4-byte prefixed packet
-                    entry.expectedLen = totalLen;
                 } else {
-                    // Check if magic starts at offset 4
-                    if (entry.buffer.length >= 8 && view.getUint32(4, false) === 0x52454401) {
-                        if (entry.buffer.length >= 100) {
-                            const payloadLen = view.getUint16(74, true);
-                            entry.expectedLen = 96 + payloadLen;
-                        } else {
-                            break;
-                        }
+                    // 2. Direct JSON envelope detection (e.g. handshakes, P2P announcements)
+                    const jsonLen = this.findCompleteJsonLength(entry.buffer);
+                    if (jsonLen > 0) {
+                        entry.expectedLen = jsonLen;
+                    } else if (entry.buffer[0] === 0x7B || entry.buffer[0] === 0x5B) {
+                        // Incomplete JSON object/array — wait for more chunks
+                        break;
                     } else {
-                        // Resync buffer: scan for magic 0x52454401
+                        // 3. Scan for magic 0x52454401 to resynchronize buffer
                         let syncIdx = -1;
-                        for (let i = 1; i < entry.buffer.length - 3; i++) {
+                        for (let i = 1; i <= entry.buffer.length - 4; i++) {
                             if (view.getUint32(i, false) === 0x52454401) {
                                 syncIdx = i;
                                 break;
@@ -357,23 +386,21 @@ class BluetoothTransport {
                             entry.buffer = entry.buffer.slice(syncIdx);
                             continue;
                         } else {
-                            break;
+                            // 4. Fallback: check 4-byte big-endian length prefix for custom payloads
+                            const totalLen = view.getUint32(0, false);
+                            if (totalLen > 0 && totalLen <= 10 * 1024 * 1024) {
+                                entry.expectedLen = 4 + totalLen;
+                            } else {
+                                break;
+                            }
                         }
                     }
                 }
             }
 
-            const view = new DataView(entry.buffer.buffer, entry.buffer.byteOffset, entry.buffer.byteLength);
-            const startsWithMagic = view.getUint32(0, false) === 0x52454401;
-            const hasHeaderPrefix = !startsWithMagic && entry.buffer.length >= 4;
-            const requiredBytes = (hasHeaderPrefix ? 4 : 0) + entry.expectedLen;
-
-            if (entry.buffer.length >= requiredBytes && entry.expectedLen > 0) {
-                const packetSlice = hasHeaderPrefix
-                    ? entry.buffer.slice(4, 4 + entry.expectedLen)
-                    : entry.buffer.slice(0, entry.expectedLen);
-
-                entry.buffer = entry.buffer.slice(requiredBytes);
+            if (entry.expectedLen > 0 && entry.buffer.length >= entry.expectedLen) {
+                const packetSlice = entry.buffer.slice(0, entry.expectedLen);
+                entry.buffer = entry.buffer.slice(entry.expectedLen);
                 entry.expectedLen = 0;
 
                 // Emit assembled packet

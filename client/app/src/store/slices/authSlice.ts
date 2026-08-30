@@ -950,23 +950,18 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 return true;
             });
 
-            // Deduplicate contacts by canonical identity_hash AND smart alias merging
+            // Deduplicate contacts by canonical identity_hash
             const dedupedConts: any[] = [];
-            const staleHashesToPurge: string[] = [];
 
             for (const ct of cleanConts) {
                 const rawH = normalizeIdentity(ct.identity_hash || '');
                 const canonicalH = meshRouter.getCanonicalId(rawH) || rawH;
                 const isCanonical64 = canonicalH.length === 64 && /^[0-9a-fA-F]+$/.test(canonicalH);
-                const ctName = ct.display_name?.trim() || '';
 
                 const existingIdx = dedupedConts.findIndex(existing => {
                     const eH = normalizeIdentity(existing.identity_hash || '');
                     if (eH === canonicalH || eH === rawH) return true;
-                    if (canonicalH.length >= 16 && eH.length >= 16 && (canonicalH.startsWith(eH.slice(0, 16)) || eH.startsWith(canonicalH.slice(0, 16)))) return true;
-                    // Name similarity match for non-generic names
-                    const eName = existing.display_name?.trim() || '';
-                    if (isNameSimilar(ctName, eName)) return true;
+                    if (isCanonical64 && eH.length === 64 && eH === canonicalH) return true;
                     return false;
                 });
 
@@ -982,24 +977,10 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     const existingIs64 = existingH.length === 64 && /^[0-9a-fA-F]+$/.test(existingH);
 
                     let bestHash = existingH;
-                    let staleHash = '';
-
                     if (!existingIs64 && isCanonical64) {
                         bestHash = canonicalH;
-                        staleHash = existingH;
-                    } else if (existingIs64 && !isCanonical64) {
-                        bestHash = existingH;
-                        staleHash = canonicalH;
-                    } else if (canonicalH.startsWith('local_') && !existingH.startsWith('local_')) {
-                        bestHash = existingH;
-                        staleHash = canonicalH;
                     } else if (existingH.startsWith('local_') && !canonicalH.startsWith('local_')) {
                         bestHash = canonicalH;
-                        staleHash = existingH;
-                    }
-
-                    if (staleHash && staleHash !== bestHash) {
-                        staleHashesToPurge.push(staleHash);
                     }
 
                     const isGeneric = (n?: string) => !n || n.startsWith('Operador ') || n.startsWith('Nodo ') || n.startsWith('Par Escaneado') || n.startsWith('Dispositivo RED');
@@ -1015,13 +996,6 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                         display_name: chosenDisplayName,
                         public_key: ct.public_key || existing.public_key
                     };
-                }
-            }
-
-            // Purge stale ephemeral hashes from backend in the background
-            if (staleHashesToPurge.length > 0) {
-                for (const sh of staleHashesToPurge) {
-                    RedAPI.req(`/contacts/${sh}`, { method: 'DELETE' }).catch(() => {});
                 }
             }
 
@@ -1047,8 +1021,6 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             const p = normalizeIdentity(c.peer || c.id || '');
                             const n = (c.name || c.display_name || '').toLowerCase();
                             if (p === 'me' || p === 'local' || n === 'operador me' || (myHash && (p === myHash || myHash.startsWith(p)))) return false;
-                            if (staleHashesToPurge.includes(p)) return false;
-                            if (p.startsWith('local_') && dedupedConts.some(dc => isNameSimilar(dc.display_name, c.name || c.display_name))) return false;
                             return true;
                         }).map((c: any) => {
                             if (c.last_message && (c.last_message.startsWith('{"') || c.last_message.includes('contact_request') || c.last_message.includes('contact_response'))) {
@@ -1073,7 +1045,6 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             const h = normalizeIdentity(c.identity_hash || '');
                             const n = (c.display_name || '').toLowerCase();
                             if (h === 'me' || h === 'local' || n === 'operador me' || (myHash && (h === myHash || myHash.startsWith(h)))) return false;
-                            if (staleHashesToPurge.includes(h)) return false;
                             return true;
                         });
                         localStorage.setItem('red_web_contacts', JSON.stringify(filtered));
@@ -1087,19 +1058,14 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
 
             for (const c of dedupedConvs) {
                 const rawP = normalizeIdentity(c.peer || c.id || '');
-                if (staleHashesToPurge.includes(rawP)) continue;
                 const canonicalP = meshRouter.getCanonicalId(rawP) || rawP;
-                if (staleHashesToPurge.includes(canonicalP)) continue;
                 const key = canonicalP.slice(0, 16);
                 if (key) mergedMap.set(key, { ...c, id: canonicalP, peer: canonicalP });
             }
 
             for (const lc of localConvs) {
                 const rawP = normalizeIdentity(lc.peer || lc.id || '');
-                if (staleHashesToPurge.includes(rawP)) continue;
                 const canonicalP = meshRouter.getCanonicalId(rawP) || rawP;
-                if (staleHashesToPurge.includes(canonicalP)) continue;
-                if (rawP.startsWith('local_') && dedupedConts.some(dc => isNameSimilar(dc.display_name, (lc as any).name || (lc as any).display_name))) continue;
                 const key = canonicalP.slice(0, 16);
                 if (!key) continue;
                 if (!mergedMap.has(key)) {

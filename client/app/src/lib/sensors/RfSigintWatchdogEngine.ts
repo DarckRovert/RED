@@ -129,10 +129,21 @@ export class RfSigintWatchdogEngine {
         let type: EmitterType = 'UNKNOWN_BLE';
         let isSuspicious = false;
 
+        const mfgData = result.manufacturerData;
+        const serviceUuids = result.serviceData || result.uuids;
+
         if (name && (name.toLowerCase().includes('drone') || name.toLowerCase().includes('dji') || name.toLowerCase().includes('opendroneid') || name.toLowerCase().includes('remoteid'))) {
             type = 'OPEN_DRONE_ID';
             isSuspicious = true;
+        } else if (serviceUuids && Object.keys(serviceUuids).some(k => k.toLowerCase().includes('fffa') || k.toLowerCase().includes('0000fffa'))) {
+            // OpenDroneID ASTM F3411 Service UUID 0xFFFA
+            type = 'OPEN_DRONE_ID';
+            isSuspicious = true;
         } else if (name && (name.toLowerCase().includes('airtag') || name.toLowerCase().includes('smarttag') || name.toLowerCase().includes('tile'))) {
+            type = 'APPLE_FIND_MY';
+            isSuspicious = true;
+        } else if (mfgData && (mfgData['76'] || mfgData['0x004c'] || mfgData['004c'])) {
+            // Apple Manufacturer ID 0x004C (AirTag / Find My network beacon)
             type = 'APPLE_FIND_MY';
             isSuspicious = true;
         } else if (name && name.toLowerCase().startsWith('red-')) {
@@ -161,11 +172,31 @@ export class RfSigintWatchdogEngine {
             });
         }
 
+        // Evicción periódica de emisores obsoletos (> 10 minutos)
+        if (this.emitters.size > 200) {
+            for (const [id, em] of this.emitters.entries()) {
+                if (now - em.lastSeen > 600000) {
+                    this.emitters.delete(id);
+                }
+            }
+        }
+
         this.notify();
     }
 
     public getEmitters(): DetectedEmitter[] {
         return Array.from(this.emitters.values()).sort((a, b) => b.lastSeen - a.lastSeen);
+    }
+
+    public destroy(): void {
+        this.stopScanning().catch(() => {});
+        if (this.scanInterval) {
+            clearInterval(this.scanInterval);
+            this.scanInterval = null;
+        }
+        this.emitters.clear();
+        this.listeners.clear();
+        RfSigintWatchdogEngine.instance = null;
     }
 }
 

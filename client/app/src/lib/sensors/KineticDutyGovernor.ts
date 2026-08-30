@@ -30,12 +30,12 @@ export class KineticDutyGovernor {
     private kineticEnergyScore: number = 0;
     private lastMotionTimestamp: number = Date.now();
     private isShakeBoostActive: boolean = false;
-    private shakeBoostTimer: NodeJS.Timeout | null = null;
+    private shakeBoostTimer: any = null;
 
     // Rolling accelerometer window
     private accelReadings: number[] = [];
     private maxWindowSize: number = 10;
-    private motionInterval: NodeJS.Timeout | null = null;
+    private motionInterval: any = null;
 
     private constructor() {
         this.initSensors();
@@ -146,6 +146,14 @@ export class KineticDutyGovernor {
         this.evaluateProfile();
     }
 
+    public setHardwareBattery(levelPercent: number, isCharging = false) {
+        if (!isNaN(levelPercent) && levelPercent >= 0 && levelPercent <= 100) {
+            this.batteryLevel = Math.round(levelPercent);
+            this.isCharging = !!isCharging;
+            this.evaluateProfile();
+        }
+    }
+
     public getTelemetry(): KineticTelemetry {
         let profile: DutyCycleProfile = "BALANCED_PATROL";
         let bleScanIntervalMs = 4000;
@@ -187,14 +195,41 @@ export class KineticDutyGovernor {
         };
     }
 
+    private lastEmittedTime: number = 0;
+    private lastEmittedProfile: DutyCycleProfile = "BALANCED_PATROL";
+
     public subscribe(listener: (telemetry: KineticTelemetry) => void): () => void {
         this.listeners.add(listener);
         listener(this.getTelemetry());
         return () => this.listeners.delete(listener);
     }
 
-    private evaluateProfile() {
+    private evaluateProfile(force = false) {
         const telemetry = this.getTelemetry();
-        this.listeners.forEach(fn => fn(telemetry));
+        const now = Date.now();
+        const profileChanged = telemetry.currentProfile !== this.lastEmittedProfile;
+
+        // Rate-limit UI React dispatches to 1Hz unless an active profile transition occurred
+        if (!force && !profileChanged && now - this.lastEmittedTime < 1000) {
+            return;
+        }
+
+        this.lastEmittedTime = now;
+        this.lastEmittedProfile = telemetry.currentProfile;
+        this.listeners.forEach(fn => {
+            try { fn(telemetry); } catch (err) { console.error('[KineticDutyGovernor] Subscriber callback error:', err); }
+        });
+    }
+
+    public destroy() {
+        if (this.motionInterval) {
+            clearInterval(this.motionInterval);
+            this.motionInterval = null;
+        }
+        if (this.shakeBoostTimer) {
+            clearTimeout(this.shakeBoostTimer);
+            this.shakeBoostTimer = null;
+        }
+        this.listeners.clear();
     }
 }

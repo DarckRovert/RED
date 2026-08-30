@@ -24,9 +24,16 @@ export interface SearchResult {
 export class VectorKnowledgeStore {
     private static instance: VectorKnowledgeStore;
     private documents: KnowledgeDocument[] = [];
+    /** Promesa resuelta cuando la base táctica ha sido completamente indexada */
+    private _ready: Promise<void>;
 
     private constructor() {
-        this.loadPreloadedTacticalBase();
+        this._ready = this.loadPreloadedTacticalBase();
+    }
+
+    /** Esperar a que el índice esté completamente cargado antes de buscar */
+    public ready(): Promise<void> {
+        return this._ready;
     }
 
     public static getInstance(): VectorKnowledgeStore {
@@ -69,7 +76,7 @@ export class VectorKnowledgeStore {
                 fnv ^= token.charCodeAt(i);
                 fnv = Math.imul(fnv, 0x01000193);
             }
-            const dim = Math.abs(fnv) % dimensions;
+            const dim = (fnv >>> 0) % dimensions;
             vec[dim] = Math.max(-128, Math.min(127, vec[dim] + 28));
         }
 
@@ -108,6 +115,9 @@ export class VectorKnowledgeStore {
     // ─── Búsqueda Semántica K-NN Offline ────────────────────────────────────────
 
     public async search(query: string, topK = 3): Promise<SearchResult[]> {
+        // Garantizar que el índice esté completamente cargado antes de buscar
+        await this._ready;
+
         const t0 = performance.now();
         const queryVec = VectorKnowledgeStore.generateEmbedding(query);
 
@@ -130,7 +140,10 @@ export class VectorKnowledgeStore {
 
     // ─── Base Táctica Precargada de Supervivencia TCCC ──────────────────────────
 
-    private loadPreloadedTacticalBase() {
+    private static readonly RAG_CACHE_KEY = 'red_rag_index_v1';
+    private static readonly RAG_VERSION = 1;
+
+    private async loadPreloadedTacticalBase() {
         const rawDocs: Array<Omit<KnowledgeDocument, 'vectorInt8'>> = [
             {
                 id: 'tccc-01-massive-bleed',
@@ -183,18 +196,94 @@ export class VectorKnowledgeStore {
             }
         ];
 
+        // Intento de carga rápida desde caché de vectores
+        let cached: Record<string, number[]> | null = null;
+        try {
+            if (typeof localStorage !== 'undefined') {
+                const raw = localStorage.getItem(VectorKnowledgeStore.RAG_CACHE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed.version === VectorKnowledgeStore.RAG_VERSION && parsed.vectors) {
+                        cached = parsed.vectors;
+                    }
+                }
+            }
+        } catch {}
+
+        const newCache: Record<string, number[]> = {};
+
         for (const doc of rawDocs) {
-            const combinedText = `${doc.title} ${doc.content} ${doc.tags.join(' ')}`;
-            const vectorInt8 = VectorKnowledgeStore.generateEmbedding(combinedText);
+            let vectorInt8: Int8Array;
+            if (cached && cached[doc.id] && cached[doc.id].length === 64) {
+                vectorInt8 = new Int8Array(cached[doc.id]);
+            } else {
+                const combinedText = `${doc.title} ${doc.content} ${doc.tags.join(' ')}`;
+                vectorInt8 = VectorKnowledgeStore.generateEmbedding(combinedText);
+            }
+            newCache[doc.id] = Array.from(vectorInt8);
             this.documents.push({
                 ...doc,
                 vectorInt8,
             });
         }
+
+        // Persistir en caché local para arranque instantáneo
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(VectorKnowledgeStore.RAG_CACHE_KEY, JSON.stringify({
+                    version: VectorKnowledgeStore.RAG_VERSION,
+                    vectors: newCache,
+                    updatedAt: Date.now(),
+                }));
+            }
+        } catch {}
     }
 
     public getDocumentCount(): number {
         return this.documents.length;
+    }
+
+    public getAllDocuments(): KnowledgeDocument[] {
+        return [...this.documents];
+    }
+
+    public addDocument(doc: {
+        id: string;
+        category: KnowledgeDocument['category'];
+        title: string;
+        content: string;
+        tags: string[];
+    }): KnowledgeDocument {
+        const combinedText = `${doc.title} ${doc.content} ${doc.tags.join(' ')}`;
+        const vectorInt8 = VectorKnowledgeStore.generateEmbedding(combinedText);
+        const fullDoc: KnowledgeDocument = {
+            ...doc,
+            vectorInt8,
+        };
+        const existingIdx = this.documents.findIndex(d => d.id === doc.id);
+        if (existingIdx >= 0) {
+            this.documents[existingIdx] = fullDoc;
+        } else {
+            this.documents.push(fullDoc);
+        }
+
+        // Persistir el índice actualizado para que los documentos dinámicos
+        // sobrevivan entre sesiones y sean precargados en el próximo arranque
+        try {
+            if (typeof localStorage !== 'undefined') {
+                const existing = localStorage.getItem(VectorKnowledgeStore.RAG_CACHE_KEY);
+                const parsed = existing ? JSON.parse(existing) : { version: VectorKnowledgeStore.RAG_VERSION, vectors: {} };
+                const vectors: Record<string, number[]> = parsed.vectors || {};
+                vectors[fullDoc.id] = Array.from(vectorInt8);
+                localStorage.setItem(VectorKnowledgeStore.RAG_CACHE_KEY, JSON.stringify({
+                    version: VectorKnowledgeStore.RAG_VERSION,
+                    vectors,
+                    updatedAt: Date.now(),
+                }));
+            }
+        } catch {}
+
+        return fullDoc;
     }
 }
 

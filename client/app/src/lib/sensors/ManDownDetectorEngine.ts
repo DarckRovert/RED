@@ -121,6 +121,12 @@ export class ManDownDetectorEngine {
     private startMotionTracking() {
         if (typeof window === 'undefined') return;
 
+        // Limpiar listener previo si ya existía para evitar listeners duplicados
+        if (this.motionListener) {
+            window.removeEventListener('devicemotion', this.motionListener);
+            this.motionListener = null;
+        }
+
         this.motionListener = (e: DeviceMotionEvent) => {
             const acc = e.accelerationIncludingGravity || e.acceleration;
             if (!acc) return;
@@ -135,8 +141,14 @@ export class ManDownDetectorEngine {
             this.lastMagnitude = magnitudeG;
 
             // Detectar micro-movimientos (> 0.15g de variación respecto a reposo)
-            if (Math.abs(magnitudeG - 1.0) > 0.15) {
+            const motionDelta = Math.abs(magnitudeG - 1.0);
+            if (motionDelta > 0.15) {
                 this.lastMotionTime = Date.now();
+            }
+
+            // Auto-cancelación si el operador se mueve activamente (> 0.45g) durante la cuenta regresiva
+            if ((this.state === 'PRE_ALARM_COUNTDOWN' || this.state === 'IMPACT_DETECTED') && motionDelta > 0.45) {
+                this.cancelPreAlarm();
             }
 
             // Detectar impacto severo
@@ -232,6 +244,12 @@ export class ManDownDetectorEngine {
             window.removeEventListener('devicemotion', this.motionListener);
             this.motionListener = null;
         }
+    }
+
+    public destroy(): void {
+        this.disarmSentry();
+        this.listeners.clear();
+        ManDownDetectorEngine.instance = null;
     }
 }
 

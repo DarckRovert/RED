@@ -241,4 +241,14 @@ export class TacticalAudioEngine {
             osc.stop(now + 0.36);
         } catch {}
     }
+
+    /**
+     * Cierra el AudioContext y libera los recursos de audio de la interfaz táctica.
+     */
+    public static destroy(): void {
+        if (this.ctx && this.ctx.state !== "closed") {
+            try { this.ctx.close().catch(() => {}); } catch {}
+            this.ctx = null;
+        }
+    }
 }

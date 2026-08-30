@@ -85,7 +85,7 @@ impl Consensus {
             ));
         }
 
-        let mut validators = self.validators.write().unwrap();
+        let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
         
         if validators.contains_key(&public_key) {
             return Err(BlockchainError::ConsensusError(
@@ -106,7 +106,7 @@ impl Consensus {
 
     /// Add stake to existing validator
     pub fn add_stake(&self, public_key: &[u8; 32], amount: u64) -> BlockchainResult<()> {
-        let mut validators = self.validators.write().unwrap();
+        let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
         
         let validator = validators.get_mut(public_key)
             .ok_or_else(|| BlockchainError::ConsensusError(
@@ -119,7 +119,7 @@ impl Consensus {
 
     /// Remove stake from validator
     pub fn remove_stake(&self, public_key: &[u8; 32], amount: u64) -> BlockchainResult<()> {
-        let mut validators = self.validators.write().unwrap();
+        let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
         
         let validator = validators.get_mut(public_key)
             .ok_or_else(|| BlockchainError::ConsensusError(
@@ -144,7 +144,7 @@ impl Consensus {
 
     /// Select leader for a slot
     pub fn select_leader(&self, slot: u64) -> Option<[u8; 32]> {
-        let validators = self.validators.read().unwrap();
+        let validators = self.validators.read().unwrap_or_else(|e| e.into_inner());
         
         let mut active_validators: Vec<_> = validators.values()
             .filter(|v| v.active)
@@ -168,7 +168,8 @@ impl Consensus {
 
         // Deterministic selection based on slot
         let seed = blake3::hash(&slot.to_le_bytes());
-        let seed_value = u64::from_le_bytes(seed.as_bytes()[..8].try_into().unwrap());
+        let seed_bytes: [u8; 8] = seed.as_bytes()[..8].try_into().unwrap_or([0u8; 8]);
+        let seed_value = u64::from_le_bytes(seed_bytes);
         let target = seed_value % total_weight;
 
         let mut cumulative = 0u64;
@@ -203,7 +204,7 @@ impl Consensus {
 
     /// Record block production
     pub fn record_block_produced(&self, validator: &[u8; 32]) {
-        let mut validators = self.validators.write().unwrap();
+        let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
         if let Some(v) = validators.get_mut(validator) {
             v.blocks_produced += 1;
         }
@@ -211,7 +212,7 @@ impl Consensus {
 
     /// Record missed slot
     pub fn record_missed_slot(&self, validator: &[u8; 32]) {
-        let mut validators = self.validators.write().unwrap();
+        let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
         if let Some(v) = validators.get_mut(validator) {
             v.missed_slots += 1;
         }
@@ -222,7 +223,7 @@ impl Consensus {
     /// - `DoubleSign`: removes 20% of stake and immediately deactivates.
     /// - `Downtime`: removes 5% of stake; deactivates if below min stake.
     pub fn slash_validator(&self, public_key: &[u8; 32], reason: SlashReason) -> BlockchainResult<()> {
-        let mut validators = self.validators.write().unwrap();
+        let mut validators = self.validators.write().unwrap_or_else(|e| e.into_inner());
         let v = validators.get_mut(public_key)
             .ok_or_else(|| BlockchainError::ConsensusError("Validator not found".to_string()))?;
 
@@ -257,12 +258,12 @@ impl Consensus {
 
     /// Get a read-only snapshot of all validators (for tests and status endpoints)
     pub fn get_validators(&self) -> HashMap<[u8; 32], Validator> {
-        self.validators.read().unwrap().clone()
+        self.validators.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Get active validator count
     pub fn active_validator_count(&self) -> usize {
-        self.validators.read().unwrap()
+        self.validators.read().unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|v| v.active)
             .count()
@@ -270,7 +271,7 @@ impl Consensus {
 
     /// Get total staked amount
     pub fn total_stake(&self) -> u64 {
-        self.validators.read().unwrap()
+        self.validators.read().unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|v| v.active)
             .map(|v| v.stake)
@@ -279,22 +280,22 @@ impl Consensus {
 
     /// Get current epoch
     pub fn current_epoch(&self) -> u64 {
-        *self.epoch.read().unwrap()
+        *self.epoch.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get current slot
     pub fn current_slot(&self) -> u64 {
-        *self.current_slot.read().unwrap()
+        *self.current_slot.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Advance to next slot
     pub fn advance_slot(&self) {
-        let mut slot = self.current_slot.write().unwrap();
+        let mut slot = self.current_slot.write().unwrap_or_else(|e| e.into_inner());
         *slot += 1;
 
         // Check for epoch transition
         if (*slot).is_multiple_of(self.slots_per_epoch) {
-            let mut epoch = self.epoch.write().unwrap();
+            let mut epoch = self.epoch.write().unwrap_or_else(|e| e.into_inner());
             *epoch += 1;
         }
     }
@@ -318,7 +319,7 @@ impl Consensus {
         loop {
             interval.tick().await;
 
-            let current_slot = *self.current_slot.read().unwrap();
+            let current_slot = *self.current_slot.read().unwrap_or_else(|e| e.into_inner());
             self.advance_slot();
 
             // Check if we are the leader for this slot

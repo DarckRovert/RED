@@ -40,13 +40,17 @@ impl VoiceStore {
             sample_rate: req.sample_rate.unwrap_or(16000),
         };
 
-        let mut map = self.bursts.write().unwrap();
-        map.entry(sender_did).or_default().push(burst.clone());
+        let mut map = self.bursts.write().unwrap_or_else(|e| e.into_inner());
+        let list = map.entry(sender_did).or_default();
+        list.push(burst.clone());
+        if list.len() > 100 {
+            list.drain(0..list.len() - 100);
+        }
         burst
     }
 
     pub fn get_recent_bursts(&self, limit: usize) -> Vec<VoiceBurst> {
-        let map = self.bursts.read().unwrap();
+        let map = self.bursts.read().unwrap_or_else(|e| e.into_inner());
         let mut all: Vec<VoiceBurst> = map.values().flatten().cloned().collect();
         all.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         all.into_iter().take(limit).collect()

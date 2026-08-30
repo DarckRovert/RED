@@ -25,15 +25,17 @@ export class SoundMeshEngine {
     private static isReceiving = false;
     private static micStream: MediaStream | null = null;
     private static onPacketCallback: ((pkt: SoundMeshPacket) => void) | null = null;
-    private static sampleInterval: NodeJS.Timeout | null = null;
+    private static sampleInterval: any = null;
 
-    private static getAudioContext(): AudioContext {
-        if (!this.audioCtx) {
+    private static getAudioContext(): AudioContext | null {
+        if (!this.audioCtx && typeof window !== 'undefined') {
             const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-            this.audioCtx = new AudioCtxClass();
+            if (AudioCtxClass) {
+                this.audioCtx = new AudioCtxClass();
+            }
         }
-        if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume().catch(() => {});
         }
         return this.audioCtx;
     }
@@ -157,6 +159,7 @@ export class SoundMeshEngine {
     public static async transmitPayload(payload: string | Uint8Array): Promise<boolean> {
         try {
             const ctx = this.getAudioContext();
+            if (!ctx) return false;
             const rawBytes = typeof payload === 'string' ? new TextEncoder().encode(payload) : payload;
             const framedBytes = this.framePacket(rawBytes);
 
@@ -231,6 +234,7 @@ export class SoundMeshEngine {
         try {
             this.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } });
             const ctx = this.getAudioContext();
+            if (!ctx) return false;
             const source = ctx.createMediaStreamSource(this.micStream);
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
@@ -247,31 +251,40 @@ export class SoundMeshEngine {
 
             let isDecoding = false;
             let receivingBits: number[] = [];
-            let totalBitsToRead = 0;
+            let syncBitIndex = -1;
+            let totalBitsToRead = 2072;
 
             const listenLoop = () => {
                 if (!this.isReceiving) return;
                 analyser.getFloatFrequencyData(dataArray);
 
                 const dbPreamble = dataArray[binPreamble] || -120;
+                // Piso de ruido estimado en frecuencias adyacentes seguras
+                const noiseLeft = dataArray[Math.max(0, binPreamble - 6)] || -120;
+                const noiseRight = dataArray[Math.min(bufferLength - 1, binPreamble + 6)] || -120;
+                const noiseFloor = (noiseLeft + noiseRight) / 2;
+                const snrDb = dbPreamble - noiseFloor;
 
-                // Detect preamble signal > -70 dB to synchronize symbol clock
-                if (!isDecoding && dbPreamble > -70) {
+                // Detect preamble signal with dynamic SNR tracking (SNR >= +12 dB and signal > -85 dB, or strong signal > -68 dB)
+                const isPreambleTriggered = (dbPreamble > -85 && snrDb >= 12) || (dbPreamble > -68);
+
+                if (!isDecoding && isPreambleTriggered) {
                     isDecoding = true;
                     receivingBits = [];
-                    // Initial expectation: Header (16b sync + 8b len = 24b) + max 255B payload + 16b CRC = up to 2072 bits
+                    syncBitIndex = -1;
                     totalBitsToRead = 2072;
 
                     let sampledCount = 0;
                     if (this.sampleInterval) clearInterval(this.sampleInterval);
 
+                    const syncPattern = [1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 1]; // 0xD391
+
                     // Symbol-timed sampling every 40ms
                     this.sampleInterval = setInterval(() => {
-                        if (!this.isReceiving || sampledCount >= totalBitsToRead) {
+                        if (!this.isReceiving) {
                             if (this.sampleInterval) clearInterval(this.sampleInterval);
                             this.sampleInterval = null;
                             isDecoding = false;
-                            this.processReceivedBits(receivingBits, dbPreamble);
                             return;
                         }
 
@@ -279,23 +292,37 @@ export class SoundMeshEngine {
                         const dbM = dataArray[binMark] || -120;
                         const dbS = dataArray[binSpace] || -120;
 
-                        if (dbM >= dbS) {
-                            receivingBits.push(1);
-                        } else {
-                            receivingBits.push(0);
-                        }
+                        receivingBits.push(dbM >= dbS ? 1 : 0);
+                        sampledCount++;
 
-                        // Dynamically adjust totalBitsToRead once length byte is received (bit 24)
-                        if (receivingBits.length === 24) {
-                            const syncWord = (receivingBits.slice(0, 8).reduce((acc, b) => (acc << 1) | b, 0) << 8) |
-                                             receivingBits.slice(8, 16).reduce((acc, b) => (acc << 1) | b, 0);
-                            if (syncWord === 0xD391) {
-                                const payloadLen = receivingBits.slice(16, 24).reduce((acc, b) => (acc << 1) | b, 0);
-                                totalBitsToRead = 24 + (payloadLen * 8) + 16;
+                        // Sliding-window correlator: look for 0xD391 sync preamble across received bit stream
+                        if (syncBitIndex === -1 && receivingBits.length >= 16) {
+                            const last16 = receivingBits.slice(-16);
+                            let diff = 0;
+                            for (let k = 0; k < 16; k++) {
+                                if (last16[k] !== syncPattern[k]) diff++;
+                            }
+                            if (diff <= 1) { // 1-bit tolerance for acoustic multipath fading
+                                syncBitIndex = receivingBits.length - 16;
                             }
                         }
 
-                        sampledCount++;
+                        // Frame aligned: parse length byte to calculate exact packet length
+                        if (syncBitIndex !== -1 && receivingBits.length === syncBitIndex + 24) {
+                            const payloadLen = receivingBits.slice(syncBitIndex + 16, syncBitIndex + 24).reduce((acc, b) => (acc << 1) | b, 0);
+                            totalBitsToRead = syncBitIndex + 24 + (payloadLen * 8) + 16;
+                        }
+
+                        // Completed packet reception or timeout
+                        if ((syncBitIndex !== -1 && receivingBits.length >= totalBitsToRead) || (syncBitIndex === -1 && sampledCount >= 100) || sampledCount >= 2200) {
+                            if (this.sampleInterval) clearInterval(this.sampleInterval);
+                            this.sampleInterval = null;
+                            isDecoding = false;
+                            if (syncBitIndex !== -1 && receivingBits.length >= totalBitsToRead) {
+                                const frameBits = receivingBits.slice(syncBitIndex, totalBitsToRead);
+                                this.processReceivedBits(frameBits, dbPreamble);
+                            }
+                        }
                     }, this.BIT_DURATION_MS);
                 }
 
@@ -318,8 +345,9 @@ export class SoundMeshEngine {
 
         const bytes: number[] = [];
         for (let i = 0; i < bits.length; i += 8) {
+            if (i + 8 > bits.length) break;
             let byteVal = 0;
-            for (let b = 0; b < 8 && (i + b) < bits.length; b++) {
+            for (let b = 0; b < 8; b++) {
                 byteVal = (byteVal << 1) | bits[i + b];
             }
             bytes.push(byteVal);
@@ -337,6 +365,8 @@ export class SoundMeshEngine {
             this.onPacketCallback({
                 senderId: sender,
                 payloadHex: payloadText,
+                rawText: payloadText,
+                payload: payloadText,
                 timestamp: Date.now(),
                 rssiDb: Math.round(rssiDb)
             });
@@ -345,13 +375,22 @@ export class SoundMeshEngine {
 
     public static stopListening() {
         this.isReceiving = false;
+        this.onPacketCallback = null;
+        // Stop the setInterval sampling loop (used in some decoder variants)
         if (this.sampleInterval) {
             clearInterval(this.sampleInterval);
             this.sampleInterval = null;
         }
+        // Release all microphone tracks to free the mic indicator on Android
         if (this.micStream) {
             this.micStream.getTracks().forEach(t => t.stop());
             this.micStream = null;
+        }
+        // Close the AudioContext to release hardware DSP resources and stop
+        // the ~15% CPU drain that persists in Android WebView background mode.
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
         }
     }
 }

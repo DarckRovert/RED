@@ -415,6 +415,7 @@ export const SystemHealthModal: React.FC<SystemHealthModalProps> = ({ onClose })
         const startOnion = performance.now();
         try {
             const circuit = tacticalOnionRouter.buildCircuit("did:red:target_node", ["did:red:relay_1", "did:red:relay_2", "did:red:relay_3"]);
+            if (!circuit) throw new Error("Pool de relays insuficiente para circuito Onion");
             const originalPayload = new TextEncoder().encode("TACTICAL_BEACON_ALPHA_OK");
             const { entryPacket } = tacticalOnionRouter.wrapLayers(originalPayload, circuit);
             

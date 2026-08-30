@@ -79,7 +79,7 @@ export class RdfTriangulationEngine {
     }
 
     /**
-     * Intersecta las líneas de marcación de rumbo LOB
+     * Intersecta las líneas de marcación de rumbo LOB mediante promedio ponderado multi-nodo
      */
     public triangulateTarget(): RdfTargetFix | null {
         if (this.lobs.length < 2) {
@@ -88,56 +88,104 @@ export class RdfTriangulationEngine {
             return null;
         }
 
-        const lob1 = this.lobs[this.lobs.length - 2];
-        const lob2 = this.lobs[this.lobs.length - 1];
+        const intersections: Array<{ x: number; y: number; weight: number }> = [];
 
-        // Conversión a coordenadas locales planas en metros (aproximación equirrectangular)
-        const latRef = (lob1.observerLat + lob2.observerLat) / 2;
+        // Referencia central
+        const latRef = this.lobs.reduce((acc, l) => acc + l.observerLat, 0) / this.lobs.length;
         const mPerDegLat = 111320;
         const mPerDegLon = 111320 * Math.cos((latRef * Math.PI) / 180);
 
-        const x1 = lob1.observerLon * mPerDegLon;
-        const y1 = lob1.observerLat * mPerDegLat;
+        // Evaluar todos los pares de líneas de marcación
+        for (let i = 0; i < this.lobs.length - 1; i++) {
+            for (let j = i + 1; j < this.lobs.length; j++) {
+                const lob1 = this.lobs[i];
+                const lob2 = this.lobs[j];
 
-        const x2 = lob2.observerLon * mPerDegLon;
-        const y2 = lob2.observerLat * mPerDegLat;
+                const x1 = lob1.observerLon * mPerDegLon;
+                const y1 = lob1.observerLat * mPerDegLat;
+                const x2 = lob2.observerLon * mPerDegLon;
+                const y2 = lob2.observerLat * mPerDegLat;
 
-        // Azimut en radianes medido desde el Norte en sentido horario
-        const theta1Rad = (lob1.bearingDeg * Math.PI) / 180;
-        const theta2Rad = (lob2.bearingDeg * Math.PI) / 180;
+                const theta1Rad = (lob1.bearingDeg * Math.PI) / 180;
+                const theta2Rad = (lob2.bearingDeg * Math.PI) / 180;
 
-        // Vectores directores (dx = sin(theta), dy = cos(theta))
-        const dx1 = Math.sin(theta1Rad);
-        const dy1 = Math.cos(theta1Rad);
+                const dx1 = Math.sin(theta1Rad);
+                const dy1 = Math.cos(theta1Rad);
+                const dx2 = Math.sin(theta2Rad);
+                const dy2 = Math.cos(theta2Rad);
 
-        const dx2 = Math.sin(theta2Rad);
-        const dy2 = Math.cos(theta2Rad);
+                const det = dx1 * dy2 - dy1 * dx2;
+                if (Math.abs(det) < 0.05) continue; // Líneas casi paralelas
 
-        // Determinante 2D: dx1 * dy2 - dy1 * dx2
-        const det = dx1 * dy2 - dy1 * dx2;
+                const t1 = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / det;
+                const t2 = ((x2 - x1) * dy1 - (y2 - y1) * dx1) / det;
 
-        if (Math.abs(det) < 0.05) {
-            // Líneas casi paralelas o colineales
+                // Solo intersecciones en la dirección de propagación (t1 > 0 y t2 > 0)
+                if (t1 > 0 && t2 > 0) {
+                    const weight = Math.abs(det); // Mayor ángulo de corte = mayor certidumbre geométrica
+                    intersections.push({
+                        x: x1 + t1 * dx1,
+                        y: y1 + t1 * dy1,
+                        weight,
+                    });
+                }
+            }
+        }
+
+        if (intersections.length === 0) {
+            // Fallback al último par disponible
+            const lob1 = this.lobs[this.lobs.length - 2];
+            const lob2 = this.lobs[this.lobs.length - 1];
+            const x1 = lob1.observerLon * mPerDegLon;
+            const y1 = lob1.observerLat * mPerDegLat;
+            const x2 = lob2.observerLon * mPerDegLon;
+            const y2 = lob2.observerLat * mPerDegLat;
+            const theta1Rad = (lob1.bearingDeg * Math.PI) / 180;
+            const theta2Rad = (lob2.bearingDeg * Math.PI) / 180;
+            const dx1 = Math.sin(theta1Rad);
+            const dy1 = Math.cos(theta1Rad);
+            const dx2 = Math.sin(theta2Rad);
+            const dy2 = Math.cos(theta2Rad);
+            const det = dx1 * dy2 - dy1 * dx2;
+            if (Math.abs(det) >= 0.02) {
+                const t1 = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / det;
+                intersections.push({ x: x1 + t1 * dx1, y: y1 + t1 * dy1, weight: 1 });
+            }
+        }
+
+        if (intersections.length === 0) {
             this.lastFix = null;
             this.notify();
             return null;
         }
 
-        // Resolución del punto de intersección: (x1 + t1*dx1, y1 + t1*dy1)
-        const t1 = ((x2 - x1) * dy2 - (y2 - y1) * dx2) / det;
+        let totalWeight = 0;
+        let avgX = 0;
+        let avgY = 0;
+        for (const p of intersections) {
+            avgX += p.x * p.weight;
+            avgY += p.y * p.weight;
+            totalWeight += p.weight;
+        }
+        avgX /= totalWeight;
+        avgY /= totalWeight;
 
-        const xTarget = x1 + t1 * dx1;
-        const yTarget = y1 + t1 * dy1;
+        // Radio de dispersión e incertidumbre geométrica
+        let maxDist = 15;
+        for (const p of intersections) {
+            const d = Math.sqrt((p.x - avgX) ** 2 + (p.y - avgY) ** 2);
+            if (d > maxDist) maxDist = d;
+        }
 
-        const targetLon = Math.round((xTarget / mPerDegLon) * 100000) / 100000;
-        const targetLat = Math.round((yTarget / mPerDegLat) * 100000) / 100000;
+        const targetLon = Math.round((avgX / mPerDegLon) * 100000) / 100000;
+        const targetLat = Math.round((avgY / mPerDegLat) * 100000) / 100000;
 
         const fix: RdfTargetFix = {
             targetLat,
             targetLon,
-            uncertaintyRadiusMeters: Math.round(15 + Math.random() * 20),
+            uncertaintyRadiusMeters: Math.round(Math.min(500, maxDist)),
             lobsUsed: this.lobs.length,
-            confidencePct: Math.min(96, Math.round(75 + this.lobs.length * 7)),
+            confidencePct: Math.min(98, Math.round(70 + Math.min(this.lobs.length, 5) * 6)),
             timestamp: Date.now()
         };
 

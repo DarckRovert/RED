@@ -169,6 +169,17 @@ export class RedAppBundleEngine {
     }
 
     /**
+     * Revokes an allocated Blob URL to release browser memory when an iframe closes.
+     */
+    public static revokeBlobUrl(url: string): void {
+        if (typeof window !== 'undefined' && url && url.startsWith('blob:')) {
+            try {
+                URL.revokeObjectURL(url);
+            } catch {}
+        }
+    }
+
+    /**
      * Packages an app into a single `.redapp` JSON string with integrity checksum
      */
     public static exportBundle(manifest: RedAppManifest, files: Record<string, string>): string {

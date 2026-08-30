@@ -128,6 +128,16 @@ export class MagneticAnomalyDetectorEngine {
         this.stopAudioBeeps();
     }
 
+    public destroy(): void {
+        this.stopListening();
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch {}
+            this.audioCtx = null;
+        }
+        this.listeners.clear();
+        MagneticAnomalyDetectorEngine.instance = null;
+    }
+
     public calibrateBaseline() {
         this.baseline = this.magnitude;
         this.delta = 0;
@@ -177,16 +187,24 @@ export class MagneticAnomalyDetectorEngine {
         }
     }
 
+    private currentDelayMs: number = 600;
+    private beepTimer: any = null;
+
     private startAudioBeeps() {
-        if (this.beepInterval) clearInterval(this.beepInterval);
-        this.beepInterval = setInterval(() => {
+        this.stopAudioBeeps();
+        const scheduleNext = () => {
+            if (!this.isAudioBeepActive) return;
             this.playClick();
-        }, 600);
+            this.beepTimer = setTimeout(scheduleNext, this.currentDelayMs);
+        };
+        this.beepTimer = setTimeout(scheduleNext, this.currentDelayMs);
     }
 
     private stopAudioBeeps() {
-        if (this.beepInterval) clearInterval(this.beepInterval);
-        this.beepInterval = null;
+        if (this.beepTimer) {
+            clearTimeout(this.beepTimer);
+            this.beepTimer = null;
+        }
     }
 
     private adjustAudioFeedback() {
@@ -194,12 +212,11 @@ export class MagneticAnomalyDetectorEngine {
 
         const absDelta = Math.abs(this.delta);
         // Intervalo entre 80ms (muy cerca / extrema anomalía) y 800ms (normal)
-        const delayMs = Math.max(80, Math.min(800, 800 - absDelta * 16));
+        this.currentDelayMs = Math.max(80, Math.min(800, Math.round(800 - absDelta * 16)));
 
-        if (this.beepInterval) clearInterval(this.beepInterval);
-        this.beepInterval = setInterval(() => {
-            this.playClick();
-        }, delayMs);
+        if (!this.beepTimer) {
+            this.startAudioBeeps();
+        }
     }
 
     private playClick() {

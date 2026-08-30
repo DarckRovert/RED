@@ -115,13 +115,21 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
         return;
     }
 
-    let data_dir_str: String = env.get_string(&data_dir_jstr)
-        .expect("Couldn't get java string!")
-        .into();
+    let data_dir_str: String = match env.get_string(&data_dir_jstr) {
+        Ok(s) => s.into(),
+        Err(e) => {
+            error!("Failed to get data_dir string from Java: {:?}", e);
+            return;
+        }
+    };
         
-    let password_str: String = env.get_string(&password_jstr)
-        .expect("Couldn't get password string!")
-        .into();
+    let password_str: String = match env.get_string(&password_jstr) {
+        Ok(s) => s.into(),
+        Err(e) => {
+            error!("Failed to get password string from Java: {:?}", e);
+            return;
+        }
+    };
 
     let data_dir = PathBuf::from(data_dir_str.clone());
     info!("Starting internal RED node at {:?}", data_dir);
@@ -132,7 +140,14 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
     }));
 
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
+        let rt = match tokio::runtime::Runtime::new() {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to create Tokio runtime for internal node: {:?}", e);
+                NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
+                return;
+            }
+        };
         rt.block_on(async {
             match run_internal_node(data_dir.clone(), password_str).await {
                 Ok(_) => {
@@ -352,6 +367,17 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     let chain_cb = chain_arc.clone();
     tokio::spawn(async move {
         consensus_cb.run_block_production(chain_cb, signing_key).await;
+    });
+
+    // ── Background Storage Maintenance Worker (Prunes expired records every 24h) ──
+    let maint_storage = storage_arc.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400));
+        loop {
+            interval.tick().await;
+            let s = maint_storage.lock().await;
+            let _ = s.prune_expired_records(30 * 86400); // 30 days default retention policy
+        }
     });
 
     // ── FINAL STATE READY — API now returns live data ─────────────────────────

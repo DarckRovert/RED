@@ -77,6 +77,34 @@ pub struct ApiState {
     pub ai_translator: Arc<crate::ai_translator::AITranslatorEngine>,
     /// v25.0: Social Feed P2P
     pub social_store: Arc<crate::social::SocialStore>,
+    /// v70.1: Token de sesión local para autenticación entre Capacitor WebView → Nodo
+    pub session_token: Arc<String>,
+}
+
+/// Middleware que verifica el token de sesión local en endpoints /api/*.
+/// Los endpoints de diagnóstico (/api/status) quedan públicos para auto-descubrimiento.
+async fn verify_session_token(
+    axum::extract::State(state): axum::extract::State<ApiState>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<Response, StatusCode> {
+    let path = req.uri().path().to_string();
+    // Endpoints públicos: status y SSE de health
+    let public = ["/api/status", "/api/events", "/local-signal", "/", "/app.css", "/app.js"];
+    if public.iter().any(|p| path == *p) {
+        return Ok(next.run(req).await);
+    }
+    // Verificar token en header X-Red-Session-Token
+    let provided = req
+        .headers()
+        .get("x-red-session-token")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if provided == state.session_token.as_str() {
+        Ok(next.run(req).await)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
 }
 
 // ─── Response types ───────────────────────────────────────────────────────────
@@ -516,6 +544,11 @@ pub fn build_router(state: ApiState) -> Router {
         .route("/app.css", get(serve_css))
         .route("/app.js", get(serve_js))
         .with_state(state.clone())
+        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            verify_session_token,
+        ))
         .layer(axum::middleware::from_fn_with_state(
             state.limiter.clone(),
             crate::rate_limit::rate_limit_middleware,
@@ -531,7 +564,7 @@ async fn serve_index() -> impl IntoResponse {
     Response::builder()
         .header("Content-Type", "text/html; charset=utf-8")
         .body(html.to_string())
-        .unwrap()
+        .unwrap_or_else(|_| Response::new(String::new()))
 }
 
 async fn serve_css() -> impl IntoResponse {
@@ -539,7 +572,7 @@ async fn serve_css() -> impl IntoResponse {
     Response::builder()
         .header("Content-Type", "text/css; charset=utf-8")
         .body(css.to_string())
-        .unwrap()
+        .unwrap_or_else(|_| Response::new(String::new()))
 }
 
 async fn serve_js() -> impl IntoResponse {
@@ -547,7 +580,7 @@ async fn serve_js() -> impl IntoResponse {
     Response::builder()
         .header("Content-Type", "application/javascript; charset=utf-8")
         .body(js.to_string())
-        .unwrap()
+        .unwrap_or_else(|_| Response::new(String::new()))
 }
 
 // ─── API Handlers ─────────────────────────────────────────────────────────────
@@ -584,13 +617,13 @@ async fn handle_download_apk() -> impl IntoResponse {
                 "attachment; filename=\"red-v5-mesh.apk\"",
             )
             .body(Body::from(apk_bytes))
-            .unwrap()
+            .unwrap_or_else(|_| Response::new(Body::empty()))
     } else {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
             .header("Content-Type", "text/plain")
             .body(Body::from("404 Not Found: No real APK binary stored on node disk."))
-            .unwrap()
+            .unwrap_or_else(|_| Response::new(Body::empty()))
     }
 }
 
@@ -791,9 +824,15 @@ async fn handle_send_message(
                 let _ = n.edit_message(&conv_id.to_hex(), &msg_id.to_hex(), new_content.clone()).await;
                 
                 // Re-emitir evento para que la UI del emisor re-renderice el ofuscado
-                let mut dummy_msg = Message::text(sender_clone, recipient_clone, new_content).unwrap();
-                dummy_msg.id = msg_id; // Same ID so the UI overwrites the old message
-                let _ = state_async.msg_tx.send(dummy_msg);
+                match Message::text(sender_clone, recipient_clone, new_content) {
+                    Ok(mut dummy_msg) => {
+                        dummy_msg.id = msg_id;
+                        let _ = state_async.msg_tx.send(dummy_msg);
+                    }
+                    Err(e) => {
+                        tracing::warn!("[Guardian] Error creando mensaje dummy tras censura: {:?}", e);
+                    }
+                }
             }
         });
     }
@@ -1054,7 +1093,7 @@ async fn handle_get_messages(
                                 accuracy,
                                 target_message_id,
                                 edited: m.edited,
-                                conversation_id: Some(conv.unwrap().id.to_hex()),
+                                conversation_id: Some(c.id.to_hex()),
                                 reply_to: reply_to_val,
                             }
                         })
@@ -1143,7 +1182,7 @@ async fn handle_add_contact(
         public_key: pub_key_bytes,
         added_at: std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs(),
         verified: false,
         blocked: false,
@@ -1284,7 +1323,7 @@ async fn handle_create_group(
                         public_key: red_core::crypto::keys::PublicKey::from_bytes([0u8; 32]), // Placeholder until resolved
                         joined_at: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
+                            .unwrap_or_default()
                             .as_secs(),
                         role: red_core::protocol::MemberRole::Member,
                         muted: false,
@@ -1591,7 +1630,7 @@ async fn handle_sse(
                         "type": "status",
                         "status": "healthy",
                         "gossip_latency_ms": 4,
-                        "timestamp": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+                        "timestamp": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
                     });
                     yield Ok(Event::default().event("status").data(heartbeat.to_string()));
                 }

@@ -4,15 +4,26 @@
 
 export class PayloadCompressor {
     /**
-     * Compress string payload using standard deflate/GZIP or Run-Length-Encoding fallback
+     * Compress string payload using standard deflate/GZIP
      */
     static async compress(data: string): Promise<string> {
+        if (!data || data.length < 48) return data;
         try {
             if (typeof CompressionStream !== "undefined") {
                 const stream = new Blob([data]).stream().pipeThrough(new CompressionStream("gzip"));
                 const response = new Response(stream);
                 const buffer = await response.arrayBuffer();
-                return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                const u8 = new Uint8Array(buffer);
+                
+                // Chunked conversion to prevent RangeError call stack overflow on large payloads
+                const CHUNK_SIZE = 8192;
+                let binary = '';
+                for (let i = 0; i < u8.length; i += CHUNK_SIZE) {
+                    const chunk = u8.subarray(i, i + CHUNK_SIZE);
+                    binary += String.fromCharCode.apply(null, chunk as any);
+                }
+                const b64 = btoa(binary);
+                return b64.length < data.length ? b64 : data;
             }
         } catch {}
         return data;
@@ -24,7 +35,11 @@ export class PayloadCompressor {
     static async decompress(data: string): Promise<string> {
         try {
             if (typeof DecompressionStream !== "undefined") {
-                const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+                const binary = atob(data);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
                 const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
                 const response = new Response(stream);
                 return await response.text();

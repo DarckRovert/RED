@@ -7,6 +7,8 @@
  */
 
 import { RedAPI } from '../api';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '../mesh/meshProtocol';
 
 const DURESS_PIN_STORAGE_KEY = 'red_duress_coercion_pin_hash_v1';
 
@@ -25,8 +27,9 @@ export class DuressWipeEngine {
     public setDuressPin(pin: string) {
         if (typeof window === 'undefined') return;
         try {
-            // Guardar simple hash del PIN de coacción
-            localStorage.setItem(DURESS_PIN_STORAGE_KEY, btoa(pin));
+            const pinBytes = new TextEncoder().encode(`red_duress_wipe_salt:${pin}`);
+            const hashBytes = sha256(pinBytes);
+            localStorage.setItem(DURESS_PIN_STORAGE_KEY, bytesToHex(hashBytes));
         } catch {}
     }
 
@@ -35,7 +38,9 @@ export class DuressWipeEngine {
         try {
             const stored = localStorage.getItem(DURESS_PIN_STORAGE_KEY);
             if (!stored) return false;
-            return stored === btoa(pin);
+            const pinBytes = new TextEncoder().encode(`red_duress_wipe_salt:${pin}`);
+            const hashBytes = sha256(pinBytes);
+            return stored === bytesToHex(hashBytes);
         } catch {
             return false;
         }
@@ -61,7 +66,13 @@ export class DuressWipeEngine {
 
             // 2. Destrucción de bases de datos IndexedDB
             try {
-                const dbs = ['red_slippy_tiles_vault_v1', 'red_dtn_store_forward_v1', 'red_offline_vault'];
+                const dbs = [
+                    'red_slippy_tiles_vault_v1',
+                    'red_dtn_store_forward_v1',
+                    'red_offline_vault',
+                    'red_deaddrop_vault',
+                    'red_indexed_media_vault_v1'
+                ];
                 dbs.forEach(dbName => {
                     try { window.indexedDB.deleteDatabase(dbName); } catch {}
                 });

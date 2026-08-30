@@ -7,6 +7,7 @@
  */
 
 import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '../mesh/meshProtocol';
 
 export type BlackBoxEventType = 
     | 'SYSTEM_BOOT' 
@@ -81,10 +82,6 @@ export class ForensicBlackBoxEngine {
         }
     }
 
-    private uint8ToHex(bytes: Uint8Array): string {
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
     /**
      * Registra un evento inmutable en la cadena forense
      */
@@ -94,12 +91,12 @@ export class ForensicBlackBoxEngine {
         details: string
     ): BlackBoxEvent {
         const now = Date.now();
-        const index = this.events.length;
-        const prevHash = index > 0 ? this.events[index - 1].hash : GENESIS_PREV_HASH;
+        const index = this.events.length > 0 ? this.events[this.events.length - 1].index + 1 : 0;
+        const prevHash = this.events.length > 0 ? this.events[this.events.length - 1].hash : GENESIS_PREV_HASH;
 
         const payloadToHash = `${index}:${now}:${eventType}:${severity}:${details}:${prevHash}`;
         const hashBytes = sha256(new TextEncoder().encode(payloadToHash));
-        const hash = this.uint8ToHex(hashBytes);
+        const hash = bytesToHex(hashBytes);
 
         const event: BlackBoxEvent = {
             index,
@@ -125,23 +122,33 @@ export class ForensicBlackBoxEngine {
      * Verifica la integridad criptográfica de la cadena completa
      */
     public verifyChainIntegrity(): boolean {
+        if (this.events.length === 0) return true;
         for (let i = 0; i < this.events.length; i++) {
             const current = this.events[i];
-            const prevHash = i > 0 ? this.events[i - 1].hash : GENESIS_PREV_HASH;
-
-            if (current.prevHash !== prevHash) {
-                return false;
+            if (i > 0) {
+                const prev = this.events[i - 1];
+                if (current.prevHash !== prev.hash) {
+                    return false;
+                }
+            } else if (current.index === 0) {
+                if (current.prevHash !== GENESIS_PREV_HASH) {
+                    return false;
+                }
             }
 
             const payloadToHash = `${current.index}:${current.timestamp}:${current.eventType}:${current.severity}:${current.details}:${current.prevHash}`;
             const hashBytes = sha256(new TextEncoder().encode(payloadToHash));
-            const recomputedHash = this.uint8ToHex(hashBytes);
+            const recomputedHash = bytesToHex(hashBytes);
 
             if (current.hash !== recomputedHash) {
                 return false;
             }
         }
         return true;
+    }
+
+    public destroy(): void {
+        this.listeners.clear();
     }
 
     public getEvents(): BlackBoxEvent[] {

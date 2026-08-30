@@ -14,7 +14,7 @@ export interface BearerQuality {
     packetLossRatePct: number;
     latencyMs: number;
     jitterMs: number;
-    rssi: number;
+    rssi: number | null;
     isJammed: boolean;
     throughputKbps: number;
 }
@@ -40,7 +40,7 @@ export class DynamicBearerGovernor {
         latencies: number[];
         consecutiveLosses: number;
         isOnline: boolean;
-        rssi: number;
+        rssi: number | null;
     }> = new Map();
 
     private listeners: Set<(t: SwarmHealthTelemetry) => void> = new Set();
@@ -53,11 +53,12 @@ export class DynamicBearerGovernor {
                 lost: 0,
                 latencies: [25],
                 consecutiveLosses: 0,
-                isOnline: true,
-                rssi: -65,
+                isOnline: b === 'WIFI_DIRECT' || b === 'BLE',
+                rssi: null, // Zero assumptions: real RSSI injected by physical transport drivers
             });
         });
     }
+
 
     public static getInstance(): DynamicBearerGovernor {
         if (!this.instance) {
@@ -145,7 +146,7 @@ export class DynamicBearerGovernor {
         const current = this.bearerStats.get(this.primaryBearer);
         if (!current) return;
 
-        const isJammed = current.consecutiveLosses >= 4 || ((current.lost / Math.max(1, current.sent)) >= 0.6);
+        const isJammed = current.consecutiveLosses >= 4 || (current.sent >= 5 && (current.lost / current.sent) >= 0.6);
 
         if (isJammed) {
             const fallbackOrder: TacticalBearerType[] = ['WIFI_DIRECT', 'BLE', 'LORA_RF', 'SOUNDMESH', 'LIFI_OPTICAL'];
@@ -168,6 +169,25 @@ export class DynamicBearerGovernor {
         this.notify();
     }
 
+    public updateBearerRssi(bearer: TacticalBearerType, rssi: number | null) {
+        const stat = this.bearerStats.get(bearer);
+        if (stat) {
+            stat.rssi = rssi;
+            this.notify();
+        }
+    }
+
+    public setBearerOnline(bearer: TacticalBearerType, isOnline: boolean) {
+        const stat = this.bearerStats.get(bearer);
+        if (stat && stat.isOnline !== isOnline) {
+            stat.isOnline = isOnline;
+            if (!isOnline && this.primaryBearer === bearer) {
+                this.evaluateFailover();
+            }
+            this.notify();
+        }
+    }
+
     /**
      * Modula el perfil de transporte según el estado de la batería de campaña
      */
@@ -180,5 +200,6 @@ export class DynamicBearerGovernor {
         }
     }
 }
+
 
 export const dynamicBearerGovernor = DynamicBearerGovernor.getInstance();

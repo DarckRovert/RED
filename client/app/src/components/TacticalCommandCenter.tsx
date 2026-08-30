@@ -154,6 +154,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'EMERGENCIA',
                 badgeColor: 'var(--accent-crimson)',
                 accentClass: 'glow-border-crimson'
+            },
+            {
+                id: 'loraTransceiver',
+                action: 'loraTransceiver',
+                icon: '📻',
+                title: 'Transceptor LoRa RF',
+                subtitle: 'Radio de largo alcance (25km) via Web Serial API o WebBluetooth. Sin Internet.',
+                badge: 'LORA HW',
+                badgeColor: 'var(--accent-amber)',
+                accentClass: 'glow-border-amber'
             }
         ],
         nav: [
@@ -216,6 +226,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'BATERÍA',
                 badgeColor: 'var(--accent-emerald)',
                 accentClass: 'glow-border-emerald'
+            },
+            {
+                id: 'p2pCompass',
+                action: 'p2pCompass',
+                icon: '🧭',
+                title: 'Brújula P2P Mesh',
+                subtitle: 'Orientación táctica relativa entre nodos mesh con triangulación de señal.',
+                badge: 'P2P NAV',
+                badgeColor: 'var(--accent-cyan)',
+                accentClass: 'glow-border-cyan'
             }
         ],
         survival: [

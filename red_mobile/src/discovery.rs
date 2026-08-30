@@ -42,25 +42,23 @@ impl DiscoveryEngine {
     }
 
     pub fn report_node(&self, node: ProximityNode) {
-        let mut map = self.nearby_nodes.write().unwrap();
+        let mut map = self.nearby_nodes.write().unwrap_or_else(|e| e.into_inner());
         map.insert(node.identity_hash.clone(), node);
     }
 
-
-
     pub fn get_config(&self) -> ProximityFilterConfig {
-        self.config.read().unwrap().clone()
+        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn set_config(&self, cfg: ProximityFilterConfig) {
-        *self.config.write().unwrap() = cfg;
+        *self.config.write().unwrap_or_else(|e| e.into_inner()) = cfg;
     }
 
     pub fn get_filtered_proximity_nodes(&self) -> Vec<ProximityNode> {
-        let map = self.nearby_nodes.read().unwrap();
-        let cfg = self.config.read().unwrap();
+        let map = self.nearby_nodes.read().unwrap_or_else(|e| e.into_inner());
+        let cfg = self.config.read().unwrap_or_else(|e| e.into_inner());
         let now = chrono::Utc::now().timestamp();
-        let last_notified_map = self.last_notified.read().unwrap();
+        let last_notified_map = self.last_notified.read().unwrap_or_else(|e| e.into_inner());
 
         map.values()
             .filter(|n| {
@@ -99,14 +97,14 @@ impl DiscoveryEngine {
             transport: "BLE".to_string(),
             last_seen: timestamp,
         };
-        self.nearby_nodes.write().unwrap().insert(identity_hash, node);
+        self.nearby_nodes.write().unwrap_or_else(|e| e.into_inner()).insert(identity_hash, node);
     }
 
     pub fn trigger_wave(&self, req: WaveHandshakeRequest) -> ProximityNode {
         let timestamp = chrono::Utc::now().timestamp();
         self.last_notified
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(req.target_identity_hash.clone(), timestamp);
 
         ProximityNode {

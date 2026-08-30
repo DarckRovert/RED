@@ -48,15 +48,51 @@ export class LowBitrateVocoder {
     ];
 
     /**
-     * Resamples input Float32Array PCM to 8000 Hz Mono Int16 PCM with pre-emphasis.
+     * 2-pole Butterworth IIR low-pass filter — fc = 3400 Hz anti-aliasing guard.
+     */
+    private static readonly LPF_COEFFS: Record<number, { b0: number; b1: number; b2: number; a1: number; a2: number }> = {
+        44100: { b0: 0.16854978, b1: 0.33709956, b2: 0.16854978, a1: -0.58578645, a2: 0.09999556 },
+        48000: { b0: 0.14785975, b1: 0.29571950, b2: 0.14785975, a1: -0.67577737, a2: 0.26721637 },
+        0:     { b0: 0.15000000, b1: 0.30000000, b2: 0.15000000, a1: -0.63000000, a2: 0.17000000 },
+    };
+
+    /**
+     * Applies a 2-pole Butterworth IIR low-pass filter (fc = 3400 Hz) to the input Float32Array.
+     */
+    private static applyLowPassFilter(samples: Float32Array, sampleRate: number): Float32Array {
+        const c = this.LPF_COEFFS[sampleRate] ?? this.LPF_COEFFS[0];
+        const { b0, b1, b2, a1, a2 } = c;
+        const out = new Float32Array(samples.length);
+        let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (let i = 0; i < samples.length; i++) {
+            const x0 = samples[i];
+            const y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            out[i] = y0;
+            x2 = x1; x1 = x0;
+            y2 = y1; y1 = y0;
+        }
+        return out;
+    }
+
+    /**
+     * Resamples input Float32Array PCM to 8000 Hz Mono Int16 PCM with Noise Gate (-42dB),
+     * Vocal Pre-emphasis filter and AGC Peak Normalization.
      */
     public static resampleTo8kHz(inputSamples: Float32Array, inputSampleRate: number): Int16Array {
+        let peak = 0;
+        for (let i = 0; i < inputSamples.length; i++) {
+            const abs = Math.abs(inputSamples[i]);
+            if (abs > peak) peak = abs;
+        }
+        const agcGain = peak > 0.05 ? Math.min(2.5, 0.9 / peak) : 1.0;
+        const NOISE_GATE_THRESHOLD = 0.008; // ~ -42 dB noise floor cutoff
+
         if (inputSampleRate === this.TARGET_SAMPLE_RATE) {
             const out = new Int16Array(inputSamples.length);
             let prev = 0;
             for (let i = 0; i < inputSamples.length; i++) {
-                // Pre-emphasis filter: y[n] = x[n] - 0.95 * x[n-1]
-                const val = inputSamples[i];
+                let val = inputSamples[i] * agcGain;
+                if (Math.abs(val) < NOISE_GATE_THRESHOLD) val = 0;
                 const filtered = val - 0.95 * prev;
                 prev = val;
                 const clamped = Math.max(-1, Math.min(1, filtered));
@@ -65,21 +101,21 @@ export class LowBitrateVocoder {
             return out;
         }
 
+        const lpfSamples = this.applyLowPassFilter(inputSamples, inputSampleRate);
         const ratio = inputSampleRate / this.TARGET_SAMPLE_RATE;
-        const targetLength = Math.round(inputSamples.length / ratio);
+        const targetLength = Math.round(lpfSamples.length / ratio);
         const out = new Int16Array(targetLength);
 
         let prev = 0;
         for (let i = 0; i < targetLength; i++) {
             const srcIdx = i * ratio;
             const idx1 = Math.floor(srcIdx);
-            const idx2 = Math.min(idx1 + 1, inputSamples.length - 1);
+            const idx2 = Math.min(idx1 + 1, lpfSamples.length - 1);
             const frac = srcIdx - idx1;
 
-            // Linear interpolation
-            const rawSample = inputSamples[idx1] * (1 - frac) + inputSamples[idx2] * frac;
+            let rawSample = (lpfSamples[idx1] * (1 - frac) + lpfSamples[idx2] * frac) * agcGain;
+            if (Math.abs(rawSample) < NOISE_GATE_THRESHOLD) rawSample = 0;
 
-            // Pre-emphasis filter for speech intelligibility
             const filtered = rawSample - 0.95 * prev;
             prev = rawSample;
 
@@ -102,12 +138,10 @@ export class LowBitrateVocoder {
         let predictedSample = pcm16[0];
         let stepIndex = 0;
 
-        // Header: [Magic(1), SampleRateCode(1), SampleCount(4), InitialPred(2), InitialStep(1)] = 9 bytes
         const headerSize = 9;
         const packedDataSize = Math.ceil(sampleCount / 2);
         const output = new Uint8Array(headerSize + packedDataSize);
 
-        // Header bytes
         output[0] = this.MAGIC_HEADER;
         output[1] = 1; // 1 = 8000 Hz
         output[2] = (sampleCount >> 24) & 0xFF;
@@ -158,16 +192,13 @@ export class LowBitrateVocoder {
                 predictedSample += vpdiff;
             }
 
-            // Clamp predicted sample to 16-bit range
             predictedSample = Math.max(-32768, Math.min(32767, predictedSample));
 
             const code = delta | sign;
 
-            // Update step index
             stepIndex += this.INDEX_TABLE[code];
             stepIndex = Math.max(0, Math.min(88, stepIndex));
 
-            // Pack into nibbles (4-bit)
             if (!isHighNibble) {
                 currentByte = code & 0x0F;
                 isHighNibble = true;
@@ -187,7 +218,6 @@ export class LowBitrateVocoder {
 
     /**
      * Ultra-compact LPC-10 Parametric Vocoder for Narrowband LoRa Channels (~1.1 kbps, <450B for 3-5s).
-     * Analyzes pitch period, logarithmic energy, and 4 reflection coefficients per 25ms frame.
      */
     public static encodeLpcTactical(pcm16: Int16Array): Uint8Array {
         const frameSize = this.LPC_FRAME_SIZE; // 200 samples (25ms)
@@ -196,8 +226,6 @@ export class LowBitrateVocoder {
             return new Uint8Array([this.MAGIC_LPC_HEADER, 0, 0, 0, 0]);
         }
 
-        // Header: [Magic(1), SampleRateCode(1), FrameCount(2), Unused(1)] = 5 bytes
-        // Each frame: [Pitch(1B: 7b period + 1b voiced), Energy(1B), LPC1_2(1B), LPC3_4(1B)] = 4 bytes
         const output = new Uint8Array(5 + frameCount * 4);
         output[0] = this.MAGIC_LPC_HEADER;
         output[1] = 1; // 8kHz
@@ -217,7 +245,6 @@ export class LowBitrateVocoder {
             const rms = Math.sqrt(sumSq / frameSize);
             const energyLog = Math.min(255, Math.round(Math.log2(Math.max(1, rms)) * 16));
 
-            // Autocorrelation for pitch estimation (lag 20..140 samples, 57Hz - 400Hz)
             let maxCorr = 0;
             let bestLag = 0;
             const r0 = sumSq || 1;
@@ -236,7 +263,6 @@ export class LowBitrateVocoder {
             const isVoiced = (maxCorr / (r0 * 0.4 + 1)) > 0.35 && bestLag >= 20;
             const pitchByte = (bestLag & 0x7F) | (isVoiced ? 0x80 : 0);
 
-            // Reflection coefficients via simplified Durbin correlation
             let r1 = 0;
             let r2 = 0;
             let r3 = 0;
@@ -250,7 +276,6 @@ export class LowBitrateVocoder {
             const k3 = Math.max(-1, Math.min(1, r3 / r0));
             const k4 = -k1 * 0.5;
 
-            // Quantize k1..k4 into 4-bit nibbles [-8..7] -> [0..15]
             const q1 = Math.max(0, Math.min(15, Math.round((k1 + 1) * 7.5)));
             const q2 = Math.max(0, Math.min(15, Math.round((k2 + 1) * 7.5)));
             const q3 = Math.max(0, Math.min(15, Math.round((k3 + 1) * 7.5)));
@@ -316,11 +341,9 @@ export class LowBitrateVocoder {
                     excitation = (Math.random() * 2 - 1) * gain * 0.8;
                 }
 
-                // All-pole recursive synthesis filter
                 const sample = excitation + (a1 * s1 + a2 * s2 + a3 * s3 + a4 * s4) * 0.65;
                 s4 = s3; s3 = s2; s2 = s1; s1 = sample;
 
-                // De-emphasis filter: y[n] = x[n] + 0.95 * y[n-1]
                 const deemph = sample + 0.92 * deemphPrev;
                 deemphPrev = deemph;
 
@@ -347,7 +370,6 @@ export class LowBitrateVocoder {
 
         const sampleCount = (encoded[2] << 24) | (encoded[3] << 16) | (encoded[4] << 8) | encoded[5];
         let predictedSample = (encoded[6] << 8) | encoded[7];
-        // Sign extend 16-bit
         if (predictedSample & 0x8000) {
             predictedSample |= ~0xFFFF;
         }
@@ -357,7 +379,6 @@ export class LowBitrateVocoder {
         let inIdx = 9;
         let currentByte = 0;
         let isHighNibble = false;
-
         let deemphPrev = 0;
 
         for (let i = 0; i < sampleCount; i++) {
@@ -386,7 +407,6 @@ export class LowBitrateVocoder {
 
             predictedSample = Math.max(-32768, Math.min(32767, predictedSample));
 
-            // De-emphasis filter: y[n] = x[n] + 0.95 * y[n-1]
             const deemphSample = predictedSample + 0.95 * deemphPrev;
             deemphPrev = deemphSample;
 
@@ -399,6 +419,19 @@ export class LowBitrateVocoder {
         return output;
     }
 
+    private static bytesToBase64(bytes: Uint8Array): string {
+        let binary = "";
+        const len = bytes.byteLength;
+        const subChunkSize = 8192;
+        for (let i = 0; i < len; i += subChunkSize) {
+            const sub = bytes.subarray(i, Math.min(len, i + subChunkSize));
+            for (let j = 0; j < sub.length; j++) {
+                binary += String.fromCharCode(sub[j]);
+            }
+        }
+        return typeof btoa !== 'undefined' ? btoa(binary) : Buffer.from(bytes).toString('base64');
+    }
+
     /**
      * Compresses raw audio buffer into tactical payload
      */
@@ -406,14 +439,7 @@ export class LowBitrateVocoder {
         const floatData = audioBuffer.getChannelData(0);
         const pcm8k = this.resampleTo8kHz(floatData, audioBuffer.sampleRate);
         const encodedBytes = this.encode(pcm8k);
-
-        // Convert to Base64
-        let binary = "";
-        const len = encodedBytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(encodedBytes[i]);
-        }
-        const base64 = btoa(binary);
+        const base64 = this.bytesToBase64(encodedBytes);
 
         const originalRawBytes = floatData.length * 4;
         const compressedSizeBytes = encodedBytes.length;
@@ -436,13 +462,7 @@ export class LowBitrateVocoder {
         const floatData = audioBuffer.getChannelData(0);
         const pcm8k = this.resampleTo8kHz(floatData, audioBuffer.sampleRate);
         const encodedBytes = this.encodeLpcTactical(pcm8k);
-
-        let binary = "";
-        const len = encodedBytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(encodedBytes[i]);
-        }
-        const base64 = btoa(binary);
+        const base64 = this.bytesToBase64(encodedBytes);
 
         const originalRawBytes = floatData.length * 4;
         const compressedSizeBytes = encodedBytes.length;
@@ -480,7 +500,9 @@ export class LowBitrateVocoder {
      * Helper to decode Base64 into Uint8Array
      */
     public static base64ToBytes(base64: string): Uint8Array {
-        const bin = atob(base64);
+        let clean = base64.includes(',') ? base64.split(',')[1] : base64;
+        clean = clean.replace(/[\s\r\n]+/g, '');
+        const bin = typeof atob !== 'undefined' ? atob(clean) : Buffer.from(clean, 'base64').toString('binary');
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) {
             bytes[i] = bin.charCodeAt(i);

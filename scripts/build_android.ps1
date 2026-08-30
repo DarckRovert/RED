@@ -177,35 +177,34 @@ if (Test-Path "gradlew.bat") {
 
 # --- Step 6: Auto-install to connected device ---
 
-Write-Header "Step 6: Auto-Install to Connected Android Device"
+Write-Header "Step 6: Auto-Install to Connected Android Devices"
 Set-Location $RED_ROOT
 
 $AdbPath = "$env:USERPROFILE\AppData\Local\Android\Sdk\platform-tools\adb.exe"
 if (Test-Path $AdbPath) {
     $devices = & $AdbPath devices | Select-String "\tdevice$"
     if ($devices.Count -gt 0) {
-        $deviceId = ($devices[0].Line -split "\t")[0].Trim()
-        Write-Host "Detected device: $deviceId - installing APK..." -ForegroundColor Cyan
-        & $AdbPath -s $deviceId install -r $ApkPath
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "[OK] APK installed on device $deviceId" -ForegroundColor Green
-            Write-Host "Restarting RED on device to apply new assets..." -ForegroundColor Cyan
-            & $AdbPath -s $deviceId shell am force-stop f.red.app
-            Start-Sleep -Milliseconds 500
-            & $AdbPath -s $deviceId shell am start -n f.red.app/.MainActivity
-            
-            # Verify the native library loaded on device using logcat
-            Write-Host "Streaming logcat (5s) to verify native library load..." -ForegroundColor Gray
-            $job = Start-Job {
-                param($adb, $dev)
-                & $adb -s $dev logcat -s RedNodePlugin:E RedNodePlugin:I -T 1 2>&1
-            } -ArgumentList $AdbPath, $deviceId
-            Start-Sleep 5
-            Stop-Job $job
-            Receive-Job $job | Select-String "red_mobile|FAILED|loaded"
-            Remove-Job $job
-        } else {
-            Write-Host "[!] adb install failed. Transfer APK manually." -ForegroundColor Yellow
+        foreach ($devLine in $devices) {
+            $deviceId = ($devLine.Line -split "\t")[0].Trim()
+            $model = (& $AdbPath -s $deviceId shell getprop ro.product.model).Trim()
+            $manuf = (& $AdbPath -s $deviceId shell getprop ro.product.manufacturer).Trim()
+            Write-Host "`nDetected device: $deviceId ($manuf $model) - installing APK..." -ForegroundColor Cyan
+            & $AdbPath -s $deviceId install -r $ApkPath
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "[OK] APK successfully installed on $deviceId ($manuf $model)" -ForegroundColor Green
+                Write-Host "Restarting RED to apply updated assets and native binaries..." -ForegroundColor Cyan
+                & $AdbPath -s $deviceId shell am force-stop f.red.app
+                Start-Sleep -Milliseconds 500
+                & $AdbPath -s $deviceId shell am start -n f.red.app/.MainActivity
+                
+                Write-Host "Verifying startup and native library via logcat (3s)..." -ForegroundColor Gray
+                $logSample = & $AdbPath -s $deviceId logcat -d -s RedNodePlugin:E RedNodePlugin:I Capacitor:E -T 20 2>&1
+                if ($logSample) {
+                    $logSample | ForEach-Object { Write-Host "  [$deviceId] $_" -ForegroundColor Gray }
+                }
+            } else {
+                Write-Host "[!] adb install failed for $deviceId." -ForegroundColor Yellow
+            }
         }
     } else {
         Write-Host "[INFO] No device connected via USB. APK ready at: $ApkPath" -ForegroundColor Yellow

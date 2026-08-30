@@ -143,6 +143,10 @@ export class BazaarSyncEngine {
         this.saveState();
         return this.getActiveListings();
     }
+
+    public destroy(): void {
+        this.listeners.clear();
+    }
 }
 
 export const bazaarSync = BazaarSyncEngine.getInstance();

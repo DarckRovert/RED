@@ -49,12 +49,12 @@ impl SosStore {
             signature,
         };
 
-        self.beacons.write().unwrap().insert(id, beacon.clone());
+        self.beacons.write().unwrap_or_else(|e| e.into_inner()).insert(id, beacon.clone());
         beacon
     }
 
     pub fn resolve_sos(&self, sos_id: &str) -> bool {
-        let mut map = self.beacons.write().unwrap();
+        let mut map = self.beacons.write().unwrap_or_else(|e| e.into_inner());
         if let Some(beacon) = map.get_mut(sos_id) {
             beacon.is_active = false;
             true
@@ -64,12 +64,12 @@ impl SosStore {
     }
 
     pub fn get_active_beacons(&self) -> Vec<SosBeacon> {
-        let map = self.beacons.read().unwrap();
+        let map = self.beacons.read().unwrap_or_else(|e| e.into_inner());
         map.values().filter(|b| b.is_active).cloned().collect()
     }
 
     pub fn list_all(&self) -> Vec<SosBeacon> {
-        let map = self.beacons.read().unwrap();
+        let map = self.beacons.read().unwrap_or_else(|e| e.into_inner());
         let mut list: Vec<SosBeacon> = map.values().cloned().collect();
         list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         list

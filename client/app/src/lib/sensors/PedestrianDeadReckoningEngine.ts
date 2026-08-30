@@ -83,6 +83,7 @@ export class PedestrianDeadReckoningEngine {
         this.totalSteps++;
         this.distanceMeters += strideMeters;
         this.currentHeadingDeg = (headingDeg + 360) % 360;
+        this.lastStepTime = now;
 
         // Vector de desplazamiento 2D
         const headingRad = (this.currentHeadingDeg * Math.PI) / 180;
@@ -102,7 +103,9 @@ export class PedestrianDeadReckoningEngine {
 
     public getState(): PdrState {
         let stepFrequencyHz = 0;
-        if (this.stepHistory.length >= 2) {
+        const now = Date.now();
+        // Si el último paso fue hace más de 3.5 segundos, el operador está detenido
+        if (this.isTracking && this.lastStepTime > 0 && (now - this.lastStepTime <= 3500) && this.stepHistory.length >= 2) {
             const dt = (this.stepHistory[this.stepHistory.length - 1] - this.stepHistory[0]) / 1000;
             if (dt > 0) {
                 stepFrequencyHz = Math.round(((this.stepHistory.length - 1) / dt) * 10) / 10;
@@ -121,6 +124,13 @@ export class PedestrianDeadReckoningEngine {
             stepFrequencyHz,
             averageSpeedMps,
         };
+    }
+
+    public destroy(): void {
+        this.stopTracking();
+        this.resetPdr();
+        this.listeners.clear();
+        PedestrianDeadReckoningEngine.instance = null;
     }
 }
 

@@ -61,8 +61,14 @@ export function CbrnSatelliteModal() {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                     <span style={{ fontSize: "1.2rem" }}>☢️</span>
                     <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>
+                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF", display: "flex", alignItems: "center", gap: "6px" }}>
                             TELEMETRÍA CBRN & ENLACE SATELITAL LEO
+                            <span style={{
+                                fontSize: "0.55rem", fontWeight: 800, letterSpacing: "0.08em",
+                                background: "rgba(255, 179, 0, 0.18)", color: "#FFB300",
+                                border: "1px solid rgba(255, 179, 0, 0.4)",
+                                borderRadius: "3px", padding: "1px 5px"
+                            }}>⚙ SIMULACIÓN ORBITAL</span>
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
                             Dosimetría Nuclear y Pasarela Espacial DTN Store-and-Forward

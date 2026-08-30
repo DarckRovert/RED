@@ -109,20 +109,31 @@ export function decode(data: Uint8Array): MeshPacket | null {
     }
   }
 
-  const recipient = bytesToHex(data.slice(offset + 4, offset + 36));
-  const sender = bytesToHex(data.slice(offset + 36, offset + 68));
+  const recipient = bytesToHex(data.subarray(offset + 4, offset + 36));
+  const sender = bytesToHex(data.subarray(offset + 36, offset + 68));
   const ttl = view.getUint8(offset + 68);
   const flags = view.getUint8(offset + 69);
   const payloadLen = view.getUint16(offset + 70, true);
   const tsLow = view.getUint32(offset + 72, true);
   const tsHigh = view.getUint32(offset + 76, true);
   const timestamp = tsLow + tsHigh * 0x100000000;
-  const nonce = bytesToHex(data.slice(offset + 80, offset + 96));
+  const nonce = bytesToHex(data.subarray(offset + 80, offset + 96));
   
   const headerEnd = offset + HEADER_SIZE_REAL;
   const actualRemaining = data.length - headerEnd;
-  const sliceLen = (actualRemaining >= payloadLen || payloadLen === 0xFFFF) ? actualRemaining : payloadLen;
-  const payload = data.slice(headerEnd, headerEnd + sliceLen);
+
+  let payload: Uint8Array;
+  if (payloadLen === 0xFFFF) {
+    // Extended payload: take all remaining bytes in wire buffer
+    payload = data.slice(headerEnd);
+  } else {
+    // If wire buffer is truncated before full payload arrived, reject incomplete packet
+    if (actualRemaining < payloadLen) {
+      return null;
+    }
+    // Extract exact payload bytes without trailing transport padding/garbage
+    payload = data.slice(headerEnd, headerEnd + payloadLen);
+  }
 
   return { recipient, sender, ttl, flags, timestamp, nonce, payload };
 }
@@ -162,13 +173,19 @@ export function createPacket(
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
+export const HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
+
 export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    hex += HEX_LUT[bytes[i]];
+  }
+  return hex;
 }
 
 export function hexToBytes(hex: string): Uint8Array {
   const clean = (hex || '').replace(/[^0-9a-fA-F]/g, '');
-  const len = Math.floor(clean.length / 2);
+  const len = clean.length >>> 1;
   const result = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
     result[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16);

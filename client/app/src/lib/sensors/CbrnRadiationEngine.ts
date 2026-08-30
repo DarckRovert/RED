@@ -23,6 +23,7 @@ export class CbrnRadiationEngine {
     private doseRateUsVh: number = 0.12; // Fondo ambiental típico
     private cumulativeDoseMsv: number = 0.00;
     private isRunning: boolean = false;
+    private isManualOverride: boolean = false;
     private timer: any = null;
 
     private listeners: Set<(t: RadiationTelemetry) => void> = new Set();
@@ -61,9 +62,11 @@ export class CbrnRadiationEngine {
         this.isRunning = true;
 
         this.timer = setInterval(() => {
-            // Simulación de fluctuación natural de fondo con micro-variaciones
-            const noise = (Math.random() - 0.5) * 0.02;
-            this.doseRateUsVh = Math.max(0.04, Math.round((this.doseRateUsVh + noise) * 100) / 100);
+            // Si no hay inyección manual externa, aplicar micro-fluctuación natural de fondo
+            if (!this.isManualOverride) {
+                const noise = (Math.random() - 0.5) * 0.02;
+                this.doseRateUsVh = Math.max(0.04, Math.round((this.doseRateUsVh + noise) * 100) / 100);
+            }
 
             // Acumular dosis biológica por segundo (uSv/h convertido a mSv/s)
             const dosePerSecMsv = (this.doseRateUsVh / 1000) / 3600;
@@ -87,10 +90,16 @@ export class CbrnRadiationEngine {
         }
     }
 
+    public destroy(): void {
+        this.stopMonitoring();
+        this.listeners.clear();
+    }
+
     /**
      * Inyecta una tasa de dosis para pruebas tácticas o integración con sondas Geiger externas USB/BLE
      */
-    public setDoseRate(rateUsVh: number) {
+    public setDoseRate(rateUsVh: number, isExternalProbe = true) {
+        this.isManualOverride = isExternalProbe;
         this.doseRateUsVh = Math.max(0, rateUsVh);
         this.notify();
     }

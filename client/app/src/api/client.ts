@@ -1461,32 +1461,117 @@ export class RedAPIClient {
 
     subscribeToEvents(onMessage: (data: any) => void): EventSource | null {
         if (typeof window === 'undefined') return null;
-        try {
-            const es = new EventSource(`${this.getURL()}/events`);
-            const handleEvent = (event: MessageEvent) => {
-                try {
-                    const parsed = JSON.parse(event.data);
-                    onMessage(parsed);
-                } catch (e) {
-                    console.warn('[RED SSE] Parse failed', event.data);
+        
+        let currentEs: EventSource | null = null;
+        let isClosed = false;
+        let reconnectDelay = 1000;
+        let reconnectTimer: any = null;
+
+        const eventTypes = [
+            'new_message', 'message', 'conv_update', 'contact_update', 'typing',
+            'contact_request', 'live_frame', 'live_announce', 'live_end',
+            'live_comment', 'status', 'peer_connected', 'peer_disconnected', 'sos_alert'
+        ];
+
+        const handleEvent = (event: MessageEvent) => {
+            try {
+                const parsed = JSON.parse(event.data);
+                onMessage(parsed);
+            } catch (e) {
+                console.warn('[RED SSE] Parse failed', event.data);
+            }
+        };
+
+        const customListeners = new Map<string, Set<{ listener: any; options?: any }>>();
+
+        const connect = () => {
+            if (isClosed) return;
+            try {
+                if (currentEs) {
+                    try { currentEs.close(); } catch {}
                 }
-            };
+                const es = new EventSource(`${this.getURL()}/events`);
+                currentEs = es;
 
-            // Register standard unnamed message listener
-            es.addEventListener('message', handleEvent);
+                es.onopen = () => {
+                    reconnectDelay = 1000; // Reset backoff on successful handshake
+                };
 
-            // Register explicit named event listeners sent by Axum Rust SSE
-            const eventTypes = [
-                'new_message', 'message', 'conv_update', 'contact_update', 'typing',
-                'contact_request', 'live_frame', 'live_announce', 'live_end',
-                'live_comment', 'status', 'peer_connected', 'peer_disconnected', 'sos_alert'
-            ];
-            eventTypes.forEach(evt => es.addEventListener(evt, handleEvent));
+                es.addEventListener('message', handleEvent);
+                eventTypes.forEach(evt => es.addEventListener(evt, handleEvent));
 
-            return es;
-        } catch {
-            return null;
-        }
+                // Re-vincular todos los listeners personalizados registrados en el proxy
+                customListeners.forEach((entries, type) => {
+                    entries.forEach(({ listener, options }) => {
+                        try { es.addEventListener(type, listener, options); } catch {}
+                    });
+                });
+
+                es.onerror = (err) => {
+                    if (isClosed) return;
+                    try { es.close(); } catch {}
+                    if (reconnectTimer) clearTimeout(reconnectTimer);
+                    reconnectTimer = setTimeout(() => {
+                        reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
+                        connect();
+                    }, reconnectDelay);
+                };
+            } catch (err) {
+                console.warn('[RED SSE] Connection setup failed, retrying in 3s...', err);
+                if (!isClosed) {
+                    if (reconnectTimer) clearTimeout(reconnectTimer);
+                    reconnectTimer = setTimeout(connect, 3000);
+                }
+            }
+        };
+
+        connect();
+
+        // Retornar un proxy compatible con la interfaz nativa de EventSource
+        const proxy = {
+            get readyState() {
+                return currentEs ? currentEs.readyState : 2;
+            },
+            get url() {
+                return currentEs ? currentEs.url : '';
+            },
+            close: () => {
+                isClosed = true;
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+                customListeners.clear();
+                if (currentEs) {
+                    try { currentEs.close(); } catch {}
+                    currentEs = null;
+                }
+            },
+            addEventListener: (type: string, listener: any, options?: any) => {
+                if (!customListeners.has(type)) {
+                    customListeners.set(type, new Set());
+                }
+                customListeners.get(type)!.add({ listener, options });
+                if (currentEs) currentEs.addEventListener(type, listener, options);
+            },
+            removeEventListener: (type: string, listener: any, options?: any) => {
+                const set = customListeners.get(type);
+                if (set) {
+                    for (const entry of set) {
+                        if (entry.listener === listener) {
+                            set.delete(entry);
+                            break;
+                        }
+                    }
+                }
+                if (currentEs) currentEs.removeEventListener(type, listener, options);
+            },
+            dispatchEvent: (event: Event) => {
+                return currentEs ? currentEs.dispatchEvent(event) : false;
+            },
+            set onerror(handler: ((this: EventSource, ev: Event) => any) | null) {
+                // Conservar compatibilidad sin suprimir la reconexión interna
+            }
+        } as unknown as EventSource;
+
+        return proxy;
     }
 }
 

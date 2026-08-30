@@ -60,19 +60,26 @@ impl ChunkerEngine {
 
         self.manifests
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(file_id.clone(), manifest.clone());
-        self.chunks.write().unwrap().insert(file_id, file_chunks);
+        self.chunks
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(file_id, file_chunks);
 
         Ok(manifest)
     }
 
     pub fn get_manifest(&self, file_id: &str) -> Option<ChunkManifest> {
-        self.manifests.read().unwrap().get(file_id).cloned()
+        self.manifests
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(file_id)
+            .cloned()
     }
 
     pub fn get_chunk(&self, file_id: &str, index: usize) -> Option<FileChunk> {
-        let map = self.chunks.read().unwrap();
+        let map = self.chunks.read().unwrap_or_else(|e| e.into_inner());
         if let Some(list) = map.get(file_id) {
             list.get(index).cloned()
         } else {

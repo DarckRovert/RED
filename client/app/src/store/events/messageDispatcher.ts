@@ -12,8 +12,15 @@ import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
 import { toast } from '../../components/Toast';
 import { MonetizationEngine } from '../../lib/network/MonetizationEngine';
 import { companionSyncEngine } from '../../lib/mesh/companionSyncEngine';
+import { getSecureStored, setSecureStored } from '../../api/core';
+import { mediaChunker } from '../../lib/mesh/mediaChunker';
 
 // Persistent cross-session message deduplication set
+// W3 FIX: Hard cap on in-memory messages per conversation to prevent OOM
+// on Moto G22 (4GB RAM) / Redmi Note 14. History beyond this cap is still
+// persisted in IndexedDB/localStorage and loaded on pagination.
+const MAX_IN_MEMORY_MESSAGES = 150;
+
 const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (() => {
     try {
         const raw = localStorage.getItem('red_processed_msg_ids');
@@ -38,6 +45,17 @@ export function recordProcessedMessageId(id: string) {
 }
 
 const _processedHandshakes = new Set<string>();
+const MAX_PROCESSED_HANDSHAKES = 1000;
+
+function trackHandshake(key: string): boolean {
+    if (_processedHandshakes.has(key)) return false;
+    if (_processedHandshakes.size >= MAX_PROCESSED_HANDSHAKES) {
+        const firstKey = _processedHandshakes.values().next().value;
+        if (firstKey) _processedHandshakes.delete(firstKey);
+    }
+    _processedHandshakes.add(key);
+    return true;
+}
 
 export async function dispatchIncomingMessage(
     item: MessageItem,
@@ -104,7 +122,7 @@ export async function dispatchIncomingMessage(
             return;
         }
 
-        // ── Protocol Packets (Discovery & Ack): handled directly here ──
+        // ── Protocol Packets (Discovery, Ack, HiveMind, Telemetry): handled directly here ──
         if (
             typeof item.content === 'string' && item.content.startsWith('{') && (
                 item.content.includes('"type":"IDENTITY_ANNOUNCE"') ||
@@ -112,7 +130,11 @@ export async function dispatchIncomingMessage(
                 item.content.includes('"type":"IDENTITY_REQUEST"') ||
                 item.content.includes('"type":"SHAKE_PAIR_') ||
                 item.content.includes('"type":"DELIVERY_ACK"') ||
-                item.content.includes('"type":"RED_PAIR')
+                item.content.includes('"type":"RED_PAIR') ||
+                item.content.includes('"type":"HIVE_') ||
+                item.content.includes('"type":"NODE_LOCATION_UPDATE"') ||
+                item.content.includes('"type":"DEAD_DROP_BEACON"') ||
+                item.content.includes('"type":"CBRN_PLUME_')
             )
         ) {
             try {
@@ -619,8 +641,7 @@ export async function dispatchIncomingMessage(
                         RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {});
 
                         const handshakeKey = `${senderHash.toLowerCase()}_confirmed`;
-                        if (!_processedHandshakes.has(handshakeKey)) {
-                            _processedHandshakes.add(handshakeKey);
+                        if (trackHandshake(handshakeKey)) {
                             toast.success(`🤝 ${finalName} aceptó tu solicitud de contacto`);
                             TacticalAudioEngine.playMessageReceived();
                         }
@@ -763,7 +784,9 @@ export async function dispatchIncomingMessage(
                 const list: any[] = raw ? JSON.parse(raw) : [];
                 if (!list.some((b: any) => b.beacon_id === beacon.beacon_id)) {
                     list.unshift({ ...beacon, active: true });
+                    // Write-through: sync a localStorage inmediato + async a Keystore
                     localStorage.setItem('red_emergency_beacons', JSON.stringify(list));
+                    void setSecureStored('red_emergency_beacons', list);
                     set((s: any) => ({
                         activeSosBeacons: [...s.activeSosBeacons.filter((b: any) => b.beacon_id !== beacon.beacon_id), { ...beacon, active: true }]
                     }));
@@ -786,6 +809,7 @@ export async function dispatchIncomingMessage(
                     const list: any[] = raw ? JSON.parse(raw) : [];
                     const updated = list.map((b: any) => b.beacon_id === beaconId ? { ...b, active: false } : b);
                     localStorage.setItem('red_emergency_beacons', JSON.stringify(updated));
+                    void setSecureStored('red_emergency_beacons', updated);
                     set((s: any) => ({
                         activeSosBeacons: s.activeSosBeacons.filter((b: any) => b.beacon_id !== beaconId)
                     }));
@@ -845,12 +869,31 @@ export async function dispatchIncomingMessage(
                                 id: groupId,
                                 peer: groupId,
                                 peer_name: groupName,
-                                last_message: `${creator.slice(0, 8)} te añadió al escuadrón`,
+                                last_message: `Invitación al escuadrón ${groupName}`,
                                 last_timestamp: Date.now() / 1000,
                                 unread_count: 1,
                                 is_group: true
                             });
                             localStorage.setItem('red_web_conversations', JSON.stringify(convs));
+                        }
+                        // Save initial welcome system message inside group vault
+                        const groupConvKey = `red_web_messages_${groupId}`;
+                        const rawMsgs = localStorage.getItem(groupConvKey);
+                        const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
+                        const sysId = `sys_inv_${groupId}`;
+                        if (!list.some(m => m.id === sysId)) {
+                            list.push({
+                                id: sysId,
+                                sender: creator,
+                                recipient: groupId,
+                                content: `🛡️ Has sido añadido al escuadrón "${groupName}" por ${creator.slice(0, 6)}…`,
+                                timestamp: Date.now() / 1000,
+                                is_mine: false,
+                                status: 'Delivered',
+                                conversation_id: groupId,
+                                msg_type: 'system' as any
+                            });
+                            localStorage.setItem(groupConvKey, JSON.stringify(list));
                         }
                     } catch {}
                 }
@@ -880,6 +923,43 @@ export async function dispatchIncomingMessage(
                 console.warn('[RED Group] group_invite parse error:', e);
             }
             return;
+        }
+
+        // ── MEDIA CHUNK: Erasure coding reassembly for mesh image/voice chunks ──
+        if (
+            item.msg_type === 'media_chunk' ||
+            (typeof item.content === 'string' && item.content.startsWith('{') && (item.content.includes('"MEDIA_CHUNK"') || item.content.includes('"chunkIndex"')))
+        ) {
+            try {
+                let chunkMeta: any = (item as any).chunk_metadata || (item as any).chunk;
+                if (!chunkMeta && typeof item.content === 'string' && item.content.startsWith('{')) {
+                    const parsed = JSON.parse(item.content);
+                    chunkMeta = parsed.chunk_metadata || parsed.chunk || (parsed.fileId ? parsed : null);
+                }
+                if (chunkMeta && chunkMeta.fileId && typeof chunkMeta.chunkIndex === 'number') {
+                    const dataUrl = mediaChunker.assemble(chunkMeta);
+                    if (dataUrl) {
+                        const fullMsgId = chunkMeta.originalMsgId || chunkMeta.fileId;
+                        const msgType = chunkMeta.mimeType?.startsWith('image/') ? 'image' :
+                                        chunkMeta.mimeType?.startsWith('audio/') ? 'voice' :
+                                        chunkMeta.mimeType?.startsWith('video/') ? 'video' : 'file';
+
+                        const assembledItem = {
+                            ...item,
+                            id: fullMsgId,
+                            content: dataUrl,
+                            media_data: dataUrl,
+                            msg_type: msgType,
+                            file_size: chunkMeta.fileSize,
+                            mime_type: chunkMeta.mimeType,
+                        };
+                        return dispatchIncomingMessage(assembledItem, set, get);
+                    }
+                    return;
+                }
+            } catch (err) {
+                console.warn('[RED MediaChunk] Reassembly error:', err);
+            }
         }
 
         // ── GROUP MESSAGE: Route to group conversation in store ──
@@ -923,7 +1003,10 @@ export async function dispatchIncomingMessage(
                         indexedMediaVault.saveMedia(msgId, rawMedia, rawItem.mime_type || parsedObj.mime_type).catch(() => {});
                     }
 
-                    const newMsg: any = {
+                    const myHash = get().identity?.identity_hash;
+                    const isMine = senderHash === myHash || senderHash === 'me';
+
+                    const newMsg: MessageItem = {
                         id: msgId,
                         sender: senderHash,
                         sender_name: rawItem.sender_name || parsedObj.sender_name,
@@ -931,8 +1014,8 @@ export async function dispatchIncomingMessage(
                         content: typeof msgContent === 'string' && msgContent.startsWith('data:') && msgContent.length > 512 ? `red_vault://${msgId}` : msgContent,
                         media_data: rawMedia && rawMedia.length > 512 ? `red_vault://${msgId}` : rawMedia,
                         timestamp: normTs,
-                        is_mine: false,
-                        msg_type: msgType,
+                        is_mine: isMine,
+                        msg_type: msgType === 'group_message' || msgType === 'squad_msg' ? 'text' : msgType,
                         status: 'Delivered' as const,
                         conversation_id: groupId,
                         duration_ms: rawItem.duration_ms || parsedObj.duration_ms,
@@ -947,7 +1030,24 @@ export async function dispatchIncomingMessage(
                         expires_at: rawItem.expires_at || parsedObj.expires_at,
                     };
 
-                    // Persist to localStorage group message vault
+                    // 1. Ensure Group in store
+                    let groups = get().groups || [];
+                    let group = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
+                    const groupName = group?.name || `Escuadrón ${groupId.slice(0, 6)}`;
+                    if (!group) {
+                        const newGroup = {
+                            id: groupId,
+                            name: groupName,
+                            members: [{ identity_hash: senderHash, role: 'Member' }, { identity_hash: myHash || 'me', role: 'Member' }],
+                            created_at: normTs,
+                            last_activity: normTs
+                        };
+                        groups = [...groups, newGroup];
+                        set({ groups });
+                        RedAPI.setWebStore('red_web_groups', groups);
+                    }
+
+                    // 2. Persist to localStorage group message vault
                     if (typeof window !== 'undefined') {
                         try {
                             const convKey = `red_web_messages_${groupId}`;
@@ -960,37 +1060,71 @@ export async function dispatchIncomingMessage(
                         } catch {}
                     }
 
-                    // If group chat is currently open, append directly to messages state
+                    // 3. If group chat is currently open, append directly to messages state
                     const { activeConversationId } = get();
-                    if (activeConversationId === groupId) {
+                    const isCurrentChat = activeConversationId === groupId;
+                    if (isCurrentChat) {
                         const curMsgs = get().messages || [];
                         if (!curMsgs.some(m => m.id === msgId)) {
-                            set({ messages: [...curMsgs, newMsg as any] });
+                            set({ messages: [...curMsgs, newMsg] });
                         }
                     }
 
-                    // Update conversation list unread badge
+                    // 4. Update conversation list unread badge and snippet
                     const curConvs = get().conversations || [];
-                    const convIdx = curConvs.findIndex(c => c.id === groupId || c.peer === groupId);
+                    const convIdx = curConvs.findIndex(c => c && (c.id === groupId || c.peer === groupId));
                     const senderContact = (get().contacts || []).find((c: any) => c.identity_hash === senderHash);
                     const senderLabel = senderContact?.display_name || senderHash.slice(0, 8);
-                    const snippet = `${senderLabel}: ${msgContent.slice(0, 40)}`;
+                    const displaySnippet = msgType === 'image' ? '📷 Foto' : msgType === 'voice' ? '🎤 Nota de voz' : msgType === 'video' ? '🎬 Video' : msgContent;
+                    const snippet = `${senderLabel}: ${displaySnippet.slice(0, 40)}`;
+
+                    let updatedConvs = [...curConvs];
                     if (convIdx >= 0) {
-                        const updated = [...curConvs];
-                        const isActive = activeConversationId === groupId;
-                        updated[convIdx] = {
-                            ...updated[convIdx],
+                        const existing = updatedConvs[convIdx];
+                        updatedConvs.splice(convIdx, 1);
+                        updatedConvs.unshift({
+                            ...existing,
+                            id: groupId,
+                            peer: groupId,
+                            peer_name: groupName,
                             last_message: snippet,
                             last_timestamp: normTs,
-                            unread_count: isActive ? 0 : (updated[convIdx].unread_count || 0) + 1
-                        };
-                        updated.unshift(updated.splice(convIdx, 1)[0]);
-                        set({ conversations: updated });
-                        RedAPI.setWebStore('red_web_conversations', updated);
+                            unread_count: isCurrentChat ? 0 : ((existing.unread_count || 0) + 1),
+                            is_group: true
+                        });
+                    } else {
+                        updatedConvs.unshift({
+                            id: groupId,
+                            peer: groupId,
+                            peer_name: groupName,
+                            last_message: snippet,
+                            last_timestamp: normTs,
+                            unread_count: isCurrentChat ? 0 : 1,
+                            is_group: true
+                        });
                     }
+                    set({ conversations: updatedConvs });
+                    RedAPI.setWebStore('red_web_conversations', updatedConvs);
 
-                    if (activeConversationId !== groupId) {
+                    if (!isMine) {
                         TacticalAudioEngine.playMessageReceived();
+                        if (!isCurrentChat) {
+                            import('@capacitor/core').then(({ Capacitor }) => {
+                                if (Capacitor.isNativePlatform()) {
+                                    import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+                                        LocalNotifications.schedule({
+                                            notifications: [{
+                                                title: `👥 ${groupName}`,
+                                                body: `${senderLabel}: ${displaySnippet.slice(0, 60)}`,
+                                                id: Math.floor(Date.now() % 2147483647),
+                                                schedule: { at: new Date(Date.now() + 100) },
+                                                extra: { conversation_id: groupId, is_group: true }
+                                            }]
+                                        }).catch(() => {});
+                                    });
+                                }
+                            });
+                        }
                     }
                     return;
                 }
@@ -1166,6 +1300,7 @@ export async function dispatchIncomingMessage(
                 if (id && !reports.some((r: any) => r.id === id || r.report_id === id)) {
                     reports.unshift(report);
                     localStorage.setItem('red_triage_reports', JSON.stringify(reports));
+                    void setSecureStored('red_triage_reports', reports);
                     toast.info(`🏥 Reporte de triaje recibido: ${report.victim_label || 'Víctima'} [${report.category || 'TRIAGE'}]`);
                 }
             } catch (e) {
@@ -1210,6 +1345,7 @@ export async function dispatchIncomingMessage(
                     if (!vouchers.some((v: any) => v.id === voucher.id)) {
                         vouchers.unshift({ ...voucher, is_outgoing: false });
                         localStorage.setItem('red_p2p_vouchers', JSON.stringify(vouchers));
+                        void setSecureStored('red_p2p_vouchers', vouchers);
                         toast.success(`💳 ¡Vale P2P recibido de ${voucher.amount} créditos RED!`);
                     }
                 }
@@ -1346,10 +1482,12 @@ export async function dispatchIncomingMessage(
                         const existingInMemory = new Set(s.messages.map((m: any) => m.id));
                         const toAdd = newMsgs.filter((m: any) => !existingInMemory.has(m.id));
                         if (toAdd.length === 0) return s;
-                        const updated = [...s.messages, ...toAdd].sort((a, b) =>
-                            ((a.timestamp || 0) > 1e11 ? (a.timestamp || 0) / 1000 : (a.timestamp || 0)) -
-                            ((b.timestamp || 0) > 1e11 ? (b.timestamp || 0) / 1000 : (b.timestamp || 0))
-                        );
+                        const updated = [...s.messages, ...toAdd]
+                            .sort((a, b) =>
+                                ((a.timestamp || 0) > 1e11 ? (a.timestamp || 0) / 1000 : (a.timestamp || 0)) -
+                                ((b.timestamp || 0) > 1e11 ? (b.timestamp || 0) / 1000 : (b.timestamp || 0))
+                            )
+                            .slice(-MAX_IN_MEMORY_MESSAGES); // W3: OOM guard
                         return { messages: updated };
                     });
                 }
@@ -1361,217 +1499,7 @@ export async function dispatchIncomingMessage(
             return;
         }
 
-        // ── Group Invitation / Escuadrón P2P Synchronization (v64.1) ───────────
-        if (item.msg_type === 'group_invite' || (typeof item.content === 'string' && item.content.includes('"type":"group_invite"'))) {
-            try {
-                const parsed = typeof item.content === 'string' && item.content.startsWith('{') ? JSON.parse(item.content) : item as any;
-                const groupId = parsed.group_id || (item as any).group_id;
-                const groupName = parsed.name || parsed.group_name || (item as any).group_name || `Escuadrón ${groupId?.slice(0, 6)}`;
-                const creator = parsed.creator || parsed.creator_hash || item.sender;
-                const members = parsed.members || [creator, get().identity?.identity_hash || 'me'];
 
-                if (groupId) {
-                    // 1. Update in-memory and local Web groups
-                    const currentGroups = get().groups || [];
-                    if (!currentGroups.some((g: any) => g.id === groupId || g.group_id === groupId)) {
-                        const newGroup = {
-                            id: groupId,
-                            name: groupName,
-                            members: members.map((m: any) => typeof m === 'string' ? { identity_hash: m, role: m === creator ? 'Admin' : 'Member' } : m),
-                            created_at: parsed.created_at || Math.floor(Date.now() / 1000),
-                            last_activity: Math.floor(Date.now() / 1000)
-                        };
-                        const nextGroups = [...currentGroups, newGroup];
-                        set({ groups: nextGroups });
-                        RedAPI.setWebStore('red_web_groups', nextGroups);
-                    }
-
-                    // 2. Ensure conversation item exists in conversation list
-                    const currentConvs = get().conversations || [];
-                    if (!currentConvs.some((c: any) => c.id === groupId || c.peer === groupId)) {
-                        const newConv: ConversationItem = {
-                            id: groupId,
-                            peer: groupId,
-                            peer_name: groupName,
-                            last_message: `Invitación al escuadrón ${groupName}`,
-                            last_timestamp: Date.now() / 1000,
-                            unread_count: 1,
-                            is_group: true
-                        };
-                        const nextConvs = [newConv, ...currentConvs];
-                        set({ conversations: nextConvs });
-                        RedAPI.setWebStore('red_web_conversations', nextConvs);
-                    }
-
-                    // 3. Save initial welcome system message inside the group vault (NOT in 1-to-1 chat)
-                    if (typeof window !== 'undefined') {
-                        try {
-                            const groupConvKey = `red_web_messages_${groupId}`;
-                            const rawMsgs = localStorage.getItem(groupConvKey);
-                            const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
-                            const sysId = `sys_inv_${groupId}`;
-                            if (!list.some(m => m.id === sysId)) {
-                                list.push({
-                                    id: sysId,
-                                    sender: creator,
-                                    recipient: groupId,
-                                    content: `🛡️ Has sido añadido al escuadrón "${groupName}" por ${creator.slice(0, 6)}…`,
-                                    timestamp: Date.now() / 1000,
-                                    is_mine: false,
-                                    status: 'Delivered',
-                                    conversation_id: groupId,
-                                    msg_type: 'system' as any
-                                });
-                                localStorage.setItem(groupConvKey, JSON.stringify(list));
-                            }
-                        } catch {}
-                    }
-
-                    toast.success(`👥 Te han añadido al escuadrón: ${groupName}`);
-                    TacticalAudioEngine.playMessageReceived();
-                }
-            } catch (e) {
-                console.warn('[Group Invite Ingest Error]', e);
-            }
-            return;
-        }
-
-        // ── Group / Squad Messages Ingestion (v64.2 P2P Fan-Out Router) ─────────
-        if (
-            item.msg_type === 'group_message' ||
-            item.msg_type === 'squad_msg' ||
-            (typeof item.content === 'string' && (item.content.includes('"type":"group_message"') || item.content.includes('"type":"squad_msg"')))
-        ) {
-            try {
-                let parsed: any = null;
-                if (typeof item.content === 'string' && item.content.startsWith('{')) {
-                    try { parsed = JSON.parse(item.content); } catch {}
-                }
-                const groupId = parsed?.group_id || (item as any).group_id || item.conversation_id;
-                if (groupId) {
-                    const senderHash = parsed?.sender || item.sender;
-                    const actualContent = parsed?.content !== undefined ? parsed.content : item.content;
-                    const actualMsgId = parsed?.id || item.id || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-                    const actualTimestamp = parsed?.timestamp || item.timestamp || (Date.now() / 1000);
-                    const actualMsgType = parsed?.msg_type || item.msg_type || (actualContent?.startsWith('data:image') ? 'image' : actualContent?.startsWith('data:audio') ? 'voice' : 'text');
-                    const actualMediaData = parsed?.media_data || item.media_data;
-
-                    const myHash = get().identity?.identity_hash;
-                    const isMine = senderHash === myHash || senderHash === 'me';
-
-                    const groupMessageItem: MessageItem = {
-                        id: actualMsgId,
-                        sender: senderHash,
-                        recipient: groupId,
-                        content: actualContent,
-                        timestamp: actualTimestamp > 1e11 ? actualTimestamp / 1000 : actualTimestamp,
-                        is_mine: isMine,
-                        status: 'Delivered',
-                        conversation_id: groupId,
-                        msg_type: actualMsgType === 'group_message' || actualMsgType === 'squad_msg' ? 'text' : actualMsgType,
-                        media_data: actualMediaData,
-                        mime_type: parsed?.mime_type || (item as any).mime_type
-                    };
-
-                    // 1. Ensure Group in store
-                    let groups = get().groups || [];
-                    let group = groups.find((g: any) => g.id === groupId || g.group_id === groupId);
-                    const groupName = group?.name || `Escuadrón ${groupId.slice(0, 6)}`;
-
-                    if (!group) {
-                        const newGroup = {
-                            id: groupId,
-                            name: groupName,
-                            members: [{ identity_hash: senderHash, role: 'Member' }, { identity_hash: myHash || 'me', role: 'Member' }],
-                            created_at: actualTimestamp,
-                            last_activity: actualTimestamp
-                        };
-                        groups = [...groups, newGroup];
-                        set({ groups });
-                        RedAPI.setWebStore('red_web_groups', groups);
-                    }
-
-                    // 2. Update Conversations list
-                    const currentConvs = get().conversations || [];
-                    const isCurrentChat = get().activeConversationId === groupId;
-                    const existingConvIdx = currentConvs.findIndex((c: any) => c && (c.id === groupId || c.peer === groupId));
-                    let updatedConvs = [...currentConvs];
-
-                    if (existingConvIdx >= 0) {
-                        const existing = updatedConvs[existingConvIdx];
-                        updatedConvs.splice(existingConvIdx, 1);
-                        updatedConvs.unshift({
-                            ...existing,
-                            id: groupId,
-                            peer: groupId,
-                            peer_name: groupName,
-                            last_message: actualContent?.startsWith('data:image') ? '📷 Foto' : actualContent?.startsWith('data:audio') ? '🎤 Nota de voz' : actualContent,
-                            last_timestamp: actualTimestamp > 1e11 ? actualTimestamp / 1000 : actualTimestamp,
-                            unread_count: isCurrentChat ? 0 : ((existing.unread_count || 0) + 1),
-                            is_group: true
-                        });
-                    } else {
-                        updatedConvs.unshift({
-                            id: groupId,
-                            peer: groupId,
-                            peer_name: groupName,
-                            last_message: actualContent?.startsWith('data:image') ? '📷 Foto' : actualContent?.startsWith('data:audio') ? '🎤 Nota de voz' : actualContent,
-                            last_timestamp: actualTimestamp > 1e11 ? actualTimestamp / 1000 : actualTimestamp,
-                            unread_count: isCurrentChat ? 0 : 1,
-                            is_group: true
-                        });
-                    }
-                    set({ conversations: updatedConvs });
-                    RedAPI.setWebStore('red_web_conversations', updatedConvs);
-
-                    // 3. Persist into group's message vault
-                    if (typeof window !== 'undefined') {
-                        try {
-                            const groupConvKey = `red_web_messages_${groupId}`;
-                            const rawMsgs = localStorage.getItem(groupConvKey);
-                            const list: MessageItem[] = rawMsgs ? JSON.parse(rawMsgs) : [];
-                            if (!list.some(m => m.id === groupMessageItem.id)) {
-                                list.push(groupMessageItem);
-                                localStorage.setItem(groupConvKey, JSON.stringify(list));
-                            }
-                        } catch {}
-                    }
-
-                    // 4. Update in-memory active chat if user is currently in this group
-                    if (isCurrentChat) {
-                        set((s: any) => {
-                            if (s.messages.some((m: any) => m.id === groupMessageItem.id)) return s;
-                            return { messages: [...s.messages, groupMessageItem] };
-                        });
-                    }
-
-                    if (!isMine) {
-                        TacticalAudioEngine.playMessageReceived();
-                        // Push Local Notification if not focused on this group
-                        if (!isCurrentChat) {
-                            import('@capacitor/core').then(({ Capacitor }) => {
-                                if (Capacitor.isNativePlatform()) {
-                                    import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
-                                        LocalNotifications.schedule({
-                                            notifications: [{
-                                                title: `👥 ${groupName}`,
-                                                body: `${senderHash.slice(0, 6)}: ${actualContent}`,
-                                                id: Math.floor(Date.now() % 2147483647),
-                                                schedule: { at: new Date(Date.now() + 100) },
-                                                extra: { conversation_id: groupId, is_group: true }
-                                            }]
-                                        }).catch(() => {});
-                                    });
-                                }
-                            });
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('[Group Message Ingest Error]', e);
-            }
-            return;
-        }
 
         // ── Real-Time Reactions: apply to target bubble, never append as new message ──
         if (item.msg_type === 'reaction') {
@@ -1842,7 +1770,8 @@ export async function dispatchIncomingMessage(
                 };
                 set({ messages: updated });
             } else {
-                set({ messages: [...messages, normalizedItem] });
+                // W3: OOM guard — clamp in-memory window to MAX_IN_MEMORY_MESSAGES
+                set({ messages: [...messages, normalizedItem].slice(-MAX_IN_MEMORY_MESSAGES) });
                 if (!normalizedItem.is_mine) {
                     TacticalAudioEngine.playMessageReceived();
                     if (item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {

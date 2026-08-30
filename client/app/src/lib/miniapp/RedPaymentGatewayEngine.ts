@@ -105,7 +105,9 @@ export class RedPaymentGatewayEngine {
             throw new Error("La dirección EVM del comercio no es válida.");
         }
 
-        let txHash = `0x${Array.from({length: 64}, () => Math.floor(Math.random()*16).toString(16)).join('')}`;
+        const _txBytes = new Uint8Array(32);
+        crypto.getRandomValues(_txBytes);
+        let txHash = `0x${Array.from(_txBytes, b => b.toString(16).padStart(2,'0')).join('')}`;
 
         // If Web3 wallet (MetaMask) is connected, send real transaction
         if (state.isConnected && state.account && (window as any).ethereum) {
@@ -152,7 +154,10 @@ export class RedPaymentGatewayEngine {
      */
     public async executeLightningPayment(intent: PaymentIntentRequest, buyerDid: string): Promise<PaymentReceipt> {
         const satAmount = intent.currency === 'SAT' ? Math.round(intent.amount) : Math.round(intent.amount * 1500); // approx sats
-        const invoice = `lnbc${satAmount}u1p${Math.random().toString(36).substring(2, 15)}...`;
+        const _invoiceBytes = new Uint8Array(8);
+        crypto.getRandomValues(_invoiceBytes);
+        const _invoiceRand = Array.from(_invoiceBytes, b => b.toString(36)).join('').substring(0, 13);
+        const invoice = `lnbc${satAmount}u1p${_invoiceRand}...`;
 
         // Check if WebLN provider is injected
         if (typeof window !== 'undefined' && (window as any).webln) {
@@ -164,7 +169,9 @@ export class RedPaymentGatewayEngine {
             }
         }
 
-        const txId = `ln_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        const _txIdBytes = new Uint8Array(4);
+        crypto.getRandomValues(_txIdBytes);
+        const txId = `ln_${Date.now()}_${Array.from(_txIdBytes, b => b.toString(36)).join('').substring(0,7)}`;
 
         return {
             success: true,
@@ -207,7 +214,7 @@ export class RedPaymentGatewayEngine {
             timestamp: Date.now(),
             merchantDid: intent.merchant.did,
             buyerDid,
-            signature: `sig_ed25519_${Date.now()}_${Math.random().toString(16).substring(2, 10)}`,
+            signature: `sig_ed25519_${Date.now()}_${Array.from(new Uint8Array(4).fill(0).map(() => { const a = new Uint8Array(1); crypto.getRandomValues(a); return a[0]; }), b => b.toString(16).padStart(2,'0')).join('')}`,
             details: {
                 voucherCode,
                 concept: intent.title,

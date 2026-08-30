@@ -99,9 +99,27 @@ export class TacticalRdfEngine {
         this.notify();
     }
 
-    public getPeakBearing(): { peakHeadingDeg: number; peakRssiDbm: number; estimatedDistMeters: number } {
+    public getPeakBearing(): {
+        peakHeadingDeg: number;
+        peakRssiDbm: number;
+        estimatedDistMeters: number;
+        confidencePct: number;
+        isSignalLocked: boolean;
+    } {
+        if (this.samples.length === 0) {
+            return {
+                peakHeadingDeg: 0,
+                peakRssiDbm: -105,
+                estimatedDistMeters: 0,
+                confidencePct: 0,
+                isSignalLocked: false,
+            };
+        }
+
         let bestSector = this.sectors[0];
+        let totalSamples = 0;
         for (const s of this.sectors) {
+            totalSamples += s.sampleCount;
             if (s.averageRssiDbm > bestSector.averageRssiDbm) {
                 bestSector = s;
             }
@@ -109,16 +127,20 @@ export class TacticalRdfEngine {
 
         const peakHeadingDeg = Math.round(bestSector.startAngleDeg + TacticalRdfEngine.SECTOR_WIDTH / 2);
         const peakRssiDbm = bestSector.averageRssiDbm;
+        const isSignalLocked = bestSector.sampleCount >= 2 && peakRssiDbm > -95;
 
         // Log-Distance Path Loss Model (RSSI0 = -40 dBm a 1 metro, path loss exponent n = 2.5)
         const rssi0 = -40;
         const pathLossExponent = 2.5;
         const dist = Math.pow(10, (rssi0 - peakRssiDbm) / (10 * pathLossExponent));
+        const confidencePct = Math.min(100, Math.round((Math.min(totalSamples, 20) / 20) * 60 + ((peakRssiDbm + 105) / 65) * 40));
 
         return {
             peakHeadingDeg,
             peakRssiDbm,
-            estimatedDistMeters: Math.max(1, Math.min(500, Math.round(dist * 10) / 10))
+            estimatedDistMeters: isSignalLocked ? Math.max(1, Math.min(500, Math.round(dist * 10) / 10)) : 0,
+            confidencePct: isSignalLocked ? confidencePct : 0,
+            isSignalLocked,
         };
     }
 

@@ -231,10 +231,29 @@ class IndexedMediaVault {
         this.memCache.clear();
         try {
             const db = await this.getDB();
-            const tx = db.transaction(this.storeName, 'readwrite');
-            tx.objectStore(this.storeName).clear();
+            await new Promise<void>((resolve, reject) => {
+                const tx = db.transaction(this.storeName, 'readwrite');
+                const store = tx.objectStore(this.storeName);
+                const req = store.clear();
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
         } catch (err) {
             console.warn('[MediaVault] Error clearing vault:', err);
+        }
+    }
+
+    /**
+     * Cierra la conexión activa de IndexedDB y vacía la caché en memoria.
+     */
+    public async closeDB(): Promise<void> {
+        this.memCache.clear();
+        if (this.dbPromise) {
+            try {
+                const db = await this.dbPromise;
+                db.close();
+            } catch {}
+            this.dbPromise = null;
         }
     }
 }

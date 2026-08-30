@@ -74,6 +74,7 @@ public class RedNodeService extends Service {
     private final AtomicBoolean sseShouldRun = new AtomicBoolean(false);
     private int notifIdCounter = 2000;
     private java.util.concurrent.ScheduledExecutorService heartbeatExecutor = null;
+    private final java.util.concurrent.ConcurrentHashMap<String, java.io.ByteArrayOutputStream> nativeBleBuffers = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void onCreate() {
@@ -440,6 +441,27 @@ public class RedNodeService extends Service {
         }
     }
 
+    private boolean isEcoMeshActive = false;
+
+    public void setEcoMeshMode(boolean enabled) {
+        this.isEcoMeshActive = enabled;
+        try {
+            if (enabled) {
+                if (wifiLock != null && wifiLock.isHeld()) {
+                    wifiLock.release();
+                    Log.i(TAG, "[EcoMesh] WifiLock released: Switched to Ultra Low-Power Standby");
+                }
+            } else {
+                if (wifiLock != null && !wifiLock.isHeld()) {
+                    wifiLock.acquire();
+                    Log.i(TAG, "[EcoMesh] WifiLock acquired: Restored High-Performance Mode");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "[EcoMesh] Mode transition error: " + e.getMessage());
+        }
+    }
+
     @Override
     public void onDestroy() {
         // CRITICAL: Call stopForeground FIRST, before any blocking operations.
@@ -507,6 +529,7 @@ public class RedNodeService extends Service {
             try { gattServer.close(); } catch (Exception ignored) {}
             Log.i(TAG, "[BLE] GATT Server closed.");
         }
+        nativeBleBuffers.clear();
 
         // Stop Rust node in a background thread with a 3s timeout to avoid
         // blocking onDestroy past the OS foreground service deadline.
@@ -580,6 +603,7 @@ public class RedNodeService extends Service {
                 Log.i(TAG, "[BLE Server] Device connected: " + device.getAddress());
             } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
                 Log.i(TAG, "[BLE Server] Device disconnected: " + device.getAddress());
+                nativeBleBuffers.remove(device.getAddress());
             }
         }
 
@@ -595,16 +619,75 @@ public class RedNodeService extends Service {
                 }
 
                 if (value != null && value.length > 0) {
-                    // 1. Direct native JNI injection into Rust core node (runs 24/7 even with screen off/WebView frozen)
+                    // 1. Forward raw chunk to Capacitor App via RedNodePlugin static event emitter for active UI
+                    RedNodePlugin.emitBleMessage(value, device.getAddress());
+
+                    // 2. Direct native JNI injection into Rust core node with frame reassembly
                     if (RedNodePlugin.isNativeLoaded) {
                         try {
-                            RedNodePlugin.injectBlePayload(value, device.getAddress());
+                            String devAddr = device.getAddress();
+                            java.io.ByteArrayOutputStream stream = nativeBleBuffers.get(devAddr);
+                            if (stream == null) {
+                                stream = new java.io.ByteArrayOutputStream();
+                                nativeBleBuffers.put(devAddr, stream);
+                            }
+                            synchronized (stream) {
+                                stream.write(value);
+                                byte[] accumulated = stream.toByteArray();
+
+                                // Check if we have at least the 96-byte RED MeshPacket header
+                                while (accumulated.length >= 96) {
+                                    // Verify RED magic: 0x52454401 (0x52, 0x45, 0x44, 0x01)
+                                    if (accumulated[0] == 0x52 && accumulated[1] == 0x45 && accumulated[2] == 0x44 && accumulated[3] == 0x01) {
+                                        int payloadLen = (accumulated[70] & 0xFF) | ((accumulated[71] & 0xFF) << 8);
+                                        int totalPacketLen = 96 + payloadLen;
+
+                                        if (accumulated.length >= totalPacketLen) {
+                                            byte[] fullPacket = new byte[totalPacketLen];
+                                            System.arraycopy(accumulated, 0, fullPacket, 0, totalPacketLen);
+
+                                            RedNodePlugin.injectBlePayload(fullPacket, devAddr);
+
+                                            // Remaining bytes in buffer
+                                            int remaining = accumulated.length - totalPacketLen;
+                                            stream.reset();
+                                            if (remaining > 0) {
+                                                stream.write(accumulated, totalPacketLen, remaining);
+                                                accumulated = stream.toByteArray();
+                                            } else {
+                                                break;
+                                            }
+                                        } else {
+                                            break; // Wait for full packet payload chunks
+                                        }
+                                    } else {
+                                        // Resync: Scan for magic 0x52454401 in buffer
+                                        int syncIdx = -1;
+                                        for (int i = 1; i <= accumulated.length - 4; i++) {
+                                            if (accumulated[i] == 0x52 && accumulated[i+1] == 0x45 && accumulated[i+2] == 0x44 && accumulated[i+3] == 0x01) {
+                                                syncIdx = i;
+                                                break;
+                                            }
+                                        }
+                                        if (syncIdx > 0) {
+                                            int remaining = accumulated.length - syncIdx;
+                                            stream.reset();
+                                            stream.write(accumulated, syncIdx, remaining);
+                                            accumulated = stream.toByteArray();
+                                        } else {
+                                            // No magic found, reset buffer if too large
+                                            if (accumulated.length > 65536) {
+                                                stream.reset();
+                                            }
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
                         } catch (Throwable jniErr) {
                             Log.w(TAG, "Direct JNI injectBlePayload warning: " + jniErr.getMessage());
                         }
                     }
-                    // 2. Forward bytes to Capacitor App via RedNodePlugin static event emitter for active UI
-                    RedNodePlugin.emitBleMessage(value, device.getAddress());
                 }
             } else {
                 if (responseNeeded) {

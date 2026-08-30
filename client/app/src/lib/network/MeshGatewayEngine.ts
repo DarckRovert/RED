@@ -35,6 +35,8 @@ export class MeshGatewayEngine {
     private static instance: MeshGatewayEngine | null = null;
     private isGatewayEnabled: boolean = true;
     private pendingRequests: Map<string, { resolve: (resp: ProxyResponsePayload) => void; reject: (err: Error) => void }> = new Map();
+    /** Referencia almacenada al listener para poder desregistrarlo limpiamente */
+    private boundMeshListener: ((event: any) => void) | null = null;
 
     private constructor() {
         this.initMeshListener();
@@ -140,7 +142,7 @@ export class MeshGatewayEngine {
     private initMeshListener() {
         if (typeof window === 'undefined') return;
 
-        window.addEventListener('red_mesh_packet', async (event: any) => {
+        this.boundMeshListener = async (event: any) => {
             const packet = event.detail;
             if (!packet) return;
 
@@ -187,7 +189,26 @@ export class MeshGatewayEngine {
                     resolver?.resolve(resp);
                 }
             }
-        });
+        };
+
+        window.addEventListener('red_mesh_packet', this.boundMeshListener);
+    }
+
+    /**
+     * Desregistra el listener de paquetes mesh y rechaza todas las solicitudes proxy pendientes.
+     * Debe invocarse al desconectar el nodo gateway de la malla.
+     */
+    public destroy(): void {
+        if (typeof window !== 'undefined' && this.boundMeshListener) {
+            window.removeEventListener('red_mesh_packet', this.boundMeshListener);
+            this.boundMeshListener = null;
+        }
+        // Rechazar todas las Promises en vuelo para evitar fugas
+        for (const [, resolver] of this.pendingRequests) {
+            resolver.reject(new Error('[MeshGatewayEngine] Gateway node destroyed'));
+        }
+        this.pendingRequests.clear();
+        MeshGatewayEngine.instance = null;
     }
 
     private generateOfflineFallbackHtml(url: string): string {

@@ -135,6 +135,14 @@ PRIORIDAD  : [ ${card.evacPriority} ]
 [S] FÉRULAS     : ${card.splintApplied ? 'FRACTURA INMOVILIZADA' : 'N/A'}
 =================================================`;
     }
+
+    public destroy(): void {
+        if (this.tickerInterval) {
+            clearInterval(this.tickerInterval);
+            this.tickerInterval = null;
+        }
+        this.listeners.clear();
+    }
 }
 
 export const tacticalTccc = TacticalTcccEngine.getInstance();

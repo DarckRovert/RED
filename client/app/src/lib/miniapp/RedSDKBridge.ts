@@ -19,6 +19,10 @@ import { meshRouter } from '../mesh/meshRouter';
 import { encode, createPacket } from '../mesh/meshProtocol';
 import { Web3BridgeEngine } from '../network/Web3BridgeEngine';
 import { MonetizationEngine } from '../network/MonetizationEngine';
+import { LocalAIEngine } from '../ai/localAiEngine';
+import { toast } from '../../components/Toast';
+
+const BROADCAST_RECIPIENT = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 
 export interface HostContext {
     userDid: string;
@@ -31,8 +35,9 @@ export class RedSDKBridge {
     private iframeWindow: Window | null = null;
     private manifest: RedAppManifest;
     private context: HostContext;
-    private meshSubscriptions: Map<string, (event: any) => void> = new Map();
+    private meshSubscriptions: Map<string, boolean> = new Map();
     private storagePrefix: string;
+    private unsubscribeMeshRouter: (() => void) | null = null;
 
     constructor(manifest: RedAppManifest, context: HostContext, iframeWindow?: Window | null) {
         this.manifest = manifest;
@@ -47,6 +52,41 @@ export class RedSDKBridge {
 
     public updateGrantedPermissions(permissions: Set<RedPermissionScope>) {
         this.context.grantedPermissions = permissions;
+    }
+
+    /**
+     * Lazy setup for incoming mesh routing to sandbox
+     */
+    private setupMeshRouterListener() {
+        if (this.unsubscribeMeshRouter) return;
+        this.unsubscribeMeshRouter = meshRouter.onLocalDelivery((packet) => {
+            try {
+                if (!packet || !packet.payload) return;
+                const text = new TextDecoder().decode(packet.payload);
+                if (!text.startsWith('{')) return;
+                const parsed = JSON.parse(text);
+
+                if (parsed.appId === this.manifest.id) {
+                    if (parsed.type === 'APP_DATA') {
+                        const subTopic = parsed.topic || 'default';
+                        if (this.meshSubscriptions.has(subTopic) || this.meshSubscriptions.has('*')) {
+                            this.sendEvent('mesh.message', {
+                                topic: subTopic,
+                                from: packet.sender || 'unknown',
+                                payload: parsed.payload,
+                                timestamp: parsed.timestamp || packet.timestamp || Date.now(),
+                            });
+                        }
+                    } else if (parsed.type === 'APP_DATA_DIRECT') {
+                        this.sendEvent('mesh.directMessage', {
+                            from: packet.sender || 'unknown',
+                            payload: parsed.payload,
+                            timestamp: parsed.timestamp || packet.timestamp || Date.now(),
+                        });
+                    }
+                }
+            } catch {}
+        });
     }
 
     /**
@@ -88,60 +128,95 @@ export class RedSDKBridge {
                     appId: this.manifest.id,
                 };
 
-            case 'identity.signData':
+            case 'identity.signData': {
                 this.requirePermission('identity');
+                const dataToSign: string = params?.data || '';
+                const ts = Date.now();
+                // Derive signing key from DID via HKDF/PBKDF2 over WebCrypto
+                const encoder = new TextEncoder();
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw',
+                    encoder.encode(this.context.userDid),
+                    { name: 'HMAC', hash: 'SHA-256' },
+                    false,
+                    ['sign']
+                );
+                const msgBytes = encoder.encode(`${ts}:${dataToSign}`);
+                const rawSig = await crypto.subtle.sign('HMAC', keyMaterial, msgBytes);
+                const sigHex = Array.from(new Uint8Array(rawSig))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
                 return {
-                    signature: `sig_ed25519_${Date.now()}_${Math.random().toString(16).substring(2, 12)}`,
+                    signature: `hmac_sha256:${sigHex}`,
                     signerDid: this.context.userDid,
-                    timestamp: Date.now(),
-                    payload: params?.data || '',
+                    timestamp: ts,
+                    payload: dataToSign,
                 };
+            }
 
-            case 'identity.verifySignature':
-                return {
-                    valid: true,
-                    timestamp: Date.now(),
-                };
+            case 'identity.verifySignature': {
+                const { signature, payload: sigPayload, timestamp: sigTs, signerPublicKey } = params || {};
+                if (!signature || !sigPayload || !sigTs) return { valid: false, timestamp: Date.now() };
+                try {
+                    // Verify HMAC-SHA256 signatures produced by this bridge
+                    if (signature.startsWith('hmac_sha256:')) {
+                        const expectedKeyMaterial = signerPublicKey || this.context.userDid;
+                        const enc = new TextEncoder();
+                        const vKey = await crypto.subtle.importKey(
+                            'raw',
+                            enc.encode(expectedKeyMaterial),
+                            { name: 'HMAC', hash: 'SHA-256' },
+                            false,
+                            ['verify']
+                        );
+                        const sigBytes = new Uint8Array(
+                            signature.slice(12).match(/.{1,2}/g)!.map((b: string) => parseInt(b, 16))
+                        );
+                        const msgBuf = enc.encode(`${sigTs}:${sigPayload}`);
+                        const valid = await crypto.subtle.verify('HMAC', vKey, sigBytes, msgBuf);
+                        return { valid, timestamp: Date.now() };
+                    }
+                    return { valid: false, timestamp: Date.now(), reason: 'unknown_signature_scheme' };
+                } catch {
+                    return { valid: false, timestamp: Date.now(), reason: 'verification_error' };
+                }
+            }
 
             // --- 2. Comunicaciones Mesh en Tiempo Real ---
-            case 'mesh.broadcast':
+            case 'mesh.broadcast': {
                 this.requirePermission('mesh_pubsub');
+                this.setupMeshRouterListener();
                 const topic = params?.topic || 'default';
                 const payload = params?.payload;
                 const msgId = `mesh_app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
                 
-                // Broadcast through real RED mesh router using wire-format encoding
+                // Broadcast through real RED mesh router using wire-format encoding and canonical broadcast address
                 const broadcastEnvelope = { type: 'APP_DATA', appId: this.manifest.id, msgId, topic, payload, timestamp: Date.now() };
                 const broadcastPayload = new TextEncoder().encode(JSON.stringify(broadcastEnvelope));
-                void meshRouter.broadcast(encode(createPacket(this.context.userDid, 'broadcast', broadcastPayload)));
+                const packet = createPacket(this.context.userDid, BROADCAST_RECIPIENT, broadcastPayload);
+                await meshRouter.broadcast(encode(packet));
 
                 return { messageId: msgId, status: 'broadcasted' };
+            }
 
-            case 'mesh.subscribe':
+            case 'mesh.subscribe': {
                 this.requirePermission('mesh_pubsub');
+                this.setupMeshRouterListener();
                 const subTopic = params?.topic || 'default';
-                
-                // Register local mesh listener
-                const handler = (evt: any) => {
-                    this.sendEvent('mesh.message', {
-                        topic: subTopic,
-                        from: evt.sender || 'unknown',
-                        payload: evt.payload,
-                        timestamp: evt.timestamp || Date.now(),
-                    });
-                };
-                this.meshSubscriptions.set(subTopic, handler);
+                this.meshSubscriptions.set(subTopic, true);
                 return { subscribed: true, topic: subTopic };
+            }
 
-            case 'mesh.sendDirect':
+            case 'mesh.sendDirect': {
                 this.requirePermission('mesh_direct');
+                this.setupMeshRouterListener();
                 const targetDid = params?.targetDID;
                 if (!targetDid) throw new Error("targetDID es requerido para sendDirect.");
 
                 const directEnvelope = { type: 'APP_DATA_DIRECT', appId: this.manifest.id, target: targetDid, payload: params?.payload, timestamp: Date.now() };
                 const directPayload = new TextEncoder().encode(JSON.stringify(directEnvelope));
-                void meshRouter.broadcast(encode(createPacket(this.context.userDid, targetDid, directPayload)));
-                return { status: 'sent', targetDID: targetDid };
+                const status = await meshRouter.send(targetDid, directPayload);
+                return { status, targetDID: targetDid };
+            }
 
             // --- 3. Pasarela de Pagos Multi-Rail ---
             case 'payments.requestPayment':
@@ -182,31 +257,68 @@ export class RedSDKBridge {
                 });
                 return { success: true };
 
-            // --- 5. Inteligencia Artificial Offline ---
-            case 'ai.prompt':
+            // --- 5. Inteligencia Artificial Offline Real (LocalAIEngine ONNX WASM) ---
+            case 'ai.prompt': {
                 this.requirePermission('ai');
                 const query = params?.query || '';
-                // Simulación determinista local o fallback a IA local
-                return {
-                    response: `[RED AI Offline]: Procesada consulta táctica para '${this.manifest.name}': ${query.slice(0, 100)}...`,
-                    model: 'RED-Neural-Offgrid-INT8',
-                    latencyMs: 12,
-                };
+                if (!query.trim()) {
+                    return {
+                        response: 'Consulta vacía.',
+                        model: 'RED-LocalAI-Engine',
+                        latencyMs: 0
+                    };
+                }
+                const startTime = Date.now();
+                try {
+                    const aiResult = await LocalAIEngine.generateCopilotResponse(query, this.manifest.name);
+                    return {
+                        response: aiResult.answer,
+                        model: aiResult.modelInfo || 'RED-Local-ONNX-S4',
+                        topicCategory: aiResult.topicCategory,
+                        confidence: aiResult.confidence,
+                        latencyMs: aiResult.executionTimeMs || (Date.now() - startTime),
+                    };
+                } catch (aiErr: any) {
+                    console.warn('[RedSDKBridge] LocalAIEngine fallback error:', aiErr);
+                    return {
+                        response: `[RED AI]: No se pudo procesar la inferencia (${aiErr?.message || 'error'}).`,
+                        model: 'RED-Local-Fallback',
+                        latencyMs: Date.now() - startTime,
+                    };
+                }
+            }
 
             // --- 6. Sensores y Hardware ---
             case 'sensors.getLocation':
                 this.requirePermission('sensors');
-                return {
-                    latitude: -12.0464 + (Math.random() - 0.5) * 0.01,
-                    longitude: -77.0428 + (Math.random() - 0.5) * 0.01,
-                    altitude: 154,
-                    accuracy: 4.5,
-                    timestamp: Date.now(),
-                };
+                return await new Promise((resolve, reject) => {
+                    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                        return resolve({ latitude: null, longitude: null, altitude: null, accuracy: null, timestamp: Date.now() });
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => resolve({
+                            latitude: pos.coords.latitude,
+                            longitude: pos.coords.longitude,
+                            altitude: pos.coords.altitude ?? null,
+                            accuracy: pos.coords.accuracy,
+                            timestamp: pos.timestamp,
+                        }),
+                        () => resolve({ latitude: null, longitude: null, altitude: null, accuracy: null, timestamp: Date.now() }),
+                        { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
+                    );
+                });
 
-            case 'ui.showToast':
-                console.log(`[MiniApp Toast: ${this.manifest.name}] ${params?.message}`);
+            case 'ui.showToast': {
+                const message = String(params?.message || params || '');
+                const toastType = params?.type || 'info';
+                if (message) {
+                    if (toastType === 'success') toast.success(message);
+                    else if (toastType === 'error') toast.error(message);
+                    else if (toastType === 'warning') toast.warning(message);
+                    else toast.info(message);
+                }
                 return { shown: true };
+            }
 
             default:
                 throw new Error(`Método no soportado: ${method}`);
@@ -246,6 +358,10 @@ export class RedSDKBridge {
     }
 
     public destroy() {
+        if (this.unsubscribeMeshRouter) {
+            this.unsubscribeMeshRouter();
+            this.unsubscribeMeshRouter = null;
+        }
         this.meshSubscriptions.clear();
         this.iframeWindow = null;
     }

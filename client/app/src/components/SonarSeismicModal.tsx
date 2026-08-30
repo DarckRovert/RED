@@ -12,9 +12,7 @@ export function SonarSeismicModal() {
     const [activeTab, setActiveTab] = useState<"sonar" | "seismic" | "structural">("sonar");
     
     // Structural Health State
-    const [structTelemetry, setStructTelemetry] = useState<StructuralHealthTelemetry>(() => structuralHealthSeismic.subscribe(() => {}) as any || {
-        isMonitoring: false, structuralIntegrityPct: 100, dominantFrequencyHz: 7.5, baselineFrequencyHz: 7.5, vibrationEnergyG2: 0.002, collapseRiskLevel: 'SAFE', alarmTriggered: false, sampleCount: 0, timestamp: Date.now()
-    });
+    const [structTelemetry, setStructTelemetry] = useState<StructuralHealthTelemetry>(() => structuralHealthSeismic.getTelemetry());
     
     // Sonar States
     const [medium, setMedium] = useState<SonarMediumType>("AIR_20C");
