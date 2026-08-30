@@ -21,6 +21,13 @@ if (fs.existsSync(path.join(outDir, 'index.html'))) {
 }
 console.log("   ✓ .nojekyll y 404.html generados en out/");
 
+// Copy APK to outDir for GitHub Pages download
+const rootApkPath = path.join(rootDir, 'red-latest.apk');
+if (fs.existsSync(rootApkPath)) {
+    fs.copyFileSync(rootApkPath, path.join(outDir, 'red-latest.apk'));
+    console.log("   ✓ Copiado red-latest.apk a out/");
+}
+
 // 3. Copy files to repository root of main branch (in case GitHub Pages uses main / root)
 console.log("\n2️⃣ Sincronizando archivos al root del repositorio (rama main)...");
 
@@ -44,7 +51,7 @@ if (fs.existsSync(rootNextDir)) {
 }
 
 // Copy new assets to root
-const itemsToCopy = ['index.html', '404.html', 'sw.js', '_next', 'offline', 'manifest.json', '.nojekyll', 'red_icon.png', 'red_splash.png', 'assets', 'models', 'ort-wasm'];
+const itemsToCopy = ['index.html', '404.html', 'sw.js', '_next', 'offline', 'manifest.json', '.nojekyll', 'red_icon.png', 'red_splash.png', 'assets', 'models', 'ort-wasm', 'red-latest.apk'];
 for (const item of itemsToCopy) {
     const src = path.join(outDir, item);
     const dst = path.join(rootDir, item);
