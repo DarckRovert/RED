@@ -1629,9 +1629,30 @@ body.mode-defcon-survival {
 }
 
 /* StatusHeader compact mode para pantallas < 380px */
+.quantum-shield-badge {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid rgba(0, 229, 255, 0.25);
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #00E5FF;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@media (min-width: 768px) {
+  .quantum-shield-badge {
+    display: flex;
+  }
+}
+
 @media (max-width: 380px) {
   .status-label-truncate {
-    max-width: 72px;
+    max-width: 68px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

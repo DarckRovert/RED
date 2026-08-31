@@ -236,7 +236,7 @@ export default function StatusHeader() {
                     </button>
 
                     {/* Quantum Shield Status Tag (Desktop/Tablet) */}
-                    <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[rgba(0,229,255,0.06)] border border-[rgba(0,229,255,0.2)] text-[9.5px] font-bold text-[#00E5FF]">
+                    <div className="quantum-shield-badge" title="Blindaje Criptográfico Post-Cuántico NIST FIPS 203 (ML-KEM-768)">
                         <span>🛡️</span>
                         <span>ML-KEM-768</span>
                     </div>
