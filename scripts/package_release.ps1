@@ -6,14 +6,19 @@ if (-not (Test-Path $releaseAssets)) {
     New-Item -ItemType Directory -Path $releaseAssets -Force | Out-Null
 }
 
-Copy-Item -Path $apkPath -Destination "$releaseAssets\red-v64.0.0-release.apk" -Force
+Copy-Item -Path $apkPath -Destination "$releaseAssets\red-v77.0.0-release.apk" -Force
 Copy-Item -Path $apkPath -Destination "$releaseAssets\red-latest.apk" -Force
-Copy-Item -Path $nodeExePath -Destination "$releaseAssets\red-node.exe" -Force
+if (Test-Path $nodeExePath) {
+    Copy-Item -Path $nodeExePath -Destination "$releaseAssets\red-node.exe" -Force
+    $hashNode = (Get-FileHash "$releaseAssets\red-node.exe" -Algorithm SHA256).Hash.ToUpper()
+    $hashNodeLine = "`n$hashNode  red-node.exe"
+} else {
+    $hashNodeLine = ""
+}
 
-$hashApk = (Get-FileHash "$releaseAssets\red-v64.0.0-release.apk" -Algorithm SHA256).Hash.ToUpper()
-$hashNode = (Get-FileHash "$releaseAssets\red-node.exe" -Algorithm SHA256).Hash.ToUpper()
+$hashApk = (Get-FileHash "$releaseAssets\red-v77.0.0-release.apk" -Algorithm SHA256).Hash.ToUpper()
 
-$shaContent = "$hashApk  red-v64.0.0-release.apk`n$hashApk  red-latest.apk`n$hashNode  red-node.exe"
+$shaContent = "$hashApk  red-v77.0.0-release.apk`n$hashApk  red-latest.apk$hashNodeLine"
 [System.IO.File]::WriteAllText("$releaseAssets\SHA256SUMS.txt", $shaContent, [System.Text.Encoding]::UTF8)
 
 Write-Host "Release assets packaged successfully:" -ForegroundColor Green
