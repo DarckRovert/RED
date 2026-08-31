@@ -135,7 +135,10 @@ class MonetizationEngineService {
      * Añade un producto táctico al catálogo del nodo y lo difunde por la malla P2P.
      */
     public addProduct(product: Omit<TacticalProduct, 'id'>): TacticalProduct {
-        const id = 'prod_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6);
+        const randProd = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const id = `prod_${Date.now().toString(36)}_${randProd}`;
         const newProd: TacticalProduct = { ...product, id };
         const current = this.getCatalog();
         const updated = [newProd, ...current];
@@ -219,8 +222,11 @@ class MonetizationEngineService {
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_tactic_credits', newBal.toString());
             const txList = this.getTransactions();
+            const randTx = typeof crypto !== 'undefined' && crypto.getRandomValues
+                ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                : Date.now().toString(36);
             const tx: TacticalTransaction = {
-                id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+                id: `tx_${Date.now()}_${randTx}`,
                 timestamp: Date.now(),
                 type,
                 description,
@@ -356,18 +362,10 @@ class MonetizationEngineService {
         }
 
         if (!Capacitor.isNativePlatform()) {
-            // Simulación transparente en Web para desarrollo
-            this.grantProReward(24);
-            this.recordTransaction('reward_ad', 100, 'Recompensa de Desarrollo Web (+24h Pro & +100 RED)');
-            const dummyReward: AdMobRewardItem = { type: 'RED_CREDITS', amount: 100 };
-            const callbacks = [...this.onRewardCallbacks];
-            this.onRewardCallbacks = [];
-            callbacks.forEach(cb => {
-                try { cb(dummyReward); } catch {}
-            });
+            // El reproductor nativo de Google AdMob requiere el entorno Android APK (Capacitor)
             return { 
-                success: true, 
-                message: 'Modo Web: Recompensa de +24h Modo Pro y 100 Créditos acreditada con éxito.' 
+                success: false, 
+                message: 'Los patrocinios en video AdMob requieren la app nativa Android de RED. En entorno Web, obtén créditos $RED mediante minería Proof-of-Relay o intercambios P2P.' 
             };
         }
 

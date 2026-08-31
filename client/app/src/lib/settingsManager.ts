@@ -218,7 +218,9 @@ export interface UserPreferences {
     // WebRTC & Calls preferences
     videoQuality: VideoCallQuality;
     ringtoneType: RingtoneType;
+    incomingRingtone?: RingtoneType;
     customStunServer: string;
+
     noiseSuppression: boolean;
     autoSpeakerVideo: boolean;
     biometricLock: boolean;

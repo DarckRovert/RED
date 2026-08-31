@@ -41,10 +41,14 @@ export default function GroupsPanel() {
             setCreationStatus("Grupo federado con éxito.");
             toast.success(`Escuadrón ${groupName} creado con éxito`);
             // Bug #5 fix: fetchData may race against createGroup's async Zustand setState.
-            // Wait a tick so the optimistic store update from createGroup settles first.
             await new Promise(r => setTimeout(r, 80));
             await fetchData();
-            setTimeout(() => goBack(), 1200);
+            if (result?.id) {
+                navigate("chat", result.id);
+            } else {
+                goBack();
+            }
+
         } catch (e) {
             console.error("Group creation failed", e);
             setCreationStatus("Error al crear el grupo.");

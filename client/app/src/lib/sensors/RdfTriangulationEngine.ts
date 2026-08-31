@@ -53,8 +53,11 @@ export class RdfTriangulationEngine {
     }
 
     public addBearing(observerLat: number, observerLon: number, bearingDeg: number, rssiDbm: number): LineOfBearing {
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : (Date.now() % 1000).toString();
         const lob: LineOfBearing = {
-            id: `lob-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+            id: `lob-${Date.now()}-${randSuffix}`,
             observerLat,
             observerLon,
             bearingDeg: Math.round(bearingDeg) % 360,

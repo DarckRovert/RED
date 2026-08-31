@@ -24,6 +24,46 @@ export interface SatelliteGatewayTelemetry {
     isUplinkAvailable: boolean;
 }
 
+interface ConstellationConfig {
+    constellation: 'IRIDIUM_NEXT' | 'ORBCOMM_OG2' | 'DIRECT_TO_CELL';
+    namePrefix: string;
+    altitudeKm: number;
+    inclinationDeg: number;
+    periodSec: number;
+    freqMhz: number;
+    phaseOffsetRad: number;
+}
+
+const CONSTELLATIONS: ConstellationConfig[] = [
+    {
+        constellation: 'IRIDIUM_NEXT',
+        namePrefix: 'IRIDIUM-NEXT',
+        altitudeKm: 780,
+        inclinationDeg: 86.4,
+        periodSec: 6024, // ~100.4 min
+        freqMhz: 1621.25,
+        phaseOffsetRad: 0.85,
+    },
+    {
+        constellation: 'ORBCOMM_OG2',
+        namePrefix: 'ORBCOMM-OG2',
+        altitudeKm: 750,
+        inclinationDeg: 45.0,
+        periodSec: 5988, // ~99.8 min
+        freqMhz: 148.5,
+        phaseOffsetRad: 2.45,
+    },
+    {
+        constellation: 'DIRECT_TO_CELL',
+        namePrefix: 'STARLINK-D2C',
+        altitudeKm: 550,
+        inclinationDeg: 53.2,
+        periodSec: 5736, // ~95.6 min
+        freqMhz: 1910.0,
+        phaseOffsetRad: 4.12,
+    }
+];
+
 export class SatelliteMeshGatewayEngine {
     private static instance: SatelliteMeshGatewayEngine | null = null;
 
@@ -31,41 +71,12 @@ export class SatelliteMeshGatewayEngine {
     private totalUplinks: number = 0;
     private listeners: Set<(t: SatelliteGatewayTelemetry) => void> = new Set();
     private updateInterval: any = null;
-
-    private satellites: SatellitePass[] = [
-        {
-            satelliteId: 'IRIDIUM-142',
-            constellation: 'IRIDIUM_NEXT',
-            azimuthDeg: 42,
-            elevationDeg: 68,
-            isInAos: true,
-            timeToAosSec: 0,
-            passDurationSec: 420,
-            uplinkFrequencyMhz: 1621.25,
-        },
-        {
-            satelliteId: 'ORBCOMM-FM114',
-            constellation: 'ORBCOMM_OG2',
-            azimuthDeg: 195,
-            elevationDeg: 18,
-            isInAos: false,
-            timeToAosSec: 340,
-            passDurationSec: 360,
-            uplinkFrequencyMhz: 148.5,
-        },
-        {
-            satelliteId: 'STARLINK-D2C-3091',
-            constellation: 'DIRECT_TO_CELL',
-            azimuthDeg: 310,
-            elevationDeg: 54,
-            isInAos: true,
-            timeToAosSec: 0,
-            passDurationSec: 280,
-            uplinkFrequencyMhz: 1910.0,
-        }
-    ];
+    private observerLat: number = 0;
+    private observerLon: number = 0;
+    private satellites: SatellitePass[] = [];
 
     private constructor() {
+        this.satellites = this.calculateOrbitalPasses(Date.now());
         this.startOrbitalTracker();
     }
 
@@ -74,6 +85,39 @@ export class SatelliteMeshGatewayEngine {
             this.instance = new SatelliteMeshGatewayEngine();
         }
         return this.instance;
+    }
+
+    public setObserverLocation(lat: number, lon: number): void {
+        this.observerLat = lat;
+        this.observerLon = lon;
+        this.satellites = this.calculateOrbitalPasses(Date.now());
+        this.notify();
+    }
+
+    public calculateOrbitalPasses(nowMs: number): SatellitePass[] {
+        const epochSec = nowMs / 1000;
+        return CONSTELLATIONS.map((config, index) => {
+            const meanAnomaly = ((epochSec / config.periodSec) * 2 * Math.PI + config.phaseOffsetRad) % (2 * Math.PI);
+            const groundTrackLon = ((epochSec / 86400) * 360 + (meanAnomaly * 180 / Math.PI)) % 360;
+            const rawElev = Math.sin(meanAnomaly) * 90;
+            const elevationDeg = Math.max(0, Math.min(90, Math.round(rawElev * 10) / 10));
+            const azimuthDeg = Math.round(((groundTrackLon + this.observerLon + 360) % 360) * 10) / 10;
+            const isInAos = elevationDeg >= 25;
+            const timeToAosSec = isInAos ? 0 : Math.max(1, Math.round(((Math.PI - (meanAnomaly % Math.PI)) / (2 * Math.PI)) * config.periodSec));
+            const passDurationSec = isInAos ? Math.max(10, Math.round(((Math.PI * 0.35) / (2 * Math.PI)) * config.periodSec)) : 0;
+            const satNumber = 100 + (index * 42) + Math.floor((epochSec / config.periodSec) % 66);
+
+            return {
+                satelliteId: `${config.namePrefix}-${satNumber}`,
+                constellation: config.constellation,
+                azimuthDeg,
+                elevationDeg,
+                isInAos,
+                timeToAosSec,
+                passDurationSec,
+                uplinkFrequencyMhz: config.freqMhz,
+            };
+        });
     }
 
     public subscribe(cb: (t: SatelliteGatewayTelemetry) => void): () => void {
@@ -92,25 +136,7 @@ export class SatelliteMeshGatewayEngine {
     private startOrbitalTracker() {
         if (this.updateInterval) clearInterval(this.updateInterval);
         this.updateInterval = setInterval(() => {
-            // Dinámica orbital en tiempo real
-            this.satellites.forEach(sat => {
-                sat.azimuthDeg = (sat.azimuthDeg + 1) % 360;
-                if (sat.isInAos) {
-                    sat.passDurationSec = Math.max(0, sat.passDurationSec - 1);
-                    if (sat.passDurationSec === 0) {
-                        sat.isInAos = false;
-                        sat.elevationDeg = 5;
-                        sat.timeToAosSec = 1200;
-                    }
-                } else {
-                    sat.timeToAosSec = Math.max(0, sat.timeToAosSec - 1);
-                    if (sat.timeToAosSec === 0) {
-                        sat.isInAos = true;
-                        sat.elevationDeg = 65;
-                        sat.passDurationSec = 400;
-                    }
-                }
-            });
+            this.satellites = this.calculateOrbitalPasses(Date.now());
             this.notify();
         }, 1000);
     }

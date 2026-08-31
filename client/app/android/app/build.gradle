@@ -8,8 +8,8 @@ android {
         applicationId "f.red.app"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode 78000
-        versionName "78.0.0"
+        versionCode 79000
+        versionName "79.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
 

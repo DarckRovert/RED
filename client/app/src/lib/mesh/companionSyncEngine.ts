@@ -90,8 +90,13 @@ function getRandomBytes(len: number): Uint8Array {
     const buf = new Uint8Array(len);
     const c = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
     if (c?.getRandomValues) return c.getRandomValues(buf);
-    for (let i = 0; i < len; i++) buf[i] = Math.floor(Math.random() * 256);
-    return buf;
+    try {
+        const nodeCrypto = require('crypto');
+        return new Uint8Array(nodeCrypto.randomBytes(len));
+    } catch {
+        for (let i = 0; i < len; i++) buf[i] = (Date.now() ^ (i * 0x9e3779b9)) & 0xFF;
+        return buf;
+    }
 }
 
 async function generateEcdhKeyPair(): Promise<CryptoKeyPair> {
@@ -343,7 +348,7 @@ class SimpleMqttClient {
 
     private sendConnect() {
         if (!this.ws) return;
-        const clientId = `red_pair_${Math.random().toString(36).substring(2, 10)}`;
+        const clientId = `red_pair_${bytesToHex(getRandomBytes(4))}`;
         const protoBytes = new TextEncoder().encode("MQTT");
         const clientBytes = new TextEncoder().encode(clientId);
 

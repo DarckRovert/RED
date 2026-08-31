@@ -42,11 +42,13 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
     }, async () => {
         const wallet = await getP2PWallet();
         if (wallet.balance < numericAmount) {
-            // Auto-credit from mesh activity or provide emergency tactical micro-grant
-            wallet.balance += (numericAmount + 50.0);
+            return { ok: false, error: 'Saldo insuficiente en la billetera P2P off-grid.', new_balance: wallet.balance } as any;
         }
         const now = Date.now();
-        const voucherId = `voucher_${now}_${Math.random().toString(36).substring(2, 8)}`;
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const voucherId = `voucher_${now}_${randSuffix}`;
         let sig = `RED_SIG_${voucherId}`;
         try {
             if (typeof window !== 'undefined' && window.crypto?.subtle) {
@@ -159,7 +161,10 @@ export async function saveStegoCapsule(capsule: StegoCapsuleRecord): Promise<Ste
         body: JSON.stringify(capsule)
     }, () => {
         const capsules = getStored<StegoCapsuleRecord[]>(STORAGE_KEYS.STEGO_CAPSULES, []);
-        const id = capsule.id || `stego_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        const randStego = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const id = capsule.id || `stego_${Date.now()}_${randStego}`;
         const record: StegoCapsuleRecord = { ...capsule, id, timestamp: capsule.timestamp || Date.now() };
         capsules.unshift(record);
         setStored(STORAGE_KEYS.STEGO_CAPSULES, capsules);
@@ -189,8 +194,11 @@ export async function createSocialPost(req: any): Promise<SocialPost> {
     }, async () => {
         const posts = getStored<SocialPost[]>(STORAGE_KEYS.SOCIAL_POSTS, []);
         const identity = await RedAPI.getIdentity().catch(() => null);
+        const randPost = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
         const post: SocialPost = {
-            id: `post_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            id: `post_${Date.now()}_${randPost}`,
             author_hash: identity?.identity_hash || 'did:red:local',
             author_name: identity?.nickname || identity?.display_name || 'Operador RED',
             content: req.content || '',

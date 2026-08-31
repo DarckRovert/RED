@@ -6,14 +6,17 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function ShamirRecoveryModal() {
-    const { navigate, identity } = useRedStore();
+    const { navigate, identity, contacts, goBack } = useRedStore();
+
     const [vaultState, setVaultState] = useState<SocialRecoveryVaultState>(() => shamirRecoveryVault.getState());
     const [activeTab, setActiveTab] = useState<"guardians" | "reconstruct">("guardians");
 
-    // Inputs for Guardian setup
-    const [guardianNames, setGuardianNames] = useState<string[]>([
-        "Guardián Alfa", "Guardián Bravo", "Guardián Charlie", "Guardián Delta", "Guardián Eco"
-    ]);
+    // Inputs for Guardian setup derived dynamically from trusted contacts
+    const [guardianNames, setGuardianNames] = useState<string[]>(() => {
+        const contactAliases = (contacts || []).map(c => c.name || (c as any).alias).filter(Boolean);
+        const defaults = ["Guardián 1", "Guardián 2", "Guardián 3", "Guardián 4", "Guardián 5"];
+        return defaults.map((d, i) => contactAliases[i] || d);
+    });
 
     // Input for manually adding a collected share
     const [inputShareHex, setInputShareHex] = useState<string>("");
@@ -26,7 +29,13 @@ export function ShamirRecoveryModal() {
     }, []);
 
     const handleGenerateShares = () => {
-        const masterSecret = identity?.identity_hash ? `${identity.identity_hash.padEnd(64, '0').slice(0, 64)}` : "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        const masterSecret = identity?.identity_hash 
+            ? identity.identity_hash.padEnd(64, '0').slice(0, 64) 
+            : (() => {
+                const buf = new Uint8Array(32);
+                if (typeof crypto !== 'undefined') crypto.getRandomValues(buf);
+                return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+            })();
         shamirRecoveryVault.initializeGuardians(masterSecret, guardianNames);
         toast.success("Bóveda Shamir 3-de-5 generada exitosamente");
     };
@@ -77,8 +86,9 @@ export function ShamirRecoveryModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                         color: "#FFF", padding: "6px 12px", borderRadius: "8px",
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"

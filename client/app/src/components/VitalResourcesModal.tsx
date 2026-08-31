@@ -7,7 +7,8 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function VitalResourcesModal() {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
+
     const [activeTab, setActiveTab] = useState<"water" | "power">("water");
 
     // Water Inputs
@@ -20,9 +21,44 @@ export function VitalResourcesModal() {
     const [tdsPpm, setTdsPpm] = useState<number>(180);
 
     // Power Inputs
-    const [batteryPct, setBatteryPct] = useState<number>(75);
+    const [batteryPct, setBatteryPct] = useState<number>(() => {
+        if (typeof window !== "undefined" && typeof (window as any).__red_last_battery === "number") {
+            return (window as any).__red_last_battery;
+        }
+        return 100;
+    });
     const [profile, setProfile] = useState<MissionPowerProfile>("ACTIVE_MESH");
     const [panelWatts, setPanelWatts] = useState<number>(15);
+
+    // Sync live hardware battery
+    useEffect(() => {
+        let isMounted = true;
+        const fetchHardwareBattery = async () => {
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const cap = window as any;
+                    if (cap?.Plugins?.Device?.getBatteryInfo) {
+                        const info = await cap.Plugins.Device.getBatteryInfo();
+                        if (isMounted && typeof info?.batteryLevel === "number") {
+                            setBatteryPct(Math.round(info.batteryLevel * 100));
+                            return;
+                        }
+                    }
+                }
+                if (typeof navigator !== "undefined" && "getBattery" in navigator) {
+                    const batt: any = await (navigator as any).getBattery();
+                    if (isMounted && batt && typeof batt.level === "number") {
+                        setBatteryPct(Math.round(batt.level * 100));
+                    }
+                }
+            } catch (err) {
+                console.warn("[VitalResourcesModal] Battery sync error:", err);
+            }
+        };
+        fetchHardwareBattery();
+        return () => { isMounted = false; };
+    }, []);
 
     useEffect(() => {
         setDosage(waterPurification.calculateDose(liters, source, method));
@@ -59,8 +95,9 @@ export function VitalResourcesModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                         color: "#FFF", padding: "6px 12px", borderRadius: "8px",
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"

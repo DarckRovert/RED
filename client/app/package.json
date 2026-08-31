@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "78.0.0",
+  "version": "79.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {

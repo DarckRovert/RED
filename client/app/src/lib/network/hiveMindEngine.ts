@@ -207,7 +207,10 @@ class HiveMindEngineClass {
         onChunk?: (token: string) => void
     ): Promise<HiveInferenceResponse> {
         const start = performance.now();
-        const requestId = 'req_' + Math.random().toString(36).substring(2, 10);
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const requestId = `req_${Date.now()}_${randSuffix}`;
         let myId = meshRouter.myIdentityHash || (typeof window !== 'undefined' ? localStorage.getItem('red_identity_hash') : '') || 'local_node';
 
         const requestPayload: HiveInferenceRequest = {

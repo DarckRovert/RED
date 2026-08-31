@@ -317,8 +317,8 @@ export function OffGridCompassModal() {
         // Draw Sun & Moon Celestial Markers (Jean Meeus Astronomical Equations)
         try {
             const ephem = CelestialNavigationEngine.getInstance().calculateEphemeris(
-                userCoords?.lat || 4.6097,
-                userCoords?.lon || -74.0817,
+                userCoords?.lat || 0,
+                userCoords?.lon || 0,
                 new Date()
             );
 

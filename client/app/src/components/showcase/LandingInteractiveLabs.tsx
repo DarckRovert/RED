@@ -22,7 +22,14 @@ export const LandingInteractiveLabs: React.FC = () => {
         "> [ENTROPÍA] Semilla CSPRNG de 256 bits generada...",
         "> [ESTADO] Inmune a ataques cuánticos con algoritmo de Shor."
     ]);
-    const [pqcEntropySeed, setPqcEntropySeed] = useState<string>("0x8F1A29D84C20E76B");
+    const [pqcEntropySeed, setPqcEntropySeed] = useState<string>(() => {
+        if (typeof window !== 'undefined' && window.crypto) {
+            const b = new Uint8Array(8);
+            window.crypto.getRandomValues(b);
+            return '0x' + Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+        }
+        return "0x8F1A29D84C20E76B";
+    });
 
     const [canWalk, setCanWalk] = useState<boolean | null>(null);
     const [respiration, setRespiration] = useState<"none" | "over30" | "normal" | null>(null);
@@ -31,8 +38,15 @@ export const LandingInteractiveLabs: React.FC = () => {
     const [triageResult, setTriageResult] = useState<{ color: string; tag: string; priority: string; action: string } | null>(null);
 
     const [simConsentStep, setSimConsentStep] = useState<"idle" | "incoming" | "accepted" | "rejected" | "blocked">("idle");
-    const [simPeerHash, setSimPeerHash] = useState("7F3A91BC2E844D0F81E73A6B");
-    const [simPeerAlias, setSimPeerAlias] = useState("Operador_Patrulla_07");
+    const [simPeerHash, setSimPeerHash] = useState(() => {
+        if (typeof window !== 'undefined' && window.crypto) {
+            const b = new Uint8Array(12);
+            window.crypto.getRandomValues(b);
+            return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+        }
+        return "7F3A91BC2E844D0F81E73A6B";
+    });
+    const [simPeerAlias, setSimPeerAlias] = useState("Nodo_Tactico_Proximo");
     const [simLog, setSimLog] = useState<string[]>([
         "> [SISTEMA] Motor de consentimiento Zero-Trust activo.",
         "> [POLÍTICA] Todo contacto entrante requiere firma explícita del usuario.",

@@ -11,7 +11,7 @@ import { toast } from "./Toast";
 type MedicalTab = "ppg" | "triage" | "records" | "water" | "mandown";
 
 export function VitalScanModal() {
-    const { navigate } = useRedStore();
+    const { navigate, identity } = useRedStore();
     const { t } = useTranslation();
     const [activeTab, setActiveTab] = useState<MedicalTab>("ppg");
 
@@ -568,16 +568,26 @@ export function VitalScanModal() {
                                             <span>TRIAGE TCCC</span>
                                         </button>
                                         <button
-                                            onClick={() => {
-                                                import("../lib/emergency/MeshSosBeaconEngine").then(({ meshSosBeacon }) => {
-                                                    meshSosBeacon.activateSosBeacon({
-                                                        distressType: "TCCC_MEDICAL",
-                                                        triageColor: scanResult.isShockSuspected ? "RED" : "YELLOW",
-                                                        note: `MEDEVAC: FC ${scanResult.bpm} BPM, SpO2 ${scanResult.spo2}% ${scanResult.isShockSuspected ? "[SHOCK]" : ""}`,
-                                                        batteryLevel: 90
-                                                    }, "LOCAL_MEDIC", "Operador VitalScan");
-                                                    toast.success("🚨 9-Line MEDEVAC emitido por Malla SOS");
-                                                });
+                                            onClick={async () => {
+                                                const { meshSosBeacon } = await import("../lib/emergency/MeshSosBeaconEngine");
+                                                let batt = 100;
+                                                if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
+                                                    batt = (window as any).__red_last_battery;
+                                                } else if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+                                                    try {
+                                                        const b: any = await (navigator as any).getBattery();
+                                                        if (b && typeof b.level === 'number') batt = Math.round(b.level * 100);
+                                                    } catch {}
+                                                }
+                                                const callerId = identity?.identity_hash ? `did:red:${identity.identity_hash.slice(0, 8)}` : "LOCAL_MEDIC";
+                                                const callerName = identity?.nickname || "Operador VitalScan";
+                                                await meshSosBeacon.activateSosBeacon({
+                                                    distressType: "TCCC_MEDICAL",
+                                                    triageColor: scanResult.isShockSuspected ? "RED" : "YELLOW",
+                                                    note: `MEDEVAC: FC ${scanResult.bpm} BPM, SpO2 ${scanResult.spo2}% ${scanResult.isShockSuspected ? "[SHOCK]" : ""}`,
+                                                    batteryLevel: batt
+                                                }, callerId, callerName);
+                                                toast.success("🚨 9-Line MEDEVAC emitido por Malla SOS");
                                             }}
                                             style={{
                                                 flex: 1, padding: "10px", borderRadius: "8px",

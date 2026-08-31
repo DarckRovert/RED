@@ -55,7 +55,10 @@ export class MultipathBondingEngine {
         parityShards = 2,
         groupId?: string
     ): BondedShard[] {
-        const gid = groupId || `bond-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const randGid = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : (Date.now() % 10000).toString();
+        const gid = groupId || `bond-${Date.now()}-${randGid}`;
         const shardSize = Math.ceil(payload.length / dataShards);
         const shards: BondedShard[] = [];
 

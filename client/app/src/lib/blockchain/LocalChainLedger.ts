@@ -183,7 +183,12 @@ export class LocalChainLedger {
     }
 
     public async submitTransaction(tx: Omit<ChainTransaction, 'id' | 'timestamp' | 'signature'> & { signature?: string }): Promise<ChainTransaction> {
-        const id = `tx_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const randBytes = new Uint8Array(4);
+        if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+            globalThis.crypto.getRandomValues(randBytes);
+        }
+        const randSuffix = bytesToHex(randBytes) || (Date.now() % 10000).toString(16);
+        const id = `tx_${Date.now()}_${randSuffix}`;
         const timestamp = Math.floor(Date.now() / 1000);
         const signature = tx.signature || await this.sha256(`TX_SIG:${id}:${tx.sender}:${tx.amount}:${timestamp}`);
 
@@ -340,8 +345,8 @@ export class LocalChainLedger {
         return {
             epoch: Math.floor(now / 86400),
             current_slot: Math.floor(now / 10),
-            total_stake: metrics.stakedAmount + 5000,
-            active_validators: Math.max(1, 1 + (metrics.stakedAmount > 0 ? 1 : 0)),
+            total_stake: metrics.stakedAmount,
+            active_validators: Math.max(1, (metrics.stakedAmount > 0 ? 1 : 0)),
             chain_height: this.blocks.length > 0 ? this.blocks[this.blocks.length - 1].height : 0,
             block_time_sec: 10,
             total_transactions: totalTx,
@@ -365,11 +370,11 @@ export class LocalChainLedger {
         const userValidator: ChainValidator = {
             public_key: myKey,
             display_name: `${myName} [Validador Principal]`,
-            stake: (metrics.stakedAmount > 0 ? metrics.stakedAmount : 5000),
-            active: true,
-            blocks_produced: this.blocks.filter(b => b.validator === myKey).length || 1,
+            stake: metrics.stakedAmount,
+            active: metrics.stakedAmount > 0,
+            blocks_produced: this.blocks.filter(b => b.validator === myKey).length || 0,
             missed_slots: 0,
-            weight: 100,
+            weight: metrics.stakedAmount > 0 ? 100 : 0,
             last_block_time: this.blocks.length > 0 ? this.blocks[this.blocks.length - 1].timestamp : undefined
         };
 

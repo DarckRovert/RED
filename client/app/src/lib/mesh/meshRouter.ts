@@ -873,7 +873,7 @@ class MeshRouter {
               ttl: 10,
               flags: 0,
               timestamp: (parsed.timestamp ? (parsed.timestamp > 1e11 ? parsed.timestamp : parsed.timestamp * 1000) : Date.now()),
-              nonce: parsed.id || ('nonce_' + Math.random().toString(36).substring(2, 10)),
+              nonce: parsed.id || (`nonce_${Date.now()}_${typeof crypto !== 'undefined' && crypto.getRandomValues ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('') : Date.now().toString(36)}`),
               payload: cleanRaw,
             };
           }

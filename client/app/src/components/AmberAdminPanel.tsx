@@ -44,10 +44,11 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
 
     // Formulario de nueva alerta
     const [form, setForm] = useState<any>({
-        authority_node_id: localNodeId,
-        authority_signature: localNodeId,
+        authority_node_id: nodeId,
+        authority_signature: nodeId,
         ttl_secs: 72 * 3600,
     });
+
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
     const fetchAlerts = useCallback(async () => {
@@ -125,7 +126,8 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
 
             toast.success("🚨 Alerta AMBER emitida y propagada en la malla");
             setView("list");
-            setForm({ authority_node_id: localNodeId, authority_signature: localNodeId, ttl_secs: 72 * 3600 });
+            setForm({ authority_node_id: nodeId, authority_signature: nodeId, ttl_secs: 72 * 3600 });
+
             setPhotoPreview(null);
             fetchAlerts();
         } catch {

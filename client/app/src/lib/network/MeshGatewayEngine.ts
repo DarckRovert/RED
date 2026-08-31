@@ -91,7 +91,10 @@ export class MeshGatewayEngine {
         }
 
         // 2. Mesh Out-Proxy Request: Broadcast request to mesh neighbors
-        const reqId = `gw_req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const randReq = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const reqId = `gw_req_${Date.now()}_${randReq}`;
         const requestPayload: ProxyRequestPayload = {
             requestId: reqId,
             url,
@@ -105,11 +108,11 @@ export class MeshGatewayEngine {
             const timeout = setTimeout(() => {
                 if (this.pendingRequests.has(reqId)) {
                     this.pendingRequests.delete(reqId);
-                    // Fallback to simulated offline cached mirror
+                    // Fallback to offline DTN cached error page
                     resolve({
                         html: this.generateOfflineFallbackHtml(url),
-                        status: 200,
-                        fromGateway: true,
+                        status: 504,
+                        fromGateway: false,
                     });
                 }
             }, 10000);

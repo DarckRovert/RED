@@ -800,7 +800,15 @@ export default function NodeMap() {
                         onClick={async () => {
                             try {
                                 const { cursorOnTarget } = await import('../lib/tactical/CursorOnTargetEngine');
-                                const bftEvt = cursorOnTarget.createBftEvent('RED-MAP-NODE', 'TACTICAL-OP', gpsData.lat, gpsData.lng, 'COMMAND_HQ', 100);
+                                const { useRedStore } = await import('../store/useRedStore');
+                                const identity = useRedStore.getState().identity;
+                                const nodeId = identity?.identity_hash ? `RED-${identity.identity_hash.slice(0, 8)}` : 'RED-MAP-NODE';
+                                const callsign = identity?.nickname || 'TACTICAL-OP';
+                                let batt = 100;
+                                if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
+                                    batt = (window as any).__red_last_battery;
+                                }
+                                const bftEvt = cursorOnTarget.createBftEvent(nodeId, callsign, gpsData.lat, gpsData.lng, 'COMMAND_HQ', batt);
                                 const cotXml = cursorOnTarget.serializeToXml(bftEvt);
                                 if (navigator.clipboard) {
                                     await navigator.clipboard.writeText(cotXml);

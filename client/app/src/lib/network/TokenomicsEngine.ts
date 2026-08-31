@@ -165,7 +165,10 @@ export class TokenomicsEngine {
         if (amount <= 0) return { success: false, error: "El monto debe ser superior a 0." };
         if (amount > this.metrics.localCredits) return { success: false, error: "Saldo insuficiente para emitir vale." };
 
-        const id = "vc_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 8);
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const id = `vc_${Date.now().toString(36)}_${randSuffix}`;
         const timestamp = Date.now();
 
         // Authentic signature statement

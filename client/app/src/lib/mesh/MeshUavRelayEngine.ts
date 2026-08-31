@@ -41,21 +41,7 @@ export class MeshUavRelayEngine {
     private listeners: Set<() => void> = new Set();
 
     private constructor() {
-        // Inicializar con nodo dron de demostración si no hay activos
-        this.addOrUpdateRelay({
-            id: 'UAV-ALPHA-RELAY',
-            callsign: 'SENTINEL-1 (UAV)',
-            altitudeAglMeters: 120,
-            coords: { lat: 4.6097, lon: -74.0817 },
-            loiterMode: 'ORBIT',
-            batteryPct: 82,
-            linkQualityPct: 94,
-            coverageRadiusKm: 18.5,
-            activeRelayClients: 6,
-            rxPacketsCount: 1420,
-            txPacketsCount: 1390,
-            lastPingTimestamp: Date.now(),
-        });
+        // Relays are discovered and registered strictly from real incoming LoRa/CoT/Mesh telemetry
     }
 
     public static getInstance(): MeshUavRelayEngine {

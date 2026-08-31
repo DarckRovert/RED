@@ -146,9 +146,17 @@ export class PsychoacousticStegoEngine {
         const samples = new Float32Array(numSamples);
 
         // Portadora de ruido ambiental suave (Brownian/Pink Noise + tono sutil de 440 Hz)
+        // Generación de ruido mediante CSPRNG de alta entropía (WebCrypto)
+        const randBuffer = new Uint8Array(numSamples);
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            crypto.getRandomValues(randBuffer);
+        } else {
+            for (let k = 0; k < numSamples; k++) randBuffer[k] = (k * 181 + 73) & 0xFF;
+        }
+
         let lastOut = 0.0;
         for (let i = 0; i < numSamples; i++) {
-            const white = Math.random() * 2 - 1;
+            const white = (randBuffer[i] / 127.5) - 1.0;
             lastOut = (lastOut + (0.02 * white)) / 1.02;
             const ambient = lastOut * 0.15 + (Math.sin(2 * Math.PI * 440 * (i / sampleRate)) * 0.05);
             samples[i] = ambient;

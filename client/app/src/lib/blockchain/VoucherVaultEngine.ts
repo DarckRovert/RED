@@ -121,10 +121,17 @@ export class VoucherVaultEngine {
         
         // Generar nonce secreto criptográfico
         const nonceBytes = new Uint8Array(16);
-        if (typeof window !== 'undefined' && window.crypto) {
-            window.crypto.getRandomValues(nonceBytes);
+        const c = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
+        if (c?.getRandomValues) {
+            c.getRandomValues(nonceBytes);
         } else {
-            for (let i = 0; i < 16; i++) nonceBytes[i] = Math.floor(Math.random() * 256);
+            try {
+                const nodeCrypto = require('crypto');
+                const buf = nodeCrypto.randomBytes(16);
+                nonceBytes.set(buf);
+            } catch {
+                for (let i = 0; i < 16; i++) nonceBytes[i] = (Date.now() ^ (i * 0x9e3779b9)) & 0xFF;
+            }
         }
         const secretNonce = bytesToHex(nonceBytes);
         const nullifierHash = VoucherVaultEngine.computeNullifier(issuerDid, secretNonce);

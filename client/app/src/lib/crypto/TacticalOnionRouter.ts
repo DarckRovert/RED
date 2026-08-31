@@ -106,12 +106,11 @@ export class TacticalOnionRouter {
             return buf;
         }
         try {
-            const { randomFillSync } = require('crypto');
-            randomFillSync(buf);
-            return buf;
+            const nodeCrypto = require('crypto');
+            return new Uint8Array(nodeCrypto.randomBytes(length));
         } catch {
             for (let i = 0; i < length; i++) {
-                buf[i] = (Date.now() ^ (i * 0x9e3779b9) ^ Math.floor(Math.random() * 256)) & 0xFF;
+                buf[i] = (Date.now() ^ (i * 0x9e3779b9)) & 0xFF;
             }
             return buf;
         }

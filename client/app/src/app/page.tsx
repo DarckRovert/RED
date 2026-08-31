@@ -5,8 +5,9 @@ import dynamic from "next/dynamic";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
-/* ── Carga dinámica con ssr:false — previene crash de hidratación SSR ── */
+const MainNavigationShell   = dynamic(() => import("../components/navigation/MainNavigationShell").then(m => ({ default: m.MainNavigationShell })), { ssr: false, loading: () => <AppLoader /> });
 const Sidebar               = dynamic(() => import("../components/Sidebar"),               { ssr: false, loading: () => <AppLoader /> });
+
 const ChatWindow            = dynamic(() => import("../components/ChatWindow"),            { ssr: false, loading: () => <AppLoader /> });
 const SecurityPanel         = dynamic(() => import("../components/SecurityPanel"),         { ssr: false, loading: () => <AppLoader /> });
 const RadarWindow           = dynamic(() => import("../components/RadarWindow"),           { ssr: false, loading: () => <AppLoader /> });
@@ -520,9 +521,10 @@ export default function AppRouter() {
             /* ── Master-Detail Tablet Layout (>= 768px) ── */
             <div className="tablet-split-layout">
               <div className="tablet-sidebar-pane">
-                <Sidebar />
+                <MainNavigationShell isTablet={true} />
               </div>
               <div className="tablet-workspace-pane">
+
                 {currentScreen === "commandCenter" && <TacticalCommandCenter />}
                 {currentScreen === "chat" && <ChatWindow />}
                 {currentScreen === "sidebar" && <TacticalTabletWorkspace onOpenTool={(s) => navigate(s)} />}
@@ -616,8 +618,9 @@ export default function AppRouter() {
           ) : (
             /* ── Single-Column Mobile Layout (< 768px) ── */
             <>
-              {currentScreen === "sidebar" && <Sidebar />}
+              {currentScreen === "sidebar" && <MainNavigationShell isTablet={false} />}
               {currentScreen === "commandCenter" && <TacticalCommandCenter />}
+
               {currentScreen === "chat" && <ChatWindow />}
               {currentScreen === "security" && <SecurityPanel />}
               {currentScreen === "radar" && <RadarWindow />}

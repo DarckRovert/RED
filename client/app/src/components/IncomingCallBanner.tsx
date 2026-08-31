@@ -5,7 +5,9 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
+import { callHistory } from "../lib/audio/CallHistoryEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+
 
 export function IncomingCallBanner() {
     const { t } = useTranslation();
@@ -20,12 +22,14 @@ export function IncomingCallBanner() {
             return;
         }
 
-        CallRingtoneEngine.startIncoming((preferences as any)?.ringtoneType || "tactical-alpha");
+        const selectedTone = (preferences as any)?.incomingRingtone || (preferences as any)?.ringtoneType || "tactical-alpha";
+        CallRingtoneEngine.startIncoming(selectedTone);
 
         return () => {
             CallRingtoneEngine.stop();
         };
-    }, [incomingCall, currentScreen]);
+    }, [incomingCall, currentScreen, preferences]);
+
 
     if (!incomingCall || currentScreen === 'call') return null;
 
@@ -43,7 +47,12 @@ export function IncomingCallBanner() {
         const callerId = incomingCall.callerHash;
         const callType = incomingCall.callType || 'video';
         const offer = incomingCall.offer;
-        const callId = incomingCall.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const callId = incomingCall.callId || (() => {
+            const rand = typeof crypto !== 'undefined' && crypto.getRandomValues
+                ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                : Date.now().toString(36);
+            return `call_${Date.now()}_${rand}`;
+        })();
         
         setActiveCallType(callType);
         useRedStore.setState({
@@ -61,6 +70,14 @@ export function IncomingCallBanner() {
     const handleReject = async () => {
         CallRingtoneEngine.stop();
         try {
+            callHistory.addRecord({
+                peerHash: incomingCall.callerHash,
+                peerName: incomingCall.callerName || "Contacto P2P",
+                direction: "MISSED",
+                callType: incomingCall.callType || "audio",
+                timestamp: Date.now(),
+                durationSeconds: 0,
+            });
             await RedAPI.sendMessage(incomingCall.callerHash, JSON.stringify({
                 hangup: true,
                 callId: incomingCall.callId,
@@ -71,6 +88,7 @@ export function IncomingCallBanner() {
         } catch {}
         setIncomingCall(null);
     };
+
 
     return (
         <div style={{

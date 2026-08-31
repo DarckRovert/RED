@@ -40,8 +40,8 @@ export class CelestialNavigationEngine {
      * Calcula las efemérides completas del Sol y la Luna para una fecha y posición dada
      */
     public calculateEphemeris(
-        latDeg: number = 4.6097,
-        lonDeg: number = -74.0817,
+        latDeg: number = 0,
+        lonDeg: number = 0,
         date: Date = new Date()
     ): CelestialEphemeris {
         const rad = Math.PI / 180;

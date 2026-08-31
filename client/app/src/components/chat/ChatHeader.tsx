@@ -231,7 +231,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 }
                             } catch {}
                             const target = fullPeerHash || peerHash;
-                            const newCallId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                            const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+                                ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                                : Date.now().toString(36);
+                            const newCallId = `call_${Date.now()}_${randSuffix}`;
                             setActiveCallType('audio');
                             useRedStore.setState({
                                 activeCallPeer: target,
@@ -263,7 +266,10 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                 }
                             } catch {}
                             const target = fullPeerHash || peerHash;
-                            const newCallId = `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                            const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+                                ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                                : Date.now().toString(36);
+                            const newCallId = `call_${Date.now()}_${randSuffix}`;
                             setActiveCallType('video');
                             useRedStore.setState({
                                 activeCallPeer: target,

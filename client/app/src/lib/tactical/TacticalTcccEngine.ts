@@ -87,8 +87,11 @@ export class TacticalTcccEngine {
     }
 
     public applyTourniquet(limb: LimbLocation, type: 'CAT_GEN7' | 'SOFTT_W' | 'SAM_XT' = 'CAT_GEN7'): TourniquetRecord {
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+            : (Date.now() % 10000).toString(16).toUpperCase();
         const tq: TourniquetRecord = {
-            id: `TQ-${Date.now().toString(36)}`,
+            id: `TQ-${Date.now().toString(36).toUpperCase()}-${randSuffix}`,
             limb,
             appliedTimestamp: Date.now(),
             elapsedMinutes: 0,

@@ -115,7 +115,10 @@ export class TacticalGeofenceEngine {
     }
 
     public createZone(zoneData: Omit<TacticalGeofenceZone, 'id' | 'createdAt'>): TacticalGeofenceZone {
-        const id = `GEO-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+            : (Date.now() % 10000).toString(16).toUpperCase();
+        const id = `GEO-${Date.now().toString(36).toUpperCase()}-${randSuffix}`;
         const zone: TacticalGeofenceZone = {
             ...zoneData,
             id,

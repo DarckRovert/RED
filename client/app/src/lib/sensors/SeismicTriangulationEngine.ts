@@ -30,16 +30,25 @@ export class SeismicTriangulationEngine {
     // Velocidad de onda P en escombros compactos / concreto fracturado (~1800 m/s)
     public static readonly DEFAULT_SEISMIC_VELOCITY = 1800.0;
 
-    private activeNodes: SeismicSensorNode[] = [
-        { id: 'node-alpha', name: 'Sensor 1 (Norte)', xMeters: 0, yMeters: 15, arrivalTimestampMs: 0, amplitudeG: 0 },
-        { id: 'node-bravo', name: 'Sensor 2 (Sur-Este)', xMeters: 18, yMeters: -10, arrivalTimestampMs: 0, amplitudeG: 0 },
-        { id: 'node-charlie', name: 'Sensor 3 (Sur-Oeste)', xMeters: -18, yMeters: -10, arrivalTimestampMs: 0, amplitudeG: 0 }
-    ];
+    private activeNodes: SeismicSensorNode[] = [];
 
     private lastTriangulation: SurvivorTriangulationResult | null = null;
     private listeners: Set<(r: SurvivorTriangulationResult) => void> = new Set();
 
     private constructor() {}
+
+    public registerSensorNode(node: SeismicSensorNode): void {
+        const idx = this.activeNodes.findIndex(n => n.id === node.id);
+        if (idx >= 0) {
+            this.activeNodes[idx] = node;
+        } else {
+            this.activeNodes.push(node);
+        }
+    }
+
+    public clearNodes(): void {
+        this.activeNodes = [];
+    }
 
     public static getInstance(): SeismicTriangulationEngine {
         if (!this.instance) {

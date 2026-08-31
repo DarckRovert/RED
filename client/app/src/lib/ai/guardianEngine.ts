@@ -210,8 +210,11 @@ export class GuardianEngineClass {
     }
 
     public addAuditLog(entry: Omit<GuardianAuditLogEntry, 'id' | 'timestamp'>) {
+        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
         const fullEntry: GuardianAuditLogEntry = {
-            id: 'log_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6),
+            id: `log_${Date.now().toString(36)}_${randSuffix}`,
             timestamp: Date.now(),
             ...entry,
         };

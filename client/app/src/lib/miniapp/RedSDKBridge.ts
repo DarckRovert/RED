@@ -187,7 +187,10 @@ export class RedSDKBridge {
                 this.setupMeshRouterListener();
                 const topic = params?.topic || 'default';
                 const payload = params?.payload;
-                const msgId = `mesh_app_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+                    ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                    : Date.now().toString(36);
+                const msgId = `mesh_app_${Date.now()}_${randSuffix}`;
                 
                 // Broadcast through real RED mesh router using wire-format encoding and canonical broadcast address
                 const broadcastEnvelope = { type: 'APP_DATA', appId: this.manifest.id, msgId, topic, payload, timestamp: Date.now() };

@@ -698,7 +698,10 @@ export async function dispatchIncomingMessage(
                     // Only display incoming call banner if not already inside an active call
                     if (get().currentScreen !== 'call') {
                         const determinedType: 'audio' | 'video' = signal.callType === 'audio' || (signal.offer?.sdp && !signal.offer.sdp.includes('m=video')) ? 'audio' : 'video';
-                        const callId = signal.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                        const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
+                            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                            : Date.now().toString(36);
+                        const callId = signal.callId || `call_${Date.now()}_${randSuffix}`;
                         const sessionStartTime = signal.startedAt || (signal.timestamp > 1e11 ? signal.timestamp : Date.now());
                         set({
                             incomingCall: {
@@ -987,7 +990,10 @@ export async function dispatchIncomingMessage(
 
                 if (!groupId) { /* can't route without group id — fall through to normal message */ }
                 else {
-                    const msgId = rawItem.id || item.id || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+                    const randGrp = typeof crypto !== 'undefined' && crypto.getRandomValues
+                        ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+                        : Date.now().toString(36);
+                    const msgId = rawItem.id || item.id || `grp_${Date.now()}_${randGrp}`;
                     const normTs = (item.timestamp && item.timestamp > 1e11) ? item.timestamp / 1000 : (item.timestamp || Date.now() / 1000);
                     const parsedObj = typeof item.content === 'string' && item.content.startsWith('{') ? (() => { try { return JSON.parse(item.content); } catch { return {}; } })() : {};
                     

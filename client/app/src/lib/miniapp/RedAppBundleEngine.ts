@@ -45,7 +45,8 @@ export class RedAppBundleEngine {
 
     function call(method, params) {
         return new Promise((resolve, reject) => {
-            const requestId = 'req_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+            const randReq = window.crypto && window.crypto.getRandomValues ? Array.from(window.crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('') : Date.now().toString(36);
+            const requestId = 'req_' + Date.now() + '_' + randReq;
             pendingRequests.set(requestId, { resolve, reject });
 
             window.parent.postMessage({

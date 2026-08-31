@@ -90,12 +90,21 @@ export class AntiForensicPanicWipeEngine {
         // 1. Emisión Silenciosa de Baliza SOS por la Malla DTN
         if (this.config.emitSilentMeshSos) {
             try {
+                let batt = 100;
+                if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
+                    batt = (window as any).__red_last_battery;
+                } else if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+                    try {
+                        const b: any = await (navigator as any).getBattery();
+                        if (b && typeof b.level === 'number') batt = Math.round(b.level * 100);
+                    } catch {}
+                }
                 await meshSosBeacon.activateSosBeacon({
                     distressType: 'GENERAL_DISTRESS',
                     triageColor: 'RED',
                     note: '🚨 ALERTA CRÍTICA: OPERADOR BAJO COACCIÓN / CAPTURA HOSTIL (PIN DE PÁNICO ACTIVADO)',
                     coords: lastKnownCoords || {},
-                    batteryLevel: 99
+                    batteryLevel: batt
                 }, 'DURESS_OPERATOR', 'Operador en Peligro');
             } catch (e) {
                 console.error("[AntiForensic] Error broadcasting silent SOS:", e);

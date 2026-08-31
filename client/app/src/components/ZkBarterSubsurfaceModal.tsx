@@ -7,7 +7,8 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function ZkBarterSubsurfaceModal() {
-    const { navigate } = useRedStore();
+    const { navigate, identity, goBack } = useRedStore();
+
     const [subsurface, setSubsurface] = useState<SubsurfaceTelemetry>(() => subsurfaceAcoustic.getTelemetry());
     const [activeTab, setActiveTab] = useState<"zkBarter" | "subsurface">("zkBarter");
 
@@ -32,11 +33,9 @@ export function ZkBarterSubsurfaceModal() {
 
     const handleGenerateProof = async () => {
         // Derivar hojas reales del árbol de Merkle desde contexto operacional local.
-        // Nunca se generan valores estáticos hard-codeados ("dummyLeaves").
+        // Nunca se generan valores estáticos hard-codeados.
         // Cada hoja es H(operatorId || resourceType || amount || leafIndex || epochSec).
-        const operatorId = (typeof window !== 'undefined'
-            ? localStorage.getItem('red_identity_hash') || localStorage.getItem('red_displayName') || 'UNKNOWN_OPERATOR'
-            : 'UNKNOWN_OPERATOR');
+        const operatorId = identity?.identity_hash || identity?.nickname || 'RED_OPERATOR';
         const epochSec = Math.floor(Date.now() / 60000); // epoch de 60s para estabilidad de la raíz
 
         const deriveLeaf = async (index: number): Promise<string> => {
@@ -118,8 +117,9 @@ export function ZkBarterSubsurfaceModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                         color: "#FFF", padding: "6px 12px", borderRadius: "8px",
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"

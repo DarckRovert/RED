@@ -6,7 +6,8 @@ import { opticalGasAqiEngine, AtmosphericTelemetry } from "../lib/sensors/Optica
 import { toast } from "./Toast";
 
 export function AtmosphericSafetyModal() {
-    const { navigate } = useRedStore();
+    const { navigate, identity, goBack } = useRedStore();
+
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const prevLumaRef = useRef<number | null>(null);
@@ -109,16 +110,26 @@ export function AtmosphericSafetyModal() {
         }
     };
 
-    const handleBroadcastAlert = () => {
-        import("../lib/emergency/MeshSosBeaconEngine").then(({ meshSosBeacon }) => {
-            meshSosBeacon.activateSosBeacon({
-                distressType: "NATURAL_DISASTER",
-                triageColor: telemetry.aqiIndex > 200 ? "RED" : "YELLOW",
-                note: `ALERTA TOXICIDAD ATMOSFÉRICA: AQI ${telemetry.aqiIndex} (${telemetry.severity}), PM2.5 ${telemetry.pm25Ugm3} ug/m3, CO ${telemetry.estimatedCoPpm} ppm. ${telemetry.recommendedMask}`,
-                batteryLevel: typeof window !== 'undefined' ? (window as any).__red_last_battery ?? 100 : 100
-            }, "LOCAL_HAZMAT", "Sensor Óptico AQI");
-            toast.success("🚨 Alerta de Toxicidad Atmosférica transmitida por Malla SOS");
-        });
+    const handleBroadcastAlert = async () => {
+        const { meshSosBeacon } = await import("../lib/emergency/MeshSosBeaconEngine");
+        let batt = 100;
+        if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
+            batt = (window as any).__red_last_battery;
+        } else if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+            try {
+                const b: any = await (navigator as any).getBattery();
+                if (b && typeof b.level === 'number') batt = Math.round(b.level * 100);
+            } catch {}
+        }
+        const callerId = identity?.identity_hash ? `did:red:${identity.identity_hash.slice(0, 8)}` : "LOCAL_HAZMAT";
+        const callerName = identity?.nickname || "Sensor Óptico AQI";
+        await meshSosBeacon.activateSosBeacon({
+            distressType: "NATURAL_DISASTER",
+            triageColor: telemetry.aqiIndex > 200 ? "RED" : "YELLOW",
+            note: `ALERTA TOXICIDAD ATMOSFÉRICA: AQI ${telemetry.aqiIndex} (${telemetry.severity}), PM2.5 ${telemetry.pm25Ugm3} ug/m3, CO ${telemetry.estimatedCoPpm} ppm. ${telemetry.recommendedMask}`,
+            batteryLevel: batt
+        }, callerId, callerName);
+        toast.success("🚨 Alerta de Toxicidad Atmosférica transmitida por Malla SOS");
     };
 
     return (
@@ -144,8 +155,9 @@ export function AtmosphericSafetyModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)",
                         color: "#FFF", borderRadius: "6px", padding: "6px 12px", cursor: "pointer", fontSize: "0.8rem"
                     }}

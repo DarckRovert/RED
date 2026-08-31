@@ -6,7 +6,8 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function TacticalVisionScanModal() {
-    const { navigate } = useRedStore();
+    const { goBack } = useRedStore();
+
     const [filter, setFilter] = useState<TacticalVisionFilter>("NVG_PHOSPHOR");
     const [detections, setDetections] = useState<DetectedVisionObject[]>([]);
     const [cameraActive, setCameraActive] = useState<boolean>(false);
@@ -92,8 +93,9 @@ export function TacticalVisionScanModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                         color: "#FFF", padding: "6px 12px", borderRadius: "8px",
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"

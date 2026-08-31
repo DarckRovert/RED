@@ -22,7 +22,7 @@ export interface LoraConfig {
 
 export interface LoraTelemetry {
     connected: boolean;
-    transportType: 'USB_SERIAL' | 'BLE_NUS' | 'MOCK' | 'NONE';
+    transportType: 'USB_SERIAL' | 'BLE_NUS' | 'NONE';
     packetsSent: number;
     packetsReceived: number;
     bytesSent: number;
@@ -284,10 +284,8 @@ export class LoraSerialBridgeEngine {
             }
         }
 
-        // Si no hay puerto serie nativo WebUSB, se simula con inyección local
-        this.telemetry.packetsSent++;
-        this.telemetry.bytesSent += framed.length;
-        return true;
+        // Si no hay transceptor hardware conectado en puerto serie, reportar false para fallback transparente a BLE/WiFi
+        return false;
     }
 
     public onPacketReceived(cb: LoraPacketCallback) {

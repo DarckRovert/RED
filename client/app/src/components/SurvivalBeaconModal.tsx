@@ -33,7 +33,12 @@ export function SurvivalBeaconModal() {
 
     // Telemetry from Device Hardware
     const [coords, setCoords] = useState<{ lat?: number; lon?: number; alt?: number }>({});
-    const [batteryLevel, setBatteryLevel] = useState<number>(100);
+    const [batteryLevel, setBatteryLevel] = useState<number>(() => {
+        if (typeof window !== "undefined" && typeof (window as any).__red_last_battery === "number") {
+            return (window as any).__red_last_battery;
+        }
+        return 100;
+    });
 
     // SoundMesh Ultrasonic Modem states
     const localHash = (identity?.identity_hash || "LOCAL_NODE").substring(0, 8).toUpperCase();
@@ -43,7 +48,7 @@ export function SurvivalBeaconModal() {
     const [receivedPackets, setReceivedPackets] = useState<SoundMeshPacket[]>([]);
 
     // Morse Li-Fi Transceiver States
-    const [customMorseMsg, setCustomMorseMsg] = useState<string>("SOS EXTRACCION NORTE");
+    const [customMorseMsg, setCustomMorseMsg] = useState<string>("SOS");
     const [isMorseLiFiTransmitting, setIsMorseLiFiTransmitting] = useState<boolean>(false);
     const [morseState, setMorseState] = useState<MorseTransmissionState>({
         isTransmitting: false, currentWord: '', currentChar: '', progressPercent: 0, wpm: 12
@@ -111,12 +116,33 @@ export function SurvivalBeaconModal() {
             );
         }
 
-        // Battery Telemetry
-        if (typeof navigator !== "undefined" && (navigator as any).getBattery) {
-            (navigator as any).getBattery().then((battery: any) => {
-                setBatteryLevel(Math.round(battery.level * 100));
-            }).catch(() => {});
-        }
+        // Battery Telemetry from Native Capacitor & Web APIs
+        const fetchBattery = async () => {
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const cap = window as any;
+                    if (cap?.Plugins?.Device?.getBatteryInfo) {
+                        const info = await cap.Plugins.Device.getBatteryInfo();
+                        if (typeof info?.batteryLevel === "number") {
+                            setBatteryLevel(Math.round(info.batteryLevel * 100));
+                            return;
+                        }
+                    }
+                }
+            } catch {}
+
+            if (typeof navigator !== "undefined" && (navigator as any).getBattery) {
+                try {
+                    const battery = await (navigator as any).getBattery();
+                    setBatteryLevel(Math.round(battery.level * 100));
+                    battery.addEventListener?.("levelchange", () => {
+                        setBatteryLevel(Math.round(battery.level * 100));
+                    });
+                } catch {}
+            }
+        };
+        fetchBattery();
 
         return () => {
             clearInterval(beaconPoll);

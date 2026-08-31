@@ -75,7 +75,10 @@ export class RedPaymentGatewayEngine {
             window.open(paypalUrl, '_blank', 'noopener,noreferrer');
         }
 
-        const txId = `pp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        const randTx = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const txId = `pp_${Date.now()}_${randTx}`;
 
         return {
             success: true,
@@ -205,7 +208,10 @@ export class RedPaymentGatewayEngine {
         // Deduct from local MonetizationEngine credits
         MonetizationEngine.recordTransaction('redeem_product', -creditsNeeded, `Pago Mini-App: ${intent.title}`);
 
-        const voucherCode = `RED-VOUCHER-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const randVoucher = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+            : (Date.now() % 10000).toString(16).toUpperCase();
+        const voucherCode = `RED-VOUCHER-${Date.now().toString(36).toUpperCase()}-${randVoucher}`;
 
         return {
             success: true,

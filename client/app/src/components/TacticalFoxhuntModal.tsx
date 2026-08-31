@@ -14,8 +14,9 @@ export function TacticalFoxhuntModal() {
 
     // RDF State
     const [rdfState, setRdfState] = useState(() => tacticalRdf.getState());
-    const [simHeading, setSimHeading] = useState<number>(45);
-    const [simRssi, setSimRssi] = useState<number>(-65);
+    const [currentHeading, setCurrentHeading] = useState<number>(0);
+    const [currentRssi, setCurrentRssi] = useState<number>(-65);
+    const [coords, setCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
 
     // Triangulation State
     const [triangState, setTriangState] = useState(() => rdfTriangulation.getState());
@@ -24,21 +25,45 @@ export function TacticalFoxhuntModal() {
         const unsubRdf = tacticalRdf.subscribe(setRdfState);
         const unsubTriang = rdfTriangulation.subscribe(setTriangState);
 
+        // Live Device Orientation / Compass Listener
+        const handleOrientation = (e: any) => {
+            const heading = e.webkitCompassHeading ?? (e.alpha !== null ? (360 - e.alpha) % 360 : null);
+            if (heading !== null && !isNaN(heading)) {
+                setCurrentHeading(Math.round(heading));
+            }
+        };
+
+        window.addEventListener("deviceorientation", handleOrientation, true);
+        window.addEventListener("deviceorientationabsolute" as any, handleOrientation, true);
+
+        // Live Geolocation for RDF fixes
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+                },
+                () => {},
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
+
         return () => {
             unsubRdf();
             unsubTriang();
+            window.removeEventListener("deviceorientation", handleOrientation, true);
+            window.removeEventListener("deviceorientationabsolute" as any, handleOrientation, true);
         };
     }, []);
 
     const handleRecordSample = () => {
-        tacticalRdf.recordSample(simHeading, simRssi);
-        toast.info(`Muestreo registrado: ${simHeading}° a ${simRssi} dBm`);
+        tacticalRdf.recordSample(currentHeading, currentRssi);
+        toast.info(`Muestreo registrado: ${currentHeading}° a ${currentRssi} dBm`);
     };
 
     const handleAddCurrentLob = () => {
         const peak = tacticalRdf.getPeakBearing();
-        const lob = rdfTriangulation.addBearing(4.6097, -74.0817, peak.peakHeadingDeg, peak.peakRssiDbm);
-        toast.success(`🎯 Marcación LOB añadida: ${lob.bearingDeg}°`);
+        const lob = rdfTriangulation.addBearing(coords.lat, coords.lon, peak.peakHeadingDeg || currentHeading, peak.peakRssiDbm || currentRssi);
+        toast.success(`🎯 Marcación LOB añadida: ${lob.bearingDeg}° (GPS: ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)})`);
     };
 
     const handleTriangulate = () => {
@@ -203,18 +228,18 @@ export function TacticalFoxhuntModal() {
                                 <div style={{ fontSize: "0.75rem", fontWeight: 900, color: "#FFFFFF" }}>CALIBRACIÓN DE MUESTREO MANUAL</div>
                                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                                     <div>
-                                        <label style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>RUMBO ({simHeading}°)</label>
+                                        <label style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>RUMBO ({currentHeading}°)</label>
                                         <input
-                                            type="range" min="0" max="359" value={simHeading}
-                                            onChange={e => setSimHeading(Number(e.target.value))}
+                                            type="range" min="0" max="359" value={currentHeading}
+                                            onChange={e => setCurrentHeading(Number(e.target.value))}
                                             style={{ width: "100%" }}
                                         />
                                     </div>
                                     <div>
-                                        <label style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>RSSI ({simRssi} dBm)</label>
+                                        <label style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>RSSI ({currentRssi} dBm)</label>
                                         <input
-                                            type="range" min="-110" max="-30" value={simRssi}
-                                            onChange={e => setSimRssi(Number(e.target.value))}
+                                            type="range" min="-110" max="-30" value={currentRssi}
+                                            onChange={e => setCurrentRssi(Number(e.target.value))}
                                             style={{ width: "100%" }}
                                         />
                                     </div>

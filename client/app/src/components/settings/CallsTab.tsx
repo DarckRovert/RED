@@ -96,6 +96,70 @@ export const CallsTab: React.FC = () => {
                             />
                         </div>
 
+                        {/* Tono de Llamada Entrante */}
+                        <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                            <div>
+                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Tono de Llamada Entrante P2P</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                    Selecciona el patrón acústico generado por Web Audio para avisos de llamada entrante.
+                                </div>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                {[
+                                    { id: "tactical-alpha", label: "Táctico Alfa", icon: "🔔", desc: "Doble tono A5/D6 penetrante" },
+                                    { id: "crypto-radar", label: "Pulso Radar", icon: "📡", desc: "Barrido sonar sinusoidal" },
+                                    { id: "smooth-synth", label: "Sintetizador", icon: "🎵", desc: "Acorde armónico C5-E5-G5" },
+                                    { id: "silent", label: "Solo Vibración", icon: "📳", desc: "Silencio total sin audio" },
+                                ].map((tOption) => {
+                                    const currentTone = (preferences as any).incomingRingtone || "tactical-alpha";
+                                    const isSelected = currentTone === tOption.id;
+                                    return (
+                                        <div
+                                            key={tOption.id}
+                                            style={{
+                                                padding: "10px 12px", borderRadius: "10px",
+                                                background: isSelected ? "rgba(0, 229, 255, 0.12)" : "rgba(255, 255, 255, 0.04)",
+                                                border: isSelected ? "1px solid rgba(0, 229, 255, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)",
+                                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                                cursor: "pointer"
+                                            }}
+                                            onClick={() => {
+                                                SettingsManager.triggerHaptic("light");
+                                                updatePreferences({ ringtoneType: tOption.id as any, incomingRingtone: tOption.id as any });
+                                                import("../../lib/audio/CallRingtoneEngine").then(m => m.CallRingtoneEngine.playPreview(tOption.id as any));
+                                                toast.info(`Tono seleccionado: ${tOption.label}`);
+                                            }}
+                                        >
+                                            <div>
+                                                <div style={{ fontSize: "0.80rem", fontWeight: 800, color: isSelected ? "#00E5FF" : "#FFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                                                    <span>{tOption.icon}</span>
+                                                    <span>{tOption.label}</span>
+                                                </div>
+                                                <div style={{ fontSize: "0.64rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                                                    {tOption.desc}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    import("../../lib/audio/CallRingtoneEngine").then(m => m.CallRingtoneEngine.playPreview(tOption.id as any));
+                                                }}
+
+                                                style={{
+                                                    background: "none", border: "none", color: "var(--accent-cyan, #00E5FF)",
+                                                    cursor: "pointer", fontSize: "0.9rem", padding: "4px"
+                                                }}
+                                                title="Probar tono"
+                                            >
+                                                ▶️
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
                         {/* Servidor STUN Personalizado */}
                         <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div>
@@ -134,6 +198,7 @@ export const CallsTab: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
 
     );
 };

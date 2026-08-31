@@ -21,14 +21,14 @@ export function AirGapStegoModal() {
     });
 
     // QR Animated State
-    const [qrText, setQrText] = useState<string>("MENSAJE TÁCTICO ULTRA-CONFIDENCIAL RED 2.0 AIR-GAP :: CLAVE MAESTRA SHA-256 VALIDADA :: C4ISR TEATRO DE OPERACIONES MILITARES");
+    const [qrText, setQrText] = useState<string>("");
     const [qrChunks, setQrChunks] = useState<string[]>([]);
     const [currentChunkIdx, setCurrentChunkIdx] = useState<number>(0);
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
     const [isStreaming, setIsStreaming] = useState<boolean>(true);
 
     // Audio Stego State
-    const [secretMessage, setSecretMessage] = useState<string>("COORDENADAS: LAT 4.6097 LON -74.0817 ALT 2640M");
+    const [secretMessage, setSecretMessage] = useState<string>("");
     const [carrierAudioUrl, setCarrierAudioUrl] = useState<string | null>(null);
     const [extractedMessage, setExtractedMessage] = useState<string | null>(null);
 

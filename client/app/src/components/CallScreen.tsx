@@ -6,7 +6,9 @@ import { RedAPI } from "../lib/api";
 import { ErrorBanner } from "./ui/ErrorBanner";
 
 import { CallRingtoneEngine } from "../lib/CallRingtoneEngine";
+import { callHistory } from "../lib/audio/CallHistoryEngine";
 import { SettingsManager, type VideoCallQuality } from "../lib/settingsManager";
+
 import { CallVideoGrid, VideoTacticalFilter } from "./call/CallVideoGrid";
 import { CallConnectingOverlay } from "./call/CallConnectingOverlay";
 import { CallHeader } from "./call/CallHeader";
@@ -75,7 +77,12 @@ export default function CallScreen() {
         targetPeerRef.current = resolvedPeerHash;
     }
 
-    const currentCallSessionId = activeCallId || incomingCall?.callId || `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const currentCallSessionId = activeCallId || incomingCall?.callId || (() => {
+        const rand = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        return `call_${Date.now()}_${rand}`;
+    })();
     const callIdRef = useRef<string>(currentCallSessionId);
     if (activeCallId && callIdRef.current !== activeCallId) {
         callIdRef.current = activeCallId;
@@ -814,6 +821,20 @@ export default function CallScreen() {
     const endCallInternal = () => {
         CallRingtoneEngine.stop();
         const targetPeer = targetPeerRef.current;
+        if (targetPeer) {
+            try {
+                callHistory.addRecord({
+                    peerHash: targetPeer,
+                    peerName: peerDisplayName,
+                    direction: incomingCall ? "INCOMING" : "OUTGOING",
+                    callType: isAudioOnly ? "audio" : "video",
+                    timestamp: Date.now() - (callDuration * 1000),
+                    durationSeconds: callDuration,
+                });
+            } catch (e) {
+                console.warn("[CallScreen] Failed to save call record:", e);
+            }
+        }
         if (targetPeer && peerRef.current) {
             RedAPI.sendMessage(targetPeer, JSON.stringify({
                 hangup: true,
@@ -821,6 +842,7 @@ export default function CallScreen() {
                 timestamp: Date.now()
             }), { msg_type: "webrtc_signal" }).catch(() => {});
         }
+
         if (peerRef.current) {
             try { peerRef.current.close(); } catch {}
             peerRef.current = null;

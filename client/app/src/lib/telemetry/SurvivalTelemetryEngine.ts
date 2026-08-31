@@ -45,11 +45,29 @@ export class SurvivalTelemetryEngine {
         let batteryPct = 100;
         let charging = false;
 
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            const devicePlugin = (Capacitor as any)?.Plugins?.Device || (typeof window !== 'undefined' && (window as any).Capacitor?.Plugins?.Device);
+            if (devicePlugin && typeof devicePlugin.getBatteryInfo === 'function') {
+                const info = await devicePlugin.getBatteryInfo();
+                if (info && info.batteryLevel !== undefined) {
+                    batteryPct = Math.round(info.batteryLevel * 100);
+                    charging = !!info.isCharging;
+                }
+            }
+        } catch {}
+
+        if (batteryPct === 100 && typeof window !== 'undefined' && (window as any).__red_last_battery !== undefined) {
+            batteryPct = (window as any).__red_last_battery;
+        }
+
         if (typeof navigator !== 'undefined' && (navigator as any).getBattery) {
             try {
                 const batt = await (navigator as any).getBattery();
-                batteryPct = Math.round(batt.level * 100);
-                charging = batt.charging;
+                if (batt && batt.level !== undefined) {
+                    batteryPct = Math.round(batt.level * 100);
+                    charging = batt.charging;
+                }
             } catch {}
         }
 

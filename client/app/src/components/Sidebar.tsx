@@ -630,81 +630,34 @@ export default function Sidebar() {
                 )}
             </div>
 
-            {/* ── Fixed Bottom Tactical HUD Dock (5 Key Pillars) ── */}
-            <nav style={{
-                position: "sticky", bottom: 0, left: 0, right: 0,
-                minHeight: "58px",
-                background: "linear-gradient(180deg, rgba(12, 16, 32, 0.96) 0%, rgba(4, 6, 16, 0.99) 100%)",
-                backdropFilter: "blur(25px)",
-                WebkitBackdropFilter: "blur(25px)",
-                borderTop: "1px solid rgba(0, 229, 255, 0.2)",
-                boxShadow: "0 -4px 25px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
-                display: "flex", alignItems: "center", justifyContent: "space-around",
-                padding: "4px 4px max(6px, env(safe-area-inset-bottom, 6px)) 4px",
-                zIndex: 40, flexShrink: 0
-            }}>
-                {[
-                    { id: "chats", icon: "💬", label: t('dock.chats') || "Chats", action: () => { setMenuOpen(false); setActiveTab("chats"); }, active: activeTab === "chats" && !menuOpen, badgeNum: unreadTotal },
-                    { id: "radar", icon: "📡", label: t('dock.radar') || "Radar", action: () => { setMenuOpen(false); navigate("radar"); }, count: meshRouter.peers.size },
-                    { id: "modules", icon: "⚡", label: "Hubs", action: () => setMenuOpen(m => !m), active: menuOpen, badgeText: "8", isModulesBtn: true },
-                    { id: "ai", icon: "🧠", label: t('dock.ai') || "Copiloto", action: () => { setMenuOpen(false); navigate("aiCopilot"); }, highlight: true },
-                    { id: "vault", icon: "🪪", label: t('dock.vault') || "Bóveda", action: () => { setMenuOpen(false); navigate("idVault"); } },
-                ].map(item => (
-                    <button
-                        key={item.id}
-                        onClick={item.action}
-                        style={{
-                            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                            gap: "3px", 
-                            background: item.isModulesBtn && item.active ? "rgba(0, 229, 255, 0.2)" : (item.active ? "rgba(255, 255, 255, 0.06)" : "transparent"),
-                            border: item.isModulesBtn ? (item.active ? "1px solid rgba(0, 229, 255, 0.7)" : "1px solid rgba(255, 255, 255, 0.15)") : (item.active ? "1px solid rgba(0, 229, 255, 0.3)" : "none"),
-                            color: item.active ? (item.isModulesBtn ? "#00E5FF" : "#FFFFFF") : (item.highlight ? "#00E5FF" : (item.isModulesBtn ? "#FFB300" : "var(--text-secondary)")),
-                            cursor: "pointer", padding: "6px 8px", borderRadius: "14px",
-                            transition: "all 0.15s ease", position: "relative",
-                            minWidth: "52px", minHeight: "50px",
-                            boxShadow: item.active ? "0 0 15px rgba(0, 229, 255, 0.2)" : "none"
-                        }}
-                    >
-                        <span style={{ fontSize: "1.3rem", filter: item.active ? "drop-shadow(0 0 10px rgba(0,229,255,0.8))" : "none" }}>
-                            {item.icon}
-                        </span>
-                        <span style={{ fontSize: "0.72rem", fontWeight: item.active ? 900 : 700, letterSpacing: "0.3px", whiteSpace: "nowrap" }}>
-                            {item.label}
-                        </span>
-                        {item.badgeText && (
-                            <span style={{
-                                position: "absolute", top: 1, right: 2,
-                                fontSize: "0.58rem", fontWeight: 900,
-                                background: "var(--accent-amber, #FFB300)", color: "#000",
-                                padding: "1px 5px", borderRadius: "6px",
-                                boxShadow: "0 0 8px var(--accent-amber, #FFB300)"
-                            }}>
-                                {item.badgeText}
-                            </span>
-                        )}
-                        {typeof item.badgeNum === "number" && item.badgeNum > 0 && (
-                            <span style={{
-                                position: "absolute", top: 2, right: 4,
-                                minWidth: 14, height: 14, borderRadius: 7,
-                                background: "#FF3355", color: "#FFFFFF",
-                                fontSize: "0.58rem", fontWeight: 900,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                padding: "0 3px",
-                                boxShadow: "0 0 8px #FF3355"
-                            }}>
-                                {item.badgeNum}
-                            </span>
-                        )}
-                        {typeof item.count === "number" && item.count > 0 && (
-                            <span style={{
-                                position: "absolute", top: 2, right: 6,
-                                width: 7, height: 7, borderRadius: "50%",
-                                background: "var(--accent-emerald, #00E676)", boxShadow: "0 0 8px var(--accent-emerald, #00E676)"
-                            }} />
-                        )}
-                    </button>
-                ))}
-            </nav>
+            {/* ── WhatsApp-Style Floating Action Button (New Chat / Add Contact) ── */}
+            <button
+                onClick={() => setAddContactOpen(true)}
+                style={{
+                    position: "absolute",
+                    bottom: "20px",
+                    right: "20px",
+                    width: "56px",
+                    height: "56px",
+                    borderRadius: "16px",
+                    background: "linear-gradient(135deg, #00E676, #00B368)",
+                    color: "#000",
+                    border: "none",
+                    boxShadow: "0 8px 24px rgba(0, 230, 118, 0.4)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "1.4rem",
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    zIndex: 30,
+                    transition: "transform 0.2s ease"
+                }}
+                title="Nuevo Chat / Agregar Contacto"
+            >
+                💬
+            </button>
+
 
             {/* Modal para Agregar Contacto */}
             {addContactOpen && (

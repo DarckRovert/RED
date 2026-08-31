@@ -8,21 +8,53 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function CbrnSatelliteModal() {
-    const { navigate } = useRedStore();
+    const { navigate, identity, goBack } = useRedStore();
+
     const [cbrn, setCbrn] = useState<RadiationTelemetry>(() => cbrnRadiation.getTelemetry());
     const [sat, setSat] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
     const [activeTab, setActiveTab] = useState<"cbrn" | "satellite" | "plume">("cbrn");
     const [plumeZone, setPlumeZone] = useState<PlumeHazardZone>(() => 
         cbrnPlumeDispersionEngine.calculatePlumeDispersion({
-            id: 'INCIDENT-01', lat: 4.6097, lon: -74.0817, hazardType: 'RADIOACTIVE_FALLOUT',
-            releaseRateKgSec: 15, windSpeedKmh: 18, windDirectionDegrees: 45, stabilityClass: 'D', timestamp: Date.now()
-        }, 4.6120, -74.0800)
+            id: `INCIDENT-${Date.now()}`,
+            lat: 0,
+            lon: 0,
+            hazardType: 'RADIOACTIVE_FALLOUT',
+            releaseRateKgSec: 10,
+            windSpeedKmh: 15,
+            windDirectionDegrees: 45,
+            stabilityClass: 'D',
+            timestamp: Date.now()
+        }, 0, 0)
     );
 
     useEffect(() => {
         cbrnRadiation.startMonitoring();
         const unsubCbrn = cbrnRadiation.subscribe(setCbrn);
         const unsubSat = satelliteMeshGateway.subscribe(setSat);
+
+        // Fetch live GPS location for plume and satellite orbital calculation
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    satelliteMeshGateway.setObserverLocation(lat, lon);
+                    setPlumeZone(cbrnPlumeDispersionEngine.calculatePlumeDispersion({
+                        id: `INCIDENT-${Date.now()}`,
+                        lat,
+                        lon,
+                        hazardType: 'RADIOACTIVE_FALLOUT',
+                        releaseRateKgSec: 10,
+                        windSpeedKmh: 15,
+                        windDirectionDegrees: 45,
+                        stabilityClass: 'D',
+                        timestamp: Date.now()
+                    }, lat + 0.002, lon + 0.002));
+                },
+                () => {},
+                { timeout: 5000, enableHighAccuracy: true }
+            );
+        }
 
         return () => {
             unsubCbrn();
@@ -69,8 +101,9 @@ export function CbrnSatelliteModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                         color: "#FFF", padding: "6px 12px", borderRadius: "8px",
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
@@ -307,16 +340,26 @@ export function CbrnSatelliteModal() {
 
                         {/* Broadcast Escape Vector to Mesh */}
                         <button
-                            onClick={() => {
-                                import("../lib/emergency/MeshSosBeaconEngine").then(({ meshSosBeacon }) => {
-                                    meshSosBeacon.activateSosBeacon({
-                                        distressType: "NATURAL_DISASTER",
-                                        triageColor: "RED",
-                                        note: `ALERTA EVACUACIÓN CBRN: Escape por Rumbo ${plumeZone.escapeVector.recommendedAzimuthDegrees}°. Zona Caliente: ${plumeZone.hotZoneRadiusMeters}m. Salir del cono de viento inmediatamente.`,
-                                        batteryLevel: 90
-                                    }, "CBRN_COMMAND", "Oficial de Seguridad CBRN");
-                                    toast.success("🚨 Corredor de Evacuación y Vector de Escape transmitido por la Malla SOS");
-                                });
+                            onClick={async () => {
+                                const { meshSosBeacon } = await import("../lib/emergency/MeshSosBeaconEngine");
+                                let batt = 100;
+                                if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
+                                    batt = (window as any).__red_last_battery;
+                                } else if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
+                                    try {
+                                        const b: any = await (navigator as any).getBattery();
+                                        if (b && typeof b.level === 'number') batt = Math.round(b.level * 100);
+                                    } catch {}
+                                }
+                                const callerId = identity?.identity_hash ? `did:red:${identity.identity_hash.slice(0, 8)}` : "CBRN_COMMAND";
+                                const callerName = identity?.nickname || "Oficial de Seguridad CBRN";
+                                await meshSosBeacon.activateSosBeacon({
+                                    distressType: "NATURAL_DISASTER",
+                                    triageColor: "RED",
+                                    note: `ALERTA EVACUACIÓN CBRN: Escape por Rumbo ${plumeZone.escapeVector.recommendedAzimuthDegrees}°. Zona Caliente: ${plumeZone.hotZoneRadiusMeters}m. Salir del cono de viento inmediatamente.`,
+                                    batteryLevel: batt
+                                }, callerId, callerName);
+                                toast.success("🚨 Corredor de Evacuación y Vector de Escape transmitido por la Malla SOS");
                             }}
                             style={{
                                 padding: "14px", borderRadius: "10px",

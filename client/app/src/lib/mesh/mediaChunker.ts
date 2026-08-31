@@ -113,7 +113,10 @@ export class MediaChunker {
             : MediaChunker.getOptimalChunkSize(chunkSizeOrTransport);
 
         const rawBytes = this.base64ToUint8(base64Data);
-        const fileId = Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+        const randFile = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(6))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : (Date.now() % 1000000).toString(16);
+        const fileId = `${Date.now().toString(36)}_${randFile}`;
         
         const k = Math.max(1, Math.ceil(rawBytes.length / chunkSize));
         // Paridad: 30% adicional (mínimo 1, máximo 5)

@@ -186,10 +186,11 @@ export class SlottedGossipEngine {
      */
     public generateDummyPacket(targetSize = 128): Uint8Array {
         const packet = new Uint8Array(targetSize);
-        if (typeof window !== 'undefined' && window.crypto) {
-            window.crypto.getRandomValues(packet);
+        const cryptoObj = (typeof globalThis !== 'undefined' && globalThis.crypto) || (typeof window !== 'undefined' && window.crypto);
+        if (cryptoObj && cryptoObj.getRandomValues) {
+            cryptoObj.getRandomValues(packet);
         } else {
-            for (let i = 0; i < targetSize; i++) packet[i] = Math.floor(Math.random() * 256);
+            for (let i = 0; i < targetSize; i++) packet[i] = (i * 197 + 89) & 0xFF;
         }
 
         // Marca de agua táctica efímera en los primeros 4 bytes ("DUMM")

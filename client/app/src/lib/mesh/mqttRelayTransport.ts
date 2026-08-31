@@ -99,7 +99,7 @@ export class MqttRelayTransport {
 
   private unsubscribe(topic: string, targetWs?: WebSocket) {
     const topicBytes = new TextEncoder().encode(topic);
-    const packetId = Math.floor(Math.random() * 65535) + 1;
+    const packetId = (typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint16Array(1))[0] : ((Date.now() ^ 0x5a5a) & 0xFFFF)) + 1;
     const remainingLen = 2 + (2 + topicBytes.length);
 
     const lenBytes: number[] = [];
@@ -233,7 +233,10 @@ export class MqttRelayTransport {
   private sendMqttConnect(socket: WebSocket) {
     if (socket.readyState !== WebSocket.OPEN) return;
 
-    const clientId = `red_${this.myId ? this.myId.slice(0, 12) : 'node'}_${Math.random().toString(36).substring(2, 8)}`;
+    const randClient = typeof crypto !== 'undefined' && crypto.getRandomValues
+      ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+      : Date.now().toString(36);
+    const clientId = `red_${this.myId ? this.myId.slice(0, 12) : 'node'}_${randClient}`;
     const protocolName = 'MQTT';
     const protocolLevel = 4; // v3.1.1
     const connectFlags = 0x02; // Clean Session
@@ -315,7 +318,7 @@ export class MqttRelayTransport {
 
   private subscribe(topic: string, qos: number = 0, targetWs?: WebSocket) {
     const topicBytes = new TextEncoder().encode(topic);
-    const packetId = Math.floor(Math.random() * 65535) + 1;
+    const packetId = (typeof crypto !== 'undefined' && crypto.getRandomValues ? crypto.getRandomValues(new Uint16Array(1))[0] : ((Date.now() ^ 0xa5a5) & 0xFFFF)) + 1;
     const remainingLen = 2 + (2 + topicBytes.length + 1);
 
     // Variable length remaining length encoding

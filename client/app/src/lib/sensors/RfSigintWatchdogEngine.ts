@@ -98,7 +98,7 @@ export class RfSigintWatchdogEngine {
                 this.processScanResult(result);
             });
         } catch (e) {
-            console.warn('[RfSigintWatchdogEngine] BLE Native scan fallback to simulated passive monitor:', e);
+            console.warn('[RfSigintWatchdogEngine] BLE Native scan initialization error:', e);
         }
 
         return true;

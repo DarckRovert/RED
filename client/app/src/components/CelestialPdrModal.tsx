@@ -7,19 +7,37 @@ import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 
 export function CelestialPdrModal() {
-    const { navigate } = useRedStore();
+    const { navigate, goBack } = useRedStore();
+
     const [activeTab, setActiveTab] = useState<"celestial" | "pdr">("celestial");
-    const [ephemeris, setEphemeris] = useState<CelestialEphemeris>(() => celestialNav.calculateEphemeris());
+    const [coords, setCoords] = useState<{ lat: number; lon: number }>({ lat: 0, lon: 0 });
+    const [ephemeris, setEphemeris] = useState<CelestialEphemeris>(() => celestialNav.calculateEphemeris(0, 0));
     const [pdr, setPdr] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
 
-    // Solar Noon calculation inputs
-    const [transitTimeStr, setTransitTimeStr] = useState<string>("17:15");
-    const [maxSunAltitude, setMaxSunAltitude] = useState<number>(75);
+    // Solar Noon calculation inputs dynamically computed from UTC clock and ephemeris
+    const [transitTimeStr, setTransitTimeStr] = useState<string>(() => {
+        const d = new Date();
+        return `${d.getUTCHours().toString().padStart(2, "0")}:${d.getUTCMinutes().toString().padStart(2, "0")}`;
+    });
+    const [maxSunAltitude, setMaxSunAltitude] = useState<number>(() => Math.max(0, Math.round(ephemeris.sun?.altitudeDeg || 45)));
     const [estimatedCoords, setEstimatedCoords] = useState<{ estimatedLat: number; estimatedLon: number } | null>(null);
 
     useEffect(() => {
+        if (typeof navigator !== "undefined" && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                pos => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    setCoords({ lat, lon });
+                    setEphemeris(celestialNav.calculateEphemeris(lat, lon));
+                },
+                () => {},
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        }
+
         const interval = setInterval(() => {
-            setEphemeris(celestialNav.calculateEphemeris());
+            setEphemeris(celestialNav.calculateEphemeris(coords.lat, coords.lon));
         }, 5000);
         const unsubPdr = pedestrianDeadReckoning.subscribe(setPdr);
 
@@ -27,7 +45,7 @@ export function CelestialPdrModal() {
             clearInterval(interval);
             unsubPdr();
         };
-    }, []);
+    }, [coords.lat, coords.lon]);
 
     const handleCalculateSolarNoon = () => {
         const res = celestialNav.estimatePositionFromSolarNoon(transitTimeStr, maxSunAltitude);
@@ -73,8 +91,9 @@ export function CelestialPdrModal() {
                     </div>
                 </div>
                 <button
-                    onClick={() => navigate("commandCenter")}
+                    onClick={goBack}
                     style={{
+
                         background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
                         color: "#FFF", padding: "6px 12px", borderRadius: "8px",
                         cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"

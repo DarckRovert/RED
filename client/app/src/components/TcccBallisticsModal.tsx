@@ -8,7 +8,7 @@ import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export function TcccBallisticsModal() {
-    const { navigate, goBack } = useRedStore();
+    const { navigate, goBack, identity } = useRedStore();
     const { t } = useTranslation();
     const [tourniquets, setTourniquets] = useState<TourniquetRecord[]>(() => tacticalTccc.getActiveTourniquets());
     const [activeTab, setActiveTab] = useState<"tccc" | "ballistics">("tccc");
@@ -45,10 +45,12 @@ export function TcccBallisticsModal() {
     };
 
     const handleExportCasualtyCard = () => {
+        const name = identity?.nickname || "Operador RED";
+        const roster = identity?.identity_hash ? `OP-${identity.identity_hash.slice(0, 6).toUpperCase()}` : `OP-${Date.now().toString(36).toUpperCase()}`;
         const cardText = tacticalTccc.generateDdForm1380({
             id: `CARD-${Date.now()}`,
-            casualtyName: "Operador Desconocido",
-            rosterNumber: "OP-DELTA-01",
+            casualtyName: name,
+            rosterNumber: roster,
             evacPriority: "URGENT",
             massiveBleedingControlled: true,
             tourniquets,

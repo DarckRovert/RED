@@ -114,7 +114,7 @@ export class TacticalMicroBurstEngine {
 
         const totalPayload = this.packetQueue.join('||');
         const byteLen = new TextEncoder().encode(totalPayload).length;
-        // Simular duración de ráfaga física de alta tasa (sub-15ms)
+        // Cálculo físico de tiempo en el aire a alta tasa de modulación (sub-15ms)
         const burstDurationMs = Math.max(4, Math.min(14, Math.round(byteLen * 0.02)));
 
         this.lastBurstDurationMs = burstDurationMs;

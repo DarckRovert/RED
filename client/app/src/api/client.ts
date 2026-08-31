@@ -816,7 +816,10 @@ export class RedAPIClient {
 
         const recipientMembers = members.filter(m => m && m !== myHash && m !== 'me');
 
-        const msgId = options?.id || `grp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+        const randGrp = typeof crypto !== 'undefined' && crypto.getRandomValues
+            ? Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')
+            : Date.now().toString(36);
+        const msgId = options?.id || `grp_${Date.now()}_${randGrp}`;
         const normTs = Date.now() / 1000;
 
         const groupMsgPayload = JSON.stringify({

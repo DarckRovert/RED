@@ -286,14 +286,43 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                         <button
                             onClick={async () => {
                                 try {
-                                    const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
-                                    const testAudio = new Uint8Array(45);
-                                    for (let i = 0; i < 45; i++) testAudio[i] = (i * 11) % 256;
-                                    await loraMeshtastic.broadcastVocoderAudio(testAudio);
-                                    toast.success("🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (1.2 kbps)");
-                                    setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · 45B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 49)]);
+                                    if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+                                        toast.error("Micrófono no disponible en este entorno");
+                                        return;
+                                    }
+                                    toast.info("🎙️ Grabando ráfaga de voz de 1 segundo...");
+                                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                                    const sourceNode = audioCtx.createMediaStreamSource(stream);
+                                    const dest = audioCtx.createMediaStreamDestination();
+                                    sourceNode.connect(dest);
+                                    
+                                    const mediaRecorder = new MediaRecorder(dest.stream);
+                                    const chunks: Blob[] = [];
+                                    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                                    
+                                    mediaRecorder.onstop = async () => {
+                                        stream.getTracks().forEach(t => t.stop());
+                                        audioCtx.close();
+                                        const blob = new Blob(chunks, { type: 'audio/webm' });
+                                        const arrayBuffer = await blob.arrayBuffer();
+                                        const decodedAudio = await new AudioContext().decodeAudioData(arrayBuffer);
+                                        const rawChannel = decodedAudio.getChannelData(0);
+                                        const { LowBitrateVocoder } = await import('../lib/audio/LowBitrateVocoder');
+                                        const pcm16 = LowBitrateVocoder.resampleTo8kHz(rawChannel, decodedAudio.sampleRate);
+                                        const compressedBytes = LowBitrateVocoder.encode(pcm16);
+                                        const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
+                                        await loraMeshtastic.broadcastVocoderAudio(compressedBytes);
+                                        toast.success(`🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (${compressedBytes.length}B, 1.2 kbps)`);
+                                        setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · ${compressedBytes.length}B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 49)]);
+                                    };
+                                    
+                                    mediaRecorder.start();
+                                    setTimeout(() => {
+                                        if (mediaRecorder.state === 'recording') mediaRecorder.stop();
+                                    }, 1000);
                                 } catch (e: any) {
-                                    toast.error("Error al transmitir voz LoRa: " + e.message);
+                                    toast.error("Error al capturar/transmitir voz LoRa: " + e.message);
                                 }
                             }}
                             style={{
@@ -319,7 +348,30 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                 try {
                                     const { cursorOnTarget } = await import('../lib/tactical/CursorOnTargetEngine');
                                     const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
-                                    const cotEvt = cursorOnTarget.createBftEvent('RED-NODE-ALPHA', 'TACTICAL-1', -12.046374, -77.042793, 'INFANTRY', 95);
+                                    const { useRedStore } = await import('../store/useRedStore');
+                                    const identity = useRedStore.getState().identity;
+                                    
+                                    let lat = 0;
+                                    let lon = 0;
+                                    if (typeof navigator !== "undefined" && navigator.geolocation) {
+                                        try {
+                                            const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                                                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: true });
+                                            });
+                                            lat = pos.coords.latitude;
+                                            lon = pos.coords.longitude;
+                                        } catch {}
+                                    }
+                                    
+                                    let batt = 100;
+                                    if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
+                                        batt = (window as any).__red_last_battery;
+                                    }
+                                    
+                                    const nodeId = identity?.identity_hash ? `RED-${identity.identity_hash.slice(0, 8)}` : 'RED-TACTICAL-NODE';
+                                    const callsign = identity?.nickname || 'TACTICAL-OP';
+                                    
+                                    const cotEvt = cursorOnTarget.createBftEvent(nodeId, callsign, lat, lon, 'INFANTRY', batt);
                                     const cotXml = cursorOnTarget.serializeToXml(cotEvt);
                                     await loraMeshtastic.sendTextMessage(cotXml);
                                     toast.success("🎯 Baliza ATAK Cursor-on-Target emitida por LoRa");
