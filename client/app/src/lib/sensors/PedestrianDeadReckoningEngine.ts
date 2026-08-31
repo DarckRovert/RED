@@ -29,6 +29,14 @@ export class PedestrianDeadReckoningEngine {
     private defaultStrideMeters: number = 0.75; // Zancada táctica promedio
     private stepHistory: number[] = [];
 
+    // Filtros de acelerómetro para detección de pasos en hardware real
+    private gravityEma: number = 9.81;
+    private prevAccelMag: number = 9.81;
+    private isPeakAscending: boolean = false;
+    private lastStepTimestamp: number = 0;
+    private motionHandler: ((e: DeviceMotionEvent) => void) | null = null;
+    private orientationHandler: ((e: DeviceOrientationEvent) => void) | null = null;
+
     private listeners: Set<(s: PdrState) => void> = new Set();
 
     private constructor() {}
@@ -54,13 +62,66 @@ export class PedestrianDeadReckoningEngine {
     }
 
     public startTracking() {
+        if (this.isTracking) return;
         this.isTracking = true;
         this.lastStepTime = Date.now();
+
+        // Conectar sensores inerciales del dispositivo si está en navegador / WebView Capacitor
+        if (typeof window !== 'undefined') {
+            this.orientationHandler = (e: DeviceOrientationEvent) => {
+                let heading = 0;
+                if ((e as any).webkitCompassHeading !== undefined) {
+                    heading = (e as any).webkitCompassHeading;
+                } else if (e.alpha !== null) {
+                    heading = (360 - e.alpha) % 360;
+                }
+                this.currentHeadingDeg = Math.round(heading);
+            };
+
+            this.motionHandler = (e: DeviceMotionEvent) => {
+                let mag = 0;
+                if (e.acceleration && typeof e.acceleration.x === 'number' && typeof e.acceleration.y === 'number' && typeof e.acceleration.z === 'number') {
+                    const x = e.acceleration.x || 0;
+                    const y = e.acceleration.y || 0;
+                    const z = e.acceleration.z || 0;
+                    mag = Math.sqrt(x * x + y * y + z * z);
+                } else if (e.accelerationIncludingGravity) {
+                    const acc = e.accelerationIncludingGravity;
+                    const x = acc.x || 0;
+                    const y = acc.y || 0;
+                    const z = acc.z || 0;
+                    const totalMag = Math.sqrt(x * x + y * y + z * z);
+                    this.gravityEma = 0.92 * this.gravityEma + 0.08 * (totalMag > 0 ? totalMag : 9.81);
+                    mag = Math.abs(totalMag - this.gravityEma);
+                }
+
+                const now = Date.now();
+                // Detección de picos con umbral de impacto de zancada (> 1.65 m/s² por encima de gravedad)
+                // Debounce mínimo de 300 ms entre pasos (frecuencia máxima humana 3.3 Hz)
+                if (mag > 1.65 && this.prevAccelMag <= 1.65 && (now - this.lastStepTimestamp > 300)) {
+                    this.lastStepTimestamp = now;
+                    // Estimación dinámica de zancada (Weinberg): zancada proporcional a la raíz cuarta de aceleración
+                    const dynamicStride = Math.min(1.15, Math.max(0.55, this.defaultStrideMeters * Math.pow(mag / 2.0, 0.25)));
+                    this.recordStep(this.currentHeadingDeg, Math.round(dynamicStride * 100) / 100);
+                }
+                this.prevAccelMag = mag;
+            };
+
+            window.addEventListener('deviceorientation', this.orientationHandler);
+            window.addEventListener('devicemotion', this.motionHandler);
+        }
+
         this.notify();
     }
 
     public stopTracking() {
         this.isTracking = false;
+        if (typeof window !== 'undefined') {
+            if (this.orientationHandler) window.removeEventListener('deviceorientation', this.orientationHandler);
+            if (this.motionHandler) window.removeEventListener('devicemotion', this.motionHandler);
+            this.orientationHandler = null;
+            this.motionHandler = null;
+        }
         this.notify();
     }
 
@@ -76,7 +137,7 @@ export class PedestrianDeadReckoningEngine {
     /**
      * Registra un paso y actualiza el vector de desplazamiento inercial
      */
-    public recordStep(headingDeg: number = 0, strideMeters: number = this.defaultStrideMeters) {
+    public recordStep(headingDeg: number = this.currentHeadingDeg, strideMeters: number = this.defaultStrideMeters) {
         if (!this.isTracking) return;
 
         const now = Date.now();

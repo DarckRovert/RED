@@ -180,21 +180,29 @@ export class VitalScanEngine {
                 const imageData = ctx.getImageData(0, 0, 160, 120);
                 const data = imageData.data;
 
-                // Calculate average Red & Green channel intensity
+                // Calculate average Red, Green & Blue channel intensity across sensor frame
                 let redSum = 0;
                 let greenSum = 0;
+                let blueSum = 0;
                 const totalPixels = data.length / 4;
 
                 for (let i = 0; i < data.length; i += 4) {
                     redSum += data[i];     // Red
                     greenSum += data[i+1]; // Green
+                    blueSum += data[i+2];  // Blue
                 }
 
                 const avgRed = redSum / totalPixels;
                 const avgGreen = greenSum / totalPixels;
+                const avgBlue = blueSum / totalPixels;
 
-                // Calibrated Finger Detection: Finger covering lens absorbs green light and dominates red (avgRed > 40 & avgRed > avgGreen * 1.05)
-                const isFingerDetected = avgRed > 40 && avgRed > (avgGreen * 1.05);
+                // Calibrated Multispectral Hemoglobin Tissue Transmission:
+                // When a finger firmly covers the camera lens + flash:
+                // 1. Red light passes through dermis/capillary bed (avgRed >= 55)
+                // 2. Hemoglobin strongly absorbs Green (avgRed > avgGreen * 1.30)
+                // 3. Dermis/blood scatters & filters Blue light (avgRed > avgBlue * 1.80 & avgBlue < 95)
+                // 4. Rejects ambient lamps, flashlights, walls, and wooden furniture where Blue/Green is balanced.
+                const isFingerDetected = avgRed >= 55 && (avgRed > avgGreen * 1.30) && (avgRed > avgBlue * 1.80) && (avgBlue < 95);
 
                 if (isFingerDetected) {
                     redSamples.push(avgRed);
