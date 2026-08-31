@@ -1,11 +1,10 @@
-RED — Sovereign Mesh OS (v77.0.0 Elite Minimalist UI/UX Edition)
-================================================================
+RED — Sovereign Mesh OS (v78.0.0 Multi-Device Tactical Mesh Edition)
+====================================================================
 
-Compilacion Oficial: 2026-08-30
-Version: 77.0.0 (versionCode 77000)
+Compilacion Oficial: 2026-08-31
+Version: 78.0.0 (versionCode 78000)
 Canal: Stable P2P
-Hash SHA-256 (APK Release): 5799475C569E24477FCB8DE8C96F0DDE34A6470DDD7BCE1B33F8AAC168A2250B
-Dispositivos Validados: Motorola Moto G22 (ZT322B386P) y Lenovo Tablet TB305XU (HA2CHKZ2)
+Dispositivos Validados: Xiaomi Redmi Note 14 (6dife65ls485fega), Lenovo Tablet TB305XU (HA2CHKZ2), Motorola Moto G22 (ZT322B386P)
 
 NOVEDADES Y MEJORAS PRINCIPALES:
 --------------------------------

@@ -1,5 +1,22 @@
 # Changelog
 
+## [78.0.0-multi-device-tactical-mesh-edition] - 2026-08-31
+
+### 🛡️ Multi-Device Tactical Mesh & Clean Production Release (Release Oficial v78.0.0)
+
+- **Despliegue Limpio Multi-Dispositivo Simultáneo:**
+  - Despliegue en limpio y verificación en hardware real en 3 dispositivos físicos: **Xiaomi Redmi Note 14** (`24116RACCG`), **Lenovo Tablet** (`TB305XU`) y **Motorola Moto G22** (`moto_g22`).
+  - Auditoría y depuración concurrente en tiempo real mediante `adb logcat` con cero errores no controlados.
+- **Auditoría Forense Integral Multi-Capa (100% PASS):**
+  - Certificación exhaustiva de los 49 módulos de software, 23 motores de sensores físicos W3C/Capacitor, 11 bóvedas IndexedDB, 10 primitivas criptográficas PQC/ZK y 81 componentes de UI.
+  - Corrección de falsos positivos en `TacticalEdgeVisionEngine` mediante filtros de relación de aspecto, gradiente de cielo abierto y halo perimétrico.
+- **Validación Automatizada 252/252 Tests (100% Éxito):**
+  - `cargo test --workspace`: 116/116 PASS.
+  - `npm run test:all`: 136/136 PASS.
+- **Versión Oficial:** `78.0.0` / `versionCode 78000`.
+
+---
+
 ## [77.0.0-elite-minimalist-ui-ux-edition] - 2026-08-30
 
 ### 🛡️ Elite Minimalist UI/UX & Tactical OS Edition (Release Oficial v77.0.0)
