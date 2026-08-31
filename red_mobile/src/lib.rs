@@ -41,6 +41,7 @@ const BOOTSTRAP_NODES: &[&str] = &[
 static ONCE: std::sync::Once = std::sync::Once::new();
 static NODE_STARTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static GLOBAL_API_STATE: std::sync::OnceLock<Arc<tokio::sync::Mutex<Option<api::ApiState>>>> = std::sync::OnceLock::new();
+static GLOBAL_TOKIO_HANDLE: std::sync::OnceLock<tokio::runtime::Handle> = std::sync::OnceLock::new();
 
 #[no_mangle]
 pub extern "system" fn Java_f_red_app_RedNodePlugin_updateBatteryStatus(
@@ -48,14 +49,16 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_updateBatteryStatus(
     _class: JClass,
     level: jni::sys::jint,
 ) {
-    if let Some(state_arc) = GLOBAL_API_STATE.get() {
-        if let Ok(s) = state_arc.try_lock() {
-            if let Some(ref api_state) = *s {
-                api_state.battery_optimizer.update_battery(level as u8);
-                tracing::info!("JNI updated battery to {}%", level);
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if let Some(state_arc) = GLOBAL_API_STATE.get() {
+            if let Ok(s) = state_arc.try_lock() {
+                if let Some(ref api_state) = *s {
+                    api_state.battery_optimizer.update_battery(level as u8);
+                    tracing::info!("JNI updated battery to {}%", level);
+                }
             }
         }
-    }
+    }));
 }
 
 #[no_mangle]
@@ -65,34 +68,40 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_injectBlePayload(
     payload_jbytes: jni::objects::JByteArray,
     _from_device_jstr: JString,
 ) {
-    let payload_bytes = match env.convert_byte_array(&payload_jbytes) {
-        Ok(b) => b,
-        Err(e) => {
-            error!("injectBlePayload: failed to convert byte array from JNI: {:?}", e);
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let payload_bytes = match env.convert_byte_array(&payload_jbytes) {
+            Ok(b) => b,
+            Err(e) => {
+                error!("injectBlePayload: failed to convert byte array from JNI: {:?}", e);
+                return;
+            }
+        };
+
+        if payload_bytes.is_empty() {
             return;
         }
-    };
 
-    if payload_bytes.is_empty() {
-        return;
-    }
-
-    if let Some(state_arc) = GLOBAL_API_STATE.get() {
-        let state_arc_clone = state_arc.clone();
-        tokio::spawn(async move {
-            let state_guard = state_arc_clone.lock().await;
-            if let Some(ref api_state) = *state_guard {
-                let node_arc = api_state.node.clone();
-                drop(state_guard);
-                let mut node = node_arc.lock().await;
-                if let Err(e) = node.inject_raw_payload(payload_bytes).await {
-                    error!("injectBlePayload: failed to inject payload into node: {:?}", e);
-                } else {
-                    tracing::debug!("injectBlePayload: successfully injected BLE payload into Rust node");
-                }
+        if let Some(state_arc) = GLOBAL_API_STATE.get() {
+            if let Some(handle) = GLOBAL_TOKIO_HANDLE.get() {
+                let state_arc_clone = state_arc.clone();
+                handle.spawn(async move {
+                    let state_guard = state_arc_clone.lock().await;
+                    if let Some(ref api_state) = *state_guard {
+                        let node_arc = api_state.node.clone();
+                        drop(state_guard);
+                        let mut node = node_arc.lock().await;
+                        if let Err(e) = node.inject_raw_payload(payload_bytes).await {
+                            error!("injectBlePayload: failed to inject payload into node: {:?}", e);
+                        } else {
+                            tracing::debug!("injectBlePayload: successfully injected BLE payload into Rust node");
+                        }
+                    }
+                });
+            } else {
+                warn!("injectBlePayload: Tokio runtime handle not yet initialized — skipping payload");
             }
-        });
-    }
+        }
+    }));
 }
 
 #[no_mangle]
@@ -102,67 +111,70 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_startNode(
     data_dir_jstr: JString,
     password_jstr: JString,
 ) {
-    ONCE.call_once(|| {
-        android_logger::init_once(
-            android_logger::Config::default()
-                .with_max_level(log::LevelFilter::Trace)
-                .with_tag("rust"),
-        );
-    });
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ONCE.call_once(|| {
+            android_logger::init_once(
+                android_logger::Config::default()
+                    .with_max_level(log::LevelFilter::Trace)
+                    .with_tag("rust"),
+            );
+        });
 
-    if NODE_STARTED.load(std::sync::atomic::Ordering::SeqCst) {
-        warn!("startNode called but node is already running — ignoring");
-        return;
-    }
-
-    let data_dir_str: String = match env.get_string(&data_dir_jstr) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            error!("Failed to get data_dir string from Java: {:?}", e);
+        if NODE_STARTED.load(std::sync::atomic::Ordering::SeqCst) {
+            warn!("startNode called but node is already running — ignoring");
             return;
         }
-    };
-        
-    let password_str: String = match env.get_string(&password_jstr) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            error!("Failed to get password string from Java: {:?}", e);
-            return;
-        }
-    };
 
-    let data_dir = PathBuf::from(data_dir_str.clone());
-    info!("Starting internal RED node at {:?}", data_dir);
-
-    let panic_dir = data_dir.clone();
-    std::panic::set_hook(Box::new(move |info| {
-        let _ = std::fs::write(panic_dir.join("PANIC_DUMP.txt"), format!("{}", info));
-    }));
-
-    std::thread::spawn(move || {
-        let rt = match tokio::runtime::Runtime::new() {
-            Ok(r) => r,
+        let data_dir_str: String = match env.get_string(&data_dir_jstr) {
+            Ok(s) => s.into(),
             Err(e) => {
-                error!("Failed to create Tokio runtime for internal node: {:?}", e);
-                NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
+                error!("Failed to get data_dir string from Java: {:?}", e);
                 return;
             }
         };
-        rt.block_on(async {
-            match run_internal_node(data_dir.clone(), password_str).await {
-                Ok(_) => {
-                    info!("Internal RED node exited cleanly");
-                    let _ = std::fs::write(data_dir.join("CRASH_DUMP.txt"), "Exited cleanly");
-                }
-                Err(e) => {
-                    error!("Internal node crashed: {:?}", e);
-                    let _ = std::fs::write(data_dir.join("CRASH_DUMP.txt"), format!("CRASH:\n{:#?}", e));
-                }
+            
+        let password_str: String = match env.get_string(&password_jstr) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                error!("Failed to get password string from Java: {:?}", e);
+                return;
             }
+        };
+
+        let data_dir = PathBuf::from(data_dir_str.clone());
+        info!("Starting internal RED node at {:?}", data_dir);
+
+        let panic_dir = data_dir.clone();
+        std::panic::set_hook(Box::new(move |info| {
+            let _ = std::fs::write(panic_dir.join("PANIC_DUMP.txt"), format!("{}", info));
+        }));
+
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Runtime::new() {
+                Ok(r) => r,
+                Err(e) => {
+                    error!("Failed to create Tokio runtime for internal node: {:?}", e);
+                    NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
+                    return;
+                }
+            };
+            let _ = GLOBAL_TOKIO_HANDLE.set(rt.handle().clone());
+            rt.block_on(async {
+                match run_internal_node(data_dir.clone(), password_str).await {
+                    Ok(_) => {
+                        info!("Internal RED node exited cleanly");
+                        let _ = std::fs::write(data_dir.join("CRASH_DUMP.txt"), "Exited cleanly");
+                    }
+                    Err(e) => {
+                        error!("Internal node crashed: {:?}", e);
+                        let _ = std::fs::write(data_dir.join("CRASH_DUMP.txt"), format!("CRASH:\n{:#?}", e));
+                    }
+                }
+            });
+            NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
         });
-        NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
-    });
-    NODE_STARTED.store(true, std::sync::atomic::Ordering::SeqCst);
+        NODE_STARTED.store(true, std::sync::atomic::Ordering::SeqCst);
+    }));
 }
 
 #[no_mangle]
@@ -171,29 +183,31 @@ pub extern "system" fn Java_f_red_app_RedNodePlugin_destroyNode(
     _class: JClass,
     data_dir_jstr: JString,
 ) {
-    let data_dir_str: String = match env.get_string(&data_dir_jstr) {
-        Ok(s) => s.into(),
-        Err(e) => {
-            error!("destroyNode: failed to read data_dir from JNI: {:?}", e);
-            return;
-        }
-    };
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let data_dir_str: String = match env.get_string(&data_dir_jstr) {
+            Ok(s) => s.into(),
+            Err(e) => {
+                error!("destroyNode: failed to read data_dir from JNI: {:?}", e);
+                return;
+            }
+        };
 
-    let base_dir = PathBuf::from(&data_dir_str);
-    error!("🔴 PANIC WIPE INITIATED — destroying all data at {:?}", base_dir);
+        let base_dir = PathBuf::from(&data_dir_str);
+        error!("🔴 PANIC WIPE INITIATED — destroying all data at {:?}", base_dir);
 
-    for dir in [base_dir.clone(), PathBuf::from(format!("{}_decoy", data_dir_str))] {
-        if dir.exists() {
-            if let Err(e) = std::fs::remove_dir_all(&dir) {
-                error!("Failed to remove {:?}: {:?}", dir, e);
-            } else {
-                info!("Destroyed {:?}", dir);
+        for dir in [base_dir.clone(), PathBuf::from(format!("{}_decoy", data_dir_str))] {
+            if dir.exists() {
+                if let Err(e) = std::fs::remove_dir_all(&dir) {
+                    error!("Failed to remove {:?}: {:?}", dir, e);
+                } else {
+                    info!("Destroyed {:?}", dir);
+                }
             }
         }
-    }
 
-    NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
-    error!("🔴 PANIC WIPE COMPLETE");
+        NODE_STARTED.store(false, std::sync::atomic::Ordering::SeqCst);
+        error!("🔴 PANIC WIPE COMPLETE");
+    }));
 }
 
 

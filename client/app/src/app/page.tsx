@@ -163,141 +163,150 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
   return (
     <div style={{
       flex: 1, height: "100%", display: "flex", flexDirection: "column",
-      alignItems: "center", justifyContent: "center", padding: "40px 32px",
-      textAlign: "center", gap: "24px", overflowY: "auto"
+      alignItems: "center", justifyContent: "flex-start", padding: "28px 24px",
+      textAlign: "center", gap: "18px", overflowY: "auto"
     }}>
-      <div style={{
-        width: 84, height: 84, borderRadius: "24px",
-        background: "linear-gradient(135deg, rgba(232,33,58,0.2) 0%, rgba(0,229,255,0.15) 100%)",
-        border: "1px solid var(--glass-border)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: "2.8rem", boxShadow: "0 12px 40px rgba(0,0,0,0.5)"
-      }}>
-        🛡️
+      {/* Header Táctico */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", maxWidth: "560px" }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "18px",
+          background: "linear-gradient(135deg, rgba(232,33,58,0.25) 0%, rgba(0,229,255,0.18) 100%)",
+          border: "1px solid rgba(0, 229, 255, 0.35)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "2.2rem", boxShadow: "0 8px 32px rgba(0,0,0,0.6)"
+        }}>
+          🛡️
+        </div>
+        <div>
+          <h2 style={{ fontSize: "1.3rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
+            {t('tablet.title')}
+          </h2>
+          <p style={{ fontSize: "0.80rem", color: "var(--text-secondary)", marginTop: "4px", lineHeight: 1.4 }}>
+            {t('tablet.subtitle')}
+          </p>
+        </div>
       </div>
 
-      <div style={{ maxWidth: "480px" }}>
-        <h2 style={{ fontSize: "1.4rem", fontWeight: 900, color: "var(--text-primary)", letterSpacing: "0.2px" }}>
-          {t('tablet.title')}
-        </h2>
-        <p style={{ fontSize: "0.84rem", color: "var(--text-muted)", marginTop: "8px", lineHeight: 1.5 }}>
-          {t('tablet.subtitle')}
-        </p>
+      {/* Hero Card C4ISR */}
+      <div
+        onClick={() => onOpenTool("commandCenter")}
+        className="card-tactical-interactive"
+        style={{
+          width: "100%", maxWidth: "620px", padding: "16px 20px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "14px",
+          background: "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(179, 136, 255, 0.10) 100%)",
+          border: "1.5px solid rgba(0, 229, 255, 0.45)", borderRadius: "14px", cursor: "pointer",
+          boxShadow: "0 4px 20px rgba(0, 229, 255, 0.15)"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", textAlign: "left" }}>
+          <span style={{ fontSize: "2.2rem" }}>⚡</span>
+          <div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.5px" }}>
+              {t('tablet.c4isr_title')}
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800, marginTop: "2px" }}>
+              {t('tablet.c4isr_sub')}
+            </div>
+          </div>
+        </div>
+        <span style={{ fontSize: "1.2rem", color: "var(--accent-cyan)", fontWeight: 900 }}>›</span>
       </div>
 
-      {/* Grid de Accesos Rápidos Tácticos para Tablet */}
+      {/* Grid de 8 Accesos Rápidos Simétricos (4x2 / 2x4) */}
       <div style={{
-        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: "14px", width: "100%", maxWidth: "600px", marginTop: "8px"
+        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
+        gap: "12px", width: "100%", maxWidth: "620px"
       }}>
         <div
           onClick={() => onOpenTool("nodemap")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>🗺️</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.map_title')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.map_sub')}</span>
+          <span style={{ fontSize: "1.6rem" }}>🗺️</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.map_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.map_sub')}</span>
         </div>
 
         <div
           onClick={() => onOpenTool("radar")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>📡</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.radar_title')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.radar_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("canvas")}
-          className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
-        >
-          <span style={{ fontSize: "1.8rem" }}>🎨</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.canvas_title')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-purple)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.canvas_sub')}</span>
+          <span style={{ fontSize: "1.6rem" }}>📡</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.radar_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.radar_sub')}</span>
         </div>
 
         <div
           onClick={() => onOpenTool("channels")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>📻</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.channels_title')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.channels_sub')}</span>
+          <span style={{ fontSize: "1.6rem" }}>📻</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.channels_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-amber)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.channels_sub')}</span>
         </div>
 
         <div
-          onClick={() => onOpenTool("settings")}
+          onClick={() => onOpenTool("canvas")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>⚙️</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('tablet.settings_title')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.settings_sub')}</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("commercialHub")}
-          className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(232,33,58,0.12) 0%, rgba(255,51,85,0.06) 100%)", border: "1px solid rgba(255,60,95,0.3)" }}
-        >
-          <span style={{ fontSize: "1.8rem" }}>⚡</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FF8599" }}>{t('tablet.hub_title')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.hub_sub')}</span>
+          <span style={{ fontSize: "1.6rem" }}>🎨</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.canvas_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-purple)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.canvas_sub')}</span>
         </div>
 
         <div
           onClick={() => onOpenTool("appStore")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(0,230,118,0.12) 0%, rgba(0,229,255,0.06) 100%)", border: "1px solid rgba(0,230,118,0.3)" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px", background: "linear-gradient(135deg, rgba(0,230,118,0.12) 0%, rgba(0,229,255,0.06) 100%)", border: "1px solid rgba(0,230,118,0.3)" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>🛒</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-emerald)" }}>App Store P2P</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS</span>
+          <span style={{ fontSize: "1.6rem" }}>🛒</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-emerald)" }}>{t('tablet.appstore_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-emerald)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.appstore_sub')}</span>
         </div>
 
         <div
           onClick={() => onOpenTool("hyperBrowser")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(0,229,255,0.12) 0%, rgba(138,43,226,0.06) 100%)", border: "1px solid rgba(0,229,255,0.3)" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px", background: "linear-gradient(135deg, rgba(0,229,255,0.12) 0%, rgba(138,43,226,0.06) 100%)", border: "1px solid rgba(0,229,255,0.3)" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>🌐</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800, color: "var(--accent-cyan)" }}>Hyper-Browser</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>MESH HTTP</span>
-        </div>
-
-        <div
-          onClick={() => onOpenTool("commandCenter")}
-          className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(0,229,255,0.18) 0%, rgba(179,136,255,0.12) 100%)", border: "1.5px solid rgba(0,229,255,0.45)", gridColumn: "1 / -1" }}
-        >
-          <span style={{ fontSize: "2rem" }}>⚡</span>
-          <span style={{ fontSize: "1rem", fontWeight: 900, color: "#FFF" }}>CENTRO DE COMANDO C4ISR</span>
-          <span style={{ fontSize: "0.74rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>MATRIZ DE 57 MÓDULOS OPERATIVOS & SENSORES</span>
+          <span style={{ fontSize: "1.6rem" }}>🌐</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>{t('tablet.browser_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.browser_sub')}</span>
         </div>
 
         <div
           onClick={() => onOpenTool("updater")}
           className="card-tactical-interactive"
-          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px", background: "linear-gradient(135deg, rgba(0,229,255,0.16) 0%, rgba(0,150,255,0.08) 100%)", border: "1px solid rgba(0,229,255,0.4)" }}
         >
-          <span style={{ fontSize: "1.8rem" }}>🚀</span>
-          <span style={{ fontSize: "0.86rem", fontWeight: 800 }}>{t('modules.updater')}</span>
-          <span style={{ fontSize: "0.70rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>OTA</span>
+          <span style={{ fontSize: "1.6rem" }}>🚀</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--accent-cyan)" }}>{t('tablet.updater_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.updater_sub')}</span>
+        </div>
+
+        <div
+          onClick={() => onOpenTool("settings")}
+          className="card-tactical-interactive"
+          style={{ padding: "14px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", borderRadius: "12px" }}
+        >
+          <span style={{ fontSize: "1.6rem" }}>⚙️</span>
+          <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#FFFFFF" }}>{t('tablet.settings_title')}</span>
+          <span style={{ fontSize: "0.64rem", color: "var(--primary-bright)", fontFamily: "JetBrains Mono, monospace" }}>{t('tablet.settings_sub')}</span>
         </div>
       </div>
 
+      {/* Badge de Seguridad y Estado */}
       <div style={{
-        padding: "8px 16px", borderRadius: "10px",
+        padding: "6px 14px", borderRadius: "8px",
         background: "rgba(0,230,118,0.08)", border: "1px solid rgba(0,230,118,0.25)",
-        color: "var(--accent-emerald)", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace",
-        fontWeight: 700
+        color: "var(--accent-emerald)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace",
+        fontWeight: 700, marginTop: "4px"
       }}>
-        ● NODO SOBERANO OPERACIONAL · {identity?.short_id || "OFFLINE"}
+        ● NODO SOBERANO OPERACIONAL · {identity?.short_id || "OFFLINE"} · ED25519 / SLED
       </div>
     </div>
   );

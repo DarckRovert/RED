@@ -398,32 +398,58 @@ export default function Sidebar() {
                         </div>
 
                         {/* Quick Action Highlights */}
-                        <div style={{ padding: "0 18px 10px 18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", flexShrink: 0 }}>
+                        <div style={{ padding: "0 18px 10px 18px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", flexShrink: 0 }}>
+                            <button
+                                onClick={() => { setMenuOpen(false); navigate("updater"); }}
+                                style={{
+                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.18) 0%, rgba(0, 150, 255, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 229, 255, 0.45)", borderRadius: "12px", textAlign: "center",
+                                    cursor: "pointer", transition: "all 0.15s ease", boxShadow: "0 0 12px rgba(0, 229, 255, 0.15)"
+                                }}
+                            >
+                                <span style={{ fontSize: "1.3rem" }}>🚀</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>Actualizador OTA</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>DISTRIBUCIÓN P2P</span>
+                            </button>
+                            <button
+                                onClick={() => { setMenuOpen(false); navigate("settings"); }}
+                                style={{
+                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
+                                    background: "rgba(255, 255, 255, 0.06)",
+                                    border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "12px", textAlign: "center",
+                                    cursor: "pointer", transition: "all 0.15s ease"
+                                }}
+                            >
+                                <span style={{ fontSize: "1.3rem" }}>⚙️</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "#FFFFFF" }}>Ajustes del Sistema</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>CONFIGURACIÓN</span>
+                            </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("appStore"); }}
                                 style={{
-                                    padding: "12px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
                                     background: "linear-gradient(135deg, rgba(0, 230, 118, 0.16) 0%, rgba(0, 229, 255, 0.08) 100%)",
-                                    border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "14px", textAlign: "center",
-                                    cursor: "pointer", transition: "all 0.15s ease", boxShadow: "0 0 15px rgba(0, 230, 118, 0.15)"
+                                    border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "12px", textAlign: "center",
+                                    cursor: "pointer", transition: "all 0.15s ease"
                                 }}
                             >
-                                <span style={{ fontSize: "1.4rem" }}>🛒</span>
-                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)" }}>App Store P2P</span>
-                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS SANDBOX</span>
+                                <span style={{ fontSize: "1.3rem" }}>🛒</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-emerald, #00E676)" }}>App Store P2P</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>MINI-APPS SANDBOX</span>
                             </button>
                             <button
                                 onClick={() => { setMenuOpen(false); navigate("hyperBrowser"); }}
                                 style={{
-                                    padding: "12px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
-                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.16) 0%, rgba(138, 43, 226, 0.08) 100%)",
-                                    border: "1px solid rgba(0, 229, 255, 0.4)", borderRadius: "14px", textAlign: "center",
-                                    cursor: "pointer", transition: "all 0.15s ease", boxShadow: "0 0 15px rgba(0, 229, 255, 0.15)"
+                                    padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: "3px",
+                                    background: "linear-gradient(135deg, rgba(0, 229, 255, 0.12) 0%, rgba(138, 43, 226, 0.08) 100%)",
+                                    border: "1px solid rgba(0, 229, 255, 0.35)", borderRadius: "12px", textAlign: "center",
+                                    cursor: "pointer", transition: "all 0.15s ease"
                                 }}
                             >
-                                <span style={{ fontSize: "1.4rem" }}>🌐</span>
-                                <span style={{ fontSize: "0.78rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>Hyper-Browser</span>
-                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>P2P MESH HTTP</span>
+                                <span style={{ fontSize: "1.3rem" }}>🌐</span>
+                                <span style={{ fontSize: "0.76rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>Hyper-Browser</span>
+                                <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>P2P MESH HTTP</span>
                             </button>
                         </div>
 
@@ -532,34 +558,7 @@ export default function Sidebar() {
                         </div>
 
                         {/* Drawer Footer */}
-                        <div style={{ padding: "14px 18px", borderTop: "1px solid rgba(255, 255, 255, 0.1)", background: "rgba(8, 10, 20, 0.95)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                                <button
-                                    onClick={() => { setMenuOpen(false); navigate("settings"); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                                        padding: "10px 8px", fontSize: "0.78rem", fontWeight: 800,
-                                        background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)",
-                                        borderRadius: "10px", color: "#FFFFFF", cursor: "pointer"
-                                    }}
-                                >
-                                    <span>⚙️</span> Ajustes
-                                </button>
-                                <button
-                                    onClick={() => { setMenuOpen(false); navigate("updater"); }}
-                                    style={{
-                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                                        padding: "10px 8px", fontSize: "0.78rem", fontWeight: 900,
-                                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.2) 0%, rgba(0, 150, 255, 0.1) 100%)",
-                                        border: "1px solid rgba(0, 229, 255, 0.5)",
-                                        borderRadius: "10px", color: "var(--accent-cyan, #00E5FF)", cursor: "pointer",
-                                        boxShadow: "0 0 12px rgba(0, 229, 255, 0.2)"
-                                    }}
-                                >
-                                    <span>🚀</span> Actualizador
-                                </button>
-                            </div>
-
+                        <div style={{ padding: "12px 18px", borderTop: "1px solid rgba(255, 255, 255, 0.1)", background: "rgba(8, 10, 20, 0.95)", flexShrink: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
                             <button
                                 onClick={() => {
                                     setMenuOpen(false);
@@ -635,15 +634,15 @@ export default function Sidebar() {
                 onClick={() => setAddContactOpen(true)}
                 style={{
                     position: "absolute",
-                    bottom: "20px",
-                    right: "20px",
+                    bottom: "76px",
+                    right: "18px",
                     width: "56px",
                     height: "56px",
                     borderRadius: "16px",
-                    background: "linear-gradient(135deg, #00E676, #00B368)",
-                    color: "#000",
+                    background: "linear-gradient(135deg, #00E676 0%, #00B368 100%)",
+                    color: "#000000",
                     border: "none",
-                    boxShadow: "0 8px 24px rgba(0, 230, 118, 0.4)",
+                    boxShadow: "0 8px 24px rgba(0, 230, 118, 0.45), 0 0 12px rgba(0, 230, 118, 0.3)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -651,7 +650,7 @@ export default function Sidebar() {
                     fontWeight: 900,
                     cursor: "pointer",
                     zIndex: 30,
-                    transition: "transform 0.2s ease"
+                    transition: "all 0.2s ease"
                 }}
                 title="Nuevo Chat / Agregar Contacto"
             >

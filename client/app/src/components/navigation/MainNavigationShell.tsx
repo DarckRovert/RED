@@ -113,7 +113,7 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                             fontSize: "1.3rem", fontWeight: 900, color: "#FFFFFF",
                             boxShadow: "0 0 16px rgba(255, 51, 85, 0.5)", cursor: "pointer"
                         }}
-                        title="RED OS v78"
+                        title={`RED OS v${RED_VERSION}`}
                     >
                         R
                     </div>
