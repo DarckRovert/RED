@@ -797,6 +797,28 @@ export default function NodeMap() {
 
                 <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
                     <button
+                        onClick={async () => {
+                            try {
+                                const { cursorOnTarget } = await import('../lib/tactical/CursorOnTargetEngine');
+                                const bftEvt = cursorOnTarget.createBftEvent('RED-MAP-NODE', 'TACTICAL-OP', gpsData.lat, gpsData.lng, 'COMMAND_HQ', 100);
+                                const cotXml = cursorOnTarget.serializeToXml(bftEvt);
+                                if (navigator.clipboard) {
+                                    await navigator.clipboard.writeText(cotXml);
+                                    toast.success("🎯 CoT XML (ATAK/CivTAK) copiado al portapapeles");
+                                } else {
+                                    toast.info("🎯 CoT XML generado: " + cotXml.slice(0, 40) + "...");
+                                }
+                            } catch (e: any) {
+                                toast.error("Error al exportar CoT: " + e.message);
+                            }
+                        }}
+                        className="btn-tactical-secondary"
+                        style={{ padding: "6px 9px", fontSize: "0.74rem" }}
+                        title="Exportar Cursor-on-Target (ATAK/CivTAK XML)"
+                    >
+                        🎯 CoT
+                    </button>
+                    <button
                         onClick={() => { setShowVaultModal(true); loadVaultStats(); }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 9px", fontSize: "0.74rem" }}
@@ -818,7 +840,7 @@ export default function NodeMap() {
                         style={{ padding: "6px 9px", fontSize: "0.74rem" }}
                         title={t('map.recenter')}
                     >
-                        🎯
+                        📍
                     </button>
                     <button
                         onClick={goBack}

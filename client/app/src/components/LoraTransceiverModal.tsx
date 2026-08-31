@@ -281,6 +281,72 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                         </div>
                     </div>
 
+                    {/* Mode & Interoperability Controls */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
+                                    const testAudio = new Uint8Array(45);
+                                    for (let i = 0; i < 45; i++) testAudio[i] = (i * 11) % 256;
+                                    await loraMeshtastic.broadcastVocoderAudio(testAudio);
+                                    toast.success("🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (1.2 kbps)");
+                                    setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · 45B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 49)]);
+                                } catch (e: any) {
+                                    toast.error("Error al transmitir voz LoRa: " + e.message);
+                                }
+                            }}
+                            style={{
+                                padding: "10px",
+                                background: "rgba(0, 229, 255, 0.15)",
+                                border: "1px solid rgba(0, 229, 255, 0.4)",
+                                color: "#00E5FF",
+                                borderRadius: "12px",
+                                fontWeight: 800,
+                                fontSize: "0.72rem",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "6px"
+                            }}
+                        >
+                            🎙️ RÁFAGA DE VOZ VOCODER
+                        </button>
+
+                        <button
+                            onClick={async () => {
+                                try {
+                                    const { cursorOnTarget } = await import('../lib/tactical/CursorOnTargetEngine');
+                                    const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
+                                    const cotEvt = cursorOnTarget.createBftEvent('RED-NODE-ALPHA', 'TACTICAL-1', -12.046374, -77.042793, 'INFANTRY', 95);
+                                    const cotXml = cursorOnTarget.serializeToXml(cotEvt);
+                                    await loraMeshtastic.sendTextMessage(cotXml);
+                                    toast.success("🎯 Baliza ATAK Cursor-on-Target emitida por LoRa");
+                                    setLogs(prev => [`[TX-CoT] ${new Date().toLocaleTimeString()} · ${cotXml.length}B · ATAK CoT XML Broadcast`, ...prev.slice(0, 49)]);
+                                } catch (e: any) {
+                                    toast.error("Error al emitir CoT: " + e.message);
+                                }
+                            }}
+                            style={{
+                                padding: "10px",
+                                background: "rgba(255, 179, 0, 0.15)",
+                                border: "1px solid rgba(255, 179, 0, 0.4)",
+                                color: "#FFB300",
+                                borderRadius: "12px",
+                                fontWeight: 800,
+                                fontSize: "0.72rem",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "6px"
+                            }}
+                        >
+                            🎯 BALIZA ATAK CoT XML
+                        </button>
+                    </div>
+
                     {/* Beacon Transmission */}
                     <div style={{ padding: "14px", background: "rgba(0, 0, 0, 0.4)", borderRadius: "14px", border: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", flexDirection: "column", gap: "10px" }}>
                         <label style={{ color: "#FFFFFF", fontWeight: 800, fontSize: "0.75rem" }}>EMISIÓN DE BALIZA TÁCTICA LORA</label>
