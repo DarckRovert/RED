@@ -205,43 +205,53 @@ export const LandingBentoAndMatrix: React.FC = () => {
         {/* Matrix Comparison Table */}
         <section id="matrix-comparison" style={{ padding: "40px 0 70px" }}>
           <div style={{ textAlign: "center", marginBottom: "32px" }}>
-            <h2 style={{ fontSize: "clamp(24px, 3vw, 36px)", fontWeight: 900, color: "#FFF", marginBottom: "10px" }}>
-              Comparativa Técnica: RED vs Sistemas Tradicionales
+            <span style={{ fontSize: "11px", padding: "5px 14px", borderRadius: "20px", background: "rgba(0, 229, 255, 0.12)", color: "#00E5FF", border: "1px solid rgba(0, 229, 255, 0.35)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+              BENCHMARK DE LA INDUSTRIA
+            </span>
+            <h2 style={{ fontSize: "clamp(24px, 3vw, 38px)", fontWeight: 900, color: "#FFF", marginTop: "12px", marginBottom: "10px" }}>
+              Comparativa Técnica: RED vs La Competencia
             </h2>
-            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "700px", margin: "0 auto" }}>
-              Por qué las apps de consumo y radios comerciales son insuficientes en operaciones de emergencia.
+            <p style={{ fontSize: "15px", color: "#94A3B8", maxWidth: "750px", margin: "0 auto" }}>
+              Cómo RED unifica el alcance de Meshtastic, la táctica de ATAK y el anonimato de Briar en una sola app sin hardware obligatorio.
             </p>
           </div>
 
-          <div style={{ maxWidth: "1100px", margin: "0 auto", overflowX: "auto", padding: "0 16px" }}>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", overflowX: "auto", padding: "0 16px" }}>
             <table style={{
               width: "100%", borderCollapse: "separate", borderSpacing: 0,
               background: "rgba(14, 18, 34, 0.9)", borderRadius: "20px",
-              border: "1px solid rgba(255,255,255,0.1)", overflow: "hidden",
-              fontSize: "13px"
+              border: "1.5px solid rgba(255,255,255,0.1)", overflow: "hidden",
+              fontSize: "12.5px"
             }}>
               <thead>
-                <tr style={{ background: "rgba(0,0,0,0.5)", textAlign: "left" }}>
-                  <th style={{ padding: "16px 20px", color: "#94A3B8", fontWeight: 800 }}>CARACTERÍSTICA</th>
-                  <th style={{ padding: "16px 20px", color: "#FF3355", fontWeight: 900, background: "rgba(232,33,58,0.15)" }}>RED SOVEREIGN MESH</th>
-                  <th style={{ padding: "16px 20px", color: "#94A3B8", fontWeight: 700 }}>WHATSAPP / SIGNAL</th>
-                  <th style={{ padding: "16px 20px", color: "#94A3B8", fontWeight: 700 }}>RADIOS ANALÓGICAS</th>
+                <tr style={{ background: "rgba(0,0,0,0.6)", textAlign: "left" }}>
+                  <th style={{ padding: "16px 18px", color: "#94A3B8", fontWeight: 800 }}>CAPACIDAD TÁCTICA</th>
+                  <th style={{ padding: "16px 18px", color: "#00E676", fontWeight: 900, background: "rgba(0,230,118,0.12)" }}>RED SOVEREIGN OS</th>
+                  <th style={{ padding: "16px 18px", color: "#FFB300", fontWeight: 800 }}>MESHTASTIC</th>
+                  <th style={{ padding: "16px 18px", color: "#00E5FF", fontWeight: 800 }}>ATAK / CivTAK</th>
+                  <th style={{ padding: "16px 18px", color: "#C084FC", fontWeight: 800 }}>BRIAR</th>
+                  <th style={{ padding: "16px 18px", color: "#94A3B8", fontWeight: 700 }}>SIGNAL / WA</th>
                 </tr>
               </thead>
               <tbody>
                 {[
-                  { feat: "Operación sin Internet / Celular", red: "✓ 100% Nativo Off-Grid", others: "✗ Cero (Inutilizable)", analog: "✓ Limitado a línea de vista" },
-                  { feat: "Cifrado Post-Cuántica (PQC)", red: "✓ NIST FIPS 203 (ML-KEM-768)", others: "✗ Solo curvas elípticas", analog: "✗ Cero (Frecuencia abierta)" },
-                  { feat: "Enrutamiento Multi-Hop (Malla)", red: "✓ Saltos automáticos P2P", others: "✗ Solo cliente-servidor", analog: "✗ Requiere repetidoras fijas" },
-                  { feat: "Registro de Metadatos / IPs", red: "✓ Cero (Zero-Knowledge)", others: "✗ Registro en servidores USA", analog: "✓ No aplica" },
-                  { feat: "Costo Mensual / Recurrente", red: "✓ $0.00 / mes (Gratis)", others: "✗ Requiere plan de datos", analog: "✗ Canon de frecuencia MTC" },
-                  { feat: "Protección Anti-Coerción / Pánico", red: "✓ Modo Calculadora & DMS", others: "✗ No disponible", analog: "✗ No disponible" },
+                  { feat: "Operación 100% Off-Grid sin Internet", red: "✓ Nativo Multi-Riel", mesh: "✓ Solo LoRa", atak: "⚠ Requiere servidor TAK o LAN", briar: "✓ BLE / Wi-Fi local", signal: "✗ 0% (Inútil sin red)" },
+                  { feat: "Hardware Adicional Obligatorio", red: "✓ $0 (Usa cualquier móvil)", mesh: "✗ Obligatorio ESP32 ($40-$80)", atak: "⚠ Móvil militar / Radio", briar: "✓ Solo móvil", signal: "✓ Solo móvil" },
+                  { feat: "Voz en Red de Malla (Vocoder)", red: "✓ 1.2 kbps (-97.9% comp.)", mesh: "✗ Solo texto plano", atak: "⚠ VoIP pesado", briar: "✗ No disponible", signal: "⚠ Requiere 4G/5G" },
+                  { feat: "Interoperabilidad Cursor-on-Target (CoT)", red: "✓ XML CoT & MIL-STD-2525", mesh: "✗ No disponible", atak: "✓ Nativo Militar", briar: "✗ No disponible", signal: "✗ No disponible" },
+                  { feat: "Cifrado Post-Cuántica (PQC)", red: "✓ NIST FIPS 203/204", mesh: "✗ Solo AES-256 clásica", mesh2: "✗ Clásica", atak: "✗ Clásica", briar: "✗ Curvas elípticas", signal: "⚠ Híbrido PQXDH" },
+                  { feat: "Transporte Acústico (Air-Gap)", red: "✓ SoundMesh 18.5-20.5 kHz", mesh: "✗ No disponible", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ No disponible" },
+                  { feat: "Sensores Físicos (CBRN / rPPG / 4DOF)", red: "✓ CMOS + START + Balística", mesh: "✗ Solo I2C externo", atak: "⚠ Plugins pesados", briar: "✗ No disponible", signal: "✗ No disponible" },
+                  { feat: "IA Local en el Borde (RAG INT8)", red: "✓ On-device (<5ms)", mesh: "✗ No disponible", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ Requiere nube" },
+                  { feat: "Modo Señuelo Anti-Coerción", red: "✓ Calculadora .CalculatorAlias", mesh: "✗ No disponible", atak: "✗ No disponible", briar: "✗ No disponible", signal: "✗ No disponible" }
                 ].map((row, rIdx) => (
-                  <tr key={rIdx} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <td style={{ padding: "14px 20px", color: "#FFF", fontWeight: 700 }}>{row.feat}</td>
-                    <td style={{ padding: "14px 20px", color: "#00E676", fontWeight: 800, background: "rgba(0,230,118,0.05)" }}>{row.red}</td>
-                    <td style={{ padding: "14px 20px", color: "#94A3B8" }}>{row.others}</td>
-                    <td style={{ padding: "14px 20px", color: "#94A3B8" }}>{row.analog}</td>
+                  <tr key={rIdx} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", background: rIdx % 2 === 0 ? "rgba(255,255,255,0.015)" : "transparent" }}>
+                    <td style={{ padding: "13px 18px", color: "#FFF", fontWeight: 700 }}>{row.feat}</td>
+                    <td style={{ padding: "13px 18px", color: "#00E676", fontWeight: 900, background: "rgba(0,230,118,0.06)" }}>{row.red}</td>
+                    <td style={{ padding: "13px 18px", color: row.mesh.startsWith("✓") ? "#00E676" : row.mesh.startsWith("⚠") ? "#FFB300" : "#FF6B81" }}>{row.mesh}</td>
+                    <td style={{ padding: "13px 18px", color: row.atak.startsWith("✓") ? "#00E676" : row.atak.startsWith("⚠") ? "#FFB300" : "#FF6B81" }}>{row.atak}</td>
+                    <td style={{ padding: "13px 18px", color: row.briar.startsWith("✓") ? "#00E676" : row.briar.startsWith("⚠") ? "#FFB300" : "#FF6B81" }}>{row.briar}</td>
+                    <td style={{ padding: "13px 18px", color: row.signal.startsWith("✓") ? "#00E676" : row.signal.startsWith("⚠") ? "#FFB300" : "#FF6B81" }}>{row.signal}</td>
                   </tr>
                 ))}
               </tbody>
