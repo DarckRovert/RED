@@ -474,10 +474,10 @@ export default function Sidebar() {
                                         onClick={() => { setMenuOpen(false); navigate(hub.primaryAction); }}
                                         style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: "pointer" }}
                                     >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                            <span style={{ fontSize: "1.4rem" }}>{hub.icon}</span>
-                                            <div>
-                                                <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.2px" }}>{hub.title}</div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1, marginRight: "8px" }}>
+                                            <span style={{ fontSize: "1.4rem", flexShrink: 0 }}>{hub.icon}</span>
+                                            <div style={{ minWidth: 0, flex: 1 }}>
+                                                <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{hub.title}</div>
                                                 <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px", lineHeight: 1.3 }}>{hub.desc}</div>
                                             </div>
                                         </div>

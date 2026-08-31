@@ -70,11 +70,10 @@ export function TcccBallisticsModal() {
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
-            color: "#FFFFFF", display: "flex", flexDirection: "column",
-            fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
+            color: "#FFFFFF",
+            fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header Táctico */}
             <header style={{

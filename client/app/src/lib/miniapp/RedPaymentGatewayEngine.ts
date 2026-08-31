@@ -110,26 +110,28 @@ export class RedPaymentGatewayEngine {
         let txHash = `0x${Array.from(_txBytes, b => b.toString(16).padStart(2,'0')).join('')}`;
 
         // If Web3 wallet (MetaMask) is connected, send real transaction
-        if (state.isConnected && state.account && (window as any).ethereum) {
-            try {
-                // Request transaction via window.ethereum
-                const eth = (window as any).ethereum;
-                const valueHex = "0x" + Math.floor(intent.amount * 1e18).toString(16); // or ERC20 transfer
-                txHash = await eth.request({
-                    method: 'eth_sendTransaction',
-                    params: [{
-                        from: state.account,
-                        to: intent.merchant.evmAddress,
-                        value: '0x0', // If token or native
-                        data: '0x',
-                    }]
-                });
-            } catch (err: any) {
-                // If user rejected or cancelled in wallet
-                if (err.code === 4001 || err.message?.includes('User rejected')) {
-                    throw new Error("Transacción cancelada por el usuario en la billetera Web3.");
-                }
+        if (!state.isConnected || !state.account || !(window as any).ethereum) {
+            throw new Error("Billetera Web3 no conectada. Conecte MetaMask o su proveedor Web3 para procesar transferencias EVM.");
+        }
+
+        try {
+            // Request transaction via window.ethereum
+            const eth = (window as any).ethereum;
+            txHash = await eth.request({
+                method: 'eth_sendTransaction',
+                params: [{
+                    from: state.account,
+                    to: intent.merchant.evmAddress,
+                    value: '0x0',
+                    data: '0x',
+                }]
+            });
+        } catch (err: any) {
+            // If user rejected or cancelled in wallet
+            if (err.code === 4001 || err.message?.includes('User rejected')) {
+                throw new Error("Transacción cancelada por el usuario en la billetera Web3.");
             }
+            throw err;
         }
 
         return {
@@ -144,7 +146,7 @@ export class RedPaymentGatewayEngine {
             details: {
                 network: state.chainName || 'Polygon PoS',
                 recipientAddress: intent.merchant.evmAddress,
-                senderAccount: state.account || '0xSimulatedWallet'
+                senderAccount: state.account
             }
         };
     }

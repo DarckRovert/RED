@@ -1,7 +1,6 @@
 import { StateCreator } from 'zustand';
 import { RedStore, ScreenView } from '../types';
 import { SettingsManager, DEFAULT_PREFERENCES, UserPreferences } from '../../lib/settingsManager';
-import { toast } from '../../components/Toast';
 import { RedAPI } from '../../api/client';
 import { localTransport } from '../../lib/mesh/localTransport';
 import { meshRouter } from '../../lib/mesh/meshRouter';

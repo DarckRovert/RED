@@ -202,6 +202,66 @@ class ModelManagerClass {
         };
     }
 
+    /**
+     * Detecta proactivamente las capacidades reales de hardware del dispositivo
+     * (WebGPU, RAM, núcleos de CPU) y devuelve el identificador del modelo óptimo.
+     *
+     * Reglas de selección:
+     *   - Sin WebGPU y RAM ≤ 2 GB  → smollm-360m-q4  (230 MB, máxima compatibilidad)
+     *   - Sin WebGPU y RAM 2–3 GB  → qwen-2.5-0.5b-q4 (390 MB)
+     *   - Con WebGPU o RAM ≥ 4 GB  → qwen-2.5-1.5b-q4 (1040 MB, razonamiento táctico)
+     *   - RAM ≥ 6 GB               → gemma-2b-q4       (1600 MB)
+     */
+    public async probeHardwareCapabilities(): Promise<{
+        hasWebGpu: boolean;
+        ramMb: number;
+        cpuCores: number;
+        recommendedModelId: string;
+        reason: string;
+    }> {
+        const ramGb: number = typeof navigator !== 'undefined' && 'deviceMemory' in navigator
+            ? ((navigator as any).deviceMemory as number) || 2
+            : 2;
+        const ramMb = ramGb * 1024;
+
+        const cpuCores: number = typeof navigator !== 'undefined'
+            ? navigator.hardwareConcurrency || 2
+            : 2;
+
+        // Probe WebGPU: request adapter without fallback — returns null if unsupported
+        let hasWebGpu = false;
+        try {
+            if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+                const adapter = await (navigator as any).gpu.requestAdapter({ powerPreference: 'high-performance' });
+                hasWebGpu = !!adapter;
+            }
+        } catch {
+            hasWebGpu = false;
+        }
+
+        let recommendedModelId: string;
+        let reason: string;
+
+        if (!hasWebGpu && ramMb <= 2048) {
+            recommendedModelId = 'smollm-360m-q4';
+            reason = `Sin WebGPU y RAM ≤ 2 GB (${ramMb} MB detectados). Modelo ultra-compacto para máxima compatibilidad.`;
+        } else if (!hasWebGpu && ramMb <= 3072) {
+            recommendedModelId = 'qwen-2.5-0.5b-q4';
+            reason = `Sin WebGPU y RAM intermedia (${ramMb} MB). Modelo compacto Qwen 0.5B.`;
+        } else if (ramMb >= 6144) {
+            recommendedModelId = 'gemma-2b-q4';
+            reason = `RAM alta (${ramMb} MB)${hasWebGpu ? ' + WebGPU activo' : ''}. Modelo Gemma 2B para razonamiento avanzado.`;
+        } else {
+            // WebGPU disponible o RAM 4-6 GB → modelo de 1.5B
+            recommendedModelId = 'qwen-2.5-1.5b-q4';
+            reason = `${hasWebGpu ? 'WebGPU activo' : 'RAM suficiente'} (${ramMb} MB, ${cpuCores} núcleos). Modelo Qwen 1.5B recomendado.`;
+        }
+
+        console.log(`[ModelManager] probeHardwareCapabilities → WebGPU=${hasWebGpu}, RAM=${ramMb}MB, CPU=${cpuCores}. Recomendado: ${recommendedModelId} — ${reason}`);
+
+        return { hasWebGpu, ramMb, cpuCores, recommendedModelId, reason };
+    }
+
     /** Checks persistent storage for installed models */
     public async checkLocalModelsStatus(): Promise<LocalModelMetaData[]> {
         if (typeof window === 'undefined') return Array.from(this.models.values());

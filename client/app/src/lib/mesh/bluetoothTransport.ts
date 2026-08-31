@@ -1,5 +1,6 @@
 import { BleClient, numberToUUID } from '@capacitor-community/bluetooth-le';
 import { dynamicBearerGovernor } from './DynamicBearerGovernor';
+import { KineticDutyGovernor, DutyCycleProfile } from '../sensors/KineticDutyGovernor';
 
 const RED_BLE_SERVICE = "00001818-0000-1000-8000-00805f9b34fb";
 const RED_BLE_WRITE_CHAR = "00002a4d-0000-1000-8000-00805f9b34fb"; // Client writes here (matches native server txChar)
@@ -28,6 +29,125 @@ class BluetoothTransport {
     private connectedDevices: Set<string> = new Set();
     private linkMetrics: Map<string, LinkQualityMetrics> = new Map();
     private negotiatedMtu: Map<string, number> = new Map();
+
+    // ─── Duty-Cycle Táctico de Escaneo BLE ────────────────────────────────────
+    // Ventanas de escaneo activo + reposo según perfil KineticDutyGovernor:
+    //   SHAKE_BOOST / HIGH_PERFORMANCE  : 1.5 s activo  /  3 s reposo
+    //   BALANCED_PATROL                 : 4 s activo    / 11 s reposo
+    //   SURVIVAL_SENTRY                 : 4 s activo    / 26 s reposo
+    private dutyCycleTimer: any = null;
+    private dutyCycleActive = false;
+    private dutyCycleCallback: ((device: RedDevice) => void) | null = null;
+
+    private cancelRest: (() => void) | null = null;
+
+    /** Computa (activeScanMs, restMs) desde el bleScanIntervalMs del gobernador. */
+    private getDutyCycleWindows(profile: DutyCycleProfile): { activeScanMs: number; restMs: number } {
+        switch (profile) {
+            case 'SHAKE_BOOST':
+            case 'HIGH_PERFORMANCE':
+                return { activeScanMs: 1500, restMs: 3000 };
+            case 'BALANCED_PATROL':
+                return { activeScanMs: 4000, restMs: 11000 };
+            case 'SURVIVAL_SENTRY':
+            default:
+                return { activeScanMs: 4000, restMs: 26000 };
+        }
+    }
+
+    /**
+     * Inicia el ciclo de escaneo BLE con ventanas asimétricas de actividad/reposo.
+     * El disparador cinético (Shake/vuelta a primer plano) lanza inmediatamente
+     * una ventana de escaneo fuera de turno.
+     */
+    public startDutyCycleScan(onDeviceFound: (device: RedDevice) => void): void {
+        if (this.dutyCycleActive) return;
+        this.dutyCycleActive = true;
+        this.dutyCycleCallback = onDeviceFound;
+
+        const runCycle = async () => {
+            if (!this.dutyCycleActive) return;
+
+            const governor = KineticDutyGovernor.getInstance();
+            const telemetry = governor.getTelemetry();
+            const { activeScanMs, restMs } = this.getDutyCycleWindows(telemetry.currentProfile);
+
+            // Active scan window
+            await this.scan(onDeviceFound, activeScanMs);
+
+            // Rest window — unless a shake boost interrupts us
+            if (this.dutyCycleActive) {
+                await new Promise<void>((resolve) => {
+                    let cleanedUp = false;
+                    let unsubFn: (() => void) | null = null;
+                    const initialProfile = telemetry.currentProfile;
+
+                    const cleanup = () => {
+                        if (cleanedUp) return;
+                        cleanedUp = true;
+                        this.cancelRest = null;
+                        if (unsubFn) {
+                            unsubFn();
+                            unsubFn = null;
+                        }
+                        if (this.dutyCycleTimer) {
+                            clearTimeout(this.dutyCycleTimer);
+                            this.dutyCycleTimer = null;
+                        }
+                        resolve();
+                    };
+
+                    this.cancelRest = cleanup;
+                    const restTimer = setTimeout(cleanup, restMs);
+                    this.dutyCycleTimer = restTimer;
+
+                    let isSubscribing = true;
+                    const unsub = governor.subscribe((t) => {
+                        // Ignorar la primera invocación sincrónica al suscribirse
+                        if (isSubscribing) return;
+
+                        // Despertar anticipado si el perfil cambia a uno de alta energía (movimiento/sacudida)
+                        if (t.currentProfile !== initialProfile &&
+                           (t.currentProfile === 'SHAKE_BOOST' || t.currentProfile === 'HIGH_PERFORMANCE')) {
+                            cleanup();
+                        }
+                    });
+                    unsubFn = unsub;
+                    isSubscribing = false;
+
+                    if (cleanedUp && unsubFn) {
+                        unsubFn();
+                        unsubFn = null;
+                    }
+                });
+            }
+
+            // Schedule next cycle
+            if (this.dutyCycleActive) {
+                runCycle();
+            }
+        };
+
+        runCycle();
+    }
+
+    /** Detiene el ciclo de escaneo BLE activo. */
+    public stopDutyCycleScan(): void {
+        this.dutyCycleActive = false;
+        this.dutyCycleCallback = null;
+        if (this.cancelRest) {
+            this.cancelRest();
+            this.cancelRest = null;
+        }
+        if (this.dutyCycleTimer) {
+            clearTimeout(this.dutyCycleTimer);
+            this.dutyCycleTimer = null;
+        }
+        if (this.isScanning) {
+            BleClient.stopLEScan().catch(() => {});
+            this.isScanning = false;
+        }
+    }
 
     /** Calculate Link Quality Score (LQS 0-100%) from RSSI and packet delivery */
     public calculateLqs(rssi: number, lossRate = 0): number {

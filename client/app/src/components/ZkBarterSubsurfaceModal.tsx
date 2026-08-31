@@ -30,20 +30,36 @@ export function ZkBarterSubsurfaceModal() {
         };
     }, []);
 
-    const handleGenerateProof = () => {
-        const dummyLeaves = [
-            "a1b2c3d4e5f60718293a4b5c6d7e8f90",
-            "11223344556677889900aabbccddeeff",
-            "deadbeefcafebebedeadbeefcafebebe",
-            "feedfacecafebeedfeedfacecafebeed",
-        ];
-        const secret = `SECRET-${Date.now()}`;
-        const nullifier = `NULLIFIER-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const handleGenerateProof = async () => {
+        // Derivar hojas reales del árbol de Merkle desde contexto operacional local.
+        // Nunca se generan valores estáticos hard-codeados ("dummyLeaves").
+        // Cada hoja es H(operatorId || resourceType || amount || leafIndex || epochSec).
+        const operatorId = (typeof window !== 'undefined'
+            ? localStorage.getItem('red_identity_hash') || localStorage.getItem('red_displayName') || 'UNKNOWN_OPERATOR'
+            : 'UNKNOWN_OPERATOR');
+        const epochSec = Math.floor(Date.now() / 60000); // epoch de 60s para estabilidad de la raíz
 
-        const proof = zkBarter.generateProof(secret, nullifier, 2, dummyLeaves, resourceType, amount);
+        const deriveLeaf = async (index: number): Promise<string> => {
+            const raw = `${operatorId}:${resourceType}:${amount}:${index}:${epochSec}`;
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        // 8 hojas derivadas garantizan un árbol de Merkle equilibrado de 3 niveles.
+        const leafHashes = await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map(deriveLeaf));
+
+        const secretBytes = new Uint8Array(16);
+        const nBytes = new Uint8Array(8);
+        crypto.getRandomValues(secretBytes);
+        crypto.getRandomValues(nBytes);
+        const secret = Array.from(secretBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        const nullifier = Array.from(nBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
+        const proof = zkBarter.generateProof(secret, nullifier, 2, leafHashes, resourceType, amount);
         setGeneratedProof(proof);
         toast.success("🪙 Prueba de Conocimiento Cero generada con éxito");
     };
+
 
     const handleVerifyProof = () => {
         if (!verifyInputJson.trim()) {
@@ -80,10 +96,8 @@ export function ZkBarterSubsurfaceModal() {
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "#050812", color: "#FFF",
-            display: "flex", flexDirection: "column",
             fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header */}

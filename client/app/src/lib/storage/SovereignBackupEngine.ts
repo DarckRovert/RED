@@ -86,10 +86,20 @@ export class SovereignBackupEngine {
             }
         } else {
             entropyBytes = new Uint8Array(16);
-            if (typeof window !== "undefined" && window.crypto) {
-                window.crypto.getRandomValues(entropyBytes);
+            const cryptoObj = (typeof window !== "undefined" && window.crypto) || (globalThis as any)?.crypto;
+            if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+                cryptoObj.getRandomValues(entropyBytes);
             } else {
-                for (let i = 0; i < 16; i++) entropyBytes[i] = Math.floor(Math.random() * 256);
+                try {
+                    const { randomFillSync } = require('crypto');
+                    randomFillSync(entropyBytes);
+                } catch {
+                    // Fallback to SubtleCrypto/globalThis if available
+                    const gCrypto = (globalThis as any)?.crypto;
+                    if (gCrypto && typeof gCrypto.getRandomValues === 'function') {
+                        gCrypto.getRandomValues(entropyBytes);
+                    }
+                }
             }
         }
 

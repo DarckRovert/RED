@@ -97,11 +97,13 @@ export class SeismicTriangulationEngine {
         const tDiff = Math.abs(nodes[0].arrivalTimestampMs - nodes[1].arrivalTimestampMs) / 1000;
         const depth = Math.round((Math.max(0.5, tDiff * velocityMps * 0.15) + 1.2) * 10) / 10;
 
+        const confidence = Math.min(98, Math.round(65 + Math.min(nodes.length, 3) * 10 + Math.min(totalAmp * 5, 10)));
+
         const result: SurvivorTriangulationResult = {
             estimatedX: Math.round(weightedX * 10) / 10,
             estimatedY: Math.round(weightedY * 10) / 10,
             estimatedDepthMeters: Math.min(8.0, depth),
-            confidencePct: Math.round(82 + Math.random() * 14),
+            confidencePct: confidence,
             patternType: 'RESCUE_3_TAPS',
             nodesUsed: nodes.length,
             timestamp: Date.now(),
@@ -112,23 +114,18 @@ export class SeismicTriangulationEngine {
     }
 
     /**
-     * Simula la detección de 3 golpes en escombros por un superviviente
+     * Registra un impacto físico detectado por acelerómetro en un nodo específico
      */
-    public simulateSurvivorTaps(): SurvivorTriangulationResult {
-        const now = Date.now();
-        const targetX = (Math.random() - 0.5) * 14;
-        const targetY = (Math.random() - 0.5) * 14;
-
+    public recordAccelerometerImpact(nodeId: string, timestampMs: number, amplitudeG: number): SurvivorTriangulationResult {
         this.activeNodes = this.activeNodes.map(n => {
-            const dist = Math.sqrt(Math.pow(n.xMeters - targetX, 2) + Math.pow(n.yMeters - targetY, 2));
-            const delayMs = (dist / SeismicTriangulationEngine.DEFAULT_SEISMIC_VELOCITY) * 1000;
-            const amp = Math.max(0.05, 1.2 / (1 + dist * 0.15));
-
-            return {
-                ...n,
-                arrivalTimestampMs: now + delayMs,
-                amplitudeG: Math.round(amp * 100) / 100
-            };
+            if (n.id === nodeId) {
+                return {
+                    ...n,
+                    arrivalTimestampMs: timestampMs,
+                    amplitudeG: Math.max(0.01, Math.round(amplitudeG * 100) / 100)
+                };
+            }
+            return n;
         });
 
         return this.triangulate(this.activeNodes);

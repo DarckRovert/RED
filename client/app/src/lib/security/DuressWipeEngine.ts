@@ -52,28 +52,34 @@ export class DuressWipeEngine {
     public async executeZeroizeWipe(): Promise<void> {
         console.warn('[DuressWipeEngine] EJECUTANDO PURGA DESTRUTIVA ZEROIZE...');
 
-        // 1. Sobrescritura de claves en localStorage con ruido aleatorio
+        // 1. Sobrescritura de claves en localStorage con ruido aleatorio CSPRNG
         if (typeof window !== 'undefined') {
             try {
                 const keys = Object.keys(localStorage);
                 keys.forEach(k => {
-                    // Sobrescritura con bytes aleatorios antes de eliminar
-                    const junk = Array.from({ length: 64 }, () => Math.floor(Math.random() * 256).toString(16)).join('');
-                    localStorage.setItem(k, junk);
+                    const noise = new Uint8Array(64);
+                    if (window.crypto && window.crypto.getRandomValues) {
+                        window.crypto.getRandomValues(noise);
+                    }
+                    localStorage.setItem(k, Array.from(noise, b => b.toString(16).padStart(2, '0')).join(''));
                 });
                 localStorage.clear();
+                sessionStorage.clear();
             } catch {}
 
-            // 2. Destrucción de bases de datos IndexedDB
+            // 2. Destrucción total de todas las bases de datos IndexedDB activas y de respaldo
             try {
-                const dbs = [
+                const activeAndLegacyDbs = [
+                    'RED_MEDIA_VAULT_DB',
+                    'red_deaddrop_vault',
+                    'red_dtn_storage_vault',
+                    'red_offline_map_vault',
                     'red_slippy_tiles_vault_v1',
                     'red_dtn_store_forward_v1',
                     'red_offline_vault',
-                    'red_deaddrop_vault',
                     'red_indexed_media_vault_v1'
                 ];
-                dbs.forEach(dbName => {
+                activeAndLegacyDbs.forEach(dbName => {
                     try { window.indexedDB.deleteDatabase(dbName); } catch {}
                 });
             } catch {}

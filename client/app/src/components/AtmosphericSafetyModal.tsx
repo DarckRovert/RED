@@ -9,6 +9,7 @@ export function AtmosphericSafetyModal() {
     const { navigate } = useRedStore();
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const prevLumaRef = useRef<number | null>(null);
     const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
     const [telemetry, setTelemetry] = useState<AtmosphericTelemetry>(() => 
         opticalGasAqiEngine.analyzeOpticalFrame(120, 48, { r: 100, g: 100, b: 100 }, 0)
@@ -67,11 +68,17 @@ export function AtmosphericSafetyModal() {
                     }
                     const stdDev = Math.sqrt(variance / count);
 
+                    // Varianza de parpadeo temporal calculada empíricamente entre fotogramas consecutivos
+                    const flickerVariance = prevLumaRef.current !== null
+                        ? Math.abs(meanLuma - prevLumaRef.current)
+                        : 0;
+                    prevLumaRef.current = meanLuma;
+
                     const result = opticalGasAqiEngine.analyzeOpticalFrame(
                         meanLuma,
                         stdDev,
                         { r: rTotal / count, g: gTotal / count, b: bTotal / count },
-                        Math.random() * 5
+                        flickerVariance
                     );
                     setTelemetry(result);
                 }
@@ -115,10 +122,8 @@ export function AtmosphericSafetyModal() {
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "#050812", color: "#FFF",
-            display: "flex", flexDirection: "column",
             fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header */}

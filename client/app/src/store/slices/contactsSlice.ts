@@ -1,8 +1,8 @@
 import { StateCreator } from 'zustand';
 import { RedStore, PendingContactRequest } from '../types';
-import { ContactItem, GroupItem, ConversationItem } from '../../api/types';
+import { ConversationItem } from '../../api/types';
 import { RedAPI } from '../../api/client';
-import { meshRouter, normalizeIdentity, isNameSimilar } from '../../lib/mesh/meshRouter';
+import { meshRouter, normalizeIdentity } from '../../lib/mesh/meshRouter';
 import { toast } from '../../components/Toast';
 
 const _processedHandshakes = new Set<string>();

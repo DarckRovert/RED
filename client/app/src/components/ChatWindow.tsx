@@ -107,6 +107,22 @@ export default function ChatWindow() {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
     const [showPollModal, setShowPollModal] = useState(false);
+    const [viewportHeight, setViewportHeight] = useState<string | number>("100%");
+
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.visualViewport) return;
+        const updateHeight = () => {
+            if (window.visualViewport) {
+                setViewportHeight(`${window.visualViewport.height}px`);
+            }
+        };
+        window.visualViewport.addEventListener("resize", updateHeight);
+        window.visualViewport.addEventListener("scroll", updateHeight);
+        return () => {
+            window.visualViewport?.removeEventListener("resize", updateHeight);
+            window.visualViewport?.removeEventListener("scroll", updateHeight);
+        };
+    }, []);
 
     // Ref so selection callbacks can access convMessages without ordering issues
     const convMessagesRef = useRef<MessageItem[]>([]);
@@ -823,7 +839,7 @@ export default function ChatWindow() {
     };
 
     return (
-        <div className="modal-screen-container">
+        <div className="modal-screen-container" style={{ height: viewportHeight }}>
             <input
                 ref={mediaInputRef}
                 type="file"

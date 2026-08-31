@@ -168,7 +168,7 @@ export default function StatusHeader() {
                 gap: "8px"
             }}>
                 {/* ── Left: Operational Mode & Radio Bearer HUD ── */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexShrink: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexShrink: 1, overflow: "hidden" }}>
                     {/* Operational Mode Pill */}
                     <button
                         type="button"
@@ -188,13 +188,15 @@ export default function StatusHeader() {
                             cursor: "pointer",
                             boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
                             transition: "all 0.15s ease",
-                            whiteSpace: "nowrap"
+                            whiteSpace: "nowrap",
+                            minWidth: 0,
+                            flexShrink: 1
                         }}
                         title={t('status_header.switch_mode') || "Cambiar Modo Operacional"}
                     >
-                        <span style={{ fontSize: "12px" }}>{currentModeObj.icon}</span>
-                        <span style={{ letterSpacing: "0.4px", textTransform: "uppercase" }}>{currentModeObj.label}</span>
-                        <span style={{ fontSize: "8px", opacity: 0.5, marginLeft: "2px" }}>▼</span>
+                        <span style={{ fontSize: "12px", flexShrink: 0 }}>{currentModeObj.icon}</span>
+                        <span className="status-label-truncate" style={{ letterSpacing: "0.4px", textTransform: "uppercase" }}>{currentModeObj.label}</span>
+                        <span style={{ fontSize: "8px", opacity: 0.5, marginLeft: "2px", flexShrink: 0 }}>▼</span>
                     </button>
 
                     {/* Active Transport Pill & Pulse */}
@@ -212,7 +214,8 @@ export default function StatusHeader() {
                             fontSize: "10px",
                             cursor: "pointer",
                             transition: "all 0.15s ease",
-                            boxShadow: `0 0 10px ${color}15`
+                            boxShadow: `0 0 10px ${color}15`,
+                            flexShrink: 0
                         }}
                         title="Abrir HUD de Enjambre Multi-Bearer & Salto FHSS"
                     >
@@ -314,7 +317,7 @@ export default function StatusHeader() {
                         title="Asistente de IA Táctico Offline"
                     >
                         <span>🧠</span>
-                        <span>IA</span>
+                        <span className="status-text-hide-compact">IA</span>
                     </button>
 
                     {/* Tactical Action: Commercial Hub */}
@@ -339,7 +342,7 @@ export default function StatusHeader() {
                         title="Hub Comercial y Vales P2P zk-Merkle"
                     >
                         <span>💳</span>
-                        <span className="hidden sm:inline">HUB</span>
+                        <span className="status-text-hide-compact">HUB</span>
                     </button>
 
                     {/* Tactical Action: Node Map */}

@@ -45,21 +45,14 @@ export function CelestialPdrModal() {
         }
     };
 
-    const handleSimulateStep = () => {
-        if (!pdr.isTracking) pedestrianDeadReckoning.startTracking();
-        pedestrianDeadReckoning.recordStep(pdr.currentHeadingDeg + (Math.random() * 10 - 5));
-    };
-
     const handleResetPdr = () => {
         pedestrianDeadReckoning.resetPdr();
         toast.info("Contador PDR restablecido a 0");
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "#050812", color: "#FFF",
-            display: "flex", flexDirection: "column",
             fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header */}
@@ -218,28 +211,18 @@ export function CelestialPdrModal() {
                             <button
                                 onClick={handleTogglePdr}
                                 style={{
-                                    flex: 1, padding: "12px", borderRadius: "10px",
+                                    flex: 2, padding: "12px", borderRadius: "10px",
                                     background: pdr.isTracking ? "rgba(232,33,58,0.2)" : "rgba(0,230,118,0.2)",
                                     border: `1px solid ${pdr.isTracking ? "#FF3355" : "#00E676"}`,
                                     color: pdr.isTracking ? "#FF3355" : "#00E676", fontWeight: 900, fontSize: "0.8rem", cursor: "pointer"
                                 }}
                             >
-                                {pdr.isTracking ? "⏸ PAUSAR PDR" : "▶ INICIAR RASTREO"}
-                            </button>
-                            <button
-                                onClick={handleSimulateStep}
-                                style={{
-                                    flex: 1, padding: "12px", borderRadius: "10px",
-                                    background: "rgba(0, 229, 255, 0.15)", border: "1px solid #00E5FF",
-                                    color: "#00E5FF", fontWeight: 900, fontSize: "0.8rem", cursor: "pointer"
-                                }}
-                            >
-                                🚶 SIMULAR PASO
+                                {pdr.isTracking ? "⏸ PAUSAR PDR INERCIAL" : "▶ INICIAR RASTREO FÍSICO"}
                             </button>
                             <button
                                 onClick={handleResetPdr}
                                 style={{
-                                    padding: "12px", borderRadius: "10px",
+                                    flex: 1, padding: "12px", borderRadius: "10px",
                                     background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.15)",
                                     color: "#AAA", fontWeight: 800, fontSize: "0.75rem", cursor: "pointer"
                                 }}

@@ -70,10 +70,8 @@ export function TacticalVisionScanModal() {
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "#050812", color: "#FFF",
-            display: "flex", flexDirection: "column",
             fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header */}

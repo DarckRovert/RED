@@ -62,17 +62,11 @@ export function SonarSeismicModal() {
         }
     };
 
-    const handleSimulateSeismicTaps = () => {
-        const res = seismicTriangulation.simulateSurvivorTaps();
-        toast.error(`🪨 ¡IMPACTO DETECTADO! Superviviente a X:${res.estimatedX}m Y:${res.estimatedY}m (Prof: ${res.estimatedDepthMeters}m)`);
-    };
-
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
-            color: "#FFFFFF", display: "flex", flexDirection: "column",
-            fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
+            color: "#FFFFFF",
+            fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header Táctico */}
             <header style={{
@@ -276,15 +270,20 @@ export function SonarSeismicModal() {
                                 </div>
                             )}
 
-                            <button
-                                onClick={handleSimulateSeismicTaps}
-                                style={{
-                                    padding: "12px", background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
-                                    color: "#FFFFFF", fontWeight: 900, fontSize: "0.85rem", border: "none", borderRadius: "12px", cursor: "pointer"
-                                }}
-                            >
-                                🪨 SIMULAR GOLPETEO DE SUPERVIVIENTE
-                            </button>
+                            <div style={{
+                                padding: "12px 14px",
+                                background: "rgba(255, 51, 85, 0.08)",
+                                border: "1px solid rgba(255, 51, 85, 0.25)",
+                                borderRadius: "12px",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px"
+                            }}>
+                                <span style={{ fontSize: "1.3rem" }}>🪨</span>
+                                <div style={{ fontSize: "0.72rem", color: "#DDD", lineHeight: 1.4 }}>
+                                    <strong style={{ color: "#FF3355" }}>Modo Detección Sísmica Activo:</strong> Coloque los nodos sobre escombros o losa estructural. Los impactos físicos por golpes de superviviente son registrados en microsegundos y triangulados por TDoA.
+                                </div>
+                            </div>
                         </div>
                     )}
 

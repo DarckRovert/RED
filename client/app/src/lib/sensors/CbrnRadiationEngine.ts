@@ -57,22 +57,30 @@ export class CbrnRadiationEngine {
         });
     }
 
+    public recordCmosPhotonHits(hotPixelCount: number, exposureTimeMs = 33.3): void {
+        if (exposureTimeMs <= 0) return;
+        // Física nuclear CMOS: los fotones gamma y partículas beta que atraviesan la matriz
+        // de silicio de la cámara generan pares electrón-hueco (hot pixels luminosos con lente tapada).
+        // 1. Tasa de eventos por minuto (CPM)
+        const cpmCalculated = Math.round((hotPixelCount / (exposureTimeMs / 1000)) * 60);
+        // 2. Factor de conversión estándar silicio CMOS a dosis equivalente ambiental H*(10): 120 CPM ≈ 1.0 uSv/h
+        const derivedDose = Math.max(0.04, Math.round((cpmCalculated / 120) * 100) / 100);
+
+        this.doseRateUsVh = derivedDose;
+        this.isManualOverride = false;
+        this.notify();
+    }
+
     public startMonitoring() {
         if (this.isRunning) return;
         this.isRunning = true;
 
         this.timer = setInterval(() => {
-            // Si no hay inyección manual externa, aplicar micro-fluctuación natural de fondo
-            if (!this.isManualOverride) {
-                const noise = (Math.random() - 0.5) * 0.02;
-                this.doseRateUsVh = Math.max(0.04, Math.round((this.doseRateUsVh + noise) * 100) / 100);
-            }
-
             // Acumular dosis biológica por segundo (uSv/h convertido a mSv/s)
             const dosePerSecMsv = (this.doseRateUsVh / 1000) / 3600;
             this.cumulativeDoseMsv = Math.round((this.cumulativeDoseMsv + dosePerSecMsv) * 10000) / 10000;
 
-            if (typeof window !== 'undefined' && Math.random() < 0.1) {
+            if (typeof window !== 'undefined') {
                 try {
                     localStorage.setItem('red_cbrn_cum_dose_msv', this.cumulativeDoseMsv.toString());
                 } catch {}

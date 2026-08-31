@@ -198,7 +198,9 @@ export class MediaChunker {
         const k = chunk.totalDataChunks || chunk.totalChunks || 1;
         const m = chunk.totalParityChunks || 0;
 
-        const MAX_ACTIVE_SESSIONS = 64;
+        // Anti-DoS + memory guard: 30 concurrent sessions max to avoid heap explosion
+        // on devices with 2 GB RAM (Moto G22 / Helio G37). Excess sessions are LRU-evicted.
+        const MAX_ACTIVE_SESSIONS = 30;
 
         if (!this.sessions.has(chunk.fileId)) {
             // Protección DoS: Evicción LRU de la sesión más antigua si se alcanza la capacidad máxima

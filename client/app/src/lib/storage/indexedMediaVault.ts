@@ -1,10 +1,18 @@
 /**
- * RED IndexedDB Media Vault (v1.0)
- * 
+ * RED IndexedDB Media Vault (v2.0)
+ *
  * High-performance, quota-free persistent storage for heavy media
  * (photos, voice notes, video chunks, and encrypted attachments).
- * Prevents localStorage QuotaExceededError crashes (5MB ceiling).
+ * Prevents localStorage QuotaExceededError crashes (5 MB ceiling).
+ *
+ * v2.0 — LRU RAM cache now adapts dynamically to the KineticDutyGovernor
+ * profile to avoid Android Low-Memory-Killer (LMK) eviction on 2 GB devices:
+ *   SURVIVAL_SENTRY  → max 20 items  (~40 MB heap impact)
+ *   BALANCED_PATROL  → max 50 items
+ *   HIGH_PERFORMANCE / SHAKE_BOOST → max 120 items
  */
+
+import { KineticDutyGovernor, DutyCycleProfile } from '../sensors/KineticDutyGovernor';
 
 export interface MediaVaultRecord {
     id: string;
@@ -21,6 +29,49 @@ class IndexedMediaVault {
     private readonly dbVersion = 1;
     private dbPromise: Promise<IDBDatabase> | null = null;
     private memCache = new Map<string, string>();
+    private maxCacheEntries = 50; // default BALANCED_PATROL
+
+    constructor() {
+        // Subscribe to KineticDutyGovernor profile changes to adapt LRU cap
+        if (typeof window !== 'undefined') {
+            try {
+                const governor = KineticDutyGovernor.getInstance();
+                governor.subscribe((telemetry) => {
+                    this.applyProfileCap(telemetry.currentProfile);
+                });
+            } catch {
+                // Governor not yet available — use default cap
+            }
+        }
+    }
+
+    private applyProfileCap(profile: DutyCycleProfile): void {
+        switch (profile) {
+            case 'SURVIVAL_SENTRY':
+                this.maxCacheEntries = 20;
+                break;
+            case 'BALANCED_PATROL':
+                this.maxCacheEntries = 50;
+                break;
+            case 'HIGH_PERFORMANCE':
+            case 'SHAKE_BOOST':
+                this.maxCacheEntries = 120;
+                break;
+        }
+        // Evict excess entries immediately after cap reduction
+        while (this.memCache.size > this.maxCacheEntries) {
+            const oldestKey = this.memCache.keys().next().value;
+            if (oldestKey) this.memCache.delete(oldestKey);
+        }
+    }
+
+    /**
+     * Libera inmediatamente toda la caché RAM de miniaturas y medios.
+     * Llamar en respuesta a eventos de presión de memoria o cambio de perfil.
+     */
+    public clearMemoryCache(): void {
+        this.memCache.clear();
+    }
 
     private getDB(): Promise<IDBDatabase> {
         if (this.dbPromise) return this.dbPromise;
@@ -58,6 +109,18 @@ class IndexedMediaVault {
         return idOrUri;
     }
 
+    private setInMemCache(id: string, dataUrl: string): void {
+        // Move to newest by re-inserting
+        if (this.memCache.has(id)) {
+            this.memCache.delete(id);
+        }
+        this.memCache.set(id, dataUrl);
+        while (this.memCache.size > this.maxCacheEntries) {
+            const oldestKey = this.memCache.keys().next().value;
+            if (oldestKey) this.memCache.delete(oldestKey);
+        }
+    }
+
     /**
      * Stores a heavy media item (Base64 dataUrl, Blob data) into IndexedDB.
      * Returns a lightweight reference URI: `red_vault://<id>`.
@@ -66,12 +129,8 @@ class IndexedMediaVault {
         const cleanId = this.normalizeId(id);
         if (!cleanId || !dataUrl) return dataUrl;
 
-        // Keep in fast RAM cache for immediate sequential reads
-        this.memCache.set(cleanId, dataUrl);
-        if (this.memCache.size > 150) {
-            const firstKey = this.memCache.keys().next().value;
-            if (firstKey) this.memCache.delete(firstKey);
-        }
+        // Keep in fast RAM cache — LRU eviction bounded by dynamic profile cap
+        this.setInMemCache(cleanId, dataUrl);
 
         try {
             const db = await this.getDB();
@@ -109,7 +168,11 @@ class IndexedMediaVault {
 
         // 1. Check RAM cache
         if (this.memCache.has(cleanId)) {
-            return this.memCache.get(cleanId)!;
+            const val = this.memCache.get(cleanId)!;
+            // Refresh LRU order on access
+            this.memCache.delete(cleanId);
+            this.memCache.set(cleanId, val);
+            return val;
         }
 
         try {
@@ -122,7 +185,7 @@ class IndexedMediaVault {
                 req.onsuccess = () => {
                     const record: MediaVaultRecord | undefined = req.result;
                     if (record && record.dataUrl) {
-                        this.memCache.set(cleanId, record.dataUrl);
+                        this.setInMemCache(cleanId, record.dataUrl);
                         resolve(record.dataUrl);
                     } else {
                         resolve(null);

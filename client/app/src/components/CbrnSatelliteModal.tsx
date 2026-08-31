@@ -31,11 +31,6 @@ export function CbrnSatelliteModal() {
         };
     }, []);
 
-    const handleSimulateDose = (rate: number) => {
-        cbrnRadiation.setDoseRate(rate);
-        toast.info(`Tasa de radiación calibrada a: ${rate} µSv/h`);
-    };
-
     const handleTriggerSatBurst = () => {
         const success = satelliteMeshGateway.triggerSatelliteBurst();
         if (success) {
@@ -46,10 +41,8 @@ export function CbrnSatelliteModal() {
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "#050812", color: "#FFF",
-            display: "flex", flexDirection: "column",
             fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header */}
@@ -65,10 +58,10 @@ export function CbrnSatelliteModal() {
                             TELEMETRÍA CBRN & ENLACE SATELITAL LEO
                             <span style={{
                                 fontSize: "0.55rem", fontWeight: 800, letterSpacing: "0.08em",
-                                background: "rgba(255, 179, 0, 0.18)", color: "#FFB300",
-                                border: "1px solid rgba(255, 179, 0, 0.4)",
+                                background: "rgba(0, 230, 118, 0.18)", color: "#00E676",
+                                border: "1px solid rgba(0, 230, 118, 0.4)",
                                 borderRadius: "3px", padding: "1px 5px"
-                            }}>⚙ SIMULACIÓN ORBITAL</span>
+                            }}>📡 TELEMETRÍA EN VIVO</span>
                         </div>
                         <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
                             Dosimetría Nuclear y Pasarela Espacial DTN Store-and-Forward
@@ -176,19 +169,19 @@ export function CbrnSatelliteModal() {
                             </div>
                         </div>
 
-                        {/* Test Calibration Rates */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                            <div style={{ fontSize: "0.7rem", color: "#AAA", fontWeight: 800 }}>CALIBRACIÓN / PRUEBA DE SENSORES:</div>
-                            <div style={{ display: "flex", gap: "6px" }}>
-                                <button onClick={() => handleSimulateDose(0.12)} style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(0,230,118,0.15)", border: "1px solid #00E676", color: "#00E676", fontSize: "0.72rem", cursor: "pointer" }}>
-                                    Fondo (0.12)
-                                </button>
-                                <button onClick={() => handleSimulateDose(5.50)} style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(255,179,0,0.15)", border: "1px solid #FFB300", color: "#FFB300", fontSize: "0.72rem", cursor: "pointer" }}>
-                                    Elevado (5.5)
-                                </button>
-                                <button onClick={() => handleSimulateDose(65.0)} style={{ flex: 1, padding: "8px", borderRadius: "8px", background: "rgba(232,33,58,0.15)", border: "1px solid #FF3355", color: "#FF3355", fontSize: "0.72rem", cursor: "pointer" }}>
-                                    Hazmat (65.0)
-                                </button>
+                        {/* Sensor State Banner */}
+                        <div style={{
+                            padding: "10px 14px",
+                            background: "rgba(0, 230, 118, 0.06)",
+                            border: "1px solid rgba(0, 230, 118, 0.25)",
+                            borderRadius: "10px",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px"
+                        }}>
+                            <span style={{ fontSize: "1.1rem" }}>📷</span>
+                            <div style={{ fontSize: "0.70rem", color: "#DDD", lineHeight: 1.3 }}>
+                                <strong style={{ color: "#00E676" }}>Sensor CMOS Activo:</strong> Detección fotónica de radiación ionizante por análisis de ruido en matriz de píxeles.
                             </div>
                         </div>
                     </div>

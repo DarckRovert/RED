@@ -194,18 +194,6 @@ export class RdfTriangulationEngine {
         return fix;
     }
 
-    /**
-     * Simula un ejercicio de Foxhunting con 3 marcaciones
-     */
-    public simulateSampleFoxhunt(baseLat: number = 4.6097, baseLon: number = -74.0817) {
-        this.clearBearings();
-
-        // 3 posiciones de observación alrededor de un objetivo ficticio
-        this.addBearing(baseLat - 0.002, baseLon - 0.003, 42, -68);
-        this.addBearing(baseLat + 0.003, baseLon - 0.002, 130, -72);
-        this.addBearing(baseLat - 0.001, baseLon + 0.004, 290, -64);
-    }
-
     public getState(): { lobs: LineOfBearing[]; lastFix: RdfTargetFix | null } {
         return {
             lobs: this.lobs,

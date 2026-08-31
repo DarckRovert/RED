@@ -41,17 +41,20 @@ export function TacticalFoxhuntModal() {
         toast.success(`🎯 Marcación LOB añadida: ${lob.bearingDeg}°`);
     };
 
-    const handleSimulateFoxhunt = () => {
-        rdfTriangulation.simulateSampleFoxhunt();
-        toast.error("🦊 ¡OBJETIVO TRIANGULADO! Coordenadas fijadas");
+    const handleTriangulate = () => {
+        const fix = rdfTriangulation.triangulateTarget();
+        if (fix) {
+            toast.success(`🎯 Objetivo fijado con ${fix.lobsUsed} marcaciones LOB`);
+        } else {
+            toast.info("Se requieren al menos 2 marcaciones LOB para triangular");
+        }
     };
 
     return (
-        <div style={{
-            position: "fixed", inset: 0, zIndex: 1100,
+        <div className="modal-viewport-adaptive" style={{
             background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
-            color: "#FFFFFF", display: "flex", flexDirection: "column",
-            fontFamily: "JetBrains Mono, monospace", overflow: "hidden"
+            color: "#FFFFFF",
+            fontFamily: "JetBrains Mono, monospace"
         }}>
             {/* Header Táctico */}
             <header style={{
@@ -93,14 +96,14 @@ export function TacticalFoxhuntModal() {
 
                 <div style={{ display: "flex", gap: "6px" }}>
                     <button
-                        onClick={handleSimulateFoxhunt}
+                        onClick={handleTriangulate}
                         style={{
                             padding: "6px 12px", borderRadius: "10px",
-                            background: "rgba(255, 51, 85, 0.15)", border: "1px solid rgba(255, 51, 85, 0.4)",
-                            color: "#FF3355", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer"
+                            background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.4)",
+                            color: "#00E5FF", fontSize: "0.74rem", fontWeight: 900, cursor: "pointer"
                         }}
                     >
-                        🎯 SIMULAR CAZA
+                        🎯 TRIANGULAR
                     </button>
                 </div>
             </header>

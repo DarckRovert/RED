@@ -1601,3 +1601,42 @@ body.mode-defcon-survival {
 .leaflet-tile {
   filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(120%) !important;
 }
+
+/* ── Modal Viewport Adaptive System (Moto G22 / Lenovo Tablet / PC) ─────────── */
+
+/* Móvil: pantalla completa con safe-areas correctas */
+.modal-viewport-adaptive {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  width: 100%;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Tablet/PC: el modal vive DENTRO del workspace-pane, sin invadir el sidebar */
+@media (min-width: 768px) {
+  .modal-viewport-adaptive {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    width: 100%;
+    height: 100%;
+    flex: 1;
+  }
+}
+
+/* StatusHeader compact mode para pantallas < 380px */
+@media (max-width: 380px) {
+  .status-label-truncate {
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .status-text-hide-compact {
+    display: none !important;
+  }
+}

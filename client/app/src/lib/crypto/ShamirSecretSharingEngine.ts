@@ -57,8 +57,14 @@ export class ShamirSecretSharingEngine {
             if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
                 cryptoObj.getRandomValues(coeffs.subarray(1));
             } else {
-                for (let c = 1; c < k; c++) {
-                    coeffs[c] = Math.floor(Math.random() * 256);
+                try {
+                    const { randomFillSync } = require('crypto');
+                    randomFillSync(coeffs.subarray(1));
+                } catch {
+                    const gCrypto = (globalThis as any)?.crypto;
+                    if (gCrypto && typeof gCrypto.getRandomValues === 'function') {
+                        gCrypto.getRandomValues(coeffs.subarray(1));
+                    }
                 }
             }
 

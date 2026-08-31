@@ -41,7 +41,7 @@ Accede a la documentación técnica y operativa completa del proyecto:
 
 En situaciones de emergencia o denegación de red, las aplicaciones tradicionales de mensajería (WhatsApp, Telegram, Signal) fallan al depender de servidores centrales en la nube y torres de telefonía celular. **RED** rompe esta dependencia convirtiendo cada dispositivo en un **nodo de red mesh independiente** capaz de cifrar, enrutar y entregar mensajes a través de radios de hardware locales y enlazar globalmente cuando exista un puente de red.
 
-| Característica | Aplicaciones Tradicionales | RED v76.0.0 |
+| Característica | Aplicaciones Tradicionales | RED v77.0.0 |
 |---|---|---|
 | **Interfaz & UX** | Saturada y con menús dispersos | **Minimalista Táctica: 8 Hubs Consolidados + Dock Fijo de 5 Pilares** |
 | **Infraestructura** | Requiere servidores en la nube y 4G/5G | **100% Descentralizado / Zero-Server** |
@@ -115,7 +115,7 @@ graph TD
 <a id="autenticacion-biometrica"></a>
 ## 🔐 3. Autenticación Biométrica Universal & Seguridad Zero-Trust
 
-RED v75.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
+RED v77.0.0 incorpora un guardián de hardware que vincula el chip de seguridad del dispositivo a la base de datos `sled`:
 
 1. **Soporte Biométrico Completo:**
    - **Android Nativo:** Sensor de huella dactilar, reconocimiento facial 3D/IR, escáner de iris y credenciales de dispositivo mediante `BiometricPrompt` (`USE_BIOMETRIC` + `USE_FINGERPRINT`).

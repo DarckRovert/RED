@@ -90,7 +90,7 @@ export class SlottedGossipEngine {
 
         // Si hay densidad de vecinos (> 2), se aplica Slotted Backoff estocástico
         if (neighborDensity > 2) {
-            const backoff = dynamicMinBackoff + Math.floor(Math.random() * (dynamicMaxBackoff - dynamicMinBackoff));
+            const backoff = dynamicMinBackoff + Math.floor(Math.random() * Math.max(1, dynamicMaxBackoff - dynamicMinBackoff + 1));
             await new Promise(resolve => setTimeout(resolve, backoff));
 
             // Verificar si durante la espera otros nodos ya retransmitieron
