@@ -517,5 +517,91 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     details: "Establece las reglas de autorización estricta: ninguna transmisión de datos es aceptada sin verificación previa de identidad y confirmación humana explícita.",
     latency: "< 10ms",
     encryption: "Zero-Trust Engine"
+  },
+
+  // 8. Interoperabilidad & Táctica de Vanguardia (7)
+  {
+    id: "cursorOnTarget",
+    name: "Interoperabilidad ATAK CoT",
+    category: "Interoperabilidad & Táctica",
+    icon: "🎯",
+    summary: "Motor XML Cursor-on-Target (CoT v2.0) y simbología militar OTAN MIL-STD-2525D.",
+    badge: "DoD / ATAK CoT",
+    techStack: "CursorOnTargetEngine / XML v2.0",
+    details: "Serializa y analiza tramas CoT para interoperar sin fricción con terminales ATAK, CivTAK y WinTAK sobre mallas locales y enlaces LoRa de largo alcance con Blue-Force Tracking.",
+    latency: "< 15ms",
+    encryption: "CoT Signed XML / TLS"
+  },
+  {
+    id: "loraMeshtasticBridge",
+    name: "Puente LoRa Meshtastic",
+    category: "Interoperabilidad & Táctica",
+    icon: "📻",
+    summary: "Adaptador físico Semtech SX1262 / ESP32 con encuadre 0x94 C3 y Voz Vocoder.",
+    badge: "Semtech SX1262",
+    techStack: "WebSerial / BLE SPP / Port 64 Voice",
+    details: "Puente Plug & Play con módulos Heltec V3, T-Beam y RAK Wireless. Permite enviar ráfagas de voz comprimida a 1.2 kbps en puerto 64 y tramas de malla PQC en puerto 65.",
+    latency: "< 120ms",
+    encryption: "Port 65 PQC Encapsulation"
+  },
+  {
+    id: "cbrnRadiationCmos",
+    name: "Detector Radiológico CMOS",
+    category: "Interoperabilidad & Táctica",
+    icon: "☢️",
+    summary: "Detección de radiación ionizante (rayos gamma y partículas beta) en el sensor de cámara.",
+    badge: "CBRN Sensor",
+    techStack: "Canvas Pixel Noise / Poisson Math",
+    details: "Mide el flujo de partículas de alta energía que impactan la matriz de silicio CMOS de la cámara con la lente bloqueada, estimando la tasa de dosis ambiental en microsieverts por hora (µSv/h).",
+    latency: "< 100ms",
+    encryption: "Local Hardware Telemetry"
+  },
+  {
+    id: "opticalRppgTriage",
+    name: "Triaje Óptico START & rPPG",
+    category: "Interoperabilidad & Táctica",
+    icon: "💓",
+    summary: "Fotopletismografía remota sin contacto para frecuencia cardíaca y triaje START masivo.",
+    badge: "Optical rPPG",
+    techStack: "Green Channel FFT / START Algorithm",
+    details: "Detecta micro-variaciones en la absorción de luz en los capilares faciales para estimar el pulso cardíaco en segundos y clasificar víctimas de emergencia según el protocolo START.",
+    latency: "< 250ms",
+    encryption: "On-Device Biometrics"
+  },
+  {
+    id: "ballistics4Dof",
+    name: "Calculador Balístico 4DOF",
+    category: "Interoperabilidad & Táctica",
+    icon: "🎯",
+    summary: "Cálculo de trayectorias balísticas con arrastre G1/G7, cota barométrica y viento cruzado.",
+    badge: "4DOF Physics",
+    techStack: "Runge-Kutta RK4 / Atmospheric Math",
+    details: "Solucionador de tiro de precisión que compensa caída de proyectil, deriva por viento, efecto Coriolis y densidad del aire barométrica para operaciones de rescate y seguridad perimetral.",
+    latency: "< 5ms",
+    encryption: "Air-Gapped Math"
+  },
+  {
+    id: "soundMeshAcoustic",
+    name: "Módem Acústico SoundMesh",
+    category: "Interoperabilidad & Táctica",
+    icon: "🔊",
+    summary: "Transmisión de datos por ultrasonido (18.5–20.5 kHz) para aislamiento electromagnético.",
+    badge: "Air-Gap Ultrasonic",
+    techStack: "WebAudio API / FSK Modulation",
+    details: "Modula paquetes binarios en tonos acústicos inaudibles para transferir claves y coordenadas entre dispositivos cercanos sin emitir señales de radiofrecuencia detectables.",
+    latency: "< 350ms",
+    encryption: "SoundMesh ChaCha20"
+  },
+  {
+    id: "depinPaymentRails",
+    name: "DePIN Rails & Sovereign Apps",
+    category: "Interoperabilidad & Táctica",
+    icon: "⚡",
+    summary: "Pasarela multi-riel (Polygon, Lightning, PayPal, Vouchers) y micro-apps descentralizadas.",
+    badge: "DePIN SDK",
+    techStack: "RedSDKBridge / Sandboxed IFrames",
+    details: "Entorno de ejecución aislado para mini-aplicaciones comunitarias (Bazaar, MeshWiki, Juegos P2P) con pagos multi-riel y recompensas automáticas Proof-of-Relay para nodos repetidores.",
+    latency: "< 20ms",
+    encryption: "Capability-based Sandboxing"
   }
 ];

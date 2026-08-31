@@ -28,8 +28,9 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
         { id: "scenarios", label: "Escenarios B2B/B2G" },
         { id: "calculator", label: "Calculadora Ahorro" },
         { id: "bento", label: "Pilares" },
+        { id: "matrix-comparison", label: "Benchmark" },
         { id: "live-mesh-demo", label: "Malla en Vivo" },
-        { id: "modules", label: "Módulos (42)" },
+        { id: "modules", label: "Módulos (49)" },
         { id: "download", label: "Descarga" },
         { id: "faq", label: "FAQ & Legal" },
     ];
@@ -102,11 +103,15 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
           </div>
           <div style={{ color: "#64748B" }}>|</div>
           <div>
-            <span style={{ color: "#94A3B8" }}>NODOS:</span> <span style={{ color: "#00F0FF", fontWeight: 700 }}>{telemetryNodes}</span>
+            <span style={{ color: "#94A3B8" }}>TESTS:</span> <span style={{ color: "#00FF88", fontWeight: 700 }}>248/248 PASS</span>
           </div>
           <div style={{ color: "#64748B" }}>|</div>
           <div>
-            <span style={{ color: "#94A3B8" }}>PQC ÉPOCA:</span> <span style={{ color: "#B026FF", fontWeight: 700 }}>#{cryptoEpoch}</span>
+            <span style={{ color: "#94A3B8" }}>VOCODER:</span> <span style={{ color: "#00E5FF", fontWeight: 700 }}>1.2 kbps</span>
+          </div>
+          <div style={{ color: "#64748B" }}>|</div>
+          <div>
+            <span style={{ color: "#94A3B8" }}>PQC FIPS:</span> <span style={{ color: "#B026FF", fontWeight: 700 }}>203/204</span>
           </div>
           <div style={{ color: "#64748B" }}>|</div>
           <div>

@@ -48,13 +48,13 @@ export const LandingModuleCatalog: React.FC<LandingModuleCatalogProps> = ({ onEn
                 letterSpacing: "1px"
               }}
             >
-              SUITE OPERATIVA COMPLETA • 42 MÓDULOS ACTIVOS
+              SUITE OPERATIVA COMPLETA • 49 MÓDULOS ACTIVOS
             </span>
             <h2 style={{ fontSize: "clamp(28px, 4vw, 40px)", fontWeight: 900, color: "#FFF", marginTop: "14px", marginBottom: "12px", letterSpacing: "-0.5px" }}>
               Catálogo de Módulos Tácticos & Resiliencia
             </h2>
             <p style={{ fontSize: "16px", color: "#94A3B8", maxWidth: "800px", margin: "0 auto", lineHeight: 1.6 }}>
-              Explora e inspecciona los 42 sistemas autónomos integrados en RED OS: comunicaciones de emergencia, criptografía post-cuántica, cartografía sin conexión y herramientas médicas de campo.
+              Explora e inspecciona los 49 sistemas autónomos integrados en RED OS: interoperabilidad ATAK CoT, puente LoRa Meshtastic con voz Vocoder, criptografía post-cuántica, cartografía sin conexión y sensores de silicio.
             </p>
           </div>
 

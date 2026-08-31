@@ -116,12 +116,21 @@ export const LandingHero: React.FC<LandingHeroProps> = ({
                     </div>
 
                     {/* Key Technical Badges */}
-                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                         <span style={{ padding: "6px 12px", borderRadius: "10px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 229, 255, 0.25)", color: "#00E5FF", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
                             📡 LORA 15-25 KM (US915 MTC)
                         </span>
                         <span style={{ padding: "6px 12px", borderRadius: "10px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 255, 136, 0.25)", color: "#00FF88", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
                             🛡️ NIST FIPS 203/204 PQC
+                        </span>
+                        <span style={{ padding: "6px 12px", borderRadius: "10px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255, 179, 0, 0.35)", color: "#FFB300", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                            🎯 ATAK CoT (MIL-STD-2525D)
+                        </span>
+                        <span style={{ padding: "6px 12px", borderRadius: "10px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 229, 255, 0.35)", color: "#00E5FF", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                            🎙️ VOZ LORA 1.2 KBPS
+                        </span>
+                        <span style={{ padding: "6px 12px", borderRadius: "10px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(0, 230, 118, 0.35)", color: "#00E676", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
+                            🧪 248/248 TESTS CERTIFICADOS
                         </span>
                         <span style={{ padding: "6px 12px", borderRadius: "10px", background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255, 51, 85, 0.25)", color: "#FF3355", fontSize: "11px", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>
                             🚫 CERO NUBE / CERO LOGS
