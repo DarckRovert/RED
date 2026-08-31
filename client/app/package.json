@@ -19,7 +19,9 @@
     "test:evolution": "node scripts/test-phase5-evolutionary-hardening.js",
     "test:chaos": "node scripts/test-phase6-chaos-mesh-stress.js",
     "test:miniapps": "node scripts/test-phase7-miniapps-payments.js",
-    "test:all": "node scripts/test-crypto-core.js && node scripts/test-phase1-sensors.js && node scripts/test-phase2-audio-comms.js && node scripts/test-phase3-vault-crypto.js && node scripts/test-phase4-depin-mesh.js && node scripts/test-phase5-evolutionary-hardening.js && node scripts/test-phase6-chaos-mesh-stress.js && node scripts/test-phase7-miniapps-payments.js",
+    "test:cot": "node scripts/test-phase8-cot-meshtastic.js",
+    "test:phase8": "node scripts/test-phase8-cot-meshtastic.js",
+    "test:all": "node scripts/test-crypto-core.js && node scripts/test-phase1-sensors.js && node scripts/test-phase2-audio-comms.js && node scripts/test-phase3-vault-crypto.js && node scripts/test-phase4-depin-mesh.js && node scripts/test-phase5-evolutionary-hardening.js && node scripts/test-phase6-chaos-mesh-stress.js && node scripts/test-phase7-miniapps-payments.js && node scripts/test-phase8-cot-meshtastic.js",
     "postinstall": "node scripts/copy-wasm.js",
     "copy-wasm": "node scripts/copy-wasm.js"
   },

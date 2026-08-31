@@ -5,3 +5,4 @@ export * from './MilStd2525Engine';
 export * from './SitrepEngine';
 export * from './TacticalBallisticsEngine';
 export * from './TacticalTcccEngine';
+export * from './CursorOnTargetEngine';

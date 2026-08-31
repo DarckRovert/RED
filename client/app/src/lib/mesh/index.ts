@@ -18,3 +18,4 @@ export * from './SatelliteMeshGatewayEngine';
 export * from './SlottedGossipEngine';
 export * from './TacticalMicroBurstEngine';
 export * from './useSquadCallMesh';
+export * from './LoRaMeshtasticBridge';
