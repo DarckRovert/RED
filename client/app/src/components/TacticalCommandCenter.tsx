@@ -104,6 +104,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
             },
             {
+                id: 'groups',
+                action: 'groups',
+                icon: '👥',
+                title: 'Escuadrones P2P & Grupos',
+                subtitle: 'Salas tácticas cerradas con cifrado de grupo SenderKeys y rotación.',
+                badge: 'SQUAD',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
                 id: 'socialFeed',
                 action: 'socialFeed',
                 icon: '🌍',
@@ -147,11 +157,21 @@ export const TacticalCommandCenter: React.FC = () => {
                 id: 'loraTransceiver',
                 action: 'loraTransceiver',
                 icon: '📻',
-                title: 'Transceptor LoRa RF',
-                subtitle: 'Radio de largo alcance (25km) via Web Serial API o WebBluetooth. Sin Internet.',
+                title: 'Transceptor LoRa RF 25km',
+                subtitle: 'Radio de largo alcance (25km) Semtech SX1262 / ESP32. Sin Internet.',
                 badge: 'LORA 915MHz',
                 badgeColor: '#FFB300',
                 accentGlow: 'rgba(255, 179, 0, 0.2)'
+            },
+            {
+                id: 'acousticWarfare',
+                action: 'acousticWarfare',
+                icon: '🔊',
+                title: 'Guerra Acústica & Scrambler',
+                subtitle: 'Emisión de pulsos ultrasónicos y contramedidas acústicas de perímetro.',
+                badge: 'ULTRASONIDO',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             }
         ],
         nav: [
@@ -196,6 +216,36 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
+                id: 'celestialPdr',
+                action: 'celestialPdr',
+                icon: '✨',
+                title: 'Navegación Celeste J2000 & PDR',
+                subtitle: 'Orientación astronómica por efemérides solares/estelares sin satélites.',
+                badge: 'CELESTIAL',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
+            },
+            {
+                id: 'sonarSeismic',
+                action: 'sonarSeismic',
+                icon: '🦇',
+                title: 'Ecosonda ToF & Sismógrafo',
+                subtitle: 'Sondeo de cavidades por ultrasonido y detección de vibraciones TDoA.',
+                badge: 'SONAR/SEISMIC',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'tacticalFoxhunt',
+                action: 'tacticalFoxhunt',
+                icon: '🦊',
+                title: 'Radiogoniometría RDF Foxhunt',
+                subtitle: 'Triangulación de balizas y emisores de radio clandestinos.',
+                badge: 'RDF HUNT',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
+            },
+            {
                 id: 'shakePair',
                 action: 'shakePair',
                 icon: '📳',
@@ -228,6 +278,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(255, 51, 85, 0.25)'
             },
             {
+                id: 'tcccBallistics',
+                action: 'tcccBallistics',
+                icon: '🎯',
+                title: 'Triage TCCC & Balística 4-DOF',
+                subtitle: 'Protocolo MARCH-PAWS y calculador de tiro balístico RK4 en campo.',
+                badge: 'TCCC / 4-DOF',
+                badgeColor: '#FF3355',
+                accentGlow: 'rgba(255, 51, 85, 0.25)'
+            },
+            {
                 id: 'survivalBeacon',
                 action: 'survivalBeacon',
                 icon: '🚨',
@@ -248,6 +308,36 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
             {
+                id: 'atmosphericSafety',
+                action: 'atmosphericSafety',
+                icon: '💨',
+                title: 'Seguridad Atmosférica & AQI',
+                subtitle: 'Monitoreo de calidad de aire, índice óptico de polución y radiación solar.',
+                badge: 'AQI SENSOR',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'vitalResources',
+                action: 'vitalResources',
+                icon: '💧',
+                title: 'Recursos Vitales H2O & Batería',
+                subtitle: 'Gestión táctica de reservas de agua, raciones y balance energético.',
+                badge: 'LOGÍSTICA',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'cbrnSatellite',
+                action: 'cbrnSatellite',
+                icon: '☢️',
+                title: 'Detector Radiológico & Satélite',
+                subtitle: 'Detección gamma en sensor CMOS y pasarela de satélites LEO (Iridium).',
+                badge: 'CBRN SENSOR',
+                badgeColor: '#FF9100',
+                accentGlow: 'rgba(255, 145, 0, 0.25)'
+            },
+            {
                 id: 'amber',
                 action: 'amber',
                 icon: '🟠',
@@ -256,6 +346,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'AMBER RESCUE',
                 badgeColor: '#FF9100',
                 accentGlow: 'rgba(255, 145, 0, 0.2)'
+            },
+            {
+                id: 'zkBarterSubsurface',
+                action: 'zkBarterSubsurface',
+                icon: '⚖️',
+                title: 'Trueque ZK & Rescate Sub-Estructural',
+                subtitle: 'Intercambio de recursos en conocimiento cero y geolocalización de atrapados.',
+                badge: 'ZK-BARTER',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
             }
         ],
         security: [
@@ -290,6 +390,56 @@ export const TacticalCommandCenter: React.FC = () => {
                 accentGlow: 'rgba(255, 51, 85, 0.2)'
             },
             {
+                id: 'c4isrEmpDrill',
+                action: 'c4isrEmpDrill',
+                icon: '⚡',
+                title: 'Matriz C4ISR & Drill EMP',
+                subtitle: 'Simulación de pulso electromagnético y procedimientos de recuperación.',
+                badge: 'EMP DRILL',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
+            },
+            {
+                id: 'tacticalVisionScan',
+                action: 'tacticalVisionScan',
+                icon: '👁️',
+                title: 'Visión Táctica Edge AI & UAV',
+                subtitle: 'Detección visual de drones, siluetas térmicas y fuego sin nube.',
+                badge: 'EDGE AI',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'airGapStego',
+                action: 'airGapStego',
+                icon: '📷',
+                title: 'Esteganografía Air-Gap QR',
+                subtitle: 'Transferencia óptica aislada de cargas cifradas mediante secuencias QR animadas.',
+                badge: 'AIR-GAP',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'stegoVault',
+                action: 'stegoVault',
+                icon: '🖼️',
+                title: 'Bóveda Esteganográfica LSB',
+                subtitle: 'Ocultación de mensajes y documentos dentro de los bits de imágenes PNG/JPG.',
+                badge: 'STEGO LSB',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
+            },
+            {
+                id: 'shamirRecovery',
+                action: 'shamirRecovery',
+                icon: '🔑',
+                title: 'Respaldo Shamir SSS (3-de-5)',
+                subtitle: 'División criptográfica del secreto en fragmentos distribuidos entre aliados.',
+                badge: 'SHAMIR SSS',
+                badgeColor: '#B388FF',
+                accentGlow: 'rgba(179, 136, 255, 0.2)'
+            },
+            {
                 id: 'blackout',
                 action: 'blackout',
                 icon: '⚡',
@@ -318,6 +468,16 @@ export const TacticalCommandCenter: React.FC = () => {
                 badge: 'STEALTH PIN',
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'guardian',
+                action: 'guardian',
+                icon: '🛡️',
+                title: 'Guardián IA & Firewall',
+                subtitle: 'Análisis heurístico de paquetes y protección anti-inyección en tiempo real.',
+                badge: 'ZERO-TRUST',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
             }
         ],
         economy: [
@@ -325,7 +485,7 @@ export const TacticalCommandCenter: React.FC = () => {
                 id: 'commercialHub',
                 action: 'commercialHub',
                 icon: '⚡',
-                title: 'Hub Comercial & Trueque P2P',
+                title: 'Hub Comercial & Recompensas',
                 subtitle: 'Vales firmados con Ed25519 y mercado offline en conocimiento cero.',
                 badge: 'ZK-BARTER',
                 badgeColor: '#00E676',
@@ -338,6 +498,26 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'RED Pay (Pagos Malla P2P)',
                 subtitle: 'Transferencias de crédito seguras entre pares sin conexión a bancos.',
                 badge: 'VALES P2P',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'web3Vault',
+                action: 'web3Vault',
+                icon: '🦊',
+                title: 'Bóveda Web3 & MetaMask',
+                subtitle: 'Gestión de claves EVM (Polygon, Ethereum, Arbitrum) y firma offline.',
+                badge: 'WEB3 EVM',
+                badgeColor: '#FFB300',
+                accentGlow: 'rgba(255, 179, 0, 0.2)'
+            },
+            {
+                id: 'explorer',
+                action: 'explorer',
+                icon: '⛓️',
+                title: 'Explorador Blockchain PoS',
+                subtitle: 'Libro mayor distribuido, validadores y trazabilidad de bloques.',
+                badge: 'LEDGER',
                 badgeColor: '#00E5FF',
                 accentGlow: 'rgba(0, 229, 255, 0.2)'
             },
@@ -378,6 +558,26 @@ export const TacticalCommandCenter: React.FC = () => {
                 title: 'Diagnóstico & Salud del Sistema',
                 subtitle: 'Métricas de CPU, memoria, almacenamiento y estado de la batería.',
                 badge: 'DIAGNÓSTICO',
+                badgeColor: '#00E676',
+                accentGlow: 'rgba(0, 230, 118, 0.2)'
+            },
+            {
+                id: 'nodeLogs',
+                action: 'nodeLogs',
+                icon: '📋',
+                title: 'Logs del Nodo Rust SSE',
+                subtitle: 'Registro de eventos de bajo nivel, paquetes reenviados y estado de red.',
+                badge: 'RUST SSE',
+                badgeColor: '#00E5FF',
+                accentGlow: 'rgba(0, 229, 255, 0.2)'
+            },
+            {
+                id: 'webCompanionLink',
+                action: 'webCompanionLink',
+                icon: '💻',
+                title: 'Vincular con PC (Web Companion)',
+                subtitle: 'Sincronización segura de sesión y mensajes con la versión de escritorio.',
+                badge: 'LINK PC',
                 badgeColor: '#00E676',
                 accentGlow: 'rgba(0, 230, 118, 0.2)'
             }

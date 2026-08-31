@@ -270,6 +270,16 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
         </div>
 
         <div
+          onClick={() => onOpenTool("commandCenter")}
+          className="card-tactical-interactive"
+          style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, rgba(0,229,255,0.18) 0%, rgba(179,136,255,0.12) 100%)", border: "1.5px solid rgba(0,229,255,0.45)", gridColumn: "1 / -1" }}
+        >
+          <span style={{ fontSize: "2rem" }}>⚡</span>
+          <span style={{ fontSize: "1rem", fontWeight: 900, color: "#FFF" }}>CENTRO DE COMANDO C4ISR</span>
+          <span style={{ fontSize: "0.74rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }}>MATRIZ DE 57 MÓDULOS OPERATIVOS & SENSORES</span>
+        </div>
+
+        <div
           onClick={() => onOpenTool("updater")}
           className="card-tactical-interactive"
           style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}

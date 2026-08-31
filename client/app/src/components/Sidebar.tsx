@@ -148,12 +148,12 @@ export default function Sidebar() {
         return deduped;
     }, [contacts, searchQuery]);
 
-    // 8 Hubs Tácticos Consolidados (Arquitectura Minimalista)
+    // 8 Hubs Tácticos Consolidados (Arquitectura Exhaustiva y Minimalista)
     const tacticalHubs: TacticalHubItem[] = [
         {
             id: "comms",
             title: "1. Mensajería & Escuadrones",
-            desc: "Chats P2P Double Ratchet, SenderKeys, Canales #, Feed Social y Pizarra",
+            desc: "Chats P2P Double Ratchet, SenderKeys, Canales #, Feed Social, LoRa y Pizarra",
             icon: "💬",
             primaryAction: "channels",
             badge: "P2P E2E",
@@ -165,12 +165,13 @@ export default function Sidebar() {
                 { icon: "🎨", label: "Pizarra Táctica", action: "canvas" },
                 { icon: "📺", label: "Transmisión en Vivo", action: "liveStream" },
                 { icon: "📢", label: "Difusión Privada", action: "broadcast" },
+                { icon: "📻", label: "Transceptor LoRa 25km", action: "loraTransceiver" },
             ]
         },
         {
             id: "radar",
             title: "2. Radar, Mapa & Navegación",
-            desc: "Radar Multicapa (BLE/LoRa/WiFi), Mapa Offline GPS y Brújula Táctica",
+            desc: "Radar Multicapa (BLE/LoRa/WiFi), Mapa Offline GPS, Brújulas, Celeste J2000 y Foxhunt",
             icon: "🧭",
             primaryAction: "radar",
             badge: "OFF-GRID",
@@ -179,14 +180,18 @@ export default function Sidebar() {
                 { icon: "📡", label: "Radar Swarm BLE/WiFi", action: "radar" },
                 { icon: "🗺️", label: "Mapa GPS Offline", action: "nodemap" },
                 { icon: "🧭", label: "Brújula Topográfica", action: "offGridCompass" },
+                { icon: "🎯", label: "Brújula P2P (Tracking)", action: "p2pCompass" },
+                { icon: "✨", label: "Navegación Celeste J2000 & PDR", action: "celestialPdr" },
+                { icon: "🦇", label: "Ecosonda ToF & Sismógrafo", action: "sonarSeismic" },
+                { icon: "🦊", label: "Radiogoniometría RDF Foxhunt", action: "tacticalFoxhunt" },
                 { icon: "📳", label: "Shake & Pair (Acelerómetro)", action: "shakePair" },
-                { icon: "📻", label: "Transceptor LoRa 25km", action: "loraTransceiver" },
+                { icon: "🌊", label: "Ola Proximidad Ultrasónica", action: "proximityWave" },
             ]
         },
         {
             id: "voice",
-            title: "3. Radio Vocal & SoundMesh",
-            desc: "Walkie PTT códec LPC militar 1.2kbps, SoundMesh 18-20kHz y Espectro RF",
+            title: "3. Radio Vocal & Guerra Acústica",
+            desc: "Walkie PTT LPC 1.2kbps, Llamadas WebRTC, Espectro RF y Ondas Binaurales",
             icon: "🎙️",
             primaryAction: "walkie",
             badge: "1.2 KBPS",
@@ -195,25 +200,28 @@ export default function Sidebar() {
                 { icon: "🎙️", label: "Walkie-Talkie Push-To-Talk", action: "walkie" },
                 { icon: "📞", label: "Llamadas Cifradas WebRTC", action: "call" },
                 { icon: "🛡️", label: "Analizador Espectro RF", action: "rfSpectrum" },
+                { icon: "🔊", label: "Guerra Acústica & Scrambler", action: "acousticWarfare" },
             ]
         },
         {
             id: "ai",
-            title: "4. Copiloto IA & RAG INT8",
-            desc: "Inferencia Local WASM Qwen/SmolLM, RAG Vectorial <5ms y Firewall Guardian",
+            title: "4. Copiloto IA, Visión & Operaciones",
+            desc: "Inferencia WASM Qwen/SmolLM, Visión Táctica UAV, Matriz C4ISR y Guardián",
             icon: "🧠",
             primaryAction: "aiCopilot",
             badge: "100% OFFLINE",
             badgeColor: "#00E5FF",
             tools: [
                 { icon: "🤖", label: "Copiloto Táctico", action: "aiCopilot" },
+                { icon: "👁️", label: "Visión Táctica Edge AI & UAV", action: "tacticalVisionScan" },
+                { icon: "⚡", label: "Matriz C4ISR & Drill EMP", action: "c4isrEmpDrill" },
                 { icon: "🛡️", label: "Guardián IA Firewall", action: "guardian" },
             ]
         },
         {
             id: "vault",
             title: "5. Bóveda PQC, Identidad & Vales",
-            desc: "Firmas NIST ML-DSA-65, Kyber ML-KEM-768, Vales P2P y Respaldo Shamir SSS",
+            desc: "Firmas NIST ML-DSA-65, Kyber ML-KEM-768, Trueque ZK, Web3 y Respaldo Shamir",
             icon: "🪪",
             primaryAction: "idVault",
             badge: "PQC FIPS-203",
@@ -221,11 +229,13 @@ export default function Sidebar() {
             tools: [
                 { icon: "🪪", label: "Perfil & Identidad DID", action: "idVault" },
                 { icon: "💳", label: "Vales & Pagos P2P", action: "p2pPay" },
+                { icon: "⚖️", label: "Trueque ZK & Rescate", action: "zkBarterSubsurface" },
                 { icon: "⚡", label: "Hub Comercial & Recompensas", action: "commercialHub" },
                 { icon: "🔐", label: "Bóveda Criptográfica PQC", action: "crypto" },
                 { icon: "🦊", label: "Bóveda Web3 & MetaMask", action: "web3Vault" },
                 { icon: "⛓️", label: "Explorador Blockchain", action: "explorer" },
                 { icon: "🖼️", label: "Bóveda Esteganográfica", action: "stegoVault" },
+                { icon: "📷", label: "Esteganografía Air-Gap QR", action: "airGapStego" },
                 { icon: "🔑", label: "Respaldo Shamir (SSS)", action: "shamirRecovery" },
                 { icon: "💾", label: "Copias de Seguridad Cifradas", action: "backup" },
                 { icon: "💻", label: "Vincular con PC (Web Companion)", action: "webCompanionLink" },
@@ -233,14 +243,15 @@ export default function Sidebar() {
         },
         {
             id: "defense",
-            title: "6. Ciberdefensa & Escudo DEFCON",
-            desc: "Matriz DEFCON 1-5, Simulador Apagón, Dead-Man's Switch y Modo Calculadora",
+            title: "6. Ciberdefensa, CBRN & Escudo DEFCON",
+            desc: "Matriz DEFCON 1-5, Detector Radiológico CMOS, Satélite LEO, Apagón y DMS",
             icon: "🛡️",
             primaryAction: "globalShield",
             badge: "DEFCON 1",
             badgeColor: "#FF3355",
             tools: [
                 { icon: "🛡️", label: "Escudo Global DEFCON", action: "globalShield" },
+                { icon: "☢️", label: "Detector Radiológico & Satélite", action: "cbrnSatellite" },
                 { icon: "⚡", label: "Simulador de Apagón", action: "blackout" },
                 { icon: "💀", label: "Hombre Muerto (DMS)", action: "dms" },
                 { icon: "🛡️", label: "Centro de Seguridad Zero-Trust", action: "security" },
@@ -250,23 +261,26 @@ export default function Sidebar() {
         },
         {
             id: "emergency",
-            title: "7. Defensa Civil, Triage & SOS",
-            desc: "Triaje START/MARCH-PAWS, Baliza SOS multimodal, Alerta AMBER y Barómetro",
+            title: "7. Defensa Civil, Triage & Supervivencia",
+            desc: "Triaje START/TCCC, Balística 4-DOF, SOS multimodal, Alerta AMBER y Barómetro",
             icon: "🚨",
             primaryAction: "vitalScan",
             badge: "SOS ACTIVE",
             badgeColor: "#FF3355",
             tools: [
                 { icon: "🫀", label: "Signos Vitales & Triage START", action: "vitalScan" },
+                { icon: "🎯", label: "Triage TCCC & Balística 4-DOF", action: "tcccBallistics" },
                 { icon: "🚨", label: "Baliza SOS Ultrasonido", action: "survivalBeacon" },
                 { icon: "🟠", label: "Alerta AMBER P2P", action: "amber" },
                 { icon: "🌤️", label: "Barómetro & Alertas CAP", action: "weather" },
+                { icon: "💨", label: "Seguridad Atmosférica AQI", action: "atmosphericSafety" },
+                { icon: "💧", label: "Recursos Vitales H2O & Batería", action: "vitalResources" },
             ]
         },
         {
             id: "system",
             title: "8. Mini-Apps Soberanas & Sistema",
-            desc: "App Store P2P, Hyper-Browser Mesh, Diagnóstico de Salud y Ajustes Soberanos",
+            desc: "App Store P2P, Hyper-Browser Mesh, Centro C4ISR, Diagnóstico y Ajustes",
             icon: "🏪",
             primaryAction: "appStore",
             badge: "SANDBOX",
@@ -274,6 +288,7 @@ export default function Sidebar() {
             tools: [
                 { icon: "🛒", label: "App Store P2P (Mini-Apps)", action: "appStore" },
                 { icon: "🌐", label: "RED Hyper-Browser Mesh", action: "hyperBrowser" },
+                { icon: "⚡", label: "Centro de Comando C4ISR", action: "commandCenter" },
                 { icon: "📊", label: "Diagnóstico de Salud", action: "health" },
                 { icon: "📋", label: "Logs del Nodo Rust SSE", action: "nodeLogs" },
                 { icon: "⚙️", label: "Ajustes del Sistema", action: "settings" },
