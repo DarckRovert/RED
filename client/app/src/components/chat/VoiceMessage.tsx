@@ -7,6 +7,37 @@ import { LocalAIEngine } from "../../lib/localAiEngine";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
 
+// ── Global Voice Note Coordinator (Single active audio & speed sync) ──────────
+class VoiceCoordinator {
+    private activeMsgId: string | null = null;
+    private listeners: Map<string, () => void> = new Map();
+
+    public register(msgId: string, pauseFn: () => void) {
+        this.listeners.set(msgId, pauseFn);
+    }
+
+    public unregister(msgId: string) {
+        this.listeners.delete(msgId);
+    }
+
+    public notifyPlaying(msgId: string) {
+        if (this.activeMsgId && this.activeMsgId !== msgId) {
+            const prevPause = this.listeners.get(this.activeMsgId);
+            if (prevPause) {
+                try { prevPause(); } catch {}
+            }
+        }
+        this.activeMsgId = msgId;
+    }
+
+    public notifyStopped(msgId: string) {
+        if (this.activeMsgId === msgId) {
+            this.activeMsgId = null;
+        }
+    }
+}
+const globalVoiceCoordinator = new VoiceCoordinator();
+
 interface VoiceMessageProps {
     msg: MessageItem;
     isMine: boolean;
@@ -19,11 +50,33 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const [playing, setPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState<number>((msg.duration_ms || 0) / 1000);
-    const [playbackRate, setPlaybackRate] = useState<number>(1.0);
+    
+    // Load persistent playback speed preference
+    const [playbackRate, setPlaybackRate] = useState<number>(() => {
+        if (typeof window === "undefined") return 1.0;
+        try {
+            const saved = localStorage.getItem("red_voice_speed");
+            return saved ? (parseFloat(saved) || 1.0) : 1.0;
+        } catch { return 1.0; }
+    });
+    
     const [isDragging, setIsDragging] = useState(false);
     const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>("");
     const [transcription, setTranscription] = useState<string | null>(msg.transcription || null);
     const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+
+    // Register with global coordinator to prevent overlapping playback
+    useEffect(() => {
+        globalVoiceCoordinator.register(msg.id, () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                setPlaying(false);
+            }
+        });
+        return () => {
+            globalVoiceCoordinator.unregister(msg.id);
+        };
+    }, [msg.id]);
 
     const getAudioDataUrl = (dataStr: string): string => {
         if (!dataStr) return "";
@@ -81,7 +134,9 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         if (playing) {
             a.pause();
             setPlaying(false);
+            globalVoiceCoordinator.notifyStopped(msg.id);
         } else {
+            globalVoiceCoordinator.notifyPlaying(msg.id);
             a.playbackRate = playbackRate;
             a.play().catch(e => console.warn("[VoiceMessage] Play error:", e));
             setPlaying(true);
@@ -92,6 +147,12 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         e.stopPropagation();
         const nextRate = playbackRate === 1.0 ? 1.5 : playbackRate === 1.5 ? 2.0 : 1.0;
         setPlaybackRate(nextRate);
+        try {
+            localStorage.setItem("red_voice_speed", nextRate.toString());
+        } catch {}
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+            try { navigator.vibrate(10); } catch {}
+        }
         if (audioRef.current) {
             audioRef.current.playbackRate = nextRate;
         }

@@ -76,7 +76,7 @@ function getFileIcon(name?: string, mime?: string): string {
     return "📁";
 }
 
-function renderFormattedContent(content: string) {
+function renderFormattedContent(content: string, searchQuery?: string) {
     if (!content) return null;
     const urlRegex = /(https?:\/\/[^\s]+)/g;
     const parts = content.split(urlRegex);
@@ -113,6 +113,29 @@ function renderFormattedContent(content: string) {
                         {sub}
                     </span>
                 );
+            }
+            if (searchQuery && searchQuery.trim().length > 0 && sub.toLowerCase().includes(searchQuery.toLowerCase())) {
+                const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const searchParts = sub.split(new RegExp(`(${escaped})`, 'gi'));
+                return searchParts.map((sPart, k) => {
+                    if (sPart.toLowerCase() === searchQuery.toLowerCase()) {
+                        return (
+                            <mark
+                                key={`${i}-${j}-${k}`}
+                                style={{
+                                    background: "rgba(255, 214, 0, 0.45)",
+                                    color: "#FFFFFF",
+                                    borderRadius: "3px",
+                                    padding: "0 2px",
+                                    fontWeight: 700
+                                }}
+                            >
+                                {sPart}
+                            </mark>
+                        );
+                    }
+                    return sPart;
+                });
             }
             return sub;
         });
@@ -883,7 +906,7 @@ export const MessageBubble = memo(({
                             {/* Standard Text content — with URL & mention highlighting */}
                             {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
-                                    {renderFormattedContent(msg.content)}
+                                    {renderFormattedContent(msg.content, searchQuery)}
                                 </div>
                             )}
 

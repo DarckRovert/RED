@@ -135,6 +135,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }, 10);
     }, [setText]);
 
+    // Draft Persistence: Load draft on mount / peerHash change
+    const draftKey = peerHash ? `red_draft_${peerHash}` : null;
+
+    useEffect(() => {
+        if (!draftKey || typeof window === "undefined") return;
+        try {
+            const savedDraft = localStorage.getItem(draftKey);
+            if (savedDraft && !editingMsg && !text) {
+                setText(savedDraft);
+            }
+        } catch {}
+    }, [draftKey]);
+
+    // Save draft debounced on text change
+    useEffect(() => {
+        if (!draftKey || typeof window === "undefined" || editingMsg) return;
+        const timer = setTimeout(() => {
+            try {
+                if (text && text.trim().length > 0) {
+                    localStorage.setItem(draftKey, text);
+                } else {
+                    localStorage.removeItem(draftKey);
+                }
+            } catch {}
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [text, draftKey, editingMsg]);
+
     useEffect(() => {
         if (editingMsg) {
             setText(editingMsg.content || "");
@@ -155,15 +183,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     const onSend = useCallback(() => {
         if (!text.trim()) return;
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+            try { navigator.vibrate(12); } catch {}
+        }
         if (onSendMessage) onSendMessage(text.trim(), replyTo);
         else if (handleSend) handleSend();
         setText("");
         setMultiline(false);
+        if (draftKey && typeof window !== "undefined") {
+            try { localStorage.removeItem(draftKey); } catch {}
+        }
         if (setReplyTo) setReplyTo(null);
         if (setEditingMsg) setEditingMsg(null);
         const ta = textareaRef.current;
         if (ta) { ta.style.height = "auto"; ta.style.overflowY = "hidden"; }
-    }, [text, onSendMessage, handleSend, setText, replyTo, setReplyTo, setEditingMsg]);
+    }, [text, onSendMessage, handleSend, setText, replyTo, setReplyTo, setEditingMsg, draftKey]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }

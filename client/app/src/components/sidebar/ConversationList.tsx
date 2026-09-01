@@ -161,6 +161,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         else if (msgType === "video" || content?.startsWith("data:video")) snippet = prefix + "📹 Video";
                         else if (msgType === "location" || content?.includes("Ubicación Táctica")) snippet = prefix + "📍 Ubicación";
                         else if (msgType === "poll") snippet = prefix + "📊 Encuesta";
+                        else if (msgType === "document" || content?.startsWith("<?xml") || content?.startsWith("<") || content?.startsWith("data:application")) snippet = prefix + "📄 Documento";
                         else if (content && !content.startsWith("data:") && !content.startsWith("[")) {
                             // Block JSON signaling packets from appearing as conversation preview
                             let isSignalingJson = false;
@@ -193,6 +194,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                             }
                         }
                     }
+                    const savedDraft = typeof window !== 'undefined' ? (localStorage.getItem(`red_draft_${c.peer}`) || localStorage.getItem(`red_draft_${c.id}`)) : null;
+                    const hasDraft = Boolean(savedDraft && savedDraft.trim().length > 0);
+
                     const peerRecord = meshRouter.getPeerByAnyId(c.peer);
                     const isPeerOnline = !!peerRecord;
                     return (
@@ -245,8 +249,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                         {rawTs ? formatTime(rawTs) : ""}
                                     </div>
                                 </div>
-                                <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "2px" }}>
-                                    {snippet}
+                                <div style={{ fontSize: "0.78rem", color: hasDraft ? "var(--accent-amber, #FFB300)" : "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "2px" }}>
+                                    {hasDraft ? (
+                                        <span>
+                                            <strong style={{ color: "var(--accent-amber, #FFB300)" }}>✏️ Borrador: </strong>
+                                            {savedDraft!.trim().slice(0, 35)}
+                                        </span>
+                                    ) : snippet}
                                 </div>
                             </div>
                             {(c.unread_count || 0) > 0 && (
