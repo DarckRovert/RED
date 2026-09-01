@@ -435,13 +435,47 @@ class DtnStorage {
     }
   }
 
-  public remove(nonce: string): boolean {
+  public remove(nonceOrId: string): boolean {
+    if (!nonceOrId) return false;
+    const cleanTarget = nonceOrId.trim();
     const items = this.getItems();
     const initialLen = items.length;
-    const filtered = items.filter(it => it.id !== nonce);
+    const toRemove: string[] = [];
+
+    const filtered = items.filter(it => {
+      const matchExact = it.id === cleanTarget || it.packet.nonce === cleanTarget;
+      if (matchExact) {
+        toRemove.push(it.id);
+        return false;
+      }
+
+      // Check if target is a prefix/suffix of nonce (8+ chars)
+      if (cleanTarget.length >= 8) {
+        if (it.id.startsWith(cleanTarget) || cleanTarget.startsWith(it.id) ||
+            it.packet.nonce.startsWith(cleanTarget) || cleanTarget.startsWith(it.packet.nonce)) {
+          toRemove.push(it.id);
+          return false;
+        }
+      }
+
+      // Check if payloadHex matches JSON message id
+      if (it.packet.payloadHex) {
+        try {
+          const decoded = new TextDecoder().decode(this.hexToUint8(it.packet.payloadHex));
+          if (decoded.includes(cleanTarget)) {
+            toRemove.push(it.id);
+            return false;
+          }
+        } catch {}
+      }
+
+      return true;
+    });
+
     if (filtered.length !== initialLen) {
       this.saveItems(filtered);
-      this.removeItemFromDB(nonce);
+      toRemove.forEach(id => this.removeItemFromDB(id));
+      console.log(`[DtnStorage] ✅ Successfully purged ${toRemove.length} DTN packet(s) for target '${cleanTarget.slice(0, 8)}'`);
       return true;
     }
     return false;

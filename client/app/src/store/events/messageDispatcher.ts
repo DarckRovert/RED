@@ -1719,7 +1719,16 @@ export async function dispatchIncomingMessage(
                 )
             )
         );
-        const currentConv = get().conversations.find((c: any) => c && (c.id === activeConversationId || c.peer === activeConversationId));
+        const currentConv = get().conversations.find((c: any) => {
+            if (!c) return false;
+            const cId = (c.id || '').toLowerCase();
+            const cPeer = (c.peer || '').toLowerCase();
+            const activeId = (activeConversationId || '').toLowerCase();
+            return cId === activeId || cPeer === activeId ||
+                   (activeId.length >= 8 && (cId.startsWith(activeId.slice(0, 8)) || cPeer.startsWith(activeId.slice(0, 8)))) ||
+                   (cPeer.length >= 8 && activeId.startsWith(cPeer.slice(0, 8)));
+        });
+
         const itemRecipient = (item as any).recipient as string | undefined;
         const canonicalSender = meshRouter.getCanonicalId(item.sender) || item.sender;
         const canonicalRecipient = itemRecipient ? (meshRouter.getCanonicalId(itemRecipient) || itemRecipient) : undefined;
@@ -1732,18 +1741,26 @@ export async function dispatchIncomingMessage(
         );
         const groupTargetId = isGroup ? ((item as any).group_id || item.conversation_id) : null;
 
-        const isCurrentChat =
-            (groupTargetId && activeConversationId === groupTargetId) ||
-            activeConversationId === item.conversation_id ||
+        const normActiveConv = (activeConversationId || '').toLowerCase().trim();
+        const normSender = (item.sender || '').toLowerCase().trim();
+        const normCanonicalSender = (canonicalSender || '').toLowerCase().trim();
+        const normRecipient = (itemRecipient || '').toLowerCase().trim();
+        const normCanonicalRecipient = (canonicalRecipient || '').toLowerCase().trim();
+        const normConvId = (item.conversation_id || '').toLowerCase().trim();
+
+        const isCurrentChat = Boolean(
+            (groupTargetId && normActiveConv === groupTargetId.toLowerCase()) ||
+            (normConvId && normActiveConv === normConvId) ||
+            (normActiveConv && normSender && (normActiveConv === normSender || (normSender.length >= 8 && normActiveConv.includes(normSender.slice(0, 8))) || (normActiveConv.length >= 8 && normSender.startsWith(normActiveConv.slice(0, 8))))) ||
+            (normActiveConv && normCanonicalSender && (normActiveConv === normCanonicalSender || (normCanonicalSender.length >= 8 && normActiveConv.includes(normCanonicalSender.slice(0, 8))) || (normActiveConv.length >= 8 && normCanonicalSender.startsWith(normActiveConv.slice(0, 8))))) ||
             (currentConv && (
-                currentConv.peer === item.sender ||
-                currentConv.peer === canonicalSender ||
-                (itemRecipient && (currentConv.peer === itemRecipient || currentConv.peer === canonicalRecipient)) ||
-                currentConv.id === item.conversation_id ||
-                (groupTargetId && (currentConv.id === groupTargetId || currentConv.peer === groupTargetId))
-            )) ||
-            (canonicalSender.length >= 8 && canonicalSender !== myHash && activeConversationId?.includes(canonicalSender.substring(0, 8))) ||
-            (canonicalRecipient && canonicalRecipient.length >= 8 && canonicalRecipient !== myHash && activeConversationId?.includes(canonicalRecipient.substring(0, 8)));
+                currentConv.peer?.toLowerCase() === normSender ||
+                currentConv.peer?.toLowerCase() === normCanonicalSender ||
+                (normRecipient && (currentConv.peer?.toLowerCase() === normRecipient || currentConv.peer?.toLowerCase() === normCanonicalRecipient)) ||
+                currentConv.id?.toLowerCase() === normConvId ||
+                (groupTargetId && (currentConv.id?.toLowerCase() === groupTargetId.toLowerCase() || currentConv.peer?.toLowerCase() === groupTargetId.toLowerCase()))
+            ))
+        );
 
         if (isCurrentChat) {
             const rawTs = (item as any).timestamp;
@@ -1783,11 +1800,19 @@ export async function dispatchIncomingMessage(
                 // 1. Exact ID match (same packet delivered or updated)
                 if (m.id && item.id && m.id === item.id) return true;
 
-                // 2. Pending optimistic local message replacement (replaces optimistic bubble with confirmed server/mesh message)
+                // 2. Exact nonce match
+                if ((m as any).nonce && (item as any).nonce && (m as any).nonce === (item as any).nonce) return true;
+
+                // 3. Pending optimistic local message replacement (replaces optimistic bubble with confirmed server/mesh message)
                 if (m.is_mine && normalizedItem.is_mine && (m.status === 'Pending' || m.id.startsWith('temp_') || m.id.startsWith('msg_pending_'))) {
                     if (m.content && item.content && m.content === item.content) return true;
                     if (m.media_data && item.media_data && (m.media_data === item.media_data || m.media_data.length === item.media_data.length)) return true;
                     if (m.msg_type === item.msg_type && timeDiff < 60) return true;
+                }
+
+                // 4. Duplicate incoming bubble protection (same sender, same content within 15s)
+                if (!m.is_mine && !normalizedItem.is_mine && (m.sender || '').toLowerCase() === (item.sender || '').toLowerCase()) {
+                    if (m.content && item.content && m.content === item.content && timeDiff < 15) return true;
                 }
 
                 return false;
@@ -1809,7 +1834,8 @@ export async function dispatchIncomingMessage(
                 if (!normalizedItem.is_mine && !isSyncedBatch) {
                     TacticalAudioEngine.playMessageReceived();
                     if (item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {
-                        meshRouter.sendDeliveryAck(item.sender, item.id || 'ack_nonce', item.id).catch(() => {});
+                        const ackTargetNonce = (data as any)?.nonce || (item as any)?.nonce || (item as any)?.packet_nonce || item.id || 'ack_nonce';
+                        meshRouter.sendDeliveryAck(item.sender, ackTargetNonce, item.id).catch(() => {});
                     }
                 }
             }

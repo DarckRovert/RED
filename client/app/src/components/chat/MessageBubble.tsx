@@ -264,16 +264,25 @@ export const MessageBubble = memo(({
         return () => clearInterval(interval);
     }, [msg.id, msg.expires_at, msg.ttl, msg.timestamp, isDeleted]);
 
-    // Resolve Image from IndexedDB if stored as red_vault://
-    const rawImageCandidate = msg.media_data || (
-        msg.content?.startsWith("data:image") ? msg.content : (
-            msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
-                msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : (
-                    msg.content?.startsWith("red_vault://") ? msg.content : null
+    // Media Type Detectors
+    const isAudioMessage = msg.msg_type === "voice" || msg.msg_type === "audio" || msg.media_data?.startsWith("data:audio") || msg.content?.startsWith("data:audio");
+    const isVideoMessage = msg.msg_type === "video" || msg.media_data?.startsWith("data:video") || msg.content?.startsWith("data:video");
+    const isImageMessage = !isAudioMessage && !isVideoMessage && (
+        msg.msg_type === "image" ||
+        (msg.media_data?.startsWith("data:image") || msg.media_data?.startsWith("/9j/") || msg.media_data?.startsWith("iVBORw0") || (msg.msg_type === "image" && msg.media_data?.startsWith("red_vault://"))) ||
+        (msg.content?.startsWith("data:image") || msg.content?.startsWith("/9j/") || msg.content?.startsWith("iVBORw0"))
+    );
+
+    // Resolve Image from IndexedDB strictly when message is an image
+    const rawImageCandidate = isImageMessage ? (
+        (msg.media_data && !msg.media_data.startsWith("data:audio") && !msg.media_data.startsWith("data:video")) ? msg.media_data : (
+            msg.content?.startsWith("data:image") ? msg.content : (
+                msg.content?.startsWith("/9j/") ? `data:image/jpeg;base64,${msg.content}` : (
+                    msg.content?.startsWith("iVBORw0") ? `data:image/png;base64,${msg.content}` : null
                 )
             )
         )
-    );
+    ) : null;
 
     useEffect(() => {
         let active = true;
@@ -287,6 +296,8 @@ export const MessageBubble = memo(({
             } else {
                 setResolvedImage(rawImageCandidate);
             }
+        } else {
+            setResolvedImage("");
         }
         return () => { active = false; };
     }, [rawImageCandidate]);
@@ -707,7 +718,7 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Media Image */}
-                            {!isPaymentMessage && (msg.msg_type === "image" || Boolean(resolvedImage)) && (
+                            {!isPaymentMessage && isImageMessage && Boolean(resolvedImage) && (
                                 <div
                                     className="chat-media-container"
                                     style={{ cursor: "pointer", margin: "2px 0" }}

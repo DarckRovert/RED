@@ -1146,6 +1146,9 @@ class MeshRouter {
             dtnStorage.remove(ackNonce);
             console.log(`[MeshRouter] ✅ Received DELIVERY_ACK for nonce ${ackNonce.slice(0, 8)} — cleared from DTN storage`);
           }
+          if (ackMessageId && ackMessageId !== ackNonce) {
+            dtnStorage.remove(ackMessageId);
+          }
 
           // Update local conversation store message status to 'Delivered'
           if (typeof window !== 'undefined' && (ackMessageId || ackNonce)) {
