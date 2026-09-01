@@ -69,14 +69,25 @@ export class VectorKnowledgeStore {
             }
         });
 
-        // 4. Dispersión FNV-1a Hash de 32/64 bits sobre las dimensiones
+        // 4. Dispersión MurmurHash3 de 32 bits sobre las dimensiones (Feature Hashing Trick)
         for (const token of tokens) {
-            let fnv = 0x811c9dc5;
+            let h = 0x9747b28c ^ token.length;
             for (let i = 0; i < token.length; i++) {
-                fnv ^= token.charCodeAt(i);
-                fnv = Math.imul(fnv, 0x01000193);
+                let k = token.charCodeAt(i);
+                k = Math.imul(k, 0xcc9e2d51);
+                k = (k << 15) | (k >>> 17);
+                k = Math.imul(k, 0x1b873593);
+                h ^= k;
+                h = (h << 13) | (h >>> 19);
+                h = Math.imul(h, 5) + 0xe6546b64;
             }
-            const dim = (fnv >>> 0) % dimensions;
+            h ^= h >>> 16;
+            h = Math.imul(h, 0x85ebca6b);
+            h ^= h >>> 13;
+            h = Math.imul(h, 0xc2b2ae35);
+            h ^= h >>> 16;
+
+            const dim = (h >>> 0) % dimensions;
             vec[dim] = Math.max(-128, Math.min(127, vec[dim] + 28));
         }
 
