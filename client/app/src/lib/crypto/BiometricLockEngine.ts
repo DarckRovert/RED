@@ -256,8 +256,8 @@ export class BiometricLockEngine {
                     }) as PublicKeyCredential;
 
                     if (assertion) {
-                        // Decrypt master PIN from WebAuthn salt
-                        const decryptedPin = this.decryptLocalPin(encPin, credId);
+                        // Decrypt master PIN from WebAuthn credential salt using real AES-256-GCM + PBKDF2
+                        const decryptedPin = await this.decryptLocalPin(encPin, credId);
                         if (decryptedPin) {
                             this.unlock();
                             return { success: true, masterPin: decryptedPin };
@@ -307,7 +307,7 @@ export class BiometricLockEngine {
 
             if (credential && credential.rawId) {
                 const credIdBase64 = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
-                const encPin = this.encryptLocalPin(masterPin, credIdBase64);
+                const encPin = await this.encryptLocalPin(masterPin, credIdBase64);
                 localStorage.setItem(STORAGE_WEBAUTHN_CRED_KEY, credIdBase64);
                 localStorage.setItem(STORAGE_WEBAUTHN_ENC_PIN, encPin);
                 this.setEnabled(true);
@@ -320,69 +320,100 @@ export class BiometricLockEngine {
         return false;
     }
 
-    private static encryptLocalPin(pin: string, salt: string): string {
+    private static async encryptLocalPin(pin: string, salt: string): Promise<string> {
         try {
-            // Derivación de clave con salt expandido y cifrado AES-GCM-like
-            const encoded = new TextEncoder().encode(pin);
-            const saltBytes = new TextEncoder().encode(salt);
+            const encoder = new TextEncoder();
+            const pinBytes = encoder.encode(pin);
+            const saltBytes = encoder.encode(salt);
             const iv = new Uint8Array(12);
-            if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-                crypto.getRandomValues(iv);
-            } else {
-                for (let i = 0; i < 12; i++) iv[i] = (Date.now() ^ (i * 31)) & 0xFF;
+            if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+                window.crypto.getRandomValues(iv);
             }
 
-            // Derivar keystream de 256 bits con FNV-1a extendido
-            const keyStream = new Uint8Array(encoded.length);
-            for (let i = 0; i < encoded.length; i++) {
-                let h = 0x811c9dc5;
-                for (let s = 0; s < saltBytes.length; s++) {
-                    h = (h ^ saltBytes[s] ^ iv[s % iv.length] ^ (i * 0x01000193)) * 1664525 + 1013904223;
-                }
-                keyStream[i] = (h >>> 16) & 0xFF;
-            }
+            const keyMaterial = await window.crypto.subtle.importKey(
+                "raw",
+                saltBytes,
+                { name: "PBKDF2" },
+                false,
+                ["deriveKey"]
+            );
 
-            const cipher = new Uint8Array(iv.length + encoded.length);
-            cipher.set(iv, 0);
-            for (let i = 0; i < encoded.length; i++) {
-                cipher[iv.length + i] = encoded[i] ^ keyStream[i];
-            }
+            const aesKey = await window.crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: iv,
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["encrypt"]
+            );
 
-            return btoa(String.fromCharCode(...cipher));
+            const ciphertextBuffer = await window.crypto.subtle.encrypt(
+                { name: "AES-GCM", iv },
+                aesKey,
+                pinBytes
+            );
+
+            const ciphertext = new Uint8Array(ciphertextBuffer);
+            const combined = new Uint8Array(iv.length + ciphertext.length);
+            combined.set(iv, 0);
+            combined.set(ciphertext, iv.length);
+
+            return btoa(String.fromCharCode(...combined));
         } catch {
             return btoa(pin);
         }
     }
 
-    private static decryptLocalPin(encBase64: string, salt: string): string | null {
+    private static async decryptLocalPin(encBase64: string, salt: string): Promise<string | null> {
         try {
             const raw = Uint8Array.from(atob(encBase64), c => c.charCodeAt(0));
             if (raw.length <= 12) {
-                // Posible PIN legado en Base64 plano
                 return atob(encBase64);
             }
 
             const iv = raw.slice(0, 12);
-            const cipher = raw.slice(12);
-            const saltBytes = new TextEncoder().encode(salt);
+            const ciphertext = raw.slice(12);
+            const encoder = new TextEncoder();
+            const saltBytes = encoder.encode(salt);
 
-            const keyStream = new Uint8Array(cipher.length);
-            for (let i = 0; i < cipher.length; i++) {
-                let h = 0x811c9dc5;
-                for (let s = 0; s < saltBytes.length; s++) {
-                    h = (h ^ saltBytes[s] ^ iv[s % iv.length] ^ (i * 0x01000193)) * 1664525 + 1013904223;
-                }
-                keyStream[i] = (h >>> 16) & 0xFF;
-            }
+            const keyMaterial = await window.crypto.subtle.importKey(
+                "raw",
+                saltBytes,
+                { name: "PBKDF2" },
+                false,
+                ["deriveKey"]
+            );
 
-            const decrypted = new Uint8Array(cipher.length);
-            for (let i = 0; i < cipher.length; i++) {
-                decrypted[i] = cipher[i] ^ keyStream[i];
-            }
+            const aesKey = await window.crypto.subtle.deriveKey(
+                {
+                    name: "PBKDF2",
+                    salt: iv,
+                    iterations: 100000,
+                    hash: "SHA-256"
+                },
+                keyMaterial,
+                { name: "AES-GCM", length: 256 },
+                false,
+                ["decrypt"]
+            );
 
-            return new TextDecoder().decode(decrypted);
+            const decryptedBuffer = await window.crypto.subtle.decrypt(
+                { name: "AES-GCM", iv },
+                aesKey,
+                ciphertext
+            );
+
+            return new TextDecoder().decode(decryptedBuffer);
         } catch {
-            return null;
+            try {
+                return atob(encBase64);
+            } catch {
+                return null;
+            }
         }
     }
 

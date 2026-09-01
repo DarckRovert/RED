@@ -6,6 +6,8 @@
  * and defeating simple chi-square spatial steganalysis.
  */
 
+import { sha256 } from '@noble/hashes/sha2.js';
+
 export interface StegoExtractResult {
     success: boolean;
     hidden_text?: string;
@@ -34,15 +36,11 @@ export class StegoEngine {
     }
 
     /**
-     * Genera una semilla de 32 bits a partir de un password o clave
+     * Genera una semilla criptográfica de 32 bits a partir de un password mediante SHA-256
      */
     private static hashSeed(password: string): number {
-        let hash = 0x811c9dc5;
-        for (let i = 0; i < password.length; i++) {
-            hash ^= password.charCodeAt(i);
-            hash = Math.imul(hash, 0x01000193);
-        }
-        return hash >>> 0;
+        const bytes = sha256(new TextEncoder().encode(password));
+        return ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
     }
 
     private static gcd(a: number, b: number): number {

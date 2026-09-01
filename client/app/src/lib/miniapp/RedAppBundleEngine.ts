@@ -7,6 +7,7 @@
  */
 
 import { RedAppManifest, RedAppBundle } from './RedSDKTypes';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 export class RedAppBundleEngine {
     /**
@@ -184,16 +185,16 @@ export class RedAppBundleEngine {
      * Packages an app into a single `.redapp` JSON string with integrity checksum
      */
     public static exportBundle(manifest: RedAppManifest, files: Record<string, string>): string {
-        // Calcular hash de integridad FNV-1a / SHA-256 de todos los archivos
-        let checksumAcc = 0x811c9dc5;
+        // Calcular hash de integridad criptográfico SHA-256 de todos los archivos
         const sortedKeys = Object.keys(files).sort();
+        const encoder = new TextEncoder();
+        let concatenated = '';
         for (const k of sortedKeys) {
-            const content = files[k] || '';
-            for (let i = 0; i < content.length; i++) {
-                checksumAcc = ((checksumAcc ^ content.charCodeAt(i)) * 0x01000193) >>> 0;
-            }
+            concatenated += `${k}:${files[k] || ''}\n`;
         }
-        const integrityDigest = `sha256_${(checksumAcc >>> 0).toString(16).padStart(8, '0')}_${sortedKeys.length}`;
+        const hashBytes = sha256(encoder.encode(concatenated));
+        const hashHex = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+        const integrityDigest = `sha256_${hashHex}_${sortedKeys.length}`;
 
         const bundle: RedAppBundle = {
             manifest: {
@@ -203,8 +204,7 @@ export class RedAppBundleEngine {
             } as any,
             files,
         };
-        const serialized = JSON.stringify(bundle);
-        return serialized;
+        return JSON.stringify(bundle);
     }
 
     /**
@@ -219,15 +219,15 @@ export class RedAppBundleEngine {
 
             // Validar checksum si está presente
             if ((parsed.manifest as any).integrityDigest) {
-                let checksumAcc = 0x811c9dc5;
                 const sortedKeys = Object.keys(parsed.files).sort();
+                const encoder = new TextEncoder();
+                let concatenated = '';
                 for (const k of sortedKeys) {
-                    const content = parsed.files[k] || '';
-                    for (let i = 0; i < content.length; i++) {
-                        checksumAcc = ((checksumAcc ^ content.charCodeAt(i)) * 0x01000193) >>> 0;
-                    }
+                    concatenated += `${k}:${parsed.files[k] || ''}\n`;
                 }
-                const expectedDigest = `sha256_${(checksumAcc >>> 0).toString(16).padStart(8, '0')}_${sortedKeys.length}`;
+                const hashBytes = sha256(encoder.encode(concatenated));
+                const hashHex = Array.from(hashBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+                const expectedDigest = `sha256_${hashHex}_${sortedKeys.length}`;
                 if ((parsed.manifest as any).integrityDigest !== expectedDigest) {
                     console.warn(`[RedAppBundleEngine] Advertencia de integridad en paquete ${parsed.manifest.id}`);
                 }

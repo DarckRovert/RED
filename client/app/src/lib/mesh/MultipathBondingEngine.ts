@@ -68,14 +68,26 @@ export class MultipathBondingEngine {
         return MultipathBondingEngine.instance;
     }
 
-    /** Computes a fast 32-bit FNV-1a checksum of the shard payload */
-    public static computeChecksum(data: Uint8Array): string {
-        let fnv = 0x811c9dc5;
-        for (let i = 0; i < data.length; i++) {
-            fnv ^= data[i];
-            fnv = Math.imul(fnv, 0x01000193);
+    // Precomputed IEEE 802.3 CRC-32 lookup table (polynomial 0xEDB88320)
+    private static CRC32_TABLE: Uint32Array = (() => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let k = 0; k < 8; k++) {
+                c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            }
+            table[i] = c >>> 0;
         }
-        return (fnv >>> 0).toString(16).padStart(8, '0');
+        return table;
+    })();
+
+    /** Computes an authentic IEEE 802.3 standard 32-bit CRC checksum of the shard payload */
+    public static computeChecksum(data: Uint8Array): string {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < data.length; i++) {
+            crc = (crc >>> 8) ^ this.CRC32_TABLE[(crc ^ data[i]) & 0xFF];
+        }
+        return ((crc ^ 0xFFFFFFFF) >>> 0).toString(16).padStart(8, '0');
     }
 
     /**

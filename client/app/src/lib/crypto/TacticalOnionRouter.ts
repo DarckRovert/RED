@@ -1,3 +1,6 @@
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+
 /**
  * TacticalOnionRouter.ts — RED Sovereign Mesh OS (v66.0.0)
  * 
@@ -60,40 +63,39 @@ export class TacticalOnionRouter {
             return null;
         }
 
-        // Fisher-Yates CSPRNG shuffle para selección insesgada y criptográficamente segura
+        // Deterministic, secure node selection: Fisher-Yates with WebCrypto entropy
         const shuffled = [...pool];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const randomBuf = new Uint32Array(1);
-            if (typeof window !== 'undefined' && window.crypto) {
-                window.crypto.getRandomValues(randomBuf);
-            } else {
-                // Node.js / server-side fallback — use crypto module, never Math.random()
-                try {
-                    const { randomFillSync } = require('crypto');
-                    randomFillSync(randomBuf);
-                } catch {
-                    randomBuf[0] = (Date.now() ^ (i * 0x9e3779b9)) >>> 0;
-                }
+        const randomValues = new Uint32Array(shuffled.length);
+        const cryptoObj = (typeof window !== 'undefined' && window.crypto) || (globalThis as any)?.crypto;
+
+        if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+            cryptoObj.getRandomValues(randomValues);
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = randomValues[i] % (i + 1);
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
             }
-            const j = randomBuf[0] % (i + 1);
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
 
-        // Circuit ID uses crypto.randomUUID when available for true CSPRNG uniqueness
-        const circuitId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-            ? `onion-${crypto.randomUUID()}`
-            : `onion-${Date.now()}-${Array.from(crypto.getRandomValues(new Uint8Array(4))).map(b => b.toString(16).padStart(2, '0')).join('')}`;
+        const entryDid = shuffled[0];
+        const middleDid = shuffled[1];
+        const exitDid = shuffled[2];
+
+        const circuitId = this.generateCircuitId();
 
         return {
             circuitId,
-            entryRelay: { relayDid: shuffled[0] },
-            middleRelay: { relayDid: shuffled[1] },
-            exitRelay: { relayDid: shuffled[2] },
+            entryRelay: { relayDid: entryDid },
+            middleRelay: { relayDid: middleDid },
+            exitRelay: { relayDid: exitDid },
             destinationDid,
-            createdAt: Date.now(),
+            createdAt: Date.now()
         };
     }
 
+    private generateCircuitId(): string {
+        const bytes = this.getRandomBytes(8);
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
 
     /**
      * Llena un buffer con bytes pseudoaleatorios criptográficamente seguros (CSPRNG)
@@ -109,9 +111,6 @@ export class TacticalOnionRouter {
             const nodeCrypto = require('crypto');
             return new Uint8Array(nodeCrypto.randomBytes(length));
         } catch {
-            for (let i = 0; i < length; i++) {
-                buf[i] = (Date.now() ^ (i * 0x9e3779b9)) & 0xFF;
-            }
             return buf;
         }
     }
@@ -124,39 +123,37 @@ export class TacticalOnionRouter {
     }
 
     /**
-     * Cifra un payload con un keystream criptográfico autenticado (Keystream derivado de SHA-256/HKDF + MAC)
+     * Cifra un payload con un keystream criptográfico autenticado (HMAC-SHA256 CTR + Encrypt-then-MAC)
      */
     private encryptLayer(data: Uint8Array, key: Uint8Array, iv: Uint8Array): Uint8Array {
-        // Generar keystream de longitud arbitraria mediante HMAC-SHA256 Counter Mode
         const out = new Uint8Array(data.length + 16); // +16 bytes para MAC de integridad
         const blockSize = 32;
-        let blockCount = Math.ceil(data.length / blockSize);
+        const blockCount = Math.ceil(data.length / blockSize);
         
-        let mac = 0x811c9dc5;
         let offset = 0;
-        for (let b = 0; b < blockCount; b++) {
-            // Derivación de bloque de keystream
-            const keyStreamBlock = new Uint8Array(blockSize);
-            let seed = (b * 0x01000193) ^ iv[b % iv.length];
-            for (let i = 0; i < blockSize; i++) {
-                seed = ((seed ^ key[i % key.length]) * 1664525 + 1013904223) >>> 0;
-                keyStreamBlock[i] = (seed >>> ((i % 4) * 8)) & 0xFF;
-            }
+        const counterBuf = new Uint8Array(iv.length + 4);
+        counterBuf.set(iv, 0);
 
+        for (let b = 0; b < blockCount; b++) {
+            counterBuf[iv.length] = (b >>> 24) & 0xFF;
+            counterBuf[iv.length + 1] = (b >>> 16) & 0xFF;
+            counterBuf[iv.length + 2] = (b >>> 8) & 0xFF;
+            counterBuf[iv.length + 3] = b & 0xFF;
+
+            const keyStreamBlock = hmac(sha256, key, counterBuf);
             const chunkLen = Math.min(blockSize, data.length - offset);
             for (let i = 0; i < chunkLen; i++) {
-                const encByte = data[offset + i] ^ keyStreamBlock[i];
-                out[offset + i] = encByte;
-                mac = ((mac ^ encByte) * 0x01000193) >>> 0;
+                out[offset + i] = data[offset + i] ^ keyStreamBlock[i];
             }
             offset += chunkLen;
         }
 
-        // Añadir MAC de integridad de 16 bytes al final
-        for (let i = 0; i < 16; i++) {
-            mac = ((mac ^ key[i % key.length] ^ iv[i % iv.length]) * 0x01000193) >>> 0;
-            out[data.length + i] = (mac >>> ((i % 4) * 8)) & 0xFF;
-        }
+        // Tag de integridad MAC mediante HMAC-SHA256 sobre (ciphertext || iv)
+        const macPayload = new Uint8Array(data.length + iv.length);
+        macPayload.set(out.subarray(0, data.length), 0);
+        macPayload.set(iv, data.length);
+        const fullMac = hmac(sha256, key, macPayload);
+        out.set(fullMac.subarray(0, 16), data.length);
 
         return out;
     }
@@ -167,36 +164,41 @@ export class TacticalOnionRouter {
     private decryptLayer(encData: Uint8Array, key: Uint8Array, iv: Uint8Array): Uint8Array | null {
         if (encData.length < 16) return null;
         const dataLen = encData.length - 16;
-        const out = new Uint8Array(dataLen);
-        const blockSize = 32;
-        let blockCount = Math.ceil(dataLen / blockSize);
-
-        let mac = 0x811c9dc5;
-        let offset = 0;
-        for (let b = 0; b < blockCount; b++) {
-            const keyStreamBlock = new Uint8Array(blockSize);
-            let seed = (b * 0x01000193) ^ iv[b % iv.length];
-            for (let i = 0; i < blockSize; i++) {
-                seed = ((seed ^ key[i % key.length]) * 1664525 + 1013904223) >>> 0;
-                keyStreamBlock[i] = (seed >>> ((i % 4) * 8)) & 0xFF;
-            }
-
-            const chunkLen = Math.min(blockSize, dataLen - offset);
-            for (let i = 0; i < chunkLen; i++) {
-                const encByte = encData[offset + i];
-                mac = ((mac ^ encByte) * 0x01000193) >>> 0;
-                out[offset + i] = encByte ^ keyStreamBlock[i];
-            }
-            offset += chunkLen;
+        
+        // 1. Validar MAC de autenticidad
+        const macPayload = new Uint8Array(dataLen + iv.length);
+        macPayload.set(encData.subarray(0, dataLen), 0);
+        macPayload.set(iv, dataLen);
+        const expectedMac = hmac(sha256, key, macPayload).subarray(0, 16);
+        
+        let diff = 0;
+        for (let i = 0; i < 16; i++) {
+            diff |= encData[dataLen + i] ^ expectedMac[i];
+        }
+        if (diff !== 0) {
+            return null; // Integridad o clave fallida
         }
 
-        // Validar MAC
-        for (let i = 0; i < 16; i++) {
-            mac = ((mac ^ key[i % key.length] ^ iv[i % iv.length]) * 0x01000193) >>> 0;
-            const expectedMacByte = (mac >>> ((i % 4) * 8)) & 0xFF;
-            if (encData[dataLen + i] !== expectedMacByte) {
-                return null; // Integridad fallida
+        // 2. Descifrar con HMAC-SHA256 CTR
+        const out = new Uint8Array(dataLen);
+        const blockSize = 32;
+        const blockCount = Math.ceil(dataLen / blockSize);
+        let offset = 0;
+        const counterBuf = new Uint8Array(iv.length + 4);
+        counterBuf.set(iv, 0);
+
+        for (let b = 0; b < blockCount; b++) {
+            counterBuf[iv.length] = (b >>> 24) & 0xFF;
+            counterBuf[iv.length + 1] = (b >>> 16) & 0xFF;
+            counterBuf[iv.length + 2] = (b >>> 8) & 0xFF;
+            counterBuf[iv.length + 3] = b & 0xFF;
+
+            const keyStreamBlock = hmac(sha256, key, counterBuf);
+            const chunkLen = Math.min(blockSize, dataLen - offset);
+            for (let i = 0; i < chunkLen; i++) {
+                out[offset + i] = encData[offset + i] ^ keyStreamBlock[i];
             }
+            offset += chunkLen;
         }
 
         return out;

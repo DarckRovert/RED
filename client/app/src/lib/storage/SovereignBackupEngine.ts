@@ -11,6 +11,7 @@
  */
 
 import { toast } from '../../components/Toast';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 // BIP-39 Standard 2048 English Wordlist (Compact first 256 for instant derivation / standard BIP39 mapping)
 const BIP39_WORDS = [
@@ -97,7 +98,7 @@ export class SovereignBackupEngine {
             }
         }
 
-        // Standard BIP-39 128-bit entropy + 4-bit checksum
+        // Standard BIP-39 128-bit entropy + 4-bit SHA-256 checksum
         // Bit manipulation to map 132 bits into 12 x 11-bit word indices
         const bits: boolean[] = [];
         for (let i = 0; i < 16; i++) {
@@ -106,11 +107,11 @@ export class SovereignBackupEngine {
             }
         }
 
-        // 4-bit checksum from simple folding of entropy bytes
-        let cs = 0;
-        for (let i = 0; i < 16; i++) cs ^= entropyBytes[i];
-        for (let b = 3; b >= 0; b--) {
-            bits.push((cs & (1 << b)) !== 0);
+        // Standard BIP-39: First 4 bits of SHA-256(entropy) as checksum
+        const hash = sha256(entropyBytes);
+        const checksumByte = hash[0];
+        for (let b = 7; b >= 4; b--) {
+            bits.push((checksumByte & (1 << b)) !== 0);
         }
 
         const words: string[] = [];
@@ -133,22 +134,10 @@ export class SovereignBackupEngine {
             throw new Error("La frase semilla debe contener al menos 12 palabras.");
         }
 
-        // Deterministic cryptographic key derivation from normalized mnemonic
+        // Deterministic cryptographic key derivation from normalized mnemonic via SHA-256
         const normalized = cleanWords.slice(0, 12).join(" ");
-        let h1 = 0x811c9dc5, h2 = 0x27d4eb2f, h3 = 0x5f356495, h4 = 0x1a8b3c4d;
-        for (let i = 0; i < normalized.length; i++) {
-            const ch = normalized.charCodeAt(i);
-            h1 = (h1 ^ ch) * 0x01000193;
-            h2 = (h2 ^ (ch << 3)) * 0x01000193;
-            h3 = (h3 ^ (ch << 5)) * 0x01000193;
-            h4 = (h4 ^ (ch << 7)) * 0x01000193;
-        }
-
-        const part1 = (h1 >>> 0).toString(16).padStart(8, "0");
-        const part2 = (h2 >>> 0).toString(16).padStart(8, "0");
-        const part3 = (h3 >>> 0).toString(16).padStart(8, "0");
-        const part4 = (h4 >>> 0).toString(16).padStart(8, "0");
-        const seedHex = `${part1}${part2}${part3}${part4}${part1}${part2}${part3}${part4}`;
+        const digestBytes = sha256(new TextEncoder().encode(`red_bip39_seed:${normalized}`));
+        const seedHex = Array.from(digestBytes).map(b => b.toString(16).padStart(2, "0")).join("");
 
         const finalHash = seedHex.substring(0, 32);
         const shortId = "red_" + finalHash.substring(0, 8);
