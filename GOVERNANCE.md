@@ -434,6 +434,15 @@ CMD ["red-node"]
 - ✅ Verificar que proceso se ejecuta con permisos correctos (NO root si no necesario)
 - ✅ Inicializar logging (no revelar paths ni IPs internas)
 
+### Regla 7.4: Soberanía de Despliegue Web y Resiliencia ante Fallos de CI (Local-First Deployment)
+**Independencia de Servicios Centralizados de CI/CD:**
+- 🛡️ **Principio de Auto-Suficiencia**: Ante bloqueos administrativos en GitHub (Billing issues/holds), límites de cuota de minutos de Actions o caídas de infraestructura cloud, el portal web y Web Companion (`https://darckrovert.github.io/RED/`) DEBE poder compilarse y publicarse directamente de forma local y determinista sin intervención de runners remotos.
+- 🚀 **Flujo de Despliegue Local Oficial**:
+  1. Compilar bundle estático optimizado: `npm run build:gh` (en `client/app/` con `NEXT_PUBLIC_BASE_PATH='/RED'`).
+  2. Generar artefactos estáticos requeridos: Copiar `out/index.html` a `out/404.html` (para soportar SPA client-side routing en GitHub Pages) e inyectar `out/.nojekyll` (para evitar omisión de carpetas `_next/`).
+  3. Publicar directamente en la rama `gh-pages`: `npx -y gh-pages -d out -b gh-pages` o ejecutando `scripts/deploy_gh_pages.ps1` / `scripts/deploy_web.bat` / `npm run deploy:gh`.
+- ❌ **Prohibición**: Queda prohibido dejar una release web desactualizada o bloqueada por depender exclusivamente de workflows remotos cuando el entorno local dispone de las herramientas de compilación y publicación directa.
+
 ---
 
 ## **NIVEL 8: DOCUMENTATION & COMPLIANCE**

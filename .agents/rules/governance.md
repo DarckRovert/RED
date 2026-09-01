@@ -39,3 +39,9 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
 6. **Nivel 6 - Automatización CI/CD**:
    - Todos los cambios deben pasar sin excepción los pipelines de `.github/workflows/` (`lint.yml`, `security.yml`, `build.yml`, `test.yml`, `build-android.yml`, `release.yml`).
 
+7. **Nivel 7 - Soberanía y Despliegue Web Determinista (Resiliencia CI/CD)**:
+   - **Independencia de Cloud Runners**: Ante retenciones administrativas de cuenta (Billing issues/holds), agotamiento de cuotas de minutos en GitHub Actions o indisponibilidad de la nube, el despliegue del portal web y cliente companion (`https://darckrovert.github.io/RED/`) NUNCA debe detenerse.
+   - **Comando Estándar de Despliegue Local Soberano**: Todo despliegue web soberano debe ejecutarse directamente mediante `npm run deploy:gh` en `client/app` o mediante el script `scripts/deploy_gh_pages.ps1` / `scripts/deploy_web.bat`.
+   - **Requisitos de Empaquetado Web**: La exportación estática de Next.js DEBE compilarse con `NEXT_PUBLIC_BASE_PATH='/RED'`, generar `out/404.html` (copia de `index.html` para enrutamiento SPA sin servidor) y crear `out/.nojekyll`, publicando directamente en la rama `gh-pages`.
+
+

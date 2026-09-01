@@ -9,6 +9,7 @@
     "build": "next build",
     "build:mobile": "node -e \"process.env.GITHUB_PAGES=''; process.env.NEXT_PUBLIC_BASE_PATH=''; require('child_process').execSync('next build', {stdio: 'inherit', env: {...process.env, GITHUB_PAGES: '', NEXT_PUBLIC_BASE_PATH: ''}});\"",
     "build:gh": "node -e \"process.env.GITHUB_PAGES='true'; process.env.NEXT_PUBLIC_BASE_PATH='/RED'; require('child_process').execSync('next build', {stdio: 'inherit', env: {...process.env, GITHUB_PAGES: 'true', NEXT_PUBLIC_BASE_PATH: '/RED'}});\"",
+    "deploy:gh": "node -e \"process.env.GITHUB_PAGES='true'; process.env.NEXT_PUBLIC_BASE_PATH='/RED'; const cp=require('child_process'); cp.execSync('next build', {stdio: 'inherit', env: {...process.env, GITHUB_PAGES: 'true', NEXT_PUBLIC_BASE_PATH: '/RED'}}); const fs=require('fs'); fs.copyFileSync('out/index.html', 'out/404.html'); fs.writeFileSync('out/.nojekyll', ''); cp.execSync('npx -y gh-pages -d out -b gh-pages', {stdio: 'inherit'});\"",
     "start": "next start",
     "lint": "eslint",
     "test:crypto": "node scripts/test-crypto-core.js",
