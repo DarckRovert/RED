@@ -773,6 +773,7 @@ export const it: I18nSchema = {
         add_story: "Pubblica Stato",
         recent_updates: "Aggiornamenti Recenti",
         no_stories: "Nessuna storia effimera nella mesh.",
+        no_stories_desc: "Gli stati e le storie effimere dei tuoi contatti mesh appariranno qui per 24 ore.",
         creator_title: "Crea Storia Effimera (24h)",
         mode_text: "Testo Tattico",
         mode_photo: "Foto / Immagine",

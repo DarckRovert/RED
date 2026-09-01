@@ -420,9 +420,9 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
     // ── Stories & Live Streaming actions ─────────────────────────────────────,
 
     publishStatus: async (content: string, media?: string | null, theme?: number) => {
-        const { contacts, conversations, identity } = get();
+        const { contacts, identity } = get();
         if (!identity) return;
-        const payload: Record<string, any> = { msg_type: 'status' };
+        const payload: Record<string, any> = { msg_type: 'status_packet' };
         if (media) payload.media_data = media;
         if (theme !== undefined) payload.theme = String(theme);
 
@@ -443,16 +443,15 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             try { localStorage.setItem('red_my_stories', JSON.stringify(updated)); } catch {}
         }
 
-        // Aggregate unique peer hashes from both contacts and active conversations
+        // Tactical Privacy: Broadcast exclusively to verified mutual contacts from address book
         const recipients = new Set<string>();
         for (const contact of contacts || []) {
-            if (contact?.identity_hash) recipients.add(contact.identity_hash);
-        }
-        for (const conv of conversations || []) {
-            if (conv?.peer) recipients.add(conv.peer);
+            if (contact?.identity_hash && (contact as any).verified !== false) {
+                recipients.add(contact.identity_hash);
+            }
         }
 
-        // Broadcast concurrently to all unique peers without blocking UI
+        // Broadcast concurrently to all verified contacts without blocking UI or polluting DMs
         const statusContent = content || 'Story';
         await Promise.allSettled(
             Array.from(recipients).map(async (peerHash) => {

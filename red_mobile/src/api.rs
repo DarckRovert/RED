@@ -345,12 +345,36 @@ fn map_message_to_item(m: &Message, is_mine: bool) -> MessageItem {
             item.msg_type = "group_invite".to_string();
             item.content = format!("Invitación al escuadrón: {}", group_name);
         }
+        MessageType::StatusPacket(data) => {
+            item.msg_type = "status_packet".to_string();
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(data) {
+                if let Some(c) = val.get("content").and_then(|v| v.as_str()) {
+                    item.content = c.to_string();
+                }
+                if let Some(m) = val.get("media_data").and_then(|v| v.as_str()) {
+                    item.media_data = Some(m.to_string());
+                }
+                if let Some(mime) = val.get("mime_type").and_then(|v| v.as_str()) {
+                    item.mime_type = Some(mime.to_string());
+                }
+            } else {
+                item.content = "[Status Packet]".to_string();
+            }
+        }
     }
     item
 }
 
 fn map_req_to_type(req: &SendMessageRequest) -> MessageType {
     let mut content = match req.msg_type.as_deref() {
+        Some("status") | Some("status_packet") => {
+            let payload = serde_json::json!({
+                "content": req.content,
+                "media_data": req.media_data,
+                "mime_type": req.mime_type,
+            });
+            MessageType::StatusPacket(serde_json::to_vec(&payload).unwrap_or_default())
+        },
         Some("webrtc_signal") => {
             MessageType::WebRTCSignal(req.content.clone())
         },

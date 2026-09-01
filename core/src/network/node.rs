@@ -811,7 +811,7 @@ impl Node {
                 }
             }
 
-            // Add message to conversation (Skip if it's purely a SocialPost, P2PVoucher, ProfileSync, ChannelHopCoordination, MedicalTriageReport, EmergencyBeacon, WebRTCSignal, or Contact handshake so we don't clutter the DMs)
+            // Add message to conversation (Skip if it's purely a SocialPost, P2PVoucher, ProfileSync, ChannelHopCoordination, MedicalTriageReport, EmergencyBeacon, WebRTCSignal, Contact handshake, or StatusPacket so we don't clutter the DMs)
             let is_hidden = matches!(
                 message.content,
                 MessageType::SocialPost(_)
@@ -825,6 +825,7 @@ impl Node {
                     | MessageType::WebRTCSignal(_)
                     | MessageType::ContactRequest(_)
                     | MessageType::ContactResponse(_)
+                    | MessageType::StatusPacket(_)
             );
             if !is_hidden {
                 if let Err(e) = s.add_message(message.clone()) {
@@ -945,8 +946,23 @@ impl Node {
     pub async fn send_message(&mut self, recipient: IdentityHash, message: Message) -> NetworkResult<()> {
         debug!("Sending message to recipient: {}", recipient.short());
         
-        // Always save the outbound message locally first
-        {
+        // Always save the outbound message locally first (unless it's an ephemeral status packet or control signaling)
+        let is_control_or_status = message.content.is_control() || matches!(
+            message.content,
+            MessageType::StatusPacket(_)
+                | MessageType::SocialPost(_)
+                | MessageType::WeatherReport(_)
+                | MessageType::P2PVoucher(_)
+                | MessageType::ProfileSyncRequest
+                | MessageType::ProfileSyncResponse { .. }
+                | MessageType::ChannelHopCoordination { .. }
+                | MessageType::MedicalTriageReport(_)
+                | MessageType::EmergencyBeacon { .. }
+                | MessageType::WebRTCSignal(_)
+                | MessageType::ContactRequest(_)
+                | MessageType::ContactResponse(_)
+        );
+        if !is_control_or_status {
             let mut s = self.storage.lock().await;
             if let Err(e) = s.add_message(message.clone()) {
                 error!("Failed to save outgoing message to local storage: {:?}", e);

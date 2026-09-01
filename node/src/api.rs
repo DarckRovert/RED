@@ -791,14 +791,35 @@ async fn handle_send_message(
         req.content.clone()
     };
 
-    let message = match Message::text(sender.clone(), recipient.clone(), content) {
-        Ok(m) => m,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("{}", e)})),
-            )
-                .into_response()
+    let message = if msg_type_str == "status" || msg_type_str == "status_packet" {
+        let payload = serde_json::json!({
+            "content": req.content,
+            "media_data": detected_media_data,
+            "mime_type": req.mime_type,
+        });
+        Message {
+            id: red_core::protocol::MessageId::generate(),
+            sender: sender.clone(),
+            recipient: recipient.clone(),
+            content: MessageType::StatusPacket(serde_json::to_vec(&payload).unwrap_or_default()),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64,
+            reply_to: None,
+            status: red_core::protocol::MessageStatus::Pending,
+            edited: false,
+        }
+    } else {
+        match Message::text(sender.clone(), recipient.clone(), content) {
+            Ok(m) => m,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(serde_json::json!({"error": format!("{}", e)})),
+                )
+                    .into_response()
+            }
         }
     };
 

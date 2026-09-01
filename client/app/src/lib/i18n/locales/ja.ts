@@ -773,6 +773,7 @@ export const ja: I18nSchema = {
         add_story: "ステータスを投稿",
         recent_updates: "最近の更新",
         no_stories: "メッシュ内に有効なストーリーはありません。",
+        no_stories_desc: "メッシュ連絡先の24時間限定ストーリーとステータスがここに表示されます。",
         creator_title: "時限ストーリーを作成 (24時間)",
         mode_text: "戦術テキスト",
         mode_photo: "写真 / 画像",

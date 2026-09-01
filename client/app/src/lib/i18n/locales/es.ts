@@ -771,6 +771,7 @@ export const es = {
         add_story: "Publicar Estado",
         recent_updates: "Actualizaciones Recientes",
         no_stories: "No hay historias efímeras en la malla.",
+        no_stories_desc: "Las historias de tus contactos de la malla aparecerán aquí durante 24 horas.",
         creator_title: "Crear Historia Efímera (24h)",
         mode_text: "Texto Táctico",
         mode_photo: "Foto / Imagen",

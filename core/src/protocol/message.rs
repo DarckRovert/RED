@@ -191,6 +191,8 @@ pub enum MessageType {
     ContactRequest(String),
     /// Contact Response handshake payload
     ContactResponse(String),
+    /// Ephemeral Status / Story packet (v41.0 Isolated Stories)
+    StatusPacket(Vec<u8>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -269,13 +271,14 @@ impl MessageType {
             MessageType::WebRTCSignal(signal) => signal.len(),
             MessageType::ContactRequest(payload) => payload.len(),
             MessageType::ContactResponse(payload) => payload.len(),
+            MessageType::StatusPacket(data) => data.len(),
         }
     }
 
     /// Check if this is a control message (not user content)
     pub fn is_control(&self) -> bool {
         match self {
-            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } | MessageType::PresenceBeacon { .. } | MessageType::ChannelHopCoordination { .. } | MessageType::WebRTCSignal(_) | MessageType::ContactRequest(_) | MessageType::ContactResponse(_) | MessageType::GroupInvite { .. } => true,
+            MessageType::ReadReceipt { .. } | MessageType::Typing { .. } | MessageType::TimerUpdate { .. } | MessageType::PresenceBeacon { .. } | MessageType::ChannelHopCoordination { .. } | MessageType::WebRTCSignal(_) | MessageType::ContactRequest(_) | MessageType::ContactResponse(_) | MessageType::GroupInvite { .. } | MessageType::StatusPacket(_) => true,
             MessageType::Ephemeral { content, .. } => content.is_control(),
             _ => false,
         }

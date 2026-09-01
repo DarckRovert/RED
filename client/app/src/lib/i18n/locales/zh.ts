@@ -773,6 +773,7 @@ export const zh: I18nSchema = {
         add_story: "发布新动态",
         recent_updates: "最新动态更新",
         no_stories: "网状网络中暂无即时动态。",
+        no_stories_desc: "网状网络联系人的临时快照和动态将在此处保留 24 小时。",
         creator_title: "发布限时动态 (24小时)",
         mode_text: "战术文本",
         mode_photo: "照片 / 图像",

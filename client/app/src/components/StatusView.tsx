@@ -268,7 +268,7 @@ export default function StatusView() {
                             <EmptyState
                                 icon="✨"
                                 title={t.stories_module?.no_stories || "Sin Actualizaciones Recientes"}
-                                description={t.stories_module?.no_stories || "Las historias de tus contactos de la malla aparecerán aquí durante 24 horas."}
+                                description={t.stories_module?.no_stories_desc || "Las historias de tus contactos de la malla aparecerán aquí durante 24 horas."}
                             />
                         ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

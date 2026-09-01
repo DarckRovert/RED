@@ -132,11 +132,33 @@ export default function StoryViewer({ stories, senderName, senderHash, onClose, 
             {/* Story Content Canvas */}
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "24px", position: "relative", zIndex: 5 }}>
                 {hasPhoto ? (
-                    <img
-                        src={currentStory.media_data?.startsWith("data:") ? currentStory.media_data : `data:image/jpeg;base64,${currentStory.media_data}`}
-                        alt="Estado"
-                        style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "16px" }}
-                    />
+                    <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                        <img
+                            src={currentStory.media_data?.startsWith("data:") ? currentStory.media_data : `data:image/jpeg;base64,${currentStory.media_data}`}
+                            alt="Estado"
+                            style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "16px" }}
+                        />
+                        {currentStory.content && currentStory.content !== "Story" && !currentStory.content.startsWith("📷") && (
+                            <div style={{
+                                position: "absolute",
+                                bottom: "24px",
+                                left: "16px",
+                                right: "16px",
+                                background: "rgba(0,0,0,0.7)",
+                                backdropFilter: "blur(10px)",
+                                border: "1px solid rgba(255,255,255,0.15)",
+                                padding: "10px 16px",
+                                borderRadius: "14px",
+                                textAlign: "center",
+                                fontSize: "0.95rem",
+                                fontWeight: 700,
+                                color: "#fff",
+                                textShadow: "0 1px 4px rgba(0,0,0,0.8)"
+                            }}>
+                                {currentStory.content}
+                            </div>
+                        )}
+                    </div>
                 ) : (
                     <div style={{ fontSize: "1.4rem", fontWeight: 800, textAlign: "center", maxWidth: "420px", textShadow: "0 2px 10px rgba(0,0,0,0.6)" }}>
                         {currentStory.content}

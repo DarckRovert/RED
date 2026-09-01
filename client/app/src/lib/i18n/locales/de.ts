@@ -773,6 +773,7 @@ export const de: I18nSchema = {
         add_story: "Status veröffentlichen",
         recent_updates: "Kürzliche Updates",
         no_stories: "Keine flüchtigen Geschichten im Mesh.",
+        no_stories_desc: "Vergängliche Statusmeldungen und Storys Ihrer Mesh-Kontakte werden hier für 24 Stunden angezeigt.",
         creator_title: "Flüchtige Geschichte erstellen (24h)",
         mode_text: "Taktischer Text",
         mode_photo: "Foto / Bild",

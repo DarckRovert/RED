@@ -773,6 +773,7 @@ export const pt: I18nSchema = {
         add_story: "Publicar Status",
         recent_updates: "Atualizações Recentes",
         no_stories: "Nenhuma história efêmera na malha.",
+        no_stories_desc: "As histórias e estados efêmeros dos seus contatos da malha aparecerão aqui durante 24 horas.",
         creator_title: "Criar História Efêmera (24h)",
         mode_text: "Texto Tático",
         mode_photo: "Foto / Imagem",

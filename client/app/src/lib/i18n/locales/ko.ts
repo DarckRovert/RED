@@ -773,6 +773,7 @@ export const ko: I18nSchema = {
         add_story: "상태 게시",
         recent_updates: "최근 업데이트",
         no_stories: "메시에 유효한 스토리가 없습니다.",
+        no_stories_desc: "메시 연락처의 24시간 휘발성 스토리 및 상태가 여기에 표시됩니다.",
         creator_title: "시한 스토리 생성 (24시간)",
         mode_text: "전술 텍스트",
         mode_photo: "사진 / 이미지",

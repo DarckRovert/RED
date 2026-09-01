@@ -773,6 +773,7 @@ export const en: I18nSchema = {
         add_story: "Publish Status",
         recent_updates: "Recent Updates",
         no_stories: "No ephemeral stories in the mesh.",
+        no_stories_desc: "Ephemeral stories from your mesh contacts will appear here for 24 hours.",
         creator_title: "Create Ephemeral Story (24h)",
         mode_text: "Tactical Text",
         mode_photo: "Photo / Image",

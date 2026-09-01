@@ -773,6 +773,7 @@ export const ar: I18nSchema = {
         add_story: "نشر حالة",
         recent_updates: "آخر التحديثات",
         no_stories: "لا توجد قصص مؤقتة على الشبكة.",
+        no_stories_desc: "ستظهر هنا القصص والحالات المؤقتة لجهات اتصال الشبكة لمدة 24 ساعة.",
         creator_title: "إنشاء قصة مؤقتة (24 ساعة)",
         mode_text: "نص تكتيكي",
         mode_photo: "صورة",

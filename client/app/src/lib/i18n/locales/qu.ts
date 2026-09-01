@@ -773,6 +773,7 @@ export const qu: I18nSchema = {
         add_story: "Status qillqay",
         recent_updates: "Musuq Willakuykuna",
         no_stories: "Manam meshpi willakuykuna kanchu.",
+        no_stories_desc: "Llika masikikunapa 24 pachantin chinkariq willakuyninkuna kaypi rikurinqa.",
         creator_title: "Pisi Pacha Willayta Kamariy (24h)",
         mode_text: "Taktiku Qillqa",
         mode_photo: "Foto / Rikch'ay",

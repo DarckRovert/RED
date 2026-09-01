@@ -441,6 +441,9 @@ export class RedAPIClient {
             options?.msg_type === 'live_announce' ||
             options?.msg_type === 'live_end' ||
             options?.msg_type === 'live_comment' ||
+            options?.msg_type === 'status' ||
+            options?.msg_type === 'status_packet' ||
+            options?.msg_type === 'story_reply' ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"group_invite"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"group_message"')) ||
             (typeof content === 'string' && content.startsWith('{') && content.includes('"type":"squad_msg"')) ||

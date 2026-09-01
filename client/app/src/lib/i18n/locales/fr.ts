@@ -773,6 +773,7 @@ export const fr: I18nSchema = {
         add_story: "Publier un Statut",
         recent_updates: "Mises à Jour Récentes",
         no_stories: "Aucune histoire éphémère dans le maillage.",
+        no_stories_desc: "Les statuts et histoires éphémères de vos contacts du maillage apparaîtront ici pendant 24 heures.",
         creator_title: "Créer une Histoire Éphémère (24h)",
         mode_text: "Texte Tactique",
         mode_photo: "Photo / Image",

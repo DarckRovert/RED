@@ -1,14 +1,28 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { MessageItem } from "../../lib/api";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { toast } from "../Toast";
+import { indexedMediaVault } from "../../lib/storage/indexedMediaVault";
 
 interface MediaGalleryViewerProps {
     activeMedia: MessageItem | null;
     allMessages?: MessageItem[];
     onClose: () => void;
+}
+
+function isValidMediaSource(src?: string | null): boolean {
+    if (!src) return false;
+    const s = src.trim();
+    return s.startsWith("data:image/") ||
+           s.startsWith("data:video/") ||
+           s.startsWith("data:audio/") ||
+           s.startsWith("blob:") ||
+           s.startsWith("http://") ||
+           s.startsWith("https://") ||
+           s.startsWith("red_vault://") ||
+           s.startsWith("capacitor://");
 }
 
 export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
@@ -17,22 +31,61 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     onClose,
 }) => {
     const { t } = useTranslation();
-    // Filter all media messages (images, videos)
-    const mediaItems = React.useMemo(() => {
-        return allMessages.filter(
+
+    // Filter valid media messages (images, videos)
+    const mediaItems = useMemo(() => {
+        const filtered = allMessages.filter(
             (m) =>
-                m.msg_type === "image" ||
-                m.msg_type === "video" ||
-                (m.media_data && (m.media_data.startsWith("data:image/") || m.media_data.startsWith("data:video/")))
+                (m.msg_type === "image" || m.msg_type === "video") &&
+                (isValidMediaSource(m.media_data) || isValidMediaSource(m.content))
         );
-    }, [allMessages]);
+        if (filtered.length === 0 && activeMedia) {
+            return [activeMedia];
+        }
+        return filtered;
+    }, [allMessages, activeMedia]);
 
     const initialIdx = mediaItems.findIndex((m) => m.id === activeMedia?.id);
     const [currentIndex, setCurrentIndex] = useState(initialIdx >= 0 ? initialIdx : 0);
     const [zoomScale, setZoomScale] = useState(1);
     const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+    const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+    const [imgError, setImgError] = useState(false);
 
     const currentItem = mediaItems[currentIndex] || activeMedia;
+
+    // Resolve vault or data URL
+    useEffect(() => {
+        let isMounted = true;
+        setImgError(false);
+        setZoomScale(1);
+
+        if (!currentItem) {
+            setResolvedSrc(null);
+            return;
+        }
+
+        const rawSrc = currentItem.media_data || currentItem.content;
+        if (!rawSrc) {
+            setResolvedSrc(null);
+            return;
+        }
+
+        if (rawSrc.startsWith("red_vault://")) {
+            const vaultId = rawSrc.replace("red_vault://", "");
+            indexedMediaVault.getMedia(vaultId).then((data) => {
+                if (isMounted) {
+                    setResolvedSrc(data || rawSrc);
+                }
+            }).catch(() => {
+                if (isMounted) setResolvedSrc(rawSrc);
+            });
+        } else {
+            setResolvedSrc(rawSrc);
+        }
+
+        return () => { isMounted = false; };
+    }, [currentItem]);
 
     const handlePrev = useCallback(() => {
         setZoomScale(1);
@@ -60,13 +113,17 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     };
 
     const handleSaveMedia = async () => {
-        if (!currentItem?.media_data && !currentItem?.content) return;
-        const dataUrl = currentItem.media_data || currentItem.content;
+        if (!resolvedSrc && !currentItem?.media_data && !currentItem?.content) return;
+        const dataUrl = resolvedSrc || currentItem?.media_data || currentItem?.content || "";
+        if (!isValidMediaSource(dataUrl)) {
+            toast.error("El contenido no es un archivo multimedia válido para guardar.");
+            return;
+        }
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const { Filesystem, Directory } = await import("@capacitor/filesystem");
-                const fileName = `RED_MEDIA_${Date.now()}.${currentItem.msg_type === "video" ? "mp4" : "jpg"}`;
+                const fileName = `RED_MEDIA_${Date.now()}.${currentItem?.msg_type === "video" ? "mp4" : "jpg"}`;
                 const base64Data = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
                 await Filesystem.writeFile({
                     path: fileName,
@@ -78,7 +135,7 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
             } else {
                 const a = document.createElement("a");
                 a.href = dataUrl;
-                a.download = `RED_MEDIA_${Date.now()}.${currentItem.msg_type === "video" ? "mp4" : "jpg"}`;
+                a.download = `RED_MEDIA_${Date.now()}.${currentItem?.msg_type === "video" ? "mp4" : "jpg"}`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -90,8 +147,8 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
     };
 
     const handleShareMedia = async () => {
-        if (!currentItem?.media_data && !currentItem?.content) return;
-        const dataUrl = currentItem.media_data || currentItem.content;
+        const dataUrl = resolvedSrc || currentItem?.media_data || currentItem?.content || "";
+        if (!dataUrl) return;
         try {
             const { Share } = await import("@capacitor/share");
             await Share.share({
@@ -112,8 +169,8 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
 
     if (!currentItem) return null;
 
-    const isVideo = currentItem.msg_type === "video" || (currentItem.media_data && currentItem.media_data.startsWith("data:video/"));
-    const src = currentItem.media_data || currentItem.content;
+    const isVideo = currentItem.msg_type === "video" || (resolvedSrc && resolvedSrc.startsWith("data:video/"));
+    const isValid = isValidMediaSource(resolvedSrc);
 
     return (
         <div
@@ -208,12 +265,36 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
                 }}
                 onDoubleClick={handleDoubleTap}
             >
-                {isVideo ? (
+                {!isValid || imgError ? (
+                    <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: "32px 24px",
+                        background: "rgba(18, 18, 30, 0.85)",
+                        border: "1px solid var(--glass-border)",
+                        borderRadius: "16px",
+                        maxWidth: "400px",
+                        textAlign: "center",
+                        gap: "12px",
+                        margin: "16px"
+                    }}>
+                        <div style={{ fontSize: "2.5rem" }}>🖼️</div>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text-primary)" }}>
+                            Archivo multimedia no disponible
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                            {currentItem.content && !currentItem.content.startsWith("data:") ? currentItem.content : "La carga multimedia no contiene un formato de imagen válido o ha expirado."}
+                        </div>
+                    </div>
+                ) : isVideo ? (
                     <video
-                        src={src}
+                        src={resolvedSrc!}
                         controls
                         autoPlay
                         playsInline
+                        onError={() => setImgError(true)}
                         style={{
                             maxWidth: "100%",
                             maxHeight: "100%",
@@ -223,8 +304,9 @@ export const MediaGalleryViewer: React.FC<MediaGalleryViewerProps> = ({
                     />
                 ) : (
                     <img
-                        src={src}
+                        src={resolvedSrc!}
                         alt="RED Media Viewer"
+                        onError={() => setImgError(true)}
                         style={{
                             maxWidth: "100%",
                             maxHeight: "100%",

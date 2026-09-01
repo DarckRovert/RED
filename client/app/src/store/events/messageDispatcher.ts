@@ -93,13 +93,34 @@ export async function dispatchIncomingMessage(
 
         const { activeConversationId, messages, typingTimeout } = get();
 
-        // ── Incoming status/story entry from peer ─────────────────────────────
-        if (item.msg_type === 'status') {
+        // ── Incoming status/story entry from peer (Strict Isolation from Chat DMs) ────
+        if (item.msg_type === 'status' || item.msg_type === 'status_packet') {
             if (!item.is_mine && item.sender) {
+                let storyContent = item.content;
+                let storyMedia = item.media_data;
+                let storyTheme = (item as any).theme;
+
+                if (typeof item.content === 'string' && item.content.startsWith('{')) {
+                    try {
+                        const parsed = JSON.parse(item.content);
+                        if (parsed.content !== undefined) storyContent = parsed.content;
+                        if (parsed.media_data) storyMedia = parsed.media_data;
+                        if (parsed.theme !== undefined) storyTheme = parsed.theme;
+                    } catch {}
+                }
+
+                const storyItem: MessageItem = {
+                    ...item,
+                    content: storyContent || '',
+                    media_data: storyMedia || undefined,
+                    theme: storyTheme !== undefined ? String(storyTheme) : undefined,
+                    msg_type: 'status' as any,
+                };
+
                 const currentMap = { ...(get().peerStories || {}) };
                 const senderArr = currentMap[item.sender] || [];
                 if (!senderArr.some(m => m.id === item.id)) {
-                    const updatedArr = [...senderArr, item];
+                    const updatedArr = [...senderArr, storyItem];
                     currentMap[item.sender] = updatedArr;
                     set({ peerStories: currentMap });
                     if (typeof window !== 'undefined') {
@@ -107,7 +128,7 @@ export async function dispatchIncomingMessage(
                     }
                 }
             }
-            return;
+            return; // strictly return early so status packets never enter conversation DM history
         }
 
         const rawItem = item as any;
