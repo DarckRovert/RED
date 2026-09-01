@@ -45,17 +45,30 @@ export function recordProcessedMessageId(id: string) {
     }
 }
 
-const _processedHandshakes = new Set<string>();
+const _processedHandshakes = new Map<string, number>();
 const MAX_PROCESSED_HANDSHAKES = 1000;
+const HANDSHAKE_EXPIRY_MS = 60_000; // 60 seconds TTL
 
-function trackHandshake(key: string): boolean {
-    if (_processedHandshakes.has(key)) return false;
+function trackHandshake(key: string, ttlMs = HANDSHAKE_EXPIRY_MS): boolean {
+    const now = Date.now();
+    const existing = _processedHandshakes.get(key);
+    if (existing && (now - existing) < ttlMs) {
+        return false;
+    }
     if (_processedHandshakes.size >= MAX_PROCESSED_HANDSHAKES) {
-        const firstKey = _processedHandshakes.values().next().value;
+        const firstKey = _processedHandshakes.keys().next().value;
         if (firstKey) _processedHandshakes.delete(firstKey);
     }
-    _processedHandshakes.add(key);
+    _processedHandshakes.set(key, now);
     return true;
+}
+
+let _fetchDataDebounceTimer: any = null;
+function debouncedFetchData(get: () => RedStore) {
+    if (_fetchDataDebounceTimer) clearTimeout(_fetchDataDebounceTimer);
+    _fetchDataDebounceTimer = setTimeout(() => {
+        get().fetchData().catch(() => {});
+    }, 300);
 }
 
 export async function dispatchIncomingMessage(
@@ -551,23 +564,23 @@ export async function dispatchIncomingMessage(
                             }
                             return c;
                         });
-                        set({ contacts: updatedContacts });
-                        RedAPI.setWebStore('red_web_contacts', updatedContacts);
-
-                        // Auto-respondemos con confirmación mutua
-                        const myId = get().identity;
-                        if (myId?.identity_hash) {
-                            const respPayload = JSON.stringify({
-                                type: 'contact_response',
-                                id: `cres_${Date.now()}_${myId.identity_hash.slice(0, 8)}`,
-                                sender_hash: myId.identity_hash,
-                                sender_name: myId.nickname || 'Operador RED',
-                                sender_pk: myId.public_key || null,
-                                avatar_url: myId.avatar_url || null,
-                                accepted: true,
-                                timestamp: Date.now()
-                            });
-                            RedAPI.sendMessage(senderHash, respPayload, { msg_type: 'contact_response' }).catch(() => {});
+                        // Auto-respondemos con confirmación mutua (con rate-limiting anti-bucle)
+                        const autoRespKey = `${senderHash.toLowerCase()}_auto_responded`;
+                        if (trackHandshake(autoRespKey, 120_000)) {
+                            const myId = get().identity;
+                            if (myId?.identity_hash) {
+                                const respPayload = JSON.stringify({
+                                    type: 'contact_response',
+                                    id: `cres_${Date.now()}_${myId.identity_hash.slice(0, 8)}`,
+                                    sender_hash: myId.identity_hash,
+                                    sender_name: myId.nickname || 'Operador RED',
+                                    sender_pk: myId.public_key || null,
+                                    avatar_url: myId.avatar_url || null,
+                                    accepted: true,
+                                    timestamp: Date.now()
+                                });
+                                RedAPI.sendMessage(senderHash, respPayload, { msg_type: 'contact_response' }).catch(() => {});
+                            }
                         }
                     } else {
                         // Nuevo contacto desconocido: Desplegar Flujo de Consentimiento (Modal de Aceptación)
@@ -596,8 +609,11 @@ export async function dispatchIncomingMessage(
                             activeContactRequestModal: pendingReq
                         });
 
-                        TacticalAudioEngine.playMessageReceived();
-                        toast.info(`🔔 Solicitud de contacto de ${finalName}`);
+                        const reqAlertKey = `${senderHash.toLowerCase()}_req_alert`;
+                        if (trackHandshake(reqAlertKey, 60_000)) {
+                            TacticalAudioEngine.playMessageReceived();
+                            toast.info(`🔔 Solicitud de contacto de ${finalName}`);
+                        }
                     }
                 }
 
@@ -655,14 +671,14 @@ export async function dispatchIncomingMessage(
                         RedAPI.addContact(senderHash, finalName, senderPk).catch(() => {});
 
                         const handshakeKey = `${senderHash.toLowerCase()}_confirmed`;
-                        if (trackHandshake(handshakeKey)) {
+                        if (trackHandshake(handshakeKey, 60_000)) {
                             toast.success(`🤝 ${finalName} aceptó tu solicitud de contacto`);
                             TacticalAudioEngine.playMessageReceived();
                         }
                     }
                 }
 
-                get().fetchData();
+                debouncedFetchData(get);
             } catch (e) {
                 console.warn('[RED] isHandshakePacket parse error:', e);
             }
@@ -1766,7 +1782,8 @@ export async function dispatchIncomingMessage(
             } else {
                 // W3: OOM guard — clamp in-memory window to MAX_IN_MEMORY_MESSAGES
                 set({ messages: [...messages, normalizedItem].slice(-MAX_IN_MEMORY_MESSAGES) });
-                if (!normalizedItem.is_mine) {
+                const isSyncedBatch = (item as any).is_synced_batch || (item as any).is_historical_sync;
+                if (!normalizedItem.is_mine && !isSyncedBatch) {
                     TacticalAudioEngine.playMessageReceived();
                     if (item.sender && item.sender !== myHash && item.msg_type !== 'ack' && item.msg_type !== 'typing') {
                         meshRouter.sendDeliveryAck(item.sender, item.id || 'ack_nonce', item.id).catch(() => {});
@@ -2034,39 +2051,42 @@ export async function dispatchIncomingMessage(
                     }
                 } catch {}
             }
-            if (!item.is_mine) {
+            const isSyncedBatch = (item as any).is_synced_batch || (item as any).is_historical_sync;
+            if (!item.is_mine && !isSyncedBatch) {
                 TacticalAudioEngine.playMessageReceived();
             }
             // FIRE LOCAL NOTIFICATION IF CHAT IS NOT FOCUSED OR APP IS BACKGROUNDED
-            import('@capacitor/core').then(({ Capacitor }) => {
-                if (Capacitor.isNativePlatform()) {
-                    const contacts = get().contacts || [];
-                    const contact = contacts.find((c: any) => c.identity_hash === item.sender || (item.sender?.length >= 8 && c.identity_hash?.startsWith(item.sender.slice(0, 8))));
-                    const senderDisplayName = contact?.display_name || `Operador ${item.sender.substring(0, 8)}…`;
+            if (!isSyncedBatch) {
+                import('@capacitor/core').then(({ Capacitor }) => {
+                    if (Capacitor.isNativePlatform()) {
+                        const contacts = get().contacts || [];
+                        const contact = contacts.find((c: any) => c.identity_hash === item.sender || (item.sender?.length >= 8 && c.identity_hash?.startsWith(item.sender.slice(0, 8))));
+                        const senderDisplayName = contact?.display_name || `Operador ${item.sender.substring(0, 8)}…`;
 
-                    import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
-                        LocalNotifications.schedule({
-                            notifications: [
-                                {
-                                    title: `💬 ${senderDisplayName}`,
-                                    body: snippet,
-                                    id: Math.floor(Date.now() % 2147483647),
-                                    schedule: { at: new Date(Date.now() + 100) },
-                                    sound: undefined,
-                                    attachments: undefined,
-                                    actionTypeId: "",
-                                    extra: {
-                                        peer: item.sender,
-                                        conversation_id: convId,
-                                        sender: item.sender
+                        import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+                            LocalNotifications.schedule({
+                                notifications: [
+                                    {
+                                        title: `💬 ${senderDisplayName}`,
+                                        body: snippet,
+                                        id: Math.floor(Date.now() % 2147483647),
+                                        schedule: { at: new Date(Date.now() + 100) },
+                                        sound: undefined,
+                                        attachments: undefined,
+                                        actionTypeId: "",
+                                        extra: {
+                                            peer: item.sender,
+                                            conversation_id: convId,
+                                            sender: item.sender
+                                        }
                                     }
-                                }
-                            ]
-                        }).catch(() => {});
-                    });
-                }
-            });
-            get().fetchData().catch(() => {});
+                                ]
+                            }).catch(() => {});
+                        });
+                    }
+                });
+            }
+            debouncedFetchData(get);
         }
         
         // Only refresh sidebar for messages in OTHER conversations (badge count update).

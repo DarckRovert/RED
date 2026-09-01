@@ -122,7 +122,7 @@ class LocalTransport {
           if (device.name && (!existing.name || existing.name === 'Dispositivo RED' || existing.name.startsWith('Nodo '))) {
             existing.name = device.name;
           }
-          meshRouter.addBlePeer(rawDevId, device.rssi, undefined, existing.name || device.name);
+          meshRouter.updatePeer(rawDevId, 'ble', device.rssi, undefined, existing.name || device.name);
         } else {
           const cleanDev = { ...device, id: rawDevId };
           this.discoveredBluetoothPeers.push(cleanDev);
@@ -141,10 +141,18 @@ class LocalTransport {
   }
 
   private connectingBleDevices: Set<string> = new Set();
+  private lastAssociatedBleDevices: Map<string, number> = new Map();
 
   private async autoAssociateBlePeer(deviceId: string) {
     const cleanId = deviceId.trim();
     if (!cleanId || this.connectingBleDevices.has(cleanId) || bluetoothTransport.isDeviceConnected(cleanId)) return;
+
+    const lastAssoc = this.lastAssociatedBleDevices.get(cleanId) || 0;
+    if (Date.now() - lastAssoc < 60_000) {
+      return;
+    }
+    this.lastAssociatedBleDevices.set(cleanId, Date.now());
+
     this.connectingBleDevices.add(cleanId);
     try {
       await bluetoothTransport.connect(cleanId);

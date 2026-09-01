@@ -827,13 +827,23 @@ class MeshRouter {
 
   // ─── RED-Sync BSP v2: Active State Synchronization Protocol ───────────────
 
+  private lastSyncTimestamps: Map<string, number> = new Map();
+
   /**
    * Initiates active vector-clock state synchronization with a peer upon connection.
    */
-  public async initiateSyncWithPeer(peerId: string) {
+  public async initiateSyncWithPeer(peerId: string, force = false) {
     if (!peerId || !this.myIdentityHash || peerId === this.myIdentityHash) return;
     const canonicalPeer = this.getCanonicalId(peerId);
     if (!canonicalPeer || canonicalPeer.length < 8) return;
+
+    const now = Date.now();
+    const lastSync = this.lastSyncTimestamps.get(canonicalPeer) || 0;
+    if (!force && now - lastSync < 45_000) {
+      // Cooldown active: avoid sync storm
+      return;
+    }
+    this.lastSyncTimestamps.set(canonicalPeer, now);
 
     let lastTimestamp = 0;
     let lastMsgId: string | undefined = undefined;
@@ -883,6 +893,9 @@ class MeshRouter {
   public async handleSyncStateQuery(senderHash: string, queryPayload: any, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
     const canonicalSender = this.getCanonicalId(senderHash);
     const lastTimestamp = queryPayload.last_timestamp || 0;
+    if (fromTransportId) {
+      this.bindDeviceToCanonical(fromTransportId, canonicalSender);
+    }
 
     const missingMsgs: any[] = [];
     if (typeof window !== 'undefined') {
@@ -958,6 +971,12 @@ class MeshRouter {
       if (!msg || !msg.id) continue;
       receivedIds.push(msg.id);
 
+      const taggedMsg = {
+        ...msg,
+        is_synced_batch: true,
+        is_historical_sync: true
+      };
+
       const syntheticPacket: MeshPacket = {
         recipient: this.myIdentityHash,
         sender: canonicalSender,
@@ -965,7 +984,7 @@ class MeshRouter {
         flags: 0,
         timestamp: msg.timestamp || Date.now(),
         nonce: msg.id,
-        payload: new TextEncoder().encode(JSON.stringify(msg)),
+        payload: new TextEncoder().encode(JSON.stringify(taggedMsg)),
       };
 
       this.localDeliveryHandlers.forEach(h => {
@@ -1578,26 +1597,35 @@ class MeshRouter {
 
   addWifiPeer(peerId: string, canonicalId?: string, name?: string, isGateway = false, hasInternet = false) {
     const canonical = canonicalId || this.getCanonicalId(peerId);
+    const isNewPeer = !this.peers.has(peerId) && !this.peers.has(canonical);
     this.updatePeer(peerId, 'wifi', undefined, canonical, name, undefined, isGateway, hasInternet);
-    dtnStorage.forceResetForRecipient(canonical);
-    this.flushPendingQueue(true);
-    this.initiateSyncWithPeer(canonical).catch(() => {});
+    if (isNewPeer) {
+      dtnStorage.forceResetForRecipient(canonical);
+      this.flushPendingQueue(true);
+      this.initiateSyncWithPeer(canonical).catch(() => {});
+    }
   }
 
   addBlePeer(deviceId: string, rssi?: number, canonicalId?: string, name?: string, isGateway = false, hasInternet = false) {
     const canonical = canonicalId || this.getCanonicalId(deviceId);
+    const isNewPeer = !this.peers.has(deviceId) && !this.peers.has(canonical);
     this.updatePeer(deviceId, 'ble', rssi, canonical, name, undefined, isGateway, hasInternet);
-    dtnStorage.forceResetForRecipient(canonical);
-    this.flushPendingQueue(true);
-    this.initiateSyncWithPeer(canonical).catch(() => {});
+    if (isNewPeer) {
+      dtnStorage.forceResetForRecipient(canonical);
+      this.flushPendingQueue(true);
+      this.initiateSyncWithPeer(canonical).catch(() => {});
+    }
   }
 
   addLoraPeer(peerId: string, canonicalId?: string, name?: string) {
     const canonical = canonicalId || this.getCanonicalId(peerId);
+    const isNewPeer = !this.peers.has(peerId) && !this.peers.has(canonical);
     this.updatePeer(peerId, 'lora', undefined, canonical, name);
-    dtnStorage.forceResetForRecipient(canonical);
-    this.flushPendingQueue(true);
-    this.initiateSyncWithPeer(canonical).catch(() => {});
+    if (isNewPeer) {
+      dtnStorage.forceResetForRecipient(canonical);
+      this.flushPendingQueue(true);
+      this.initiateSyncWithPeer(canonical).catch(() => {});
+    }
   }
 
   removePeer(peerId: string) {
