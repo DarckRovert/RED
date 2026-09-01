@@ -31,6 +31,20 @@ const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (()
 })() : []);
 
 let _saveProcessedIdsTimer: any = null;
+
+function flushProcessedMessageIdsNow() {
+    if (typeof window === 'undefined') return;
+    try {
+        const arr = Array.from(_processedMessageIds).slice(-2500);
+        localStorage.setItem('red_processed_msg_ids', JSON.stringify(arr));
+    } catch {}
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', flushProcessedMessageIdsNow);
+    window.addEventListener('pagehide', flushProcessedMessageIdsNow);
+}
+
 export function recordProcessedMessageId(id: string) {
     if (!id) return;
     _processedMessageIds.add(id);
@@ -43,10 +57,7 @@ export function recordProcessedMessageId(id: string) {
         if (!_saveProcessedIdsTimer) {
             _saveProcessedIdsTimer = setTimeout(() => {
                 _saveProcessedIdsTimer = null;
-                try {
-                    const arr = Array.from(_processedMessageIds).slice(-2500);
-                    localStorage.setItem('red_processed_msg_ids', JSON.stringify(arr));
-                } catch {}
+                flushProcessedMessageIdsNow();
             }, 2000);
         }
     }
@@ -59,8 +70,11 @@ const HANDSHAKE_EXPIRY_MS = 60_000; // 60 seconds TTL
 function trackHandshake(key: string, ttlMs = HANDSHAKE_EXPIRY_MS): boolean {
     const now = Date.now();
     const existing = _processedHandshakes.get(key);
-    if (existing && (now - existing) < ttlMs) {
-        return false;
+    if (existing) {
+        if ((now - existing) < ttlMs) {
+            return false;
+        }
+        _processedHandshakes.delete(key); // Re-order to end for true O(1) LRU
     }
     if (_processedHandshakes.size >= MAX_PROCESSED_HANDSHAKES) {
         const firstKey = _processedHandshakes.keys().next().value;

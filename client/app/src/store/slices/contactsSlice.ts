@@ -4,18 +4,17 @@ import { ConversationItem } from '../../api/types';
 import { RedAPI } from '../../api/client';
 import { meshRouter, normalizeIdentity } from '../../lib/mesh/meshRouter';
 import { toast } from '../../components/Toast';
-
-const _processedHandshakes = new Set<string>();
+const _processedHandshakes = new Map<string, number>();
 const MAX_PROCESSED_HANDSHAKES = 1000;
 
 function trackProcessedHandshake(key: string): void {
-    if (_processedHandshakes.size >= MAX_PROCESSED_HANDSHAKES) {
-        const firstKey = _processedHandshakes.values().next().value;
-        if (firstKey) {
-            _processedHandshakes.delete(firstKey);
-        }
+    if (_processedHandshakes.has(key)) {
+        _processedHandshakes.delete(key);
+    } else if (_processedHandshakes.size >= MAX_PROCESSED_HANDSHAKES) {
+        const firstKey = _processedHandshakes.keys().next().value;
+        if (firstKey) _processedHandshakes.delete(firstKey);
     }
-    _processedHandshakes.add(key);
+    _processedHandshakes.set(key, Date.now());
 }
 
 export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStore>> = (set, get) => ({

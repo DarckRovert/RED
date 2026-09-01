@@ -237,49 +237,87 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 </div>
             )}
 
-            {/* ── Attachments Bar ── */}
+            {/* ── Attachments Bar (WhatsApp-style Clean Primary Actions + Tactical Expander) ── */}
             {isAttachOpen && (
                 <div style={{
-                    display: "flex", gap: "10px", padding: "12px 16px",
+                    display: "flex", flexDirection: "column", gap: "8px", padding: "12px 16px",
                     background: "rgba(14,16,28,0.98)", borderBottom: "1px solid var(--glass-border)",
-                    overflowX: "auto", flexShrink: 0
+                    flexShrink: 0
                 }}>
-                    {[
-                        { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
-                        { icon: "🫀", label: "Ficha VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
-                        { icon: "🔊", label: "SoundMesh Acústico", action: () => {
-                            setIsAttachOpen(false);
-                            if (text.trim()) {
-                                import("../../lib/audio/SoundMeshEngine").then(({ SoundMeshEngine }) => {
-                                    SoundMeshEngine.transmit(text.trim());
-                                    toast.success("🔊 Transmitiendo mensaje por SoundMesh Acústico FSK");
-                                });
-                            } else {
-                                toast.info("✍️ Escribe un mensaje primero para emitirlo por audio");
-                            }
-                        } },
-                        { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
-                        { icon: "🖼️", label: "Esteganografía LSB", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
-                        { icon: "💸", label: "Pagar RED", action: () => { setIsAttachOpen(false); handlePay(); } },
-                        { icon: "📷", label: "Cámara", action: () => { setIsAttachOpen(false); handleCamera(); } },
-                        { icon: "🖼️", label: "Galería", action: () => { setIsAttachOpen(false); handleGallery(); } },
-                        { icon: "📄", label: "Documento", action: () => { setIsAttachOpen(false); handleDocument(); } },
-                        { icon: "📍", label: "Ubicación", action: () => { setIsAttachOpen(false); handleLocation(); } },
-                        { icon: "📊", label: "Encuesta", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
-                    ].map(a => (
-                        <button
-                            key={a.label}
-                            onClick={a.action}
-                            className="btn-tactical-secondary"
-                            style={{
-                                padding: "8px 14px", display: "flex", alignItems: "center", gap: "6px",
-                                fontSize: "0.78rem", whiteSpace: "nowrap", flexShrink: 0
-                            }}
-                        >
-                            <span>{a.icon}</span>
-                            <span>{a.label}</span>
-                        </button>
-                    ))}
+                    {/* Primary Everyday Actions */}
+                    <div style={{
+                        display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "4px",
+                        scrollbarWidth: "none"
+                    }}>
+                        {[
+                            { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #EC407A, #D81B60)", action: () => { setIsAttachOpen(false); handleCamera(); } },
+                            { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AB47BC, #8E24AA)", action: () => { setIsAttachOpen(false); handleGallery(); } },
+                            { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5C6BC0, #3949AB)", action: () => { setIsAttachOpen(false); handleDocument(); } },
+                            { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #26A69A, #00897B)", action: () => { setIsAttachOpen(false); handleLocation(); } },
+                            { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #FFA726, #FB8C00)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
+                            { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00E5FF, #00B0FF)", action: () => { setIsAttachOpen(false); handlePay(); } },
+                            { icon: "🎛️", label: "Táctico", bg: "rgba(255,255,255,0.1)", action: () => { setAiMenuOpen(!aiMenuOpen); } },
+                        ].map(a => (
+                            <button
+                                key={a.label}
+                                onClick={a.action}
+                                style={{
+                                    display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
+                                    background: "transparent", border: "none", color: "#fff", cursor: "pointer",
+                                    flexShrink: 0, minWidth: "56px"
+                                }}
+                            >
+                                <div style={{
+                                    width: 44, height: 44, borderRadius: "50%", background: a.bg,
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: "1.2rem", boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+                                }}>
+                                    {a.icon}
+                                </div>
+                                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 600 }}>{a.label}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Collapsible Tactical Tools Sub-row */}
+                    {aiMenuOpen && (
+                        <div style={{
+                            display: "flex", gap: "8px", overflowX: "auto", paddingTop: "8px",
+                            borderTop: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none",
+                            animation: "fadeIn 0.2s ease-out"
+                        }}>
+                            {[
+                                { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
+                                { icon: "🫀", label: "Ficha VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
+                                { icon: "🔊", label: "SoundMesh Audio", action: () => {
+                                    setIsAttachOpen(false);
+                                    if (text.trim()) {
+                                        import("../../lib/audio/SoundMeshEngine").then(({ SoundMeshEngine }) => {
+                                            SoundMeshEngine.transmit(text.trim());
+                                            toast.success("🔊 Transmitiendo por SoundMesh FSK");
+                                        });
+                                    } else {
+                                        toast.info("✍️ Escribe un mensaje primero para emitirlo");
+                                    }
+                                } },
+                                { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
+                                { icon: "🖼️", label: "Esteganografía LSB", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
+                            ].map(t => (
+                                <button
+                                    key={t.label}
+                                    onClick={t.action}
+                                    className="btn-tactical-secondary"
+                                    style={{
+                                        padding: "6px 12px", display: "flex", alignItems: "center", gap: "6px",
+                                        fontSize: "0.74rem", whiteSpace: "nowrap", flexShrink: 0
+                                    }}
+                                >
+                                    <span>{t.icon}</span>
+                                    <span>{t.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 

@@ -1501,6 +1501,7 @@ class MeshRouter {
     if (!anySent) {
       // Enqueue in persistent DTN store-and-forward storage
       dtnStorage.enqueue(packet);
+      dtnStorage.markAttempt(packet.nonce, false);
       console.log(`[MeshRouter] No reachable route — saved in persistent DTN queue for ${packet.recipient.slice(0, 8)}`);
       return 'queued';
     } else {
@@ -1565,24 +1566,10 @@ class MeshRouter {
     let flushed = 0;
     for (const item of items) {
       const packet = dtnStorage.toMeshPacket(item);
-      const encoded = encode(packet);
-      let sent = false;
-
-      // 1. Direct local mesh peers (BLE, LoRa, WiFi Direct DataChannel)
-      for (const [peerId, peer] of this.peers) {
-        const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
-        if (ok) sent = true;
+      const res = await this.forwardPacket(packet, null);
+      if (res === 'sent') {
+        flushed++;
       }
-
-      // 2. Global WAN / WebRTC / MQTT Blind Relay
-      if (this.wifi && packet.recipient && packet.recipient !== 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff') {
-        const ok = await this.wifi.send(packet.recipient, encoded);
-        if (ok) sent = true;
-      }
-
-      // 3. Mark attempt with exponential backoff (persists until cryptographic DELIVERY_ACK is received)
-      dtnStorage.markAttempt(item.id, false);
-      if (sent) flushed++;
     }
 
     if (flushed > 0) {
