@@ -400,15 +400,22 @@ class BluetoothTransport {
                 const chunk = payload.slice(offset, offset + sliceLength);
 
                 const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+                let writeOk = false;
                 try {
-                    await BleClient.write(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
-                } catch {
                     await BleClient.writeWithoutResponse(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                    writeOk = true;
+                } catch (writeNoRespErr) {
+                    try {
+                        await BleClient.write(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                        writeOk = true;
+                    } catch (writeWithRespErr) {
+                        console.warn('[BLE] Write retry failed:', writeWithRespErr);
+                    }
                 }
                 offset += sliceLength;
                 
-                // Small delay to prevent GATT buffer overflow on mobile controllers
-                await new Promise(r => setTimeout(r, 16));
+                // Controlled delay (25ms) to prevent GATT queue saturation on Android controllers (Moto G / Lenovo)
+                await new Promise(r => setTimeout(r, 25));
             }
 
             metrics.packetsAcked += 1;
@@ -422,7 +429,6 @@ class BluetoothTransport {
                 this.unsupportedDevices.set(targetId, Date.now() + 45000);
             }
             console.error("BLE Send failed:", e);
-            this.connectedDevices.delete(targetId);
             metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
             metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
             this.linkMetrics.set(targetId, metrics);

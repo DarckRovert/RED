@@ -379,6 +379,27 @@ class DtnStorage {
     console.log(`[DtnStorage] Force reset retry timers for ${items.length} pending DTN packets`);
   }
 
+  public forceResetForRecipient(recipientHash: string): number {
+    if (!recipientHash) return 0;
+    const cleanRecipient = recipientHash.trim().toLowerCase();
+    const items = this.getItems();
+    let resetCount = 0;
+    for (const it of items) {
+      const target = (it.targetRecipient || '').toLowerCase();
+      if (target === cleanRecipient || (cleanRecipient.length >= 8 && target.startsWith(cleanRecipient.slice(0, 8))) || (target.length >= 8 && cleanRecipient.startsWith(target.slice(0, 8)))) {
+        it.nextRetryAfter = 0;
+        it.attempts = 0;
+        this.saveItemToDB(it);
+        resetCount++;
+      }
+    }
+    if (resetCount > 0) {
+      this.saveItems(items);
+      console.log(`[DtnStorage] ⚡ Reset retry backoff for ${resetCount} DTN packets targeted to ${cleanRecipient.slice(0, 8)}`);
+    }
+    return resetCount;
+  }
+
   public getItemsToRetry(forceAll = false): DtnQueueItem[] {
     const now = Date.now();
     const items = this.getItems();

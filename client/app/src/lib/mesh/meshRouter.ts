@@ -36,6 +36,7 @@ import {
 
 import { RedAPI } from '../api';
 import { slottedGossip } from './SlottedGossipEngine';
+import { DnsTunnelEngine } from '../network/dnsTunnelEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -824,6 +825,179 @@ class MeshRouter {
     }
   }
 
+  // ─── RED-Sync BSP v2: Active State Synchronization Protocol ───────────────
+
+  /**
+   * Initiates active vector-clock state synchronization with a peer upon connection.
+   */
+  public async initiateSyncWithPeer(peerId: string) {
+    if (!peerId || !this.myIdentityHash || peerId === this.myIdentityHash) return;
+    const canonicalPeer = this.getCanonicalId(peerId);
+    if (!canonicalPeer || canonicalPeer.length < 8) return;
+
+    let lastTimestamp = 0;
+    let lastMsgId: string | undefined = undefined;
+
+    if (typeof window !== 'undefined') {
+      try {
+        const keys = [
+          `red_web_messages_${canonicalPeer}`,
+          `red_web_messages_${canonicalPeer.slice(0, 8)}`
+        ];
+        for (const k of keys) {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const msgs = JSON.parse(raw);
+            if (Array.isArray(msgs) && msgs.length > 0) {
+              const last = msgs[msgs.length - 1];
+              if (last && last.timestamp) {
+                const ts = last.timestamp > 1e11 ? last.timestamp : last.timestamp * 1000;
+                if (ts > lastTimestamp) {
+                  lastTimestamp = ts;
+                  lastMsgId = last.id;
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const queryPayload = {
+      type: 'SYNC_STATE_QUERY',
+      payload: {
+        requester: this.myIdentityHash,
+        target: canonicalPeer,
+        last_timestamp: lastTimestamp,
+        last_msg_id: lastMsgId,
+        timestamp: Date.now(),
+      }
+    };
+
+    const encoded = new TextEncoder().encode(JSON.stringify(queryPayload));
+    const packet = createPacket(this.myIdentityHash, canonicalPeer, encoded);
+    console.log(`[MeshRouter] 🔄 RED-Sync: Sent SYNC_STATE_QUERY to ${canonicalPeer.slice(0, 8)} (last ts: ${lastTimestamp})`);
+    await this.forwardPacket(packet, null).catch(() => {});
+  }
+
+  public async handleSyncStateQuery(senderHash: string, queryPayload: any, fromTransportId?: string, transportType?: 'ble' | 'wifi' | 'lora') {
+    const canonicalSender = this.getCanonicalId(senderHash);
+    const lastTimestamp = queryPayload.last_timestamp || 0;
+
+    const missingMsgs: any[] = [];
+    if (typeof window !== 'undefined') {
+      try {
+        const keys = [
+          `red_web_messages_${canonicalSender}`,
+          `red_web_messages_${canonicalSender.slice(0, 8)}`
+        ];
+        for (const k of keys) {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const msgs = JSON.parse(raw);
+            if (Array.isArray(msgs)) {
+              for (const m of msgs) {
+                const mTs = m.timestamp > 1e11 ? m.timestamp : m.timestamp * 1000;
+                if (mTs > lastTimestamp && (m.sender === this.myIdentityHash || m.isOutgoing)) {
+                  missingMsgs.push(m);
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const dtnItems = dtnStorage.getItemsToRetry(true);
+    for (const item of dtnItems) {
+      if (item.targetRecipient === canonicalSender || (canonicalSender.length >= 8 && item.targetRecipient.startsWith(canonicalSender.slice(0, 8)))) {
+        try {
+          const meshPkt = dtnStorage.toMeshPacket(item);
+          const str = new TextDecoder().decode(meshPkt.payload);
+          if (str.startsWith('{')) {
+            const parsed = JSON.parse(str);
+            if (!missingMsgs.some(m => m.id === parsed.id)) {
+              missingMsgs.push(parsed);
+            }
+          }
+        } catch {}
+      }
+    }
+
+    if (missingMsgs.length === 0) {
+      console.log(`[MeshRouter] 🔄 RED-Sync: No missing messages to sync for ${canonicalSender.slice(0, 8)}`);
+      return;
+    }
+
+    const batch = missingMsgs.slice(-50);
+    const batchPayload = {
+      type: 'SYNC_STATE_BATCH',
+      payload: {
+        sender: this.myIdentityHash,
+        recipient: canonicalSender,
+        messages: batch,
+        timestamp: Date.now(),
+      }
+    };
+
+    const encoded = new TextEncoder().encode(JSON.stringify(batchPayload));
+    const packet = createPacket(this.myIdentityHash, canonicalSender, encoded);
+    console.log(`[MeshRouter] ⚡ RED-Sync: Pushing ${batch.length} missing messages to ${canonicalSender.slice(0, 8)} via SYNC_STATE_BATCH`);
+    await this.forwardPacket(packet, null).catch(() => {});
+  }
+
+  public async handleSyncStateBatch(senderHash: string, batchPayload: any) {
+    const canonicalSender = this.getCanonicalId(senderHash);
+    const messages = batchPayload.messages;
+    if (!Array.isArray(messages) || messages.length === 0) return;
+
+    console.log(`[MeshRouter] 📥 RED-Sync: Received ${messages.length} messages from ${canonicalSender.slice(0, 8)}`);
+    const receivedIds: string[] = [];
+
+    for (const msg of messages) {
+      if (!msg || !msg.id) continue;
+      receivedIds.push(msg.id);
+
+      const syntheticPacket: MeshPacket = {
+        recipient: this.myIdentityHash,
+        sender: canonicalSender,
+        ttl: 1,
+        flags: 0,
+        timestamp: msg.timestamp || Date.now(),
+        nonce: msg.id,
+        payload: new TextEncoder().encode(JSON.stringify(msg)),
+      };
+
+      this.localDeliveryHandlers.forEach(h => {
+        try { h(syntheticPacket); } catch {}
+      });
+    }
+
+    const ackPayload = {
+      type: 'SYNC_STATE_ACK',
+      payload: {
+        sender: this.myIdentityHash,
+        recipient: canonicalSender,
+        received_ids: receivedIds,
+        timestamp: Date.now(),
+      }
+    };
+
+    const encoded = new TextEncoder().encode(JSON.stringify(ackPayload));
+    const ackPacket = createPacket(this.myIdentityHash, canonicalSender, encoded);
+    await this.forwardPacket(ackPacket, null).catch(() => {});
+  }
+
+  public handleSyncStateAck(ackPayload: any) {
+    const receivedIds: string[] = ackPayload.received_ids || [];
+    if (!Array.isArray(receivedIds) || receivedIds.length === 0) return;
+
+    for (const id of receivedIds) {
+      dtnStorage.remove(id);
+    }
+    console.log(`[MeshRouter] ✅ RED-Sync: Confirmed delivery of ${receivedIds.length} synced messages`);
+  }
+
   // ─── Sending ────────────────────────────────────────────────────────────────
 
   /**
@@ -1075,7 +1249,26 @@ class MeshRouter {
         }
       }
 
-      // 3. Shake-to-Pair Real P2P Mesh Handshake
+      // 3. RED-Sync BSP v2 State Synchronization Handshake
+      if (payloadStr.startsWith('{') && (payloadStr.includes('SYNC_STATE_QUERY') || payloadStr.includes('SYNC_STATE_BATCH') || payloadStr.includes('SYNC_STATE_ACK'))) {
+        try {
+          const parsed = JSON.parse(payloadStr);
+          if (parsed.type === 'SYNC_STATE_QUERY' && parsed.payload) {
+            this.handleSyncStateQuery(packet.sender, parsed.payload, fromTransportId, transportType).catch(() => {});
+            return;
+          }
+          if (parsed.type === 'SYNC_STATE_BATCH' && parsed.payload) {
+            this.handleSyncStateBatch(packet.sender, parsed.payload).catch(() => {});
+            return;
+          }
+          if (parsed.type === 'SYNC_STATE_ACK' && parsed.payload) {
+            this.handleSyncStateAck(parsed.payload);
+            return;
+          }
+        } catch {}
+      }
+
+      // 4. Shake-to-Pair Real P2P Mesh Handshake
       if (payloadStr.startsWith('{') && (payloadStr.includes('SHAKE_PAIR_BROADCAST') || payloadStr.includes('SHAKE_PAIR_ACCEPT'))) {
         try {
           const parsed = JSON.parse(payloadStr);
@@ -1270,6 +1463,22 @@ class MeshRouter {
       }
     }
 
+    // ─── 5. ZERO-BALANCE CELLULAR DNS TUNNELING FALLBACK ───
+    // If no local radio routes succeeded, but the device is on Cellular without data balance:
+    if (!anySent && !isBroadcast) {
+      try {
+        const hex = Array.from(encoded).map(b => b.toString(16).padStart(2, '0')).join('');
+        const dnsQueries = DnsTunnelEngine.packPayloadIntoDnsQuery(hex);
+        if (dnsQueries.length > 0) {
+          DnsTunnelEngine.transmitDnsQuery(dnsQueries[0]).then(res => {
+            if (res.success) {
+              console.log(`[MeshRouter] 📡 Zero-Balance Carrier Bypass: Transmitted packet via DNS Tunneling (${res.latencyMs}ms)`);
+            }
+          }).catch(() => {});
+        }
+      } catch {}
+    }
+
     if (!anySent) {
       // Enqueue in persistent DTN store-and-forward storage
       dtnStorage.enqueue(packet);
@@ -1368,18 +1577,27 @@ class MeshRouter {
   // ─── Peer Management ─────────────────────────────────────────────────────────
 
   addWifiPeer(peerId: string, canonicalId?: string, name?: string, isGateway = false, hasInternet = false) {
-    this.updatePeer(peerId, 'wifi', undefined, canonicalId, name, undefined, isGateway, hasInternet);
-    this.flushPendingQueue();
+    const canonical = canonicalId || this.getCanonicalId(peerId);
+    this.updatePeer(peerId, 'wifi', undefined, canonical, name, undefined, isGateway, hasInternet);
+    dtnStorage.forceResetForRecipient(canonical);
+    this.flushPendingQueue(true);
+    this.initiateSyncWithPeer(canonical).catch(() => {});
   }
 
   addBlePeer(deviceId: string, rssi?: number, canonicalId?: string, name?: string, isGateway = false, hasInternet = false) {
-    this.updatePeer(deviceId, 'ble', rssi, canonicalId, name, undefined, isGateway, hasInternet);
-    this.flushPendingQueue();
+    const canonical = canonicalId || this.getCanonicalId(deviceId);
+    this.updatePeer(deviceId, 'ble', rssi, canonical, name, undefined, isGateway, hasInternet);
+    dtnStorage.forceResetForRecipient(canonical);
+    this.flushPendingQueue(true);
+    this.initiateSyncWithPeer(canonical).catch(() => {});
   }
 
   addLoraPeer(peerId: string, canonicalId?: string, name?: string) {
-    this.updatePeer(peerId, 'lora', undefined, canonicalId, name);
-    this.flushPendingQueue();
+    const canonical = canonicalId || this.getCanonicalId(peerId);
+    this.updatePeer(peerId, 'lora', undefined, canonical, name);
+    dtnStorage.forceResetForRecipient(canonical);
+    this.flushPendingQueue(true);
+    this.initiateSyncWithPeer(canonical).catch(() => {});
   }
 
   removePeer(peerId: string) {

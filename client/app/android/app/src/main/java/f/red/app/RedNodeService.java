@@ -416,16 +416,22 @@ public class RedNodeService extends Service {
 
         ParcelUuid serviceUuid = new ParcelUuid(UUID.fromString(RED_BLE_SERVICE_UUID));
 
+        // Primary advertising data MUST strictly fit within 31 bytes (UUID 16B + header 3B = 19B)
         AdvertiseData data = new AdvertiseData.Builder()
-                .setIncludeDeviceName(true) // Other devices see "RED-<devicename>"
+                .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(false)
                 .addServiceUuid(serviceUuid)
+                .build();
+
+        // Device name is sent in the Scan Response to avoid exceeding 31 bytes on phones/tablets with long names
+        AdvertiseData scanResponse = new AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
                 .build();
 
         advertiseCallback = new AdvertiseCallback() {
             @Override
             public void onStartSuccess(AdvertiseSettings settingsInEffect) {
-                Log.i(TAG, "[BLE] RED Peripheral advertising started. UUID=" + RED_BLE_SERVICE_UUID);
+                Log.i(TAG, "[BLE] RED Peripheral 2-phase advertising active. UUID=" + RED_BLE_SERVICE_UUID);
             }
 
             @Override
@@ -435,7 +441,7 @@ public class RedNodeService extends Service {
         };
 
         try {
-            bleAdvertiser.startAdvertising(settings, data, advertiseCallback);
+            bleAdvertiser.startAdvertising(settings, data, scanResponse, advertiseCallback);
         } catch (Exception e) {
             Log.e(TAG, "[BLE] Exception starting advertise: " + e.getMessage());
         }

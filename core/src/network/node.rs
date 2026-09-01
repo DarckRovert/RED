@@ -569,13 +569,91 @@ impl Node {
     /// Handle an incoming gossip message
     async fn handle_gossip_message(&mut self, _sender: PeerId, data: Vec<u8>) {
         debug!("Received gossip message ({} bytes)", data.len());
-        // Gossip messages are currently expected to be encrypted OnionPackets
+
+        // 1. Direct check: TypeScript MeshPacket binary wire format (Magic: 0x52454401, Header: 96 bytes)
+        if data.len() >= 96 && data[0] == 0x52 && data[1] == 0x45 && data[2] == 0x44 && data[3] == 0x01 {
+            let payload = &data[96..];
+            if let Ok(json_str) = std::str::from_utf8(payload) {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(json_str) {
+                    if let Some(content_str) = parsed.get("content").and_then(|c| c.as_str()) {
+                        let sender_hex = parsed.get("sender").and_then(|s| s.as_str()).unwrap_or("");
+                        let recipient_hex = parsed.get("recipient").and_then(|r| r.as_str()).unwrap_or("");
+                        if let (Ok(sender_hash), Ok(recipient_hash)) = (
+                            crate::identity::IdentityHash::from_hex(sender_hex),
+                            crate::identity::IdentityHash::from_hex(recipient_hex)
+                        ) {
+                            let msg_type_str = parsed.get("msg_type").and_then(|t| t.as_str()).unwrap_or("text");
+                            let msg_content = match msg_type_str {
+                                "image" => MessageType::Image {
+                                    mime_type: "image/jpeg".to_string(),
+                                    data: content_str.as_bytes().to_vec(),
+                                    width: 0,
+                                    height: 0,
+                                },
+                                "voice" => MessageType::Voice {
+                                    duration_ms: 0,
+                                    data: content_str.as_bytes().to_vec(),
+                                },
+                                _ => MessageType::Text(content_str.to_string()),
+                            };
+                            let ts = parsed.get("timestamp").and_then(|t| t.as_u64()).unwrap_or_else(|| {
+                                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+                            });
+                            let msg = Message {
+                                id: crate::protocol::MessageId::generate(),
+                                sender: sender_hash,
+                                recipient: recipient_hash,
+                                content: msg_content,
+                                timestamp: ts,
+                                status: crate::protocol::MessageStatus::Sent,
+                                edited: false,
+                                reply_to: None,
+                            };
+                            self.handle_incoming_message(msg).await;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Direct JSON envelope check
+        if let Ok(json_str) = std::str::from_utf8(&data) {
+            let trimmed = json_str.trim_start();
+            if trimmed.starts_with('{') {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                    if let Some(content_str) = parsed.get("content").and_then(|c| c.as_str()) {
+                        let sender_hex = parsed.get("sender").and_then(|s| s.as_str()).unwrap_or("");
+                        let recipient_hex = parsed.get("recipient").and_then(|r| r.as_str()).unwrap_or("");
+                        if let (Ok(sender_hash), Ok(recipient_hash)) = (
+                            crate::identity::IdentityHash::from_hex(sender_hex),
+                            crate::identity::IdentityHash::from_hex(recipient_hex)
+                        ) {
+                            let msg = Message {
+                                id: crate::protocol::MessageId::generate(),
+                                sender: sender_hash,
+                                recipient: recipient_hash,
+                                content: MessageType::Text(content_str.to_string()),
+                                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                status: crate::protocol::MessageStatus::Sent,
+                                edited: false,
+                                reply_to: None,
+                            };
+                            self.handle_incoming_message(msg).await;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Classic Bincode OnionPacket / Message deserialization
         if let Ok(packet) = bincode::deserialize::<crate::network::routing::OnionPacket>(&data) {
             self.handle_onion_packet(_sender, packet).await;
         } else if let Ok(msg) = bincode::deserialize::<Message>(&data) {
             self.handle_incoming_message(msg).await;
         } else {
-            error!("Failed to deserialize gossip message as OnionPacket or Message");
+            error!("Failed to deserialize gossip message as MeshPacket, JSON, OnionPacket or Message");
         }
     }
 
