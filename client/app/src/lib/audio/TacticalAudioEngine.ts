@@ -55,8 +55,17 @@ export class TacticalAudioEngine {
         } catch {}
     }
 
+    private static lastMessageReceivedSoundTs = 0;
+    private static readonly ACOUSTIC_BURST_GUARD_MS = 600;
+
     /** Tono armónico dual confirmando mensaje recibido por la malla (523Hz -> 659Hz, 90ms) */
     public static playMessageReceived(): void {
+        const nowTs = Date.now();
+        if (nowTs - this.lastMessageReceivedSoundTs < this.ACOUSTIC_BURST_GUARD_MS) {
+            return; // Supresión de tormenta acústica en ráfagas de sincronización
+        }
+        this.lastMessageReceivedSoundTs = nowTs;
+
         const prefs = SettingsManager.getPreferences();
         if (!prefs.soundsEnabled) return;
 

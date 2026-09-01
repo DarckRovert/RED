@@ -148,10 +148,25 @@ class LocalTransport {
     if (!cleanId || this.connectingBleDevices.has(cleanId) || bluetoothTransport.isDeviceConnected(cleanId)) return;
 
     const lastAssoc = this.lastAssociatedBleDevices.get(cleanId) || 0;
-    if (Date.now() - lastAssoc < 60_000) {
+    if (Date.now() - lastAssoc < 45_000) {
       return;
     }
     this.lastAssociatedBleDevices.set(cleanId, Date.now());
+
+    // ── BLE Arbitration / Tie-Breaking ──
+    // Compares our identity vs target device ID to decide initiator role.
+    // The node with the lower hash yields a 2-second grace period so the higher node connects first.
+    // This prevents simultaneous bidirectional GATT connection attempts (Status 133 / GATT_BUSY).
+    const myComp = (this.myIdentityHash || '00000000').toLowerCase();
+    const targetComp = cleanId.replace(/:/g, '').toLowerCase();
+    const isMasterInitiator = myComp >= targetComp;
+
+    if (!isMasterInitiator) {
+      await new Promise(r => setTimeout(r, 2000));
+      if (bluetoothTransport.isDeviceConnected(cleanId)) {
+        return; // El par con prioridad mayor ya estableció el enlace
+      }
+    }
 
     this.connectingBleDevices.add(cleanId);
     try {

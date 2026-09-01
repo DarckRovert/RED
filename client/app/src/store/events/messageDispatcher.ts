@@ -30,6 +30,7 @@ const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (()
     } catch { return []; }
 })() : []);
 
+let _saveProcessedIdsTimer: any = null;
 export function recordProcessedMessageId(id: string) {
     if (!id) return;
     _processedMessageIds.add(id);
@@ -37,11 +38,17 @@ export function recordProcessedMessageId(id: string) {
         const first = _processedMessageIds.values().next().value;
         if (first) _processedMessageIds.delete(first);
     }
+    // Debounced asynchronous flush to avoid locking WebView I/O on packet bursts
     if (typeof window !== 'undefined') {
-        try {
-            const arr = Array.from(_processedMessageIds).slice(-2500);
-            localStorage.setItem('red_processed_msg_ids', JSON.stringify(arr));
-        } catch {}
+        if (!_saveProcessedIdsTimer) {
+            _saveProcessedIdsTimer = setTimeout(() => {
+                _saveProcessedIdsTimer = null;
+                try {
+                    const arr = Array.from(_processedMessageIds).slice(-2500);
+                    localStorage.setItem('red_processed_msg_ids', JSON.stringify(arr));
+                } catch {}
+            }, 2000);
+        }
     }
 }
 
@@ -81,10 +88,12 @@ export async function dispatchIncomingMessage(
         const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
         if (!item) return;
 
-        // 0. Global deduplication of incoming messages across transports/SSE strictly by unique message ID
-        if (item.id) {
-            if (_processedMessageIds.has(item.id)) return;
-            recordProcessedMessageId(item.id);
+        // 0. Global deduplication of incoming messages across transports/SSE strictly by unique message ID / deterministic hash
+        const dedupId = item.id || (data as any).nonce || (data as any).id || (item.sender && item.timestamp ? generateDeterministicMsgId(item.sender, item.recipient || 'broadcast', item.content || '', typeof item.timestamp === 'number' ? item.timestamp : Date.now()) : null);
+        if (dedupId) {
+            if (_processedMessageIds.has(dedupId)) return;
+            recordProcessedMessageId(dedupId);
+            if (!item.id) item.id = dedupId;
         }
 
         // Anti-spam PoW verification for incoming peer messages
