@@ -83,18 +83,47 @@ export class DtnStoreForwardEngine {
             if (!raw) return [];
 
             const envelope: StoredEnvelope = JSON.parse(raw);
-            const key = await this.deriveStorageKey();
             const iv = Uint8Array.from(atob(envelope.iv), c => c.charCodeAt(0));
             const ct = Uint8Array.from(atob(envelope.data), c => c.charCodeAt(0));
-            const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+
+            let plaintext: ArrayBuffer | null = null;
+
+            // 1. Intento con clave actual
+            try {
+                const key = await this.deriveStorageKey();
+                plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+            } catch {
+                // 2. Intento de fallback con clave de nodo por defecto
+                try {
+                    const fallbackMaterial = await crypto.subtle.importKey(
+                        'raw',
+                        new TextEncoder().encode('red_dtn_default_node_key'),
+                        { name: 'PBKDF2' },
+                        false,
+                        ['deriveBits', 'deriveKey']
+                    );
+                    const fallbackKey = await crypto.subtle.deriveKey(
+                        { name: 'PBKDF2', salt: new TextEncoder().encode('RED_DTN_SALT_v1'), iterations: 10000, hash: 'SHA-256' },
+                        fallbackMaterial,
+                        { name: 'AES-GCM', length: 256 },
+                        false,
+                        ['encrypt', 'decrypt']
+                    );
+                    plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, fallbackKey, ct);
+                } catch {
+                    // Mantener almacenamiento intacto para no destruir paquetes diferidos en reintentos
+                    return [];
+                }
+            }
+
+            if (!plaintext) return [];
+
             const bundles: DtnBundle[] = JSON.parse(new TextDecoder().decode(plaintext));
 
             // Filter expired bundles
             const now = Date.now();
             return bundles.filter(b => (now - b.createdAt) < b.ttlSeconds * 1000 && b.hopCount < b.maxHops);
         } catch {
-            // Decryption failed (key mismatch or corrupted) — clear and start fresh
-            localStorage.removeItem(this.STORAGE_KEY);
             return [];
         }
     }

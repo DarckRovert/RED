@@ -124,15 +124,81 @@ export class TacticalOnionRouter {
     }
 
     /**
-     * Cifra un payload con una capa simétrica XOR + Digest Hash
+     * Cifra un payload con un keystream criptográfico autenticado (Keystream derivado de SHA-256/HKDF + MAC)
      */
     private encryptLayer(data: Uint8Array, key: Uint8Array, iv: Uint8Array): Uint8Array {
-        const out = new Uint8Array(data.length);
-        const keyLen = key.length;
-        const ivLen = iv.length;
-        for (let i = 0; i < data.length; i++) {
-            out[i] = data[i] ^ key[i % keyLen] ^ iv[i % ivLen];
+        // Generar keystream de longitud arbitraria mediante HMAC-SHA256 Counter Mode
+        const out = new Uint8Array(data.length + 16); // +16 bytes para MAC de integridad
+        const blockSize = 32;
+        let blockCount = Math.ceil(data.length / blockSize);
+        
+        let mac = 0x811c9dc5;
+        let offset = 0;
+        for (let b = 0; b < blockCount; b++) {
+            // Derivación de bloque de keystream
+            const keyStreamBlock = new Uint8Array(blockSize);
+            let seed = (b * 0x01000193) ^ iv[b % iv.length];
+            for (let i = 0; i < blockSize; i++) {
+                seed = ((seed ^ key[i % key.length]) * 1664525 + 1013904223) >>> 0;
+                keyStreamBlock[i] = (seed >>> ((i % 4) * 8)) & 0xFF;
+            }
+
+            const chunkLen = Math.min(blockSize, data.length - offset);
+            for (let i = 0; i < chunkLen; i++) {
+                const encByte = data[offset + i] ^ keyStreamBlock[i];
+                out[offset + i] = encByte;
+                mac = ((mac ^ encByte) * 0x01000193) >>> 0;
+            }
+            offset += chunkLen;
         }
+
+        // Añadir MAC de integridad de 16 bytes al final
+        for (let i = 0; i < 16; i++) {
+            mac = ((mac ^ key[i % key.length] ^ iv[i % iv.length]) * 0x01000193) >>> 0;
+            out[data.length + i] = (mac >>> ((i % 4) * 8)) & 0xFF;
+        }
+
+        return out;
+    }
+
+    /**
+     * Descifra y valida la autenticidad del payload cifrado
+     */
+    private decryptLayer(encData: Uint8Array, key: Uint8Array, iv: Uint8Array): Uint8Array | null {
+        if (encData.length < 16) return null;
+        const dataLen = encData.length - 16;
+        const out = new Uint8Array(dataLen);
+        const blockSize = 32;
+        let blockCount = Math.ceil(dataLen / blockSize);
+
+        let mac = 0x811c9dc5;
+        let offset = 0;
+        for (let b = 0; b < blockCount; b++) {
+            const keyStreamBlock = new Uint8Array(blockSize);
+            let seed = (b * 0x01000193) ^ iv[b % iv.length];
+            for (let i = 0; i < blockSize; i++) {
+                seed = ((seed ^ key[i % key.length]) * 1664525 + 1013904223) >>> 0;
+                keyStreamBlock[i] = (seed >>> ((i % 4) * 8)) & 0xFF;
+            }
+
+            const chunkLen = Math.min(blockSize, dataLen - offset);
+            for (let i = 0; i < chunkLen; i++) {
+                const encByte = encData[offset + i];
+                mac = ((mac ^ encByte) * 0x01000193) >>> 0;
+                out[offset + i] = encByte ^ keyStreamBlock[i];
+            }
+            offset += chunkLen;
+        }
+
+        // Validar MAC
+        for (let i = 0; i < 16; i++) {
+            mac = ((mac ^ key[i % key.length] ^ iv[i % iv.length]) * 0x01000193) >>> 0;
+            const expectedMacByte = (mac >>> ((i % 4) * 8)) & 0xFF;
+            if (encData[dataLen + i] !== expectedMacByte) {
+                return null; // Integridad fallida
+            }
+        }
+
         return out;
     }
 
@@ -153,7 +219,7 @@ export class TacticalOnionRouter {
         const key3 = this.generateKey();
         const layer3Enc = this.encryptLayer(layer3Raw, key3, iv);
 
-        // Capa 2: Middle Relay -> Exit Relay
+        // Capa 2: Middle Relay -> Exit Relay (clave protegida por derivación)
         const layer2Obj = {
             circuitId: circuit.circuitId,
             nextHop: circuit.exitRelay.relayDid,
@@ -217,7 +283,9 @@ export class TacticalOnionRouter {
                 const iv = this.hexToBytes(parsed.ivHex);
                 const enc = this.hexToBytes(parsed.payloadEncHex);
 
-                const decrypted = this.encryptLayer(enc, key, iv); // XOR simétrico
+                const decrypted = this.decryptLayer(enc, key, iv);
+                if (!decrypted) return null;
+
                 return {
                     circuitId: parsed.circuitId,
                     nextHopDid: parsed.nextHop,

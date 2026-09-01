@@ -216,48 +216,48 @@ impl AICopilotEngine {
         let formatted_prompt = if model_name_lower.contains("qwen") || model_name_lower.contains("smollm") {
             if let Some(ctx) = &req.context {
                 format!(
-                    "<|im_start|>system\nEres el Copiloto IA Soberano de RED, un asistente táctico de emergencia 100% offline. Utiliza el siguiente protocolo oficial cuando sea relevante: {}\nResponde en español de forma precisa, concisa y útil.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    "<|im_start|>system\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional que opera 100% en el dispositivo sin internet. Conversa con fluidez, amabilidad y precisión en español sobre cualquier tema que plantee el operador. Si el siguiente protocolo oficial es relevante a la consulta, intégralo de forma natural: {}\nResponde de manera clara, amena y estructurada.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
                     ctx, prompt
                 )
             } else {
                 format!(
-                    "<|im_start|>system\nEres el Copiloto IA Soberano de RED, un asistente táctico de emergencia 100% offline. Responde en español de forma precisa, concisa y útil.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    "<|im_start|>system\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional que opera 100% en el dispositivo sin internet. Conversa con fluidez, amabilidad y precisión en español sobre cualquier tema o consulta general que plantee el operador de manera clara y amena.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
                     prompt
                 )
             }
         } else if model_name_lower.contains("llama") {
             if let Some(ctx) = &req.context {
                 format!(
-                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nEres el Copiloto IA Soberano de RED. Protocolo táctico: {}\nResponde en español de forma directa.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional que opera 100% en el dispositivo sin internet. Conversa con fluidez y amabilidad en español sobre cualquier consulta. Protocolo de referencia: {}\nResponde de forma clara y amena.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
                     ctx, prompt
                 )
             } else {
                 format!(
-                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nEres el Copiloto IA Soberano de RED. Responde en español de forma directa y concisa.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+                    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional que opera 100% en el dispositivo sin internet. Conversa con fluidez, amabilidad y precisión en español de forma clara y amena.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
                     prompt
                 )
             }
         } else if model_name_lower.contains("phi") {
             if let Some(ctx) = &req.context {
                 format!(
-                    "<|system|>\nEres el Copiloto IA de RED. Protocolo táctico: {}\nResponde en español de forma concisa.<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n",
+                    "<|system|>\nEres el Copiloto IA de RED OS, un asistente inteligente y conversacional que opera 100% en el dispositivo. Conversa con fluidez y amabilidad en español. Protocolo táctico: {}\nResponde de forma clara y amena.<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n",
                     ctx, prompt
                 )
             } else {
                 format!(
-                    "<|system|>\nEres el Copiloto IA de RED. Responde en español de forma concisa.<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n",
+                    "<|system|>\nEres el Copiloto IA de RED OS, un asistente inteligente y conversacional que opera 100% en el dispositivo. Conversa con fluidez, amabilidad y precisión en español de forma amena.<|end|>\n<|user|>\n{}<|end|>\n<|assistant|>\n",
                     prompt
                 )
             }
         } else {
             if let Some(ctx) = &req.context {
                 format!(
-                    "<|im_start|>system\nEres el Copiloto IA de RED. Protocolo: {}\nResponde en español.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    "<|im_start|>system\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional. Conversa con fluidez y amabilidad en español. Protocolo de apoyo: {}\nResponde de forma clara y amena.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
                     ctx, prompt
                 )
             } else {
                 format!(
-                    "<|im_start|>system\nEres el Copiloto IA de RED. Responde en español.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
+                    "<|im_start|>system\nEres el Copiloto IA de RED OS, un asistente inteligente, empático y conversacional que opera 100% en el dispositivo sin internet. Conversa con fluidez y amabilidad en español.<|im_end|>\n<|im_start|>user\n{}<|im_end|>\n<|im_start|>assistant\n",
                     prompt
                 )
             }

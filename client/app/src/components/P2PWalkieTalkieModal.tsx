@@ -37,6 +37,9 @@ export const P2PWalkieTalkieModal: React.FC = () => {
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const activeAudioBufferNodeRef = useRef<AudioBufferSourceNode | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const recordedChunksRef = useRef<Blob[]>([]);
+    const webStreamRef = useRef<MediaStream | null>(null);
 
     const myNickname = identity?.nickname || "Operador RED";
 
@@ -161,12 +164,29 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                     await NativeAudio.start();
                 } else {
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    webStreamRef.current = stream;
                     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
                     audioContextRef.current = new AudioCtx();
                     const source = audioContextRef.current.createMediaStreamSource(stream);
                     analyserRef.current = audioContextRef.current.createAnalyser();
                     analyserRef.current.fftSize = 64;
                     source.connect(analyserRef.current);
+
+                    recordedChunksRef.current = [];
+                    const mimeType = (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm;codecs=opus'))
+                        ? 'audio/webm;codecs=opus'
+                        : ((typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported('audio/webm')) ? 'audio/webm' : 'audio/ogg');
+                    
+                    if (typeof MediaRecorder !== 'undefined') {
+                        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+                        recorder.ondataavailable = (e) => {
+                            if (e.data && e.data.size > 0) {
+                                recordedChunksRef.current.push(e.data);
+                            }
+                        };
+                        recorder.start(100);
+                        mediaRecorderRef.current = recorder;
+                    }
                 }
                 setIsRecording(true);
                 setStatusMsg("🎙️ Transmitiendo por canal de voz...");
@@ -189,6 +209,28 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                         base64Audio = result.base64;
                         duration = Math.round(result.durationMs / 1000) || recordingTime;
                     }
+                } else if (mediaRecorderRef.current) {
+                    const rec = mediaRecorderRef.current;
+                    await new Promise<void>((resolve) => {
+                        rec.onstop = () => resolve();
+                        try { rec.stop(); } catch { resolve(); }
+                    });
+                    if (webStreamRef.current) {
+                        webStreamRef.current.getTracks().forEach(t => t.stop());
+                        webStreamRef.current = null;
+                    }
+                    const blob = new Blob(recordedChunksRef.current, { type: rec.mimeType || 'audio/webm' });
+                    if (blob.size > 0) {
+                        const buffer = await blob.arrayBuffer();
+                        const bytes = new Uint8Array(buffer);
+                        let binary = '';
+                        for (let i = 0; i < bytes.byteLength; i++) {
+                            binary += String.fromCharCode(bytes[i]);
+                        }
+                        base64Audio = btoa(binary);
+                        duration = recordingTime || 1;
+                    }
+                    mediaRecorderRef.current = null;
                 }
 
                 if (base64Audio) {

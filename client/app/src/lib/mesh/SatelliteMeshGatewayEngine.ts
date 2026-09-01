@@ -5,6 +5,9 @@
  * constellations to automatically inject queued DTN emergency beacons, SITREPs, and tactical telemetry.
  */
 
+import { meshRouter } from './meshRouter';
+import { dtnStorage } from './dtnStorage';
+
 export interface SatellitePass {
     satelliteId: string;
     constellation: 'IRIDIUM_NEXT' | 'ORBCOMM_OG2' | 'DIRECT_TO_CELL';
@@ -159,6 +162,27 @@ export class SatelliteMeshGatewayEngine {
     public triggerSatelliteBurst(): boolean {
         const best = this.satellites.find(s => s.isInAos);
         if (!best) return false;
+
+        for (const item of this.outboundQueue) {
+            try {
+                const satEnvelope = `SAT_BURST_V1:${best.satelliteId}:${best.constellation}:${item.payload}`;
+                const bytes = new TextEncoder().encode(satEnvelope);
+
+                meshRouter.broadcast(bytes).catch(() => {});
+
+                dtnStorage.enqueue({
+                    recipient: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+                    sender: 'SAT_GATEWAY',
+                    ttl: 14,
+                    flags: 0x01,
+                    timestamp: Date.now(),
+                    nonce: item.id,
+                    payload: bytes,
+                }, 9);
+            } catch (err) {
+                console.warn('[SatelliteGateway] Error despachando ráfaga satelital:', err);
+            }
+        }
 
         this.totalUplinks += Math.max(1, this.outboundQueue.length);
         this.outboundQueue = [];

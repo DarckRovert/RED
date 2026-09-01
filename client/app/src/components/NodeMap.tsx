@@ -456,7 +456,9 @@ export default function NodeMap() {
                         // 1. Consultar primero la bóveda IndexedDB
                         offlineTileCacheEngine.getTile(coords.z, coords.x, coords.y).then((cachedBlob) => {
                             if (cachedBlob) {
-                                tile.src = URL.createObjectURL(cachedBlob);
+                                const blobUrl = URL.createObjectURL(cachedBlob);
+                                (tile as any)._blobUrl = blobUrl;
+                                tile.src = blobUrl;
                             } else {
                                 const url = (this as any).getTileUrl(coords);
                                 tile.src = url;
@@ -470,6 +472,13 @@ export default function NodeMap() {
                         });
 
                         return tile;
+                    },
+                    _removeTile(key: string) {
+                        const tile = (this as any)._tiles[key]?.el;
+                        if (tile && (tile as any)._blobUrl) {
+                            try { URL.revokeObjectURL((tile as any)._blobUrl); } catch {}
+                        }
+                        (L.TileLayer.prototype as any)._removeTile?.call(this, key);
                     }
                 });
 

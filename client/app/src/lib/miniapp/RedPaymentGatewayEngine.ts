@@ -92,7 +92,8 @@ export class RedPaymentGatewayEngine {
             details: {
                 paypalUrl,
                 merchantUsername: username,
-                status: 'intent_opened'
+                status: 'intent_opened',
+                pendingConfirmation: true
             }
         };
     }

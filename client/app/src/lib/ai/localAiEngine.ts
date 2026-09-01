@@ -501,7 +501,7 @@ class LocalAIEngineClass {
             }
         });
 
-        // ── FASE 4: SÍNTESIS CONVERSACIONAL FLUIDA EN ESPAÑOL (NLG / SmolLM2) ──
+        // ── FASE 4: SÍNTESIS NEURONAL REAL EN ESPAÑOL (Qwen / SmolLM / LLaMA) ──
         const genStart = performance.now();
         let finalAnswer = '';
         let topicCategory = matchedFrag?.category || 'General';
@@ -522,31 +522,102 @@ class LocalAIEngineClass {
             } catch {}
         }
 
-        // 2. Si no hubo delegación colmena, generar respuesta local fluida
+        // 2. Inferencia Neuronal Real en Dispositivo con Modelo Activo
         if (!finalAnswer) {
-            if (matchedFrag && highestSim >= 0.35) {
-                // Síntesis RAG Táctica Estructurada y Pedagógica
-                const priorityBadge = matchedFrag.priorityLevel === 'CRITICO' ? '🚨 PROTOCOLO CRÍTICO' : '⚡ PROTOCOLO TÁCTICO';
-                const triageBadge = matchedFrag.triageColor ? ` [TRIAGE ${matchedFrag.triageColor}]` : '';
+            const activeModel = ModelManager.getActiveModel();
+            const modelId = activeModel?.id || 'qwen-2.5-0.5b-q4';
 
-                finalAnswer = `🛡️ ${priorityBadge}${triageBadge}: ${matchedFrag.title}\n\n` +
-                    `${matchedFrag.summary}\n\n` +
-                    `📋 PASOS DE ACCIÓN INMEDIATA:\n` +
-                    matchedFrag.actionSteps.map((step, idx) => `  ${idx + 1}. ${step}`).join('\n') +
-                    (matchedFrag.vitalWarnings && matchedFrag.vitalWarnings.length > 0 ? 
-                        `\n\n⚠️ ADVERTENCIAS VITALES:\n` + matchedFrag.vitalWarnings.map(w => `  • ${w}`).join('\n') : '') +
-                    `\n\n📖 DETALLES TÉCNICOS & PROCEDIMIENTO:\n${matchedFrag.content}`;
-                topicCategory = `Táctico: ${matchedFrag.title}`;
+            // Construir System Prompt conversacional equilibrado y natural
+            const systemPrompt = `Eres el Copiloto IA de RED OS, un asistente inteligente, empático, resolutivo y experto que opera 100% en el dispositivo del usuario sin conexión a internet. Conversa con fluidez, amabilidad, naturalidad y precisión en español sobre cualquier tema o consulta general que plantee el operador. ${ragContext ? `Información de referencia táctica: ${ragContext}. Intégrala orgánicamente en tu respuesta sin responder con plantillas rígidas ni menús prefabricados.` : ''}`;
+
+            // Construir historial multiturno reciente (últimos 4 turnos)
+            const recentHistory = LocalAIEngineClass.sessionDialogHistory.slice(-4);
+            let formattedPrompt = '';
+
+            if (modelId.includes('llama')) {
+                formattedPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${systemPrompt}<|eot_id|>`;
+                for (const msg of recentHistory) {
+                    formattedPrompt += `<|start_header_id|>${msg.role}<|end_header_id|>\n\n${msg.text}<|eot_id|>`;
+                }
+                formattedPrompt += `<|start_header_id|>user<|end_header_id|>\n\n${cleanQuery}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n`;
+            } else if (modelId.includes('phi')) {
+                formattedPrompt = `<|system|>\n${systemPrompt}<|end|>\n`;
+                for (const msg of recentHistory) {
+                    formattedPrompt += `<|${msg.role}|>\n${msg.text}<|end|>\n`;
+                }
+                formattedPrompt += `<|user|>\n${cleanQuery}<|end|>\n<|assistant|>\n`;
             } else {
-                // Síntesis Conversacional Dinámica sin Plantillas Rígidas
-                finalAnswer = this.synthesizeConversationalAnswer(cleanQuery, lowerQ, tokens);
-                topicCategory = 'Copiloto Conversacional';
+                // Qwen / SmolLM / ChatML standard
+                formattedPrompt = `<|im_start|>system\n${systemPrompt}<|im_end|>\n`;
+                for (const msg of recentHistory) {
+                    formattedPrompt += `<|im_start|>${msg.role}\n${msg.text}<|im_end|>\n`;
+                }
+                formattedPrompt += `<|im_start|>user\n${cleanQuery}<|im_end|>\n<|im_start|>assistant\n`;
+            }
+
+            try {
+                const generator = await this.getGenerator();
+                if (generator) {
+                    const genOutput = await this.withTimeout(
+                        generator(formattedPrompt, {
+                            max_new_tokens: 220,
+                            temperature: 0.7,
+                            top_p: 0.9,
+                            do_sample: true,
+                            repetition_penalty: 1.15,
+                        }),
+                        25000,
+                        'Neural Generation'
+                    );
+
+                    let rawGenerated = '';
+                    if (Array.isArray(genOutput) && genOutput.length > 0) {
+                        rawGenerated = (genOutput[0] as any)?.generated_text || '';
+                    } else if (genOutput && typeof genOutput === 'object' && (genOutput as any).generated_text) {
+                        rawGenerated = (genOutput as any).generated_text;
+                    }
+
+                    if (rawGenerated) {
+                        // Extraer texto generado omitiendo los encabezados del prompt
+                        if (rawGenerated.startsWith(formattedPrompt)) {
+                            rawGenerated = rawGenerated.slice(formattedPrompt.length);
+                        } else if (rawGenerated.includes('<|im_start|>assistant\n')) {
+                            rawGenerated = rawGenerated.split('<|im_start|>assistant\n').pop() || '';
+                        } else if (rawGenerated.includes('<|start_header_id|>assistant<|end_header_id|>\n\n')) {
+                            rawGenerated = rawGenerated.split('<|start_header_id|>assistant<|end_header_id|>\n\n').pop() || '';
+                        } else if (rawGenerated.includes('<|assistant|>\n')) {
+                            rawGenerated = rawGenerated.split('<|assistant|>\n').pop() || '';
+                        }
+
+                        // Limpiar tokens de control
+                        finalAnswer = rawGenerated
+                            .replace(/<\|im_end\|>/g, '')
+                            .replace(/<\|eot_id\|>/g, '')
+                            .replace(/<\|end\|>/g, '')
+                            .replace(/<\|endoftext\|>/g, '')
+                            .replace(/<\/s>/g, '')
+                            .trim();
+                    }
+                }
+            } catch (genErr) {
+                console.warn('[LocalAIEngine] Inferencia neuronal WASM fallback:', genErr);
+            }
+
+            // Fallback dinámico inteligente si la inferencia en memoria no generó texto
+            if (!finalAnswer) {
+                if (matchedFrag && highestSim >= 0.45) {
+                    finalAnswer = `🛡️ **${matchedFrag.title}**\n\n${matchedFrag.summary}\n\n📖 **Procedimiento:**\n${matchedFrag.content}`;
+                    topicCategory = `Táctico: ${matchedFrag.title}`;
+                } else {
+                    finalAnswer = this.synthesizeConversationalAnswer(cleanQuery, lowerQ, tokens);
+                    topicCategory = 'Copiloto Conversacional';
+                }
             }
 
             thoughtSteps.push({
                 phase: 'Generación',
-                title: '4. Síntesis de Lenguaje Natural en Español',
-                description: 'Generación fluida completada con éxito sin conexión a internet.',
+                title: '4. Inferencia Neuronal en Español',
+                description: `Generación completada mediante ${activeModel?.name || 'Modelo Local'} (100% Offline).`,
                 status: 'completed',
                 metrics: {
                     'Tiempo Síntesis': `${Math.round(performance.now() - genStart)}ms`,
@@ -567,8 +638,8 @@ class LocalAIEngineClass {
             `🤔 1. Análisis de Intención: El operador consulta sobre "${cleanQuery.slice(0, 45)}${cleanQuery.length > 45 ? '...' : ''}". Entidades detectadas: [${tokens.slice(0, 4).join(', ') || 'consulta general'}].`,
             `🔍 2. Proyección Vectorial: Mapeando tensores 384-D en el espacio latente sin conexión a internet. ${matchedFrag ? `Afinidad semántica con protocolo '${matchedFrag.title}' calculada en ${(highestSim * 100).toFixed(1)}%.` : 'Calculada similitud general en memoria.'}`,
             `🛡️ 3. Inspección Guardian: Evaluando vectores de ataque, jailbreaks y clasificación DeBERTa-v3. Estado: ${isSafe ? '100% Seguro (Sin amenazas)' : 'Filtrado de riesgo'}.`,
-            `⚡ 4. Deliberación Interna: ${matchedFrag ? 'Priorizando protocolo de supervivencia con pasos de acción inmediata y advertencias vitales.' : 'Formulando directiva técnica y pedagógica adaptada al contexto del operador.'}`,
-            `📝 5. Generación de Directiva: Redactando síntesis en lenguaje natural optimizada para terminales tácticos off-grid.`
+            `⚡ 4. Deliberación Interna: ${matchedFrag ? 'Integrando protocolo de referencia y estructurando diálogo fluido.' : 'Formulando respuesta amena, técnica y adaptada al operador.'}`,
+            `📝 5. Generación de Directiva: Inferencia neuronal completada en dispositivo.`
         ];
 
         const totalExecTime = Math.round(performance.now() - start);

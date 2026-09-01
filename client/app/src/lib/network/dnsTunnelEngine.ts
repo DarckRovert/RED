@@ -116,6 +116,7 @@ export class DnsTunnelEngine {
     this.stats.packetsSent++;
     this.stats.bytesTransmitted += dnsHostname.length;
 
+    // 1. Intento por DoH (Cloudflare / Google / Quad9)
     for (const provider of this.DOH_PROVIDERS) {
       try {
         const dohUrl = `${provider}?name=${encodeURIComponent(dnsHostname)}&type=TXT`;
@@ -137,12 +138,29 @@ export class DnsTunnelEngine {
       } catch {}
     }
 
+    // 2. Fallback a UDP Puerto 53 sin saldo (vía backend local RED en puerto 7333 / Native UDP Socket)
+    try {
+      const res = await fetch('http://127.0.0.1:7333/api/dns/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: dnsHostname, record_type: 'TXT', port: 53 }),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const latencyMs = Math.round(performance.now() - startTime);
+        this.stats.lastResponseTimeMs = latencyMs;
+        this.stats.packetsReceived++;
+        return { success: true, responseTxt: json.answer || "UDP_53_ACK", latencyMs };
+      }
+    } catch {}
+
     const latencyMs = Math.round(performance.now() - startTime);
     return {
         success: false,
         responseTxt: undefined,
         latencyMs,
-        reason: 'DoH request failed on all fallback providers (Cloudflare, Google, Quad9)',
+        reason: 'DoH y UDP 53 fallaron (red celular sin conectividad de nombres)',
     } as { success: boolean; responseTxt?: string; latencyMs: number };
   }
 

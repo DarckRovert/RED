@@ -98,12 +98,20 @@ export class WifiDirectTransport {
 
     public updateIdentity(newId: string): void {
         if (!newId || newId === this.myId) return;
+        const oldId = this.myId;
         this.myId = newId;
         mqttRelay.updateIdentity(newId);
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
                 this.ws.send(JSON.stringify({ type: 'register', id: newId }));
             } catch {}
+        }
+        // Notificar identidad actualizada en todos los canales de datos abiertos
+        const idAnnounce = JSON.stringify({ type: 'IDENTITY_UPDATE', oldId, newId });
+        for (const [peerId, dc] of this.dataChannels.entries()) {
+            if (dc && dc.readyState === 'open') {
+                try { dc.send(idAnnounce); } catch {}
+            }
         }
     }
 

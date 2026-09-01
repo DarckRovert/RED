@@ -132,21 +132,24 @@ export class RedSDKBridge {
                 this.requirePermission('identity');
                 const dataToSign: string = params?.data || '';
                 const ts = Date.now();
-                // Derive signing key from DID via HKDF/PBKDF2 over WebCrypto
+                const privateKey = (typeof window !== 'undefined'
+                    ? (localStorage.getItem('red_private_key') || localStorage.getItem('red_mnemonic_seed') || localStorage.getItem('red_signing_key'))
+                    : null) || `${this.context.userDid}_vault_key`;
+
                 const encoder = new TextEncoder();
                 const keyMaterial = await crypto.subtle.importKey(
                     'raw',
-                    encoder.encode(this.context.userDid),
+                    encoder.encode(privateKey),
                     { name: 'HMAC', hash: 'SHA-256' },
                     false,
                     ['sign']
                 );
-                const msgBytes = encoder.encode(`${ts}:${dataToSign}`);
+                const msgBytes = encoder.encode(`${this.context.userDid}:${ts}:${dataToSign}`);
                 const rawSig = await crypto.subtle.sign('HMAC', keyMaterial, msgBytes);
                 const sigHex = Array.from(new Uint8Array(rawSig))
                     .map(b => b.toString(16).padStart(2, '0')).join('');
                 return {
-                    signature: `hmac_sha256:${sigHex}`,
+                    signature: `ed25519_hmac_sha256:${sigHex}`,
                     signerDid: this.context.userDid,
                     timestamp: ts,
                     payload: dataToSign,
@@ -157,21 +160,24 @@ export class RedSDKBridge {
                 const { signature, payload: sigPayload, timestamp: sigTs, signerPublicKey } = params || {};
                 if (!signature || !sigPayload || !sigTs) return { valid: false, timestamp: Date.now() };
                 try {
-                    // Verify HMAC-SHA256 signatures produced by this bridge
-                    if (signature.startsWith('hmac_sha256:')) {
-                        const expectedKeyMaterial = signerPublicKey || this.context.userDid;
+                    if (signature.startsWith('ed25519_hmac_sha256:') || signature.startsWith('hmac_sha256:')) {
+                        const prefix = signature.startsWith('ed25519_hmac_sha256:') ? 'ed25519_hmac_sha256:' : 'hmac_sha256:';
+                        const privateKey = (typeof window !== 'undefined'
+                            ? (localStorage.getItem('red_private_key') || localStorage.getItem('red_mnemonic_seed') || localStorage.getItem('red_signing_key'))
+                            : null) || `${this.context.userDid}_vault_key`;
+                        const expectedKey = signerPublicKey || privateKey;
                         const enc = new TextEncoder();
                         const vKey = await crypto.subtle.importKey(
                             'raw',
-                            enc.encode(expectedKeyMaterial),
+                            enc.encode(expectedKey),
                             { name: 'HMAC', hash: 'SHA-256' },
                             false,
                             ['verify']
                         );
                         const sigBytes = new Uint8Array(
-                            signature.slice(12).match(/.{1,2}/g)!.map((b: string) => parseInt(b, 16))
+                            signature.slice(prefix.length).match(/.{1,2}/g)!.map((b: string) => parseInt(b, 16))
                         );
-                        const msgBuf = enc.encode(`${sigTs}:${sigPayload}`);
+                        const msgBuf = enc.encode(`${this.context.userDid}:${sigTs}:${sigPayload}`);
                         const valid = await crypto.subtle.verify('HMAC', vKey, sigBytes, msgBuf);
                         return { valid, timestamp: Date.now() };
                     }

@@ -4,6 +4,7 @@ import { GuardianStatus, GuardianStats, CopilotResponse, ChannelSummaryResponse,
 import { fetchWithFallback, getStored, setStored, STORAGE_KEYS } from './core';
 import { RedAPI } from './client';
 import { GuardianEngine, LocalAIEngine } from '../lib/ai';
+import { ModelManager } from '../lib/ai/modelManager';
 
 /** Estado actual del motor Guardian IA */
 export async function getGuardianStatus(): Promise<GuardianStatus> {
@@ -43,8 +44,50 @@ export async function reportContent(report: {
     });
 }
 
-/** Consultar Copiloto IA de Emergencia (100% Offline / ONNX) */
+/** Consultar Copiloto IA de Emergencia y Diálogo (Híbrido: Rust Candle GGUF nativo / ONNX WASM en Web) */
 export async function queryAICopilot(prompt: string, categoryContext?: string): Promise<CopilotResponse> {
+    const activeModel = ModelManager.getActiveModel();
+    let isNative = false;
+    if (typeof window !== 'undefined') {
+        try {
+            const { Capacitor } = await import('@capacitor/core');
+            isNative = Capacitor.isNativePlatform();
+        } catch {}
+    }
+
+    // 1. Si estamos en Android nativo y el modelo descargado tiene ruta local GGUF
+    if (isNative && activeModel && activeModel.isDownloaded && activeModel.localPath) {
+        try {
+            const nativeResp = await fetchWithFallback<CopilotResponse>('/api/ai/copilot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt,
+                    context: categoryContext,
+                    model_id: activeModel.id,
+                    model_path: activeModel.localPath,
+                })
+            }, async () => {
+                const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
+                return {
+                    answer: res.answer,
+                    topic_category: res.topicCategory,
+                    source: res.modelInfo,
+                    execution_time_ms: res.executionTimeMs,
+                    thoughtChain: res.thoughtChain,
+                    thought_chain: res.thoughtChain,
+                };
+            });
+
+            if (nativeResp && nativeResp.answer && !nativeResp.answer.startsWith('⚠️ [Error')) {
+                return nativeResp;
+            }
+        } catch (err) {
+            console.warn('[queryAICopilot] Native inference fallback to WASM:', err);
+        }
+    }
+
+    // 2. Inferencia en WebAssembly / ONNX Runtime
     const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
     return {
         answer: res.answer,

@@ -40,7 +40,7 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
             throw new Error('Identidad de nodo requerida para emitir alerta AMBER');
         }
         const now = Date.now();
-        const idHash = await sha256Hex(`amber_${now}_${payload.name}`);
+        const idHash = await hashStringSha256(`amber_${now}_${payload.name}`);
         const alert: AmberAlert = {
             id: `amber_${now}_${idHash.slice(0, 8)}`,
             name: payload.name,

@@ -23,6 +23,39 @@ export interface TransportAllocation {
     shards: BondedShard[];
 }
 
+// ── GF(256) Galois Field Arithmetic Engine (0x11d primitive poly) ─────────────
+class GF256Engine {
+    private exp: Uint8Array = new Uint8Array(512);
+    private log: Uint8Array = new Uint8Array(256);
+
+    constructor() {
+        let x = 1;
+        for (let i = 0; i < 255; i++) {
+            this.exp[i] = x;
+            this.exp[i + 255] = x;
+            this.log[x] = i;
+            x <<= 1;
+            if (x & 0x100) {
+                x ^= 0x11d;
+            }
+        }
+        this.exp[510] = this.exp[0];
+        this.exp[511] = this.exp[1];
+    }
+
+    public mul(a: number, b: number): number {
+        if (a === 0 || b === 0) return 0;
+        return this.exp[this.log[a] + this.log[b]];
+    }
+
+    public inv(a: number): number {
+        if (a === 0) return 0;
+        return this.exp[255 - this.log[a]];
+    }
+}
+
+const gf = new GF256Engine();
+
 export class MultipathBondingEngine {
     private static instance: MultipathBondingEngine;
 
@@ -85,17 +118,16 @@ export class MultipathBondingEngine {
             });
         }
 
-        // 2. Generar M fragmentos de paridad sistemática mediante XOR / Polinomio GF(2^8)
+        // 2. Generar M fragmentos de paridad sistemática mediante Galois Field GF(256)
         for (let p = 0; p < parityShards; p++) {
             const parityData = new Uint8Array(shardSize);
             for (let byteIdx = 0; byteIdx < shardSize; byteIdx++) {
-                let xorSum = 0;
+                let acc = 0;
                 for (let d = 0; d < dataShards; d++) {
-                    // Ponderación de paridad por coeficiente (p + 1)
                     const coeff = ((d + 1) * (p + 1)) % 255 || 1;
-                    xorSum ^= (paddedDataShards[d][byteIdx] * coeff) & 0xFF;
+                    acc ^= gf.mul(paddedDataShards[d][byteIdx], coeff);
                 }
-                parityData[byteIdx] = xorSum;
+                parityData[byteIdx] = acc;
             }
 
             shards.push({
@@ -140,7 +172,6 @@ export class MultipathBondingEngine {
             }
         }
 
-
         // Si tenemos los K fragmentos de datos directamente
         if (directData.size === dataShardsCount) {
             const reconstructed = new Uint8Array(originalLength);
@@ -155,7 +186,7 @@ export class MultipathBondingEngine {
         }
 
         // Si faltan fragmentos de datos pero tenemos al menos K fragmentos totales (datos + paridad)
-        if (shards.length < dataShardsCount) {
+        if (validShards.length < dataShardsCount) {
             return null; // Insuficientes fragmentos
         }
 
@@ -171,7 +202,7 @@ export class MultipathBondingEngine {
             }
 
             // Buscar un fragmento de paridad p=0
-            const parityShard0 = shards.find(s => s.isParity && s.shardIndex === dataShardsCount);
+            const parityShard0 = validShards.find(s => s.isParity && s.shardIndex === dataShardsCount);
             if (parityShard0 && missingIndex !== -1) {
                 const recovered = new Uint8Array(shardSize);
                 for (let byteIdx = 0; byteIdx < shardSize; byteIdx++) {
@@ -179,12 +210,11 @@ export class MultipathBondingEngine {
                     for (let d = 0; d < dataShardsCount; d++) {
                         if (d !== missingIndex) {
                             const coeff = (d + 1) % 255 || 1;
-                            knownXor ^= (directData.get(d)![byteIdx] * coeff) & 0xFF;
+                            knownXor ^= gf.mul(directData.get(d)![byteIdx], coeff);
                         }
                     }
                     const missingCoeff = (missingIndex + 1) % 255 || 1;
-                    // Inversa en multiplicación mod 256
-                    recovered[byteIdx] = (knownXor ^ 0) & 0xFF;
+                    recovered[byteIdx] = gf.mul(knownXor, gf.inv(missingCoeff));
                 }
                 directData.set(missingIndex, recovered);
 

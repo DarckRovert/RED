@@ -772,12 +772,16 @@ export class RedAPIClient {
      * Fans out across MeshRouter to all members and persists under group conversation vault.
      */
     async sendGroupMessage(groupId: string, content: string, options?: Record<string, any>): Promise<void> {
+        let nativeSuccess = false;
         try {
             const body = { recipient: groupId, content, ...options };
-            await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
+            const res: any = await this.req(`/groups/${groupId}/send`, { method: 'POST', body: JSON.stringify(body) });
+            if (res && (res.status === 200 || res.ok || res.id)) {
+                nativeSuccess = true;
+            }
         } catch {}
 
-        // Web / Mesh Fan-Out over meshRouter:
+        // Web / Mesh Fan-Out over meshRouter (only if native backend did not already broadcast):
         const localGroups = this.getWebStore<any[]>('red_web_groups', []);
         let myHash = '';
         try {
@@ -835,19 +839,21 @@ export class RedAPIClient {
             ...(options || {})
         });
 
-        // Fan-out to every member node over mesh
-        for (const memberHash of recipientMembers) {
-            try {
-                await this.sendMessage(memberHash, groupMsgPayload, {
-                    ...options,
-                    id: msgId,
-                    is_group: true,
-                    group_id: groupId,
-                    conversation_id: groupId,
-                    msg_type: options?.msg_type || 'group_message'
-                });
-            } catch (e) {
-                console.warn(`[RED Group] Fan-out error to member ${memberHash.slice(0, 8)}:`, e);
+        // Fan-out to every member node over mesh (only if native backend did not handle it)
+        if (!nativeSuccess) {
+            for (const memberHash of recipientMembers) {
+                try {
+                    await this.sendMessage(memberHash, groupMsgPayload, {
+                        ...options,
+                        id: msgId,
+                        is_group: true,
+                        group_id: groupId,
+                        conversation_id: groupId,
+                        msg_type: options?.msg_type || 'group_message'
+                    });
+                } catch (e) {
+                    console.warn(`[RED Group] Fan-out error to member ${memberHash.slice(0, 8)}:`, e);
+                }
             }
         }
 

@@ -29,14 +29,21 @@ export function ShamirRecoveryModal() {
     }, []);
 
     const handleGenerateShares = () => {
-        const masterSecret = identity?.identity_hash 
-            ? identity.identity_hash.padEnd(64, '0').slice(0, 64) 
-            : (() => {
-                const buf = new Uint8Array(32);
-                if (typeof crypto !== 'undefined') crypto.getRandomValues(buf);
-                return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
-            })();
-        shamirRecoveryVault.initializeGuardians(masterSecret, guardianNames);
+        let masterSecret = '';
+        if (typeof window !== 'undefined') {
+            masterSecret = localStorage.getItem('red_mnemonic_seed') || localStorage.getItem('red_private_key') || '';
+        }
+        if (!masterSecret) {
+            masterSecret = identity?.private_key || (identity as any)?.signing_key || identity?.identity_hash || '';
+        }
+        if (!masterSecret) {
+            const buf = new Uint8Array(32);
+            if (typeof crypto !== 'undefined') crypto.getRandomValues(buf);
+            masterSecret = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+        // Pad to at least 64 chars if hex
+        const secretHex = masterSecret.length < 64 ? masterSecret.padEnd(64, '0') : masterSecret;
+        shamirRecoveryVault.initializeGuardians(secretHex, guardianNames);
         toast.success("Bóveda Shamir 3-de-5 generada exitosamente");
     };
 

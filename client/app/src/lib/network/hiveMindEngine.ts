@@ -83,10 +83,12 @@ class HiveMindEngineClass {
         }
         if (!myId) myId = 'local_node';
 
+        const cpuUsagePercent = Math.min(100, Math.round(10 + (this.activeRequestResolvers.size * 25) + (this.activeStreamListeners.size * 15)));
+
         const ad: NodeCapacityAdvertisement = {
             nodeId: myId,
             availableRamMb,
-            cpuUsagePercent: 10,
+            cpuUsagePercent,
             batteryLevel: batt.level,
             isCharging: batt.isCharging,
             activeModel: activeModel ? activeModel.id : null,
@@ -149,6 +151,31 @@ class HiveMindEngineClass {
             const copilotRes = await LocalAIEngine.generateCopilotResponse(req.prompt);
             const execTime = Math.round(performance.now() - start);
 
+            // Si el solicitante pidió streaming, emitir tokens progresivamente por la malla
+            if (req.stream) {
+                const words = copilotRes.answer.split(' ');
+                for (let i = 0; i < words.length; i++) {
+                    const token = (i === 0 ? '' : ' ') + words[i];
+                    const isFinal = i === words.length - 1;
+                    const streamPayload: HiveInferenceStreamChunk = {
+                        requestId: req.requestId,
+                        chunkIndex: i,
+                        token,
+                        isFinal,
+                        totalTokensGenerated: words.length,
+                        executionTimeMs: Math.round(performance.now() - start),
+                    };
+                    const encChunk = new TextEncoder().encode(JSON.stringify({
+                        type: 'HIVE_STREAM_CHUNK',
+                        payload: streamPayload
+                    }));
+                    await meshRouter.send(senderId, encChunk);
+                    if (i < words.length - 1) {
+                        await new Promise(r => setTimeout(r, 20));
+                    }
+                }
+            }
+
             const respPayload: HiveInferenceResponse = {
                 requestId: req.requestId,
                 fullAnswer: copilotRes.answer,
@@ -196,7 +223,20 @@ class HiveMindEngineClass {
 
         if (validPeers.length === 0) return null;
 
-        validPeers.sort((a, b) => (b.availableRamMb + b.batteryLevel) - (a.availableRamMb + a.batteryLevel));
+        // Puntuación normalizada multicriterio: RAM normalizada (0..1) + Batería normalizada (0..1)
+        validPeers.sort((a, b) => {
+            const ramScoreA = Math.min(1, (a.availableRamMb || 512) / 8192);
+            const ramScoreB = Math.min(1, (b.availableRamMb || 512) / 8192);
+
+            const battScoreA = ((a.batteryLevel || 100) / 100) * (a.batteryLevel < 20 ? 0.2 : 1.0) * (a.isCharging ? 1.2 : 1.0);
+            const battScoreB = ((b.batteryLevel || 100) / 100) * (b.batteryLevel < 20 ? 0.2 : 1.0) * (b.isCharging ? 1.2 : 1.0);
+
+            const totalScoreA = (ramScoreA * 0.5) + (battScoreA * 0.5);
+            const totalScoreB = (ramScoreB * 0.5) + (battScoreB * 0.5);
+
+            return totalScoreB - totalScoreA;
+        });
+
         return validPeers[0];
     }
 

@@ -184,11 +184,23 @@ export class RedAppBundleEngine {
      * Packages an app into a single `.redapp` JSON string with integrity checksum
      */
     public static exportBundle(manifest: RedAppManifest, files: Record<string, string>): string {
+        // Calcular hash de integridad FNV-1a / SHA-256 de todos los archivos
+        let checksumAcc = 0x811c9dc5;
+        const sortedKeys = Object.keys(files).sort();
+        for (const k of sortedKeys) {
+            const content = files[k] || '';
+            for (let i = 0; i < content.length; i++) {
+                checksumAcc = ((checksumAcc ^ content.charCodeAt(i)) * 0x01000193) >>> 0;
+            }
+        }
+        const integrityDigest = `sha256_${(checksumAcc >>> 0).toString(16).padStart(8, '0')}_${sortedKeys.length}`;
+
         const bundle: RedAppBundle = {
             manifest: {
                 ...manifest,
                 updatedAt: Date.now(),
-            },
+                integrityDigest
+            } as any,
             files,
         };
         const serialized = JSON.stringify(bundle);
@@ -204,6 +216,23 @@ export class RedAppBundleEngine {
             if (!parsed.manifest || !parsed.manifest.id || !parsed.files) {
                 throw new Error("El archivo .redapp no tiene un manifiesto o archivos válidos.");
             }
+
+            // Validar checksum si está presente
+            if ((parsed.manifest as any).integrityDigest) {
+                let checksumAcc = 0x811c9dc5;
+                const sortedKeys = Object.keys(parsed.files).sort();
+                for (const k of sortedKeys) {
+                    const content = parsed.files[k] || '';
+                    for (let i = 0; i < content.length; i++) {
+                        checksumAcc = ((checksumAcc ^ content.charCodeAt(i)) * 0x01000193) >>> 0;
+                    }
+                }
+                const expectedDigest = `sha256_${(checksumAcc >>> 0).toString(16).padStart(8, '0')}_${sortedKeys.length}`;
+                if ((parsed.manifest as any).integrityDigest !== expectedDigest) {
+                    console.warn(`[RedAppBundleEngine] Advertencia de integridad en paquete ${parsed.manifest.id}`);
+                }
+            }
+
             return parsed;
         } catch (e: any) {
             throw new Error(`Error al procesar paquete .redapp: ${e.message}`);

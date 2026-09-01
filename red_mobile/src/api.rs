@@ -1289,12 +1289,18 @@ async fn handle_create_group(
     let mut node = state.node.lock().await;
     match node.create_group(req.name).await {
         Ok(mut group) => {
+            let existing_contacts = node.get_sync_payload().await.ok().map(|(c, _, _)| c).unwrap_or_default();
             let mut added_members = Vec::new();
             for member_hash in req.members {
                 if let Ok(id_hash) = parse_identity_hash(&member_hash) {
+                    let member_pub_key = existing_contacts.iter()
+                        .find(|c| c.identity_hash == id_hash)
+                        .map(|c| c.public_key)
+                        .unwrap_or_else(|| *id_hash.as_bytes());
+
                     let member = red_core::protocol::GroupMember {
                         identity_hash: id_hash.clone(),
-                        public_key: red_core::crypto::keys::PublicKey::from_bytes([0u8; 32]),
+                        public_key: red_core::crypto::keys::PublicKey::from_bytes(member_pub_key),
                         joined_at: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()

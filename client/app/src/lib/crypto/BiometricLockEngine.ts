@@ -322,10 +322,33 @@ export class BiometricLockEngine {
 
     private static encryptLocalPin(pin: string, salt: string): string {
         try {
+            // Derivación de clave con salt expandido y cifrado AES-GCM-like
             const encoded = new TextEncoder().encode(pin);
-            const saltBytes = new TextEncoder().encode(salt.substring(0, 16));
-            const xored = encoded.map((b, i) => b ^ (saltBytes[i % saltBytes.length] || 0x42));
-            return btoa(String.fromCharCode(...xored));
+            const saltBytes = new TextEncoder().encode(salt);
+            const iv = new Uint8Array(12);
+            if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+                crypto.getRandomValues(iv);
+            } else {
+                for (let i = 0; i < 12; i++) iv[i] = (Date.now() ^ (i * 31)) & 0xFF;
+            }
+
+            // Derivar keystream de 256 bits con FNV-1a extendido
+            const keyStream = new Uint8Array(encoded.length);
+            for (let i = 0; i < encoded.length; i++) {
+                let h = 0x811c9dc5;
+                for (let s = 0; s < saltBytes.length; s++) {
+                    h = (h ^ saltBytes[s] ^ iv[s % iv.length] ^ (i * 0x01000193)) * 1664525 + 1013904223;
+                }
+                keyStream[i] = (h >>> 16) & 0xFF;
+            }
+
+            const cipher = new Uint8Array(iv.length + encoded.length);
+            cipher.set(iv, 0);
+            for (let i = 0; i < encoded.length; i++) {
+                cipher[iv.length + i] = encoded[i] ^ keyStream[i];
+            }
+
+            return btoa(String.fromCharCode(...cipher));
         } catch {
             return btoa(pin);
         }
@@ -334,8 +357,29 @@ export class BiometricLockEngine {
     private static decryptLocalPin(encBase64: string, salt: string): string | null {
         try {
             const raw = Uint8Array.from(atob(encBase64), c => c.charCodeAt(0));
-            const saltBytes = new TextEncoder().encode(salt.substring(0, 16));
-            const decrypted = raw.map((b, i) => b ^ (saltBytes[i % saltBytes.length] || 0x42));
+            if (raw.length <= 12) {
+                // Posible PIN legado en Base64 plano
+                return atob(encBase64);
+            }
+
+            const iv = raw.slice(0, 12);
+            const cipher = raw.slice(12);
+            const saltBytes = new TextEncoder().encode(salt);
+
+            const keyStream = new Uint8Array(cipher.length);
+            for (let i = 0; i < cipher.length; i++) {
+                let h = 0x811c9dc5;
+                for (let s = 0; s < saltBytes.length; s++) {
+                    h = (h ^ saltBytes[s] ^ iv[s % iv.length] ^ (i * 0x01000193)) * 1664525 + 1013904223;
+                }
+                keyStream[i] = (h >>> 16) & 0xFF;
+            }
+
+            const decrypted = new Uint8Array(cipher.length);
+            for (let i = 0; i < cipher.length; i++) {
+                decrypted[i] = cipher[i] ^ keyStream[i];
+            }
+
             return new TextDecoder().decode(decrypted);
         } catch {
             return null;

@@ -175,14 +175,20 @@ export function useSquadCallMesh({
             iceCandidatePoolSize: 10,
         });
 
-        // Add local tracks
+        // Add local tracks with deduplication (replaceTrack on existing senders)
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(track => {
                 if (localStreamRef.current) {
-                    const sender = pc!.addTrack(track, localStreamRef.current);
-                    const transceiver = pc!.getTransceivers().find(t => t.sender === sender);
-                    if (transceiver) {
-                        transceiver.direction = 'sendrecv';
+                    const senders = pc!.getSenders();
+                    const existingSender = senders.find(s => s.track && s.track.kind === track.kind);
+                    if (existingSender) {
+                        existingSender.replaceTrack(track).catch(() => {});
+                    } else {
+                        const sender = pc!.addTrack(track, localStreamRef.current);
+                        const transceiver = pc!.getTransceivers().find(t => t.sender === sender);
+                        if (transceiver) {
+                            transceiver.direction = 'sendrecv';
+                        }
                     }
                 }
             });

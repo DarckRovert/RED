@@ -10,6 +10,7 @@ export interface LocalModelMetaData {
     quantization?: string;
     downloadUrl: string;
     fileName: string;
+    hfModelId?: string;
     tokenizerUrl?: string;
     tokenizerFileName?: string;
     recommendedMinRamMb: number;
@@ -27,6 +28,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         description: '⚡ ULTRA-LIGERO (390 MB). Razonamiento en español de alta velocidad para dispositivos con 1GB a 2GB de RAM.',
         parameterCount: '0.5B',
         fileSizeMb: 390,
+        hfModelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
         downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
         fileName: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
         tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/raw/main/tokenizer.json',
@@ -41,6 +43,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         description: '🚀 MICRO-MODELO (230 MB). El modelo instruct más rápido y compacto para inferencia táctica instantánea.',
         parameterCount: '360M',
         fileSizeMb: 230,
+        hfModelId: 'onnx-community/SmolLM2-360M-Instruct',
         downloadUrl: 'https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q4_K_M.gguf',
         fileName: 'SmolLM2-360M-Instruct-Q4_K_M.gguf',
         tokenizerUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/raw/main/tokenizer.json',
@@ -55,6 +58,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         description: '🌟 RECOMENDADO PARA MÓVILES. Razonamiento táctico brillante en español con 1.6 GB de RAM.',
         parameterCount: '1.5B',
         fileSizeMb: 1040,
+        hfModelId: 'onnx-community/Qwen2.5-1.5B-Instruct',
         downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
         fileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
         tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/tokenizer.json',
@@ -69,6 +73,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         description: '⚡ ULTRA-RÁPIDO. Modelo oficial 1B de Meta optimizado para velocidad extrema en procesadores ARM64 móviles.',
         parameterCount: '1.0B',
         fileSizeMb: 770,
+        hfModelId: 'onnx-community/Llama-3.2-1B-Instruct',
         downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
         fileName: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
         tokenizerUrl: 'https://huggingface.co/unsloth/Llama-3.2-1B-Instruct/raw/main/tokenizer.json',
@@ -83,6 +88,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         description: 'Modelo 2B de Google optimizado para razonamiento táctico estándar.',
         parameterCount: '2.0B',
         fileSizeMb: 1600,
+        hfModelId: 'onnx-community/gemma-2-2b-it',
         downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
         fileName: 'gemma-2-2b-it-Q4_K_M.gguf',
         tokenizerUrl: 'https://huggingface.co/unsloth/gemma-2-2b-it/raw/main/tokenizer.json',
@@ -97,6 +103,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         description: 'Modelo de 3.8B parámetros cuantizado en Q4 para dispositivos con 6GB+ de memoria RAM.',
         parameterCount: '3.8B',
         fileSizeMb: 2200,
+        hfModelId: 'onnx-community/Phi-3-mini-4k-instruct',
         downloadUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf',
         fileName: 'Phi-3-mini-4k-instruct-q4.gguf',
         tokenizerUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/raw/main/tokenizer.json',

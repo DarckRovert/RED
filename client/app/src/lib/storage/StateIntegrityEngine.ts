@@ -128,8 +128,8 @@ export class StateIntegrityEngine {
 
         // Sanitize conversation message stores: remove any stray typing or control packets
         try {
-            for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
+            const allKeys = Object.keys(localStorage);
+            for (const k of allKeys) {
                 if (k && k.startsWith("red_web_messages_")) {
                     const raw = localStorage.getItem(k);
                     if (raw) {

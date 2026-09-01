@@ -67,9 +67,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const mentionSuggestions = useMemo(() => {
         if (!mentionQuery && mentionQuery !== "") return [];
         const q = (mentionQuery || "").toLowerCase();
-        return contacts
+        return (contacts || [])
             .filter(c => {
-                const name = (c.nickname || c.peer_id || "").toLowerCase();
+                const name = (c.display_name || c.name || (c as any).nickname || c.identity_hash || "").toLowerCase();
                 return name.startsWith(q) || name.includes(q);
             })
             .slice(0, 6);
@@ -434,10 +434,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 animation: "fadeIn 0.12s ease"
                             }}>
                                 {mentionSuggestions.map((c: any) => {
-                                    const name = c.nickname || c.peer_id || "???";
+                                    const name = c.display_name || c.name || c.nickname || (c.identity_hash ? c.identity_hash.substring(0, 8) : "Operador");
                                     return (
                                         <button
-                                            key={c.peer_id || name}
+                                            key={c.identity_hash || c.id || name}
                                             onMouseDown={(e) => {
                                                 e.preventDefault(); // keep focus in textarea
                                                 insertMention(name);
