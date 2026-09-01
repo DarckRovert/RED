@@ -21,6 +21,7 @@ import { mediaChunker } from '../../lib/mesh/mediaChunker';
 // persisted in IndexedDB/localStorage and loaded on pagination.
 const MAX_IN_MEMORY_MESSAGES = 150;
 
+const MAX_PROCESSED_MESSAGES = 5000;
 const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (() => {
     try {
         const raw = localStorage.getItem('red_processed_msg_ids');
@@ -32,13 +33,13 @@ const _processedMessageIds = new Set<string>(typeof window !== 'undefined' ? (()
 export function recordProcessedMessageId(id: string) {
     if (!id) return;
     _processedMessageIds.add(id);
-    if (_processedMessageIds.size > 2500) {
+    if (_processedMessageIds.size > MAX_PROCESSED_MESSAGES) {
         const first = _processedMessageIds.values().next().value;
         if (first) _processedMessageIds.delete(first);
     }
     if (typeof window !== 'undefined') {
         try {
-            const arr = Array.from(_processedMessageIds).slice(-1000);
+            const arr = Array.from(_processedMessageIds).slice(-2500);
             localStorage.setItem('red_processed_msg_ids', JSON.stringify(arr));
         } catch {}
     }
@@ -67,18 +68,10 @@ export async function dispatchIncomingMessage(
         const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
         if (!item) return;
 
-        // 0. Global deduplication of incoming messages across transports/SSE
+        // 0. Global deduplication of incoming messages across transports/SSE strictly by unique message ID
         if (item.id) {
             if (_processedMessageIds.has(item.id)) return;
             recordProcessedMessageId(item.id);
-        }
-        if (item.sender) {
-            const bodyKey = (item.media_data || item.content || '').slice(0, 40);
-            if (bodyKey) {
-                const semanticKey = `sem_${item.sender}_${bodyKey}_${Math.round((item.timestamp || Date.now()) / 10000)}`;
-                if (_processedMessageIds.has(semanticKey)) return;
-                recordProcessedMessageId(semanticKey);
-            }
         }
 
         // Anti-spam PoW verification for incoming peer messages
@@ -1748,40 +1741,14 @@ export async function dispatchIncomingMessage(
                 const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : normTimestamp;
                 const timeDiff = Math.abs(mTs - normTimestamp);
 
-                // 1. Exact ID match
+                // 1. Exact ID match (same packet delivered or updated)
                 if (m.id && item.id && m.id === item.id) return true;
 
-                // 2. Pending optimistic message replacement
-                if (m.status === 'Pending' || m.id.startsWith('temp_') || m.id.startsWith('msg_pending_') || m.id.startsWith('msg_')) {
+                // 2. Pending optimistic local message replacement (replaces optimistic bubble with confirmed server/mesh message)
+                if (m.is_mine && normalizedItem.is_mine && (m.status === 'Pending' || m.id.startsWith('temp_') || m.id.startsWith('msg_pending_'))) {
                     if (m.content && item.content && m.content === item.content) return true;
                     if (m.media_data && item.media_data && (m.media_data === item.media_data || m.media_data.length === item.media_data.length)) return true;
-                    if (m.msg_type === item.msg_type && timeDiff < 60) {
-                        if (m.is_mine && normalizedItem.is_mine) return true;
-                    }
-                }
-
-                // 3. Sender & Content / Media deduplication within 60-second window (prevents duplicate bubbles from dual SSE + MeshRouter channels)
-                const mPayload = m.media_data || m.content;
-                const nPayload = normalizedItem.media_data || normalizedItem.content;
-                if (mPayload && nPayload && timeDiff < 60) {
-                    const isMediaVaultMatch = 
-                        (mPayload.startsWith('red_vault://') && nPayload.includes(m.id)) ||
-                        (nPayload.startsWith('red_vault://') && mPayload.includes(normalizedItem.id)) ||
-                        (mPayload.startsWith('red_vault://') && nPayload.startsWith('red_vault://') && mPayload === nPayload);
-                    const isContentMatch = 
-                        mPayload === nPayload ||
-                        (mPayload.length > 60 && nPayload.length > 60 && mPayload.slice(0, 60) === nPayload.slice(0, 60));
-
-                    if (isMediaVaultMatch || isContentMatch || (m.msg_type === normalizedItem.msg_type && (m.msg_type === 'image' || m.msg_type === 'video' || m.msg_type === 'voice'))) {
-                        if (m.is_mine && normalizedItem.is_mine) return true;
-                        if (!m.is_mine && !normalizedItem.is_mine) {
-                            const mSender = (m.sender || '').toLowerCase();
-                            const nSender = (normalizedItem.sender || item.sender || '').toLowerCase();
-                            if (mSender === nSender || mSender.startsWith(nSender.slice(0, 8)) || nSender.startsWith(mSender.slice(0, 8))) {
-                                return true;
-                            }
-                        }
-                    }
+                    if (m.msg_type === item.msg_type && timeDiff < 60) return true;
                 }
 
                 return false;

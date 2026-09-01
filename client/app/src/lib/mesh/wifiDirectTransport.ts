@@ -44,6 +44,15 @@ export class WifiDirectTransport {
         { urls: 'stun:stun.nextcloud.com:443' },
         { urls: 'stun:stun.sipgate.net:3478' },
         { urls: 'stun:turn.matrix.org:3478' },
+        {
+            urls: [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:443?transport=tcp',
+            ],
+            username: 'openrelay',
+            credential: 'openrelay',
+        },
     ];
 
     constructor(myId: string) {
@@ -271,14 +280,17 @@ export class WifiDirectTransport {
         console.log('[WebRtcTransport] Network transition detected — executing proactive transport refresh');
         if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
 
-        // 1. Refresh WebSocket Signaling Connection
+        // 1. Proactively reconnect MQTT Relay pool
+        mqttRelay.reconnect();
+
+        // 2. Refresh WebSocket Signaling Connection
         if (this.ws) {
             try { this.ws.close(); } catch {}
             this.ws = null;
         }
         await this.connectToLocalSignaling();
 
-        // 2. Perform WebRTC ICE Restart on all existing PeerConnections
+        // 3. Perform WebRTC ICE Restart on all existing PeerConnections
         if (forceIceRestart) {
             for (const [peerId, pc] of this.peerConnections) {
                 try {
@@ -292,6 +304,10 @@ export class WifiDirectTransport {
                         this.sendWs({
                             type: 'offer',
                             targetPeerId: peerId,
+                            sdp: offer,
+                        });
+                        mqttRelay.sendSignaling(peerId, {
+                            type: 'offer',
                             sdp: offer,
                         });
                     }
@@ -693,13 +709,11 @@ export class WifiDirectTransport {
             this.createOffer(peerId).catch(() => {});
         }
 
-        // 2. High-Availability Global MQTT Blind Relay (Fallback 1)
+        // 2. High-Availability Global MQTT Blind Relay (Fallback 1 on Port 443 WSS)
         const mqttSent = mqttRelay.sendPacket(peerId, payload);
-        if (mqttSent) {
-            return true;
-        }
 
         // 3. Encrypted Blind WebSocket Relay Fallback (Fallback 2, Zero-Knowledge)
+        let wsSent = false;
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
                 const hex = bytesToHexFast(payload);
@@ -708,13 +722,13 @@ export class WifiDirectTransport {
                     targetPeerId: peerId,
                     payloadHex: hex,
                 });
-                return true;
+                wsSent = true;
             } catch (err) {
                 console.warn(`[WebRtcTransport] Blind relay failed for ${peerId.slice(0, 8)}:`, err);
             }
         }
 
-        return false;
+        return mqttSent || wsSent;
     }
 
     onMessage(callback: (msg: { from: string; payload: Uint8Array }) => void) {

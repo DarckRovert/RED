@@ -29,8 +29,10 @@ export class MqttRelayTransport {
   private reconnectTimers: Map<string, any> = new Map();
 
   private static readonly BROKER_POOL: string[] = [
-    'wss://broker.emqx.io:8084/mqtt',
-    'wss://broker.hivemq.com:8884/mqtt',
+    'wss://broker.emqx.io/mqtt',
+    'wss://broker.hivemq.com/mqtt',
+    'wss://public.mqtthq.com:443/mqtt',
+    'wss://mqtt.eclipseprojects.io/mqtt',
   ];
 
   private static readonly HEX_LUT: string[] = Array.from({ length: 256 }, (_, i) => i.toString(16).padStart(2, '0'));
@@ -153,6 +155,32 @@ export class MqttRelayTransport {
       this.connectBroker(url);
     }
     this.startPing();
+  }
+
+  public reconnect(): void {
+    if (typeof window === 'undefined') return;
+    console.log('[MqttRelay] Proactively refreshing broker connections on network transition...');
+    for (const [, timer] of this.reconnectTimers) {
+      clearTimeout(timer);
+    }
+    this.reconnectTimers.clear();
+
+    for (const [url, entry] of this.brokerSockets) {
+      if (entry.ws.readyState !== WebSocket.OPEN) {
+        try {
+          entry.ws.onclose = null;
+          entry.ws.onerror = null;
+          entry.ws.close();
+        } catch {}
+      }
+    }
+
+    for (const url of MqttRelayTransport.BROKER_POOL) {
+      const existing = this.brokerSockets.get(url);
+      if (!existing || existing.ws.readyState !== WebSocket.OPEN) {
+        this.connectBroker(url);
+      }
+    }
   }
 
   private connectBroker(url: string) {
@@ -536,22 +564,22 @@ export class MqttRelayTransport {
     
     // Publish to primary v65, mesh, v40 and v32 realtime topics
     let published = this.publish(`red/v65/dm/${clean}`, payload);
-    this.publish(`red/v65/mb/${clean}`, payload);
-    this.publish(`red/mesh/dm/${clean}`, payload);
-    this.publish(`red/v40/dm/${clean}`, payload);
-    this.publish(`red/v40/mb/${clean}`, payload);
-    this.publish(`red/v32/dm/${clean}`, payload);
-    this.publish(`red/v32/mb/${clean}`, payload);
+    if (this.publish(`red/v65/mb/${clean}`, payload)) published = true;
+    if (this.publish(`red/mesh/dm/${clean}`, payload)) published = true;
+    if (this.publish(`red/v40/dm/${clean}`, payload)) published = true;
+    if (this.publish(`red/v40/mb/${clean}`, payload)) published = true;
+    if (this.publish(`red/v32/dm/${clean}`, payload)) published = true;
+    if (this.publish(`red/v32/mb/${clean}`, payload)) published = true;
 
     if (clean.length > 8) {
       const short = clean.slice(0, 8);
-      this.publish(`red/v65/dm/${short}`, payload);
-      this.publish(`red/v65/mb/${short}`, payload);
-      this.publish(`red/mesh/dm/${short}`, payload);
-      this.publish(`red/v40/dm/${short}`, payload);
-      this.publish(`red/v40/mb/${short}`, payload);
-      this.publish(`red/v32/dm/${short}`, payload);
-      this.publish(`red/v32/mb/${short}`, payload);
+      if (this.publish(`red/v65/dm/${short}`, payload)) published = true;
+      if (this.publish(`red/v65/mb/${short}`, payload)) published = true;
+      if (this.publish(`red/mesh/dm/${short}`, payload)) published = true;
+      if (this.publish(`red/v40/dm/${short}`, payload)) published = true;
+      if (this.publish(`red/v40/mb/${short}`, payload)) published = true;
+      if (this.publish(`red/v32/dm/${short}`, payload)) published = true;
+      if (this.publish(`red/v32/mb/${short}`, payload)) published = true;
     }
     return published;
   }

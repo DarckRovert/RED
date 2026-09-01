@@ -123,6 +123,7 @@ export function generateDeterministicMsgId(sender: string, recipient: string, co
 export interface MeshPeer {
   id: string;          // Canonical node ID or hardware device ID
   canonicalId?: string; // Resolved canonical identity hash (64-char hex)
+  hardwareId?: string;  // Original physical hardware address (e.g. BLE MAC "6B:2D:06:EA:DA:2E")
   name?: string;
   publicKey?: string;
   transport?: 'wifi' | 'ble' | 'lora' | string;
@@ -276,20 +277,24 @@ class MeshRouter {
 
     // Automatically flush pending DTN store-and-forward queue when MQTT connects/reconnects
     mqttRelay.onConnect(() => {
-      console.log('[MeshRouter] Global MQTT relay active — flushing pending DTN queue');
-      this.flushPendingQueue().catch(() => {});
+      console.log('[MeshRouter] Global MQTT relay active — resetting timers and flushing pending DTN queue');
+      dtnStorage.forceResetRetryTimers();
+      this.flushPendingQueue(true).catch(() => {});
     });
 
     // Schedule dedup cache purge every 5 minutes (clean previous if any)
     if (this.purgeInterval) clearInterval(this.purgeInterval);
     this.purgeInterval = setInterval(() => this.purgeDedup(), 5 * 60 * 1000);
 
-    // Actively retry unacknowledged DTN pending packets every 6 seconds
+    // Actively retry unacknowledged DTN pending packets every 3 seconds for fast cellular/mesh recovery
     if (this.flushInterval) clearInterval(this.flushInterval);
-    this.flushInterval = setInterval(() => this.flushPendingQueue(), 6000);
+    this.flushInterval = setInterval(() => this.flushPendingQueue(), 3000);
 
     // Initial DTN flush on boot
-    setTimeout(() => this.flushPendingQueue(), 1500);
+    setTimeout(() => {
+      dtnStorage.forceResetRetryTimers();
+      this.flushPendingQueue(true);
+    }, 1500);
   }
 
   public stop() {
@@ -320,11 +325,15 @@ class MeshRouter {
     console.log(`[MeshRouter] Network state updated: online=${state.connected}, type=${state.connectionType}, internet=${state.hasInternetAccess}`);
 
     if (state.connected) {
-      // Proactively refresh signaling and trigger ICE restarts for 4G/5G transitions
+      // Force reset DTN backoff timers so pending packets flush immediately
+      dtnStorage.forceResetRetryTimers();
+
+      // Proactively refresh MQTT and WebSocket signaling and trigger ICE restarts for 4G/5G transitions
+      mqttRelay.reconnect();
       this.wifi?.reconnect(true).catch(() => {});
 
-      // Flush persistent offline DTN queue upon network restoration
-      this.flushPendingQueue().catch(() => {});
+      // Flush persistent offline DTN queue immediately upon network restoration
+      this.flushPendingQueue(true).catch(() => {});
 
       // Announce updated gateway capability to local mesh peers
       if (previousInternet !== state.hasInternetAccess) {
@@ -408,6 +417,25 @@ class MeshRouter {
     }
 
     return clean;
+  }
+
+  /**
+   * Returns the original physical hardware address (e.g. BLE MAC) for a canonical DID or peer ID.
+   */
+  getHardwareId(id: string): string | undefined {
+    if (!id) return undefined;
+    const clean = normalizeIdentity(id);
+    if (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(id.trim())) {
+      return id.trim().toUpperCase();
+    }
+    const peer = this.peers.get(clean) || this.peers.get(id);
+    if (peer?.hardwareId) return peer.hardwareId.toUpperCase();
+    for (const p of this.peers.values()) {
+      if (p.canonicalId?.toLowerCase() === clean && p.hardwareId) {
+        return p.hardwareId.toUpperCase();
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -1302,8 +1330,8 @@ class MeshRouter {
 
   // ─── DTN Store-and-Forward Queue Flusher ──────────────────────────────────────
 
-  public async flushPendingQueue() {
-    const items = dtnStorage.getItemsToRetry();
+  public async flushPendingQueue(forceAll = false) {
+    const items = dtnStorage.getItemsToRetry(forceAll);
     if (items.length === 0) return;
 
     let flushed = 0;
@@ -1312,7 +1340,7 @@ class MeshRouter {
       const encoded = encode(packet);
       let sent = false;
 
-      // 1. Direct local mesh peers
+      // 1. Direct local mesh peers (BLE, LoRa, WiFi Direct DataChannel)
       for (const [peerId, peer] of this.peers) {
         const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
         if (ok) sent = true;
@@ -1330,10 +1358,10 @@ class MeshRouter {
     }
 
     if (flushed > 0) {
-      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed} DTN packets awaiting DELIVERY_ACK`);
+      console.log(`[MeshRouter] 🔄 Retransmitted ${flushed}/${items.length} DTN packets awaiting DELIVERY_ACK`);
     }
 
-    // Periodically purge dead expired packets (>7 days)
+    // Periodically purge dead expired packets (>30 days)
     dtnStorage.purgeExpired();
   }
 
@@ -1417,9 +1445,14 @@ class MeshRouter {
       } catch {}
     }
 
+    const hwId = (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(id.trim()))
+      ? id.trim().toUpperCase()
+      : (existing?.hardwareId || (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(cleanId) ? cleanId.toUpperCase() : undefined));
+
     const updated: MeshPeer = {
       id: resolvedCanonical,
       canonicalId: resolvedCanonical,
+      hardwareId: hwId,
       name: bestName,
       publicKey: publicKey || existing?.publicKey,
       transport: newPriority >= existingPriority ? transport : (existing?.transport ?? transport),

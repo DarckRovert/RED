@@ -266,79 +266,113 @@ class BluetoothTransport {
 
     private connectingSet: Set<string> = new Set();
 
+    public sanitizeBleDeviceId(id: string): string {
+        if (!id) return '';
+        const trimmed = id.trim();
+        if (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(trimmed)) {
+            return trimmed.toUpperCase();
+        }
+        return trimmed;
+    }
+
+    private async resolveTargetMac(deviceId: string): Promise<string | null> {
+        const sanitized = this.sanitizeBleDeviceId(deviceId);
+        if (sanitized.includes(':')) {
+            return sanitized;
+        }
+        try {
+            const { meshRouter } = await import('./meshRouter');
+            const hw = meshRouter.getHardwareId(deviceId);
+            if (hw && hw.includes(':')) {
+                return this.sanitizeBleDeviceId(hw);
+            }
+        } catch {}
+        return null;
+    }
+
     async connect(deviceId: string): Promise<boolean> {
+        const targetId = await this.resolveTargetMac(deviceId);
+        if (!targetId) {
+            return false;
+        }
         await this.init();
-        if (this.connectedDevices.has(deviceId)) return true;
-        if (this.connectingSet.has(deviceId)) {
+        if (this.connectedDevices.has(targetId)) return true;
+        if (this.connectingSet.has(targetId)) {
             // Wait for existing connection attempt
             for (let i = 0; i < 20; i++) {
                 await new Promise(r => setTimeout(r, 100));
-                if (this.connectedDevices.has(deviceId)) return true;
-                if (!this.connectingSet.has(deviceId)) break;
+                if (this.connectedDevices.has(targetId)) return true;
+                if (!this.connectingSet.has(targetId)) break;
             }
         }
 
-        this.connectingSet.add(deviceId);
+        this.connectingSet.add(targetId);
         try {
-            await BleClient.connect(deviceId);
-            this.connectedDevices.add(deviceId);
+            await BleClient.connect(targetId);
+            this.connectedDevices.add(targetId);
 
             // Request adaptive MTU (512 bytes for maximum throughput)
             try {
                 if (typeof (BleClient as any).requestMtu === 'function') {
-                    await (BleClient as any).requestMtu(deviceId, 512);
-                    this.negotiatedMtu.set(deviceId, 500);
+                    await (BleClient as any).requestMtu(targetId, 512);
+                    this.negotiatedMtu.set(targetId, 500);
                 } else {
-                    this.negotiatedMtu.set(deviceId, 480);
+                    this.negotiatedMtu.set(targetId, 480);
                 }
             } catch {
-                this.negotiatedMtu.set(deviceId, 240); // Safe fallback
+                this.negotiatedMtu.set(targetId, 240); // Safe fallback
             }
 
             try {
-                await BleClient.startNotifications(deviceId, RED_BLE_SERVICE, RED_BLE_NOTIFY_CHAR, (value) => {
-                    this.processIncomingChunk(deviceId, new Uint8Array(value.buffer));
+                await BleClient.startNotifications(targetId, RED_BLE_SERVICE, RED_BLE_NOTIFY_CHAR, (value) => {
+                    this.processIncomingChunk(targetId, new Uint8Array(value.buffer));
                 });
             } catch (notifErr) {
                 console.warn('[BLE] startNotifications non-fatal:', notifErr);
             }
 
-            console.log(`[BLE] Successfully connected GATT to ${deviceId.slice(0, 8)}`);
+            console.log(`[BLE] Successfully connected GATT to ${targetId.slice(0, 8)}`);
             return true;
         } catch (e) {
-            console.warn(`[BLE] Direct GATT connect failed for ${deviceId.slice(0, 8)}:`, e);
-            this.connectedDevices.delete(deviceId);
+            console.warn(`[BLE] Direct GATT connect failed for ${targetId.slice(0, 8)}:`, e);
+            this.connectedDevices.delete(targetId);
             return false;
         } finally {
-            this.connectingSet.delete(deviceId);
+            this.connectingSet.delete(targetId);
         }
     }
 
     async disconnect(deviceId: string) {
-        if (!this.connectedDevices.has(deviceId)) return;
+        const targetId = (await this.resolveTargetMac(deviceId)) || this.sanitizeBleDeviceId(deviceId);
+        if (!this.connectedDevices.has(targetId)) return;
         try {
-            await BleClient.disconnect(deviceId);
+            await BleClient.disconnect(targetId);
         } catch {}
-        this.connectedDevices.delete(deviceId);
-        this.negotiatedMtu.delete(deviceId);
-        const entry = this.incomingBuffers.get(deviceId);
+        this.connectedDevices.delete(targetId);
+        this.negotiatedMtu.delete(targetId);
+        const entry = this.incomingBuffers.get(targetId);
         if (entry?.timer) clearTimeout(entry.timer);
-        this.incomingBuffers.delete(deviceId);
+        this.incomingBuffers.delete(targetId);
     }
 
     async send(deviceId: string, payload: Uint8Array): Promise<boolean> {
-        const unsuppUntil = this.unsupportedDevices.get(deviceId);
+        const targetId = await this.resolveTargetMac(deviceId);
+        if (!targetId) {
+            return false;
+        }
+
+        const unsuppUntil = this.unsupportedDevices.get(targetId);
         if (unsuppUntil && Date.now() < unsuppUntil) {
             return false;
         }
 
-        let isConnected = this.connectedDevices.has(deviceId);
+        let isConnected = this.connectedDevices.has(targetId);
         if (!isConnected) {
-            isConnected = await this.connect(deviceId);
+            isConnected = await this.connect(targetId);
         }
 
-        const metrics = this.linkMetrics.get(deviceId) || {
-            deviceId,
+        const metrics = this.linkMetrics.get(targetId) || {
+            deviceId: targetId,
             rssi: -75,
             lqs: 70,
             packetsSent: 0,
@@ -351,12 +385,12 @@ class BluetoothTransport {
         if (!isConnected) {
             metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
             metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
-            this.linkMetrics.set(deviceId, metrics);
+            this.linkMetrics.set(targetId, metrics);
             return false;
         }
 
         try {
-            const CHUNK_SIZE = this.negotiatedMtu.get(deviceId) || 128;
+            const CHUNK_SIZE = this.negotiatedMtu.get(targetId) || 128;
             const totalLength = payload.length;
 
             // Direct streaming chunking without corrupting payload with ambiguous 0xAA 0x55 header
@@ -367,9 +401,9 @@ class BluetoothTransport {
 
                 const dataView = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
                 try {
-                    await BleClient.write(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                    await BleClient.write(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
                 } catch {
-                    await BleClient.writeWithoutResponse(deviceId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
+                    await BleClient.writeWithoutResponse(targetId, RED_BLE_SERVICE, RED_BLE_WRITE_CHAR, dataView);
                 }
                 offset += sliceLength;
                 
@@ -380,18 +414,18 @@ class BluetoothTransport {
             metrics.packetsAcked += 1;
             metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
             metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
-            this.linkMetrics.set(deviceId, metrics);
+            this.linkMetrics.set(targetId, metrics);
             return true;
         } catch (e: any) {
             const errMsg = String(e?.message || e || '');
             if (errMsg.includes('Characteristic not found') || errMsg.includes('Service not found')) {
-                this.unsupportedDevices.set(deviceId, Date.now() + 45000);
+                this.unsupportedDevices.set(targetId, Date.now() + 45000);
             }
             console.error("BLE Send failed:", e);
-            this.connectedDevices.delete(deviceId);
+            this.connectedDevices.delete(targetId);
             metrics.lossRate = 1 - (metrics.packetsAcked / Math.max(1, metrics.packetsSent));
             metrics.lqs = this.calculateLqs(metrics.rssi, metrics.lossRate);
-            this.linkMetrics.set(deviceId, metrics);
+            this.linkMetrics.set(targetId, metrics);
             return false;
         }
     }

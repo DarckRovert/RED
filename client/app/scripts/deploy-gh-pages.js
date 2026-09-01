@@ -2,13 +2,20 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-console.log("================================================================================");
-console.log("🌐 DESPLIEGUE EXHAUSTIVO DE WEB COMPANION A GITHUB PAGES (v78.0.0)");
-console.log("================================================================================\n");
-
 const appDir = path.resolve(__dirname, '..');
 const outDir = path.join(appDir, 'out');
 const rootDir = path.resolve(appDir, '../..');
+
+let currentVersion = '80.0.0';
+try {
+    const versionTs = fs.readFileSync(path.join(appDir, 'src/lib/version.ts'), 'utf8');
+    const match = versionTs.match(/RED_VERSION = ["']([^"']+)["']/);
+    if (match) currentVersion = match[1];
+} catch {}
+
+console.log("================================================================================");
+console.log(`🌐 DESPLIEGUE EXHAUSTIVO DE WEB COMPANION A GITHUB PAGES (v${currentVersion})`);
+console.log("================================================================================\n");
 
 // 1. Build Next.js with /RED base path for GitHub Pages
 console.log("1️⃣ Compilando Single Page Application con basePath='/RED' para GitHub Pages...");
@@ -67,7 +74,7 @@ try {
     execSync('git config user.email "darckrovert@gmail.com"', { cwd: outDir, stdio: 'inherit' });
     execSync('git checkout -B gh-pages', { cwd: outDir, stdio: 'inherit' });
     execSync('git add -A', { cwd: outDir, stdio: 'inherit' });
-    execSync('git commit -m "deploy(gh-pages): live web companion bundle v78.0.0"', { cwd: outDir, stdio: 'inherit' });
+    execSync(`git commit -m "deploy(gh-pages): live web companion bundle v${currentVersion}"`, { cwd: outDir, stdio: 'inherit' });
     execSync('git remote add origin https://github.com/DarckRovert/RED.git', { cwd: outDir, stdio: 'inherit' });
     execSync('git push -f origin gh-pages', { cwd: outDir, stdio: 'inherit' });
     console.log("   ✅ Rama gh-pages actualizada y empujada a origin/gh-pages con éxito.");

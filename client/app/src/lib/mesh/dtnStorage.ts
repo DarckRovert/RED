@@ -366,12 +366,25 @@ class DtnStorage {
     console.log(`[DtnStorage] Enqueued packet ${nonce.slice(0, 8)} (Priority: ${calculatedPriority}) for ${packet.recipient.slice(0, 8)} (queue size: ${items.length})`);
   }
 
-  public getItemsToRetry(): DtnQueueItem[] {
+  public forceResetRetryTimers(): void {
+    const items = this.getItems();
+    for (const it of items) {
+      it.nextRetryAfter = 0;
+      it.attempts = 0;
+    }
+    this.saveItems(items);
+    for (const it of items) {
+      this.saveItemToDB(it);
+    }
+    console.log(`[DtnStorage] Force reset retry timers for ${items.length} pending DTN packets`);
+  }
+
+  public getItemsToRetry(forceAll = false): DtnQueueItem[] {
     const now = Date.now();
     const items = this.getItems();
-    // Filter active items whose retry timer has elapsed, sorted by Priority DESC then createdAt ASC
+    // Filter active items whose retry timer has elapsed (or all if forceAll is true), sorted by Priority DESC then createdAt ASC
     return items
-      .filter(it => it.expiresAt > now && it.nextRetryAfter <= now)
+      .filter(it => it.expiresAt > now && (forceAll || it.nextRetryAfter <= now))
       .sort((a, b) => {
         if (b.priority !== a.priority) return b.priority - a.priority;
         return a.createdAt - b.createdAt;
