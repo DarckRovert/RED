@@ -217,6 +217,20 @@ runTest('14. Integración MeshRouter: sendToPeer soporta canal acústico soundme
     assert(mrCode.includes('cognitiveArbiter.evaluateRoutingDecision'), 'Debe evaluar decisiones con cognitiveArbiter');
 });
 
+runTest('15. Integración MeshRouter: broadcast activa SoundMesh ante Jamming EW y modula peers', () => {
+    const mrPath = path.join(__dirname, '..', 'src', 'lib', 'mesh', 'meshRouter.ts');
+    const mrCode = fs.readFileSync(mrPath, 'utf8');
+    assert(mrCode.includes('decision.isElectronicWarfareActive && payload.length <= 255'), 'broadcast debe chequear jamming');
+    assert(mrCode.includes('decision.batteryConservationMode && peersList.length > 3'), 'broadcast debe limitar peers en batería crítica');
+});
+
+runTest('16. Integración MeshRouter: forwardPacket protege broadcasts y filtra por LQS elevado en ahorro', () => {
+    const mrPath = path.join(__dirname, '..', 'src', 'lib', 'mesh', 'meshRouter.ts');
+    const mrCode = fs.readFileSync(mrPath, 'utf8');
+    assert(mrCode.includes('decision.batteryConservationMode ? 50 : 15'), 'Multi-hop flood debe filtrar por LQS >= 50 en batería crítica');
+    assert(mrCode.includes('decision.batteryConservationMode && peersToSend.length > 3'), 'Multi-hop flood debe acotar a top 3 vecinos');
+});
+
 console.log('\n================================================================================');
 console.log(`📊 RESUMEN FINAL: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE (100% PASS)`);
 console.log('================================================================================\n');

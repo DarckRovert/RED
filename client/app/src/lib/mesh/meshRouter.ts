@@ -1051,12 +1051,26 @@ class MeshRouter {
 
   /**
    * Broadcast a raw payload to ALL connected peers (mesh flood) and WAN relays.
+   * Throttled by CognitiveRadioArbiter to prevent battery exhaustion during flood storms.
    */
   async broadcast(payload: Uint8Array, exceptPeer?: string): Promise<number> {
     let sent = 0;
-    for (const [peerId, peer] of this.peers) {
+    const decision = cognitiveArbiter.getLastDecision();
+
+    // If Jamming EW is active in RF, emit broadcast via ultrasonic SoundMesh
+    if (decision.isElectronicWarfareActive && payload.length <= 255) {
+      SoundMeshEngine.transmitPayload(payload).catch(() => {});
+    }
+
+    // Filter peers if battery conservation is active (throttle dense flood)
+    let peersList = Array.from(this.peers.entries());
+    if (decision.batteryConservationMode && peersList.length > 3) {
+      peersList = peersList.slice(0, 3); // Restrict to top 3 neighbors in critical battery
+    }
+
+    for (const [peerId, peer] of peersList) {
       if (peerId === exceptPeer) continue;
-      const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', payload);
+      const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', payload);
       if (ok) sent++;
     }
 
@@ -1420,22 +1434,25 @@ class MeshRouter {
 
     let anySent = false;
 
+    // ─── 0. UNIFIED COGNITIVE RADIO EVALUATION (Unicast & Broadcast) ───
+    const canonicalRecipient = !isBroadcast ? this.getCanonicalId(packet.recipient) : null;
+    const directPeer = canonicalRecipient ? this.getPeerByAnyId(canonicalRecipient) : undefined;
+    const isEmergency = isBroadcast && (packet.flags === 1 || packet.nonce.includes('sos') || packet.nonce.includes('beacon'));
+    const decision = cognitiveArbiter.evaluateRoutingDecision(directPeer, encoded.length, isEmergency);
+
+    // Global Cognitive Fallback A: Electronic Warfare / Jamming active in RF -> route via SoundMesh
+    if (decision.isElectronicWarfareActive && encoded.length <= 255) {
+      console.log(`[MeshRouter] 🛡️ Jamming EW Active: Routing via SoundMesh (${decision.rationale})`);
+      const ok = await SoundMeshEngine.transmitPayload(encoded);
+      if (ok) {
+        dtnStorage.markAttempt(packet.nonce, false);
+        anySent = true;
+        if (!isBroadcast) return 'sent';
+      }
+    }
+
     // ─── 1. SMART COGNITIVE UNICAST DIRECT ROUTING (Fast Path) ───
     if (!isBroadcast) {
-      const canonicalRecipient = this.getCanonicalId(packet.recipient);
-      const directPeer = this.getPeerByAnyId(canonicalRecipient);
-      const decision = cognitiveArbiter.evaluateRoutingDecision(directPeer, encoded.length);
-
-      // Cognitive Fallback A: Electronic Warfare / Jamming active in RF -> route via SoundMesh
-      if (decision.isElectronicWarfareActive && encoded.length <= 255) {
-        console.log(`[MeshRouter] 🛡️ Jamming EW Active: Routing via SoundMesh (${decision.rationale})`);
-        const ok = await SoundMeshEngine.transmitPayload(encoded);
-        if (ok) {
-          dtnStorage.markAttempt(packet.nonce, false);
-          return 'sent';
-        }
-      }
-
       // Cognitive Fallback B: Long-distance target (>90m) or dedicated LoRa link -> LoRa RF
       if (decision.primaryBearer === 'LORA_RF') {
         const ok = await this.sendViaLoRa(encoded);
@@ -1448,11 +1465,11 @@ class MeshRouter {
 
       if (directPeer) {
         // Direct Fast-Path 1: Direct WebRTC DataChannel (54 Mbps, <30ms)
-        if (this.wifi && (directPeer.transport === 'wifi' || this.wifi.onlinePeers.has(canonicalRecipient) || this.wifi.onlinePeers.has(directPeer.id))) {
-          const targetId = this.wifi.onlinePeers.has(canonicalRecipient) ? canonicalRecipient : directPeer.id;
+        if (this.wifi && (directPeer.transport === 'wifi' || this.wifi.onlinePeers.has(canonicalRecipient!) || this.wifi.onlinePeers.has(directPeer.id))) {
+          const targetId = this.wifi.onlinePeers.has(canonicalRecipient!) ? canonicalRecipient! : directPeer.id;
           const ok = await this.wifi.send(targetId, encoded);
           if (ok) {
-            console.log(`[MeshRouter] ⚡ Fast-path: Delivered directly to ${canonicalRecipient.slice(0, 8)} via WiFi Direct`);
+            console.log(`[MeshRouter] ⚡ Fast-path: Delivered directly to ${canonicalRecipient!.slice(0, 8)} via WiFi Direct`);
             dtnStorage.markAttempt(packet.nonce, false);
             return 'sent';
           }
@@ -1461,10 +1478,10 @@ class MeshRouter {
         // Direct Fast-Path 2: Direct BLE GATT (<100ms) with LQS verification
         const lqs = directPeer.rssi ? bluetoothTransport.getLinkQuality(directPeer.id) : 70;
         if (lqs >= 20) {
-          const bleTargetId = directPeer.id || canonicalRecipient;
+          const bleTargetId = directPeer.id || canonicalRecipient!;
           const ok = await bluetoothTransport.send(bleTargetId, encoded);
           if (ok) {
-            console.log(`[MeshRouter] 📶 Direct BLE send to ${canonicalRecipient.slice(0, 8)} (LQS ${lqs}%)`);
+            console.log(`[MeshRouter] 📶 Direct BLE send to ${canonicalRecipient!.slice(0, 8)} (LQS ${lqs}%)`);
             dtnStorage.markAttempt(packet.nonce, false);
             return 'sent';
           }
@@ -1472,18 +1489,23 @@ class MeshRouter {
       }
     }
 
-    // ─── 2. CONTROLLED MULTI-HOP FLOOD (LQS-Filtered) ───
+    // ─── 2. CONTROLLED MULTI-HOP FLOOD (LQS-Filtered & Battery Throttled) ───
     // If not a direct peer or direct send failed, forward to connected neighbors with healthy links
-    const peersToSend = Array.from(this.peers.entries())
+    let peersToSend = Array.from(this.peers.entries())
       .filter(([id, peer]) => {
         if (id === exceptPeer) return false;
-        // Don't waste radio energy on severely degraded links (LQS < 15%)
+        // Don't waste radio energy on severely degraded links (LQS < 15% normal, < 50% in battery saver)
         const lqs = peer.rssi ? bluetoothTransport.getLinkQuality(id) : 70;
-        return lqs >= 15;
+        return lqs >= (decision.batteryConservationMode ? 50 : 15);
       });
 
+    // In critical battery conservation mode (<=15%), throttle multi-hop to top 3 best links
+    if (decision.batteryConservationMode && peersToSend.length > 3) {
+      peersToSend = peersToSend.slice(0, 3);
+    }
+
     for (const [peerId, peer] of peersToSend) {
-      const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora') || 'ble', encoded);
+      const ok = await this.sendToPeer(peerId, (peer.transport as 'wifi' | 'ble' | 'lora' | 'soundmesh') || 'ble', encoded);
       if (ok) anySent = true;
     }
 
