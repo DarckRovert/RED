@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v83.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v84.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 

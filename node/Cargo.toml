@@ -1,6 +1,6 @@
 [package]
 name = "red_node"
-version = "83.0.0"
+version = "84.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "RED network node"

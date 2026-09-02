@@ -59,14 +59,22 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              if (typeof window !== 'undefined' && !window.Capacitor) {
-                window.Capacitor = {
-                  triggerEvent: function() {},
-                  isNativePlatform: function() { return false; },
-                  isPluginAvailable: function() { return false; },
-                  Plugins: {}
-                };
-              }
+              (function() {
+                try {
+                  if (typeof window !== 'undefined') {
+                    if (!window.Capacitor) {
+                      window.Capacitor = {
+                        triggerEvent: function() { return false; },
+                        isNativePlatform: function() { return false; },
+                        isPluginAvailable: function() { return false; },
+                        Plugins: {}
+                      };
+                    } else if (typeof window.Capacitor.triggerEvent !== 'function') {
+                      window.Capacitor.triggerEvent = function() { return false; };
+                    }
+                  }
+                } catch(e) {}
+              })();
             `,
           }}
         />

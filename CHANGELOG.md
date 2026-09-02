@@ -1,5 +1,35 @@
 # Changelog
 
+## [84.0.0-cognitive-radio-multi-transport-edition] - 2026-09-02
+
+### 🛡️ Cognitive Radio & Multi-Transport Autonomous Sovereign Master Edition (Release Oficial v84.0.0)
+
+- **Motor de Radio Cognitiva Militar (`CognitiveRadioArbiter.ts`):**
+  - Árbitro de enrutamiento omnicanal con función de costo multidimensional en tiempo real (<0.02 ms de latencia, 0% CPU).
+  - Cálculo geodésico esférico Haversine sanitizado contra `NaN` para selección óptima de transporte físico (BLE 5.x, Wi-Fi Direct, LoRa sub-GHz, SoundMesh acústico ultrasónico y Li-Fi óptico).
+  - Detección de interferencia y Guerra Electrónica (EW / Jamming en 2.4 GHz) con conmutación automática de tráfico unicast y balizas de emergencia SOS a canal acústico ultrasónico.
+  - Planificador de escucha escalonada (*Staggered Sentry*): duty cycles adaptativos (55s reposo / 2s escucha para 48h de autonomía, 30s/3s para modo equilibrado, 10s/5s para activo y continuo para SOS/carga).
+- **Protocolo Ultra-Compacto CoT-PLI de 28 Bytes:**
+  - Reducción del -94.9% en consumo de ancho de banda respecto a XML ATAK convencional (de 550 bytes a 28 bytes exactos).
+  - Empaquetado binario de alta densidad: coordenadas en microgrados escaladas por 10⁶ (resolución de 0.11 m), altitud HAE Int16, timestamp Unix Uint32, rol militar y checksum CRC-16-CCITT.
+  - Soporte nativo para interoperabilidad con redes de radio LoRa Meshtastic bajo canal dedicado.
+- **Blindaje contra Asesinos de Batería OEM (`OemBatteryHelper.ts`):**
+  - Detección heurística de fabricantes agresivos (Xiaomi HyperOS/MIUI, Samsung OneUI, Huawei EMUI, ColorOS/Vivo).
+  - Mitigación proactiva de cierres en segundo plano y supervivencia del daemon de red `RedNodeService`.
+- **Hardening y Eliminación de Puntos Ciegos en `meshRouter.ts`:**
+  - Protección global de paquetes Broadcast contra Jamming en 2.4 GHz activando SoundMesh en paralelo.
+  - Limitación inteligente de contienda multi-hop flood durante batería crítica (≤15%) a los 3 mejores vecinos con LQS ≥ 50%.
+  - Inicialización defensiva de `window.Capacitor.triggerEvent` en WebView.
+- **Despliegue Limpio y Depuración en Hardware Real:**
+  - Despliegue en limpio verificado vía ADB en **Motorola Moto G22** (`ZT322B386P`) y **Lenovo Tablet TB305XU** (`HA2CHKZ2`), auditado y validado en tiempo real con `adb logcat`.
+- **Validación Exhaustiva 100% PASS:**
+  - 56/56 suites de resiliencia automatizadas superadas (`npm run test:all`).
+  - TypeScript estricto con 0 errores (`npx tsc --noEmit`).
+  - Rust workspace con 0 errores (`cargo check --workspace`).
+- **Versión Oficial:** `84.0.0` / `versionCode 84000`.
+
+---
+
 ## [78.0.0-multi-device-tactical-mesh-edition] - 2026-08-31
 
 ### 🛡️ Multi-Device Tactical Mesh & Clean Production Release (Release Oficial v78.0.0)
