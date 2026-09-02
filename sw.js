@@ -3,7 +3,7 @@
 // Handles: Push Notifications, Offline Cache Storage, Stale-While-Revalidate,
 //          Background Sync, and Scheduled Messages via IndexedDB
 
-const CACHE_NAME = 'red-vault-cache-v82';
+const CACHE_NAME = 'red-vault-cache-v83';
 const DB_NAME = 'red-sw-db';
 const STORE_SCHEDULED = 'scheduled-messages';
 const STORE_NOTIF_PREFS = 'notif-prefs';

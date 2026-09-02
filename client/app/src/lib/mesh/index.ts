@@ -19,3 +19,6 @@ export * from './SlottedGossipEngine';
 export * from './TacticalMicroBurstEngine';
 export * from './useSquadCallMesh';
 export * from './LoRaMeshtasticBridge';
+export * from './EcoMeshDutyCycleEngine';
+export * from './BroadcastStormGuardEngine';
+export * from './LamportMeshClockEngine';

@@ -268,6 +268,16 @@ export const TacticalCommandCenter: React.FC = () => {
         ],
         survival: [
             {
+                id: 'extremeSurvival',
+                action: 'extremeSurvival',
+                icon: '⚡',
+                title: 'HUD Supervivencia Extrema (3 Botones)',
+                subtitle: 'Modo de pánico y alto estrés: SOS Médico, PTT Directo y Brújula de Evacuación.',
+                badge: 'ALTO ESTRÉS',
+                badgeColor: '#FF1E40',
+                accentGlow: 'rgba(255, 30, 64, 0.35)'
+            },
+            {
                 id: 'vitalScan',
                 action: 'vitalScan',
                 icon: '🫀',

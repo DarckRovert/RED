@@ -80,6 +80,7 @@ const ToastProvider         = dynamic(() => import("../components/Toast").then(m
 const IncomingCallBanner    = dynamic(() => import("../components/IncomingCallBanner").then(m => ({ default: m.IncomingCallBanner })), { ssr: false, loading: () => null });
 const FloatingCallPIP       = dynamic(() => import("../components/FloatingCallPIP").then(m => ({ default: m.FloatingCallPIP })),       { ssr: false, loading: () => null });
 const LoraTransceiverModal  = dynamic(() => import("../components/LoraTransceiverModal").then(m => ({ default: m.LoraTransceiverModal })), { ssr: false, loading: () => <AppLoader /> });
+const ExtremeSurvivalHudModal = dynamic(() => import("../components/ExtremeSurvivalHudModal").then(m => ({ default: m.ExtremeSurvivalHudModal })), { ssr: false, loading: () => <AppLoader /> });
 const BiometricShieldOverlay = dynamic(() => import("../components/BiometricShieldOverlay").then(m => ({ default: m.BiometricShieldOverlay })), { ssr: false, loading: () => null });
 const IncomingContactRequestModal = dynamic(() => import("../components/IncomingContactRequestModal").then(m => ({ default: m.IncomingContactRequestModal })), { ssr: false, loading: () => null });
 
@@ -578,6 +579,7 @@ export default function AppRouter() {
                 {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
                 {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
                 {currentScreen === "loraTransceiver" && <LoraTransceiverModal onClose={goBack} />}
+                {(currentScreen === "extremeSurvival" || currentScreen === "survivalHud") && <ExtremeSurvivalHudModal />}
                 {currentScreen === "stegoVault" && <StegoVaultModal />}
                 {currentScreen === "shakePair" && <ShakePairModal />}
                 {(currentScreen === "p2pPay" || currentScreen === "redP2PPay") && <RedP2PPayModal />}
@@ -674,6 +676,7 @@ export default function AppRouter() {
               {currentScreen === "tacticalFoxhunt" && <TacticalFoxhuntModal />}
               {currentScreen === "atmosphericSafety" && <AtmosphericSafetyModal />}
               {currentScreen === "loraTransceiver" && <LoraTransceiverModal onClose={goBack} />}
+              {(currentScreen === "extremeSurvival" || currentScreen === "survivalHud") && <ExtremeSurvivalHudModal />}
               {currentScreen === "rfSpectrum" && <RfSpectrumModal />}
               {currentScreen === "stegoVault" && <StegoVaultModal />}
               {currentScreen === "shakePair" && <ShakePairModal />}

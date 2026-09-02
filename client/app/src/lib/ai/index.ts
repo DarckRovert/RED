@@ -6,4 +6,5 @@ export * from './guardianEngine';
 export * from './TacticalEdgeVisionEngine';
 export * from './VectorKnowledgeStore';
 export * from './TacticalSpeechEngine';
+export * from './ZeroFootprintAiMemoryManager';
 
