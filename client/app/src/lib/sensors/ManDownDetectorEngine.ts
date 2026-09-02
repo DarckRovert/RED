@@ -80,6 +80,7 @@ export class ManDownDetectorEngine {
     public armSentry(): boolean {
         if (typeof window === 'undefined') return false;
 
+        this.stopAllTimers();
         this.isArmed = true;
         this.state = 'MONITORING';
         this.lastMotionTime = Date.now();
@@ -93,26 +94,34 @@ export class ManDownDetectorEngine {
     }
 
     /**
-     * Desarma el centinela de Hombre Caído
+     * Desarma el centinela de Hombre Caído y cancela balizas SOS si ya se habían emitido
      */
     public disarmSentry() {
+        const wasDispatched = this.state === 'ALARM_DISPATCHED';
         this.isArmed = false;
         this.state = 'DISARMED';
         this.stopAllTimers();
+        if (wasDispatched) {
+            meshSosBeacon.deactivateSosBeacon().catch(() => {});
+        }
         this.notify();
     }
 
     /**
-     * Cancela la pre-alarma si el operador se encuentra bien (falso positivo)
+     * Cancela la pre-alarma o desactiva la alarma ya emitida si el operador se encuentra bien
      */
     public cancelPreAlarm() {
-        if (this.state === 'PRE_ALARM_COUNTDOWN' || this.state === 'IMPACT_DETECTED') {
+        const wasDispatched = this.state === 'ALARM_DISPATCHED';
+        if (this.state === 'PRE_ALARM_COUNTDOWN' || this.state === 'IMPACT_DETECTED' || wasDispatched) {
             this.state = 'MONITORING';
             this.impactTimestamp = null;
             this.lastMotionTime = Date.now();
             this.secondsRemaining = this.PRE_ALARM_SECONDS;
             if (this.preAlarmInterval) clearInterval(this.preAlarmInterval);
             this.preAlarmInterval = null;
+            if (wasDispatched) {
+                meshSosBeacon.deactivateSosBeacon().catch(() => {});
+            }
             TacticalAudioEngine.playRogerBeep();
             this.notify();
         }
@@ -131,17 +140,26 @@ export class ManDownDetectorEngine {
             const acc = e.accelerationIncludingGravity || e.acceleration;
             if (!acc) return;
 
-            const x = acc.x || 0;
-            const y = acc.y || 0;
-            const z = acc.z || 9.81;
+            const rawX = acc.x;
+            const rawY = acc.y;
+            const rawZ = acc.z;
+
+            const x = (typeof rawX === 'number' && isFinite(rawX)) ? rawX : 0;
+            const y = (typeof rawY === 'number' && isFinite(rawY)) ? rawY : 0;
+            const defaultZ = e.accelerationIncludingGravity ? 9.81 : 0;
+            const z = (typeof rawZ === 'number' && isFinite(rawZ)) ? rawZ : defaultZ;
 
             // Magnitud en unidades g (1g ≈ 9.81 m/s^2)
             const magnitudeMps2 = Math.sqrt(x * x + y * y + z * z);
             const magnitudeG = magnitudeMps2 / 9.81;
+
+            if (!isFinite(magnitudeG) || magnitudeG < 0) return;
+
             this.lastMagnitude = magnitudeG;
 
             // Detectar micro-movimientos (> 0.15g de variación respecto a reposo)
-            const motionDelta = Math.abs(magnitudeG - 1.0);
+            const expectedRestG = e.accelerationIncludingGravity ? 1.0 : 0.0;
+            const motionDelta = Math.abs(magnitudeG - expectedRestG);
             if (motionDelta > 0.15) {
                 this.lastMotionTime = Date.now();
             }

@@ -86,7 +86,7 @@ export class AcousticSonarEngine {
     }
 
     private initAudio() {
-        if (!this.audioCtx) {
+        if (!this.audioCtx || this.audioCtx.state === 'closed') {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             if (AudioContextClass) {
                 this.audioCtx = new AudioContextClass();
@@ -133,6 +133,14 @@ export class AcousticSonarEngine {
 
         osc.connect(gain);
         gain.connect(this.audioCtx.destination);
+
+        // Desconectar nodos al finalizar el pulso acústico para recolección por Garbage Collector
+        osc.onended = () => {
+            try {
+                osc.disconnect();
+                gain.disconnect();
+            } catch {}
+        };
 
         osc.start(now);
         osc.stop(now + duration);

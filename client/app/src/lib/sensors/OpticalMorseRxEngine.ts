@@ -60,6 +60,10 @@ export class OpticalMorseRxEngine {
         return this.instance;
     }
 
+    public getState(): MorseRxState {
+        return { ...this.currentState };
+    }
+
     public subscribe(cb: (state: MorseRxState) => void): () => void {
         this.listeners.add(cb);
         cb(this.currentState);
@@ -85,6 +89,8 @@ export class OpticalMorseRxEngine {
      * Procesa la luminancia promedio de la región de interés (ROI) del fotograma actual
      */
     public processFrameLuminance(luma: number, now: number = Date.now()): MorseRxState {
+        if (!isFinite(luma)) return this.currentState;
+
         // Mantener promedio móvil adaptativo
         this.luminanceHistory.push(luma);
         if (this.luminanceHistory.length > 30) this.luminanceHistory.shift();
@@ -94,7 +100,7 @@ export class OpticalMorseRxEngine {
         const dynamicThreshold = minLuma + (maxLuma - minLuma) * 0.55;
 
         const isCurrentlyOn = luma > dynamicThreshold && (maxLuma - minLuma) > 15;
-        const duration = now - this.lastStateChangeTime;
+        const duration = Math.max(0, now - this.lastStateChangeTime);
 
         if (isCurrentlyOn !== this.isLightOn) {
             // Cambio de estado óptico
@@ -102,7 +108,11 @@ export class OpticalMorseRxEngine {
                 // Se apagó la luz -> evaluar duración del pulso (dit vs dah)
                 const isDah = duration > (this.detectedUnitMs * 2.0);
                 const symbol = isDah ? '-' : '.';
-                this.currentSymbolBuffer += symbol;
+                if (this.currentSymbolBuffer.length < 8) {
+                    this.currentSymbolBuffer += symbol;
+                } else {
+                    this.currentSymbolBuffer = '';
+                }
 
                 // Adaptar unitMs dinámicamente si fue un dit
                 if (!isDah && duration >= 40 && duration <= 300) {
@@ -114,6 +124,7 @@ export class OpticalMorseRxEngine {
                 if (duration >= this.detectedUnitMs * 2.5 && this.currentSymbolBuffer) {
                     const char = REVERSE_MORSE_TABLE[this.currentSymbolBuffer] || `[${this.currentSymbolBuffer}]`;
                     this.decodedText += char;
+                    if (this.decodedText.length > 5000) this.decodedText = this.decodedText.slice(-4000);
                     this.currentState.lastDecodedChar = char;
                     this.currentSymbolBuffer = '';
                 }
@@ -130,6 +141,7 @@ export class OpticalMorseRxEngine {
             if (!this.isLightOn && duration >= this.detectedUnitMs * 3.5 && this.currentSymbolBuffer) {
                 const char = REVERSE_MORSE_TABLE[this.currentSymbolBuffer] || `[${this.currentSymbolBuffer}]`;
                 this.decodedText += char;
+                if (this.decodedText.length > 5000) this.decodedText = this.decodedText.slice(-4000);
                 this.currentState.lastDecodedChar = char;
                 this.currentSymbolBuffer = '';
             }
@@ -150,6 +162,31 @@ export class OpticalMorseRxEngine {
 
         this.notify();
         return this.currentState;
+    }
+
+    public reset(): void {
+        this.clearText();
+        this.luminanceHistory = [];
+        this.isLightOn = false;
+        this.lastStateChangeTime = Date.now();
+        this.detectedUnitMs = 100;
+        this.currentState = {
+            isReceiving: false,
+            currentLuminance: 0,
+            thresholdLuminance: 128,
+            isLightOn: false,
+            currentSymbolBuffer: '',
+            decodedText: '',
+            detectedWpm: 12,
+            lastDecodedChar: '',
+        };
+        this.notify();
+    }
+
+    public destroy(): void {
+        this.reset();
+        this.listeners.clear();
+        OpticalMorseRxEngine.instance = null;
     }
 }
 

@@ -63,46 +63,68 @@ export class PedestrianDeadReckoningEngine {
 
     public startTracking() {
         if (this.isTracking) return;
+
+        // Limpiar listeners previos para evitar duplicaciones
+        if (typeof window !== 'undefined') {
+            if (this.orientationHandler) window.removeEventListener('deviceorientation', this.orientationHandler);
+            if (this.motionHandler) window.removeEventListener('devicemotion', this.motionHandler);
+            this.orientationHandler = null;
+            this.motionHandler = null;
+        }
+
         this.isTracking = true;
         this.lastStepTime = Date.now();
+        this.prevAccelMag = 0;
+        this.gravityEma = 9.81;
 
         // Conectar sensores inerciales del dispositivo si está en navegador / WebView Capacitor
         if (typeof window !== 'undefined') {
             this.orientationHandler = (e: DeviceOrientationEvent) => {
                 let heading = 0;
-                if ((e as any).webkitCompassHeading !== undefined) {
+                if ((e as any).webkitCompassHeading !== undefined && isFinite((e as any).webkitCompassHeading)) {
                     heading = (e as any).webkitCompassHeading;
-                } else if (e.alpha !== null) {
-                    heading = (360 - e.alpha) % 360;
+                } else if (typeof e.alpha === 'number' && isFinite(e.alpha)) {
+                    heading = (360 - e.alpha);
                 }
-                this.currentHeadingDeg = Math.round(heading);
+                const safeHeading = ((Math.round(heading) % 360) + 360) % 360;
+                this.currentHeadingDeg = isFinite(safeHeading) ? safeHeading : 0;
             };
 
             this.motionHandler = (e: DeviceMotionEvent) => {
                 let mag = 0;
-                if (e.acceleration && typeof e.acceleration.x === 'number' && typeof e.acceleration.y === 'number' && typeof e.acceleration.z === 'number') {
-                    const x = e.acceleration.x || 0;
-                    const y = e.acceleration.y || 0;
-                    const z = e.acceleration.z || 0;
+                if (e.acceleration && typeof e.acceleration.x === 'number' && isFinite(e.acceleration.x) &&
+                    typeof e.acceleration.y === 'number' && isFinite(e.acceleration.y) &&
+                    typeof e.acceleration.z === 'number' && isFinite(e.acceleration.z)) {
+                    const x = e.acceleration.x;
+                    const y = e.acceleration.y;
+                    const z = e.acceleration.z;
                     mag = Math.sqrt(x * x + y * y + z * z);
                 } else if (e.accelerationIncludingGravity) {
                     const acc = e.accelerationIncludingGravity;
-                    const x = acc.x || 0;
-                    const y = acc.y || 0;
-                    const z = acc.z || 0;
+                    const rawX = acc.x;
+                    const rawY = acc.y;
+                    const rawZ = acc.z;
+                    const x = (typeof rawX === 'number' && isFinite(rawX)) ? rawX : 0;
+                    const y = (typeof rawY === 'number' && isFinite(rawY)) ? rawY : 0;
+                    const z = (typeof rawZ === 'number' && isFinite(rawZ)) ? rawZ : 9.81;
                     const totalMag = Math.sqrt(x * x + y * y + z * z);
-                    this.gravityEma = 0.92 * this.gravityEma + 0.08 * (totalMag > 0 ? totalMag : 9.81);
+                    const currentG = isFinite(this.gravityEma) ? this.gravityEma : 9.81;
+                    this.gravityEma = 0.92 * currentG + 0.08 * (totalMag > 0 ? totalMag : 9.81);
                     mag = Math.abs(totalMag - this.gravityEma);
                 }
 
+                if (!isFinite(mag) || mag < 0) return;
+
                 const now = Date.now();
+                const prevMag = isFinite(this.prevAccelMag) ? this.prevAccelMag : 0;
                 // Detección de picos con umbral de impacto de zancada (> 1.65 m/s² por encima de gravedad)
                 // Debounce mínimo de 300 ms entre pasos (frecuencia máxima humana 3.3 Hz)
-                if (mag > 1.65 && this.prevAccelMag <= 1.65 && (now - this.lastStepTimestamp > 300)) {
+                if (mag > 1.65 && prevMag <= 1.65 && (now - this.lastStepTimestamp > 300)) {
                     this.lastStepTimestamp = now;
                     // Estimación dinámica de zancada (Weinberg): zancada proporcional a la raíz cuarta de aceleración
                     const dynamicStride = Math.min(1.15, Math.max(0.55, this.defaultStrideMeters * Math.pow(mag / 2.0, 0.25)));
-                    this.recordStep(this.currentHeadingDeg, Math.round(dynamicStride * 100) / 100);
+                    const safeStride = isFinite(dynamicStride) ? Math.round(dynamicStride * 100) / 100 : this.defaultStrideMeters;
+                    this.recordStep(this.currentHeadingDeg, safeStride);
                 }
                 this.prevAccelMag = mag;
             };
@@ -122,6 +144,8 @@ export class PedestrianDeadReckoningEngine {
             this.orientationHandler = null;
             this.motionHandler = null;
         }
+        this.prevAccelMag = 0;
+        this.gravityEma = 9.81;
         this.notify();
     }
 
@@ -141,15 +165,19 @@ export class PedestrianDeadReckoningEngine {
         if (!this.isTracking) return;
 
         const now = Date.now();
+        const rawHeading = (typeof headingDeg === 'number' && isFinite(headingDeg)) ? headingDeg : this.currentHeadingDeg;
+        const safeHeading = ((rawHeading % 360) + 360) % 360;
+        const safeStride = (typeof strideMeters === 'number' && isFinite(strideMeters) && strideMeters > 0) ? strideMeters : this.defaultStrideMeters;
+
         this.totalSteps++;
-        this.distanceMeters += strideMeters;
-        this.currentHeadingDeg = (headingDeg + 360) % 360;
+        this.distanceMeters = Math.round((this.distanceMeters + safeStride) * 100) / 100;
+        this.currentHeadingDeg = safeHeading;
         this.lastStepTime = now;
 
         // Vector de desplazamiento 2D
-        const headingRad = (this.currentHeadingDeg * Math.PI) / 180;
-        this.displacementNorthMeters += strideMeters * Math.cos(headingRad);
-        this.displacementEastMeters += strideMeters * Math.sin(headingRad);
+        const headingRad = (safeHeading * Math.PI) / 180;
+        this.displacementNorthMeters = Math.round((this.displacementNorthMeters + safeStride * Math.cos(headingRad)) * 100) / 100;
+        this.displacementEastMeters = Math.round((this.displacementEastMeters + safeStride * Math.sin(headingRad)) * 100) / 100;
 
         this.stepHistory.push(now);
         if (this.stepHistory.length > 20) this.stepHistory.shift();
@@ -158,7 +186,8 @@ export class PedestrianDeadReckoningEngine {
     }
 
     public setHeading(headingDeg: number) {
-        this.currentHeadingDeg = (headingDeg + 360) % 360;
+        const rawHeading = (typeof headingDeg === 'number' && isFinite(headingDeg)) ? headingDeg : 0;
+        this.currentHeadingDeg = ((rawHeading % 360) + 360) % 360;
         this.notify();
     }
 

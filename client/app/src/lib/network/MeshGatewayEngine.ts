@@ -77,6 +77,10 @@ export class MeshGatewayEngine {
      * Client Request: Fetches a URL, either directly if connected or over mesh DTN
      */
     public async fetchUrl(url: string, originDid: string): Promise<{ html: string; status: number; fromGateway: boolean }> {
+        if (!url || typeof url !== 'string' || url.trim().length === 0) {
+            return { html: 'URL inválida o vacía', status: 400, fromGateway: false };
+        }
+        const safeOriginDid = (typeof originDid === 'string' && originDid.trim().length > 0) ? originDid : 'did:red:local';
         const hasInternet = await this.checkInternetConnectivity();
 
         // 1. Direct fetch if internet is available
@@ -99,7 +103,7 @@ export class MeshGatewayEngine {
             requestId: reqId,
             url,
             method: 'GET',
-            originDid,
+            originDid: safeOriginDid,
             timestamp: Date.now(),
         };
 
@@ -215,6 +219,7 @@ export class MeshGatewayEngine {
     }
 
     private generateOfflineFallbackHtml(url: string): string {
+        const safeUrl = (typeof url === 'string') ? url.replace(/[<>&"]/g, '') : '';
         return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><style>body{background:#0b0f19;color:#f3f4f6;font-family:sans-serif;padding:30px;text-align:center;}.box{background:#111827;border:1px solid #1f293d;border-radius:12px;padding:24px;max-width:500px;margin:0 auto;}h1{color:#38bdf8;font-size:18px;}p{color:#94a3b8;font-size:13px;margin-top:10px;line-height:1.5;}.tag{background:#1e293b;color:#10b981;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;display:inline-block;margin-bottom:12px;}</style></head>
@@ -222,7 +227,7 @@ export class MeshGatewayEngine {
     <div class="box">
         <span class="tag">🌐 ENLACE PROXY MESH RED</span>
         <h1>Página Solicitada vía Malla</h1>
-        <p><strong>${url}</strong></p>
+        <p><strong>${safeUrl}</strong></p>
         <p>No se detectó un Gateway ClearNet directo en alcance inmediato de radio. Los paquetes de solicitud siguen encolados en la memoria DTN de los nodos vecinos para retransmisión oportuna.</p>
     </div>
 </body>

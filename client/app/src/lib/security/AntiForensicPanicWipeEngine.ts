@@ -46,7 +46,10 @@ export class AntiForensicPanicWipeEngine {
         try {
             const raw = localStorage.getItem(STORAGE_DURESS_CONFIG_KEY);
             if (raw) {
-                this.config = JSON.parse(raw);
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    this.config = { ...this.config, ...parsed };
+                }
             }
         } catch {}
     }
@@ -62,8 +65,9 @@ export class AntiForensicPanicWipeEngine {
      * Configura el PIN de coacción / pánico
      */
     public setDuressPin(pin: string): boolean {
-        if (!pin || pin.length < 4) return false;
-        const pinBytes = new TextEncoder().encode(`red_duress_salt:${pin}`);
+        if (!pin || typeof pin !== 'string' || pin.trim().length < 4) return false;
+        const safePin = pin.trim();
+        const pinBytes = new TextEncoder().encode(`red_duress_salt:${safePin}`);
         const hashBytes = sha256(pinBytes);
         this.config.duressPinHash = bytesToHex(hashBytes);
         this.config.isDuressPinConfigured = true;
@@ -75,8 +79,9 @@ export class AntiForensicPanicWipeEngine {
      * Valida si un PIN introducido corresponde al PIN de coacción
      */
     public isDuressPin(pin: string): boolean {
-        if (!this.config.isDuressPinConfigured || !this.config.duressPinHash) return false;
-        const pinBytes = new TextEncoder().encode(`red_duress_salt:${pin}`);
+        if (!pin || typeof pin !== 'string' || !this.config.isDuressPinConfigured || !this.config.duressPinHash) return false;
+        const safePin = pin.trim();
+        const pinBytes = new TextEncoder().encode(`red_duress_salt:${safePin}`);
         const hashBytes = sha256(pinBytes);
         return bytesToHex(hashBytes) === this.config.duressPinHash;
     }
@@ -86,6 +91,10 @@ export class AntiForensicPanicWipeEngine {
      */
     public async triggerDuressPanicProtocol(lastKnownCoords?: { lat: number; lon: number }): Promise<void> {
         console.warn("[AntiForensicPanicWipeEngine] !!! DURESS PANIC PROTOCOL ENGAGED !!!");
+
+        const safeCoords = (lastKnownCoords && typeof lastKnownCoords.lat === 'number' && typeof lastKnownCoords.lon === 'number' && isFinite(lastKnownCoords.lat) && isFinite(lastKnownCoords.lon))
+            ? { lat: lastKnownCoords.lat, lon: lastKnownCoords.lon }
+            : {};
 
         // 1. Emisión Silenciosa de Baliza SOS por la Malla DTN
         if (this.config.emitSilentMeshSos) {
@@ -103,7 +112,7 @@ export class AntiForensicPanicWipeEngine {
                     distressType: 'GENERAL_DISTRESS',
                     triageColor: 'RED',
                     note: '🚨 ALERTA CRÍTICA: OPERADOR BAJO COACCIÓN / CAPTURA HOSTIL (PIN DE PÁNICO ACTIVADO)',
-                    coords: lastKnownCoords || {},
+                    coords: safeCoords,
                     batteryLevel: batt
                 }, 'DURESS_OPERATOR', 'Operador en Peligro');
             } catch (e) {
@@ -144,6 +153,10 @@ export class AntiForensicPanicWipeEngine {
                 localStorage.setItem('red_user_nickname', 'Ciudadano');
             } catch {}
         }
+    }
+
+    public destroy(): void {
+        AntiForensicPanicWipeEngine.instance = null;
     }
 }
 

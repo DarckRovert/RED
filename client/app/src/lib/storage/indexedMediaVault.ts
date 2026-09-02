@@ -91,7 +91,14 @@ class IndexedMediaVault {
                 }
             };
 
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => {
+                const db = req.result;
+                db.onversionchange = () => {
+                    db.close();
+                    this.dbPromise = null;
+                };
+                resolve(db);
+            };
             req.onerror = () => {
                 this.dbPromise = null;
                 reject(req.error || new Error('Error al abrir RED_MEDIA_VAULT_DB'));
@@ -154,6 +161,7 @@ class IndexedMediaVault {
 
             return `red_vault://${cleanId}`;
         } catch (err) {
+            this.dbPromise = null;
             console.warn('[MediaVault] Fallback saving to memory cache:', err);
             return dataUrl;
         }
@@ -194,6 +202,7 @@ class IndexedMediaVault {
                 req.onerror = () => resolve(null);
             });
         } catch (err) {
+            this.dbPromise = null;
             console.warn('[MediaVault] Error retrieving media:', err);
             return null;
         }
@@ -230,6 +239,7 @@ class IndexedMediaVault {
                 req.onerror = () => resolve(false);
             });
         } catch {
+            this.dbPromise = null;
             return false;
         }
     }
@@ -253,6 +263,7 @@ class IndexedMediaVault {
                 req.onerror = () => reject(req.error);
             });
         } catch (err) {
+            this.dbPromise = null;
             console.warn('[MediaVault] Error deleting media:', err);
         }
     }
@@ -283,6 +294,7 @@ class IndexedMediaVault {
                 cursorReq.onerror = () => resolve({ count: 0, totalBytes: 0 });
             });
         } catch {
+            this.dbPromise = null;
             return { count: 0, totalBytes: 0 };
         }
     }
@@ -302,6 +314,7 @@ class IndexedMediaVault {
                 req.onerror = () => reject(req.error);
             });
         } catch (err) {
+            this.dbPromise = null;
             console.warn('[MediaVault] Error clearing vault:', err);
         }
     }

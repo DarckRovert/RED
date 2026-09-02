@@ -89,40 +89,62 @@ export class TacticalBallisticsEngine {
     ): BallisticSolution {
         const cal = TacticalBallisticsEngine.PROFILES[caliberKey] || TacticalBallisticsEngine.PROFILES['5.56_NATO'];
         const g = 9.80665;
-        const cosAngle = Math.cos((inclineAngleDeg * Math.PI) / 180);
 
-        // Distancia horizontal efectiva (Rifleman's Rule)
-        const effectiveDistance = distanceMeters * cosAngle;
+        if (!isFinite(distanceMeters) || distanceMeters <= 0) {
+            const initEnergy = Math.round(0.5 * (cal.bulletMassGrams / 1000) * Math.pow(cal.muzzleVelocityMps, 2));
+            return {
+                targetDistanceMeters: 0,
+                bulletDropCm: 0,
+                elevationMrad: 0,
+                elevationMoa: 0,
+                elevationClicksMrad: 0,
+                elevationClicksMoa: 0,
+                windDriftCm: 0,
+                windageMrad: 0,
+                windageMoa: 0,
+                timeOfFlightSec: 0,
+                remainingVelocityMps: cal.muzzleVelocityMps,
+                kineticEnergyJoules: initEnergy,
+            };
+        }
+
+        const safeDistance = Math.min(3000, Math.max(1, distanceMeters));
+        const safeCrosswind = (typeof crosswindMps === 'number' && isFinite(crosswindMps)) ? crosswindMps : 0;
+        const safeIncline = (typeof inclineAngleDeg === 'number' && isFinite(inclineAngleDeg))
+            ? Math.max(-89, Math.min(89, inclineAngleDeg))
+            : 0;
+
+        const cosAngle = Math.cos((safeIncline * Math.PI) / 180);
 
         // Estimación de tiempo de vuelo con deceleración aerodinámica G1
-        const avgVelocity = cal.muzzleVelocityMps * (1 - (0.00035 / Math.max(0.1, cal.ballisticCoefficientG1)) * (distanceMeters / 2));
+        const avgVelocity = cal.muzzleVelocityMps * (1 - (0.00035 / Math.max(0.1, cal.ballisticCoefficientG1)) * (safeDistance / 2));
         const vMps = Math.max(150, avgVelocity);
-        const timeOfFlightSec = distanceMeters / vMps;
+        const timeOfFlightSec = safeDistance / vMps;
 
         // Caída por gravedad: drop = 0.5 * g * t^2
         const rawDropM = 0.5 * g * Math.pow(timeOfFlightSec, 2);
         const zeroDropM = 0.5 * g * Math.pow(cal.zeroRangeMeters / cal.muzzleVelocityMps, 2);
-        const netDropM = Math.max(0, (rawDropM - (zeroDropM * (distanceMeters / cal.zeroRangeMeters)))) * cosAngle;
+        const netDropM = Math.max(0, (rawDropM - (zeroDropM * (safeDistance / cal.zeroRangeMeters)))) * cosAngle;
         const bulletDropCm = Math.round(netDropM * 100 * 10) / 10;
 
         // Conversión a MRAD y MOA
         // 1 MRAD a D metros = D / 1000 metros = D * 0.1 cm
-        const mradFactor = (distanceMeters * 0.1) || 1;
+        const mradFactor = Math.max(0.1, safeDistance * 0.1);
         const elevationMrad = Math.round((bulletDropCm / mradFactor) * 10) / 10;
         const elevationMoa = Math.round((elevationMrad * 3.4377) * 10) / 10;
 
         // Deriva por viento: drift = crosswind * (t - (x / V0))
-        const windDriftM = Math.abs(crosswindMps) * (timeOfFlightSec - (distanceMeters / cal.muzzleVelocityMps));
+        const windDriftM = Math.abs(safeCrosswind) * Math.max(0, (timeOfFlightSec - (safeDistance / cal.muzzleVelocityMps)));
         const windDriftCm = Math.round(Math.max(0, windDriftM * 100) * 10) / 10;
         const windageMrad = Math.round((windDriftCm / mradFactor) * 10) / 10;
         const windageMoa = Math.round((windageMrad * 3.4377) * 10) / 10;
 
         // Velocidad y Energía residual
-        const remainingVelocityMps = Math.round(cal.muzzleVelocityMps * Math.exp(-0.0003 * distanceMeters / cal.ballisticCoefficientG1));
+        const remainingVelocityMps = Math.round(cal.muzzleVelocityMps * Math.exp(-0.0003 * safeDistance / Math.max(0.01, cal.ballisticCoefficientG1)));
         const kineticEnergyJoules = Math.round(0.5 * (cal.bulletMassGrams / 1000) * Math.pow(remainingVelocityMps, 2));
 
         return {
-            targetDistanceMeters: distanceMeters,
+            targetDistanceMeters: safeDistance,
             bulletDropCm,
             elevationMrad,
             elevationMoa,
@@ -135,6 +157,10 @@ export class TacticalBallisticsEngine {
             remainingVelocityMps,
             kineticEnergyJoules,
         };
+    }
+
+    public destroy(): void {
+        TacticalBallisticsEngine.instance = null;
     }
 }
 

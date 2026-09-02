@@ -108,8 +108,9 @@ export class TokenomicsEngine {
      * Rewards a node for forwarding packets or storing DTN messages
      */
     public recordPacketRelayed(bytes = 256): number {
+        const safeBytes = (typeof bytes === 'number' && isFinite(bytes) && bytes > 0) ? bytes : 256;
         // 0.05 RED credits per relayed KB
-        const reward = Math.max(0.01, parseFloat(((bytes / 1024) * 0.05).toFixed(3)));
+        const reward = Math.max(0.01, parseFloat(((safeBytes / 1024) * 0.05).toFixed(3)));
         this.metrics.totalRelayedPackets++;
         this.metrics.relayEarnings += reward;
         this.metrics.localCredits += reward;
@@ -124,7 +125,9 @@ export class TokenomicsEngine {
      * Delegates tokens for PoS network validation
      */
     public stakeTokens(amount: number): { success: boolean; error?: string } {
-        if (amount <= 0) return { success: false, error: "El monto a stakear debe ser mayor a 0." };
+        if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+            return { success: false, error: "El monto a stakear debe ser un número válido mayor a 0." };
+        }
         if (amount > this.metrics.localCredits) return { success: false, error: "Saldo insuficiente de créditos RED." };
 
         this.metrics.localCredits -= amount;
@@ -140,7 +143,9 @@ export class TokenomicsEngine {
      * Unstakes tokens with rewards
      */
     public unstakeTokens(amount: number): { success: boolean; error?: string } {
-        if (amount <= 0) return { success: false, error: "El monto a retirar debe ser mayor a 0." };
+        if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+            return { success: false, error: "El monto a retirar debe ser un número válido mayor a 0." };
+        }
         if (amount > this.metrics.stakedAmount) return { success: false, error: "Monto mayor al stake actual." };
 
         // Calculate accrued staking reward based on APY (simulated daily epoch)
@@ -162,7 +167,9 @@ export class TokenomicsEngine {
         issuerDid: string,
         recipientDid?: string
     ): Promise<{ success: boolean; voucher?: OfflineVoucher; qrPayload?: string; error?: string }> {
-        if (amount <= 0) return { success: false, error: "El monto debe ser superior a 0." };
+        if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+            return { success: false, error: "El monto debe ser un número válido superior a 0." };
+        }
         if (amount > this.metrics.localCredits) return { success: false, error: "Saldo insuficiente para emitir vale." };
 
         const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
@@ -297,6 +304,7 @@ export class TokenomicsEngine {
 
     public destroy(): void {
         this.listeners.clear();
+        TokenomicsEngine.instance = null;
     }
 
     public subscribe(listener: (metrics: TokenomicsMetrics) => void): () => void {

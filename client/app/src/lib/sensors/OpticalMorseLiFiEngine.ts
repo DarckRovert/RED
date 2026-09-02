@@ -36,6 +36,8 @@ export class OpticalMorseLiFiEngine {
     private audioCtx: AudioContext | null = null;
     private oscillator: OscillatorNode | null = null;
     private gainNode: GainNode | null = null;
+    private sleepTimer: any = null;
+    private sleepResolver: (() => void) | null = null;
 
     private listeners: Set<(state: MorseTransmissionState) => void> = new Set();
     private currentState: MorseTransmissionState = {
@@ -68,7 +70,8 @@ export class OpticalMorseLiFiEngine {
     }
 
     public encodeToMorse(text: string): string {
-        const clean = text.toUpperCase().trim();
+        const clean = typeof text === 'string' ? text.toUpperCase().trim() : '';
+        if (!clean) return '';
         return Array.from(clean)
             .map(char => MORSE_DICTIONARY[char] || '?')
             .join(' ');
@@ -88,12 +91,15 @@ export class OpticalMorseLiFiEngine {
     ): Promise<boolean> {
         if (this.isTransmitting) return false;
 
+        const cleanText = typeof text === 'string' ? text.toUpperCase().trim() : '';
+        if (!cleanText || cleanText.length === 0) return false;
+
         this.isTransmitting = true;
         this.shouldAbort = false;
 
         // Estándar ITU: 1 Unit = 1200 / WPM en milisegundos
-        const unitMs = Math.round(1200 / Math.max(4, Math.min(25, wpm)));
-        const cleanText = text.toUpperCase().trim();
+        const safeWpm = (typeof wpm === 'number' && isFinite(wpm)) ? Math.max(4, Math.min(25, Math.round(wpm))) : 12;
+        const unitMs = Math.round(1200 / safeWpm);
         const totalChars = cleanText.length;
 
         this.currentState = {
@@ -101,7 +107,7 @@ export class OpticalMorseLiFiEngine {
             currentWord: '',
             currentChar: '',
             progressPercent: 0,
-            wpm,
+            wpm: safeWpm,
         };
         this.notify();
 
@@ -148,17 +154,19 @@ export class OpticalMorseLiFiEngine {
                 await this.sleep(unitMs * 2);
             }
         } finally {
+            this.abortSleep();
             await this.setLightAndSound(false, options);
             if (options.onPulse) options.onPulse(false);
 
             this.isTransmitting = false;
+            const wasAborted = this.shouldAbort;
             this.shouldAbort = false;
             this.currentState = {
                 isTransmitting: false,
                 currentWord: '',
                 currentChar: '',
-                progressPercent: 100,
-                wpm,
+                progressPercent: wasAborted ? 0 : 100,
+                wpm: safeWpm,
             };
             this.notify();
         }
@@ -168,6 +176,7 @@ export class OpticalMorseLiFiEngine {
 
     public stopTransmission() {
         this.shouldAbort = true;
+        this.abortSleep();
         this.setLightAndSound(false, { useTorch: true, useAudio: true }).catch(() => {});
     }
 
@@ -236,13 +245,22 @@ export class OpticalMorseLiFiEngine {
             const gn = this.gainNode;
             this.oscillator = null;
             this.gainNode = null;
-            setTimeout(() => {
+            try {
+                osc.onended = () => {
+                    try {
+                        osc.disconnect();
+                        gn?.disconnect();
+                    } catch {}
+                };
+                const stopTime = this.audioCtx ? this.audioCtx.currentTime + 0.008 : undefined;
+                osc.stop(stopTime);
+            } catch {
                 try {
                     osc.stop();
                     osc.disconnect();
                     gn?.disconnect();
                 } catch {}
-            }, 8);
+            }
         }
     }
 
@@ -258,7 +276,27 @@ export class OpticalMorseLiFiEngine {
     }
 
     private sleep(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
+        if (this.shouldAbort || ms <= 0) return Promise.resolve();
+        return new Promise(resolve => {
+            this.sleepResolver = resolve;
+            this.sleepTimer = setTimeout(() => {
+                this.sleepTimer = null;
+                this.sleepResolver = null;
+                resolve();
+            }, ms);
+        });
+    }
+
+    private abortSleep() {
+        if (this.sleepTimer) {
+            clearTimeout(this.sleepTimer);
+            this.sleepTimer = null;
+        }
+        if (this.sleepResolver) {
+            const res = this.sleepResolver;
+            this.sleepResolver = null;
+            res();
+        }
     }
 }
 

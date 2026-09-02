@@ -307,13 +307,15 @@ export class Web3BridgeEngine {
             });
 
             const wei = BigInt(balanceHex);
-            const eth = Number(wei) / 1e18;
+            const rawEth = Number(wei) / 1e18;
+            const eth = (!isNaN(rawEth) && isFinite(rawEth) && rawEth >= 0) ? rawEth : 0;
             this.state.balanceEth = eth.toFixed(4);
 
             // 2. $RED Token simulation/contract balance query
             // Derives sovereign staking multiplier or reads ERC-20 contract
             const localRedBalance = parseFloat(localStorage.getItem("red_tactic_credits") || "0");
-            const onChainRedTokens = (eth * 1000 + localRedBalance).toFixed(2);
+            const safeLocalRed = (!isNaN(localRedBalance) && isFinite(localRedBalance) && localRedBalance >= 0) ? localRedBalance : 0;
+            const onChainRedTokens = (eth * 1000 + safeLocalRed).toFixed(2);
             this.state.balanceRedToken = onChainRedTokens;
         } catch {}
     }
@@ -411,6 +413,7 @@ export class Web3BridgeEngine {
 
     public destroy(): void {
         this.listeners.clear();
+        Web3BridgeEngine.instance = null;
     }
 
     public getState(): Web3WalletState {

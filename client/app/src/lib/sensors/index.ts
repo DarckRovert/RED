@@ -21,3 +21,4 @@ export * from './TacticalGeofenceEngine';
 export * from './TacticalPowerGovernorEngine';
 export * from './TacticalRdfEngine';
 export * from './WaterPurificationEngine';
+export * from './TacticalLocationEngine';

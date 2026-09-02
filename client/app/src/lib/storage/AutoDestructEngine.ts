@@ -31,7 +31,7 @@ class AutoDestructEngineClass {
         
         let expiresAt: number | null = null;
         if (msg.expires_at && msg.expires_at > 0) {
-            expiresAt = msg.expires_at;
+            expiresAt = msg.expires_at > 1e11 ? msg.expires_at / 1000 : msg.expires_at;
         } else if (msg.ttl && msg.ttl > 0) {
             const baseTs = msg.timestamp > 1e11 ? msg.timestamp / 1000 : (msg.timestamp || nowSec);
             expiresAt = baseTs + msg.ttl;
@@ -42,7 +42,7 @@ class AutoDestructEngineClass {
         const remainingSec = expiresAt - nowSec;
         if (remainingSec <= 0) {
             // Already expired, purge immediately
-            this.purgeMessage(msg.id);
+            void this.purgeMessage(msg.id);
             return;
         }
 
@@ -51,10 +51,13 @@ class AutoDestructEngineClass {
             clearTimeout(this.activeTimers.get(msg.id)!);
         }
 
+        // Bound to 32-bit signed int max (2147483647 ms ≈ 24.8 days) to avoid V8 timer overflow
+        const delayMs = Math.min(2147483647, Math.max(50, Math.round(remainingSec * 1000)));
+
         // Set timer for exact moment
         const timer = setTimeout(() => {
-            this.purgeMessage(msg.id);
-        }, Math.max(50, remainingSec * 1000));
+            void this.purgeMessage(msg.id);
+        }, delayMs);
 
         this.activeTimers.set(msg.id, timer);
     }
@@ -125,34 +128,56 @@ class AutoDestructEngineClass {
             if (typeof window === 'undefined') return;
             const nowSec = Date.now() / 1000;
             try {
+                // Collect target keys first to prevent concurrent loop index shifting
+                const keys: string[] = [];
                 for (let i = 0; i < localStorage.length; i++) {
-                    const key = localStorage.key(i);
-                    if (key && key.startsWith('red_web_messages_')) {
-                        const raw = localStorage.getItem(key);
-                        if (raw && (raw.includes('"expires_at"') || raw.includes('"ttl"'))) {
-                            const parsed: MessageItem[] = JSON.parse(raw);
-                            let hasExpired = false;
-                            const kept = parsed.filter(m => {
-                                let exp = m.expires_at;
-                                if (!exp && m.ttl) {
-                                    const base = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
-                                    exp = base + m.ttl;
-                                }
-                                if (exp && exp <= nowSec) {
-                                    hasExpired = true;
-                                    this.purgeMessage(m.id);
-                                    return false;
-                                }
-                                return true;
-                            });
-                            if (hasExpired) {
-                                localStorage.setItem(key, JSON.stringify(kept));
+                    const k = localStorage.key(i);
+                    if (k && k.startsWith('red_web_messages_')) {
+                        keys.push(k);
+                    }
+                }
+
+                for (const key of keys) {
+                    const raw = localStorage.getItem(key);
+                    if (raw && (raw.includes('"expires_at"') || raw.includes('"ttl"'))) {
+                        const parsed: MessageItem[] = JSON.parse(raw);
+                        const expiredIds: string[] = [];
+                        const kept = parsed.filter(m => {
+                            let exp = m.expires_at;
+                            if (exp && exp > 1e11) exp = exp / 1000;
+                            if (!exp && m.ttl) {
+                                const base = m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp;
+                                exp = base + m.ttl;
+                            }
+                            if (exp && exp <= nowSec) {
+                                expiredIds.push(m.id);
+                                return false;
+                            }
+                            return true;
+                        });
+
+                        if (expiredIds.length > 0) {
+                            localStorage.setItem(key, JSON.stringify(kept));
+                            for (const id of expiredIds) {
+                                void this.purgeMessage(id);
                             }
                         }
                     }
                 }
             } catch {}
         }, 5000);
+    }
+
+    public destroy(): void {
+        if (this.tickInterval) {
+            clearInterval(this.tickInterval);
+            this.tickInterval = null;
+        }
+        for (const timer of this.activeTimers.values()) {
+            clearTimeout(timer);
+        }
+        this.activeTimers.clear();
+        this.subscribers.clear();
     }
 }
 

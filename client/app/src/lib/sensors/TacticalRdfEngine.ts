@@ -70,8 +70,15 @@ export class TacticalRdfEngine {
     }
 
     public recordSample(headingDeg: number, rssiDbm: number) {
-        this.currentHeading = Math.round(headingDeg) % 360;
-        this.currentRssi = rssiDbm;
+        const safeHeading = (typeof headingDeg === 'number' && isFinite(headingDeg))
+            ? ((Math.round(headingDeg) % 360) + 360) % 360
+            : 0;
+        const safeRssi = (typeof rssiDbm === 'number' && isFinite(rssiDbm))
+            ? Math.max(-140, Math.min(0, rssiDbm))
+            : -105;
+
+        this.currentHeading = safeHeading;
+        this.currentRssi = safeRssi;
 
         const normalizedHeading = (this.currentHeading + 360) % 360;
         const sectorIndex = Math.floor(normalizedHeading / TacticalRdfEngine.SECTOR_WIDTH) % TacticalRdfEngine.SECTOR_COUNT;
@@ -79,16 +86,16 @@ export class TacticalRdfEngine {
         const sector = this.sectors[sectorIndex];
         if (sector) {
             if (sector.sampleCount === 0) {
-                sector.averageRssiDbm = rssiDbm;
+                sector.averageRssiDbm = safeRssi;
             } else {
-                sector.averageRssiDbm = Math.round((sector.averageRssiDbm * 0.7 + rssiDbm * 0.3) * 10) / 10;
+                sector.averageRssiDbm = Math.round((sector.averageRssiDbm * 0.7 + safeRssi * 0.3) * 10) / 10;
             }
             sector.sampleCount++;
         }
 
         this.samples.push({
             headingDeg: this.currentHeading,
-            rssiDbm,
+            rssiDbm: safeRssi,
             timestamp: Date.now()
         });
 
@@ -132,13 +139,15 @@ export class TacticalRdfEngine {
         // Log-Distance Path Loss Model (RSSI0 = -40 dBm a 1 metro, path loss exponent n = 2.5)
         const rssi0 = -40;
         const pathLossExponent = 2.5;
-        const dist = Math.pow(10, (rssi0 - peakRssiDbm) / (10 * pathLossExponent));
-        const confidencePct = Math.min(100, Math.round((Math.min(totalSamples, 20) / 20) * 60 + ((peakRssiDbm + 105) / 65) * 40));
+        const rawDist = Math.pow(10, (rssi0 - peakRssiDbm) / (10 * pathLossExponent));
+        const safeDist = isFinite(rawDist) ? Math.max(1, Math.min(500, Math.round(rawDist * 10) / 10)) : 0;
+        const rawConfidence = (Math.min(totalSamples, 20) / 20) * 60 + ((peakRssiDbm + 105) / 65) * 40;
+        const confidencePct = isFinite(rawConfidence) ? Math.max(0, Math.min(100, Math.round(rawConfidence))) : 0;
 
         return {
             peakHeadingDeg,
             peakRssiDbm,
-            estimatedDistMeters: isSignalLocked ? Math.max(1, Math.min(500, Math.round(dist * 10) / 10)) : 0,
+            estimatedDistMeters: isSignalLocked ? safeDist : 0,
             confidencePct: isSignalLocked ? confidencePct : 0,
             isSignalLocked,
         };
@@ -164,6 +173,13 @@ export class TacticalRdfEngine {
             peakBearing: this.getPeakBearing(),
             sampleCount: this.samples.length
         };
+    }
+
+    public destroy(): void {
+        this.samples = [];
+        this.resetSectors();
+        this.listeners.clear();
+        TacticalRdfEngine.instance = null;
     }
 }
 

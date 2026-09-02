@@ -111,9 +111,21 @@ export class CursorOnTargetEngine {
      * Serializes a CotEvent into standard ATAK XML format
      */
     public serializeToXml(event: CotEvent): string {
-        const hae = event.point.hae !== undefined ? event.point.hae : 0.0;
-        const ce = event.point.ce !== undefined ? event.point.ce : 9999999.0;
-        const le = event.point.le !== undefined ? event.point.le : 9999999.0;
+        const lat = (typeof event.point?.lat === 'number' && isFinite(event.point.lat))
+            ? Math.max(-90, Math.min(90, event.point.lat))
+            : 0.0;
+        const lon = (typeof event.point?.lon === 'number' && isFinite(event.point.lon))
+            ? Math.max(-180, Math.min(180, event.point.lon))
+            : 0.0;
+        const hae = (typeof event.point?.hae === 'number' && isFinite(event.point.hae))
+            ? event.point.hae
+            : 0.0;
+        const ce = (typeof event.point?.ce === 'number' && isFinite(event.point.ce) && event.point.ce >= 0)
+            ? event.point.ce
+            : 9999999.0;
+        const le = (typeof event.point?.le === 'number' && isFinite(event.point.le) && event.point.le >= 0)
+            ? event.point.le
+            : 9999999.0;
 
         let detailXml = '<detail>';
         if (event.detail?.contact) {
@@ -127,14 +139,15 @@ export class CursorOnTargetEngine {
         if (event.detail?.group) {
             detailXml += `<__group name="${this.escapeXml(event.detail.group.name)}" role="${this.escapeXml(event.detail.group.role)}"/>`;
         }
-        if (event.detail?.status?.battery !== undefined) {
-            detailXml += `<status battery="${event.detail.status.battery}"/>`;
+        if (event.detail?.status?.battery !== undefined && isFinite(event.detail.status.battery)) {
+            const safeBat = Math.max(0, Math.min(100, Math.round(event.detail.status.battery)));
+            detailXml += `<status battery="${safeBat}"/>`;
         }
         detailXml += '</detail>';
 
         return `<?xml version="1.0" encoding="UTF-8"?>
-<event version="${event.version || '2.0'}" uid="${this.escapeXml(event.uid)}" type="${this.escapeXml(event.type)}" time="${event.time}" start="${event.start}" stale="${event.stale}" how="${event.how || 'm-g'}">
-  <point lat="${event.point.lat.toFixed(6)}" lon="${event.point.lon.toFixed(6)}" hae="${hae.toFixed(1)}" ce="${ce.toFixed(1)}" le="${le.toFixed(1)}"/>
+<event version="${this.escapeXml(event.version || '2.0')}" uid="${this.escapeXml(event.uid || 'UID-UNKNOWN')}" type="${this.escapeXml(event.type || 'a-u-G')}" time="${event.time || new Date().toISOString()}" start="${event.start || event.time || new Date().toISOString()}" stale="${event.stale || new Date(Date.now() + 180000).toISOString()}" how="${this.escapeXml(event.how || 'm-g')}">
+  <point lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}" hae="${hae.toFixed(1)}" ce="${ce.toFixed(1)}" le="${le.toFixed(1)}"/>
   ${detailXml}
 </event>`.trim();
     }
@@ -165,9 +178,17 @@ export class CursorOnTargetEngine {
 
             const lat = parseFloat(latStr);
             const lon = parseFloat(lonStr);
-            const hae = parseFloat(getAttr('point', 'hae') || '0');
-            const ce = parseFloat(getAttr('point', 'ce') || '10');
-            const le = parseFloat(getAttr('point', 'le') || '10');
+            if (!isFinite(lat) || !isFinite(lon)) return null;
+
+            const safeLat = Math.max(-90, Math.min(90, lat));
+            const safeLon = Math.max(-180, Math.min(180, lon));
+
+            const rawHae = parseFloat(getAttr('point', 'hae') || '0');
+            const rawCe = parseFloat(getAttr('point', 'ce') || '10');
+            const rawLe = parseFloat(getAttr('point', 'le') || '10');
+            const hae = isFinite(rawHae) ? rawHae : 0;
+            const ce = (isFinite(rawCe) && rawCe >= 0) ? rawCe : 10;
+            const le = (isFinite(rawLe) && rawLe >= 0) ? rawLe : 10;
 
             const callsign = getAttr('contact', 'callsign') || uid;
             
@@ -186,7 +207,7 @@ export class CursorOnTargetEngine {
                 start,
                 stale,
                 how,
-                point: { lat, lon, hae, ce, le },
+                point: { lat: safeLat, lon: safeLon, hae, ce, le },
                 detail: {
                     contact: { callsign },
                     remarks: remarks || undefined
@@ -210,32 +231,39 @@ export class CursorOnTargetEngine {
     ): CotEvent {
         const now = new Date();
         const stale = new Date(now.getTime() + 180000); // 3 minutes validity
+        const safeDid = operatorDid ? operatorDid.slice(0, 12) : 'ANON';
+        const safeCallsign = callsign ? callsign.trim() : `OP-${safeDid.toUpperCase()}`;
+        const safeLat = (typeof lat === 'number' && isFinite(lat)) ? Math.max(-90, Math.min(90, lat)) : 0;
+        const safeLon = (typeof lon === 'number' && isFinite(lon)) ? Math.max(-180, Math.min(180, lon)) : 0;
 
         return {
             version: '2.0',
-            uid: `RED-${operatorDid.slice(0, 12)}`,
+            uid: `RED-${safeDid}`,
             type: this.toCotType('FRIEND', role),
             time: now.toISOString(),
             start: now.toISOString(),
             stale: stale.toISOString(),
             how: 'm-g',
             point: {
-                lat,
-                lon,
+                lat: safeLat,
+                lon: safeLon,
                 hae: 0,
                 ce: 5.0,
                 le: 5.0
             },
             detail: {
-                contact: { callsign },
+                contact: { callsign: safeCallsign },
                 remarks: 'Transmitted via RED Sovereign Mesh OS (P2P Mesh / PQC Secured)',
-                status: batteryPct !== undefined ? { battery: batteryPct } : undefined
+                status: (batteryPct !== undefined && isFinite(batteryPct))
+                    ? { battery: Math.max(0, Math.min(100, Math.round(batteryPct))) }
+                    : undefined
             }
         };
     }
 
-    private escapeXml(unsafe: string): string {
-        return unsafe.replace(/[<>&'"]/g, (c) => {
+    private escapeXml(unsafe: any): string {
+        const str = typeof unsafe === 'string' ? unsafe : String(unsafe || '');
+        return str.replace(/[<>&'"]/g, (c) => {
             switch (c) {
                 case '<': return '&lt;';
                 case '>': return '&gt;';
@@ -245,6 +273,10 @@ export class CursorOnTargetEngine {
                 default: return c;
             }
         });
+    }
+
+    public destroy(): void {
+        CursorOnTargetEngine.instance = null;
     }
 }
 

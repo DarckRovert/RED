@@ -38,11 +38,20 @@ export class SeismicTriangulationEngine {
     private constructor() {}
 
     public registerSensorNode(node: SeismicSensorNode): void {
-        const idx = this.activeNodes.findIndex(n => n.id === node.id);
+        if (!node || !node.id) return;
+        const safeNode: SeismicSensorNode = {
+            id: String(node.id),
+            name: node.name || `Node-${node.id}`,
+            xMeters: (typeof node.xMeters === 'number' && isFinite(node.xMeters)) ? node.xMeters : 0,
+            yMeters: (typeof node.yMeters === 'number' && isFinite(node.yMeters)) ? node.yMeters : 0,
+            arrivalTimestampMs: (typeof node.arrivalTimestampMs === 'number' && isFinite(node.arrivalTimestampMs)) ? node.arrivalTimestampMs : Date.now(),
+            amplitudeG: (typeof node.amplitudeG === 'number' && isFinite(node.amplitudeG) && node.amplitudeG >= 0) ? node.amplitudeG : 0.1
+        };
+        const idx = this.activeNodes.findIndex(n => n.id === safeNode.id);
         if (idx >= 0) {
-            this.activeNodes[idx] = node;
+            this.activeNodes[idx] = safeNode;
         } else {
-            this.activeNodes.push(node);
+            this.activeNodes.push(safeNode);
         }
     }
 
@@ -77,14 +86,25 @@ export class SeismicTriangulationEngine {
         nodes: SeismicSensorNode[] = this.activeNodes,
         velocityMps: number = SeismicTriangulationEngine.DEFAULT_SEISMIC_VELOCITY
     ): SurvivorTriangulationResult {
-        if (nodes.length < 3) {
+        const safeVelocity = (typeof velocityMps === 'number' && isFinite(velocityMps) && velocityMps > 0)
+            ? velocityMps
+            : SeismicTriangulationEngine.DEFAULT_SEISMIC_VELOCITY;
+
+        const validNodes = (Array.isArray(nodes) ? nodes : []).filter(n =>
+            n && typeof n.xMeters === 'number' && isFinite(n.xMeters) &&
+            typeof n.yMeters === 'number' && isFinite(n.yMeters) &&
+            typeof n.amplitudeG === 'number' && isFinite(n.amplitudeG) &&
+            typeof n.arrivalTimestampMs === 'number' && isFinite(n.arrivalTimestampMs)
+        );
+
+        if (validNodes.length < 3) {
             const fallback: SurvivorTriangulationResult = {
                 estimatedX: 0,
                 estimatedY: 0,
                 estimatedDepthMeters: 0,
                 confidencePct: 0,
                 patternType: 'RANDOM_VIBRATION',
-                nodesUsed: nodes.length,
+                nodesUsed: validNodes.length,
                 timestamp: Date.now(),
             };
             this.notify(fallback);
@@ -92,29 +112,46 @@ export class SeismicTriangulationEngine {
         }
 
         // Multilateración ponderada por amplitud y TDoA
-        const totalAmp = nodes.reduce((sum, n) => sum + (n.amplitudeG || 0.1), 0);
+        const totalAmp = validNodes.reduce((sum, n) => sum + Math.max(0.01, n.amplitudeG), 0);
+        if (totalAmp <= 0 || !isFinite(totalAmp)) {
+            const fallback: SurvivorTriangulationResult = {
+                estimatedX: 0,
+                estimatedY: 0,
+                estimatedDepthMeters: 0,
+                confidencePct: 0,
+                patternType: 'RANDOM_VIBRATION',
+                nodesUsed: validNodes.length,
+                timestamp: Date.now(),
+            };
+            this.notify(fallback);
+            return fallback;
+        }
+
         let weightedX = 0;
         let weightedY = 0;
 
-        nodes.forEach(n => {
-            const weight = (n.amplitudeG || 0.1) / totalAmp;
+        validNodes.forEach(n => {
+            const weight = Math.max(0.01, n.amplitudeG) / totalAmp;
             weightedX += n.xMeters * weight;
             weightedY += n.yMeters * weight;
         });
 
         // Corrección de profundidad estimada en función del retardo promedio
-        const tDiff = Math.abs(nodes[0].arrivalTimestampMs - nodes[1].arrivalTimestampMs) / 1000;
-        const depth = Math.round((Math.max(0.5, tDiff * velocityMps * 0.15) + 1.2) * 10) / 10;
+        const tDiff = Math.abs(validNodes[0].arrivalTimestampMs - validNodes[1].arrivalTimestampMs) / 1000;
+        const depth = Math.round((Math.max(0.5, tDiff * safeVelocity * 0.15) + 1.2) * 10) / 10;
+        const confidence = Math.min(98, Math.round(65 + Math.min(validNodes.length, 3) * 10 + Math.min(totalAmp * 5, 10)));
 
-        const confidence = Math.min(98, Math.round(65 + Math.min(nodes.length, 3) * 10 + Math.min(totalAmp * 5, 10)));
+        const safeX = isFinite(weightedX) ? Math.round(weightedX * 10) / 10 : 0;
+        const safeY = isFinite(weightedY) ? Math.round(weightedY * 10) / 10 : 0;
+        const safeDepth = isFinite(depth) ? Math.min(8.0, depth) : 1.2;
 
         const result: SurvivorTriangulationResult = {
-            estimatedX: Math.round(weightedX * 10) / 10,
-            estimatedY: Math.round(weightedY * 10) / 10,
-            estimatedDepthMeters: Math.min(8.0, depth),
-            confidencePct: confidence,
+            estimatedX: safeX,
+            estimatedY: safeY,
+            estimatedDepthMeters: safeDepth,
+            confidencePct: isFinite(confidence) ? confidence : 50,
             patternType: 'RESCUE_3_TAPS',
-            nodesUsed: nodes.length,
+            nodesUsed: validNodes.length,
             timestamp: Date.now(),
         };
 
@@ -126,12 +163,17 @@ export class SeismicTriangulationEngine {
      * Registra un impacto físico detectado por acelerómetro en un nodo específico
      */
     public recordAccelerometerImpact(nodeId: string, timestampMs: number, amplitudeG: number): SurvivorTriangulationResult {
+        const safeTimestamp = (typeof timestampMs === 'number' && isFinite(timestampMs)) ? timestampMs : Date.now();
+        const safeAmp = (typeof amplitudeG === 'number' && isFinite(amplitudeG) && amplitudeG >= 0)
+            ? Math.max(0.01, Math.round(amplitudeG * 100) / 100)
+            : 0.1;
+
         this.activeNodes = this.activeNodes.map(n => {
             if (n.id === nodeId) {
                 return {
                     ...n,
-                    arrivalTimestampMs: timestampMs,
-                    amplitudeG: Math.max(0.01, Math.round(amplitudeG * 100) / 100)
+                    arrivalTimestampMs: safeTimestamp,
+                    amplitudeG: safeAmp
                 };
             }
             return n;
@@ -149,6 +191,13 @@ export class SeismicTriangulationEngine {
             nodes: this.activeNodes,
             lastResult: this.lastTriangulation,
         };
+    }
+
+    public destroy(): void {
+        this.activeNodes = [];
+        this.lastTriangulation = null;
+        this.listeners.clear();
+        SeismicTriangulationEngine.instance = null;
     }
 }
 

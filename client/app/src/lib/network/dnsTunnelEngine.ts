@@ -29,6 +29,9 @@ const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
  * Codifica una cadena o Uint8Array a Base32 URL-Safe para subdominios DNS
  */
 export function encodeBase32(buffer: Uint8Array): string {
+  if (!buffer || typeof buffer.length !== 'number' || buffer.length === 0) {
+    return "";
+  }
   let bits = 0;
   let value = 0;
   let output = "";
@@ -53,7 +56,9 @@ export function encodeBase32(buffer: Uint8Array): string {
  * Decodifica una cadena Base32 a Uint8Array
  */
 export function decodeBase32(input: string): Uint8Array {
-  const cleanInput = input.toUpperCase().replace(/=+$/, "");
+  const cleanInput = typeof input === 'string' ? input.toUpperCase().replace(/=+$/, "") : "";
+  if (!cleanInput) return new Uint8Array(0);
+
   const output: number[] = [];
   let bits = 0;
   let value = 0;
@@ -92,8 +97,11 @@ export class DnsTunnelEngine {
    * Encapsula un mensaje cifrado Noise XK en subdominios DNS (max 63 chars por etiqueta)
    */
   public static packPayloadIntoDnsQuery(encryptedPayloadHex: string, domainZone = "dns.redmesh.net"): string[] {
-    const rawBytes = new TextEncoder().encode(encryptedPayloadHex);
+    const rawStr = typeof encryptedPayloadHex === 'string' ? encryptedPayloadHex : '';
+    if (!rawStr) return [];
+    const rawBytes = new TextEncoder().encode(rawStr);
     const b32 = encodeBase32(rawBytes);
+    if (!b32) return [];
     
     // Fragmentar en etiquetas DNS de máximo 48 caracteres para seguridad
     const CHUNK_SIZE = 48;
@@ -111,15 +119,25 @@ export class DnsTunnelEngine {
   /**
    * Ejecuta la transmisión de una consulta DNS sin saldo vía DoH o UDP
    */
-  public static async transmitDnsQuery(dnsHostname: string): Promise<{ success: boolean; responseTxt?: string; latencyMs: number }> {
+  public static async transmitDnsQuery(dnsHostname: string): Promise<{ success: boolean; responseTxt?: string; latencyMs: number; reason?: string }> {
+    const safeHostname = typeof dnsHostname === 'string' ? dnsHostname.trim() : '';
+    if (!safeHostname) {
+      return {
+        success: false,
+        responseTxt: undefined,
+        latencyMs: 0,
+        reason: 'Hostname DNS nulo o vacío',
+      };
+    }
+
     const startTime = performance.now();
     this.stats.packetsSent++;
-    this.stats.bytesTransmitted += dnsHostname.length;
+    this.stats.bytesTransmitted += safeHostname.length;
 
     // 1. Intento por DoH (Cloudflare / Google / Quad9)
     for (const provider of this.DOH_PROVIDERS) {
       try {
-        const dohUrl = `${provider}?name=${encodeURIComponent(dnsHostname)}&type=TXT`;
+        const dohUrl = `${provider}?name=${encodeURIComponent(safeHostname)}&type=TXT`;
         const res = await fetch(dohUrl, {
           headers: { Accept: "application/dns-json" },
           cache: "no-store",
@@ -143,7 +161,7 @@ export class DnsTunnelEngine {
       const res = await fetch('http://127.0.0.1:7333/api/dns/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: dnsHostname, record_type: 'TXT', port: 53 }),
+        body: JSON.stringify({ query: safeHostname, record_type: 'TXT', port: 53 }),
         signal: AbortSignal.timeout(4000),
       });
       if (res.ok) {
@@ -161,10 +179,20 @@ export class DnsTunnelEngine {
         responseTxt: undefined,
         latencyMs,
         reason: 'DoH y UDP 53 fallaron (red celular sin conectividad de nombres)',
-    } as { success: boolean; responseTxt?: string; latencyMs: number };
+    };
   }
 
   public static getStats(): DnsTunnelStats {
     return { ...this.stats };
+  }
+
+  public static resetStats(): void {
+    this.stats = {
+      packetsSent: 0,
+      packetsReceived: 0,
+      bytesTransmitted: 0,
+      activeProvider: "DoH (Cloudflare 1.1.1.1 / Google 8.8.8.8)",
+      lastResponseTimeMs: 18,
+    };
   }
 }

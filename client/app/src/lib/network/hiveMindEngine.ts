@@ -225,11 +225,15 @@ class HiveMindEngineClass {
 
         // Puntuación normalizada multicriterio: RAM normalizada (0..1) + Batería normalizada (0..1)
         validPeers.sort((a, b) => {
-            const ramScoreA = Math.min(1, (a.availableRamMb || 512) / 8192);
-            const ramScoreB = Math.min(1, (b.availableRamMb || 512) / 8192);
+            const ramA = (typeof a.availableRamMb === 'number' && isFinite(a.availableRamMb) && a.availableRamMb > 0) ? a.availableRamMb : 512;
+            const ramB = (typeof b.availableRamMb === 'number' && isFinite(b.availableRamMb) && b.availableRamMb > 0) ? b.availableRamMb : 512;
+            const ramScoreA = Math.min(1, ramA / 8192);
+            const ramScoreB = Math.min(1, ramB / 8192);
 
-            const battScoreA = ((a.batteryLevel || 100) / 100) * (a.batteryLevel < 20 ? 0.2 : 1.0) * (a.isCharging ? 1.2 : 1.0);
-            const battScoreB = ((b.batteryLevel || 100) / 100) * (b.batteryLevel < 20 ? 0.2 : 1.0) * (b.isCharging ? 1.2 : 1.0);
+            const batA = (typeof a.batteryLevel === 'number' && isFinite(a.batteryLevel) && a.batteryLevel >= 0) ? a.batteryLevel : 100;
+            const batB = (typeof b.batteryLevel === 'number' && isFinite(b.batteryLevel) && b.batteryLevel >= 0) ? b.batteryLevel : 100;
+            const battScoreA = (batA / 100) * (batA < 20 ? 0.2 : 1.0) * (a.isCharging ? 1.2 : 1.0);
+            const battScoreB = (batB / 100) * (batB < 20 ? 0.2 : 1.0) * (b.isCharging ? 1.2 : 1.0);
 
             const totalScoreA = (ramScoreA * 0.5) + (battScoreA * 0.5);
             const totalScoreB = (ramScoreB * 0.5) + (battScoreB * 0.5);

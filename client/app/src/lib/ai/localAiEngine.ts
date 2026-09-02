@@ -148,16 +148,156 @@ class LocalAIEngineClass {
             const tf = await this.getTransformers();
             if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
             try {
-                this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
+                this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
                     quantized: true,
                 });
             } catch {
-                this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+                this.embeddingPipeline = await tf.pipeline('feature-extraction', 'Xenova/paraphrase-multilingual-MiniLM-L12-v2', {
                     quantized: true,
                 });
             }
         }
         return this.embeddingPipeline;
+    }
+
+    /**
+     * Inferencia prioritaria mediante Endpoint Soberano (Ollama / LM Studio / OpenAI compatible / Nodo RED).
+     * Devuelve null si no hay endpoint activo o si la llamada falla, permitiendo fallback fluido sin bloqueos.
+     */
+    public async callSovereignLlm(
+        messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+        options: { temperature?: number; max_tokens?: number } = {}
+    ): Promise<string | null> {
+        const sovereign = ModelManager.getSovereignEndpoint();
+        if (!sovereign || !sovereign.url) return null;
+
+        try {
+            let cleanUrl = sovereign.url.trim().replace(/\/+$/, '');
+            if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                cleanUrl = `http://${cleanUrl}`;
+            }
+            const targetUrl = cleanUrl.includes('/v1') 
+                ? `${cleanUrl}/chat/completions` 
+                : (cleanUrl.includes('/api') ? `${cleanUrl}/chat` : `${cleanUrl}/api/chat`);
+            
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (sovereign.apiKey) {
+                headers['Authorization'] = `Bearer ${sovereign.apiKey}`;
+            }
+
+            const isV1 = targetUrl.includes('/v1');
+            const body = isV1 ? {
+                model: sovereign.modelName || 'default',
+                messages,
+                temperature: options.temperature ?? 0.2,
+                max_tokens: options.max_tokens ?? 256
+            } : {
+                model: sovereign.modelName || 'default',
+                messages,
+                stream: false,
+                options: {
+                    temperature: options.temperature ?? 0.2,
+                    num_predict: options.max_tokens ?? 256
+                }
+            };
+
+            const resp = await fetch(targetUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(12000)
+            });
+
+            if (!resp.ok) {
+                // Fallback para endpoints Ollama que solo exponen /api/generate
+                if (!isV1 && (resp.status === 404 || resp.status === 405)) {
+                    const genUrl = `${cleanUrl}/api/generate`;
+                    const prompt = messages.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n') + '\n[ASSISTANT]:';
+                    const genResp = await fetch(genUrl, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ model: sovereign.modelName || 'default', prompt, stream: false }),
+                        signal: AbortSignal.timeout(12000)
+                    });
+                    if (genResp.ok) {
+                        const data = await genResp.json();
+                        return (data.response || '').trim();
+                    }
+                }
+                console.warn(`[LocalAIEngine] Sovereign endpoint error HTTP ${resp.status}`);
+                return null;
+            }
+
+            const data = await resp.json();
+            if (isV1) {
+                return (data.choices?.[0]?.message?.content || '').trim();
+            } else {
+                return (data.message?.content || data.response || '').trim();
+            }
+        } catch (err: any) {
+            console.warn('[LocalAIEngine] Sovereign LLM fallback:', err?.message);
+            return null;
+        }
+    }
+
+    /**
+     * Transcripción remota mediante endpoint compatible con Whisper API (/v1/audio/transcriptions).
+     */
+    public async callSovereignTranscribe(audioData: string | Blob | ArrayBuffer): Promise<string | null> {
+        const sovereign = ModelManager.getSovereignEndpoint();
+        if (!sovereign || !sovereign.url) return null;
+
+        try {
+            let cleanUrl = sovereign.url.trim().replace(/\/+$/, '');
+            if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                cleanUrl = `http://${cleanUrl}`;
+            }
+            const targetUrl = `${cleanUrl}/v1/audio/transcriptions`;
+
+            let blob: Blob;
+            if (audioData instanceof Blob) {
+                blob = audioData;
+            } else if (audioData instanceof ArrayBuffer) {
+                blob = new Blob([audioData], { type: 'audio/wav' });
+            } else if (typeof audioData === 'string') {
+                if (audioData.startsWith('data:') || audioData.startsWith('http') || audioData.startsWith('blob:')) {
+                    const resp = await fetch(audioData);
+                    blob = await resp.blob();
+                } else {
+                    const binary = atob(audioData);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                    blob = new Blob([bytes], { type: 'audio/wav' });
+                }
+            } else {
+                return null;
+            }
+
+            const formData = new FormData();
+            formData.append('file', blob, 'voice_note.wav');
+            formData.append('model', sovereign.modelName || 'whisper-1');
+            formData.append('language', 'es');
+
+            const headers: Record<string, string> = {};
+            if (sovereign.apiKey) {
+                headers['Authorization'] = `Bearer ${sovereign.apiKey}`;
+            }
+
+            const resp = await fetch(targetUrl, {
+                method: 'POST',
+                headers,
+                body: formData,
+                signal: AbortSignal.timeout(15000)
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                return (data.text || '').trim();
+            }
+        } catch (e: any) {
+            console.warn('[LocalAIEngine] Sovereign audio transcription fallback:', e?.message);
+        }
+        return null;
     }
 
     /** Real Offline Dynamic Generative Pipeline matching Active Selected Model */
@@ -299,43 +439,55 @@ class LocalAIEngineClass {
     }
 
     /**
-     * Transcribe audio (Blob, DataURL or ArrayBuffer) into text using local Whisper model.
+     * Transcribe audio (Blob, DataURL or ArrayBuffer) into text using local Whisper model or Sovereign Endpoint.
      */
     public async transcribeAudio(audioData: string | Blob | ArrayBuffer): Promise<{ text: string; executionTimeMs: number }> {
         const start = performance.now();
-        try {
-            const pcmData = await this.decodeAudioTo16kHzPcm(audioData);
-            if (!pcmData || pcmData.length === 0) {
-                return {
-                    text: '⚠️ No se pudo decodificar el buffer de audio.',
-                    executionTimeMs: Math.round(performance.now() - start)
-                };
-            }
 
-            const asr = await this.getTranscriber();
-            const out = await this.withTimeout(
-                asr(pcmData, {
-                    chunk_length_s: 30,
-                    stride_length_s: 5,
-                    language: 'spanish',
-                    task: 'transcribe'
-                }),
-                25000,
-                'Whisper ASR'
-            );
-
-            const text = out && typeof out === 'object' && (out as any).text ? (out as any).text.trim() : (Array.isArray(out) ? (out as any)[0]?.text : '');
+        // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano (Whisper compatible)
+        const sovereignText = await this.callSovereignTranscribe(audioData);
+        if (sovereignText && sovereignText.trim().length > 0) {
             return {
-                text: text || 'Transcripción completada sin texto audible.',
-                executionTimeMs: Math.round(performance.now() - start)
-            };
-        } catch (err: any) {
-            console.warn('[LocalAIEngine] Whisper transcription note:', err);
-            return {
-                text: `⚠️ Fallo en motor Whisper: ${err?.message || 'Error de procesamiento de voz'}`,
+                text: sovereignText,
                 executionTimeMs: Math.round(performance.now() - start)
             };
         }
+
+        // 2. Nivel 2: Inferencia Whisper local WASM si está disponible
+        try {
+            const pcmData = await this.decodeAudioTo16kHzPcm(audioData);
+            if (pcmData && pcmData.length > 0) {
+                const asr = await this.getTranscriber();
+                if (asr) {
+                    const out = await this.withTimeout(
+                        asr(pcmData, {
+                            chunk_length_s: 30,
+                            stride_length_s: 5,
+                            language: 'spanish',
+                            task: 'transcribe'
+                        }),
+                        25000,
+                        'Whisper ASR'
+                    );
+
+                    const text = out && typeof out === 'object' && (out as any).text ? (out as any).text.trim() : (Array.isArray(out) ? (out as any)[0]?.text : '');
+                    if (text && text.trim().length > 0) {
+                        return {
+                            text,
+                            executionTimeMs: Math.round(performance.now() - start)
+                        };
+                    }
+                }
+            }
+        } catch (err: any) {
+            console.warn('[LocalAIEngine] Whisper transcription local fallback:', err);
+        }
+
+        // 3. Nivel 3: Fallback táctico determinista seguro
+        return {
+            text: '📝 Nota de voz táctica recibida (Configura un Endpoint Soberano en Ajustes para transcripción neuronal completa).',
+            executionTimeMs: Math.round(performance.now() - start)
+        };
     }
 
     /**
@@ -645,9 +797,19 @@ class LocalAIEngineClass {
                 formattedPrompt += `<|im_start|>user\n${cleanQuery}<|im_end|>\n<|im_start|>assistant\n`;
             }
 
-            try {
-                const generator = await this.getGenerator();
-                if (generator) {
+            // Nivel 1: Inferencia prioritaria mediante Endpoint Soberano
+            const sovereignMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+                { role: 'system', content: systemPrompt },
+                ...recentHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.text })),
+                { role: 'user', content: cleanQuery }
+            ];
+            const sovereignResp = await this.callSovereignLlm(sovereignMessages, { max_tokens: 280, temperature: 0.6 });
+            if (sovereignResp) {
+                finalAnswer = sovereignResp;
+            } else {
+                try {
+                    const generator = await this.getGenerator();
+                    if (generator) {
                     const genOutput = await this.withTimeout(
                         generator(formattedPrompt, {
                             max_new_tokens: 220,
@@ -692,6 +854,7 @@ class LocalAIEngineClass {
             } catch (genErr) {
                 console.warn('[LocalAIEngine] Inferencia neuronal WASM fallback:', genErr);
             }
+        }
 
             // Fallback dinámico inteligente si la inferencia en memoria no generó texto
             if (!finalAnswer) {
@@ -733,10 +896,13 @@ class LocalAIEngineClass {
         ];
 
         const totalExecTime = Math.round(performance.now() - start);
+        const isSov = ModelManager.isSovereignActive();
         const activeModel = ModelManager.getActiveModel();
-        const activeModelName = activeModel?.name || 'Qwen 2.5 0.5B Instruct';
-        const activeModelTag = activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : 'Qwen 2.5 0.5B + Vector INT8 (100% Offline)';
-        const memoryUsedMb = activeModel?.fileSizeMb ? Math.round(activeModel.fileSizeMb * 1.15) : 64;
+        const activeModelName = isSov ? ModelManager.getActiveEndpointDescription() : (activeModel?.name || 'Qwen 2.5 0.5B Instruct');
+        const activeModelTag = isSov 
+            ? ModelManager.getActiveEndpointDescription()
+            : (activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : 'Qwen 2.5 0.5B + Vector INT8 (100% Offline)');
+        const memoryUsedMb = isSov ? 0 : (activeModel?.fileSizeMb ? Math.round(activeModel.fileSizeMb * 1.15) : 64);
 
         const telemetryPayload: NeuralTelemetryData = {
             modelName: `${activeModelName} + e5-small INT8`,
@@ -902,10 +1068,37 @@ class LocalAIEngineClass {
             };
         }
 
-        // 1. Intentar con generador ONNX WASM (si está cargado)
+        // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano
+        const sampleText = messages.slice(-10).join('\n- ');
+        const sovereignSummary = await this.callSovereignLlm([
+            {
+                role: 'system',
+                content: 'Eres un analista táctico de señales. Resume la siguiente transcripción de mensajes de radio y chat en 3 a 5 viñetas concisas con hechos y coordenadas clave. Devuelve exclusivamente las viñetas sin introducciones.'
+            },
+            {
+                role: 'user',
+                content: `- ${sampleText}`
+            }
+        ], { temperature: 0.2, max_tokens: 200 });
+
+        if (sovereignSummary) {
+            const bullets = sovereignSummary
+                .split('\n')
+                .map(b => b.replace(/^[•\-\*\d\.]+\s*/, '').trim())
+                .filter(b => b.length > 0);
+            if (bullets.length > 0) {
+                return {
+                    summaryBullets: bullets,
+                    sentiment: 'Análisis Neuronal Soberano',
+                    totalMessages: count,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+        }
+
+        // 2. Nivel 2: Intentar con generador ONNX WASM (si está cargado)
         try {
             if (this.generatorPipeline) {
-                const sampleText = messages.slice(-6).join('. ');
                 const generator = await this.getGenerator();
                 const output = await generator(`Summarize: ${sampleText}`, { max_new_tokens: 100 });
 
@@ -1027,7 +1220,36 @@ class LocalAIEngineClass {
         };
         const targetName = langNames[targetLang.toLowerCase()] || targetLang;
 
-        // 1. Inferencia neuronal mediante el modelo activo
+        // 1. Nivel 1: Inferencia prioritaria mediante Endpoint Soberano
+        const sovereignOutput = await this.callSovereignLlm([
+            {
+                role: 'system',
+                content: `Eres un traductor táctico militar y de emergencias de alta fidelidad. Traduce el texto al ${targetName}. Devuelve EXCLUSIVAMENTE la traducción exacta del mensaje, sin preámbulos, sin comillas, sin explicaciones ni texto adicional.`
+            },
+            {
+                role: 'user',
+                content: trimmed
+            }
+        ], { temperature: 0.1, max_tokens: Math.max(60, trimmed.length * 2) });
+
+        if (sovereignOutput) {
+            const cleaned = sovereignOutput
+                .replace(/<\|im_end\|>/g, '')
+                .replace(/<\|eot_id\|>/g, '')
+                .replace(/<\|end\|>/g, '')
+                .replace(/^["']|["']$/g, '')
+                .trim();
+            if (cleaned) {
+                return {
+                    originalText: text,
+                    translatedText: cleaned,
+                    targetLang,
+                    executionTimeMs: Math.round(performance.now() - start),
+                };
+            }
+        }
+
+        // 2. Nivel 2: Inferencia neuronal mediante generador local WASM si está disponible
         try {
             const prompt = `<|im_start|>system\nEres un traductor táctico militar y de emergencias de alta fidelidad. Traduce el siguiente texto al ${targetName}. Devuelve EXCLUSIVAMENTE la traducción exacta del mensaje, sin preámbulos, sin comillas, sin explicaciones ni texto adicional.\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
 
@@ -1119,6 +1341,28 @@ class LocalAIEngineClass {
             systemInstruction = 'Corrige la ortografía y redacción del siguiente texto militar manteniendo su sentido original con máxima claridad.';
         }
 
+        // 1. Nivel 1: Inferencia prioritaria vía Endpoint Soberano
+        const sovereignRephrase = await this.callSovereignLlm([
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: trimmed }
+        ], { temperature: 0.2, max_tokens: 180 });
+
+        if (sovereignRephrase && sovereignRephrase.trim().length > 0) {
+            const cleaned = sovereignRephrase
+                .replace(/<\|im_end\|>/g, '')
+                .replace(/<\|eot_id\|>/g, '')
+                .replace(/<\|end\|>/g, '')
+                .replace(/^["']|["']$/g, '')
+                .trim();
+            return {
+                originalText: text,
+                rephrasedText: cleaned,
+                mode,
+                executionTimeMs: Math.round(performance.now() - start)
+            };
+        }
+
+        // 2. Nivel 2: Inferencia neuronal WASM si está disponible
         try {
             const prompt = `<|im_start|>system\n${systemInstruction}\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
             const generator = await this.getGenerator();

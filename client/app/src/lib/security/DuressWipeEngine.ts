@@ -26,8 +26,10 @@ export class DuressWipeEngine {
 
     public setDuressPin(pin: string) {
         if (typeof window === 'undefined') return;
+        if (!pin || typeof pin !== 'string' || pin.trim().length < 4) return;
         try {
-            const pinBytes = new TextEncoder().encode(`red_duress_wipe_salt:${pin}`);
+            const safePin = pin.trim();
+            const pinBytes = new TextEncoder().encode(`red_duress_wipe_salt:${safePin}`);
             const hashBytes = sha256(pinBytes);
             localStorage.setItem(DURESS_PIN_STORAGE_KEY, bytesToHex(hashBytes));
         } catch {}
@@ -35,10 +37,12 @@ export class DuressWipeEngine {
 
     public isDuressPin(pin: string): boolean {
         if (typeof window === 'undefined') return false;
+        if (!pin || typeof pin !== 'string') return false;
         try {
             const stored = localStorage.getItem(DURESS_PIN_STORAGE_KEY);
             if (!stored) return false;
-            const pinBytes = new TextEncoder().encode(`red_duress_wipe_salt:${pin}`);
+            const safePin = pin.trim();
+            const pinBytes = new TextEncoder().encode(`red_duress_wipe_salt:${safePin}`);
             const hashBytes = sha256(pinBytes);
             return stored === bytesToHex(hashBytes);
         } catch {
@@ -94,6 +98,10 @@ export class DuressWipeEngine {
                 window.location.reload();
             } catch {}
         }
+    }
+
+    public destroy(): void {
+        DuressWipeEngine.instance = null;
     }
 }
 

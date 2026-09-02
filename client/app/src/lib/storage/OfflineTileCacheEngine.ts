@@ -61,8 +61,18 @@ class OfflineTileCacheEngineClass {
                 }
             };
 
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                const db = request.result;
+                db.onversionchange = () => {
+                    db.close();
+                    this.dbPromise = null;
+                };
+                resolve(db);
+            };
+            request.onerror = () => {
+                this.dbPromise = null;
+                reject(request.error);
+            };
         });
 
         return this.dbPromise;
@@ -72,13 +82,19 @@ class OfflineTileCacheEngineClass {
      * Converts WGS84 latitude, longitude and zoom level to Slippy Map tile coordinates
      */
     public latLonToTile(lat: number, lon: number, zoom: number): { x: number; y: number } {
-        const radLat = (lat * Math.PI) / 180;
-        const n = Math.pow(2, zoom);
-        const x = Math.floor(((lon + 180) / 360) * n);
+        if (!isFinite(lat) || !isFinite(lon) || !isFinite(zoom)) {
+            return { x: 0, y: 0 };
+        }
+        const safeZoom = Math.max(0, Math.min(22, Math.floor(zoom)));
+        const clampedLat = Math.max(-85.0511, Math.min(85.0511, lat));
+        const clampedLon = Math.max(-180, Math.min(180, lon));
+        const radLat = (clampedLat * Math.PI) / 180;
+        const n = Math.pow(2, safeZoom);
+        const x = Math.floor(((clampedLon + 180) / 360) * n);
         const y = Math.floor(((1 - Math.log(Math.tan(radLat) + 1 / Math.cos(radLat)) / Math.PI) / 2) * n);
         return {
-            x: Math.max(0, Math.min(n - 1, x)),
-            y: Math.max(0, Math.min(n - 1, y))
+            x: Math.max(0, Math.min(n - 1, x || 0)),
+            y: Math.max(0, Math.min(n - 1, y || 0))
         };
     }
 
@@ -95,20 +111,28 @@ class OfflineTileCacheEngineClass {
         const tiles: TileCoord[] = [];
         const seen = new Set<string>();
 
+        if (!isFinite(centerLat) || !isFinite(centerLon)) {
+            return [];
+        }
+
         // 1. Clamping seguro de parámetros tácticos para evitar saturación de memoria en el cliente móvil
         const safeRadiusKm = Math.min(30, Math.max(0.5, radiusKm));
         const safeMinZoom = Math.max(8, Math.min(17, Math.floor(minZoom)));
         const safeMaxZoom = Math.max(safeMinZoom, Math.min(17, Math.floor(maxZoom)));
         const MAX_BATCH_TILES = 3500;
 
-        // Approximate bounding box with safety margin
-        const latDelta = safeRadiusKm / 111.0;
-        const lonDelta = safeRadiusKm / (111.0 * Math.cos((centerLat * Math.PI) / 180));
+        // Approximate bounding box with safety margin and pole guard
+        const clampedCenterLat = Math.max(-85.0511, Math.min(85.0511, centerLat));
+        const clampedCenterLon = Math.max(-180, Math.min(180, centerLon));
+        const cosLat = Math.max(0.01, Math.cos((clampedCenterLat * Math.PI) / 180));
 
-        const minLat = centerLat - latDelta;
-        const maxLat = centerLat + latDelta;
-        const minLon = centerLon - lonDelta;
-        const maxLon = centerLon + lonDelta;
+        const latDelta = safeRadiusKm / 111.0;
+        const lonDelta = safeRadiusKm / (111.0 * cosLat);
+
+        const minLat = Math.max(-85.0511, clampedCenterLat - latDelta);
+        const maxLat = Math.min(85.0511, clampedCenterLat + latDelta);
+        const minLon = Math.max(-180, clampedCenterLon - lonDelta);
+        const maxLon = Math.min(180, clampedCenterLon + lonDelta);
 
         for (let z = safeMinZoom; z <= safeMaxZoom; z++) {
             const topLeft = this.latLonToTile(maxLat, minLon, z);
@@ -422,6 +446,16 @@ class OfflineTileCacheEngineClass {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
         return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    public async closeDB(): Promise<void> {
+        if (this.dbPromise) {
+            try {
+                const db = await this.dbPromise;
+                db.close();
+            } catch {}
+            this.dbPromise = null;
+        }
     }
 }
 

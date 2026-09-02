@@ -32,7 +32,10 @@ export class CbrnRadiationEngine {
         if (typeof window !== 'undefined') {
             try {
                 const saved = localStorage.getItem('red_cbrn_cum_dose_msv');
-                if (saved) this.cumulativeDoseMsv = parseFloat(saved) || 0;
+                if (saved) {
+                    const parsed = parseFloat(saved);
+                    this.cumulativeDoseMsv = (isFinite(parsed) && parsed >= 0) ? parsed : 0;
+                }
             } catch {}
         }
     }
@@ -58,7 +61,7 @@ export class CbrnRadiationEngine {
     }
 
     public recordCmosPhotonHits(hotPixelCount: number, exposureTimeMs = 33.3): void {
-        if (exposureTimeMs <= 0) return;
+        if (!isFinite(hotPixelCount) || hotPixelCount < 0 || !isFinite(exposureTimeMs) || exposureTimeMs <= 0) return;
         // Física nuclear CMOS: los fotones gamma y partículas beta que atraviesan la matriz
         // de silicio de la cámara generan pares electrón-hueco (hot pixels luminosos con lente tapada).
         // 1. Tasa de eventos por minuto (CPM)
@@ -66,7 +69,7 @@ export class CbrnRadiationEngine {
         // 2. Factor de conversión estándar silicio CMOS a dosis equivalente ambiental H*(10): 120 CPM ≈ 1.0 uSv/h
         const derivedDose = Math.max(0.04, Math.round((cpmCalculated / 120) * 100) / 100);
 
-        this.doseRateUsVh = derivedDose;
+        this.doseRateUsVh = isFinite(derivedDose) ? derivedDose : 0.04;
         this.isManualOverride = false;
         this.notify();
     }
@@ -77,8 +80,10 @@ export class CbrnRadiationEngine {
 
         this.timer = setInterval(() => {
             // Acumular dosis biológica por segundo (uSv/h convertido a mSv/s)
-            const dosePerSecMsv = (this.doseRateUsVh / 1000) / 3600;
-            this.cumulativeDoseMsv = Math.round((this.cumulativeDoseMsv + dosePerSecMsv) * 10000) / 10000;
+            const safeRate = (typeof this.doseRateUsVh === 'number' && isFinite(this.doseRateUsVh) && this.doseRateUsVh >= 0) ? this.doseRateUsVh : 0.12;
+            const dosePerSecMsv = (safeRate / 1000) / 3600;
+            const currentCum = (typeof this.cumulativeDoseMsv === 'number' && isFinite(this.cumulativeDoseMsv) && this.cumulativeDoseMsv >= 0) ? this.cumulativeDoseMsv : 0;
+            this.cumulativeDoseMsv = Math.round((currentCum + dosePerSecMsv) * 10000) / 10000;
 
             if (typeof window !== 'undefined') {
                 try {
@@ -108,7 +113,8 @@ export class CbrnRadiationEngine {
      */
     public setDoseRate(rateUsVh: number, isExternalProbe = true) {
         this.isManualOverride = isExternalProbe;
-        this.doseRateUsVh = Math.max(0, rateUsVh);
+        const safeRate = (typeof rateUsVh === 'number' && isFinite(rateUsVh) && rateUsVh >= 0) ? rateUsVh : 0;
+        this.doseRateUsVh = safeRate;
         this.notify();
     }
 
@@ -123,8 +129,9 @@ export class CbrnRadiationEngine {
     }
 
     public getTelemetry(): RadiationTelemetry {
-        const cpm = Math.round(this.doseRateUsVh * 120); // Factor de conversión estándar para tubo GM LND-712
-        const rate = this.doseRateUsVh;
+        const rate = (typeof this.doseRateUsVh === 'number' && isFinite(this.doseRateUsVh) && this.doseRateUsVh >= 0) ? this.doseRateUsVh : 0.12;
+        const cum = (typeof this.cumulativeDoseMsv === 'number' && isFinite(this.cumulativeDoseMsv) && this.cumulativeDoseMsv >= 0) ? this.cumulativeDoseMsv : 0;
+        const cpm = Math.round(rate * 120); // Factor de conversión estándar para tubo GM LND-712
 
         let threatLevel: CbrnThreatLevel = 'SAFE_BACKGROUND';
         let arsDesc = 'Radiación de fondo ambiental normal. Sin riesgo biológico detectable.';
@@ -141,13 +148,20 @@ export class CbrnRadiationEngine {
         }
 
         // Límite de dosis de emergencia para rescatistas: 50 mSv
-        const safeStayMins = rate > 0 ? Math.round(((50 - this.cumulativeDoseMsv) / (rate / 1000)) * 60) : 99999;
+        const remainingDoseMsv = Math.max(0, 50 - cum);
+        let safeStayMins = 99999;
+        if (remainingDoseMsv <= 0) {
+            safeStayMins = 0;
+        } else if (rate > 0.0001) {
+            const calculated = Math.round((remainingDoseMsv / (rate / 1000)) * 60);
+            safeStayMins = Math.min(99999, Math.max(0, isFinite(calculated) ? calculated : 99999));
+        }
 
         return {
             doseRateUsVh: rate,
             countsPerMinuteCpm: cpm,
-            cumulativeDoseMsv: this.cumulativeDoseMsv,
-            safeStayTimeMinutes: Math.max(0, safeStayMins),
+            cumulativeDoseMsv: cum,
+            safeStayTimeMinutes: safeStayMins,
             threatLevel,
             arsRiskDescription: arsDesc,
             isSensorOnline: true,

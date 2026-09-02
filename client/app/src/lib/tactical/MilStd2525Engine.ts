@@ -38,18 +38,25 @@ export class MilStd2525Engine {
      * Genera el SVG completo estándar MIL-STD-2525D
      */
     public generateSvg(config: MilitarySymbolConfig): string {
-        const size = config.size || 36;
-        const color = AFFILIATION_COLORS[config.affiliation] || AFFILIATION_COLORS.FRIEND;
+        const safeConfig = config || { affiliation: 'FRIEND', role: 'INFANTRY' };
+        const rawSize = safeConfig.size;
+        const size = (typeof rawSize === 'number' && isFinite(rawSize) && rawSize > 0)
+            ? Math.max(16, Math.min(256, Math.round(rawSize)))
+            : 36;
+        const affiliation = (safeConfig.affiliation && AFFILIATION_COLORS[safeConfig.affiliation])
+            ? safeConfig.affiliation
+            : 'FRIEND';
+        const color = AFFILIATION_COLORS[affiliation];
         const half = size / 2;
 
         let frameSvg = '';
-        if (config.affiliation === 'FRIEND') {
+        if (affiliation === 'FRIEND') {
             // Círculo / Rectángulo redondeado
             frameSvg = `<rect x="3" y="3" width="${size - 6}" height="${size - 6}" rx="6" fill="${color.fill}" stroke="${color.stroke}" stroke-width="2.5" />`;
-        } else if (config.affiliation === 'HOSTILE') {
+        } else if (affiliation === 'HOSTILE') {
             // Rombo 45 grados
             frameSvg = `<polygon points="${half},3 ${size - 3},${half} ${half},${size - 3} 3,${half}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="2.5" />`;
-        } else if (config.affiliation === 'NEUTRAL') {
+        } else if (affiliation === 'NEUTRAL') {
             // Cuadrado recto
             frameSvg = `<rect x="3" y="3" width="${size - 6}" height="${size - 6}" fill="${color.fill}" stroke="${color.stroke}" stroke-width="2.5" />`;
         } else {
@@ -58,7 +65,8 @@ export class MilStd2525Engine {
         }
 
         let roleSvg = '';
-        switch (config.role) {
+        const role = safeConfig.role || 'INFANTRY';
+        switch (role) {
             case 'INFANTRY':
                 // Clásica 'X' cruzada de infantería
                 roleSvg = `<line x1="${half - 7}" y1="${half - 7}" x2="${half + 7}" y2="${half + 7}" stroke="${color.stroke}" stroke-width="2" stroke-linecap="round" />
@@ -87,12 +95,22 @@ export class MilStd2525Engine {
                 // Radar / Triángulo de reconocimiento
                 roleSvg = `<polygon points="${half},${half - 7} ${half + 7},${half + 5} ${half - 7},${half + 5}" fill="none" stroke="${color.stroke}" stroke-width="2" />`;
                 break;
+            default:
+                roleSvg = `<circle cx="${half}" cy="${half}" r="${Math.max(2, size * 0.15)}" fill="${color.stroke}" />`;
+                break;
+        }
+
+        let labelSvg = '';
+        if (safeConfig.label && typeof safeConfig.label === 'string') {
+            const safeLabel = safeConfig.label.slice(0, 12).replace(/[<>&"]/g, '');
+            labelSvg = `<text x="${half}" y="${size - 4}" font-family="JetBrains Mono, monospace" font-size="${Math.max(8, size * 0.22)}" font-weight="700" fill="${color.stroke}" text-anchor="middle">${safeLabel}</text>`;
         }
 
         return `
             <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
                 ${frameSvg}
                 ${roleSvg}
+                ${labelSvg}
             </svg>
         `.trim();
     }
@@ -103,6 +121,10 @@ export class MilStd2525Engine {
     public generateDataUri(config: MilitarySymbolConfig): string {
         const svg = this.generateSvg(config);
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    }
+
+    public destroy(): void {
+        MilStd2525Engine.instance = null;
     }
 }
 

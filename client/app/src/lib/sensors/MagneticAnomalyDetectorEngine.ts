@@ -117,6 +117,7 @@ export class MagneticAnomalyDetectorEngine {
 
     public stopListening() {
         this.isListening = false;
+        this.isAudioBeepActive = false;
         if (this.sensorListener) {
             if (typeof this.sensorListener === 'function') {
                 window.removeEventListener('deviceorientation', this.sensorListener);
@@ -157,11 +158,13 @@ export class MagneticAnomalyDetectorEngine {
     }
 
     private processRawMagneticVector(x: number, y: number, z: number) {
+        if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return;
         const mag = Math.sqrt(x * x + y * y + z * z);
         this.processMagnitude(mag);
     }
 
     private processMagnitude(mag: number) {
+        if (!isFinite(mag)) return;
         this.gradient = mag - this.lastMagnitude;
         this.lastMagnitude = this.magnitude;
         this.magnitude = mag;
@@ -239,6 +242,13 @@ export class MagneticAnomalyDetectorEngine {
 
             osc.connect(gain);
             gain.connect(ctx.destination);
+
+            osc.onended = () => {
+                try {
+                    osc.disconnect();
+                    gain.disconnect();
+                } catch {}
+            };
 
             osc.start(now);
             osc.stop(now + 0.04);

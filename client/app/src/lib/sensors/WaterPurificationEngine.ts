@@ -35,6 +35,7 @@ export class WaterPurificationEngine {
         source: WaterSourceType,
         method: DisinfectionMethod
     ): PurificationDosageResult {
+        const safeLiters = Math.max(0.1, Math.min(1000, isFinite(liters) ? liters : 1));
         const isTurbid = source === 'TURBID_PUDDLE' || source === 'STAGNANT_SWAMP';
 
         if (method === 'SODIUM_HYPOCHLORITE_5PCT') {
@@ -42,11 +43,11 @@ export class WaterPurificationEngine {
             // Agua clara: 2 gotas por litro (~0.1 ml/L, ~4 ppm Cloro libre)
             // Agua turbia: 4 gotas por litro (~0.2 ml/L)
             const dropsPerLiter = isTurbid ? 4 : 2;
-            const totalDrops = Math.round(liters * dropsPerLiter);
-            const totalMl = Math.round((totalDrops / 20) * 10) / 10;
+            const totalDrops = Math.max(1, Math.round(safeLiters * dropsPerLiter));
+            const totalMl = Math.max(0.1, Math.round((totalDrops / 20) * 10) / 10);
 
             return {
-                liters,
+                liters: safeLiters,
                 source,
                 method,
                 dosageText: `${totalDrops} gotas (${totalMl} ml) de Cloro 5%`,
@@ -62,10 +63,10 @@ export class WaterPurificationEngine {
             // Agua clara: 5 gotas por litro
             // Agua turbia: 10 gotas por litro
             const dropsPerLiter = isTurbid ? 10 : 5;
-            const totalDrops = Math.round(liters * dropsPerLiter);
+            const totalDrops = Math.max(1, Math.round(safeLiters * dropsPerLiter));
 
             return {
-                liters,
+                liters: safeLiters,
                 source,
                 method,
                 dosageText: `${totalDrops} gotas de Tintura de Yodo 2%`,
@@ -76,9 +77,9 @@ export class WaterPurificationEngine {
 
         if (method === 'AQUATABS_NADCC') {
             // Pastillas NaDCC 8.5mg / 17mg
-            const tabs = Math.ceil(liters / (isTurbid ? 1 : 2));
+            const tabs = Math.max(1, Math.ceil(safeLiters / (isTurbid ? 1 : 2)));
             return {
-                liters,
+                liters: safeLiters,
                 source,
                 method,
                 dosageText: `${tabs} pastilla(s) Aquatabs NaDCC`,
@@ -89,7 +90,7 @@ export class WaterPurificationEngine {
 
         if (method === 'BOILING') {
             return {
-                liters,
+                liters: safeLiters,
                 source,
                 method,
                 dosageText: 'Hervor a ebullición franca',
@@ -100,7 +101,7 @@ export class WaterPurificationEngine {
 
         // SODIS
         return {
-            liters,
+            liters: safeLiters,
             source,
             method,
             dosageText: 'Exposición Solar UV en botella PET transparente',
@@ -110,7 +111,9 @@ export class WaterPurificationEngine {
     }
 
     public classifyTds(tdsPpm: number): { status: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR' | 'UNSAFE'; advice: string } {
-        if (tdsPpm < 150) {
+        if (!isFinite(tdsPpm) || tdsPpm < 0) {
+            return { status: 'UNSAFE', advice: '⚠️ Sensor TDS no calibrado, desconectado o valor erróneo. Verifique electrodos antes de beber.' };
+        } else if (tdsPpm < 150) {
             return { status: 'EXCELLENT', advice: 'Agua pura de manantial / filtrada. Ideal para hidratación.' };
         } else if (tdsPpm <= 300) {
             return { status: 'GOOD', advice: 'Mineralización óptima y balance electrolítico seguro.' };
@@ -124,10 +127,13 @@ export class WaterPurificationEngine {
     }
 
     public calculateSodisHours(uvIndex: number, cloudCoverPct: number): { exposureHours: number; instructions: string } {
+        const safeUv = Math.max(0, isFinite(uvIndex) ? uvIndex : 0);
+        const safeCloud = Math.max(0, Math.min(100, isFinite(cloudCoverPct) ? cloudCoverPct : 50));
+
         let hours = 6;
-        if (uvIndex < 3 || cloudCoverPct > 70) {
+        if (safeUv < 3 || safeCloud > 70) {
             hours = 48; // Dos días consecutivos si está nublado
-        } else if (uvIndex < 6 || cloudCoverPct > 30) {
+        } else if (safeUv < 6 || safeCloud > 30) {
             hours = 12; // Día completo
         }
 

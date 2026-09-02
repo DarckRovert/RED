@@ -55,7 +55,10 @@ export class CbrnPlumeDispersionEngine {
         operatorLat: number,
         operatorLon: number
     ): PlumeHazardZone {
-        const windMs = Math.max(1, source.windSpeedKmh / 3.6);
+        const safeWindSpeed = (typeof source.windSpeedKmh === 'number' && isFinite(source.windSpeedKmh) && source.windSpeedKmh >= 0)
+            ? source.windSpeedKmh
+            : 15;
+        const windMs = Math.max(1, safeWindSpeed / 3.6);
 
         // Parámetros de escala según severidad del agente
         let severityFactor = 1.0;
@@ -72,6 +75,29 @@ export class CbrnPlumeDispersionEngine {
         const warmZoneWidthMeters = Math.round(warmZoneLengthMeters * 0.45);
         const coldZonePerimeterMeters = warmZoneLengthMeters + 300;
 
+        const rawWindDir = typeof source.windDirectionDegrees === 'number' && isFinite(source.windDirectionDegrees)
+            ? source.windDirectionDegrees
+            : 0;
+        const windDir = ((rawWindDir % 360) + 360) % 360;
+
+        const areCoordsFinite = isFinite(operatorLat) && isFinite(operatorLon) && isFinite(source.lat) && isFinite(source.lon);
+        if (!areCoordsFinite) {
+            return {
+                source,
+                hotZoneRadiusMeters,
+                warmZoneLengthMeters,
+                warmZoneWidthMeters,
+                coldZonePerimeterMeters,
+                escapeVector: {
+                    recommendedAzimuthDegrees: (windDir + 90) % 360,
+                    distanceToSafetyMeters: 0,
+                    estimatedWalkTimeMinutes: 0,
+                    isInDangerZone: false,
+                    currentDangerLevel: 'SAFE',
+                }
+            };
+        }
+
         // Distancia y rumbo del operador respecto al foco emisor
         const dLat = (operatorLat - source.lat) * 111320;
         const dLon = (operatorLon - source.lon) * 111320 * Math.cos(source.lat * Math.PI / 180);
@@ -80,7 +106,6 @@ export class CbrnPlumeDispersionEngine {
         let bearingFromSourceDeg = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
 
         // Diferencia angular con la dirección del viento
-        const windDir = source.windDirectionDegrees;
         const angleDiff = Math.abs(((bearingFromSourceDeg - windDir + 180) % 360) - 180);
 
         let currentDangerLevel: 'SAFE' | 'WARM_EXCLUSION' | 'HOT_LETHAL' = 'SAFE';

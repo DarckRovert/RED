@@ -53,15 +53,28 @@ export class RdfTriangulationEngine {
     }
 
     public addBearing(observerLat: number, observerLon: number, bearingDeg: number, rssiDbm: number): LineOfBearing {
+        const safeLat = (typeof observerLat === 'number' && isFinite(observerLat))
+            ? Math.max(-90, Math.min(90, observerLat))
+            : 0;
+        const safeLon = (typeof observerLon === 'number' && isFinite(observerLon))
+            ? Math.max(-180, Math.min(180, observerLon))
+            : 0;
+        const safeBearing = (typeof bearingDeg === 'number' && isFinite(bearingDeg))
+            ? ((Math.round(bearingDeg) % 360) + 360) % 360
+            : 0;
+        const safeRssi = (typeof rssiDbm === 'number' && isFinite(rssiDbm))
+            ? Math.max(-140, Math.min(0, rssiDbm))
+            : -105;
+
         const randSuffix = typeof crypto !== 'undefined' && crypto.getRandomValues
             ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('')
             : (Date.now() % 1000).toString();
         const lob: LineOfBearing = {
             id: `lob-${Date.now()}-${randSuffix}`,
-            observerLat,
-            observerLon,
-            bearingDeg: Math.round(bearingDeg) % 360,
-            rssiDbm,
+            observerLat: safeLat,
+            observerLon: safeLon,
+            bearingDeg: safeBearing,
+            rssiDbm: safeRssi,
             timestamp: Date.now()
         };
 
@@ -93,10 +106,11 @@ export class RdfTriangulationEngine {
 
         const intersections: Array<{ x: number; y: number; weight: number }> = [];
 
-        // Referencia central
+        // Referencia central con suelo de coseno polar para prevenir división por cero en altas latitudes
         const latRef = this.lobs.reduce((acc, l) => acc + l.observerLat, 0) / this.lobs.length;
         const mPerDegLat = 111320;
-        const mPerDegLon = 111320 * Math.cos((latRef * Math.PI) / 180);
+        const safeCosLat = Math.max(0.01, Math.abs(Math.cos((latRef * Math.PI) / 180)));
+        const mPerDegLon = 111320 * safeCosLat;
 
         // Evaluar todos los pares de líneas de marcación
         for (let i = 0; i < this.lobs.length - 1; i++) {
@@ -170,6 +184,13 @@ export class RdfTriangulationEngine {
             avgY += p.y * p.weight;
             totalWeight += p.weight;
         }
+
+        if (totalWeight <= 0) {
+            this.lastFix = null;
+            this.notify();
+            return null;
+        }
+
         avgX /= totalWeight;
         avgY /= totalWeight;
 
@@ -180,8 +201,10 @@ export class RdfTriangulationEngine {
             if (d > maxDist) maxDist = d;
         }
 
-        const targetLon = Math.round((avgX / mPerDegLon) * 100000) / 100000;
-        const targetLat = Math.round((avgY / mPerDegLat) * 100000) / 100000;
+        const rawLon = avgX / mPerDegLon;
+        const rawLat = avgY / mPerDegLat;
+        const targetLon = isFinite(rawLon) ? Math.max(-180, Math.min(180, Math.round(rawLon * 100000) / 100000)) : 0;
+        const targetLat = isFinite(rawLat) ? Math.max(-90, Math.min(90, Math.round(rawLat * 100000) / 100000)) : 0;
 
         const fix: RdfTargetFix = {
             targetLat,
@@ -202,6 +225,13 @@ export class RdfTriangulationEngine {
             lobs: this.lobs,
             lastFix: this.lastFix
         };
+    }
+
+    public destroy(): void {
+        this.lobs = [];
+        this.lastFix = null;
+        this.listeners.clear();
+        RdfTriangulationEngine.instance = null;
     }
 }
 

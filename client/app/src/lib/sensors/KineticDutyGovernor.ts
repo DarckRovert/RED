@@ -37,6 +37,13 @@ export class KineticDutyGovernor {
     private maxWindowSize: number = 10;
     private motionInterval: any = null;
 
+    // Hardware Event Listener references for leak-free destroy()
+    private motionHandler: ((e: DeviceMotionEvent) => void) | null = null;
+    private visibilityHandler: (() => void) | null = null;
+    private batteryObj: any = null;
+    private batteryLevelHandler: (() => void) | null = null;
+    private batteryChargingHandler: (() => void) | null = null;
+
     private constructor() {
         this.initSensors();
     }
@@ -56,8 +63,8 @@ export class KineticDutyGovernor {
             const cap = (window as any).Capacitor;
             if (cap && cap.Plugins && cap.Plugins.Device) {
                 const info = await cap.Plugins.Device.getBatteryInfo();
-                if (info && typeof info.batteryLevel === 'number') {
-                    this.batteryLevel = Math.round(info.batteryLevel * 100);
+                if (info && typeof info.batteryLevel === 'number' && isFinite(info.batteryLevel)) {
+                    this.batteryLevel = Math.max(0, Math.min(100, Math.round(info.batteryLevel * 100)));
                     this.isCharging = !!info.isCharging;
                     this.evaluateProfile();
                 }
@@ -67,38 +74,51 @@ export class KineticDutyGovernor {
         try {
             if ("getBattery" in navigator) {
                 const battery: any = await (navigator as any).getBattery();
-                this.batteryLevel = Math.round(battery.level * 100);
+                this.batteryObj = battery;
+                if (typeof battery.level === 'number' && isFinite(battery.level)) {
+                    this.batteryLevel = Math.max(0, Math.min(100, Math.round(battery.level * 100)));
+                }
                 this.isCharging = !!battery.charging;
                 this.evaluateProfile();
 
-                battery.addEventListener("levelchange", () => {
-                    this.batteryLevel = Math.round(battery.level * 100);
-                    this.evaluateProfile();
-                });
-                battery.addEventListener("chargingchange", () => {
+                this.batteryLevelHandler = () => {
+                    if (typeof battery.level === 'number' && isFinite(battery.level)) {
+                        this.batteryLevel = Math.max(0, Math.min(100, Math.round(battery.level * 100)));
+                        this.evaluateProfile();
+                    }
+                };
+                this.batteryChargingHandler = () => {
                     this.isCharging = !!battery.charging;
                     this.evaluateProfile();
-                });
+                };
+
+                battery.addEventListener("levelchange", this.batteryLevelHandler);
+                battery.addEventListener("chargingchange", this.batteryChargingHandler);
             }
         } catch {}
 
         // 2. Hardware Accelerometer Listener
         try {
             if (window.DeviceMotionEvent) {
-                window.addEventListener("devicemotion", (event) => {
+                this.motionHandler = (event: DeviceMotionEvent) => {
                     const acc = event.accelerationIncludingGravity || event.acceleration;
-                    if (acc && typeof acc.x === "number" && typeof acc.y === "number" && typeof acc.z === "number") {
+                    if (acc && typeof acc.x === "number" && isFinite(acc.x) &&
+                        typeof acc.y === "number" && isFinite(acc.y) &&
+                        typeof acc.z === "number" && isFinite(acc.z)) {
                         const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-                        this.recordMotionSample(mag);
+                        if (isFinite(mag) && mag >= 0) {
+                            this.recordMotionSample(mag);
+                        }
                     }
-                });
+                };
+                window.addEventListener("devicemotion", this.motionHandler);
             }
         } catch {}
 
         // 3. Android Doze Mode & Background Visibility Guard
         try {
             if (typeof document !== "undefined") {
-                document.addEventListener("visibilitychange", () => {
+                this.visibilityHandler = () => {
                     if (document.hidden) {
                         // Modo Fondo / Reposo -> Activar perfil Sentry con pulso periódico
                         this.evaluateProfile();
@@ -106,7 +126,8 @@ export class KineticDutyGovernor {
                         // Retorno a Primer Plano -> Despertar inmediato y ráfaga de escaneo
                         this.triggerShakeBoost();
                     }
-                });
+                };
+                document.addEventListener("visibilitychange", this.visibilityHandler);
             }
         } catch {}
 
@@ -117,15 +138,19 @@ export class KineticDutyGovernor {
     }
 
     private recordMotionSample(magnitude: number) {
+        if (!isFinite(magnitude) || magnitude < 0) return;
+
         // High pass / variance against gravity (9.8 m/s^2)
         const delta = Math.abs(magnitude - 9.80665);
+        if (!isFinite(delta)) return;
+
         this.accelReadings.push(delta);
         if (this.accelReadings.length > this.maxWindowSize) {
             this.accelReadings.shift();
         }
 
         const avgDelta = this.accelReadings.reduce((a, b) => a + b, 0) / this.accelReadings.length;
-        this.kineticEnergyScore = Math.min(100, Math.round(avgDelta * 20));
+        this.kineticEnergyScore = isFinite(avgDelta) ? Math.min(100, Math.round(avgDelta * 20)) : 0;
 
         // Threshold for human movement (walking / shaking)
         if (avgDelta > 1.2) {
@@ -155,13 +180,14 @@ export class KineticDutyGovernor {
     }
 
     public setManualBattery(level: number) {
-        this.batteryLevel = Math.max(1, Math.min(100, level));
+        const safe = (typeof level === 'number' && isFinite(level)) ? Math.round(level) : 100;
+        this.batteryLevel = Math.max(0, Math.min(100, safe));
         this.evaluateProfile();
     }
 
     public setHardwareBattery(levelPercent: number, isCharging = false) {
-        if (!isNaN(levelPercent) && levelPercent >= 0 && levelPercent <= 100) {
-            this.batteryLevel = Math.round(levelPercent);
+        if (typeof levelPercent === 'number' && isFinite(levelPercent)) {
+            this.batteryLevel = Math.max(0, Math.min(100, Math.round(levelPercent)));
             this.isCharging = !!isCharging;
             this.evaluateProfile();
         }
@@ -176,7 +202,8 @@ export class KineticDutyGovernor {
         if (this.isShakeBoostActive) {
             profile = "SHAKE_BOOST";
             bleScanIntervalMs = 800;
-            loraTxPowerDbm = 20;
+            // Mitigación de brownout por caída de tensión en baterías degradadas
+            loraTxPowerDbm = this.batteryLevel <= 10 ? 14 : 20;
             estimatedMeshHours = (this.batteryLevel / 100) * 12;
         } else if (this.isCharging || (this.batteryLevel > 50 && !this.isStationary)) {
             profile = "HIGH_PERFORMANCE";
@@ -193,6 +220,10 @@ export class KineticDutyGovernor {
             bleScanIntervalMs = 4000;
             loraTxPowerDbm = 14;
             estimatedMeshHours = (this.batteryLevel / 100) * 32;
+        }
+
+        if (this.batteryLevel === 0) {
+            estimatedMeshHours = 0.0;
         }
 
         return {
@@ -243,6 +274,22 @@ export class KineticDutyGovernor {
             clearTimeout(this.shakeBoostTimer);
             this.shakeBoostTimer = null;
         }
+        if (typeof window !== "undefined" && this.motionHandler) {
+            window.removeEventListener("devicemotion", this.motionHandler);
+            this.motionHandler = null;
+        }
+        if (typeof document !== "undefined" && this.visibilityHandler) {
+            document.removeEventListener("visibilitychange", this.visibilityHandler);
+            this.visibilityHandler = null;
+        }
+        if (this.batteryObj) {
+            if (this.batteryLevelHandler) this.batteryObj.removeEventListener("levelchange", this.batteryLevelHandler);
+            if (this.batteryChargingHandler) this.batteryObj.removeEventListener("chargingchange", this.batteryChargingHandler);
+            this.batteryObj = null;
+            this.batteryLevelHandler = null;
+            this.batteryChargingHandler = null;
+        }
+        this.accelReadings = [];
         this.listeners.clear();
     }
 }

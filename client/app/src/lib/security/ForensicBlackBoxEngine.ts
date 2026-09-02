@@ -66,10 +66,16 @@ export class ForensicBlackBoxEngine {
         try {
             const raw = localStorage.getItem(STORAGE_BLACKBOX_KEY);
             if (raw) {
-                this.events = JSON.parse(raw);
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    this.events = parsed;
+                } else {
+                    this.events = [];
+                }
             }
         } catch (e) {
             console.error('[ForensicBlackBoxEngine] Error loading ledger:', e);
+            this.events = [];
         }
     }
 
@@ -148,7 +154,9 @@ export class ForensicBlackBoxEngine {
     }
 
     public destroy(): void {
+        this.events = [];
         this.listeners.clear();
+        ForensicBlackBoxEngine.instance = null;
     }
 
     public getEvents(): BlackBoxEvent[] {

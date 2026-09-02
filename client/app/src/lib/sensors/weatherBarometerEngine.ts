@@ -45,12 +45,26 @@ const MAX_HISTORY_SAMPLES = 100;
  * Persists a barometric sample in localStorage for trend calculation.
  */
 export function recordBaroSample(sample: BaroSample): BaroSample[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined' || !sample) return [];
+  // Reject uncalibrated or absurd pressure readings outside terrestrial range (600 - 1150 hPa)
+  if (!isFinite(sample.pressureHpa) || sample.pressureHpa < 600 || sample.pressureHpa > 1150) {
+    return getBaroHistory();
+  }
+  const safeTimestamp = (sample.timestamp && isFinite(sample.timestamp) && sample.timestamp > 0)
+    ? sample.timestamp
+    : Date.now();
+
+  const validatedSample: BaroSample = {
+    ...sample,
+    timestamp: safeTimestamp,
+    pressureHpa: Math.round(sample.pressureHpa * 10) / 10,
+  };
+
   try {
     const existing = getBaroHistory();
-    const updated = [...existing, sample].filter(
-      // Keep last 48 hours
-      (s) => Date.now() - s.timestamp < 48 * 60 * 60 * 1000
+    const updated = [...existing, validatedSample].filter(
+      // Keep last 48 hours and purge corrupted / out-of-range samples
+      (s) => isFinite(s.pressureHpa) && s.pressureHpa >= 600 && s.pressureHpa <= 1150 && (Date.now() - s.timestamp < 48 * 60 * 60 * 1000)
     );
     // Sort chronological
     updated.sort((a, b) => a.timestamp - b.timestamp);
@@ -70,7 +84,10 @@ export function getBaroHistory(): BaroSample[] {
   try {
     const raw = localStorage.getItem(BARO_HISTORY_KEY);
     if (!raw) return [];
-    return JSON.parse(raw);
+    const parsed: BaroSample[] = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(s => s && isFinite(s.pressureHpa) && s.pressureHpa >= 600 && s.pressureHpa <= 1150)
+      : [];
   } catch {
     return [];
   }
@@ -79,11 +96,16 @@ export function getBaroHistory(): BaroSample[] {
 /**
  * Calculates Dew Point using Magnus-Tetens formula.
  */
-export function calculateDewPoint(tempC: number, rhPercent: number): number {
+export function calculateDewPoint(tempC: number, rhPercent: number): number | null {
+  if (!isFinite(tempC) || !isFinite(rhPercent)) return null;
   const a = 17.27;
   const b = 237.7;
-  const alpha = ((a * tempC) / (b + tempC)) + Math.log(Math.max(1, Math.min(100, rhPercent)) / 100.0);
+  if (tempC <= -b) return null;
+  const clampedRh = Math.max(1, Math.min(100, rhPercent));
+  const alpha = ((a * tempC) / (b + tempC)) + Math.log(clampedRh / 100.0);
+  if (Math.abs(a - alpha) < 0.0001) return null;
   const dp = (b * alpha) / (a - alpha);
+  if (!isFinite(dp)) return null;
   return Math.round(dp * 10) / 10;
 }
 
@@ -91,7 +113,7 @@ export function calculateDewPoint(tempC: number, rhPercent: number): number {
  * Calculates Heat Index (sensación térmica) in Celsius for warm environments.
  */
 export function calculateHeatIndex(tempC: number, rhPercent: number): number | null {
-  if (tempC < 20) return null; // Heat index only relevant above 20°C
+  if (tempC < 20 || !isFinite(tempC) || !isFinite(rhPercent)) return null; // Heat index only relevant above 20°C
   const tF = (tempC * 9/5) + 32;
   const rh = Math.max(0, Math.min(100, rhPercent));
   
@@ -108,7 +130,8 @@ export function calculateHeatIndex(tempC: number, rhPercent: number): number | n
  * Estimates Cumulus Cloud Base Altitude (LCL - Lifting Condensation Level) in meters AGL.
  * Formula: ((Temp - DewPoint) / 2.5) * 1000 feet -> converted to meters
  */
-export function estimateCloudBaseMeters(tempC: number, dewPointC: number): number {
+export function estimateCloudBaseMeters(tempC: number, dewPointC: number | null): number | null {
+  if (!isFinite(tempC) || dewPointC === null || !isFinite(dewPointC)) return null;
   const spreadC = Math.max(0, tempC - dewPointC);
   const baseFeet = (spreadC / 2.5) * 1000;
   return Math.round(baseFeet * 0.3048);
@@ -123,7 +146,29 @@ export function analyzeAtmosphere(
   currentHumidity?: number,
   samples?: BaroSample[]
 ): BaroAnalysis {
-  const history = samples || getBaroHistory();
+  const isValidHpa = isFinite(currentHpa) && currentHpa >= 600 && currentHpa <= 1150;
+
+  if (!isValidHpa) {
+    return {
+      currentHpa: 0,
+      deltaP3h: 0,
+      trend: 'STEADY',
+      trendLabel: 'Sin Calibrar',
+      trendIcon: '🧭',
+      trendDescription: 'Lectura de presión no calibrada o fuera del rango terrestre (600 - 1150 hPa).',
+      isStormWarning: false,
+      zambrettiCode: 'OFF-GRID',
+      zambrettiForecast: 'A la espera de lectura barométrica válida para proyectar pronóstico.',
+      dewPointC: null,
+      heatIndexC: null,
+      cloudBaseEstimatedMeters: null,
+      suggestedCapSeverity: 'None',
+    };
+  }
+
+  const history = (samples || getBaroHistory()).filter(
+    s => isFinite(s.pressureHpa) && s.pressureHpa >= 600 && s.pressureHpa <= 1150
+  );
   const now = Date.now();
   
   // Look for sample ~3 hours ago (between 2h and 4.5h ago)

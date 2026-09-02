@@ -119,9 +119,18 @@ export class TacticalGeofenceEngine {
             ? Array.from(crypto.getRandomValues(new Uint8Array(2))).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
             : (Date.now() % 10000).toString(16).toUpperCase();
         const id = `GEO-${Date.now().toString(36).toUpperCase()}-${randSuffix}`;
+
+        const safeLat = (typeof zoneData.centerLat === 'number' && isFinite(zoneData.centerLat)) ? zoneData.centerLat : 0;
+        const safeLon = (typeof zoneData.centerLon === 'number' && isFinite(zoneData.centerLon)) ? zoneData.centerLon : 0;
+        const safeRadius = (typeof zoneData.radiusMeters === 'number' && isFinite(zoneData.radiusMeters) && zoneData.radiusMeters > 0)
+            ? zoneData.radiusMeters : 100;
+
         const zone: TacticalGeofenceZone = {
             ...zoneData,
             id,
+            centerLat: safeLat,
+            centerLon: safeLon,
+            radiusMeters: safeRadius,
             createdAt: Date.now(),
         };
         this.zones.set(id, zone);
@@ -147,7 +156,9 @@ export class TacticalGeofenceEngine {
      * Evalúa la posición GPS del operador respecto a todas las geocercas activas
      */
     public evaluatePosition(userLat: number, userLon: number): GeofenceEvaluation {
-        if (typeof userLat !== 'number' || typeof userLon !== 'number' || isNaN(userLat) || isNaN(userLon)) {
+        if (typeof userLat !== 'number' || typeof userLon !== 'number' ||
+            !isFinite(userLat) || !isFinite(userLon) ||
+            (Math.abs(userLat) < 0.0001 && Math.abs(userLon) < 0.0001)) {
             return this.lastEvaluation;
         }
 
@@ -170,10 +181,14 @@ export class TacticalGeofenceEngine {
             if (zone.geometryType === 'CIRCULAR') {
                 isInside = dist <= zone.radiusMeters;
             } else if (zone.geometryType === 'POLYGON' && zone.polygonCoords && zone.polygonCoords.length >= 3) {
-                isInside = OffGridNavigationEngine.isPointInGeofence(
-                    { lat: userLat, lon: userLon },
-                    zone.polygonCoords
-                );
+                try {
+                    isInside = OffGridNavigationEngine.isPointInGeofence(
+                        { lat: userLat, lon: userLon },
+                        zone.polygonCoords
+                    );
+                } catch {
+                    isInside = false;
+                }
             }
 
             if (isInside) {
@@ -210,13 +225,17 @@ export class TacticalGeofenceEngine {
     }
 
     private getHaversineDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        if (!isFinite(lat1) || !isFinite(lon1) || !isFinite(lat2) || !isFinite(lon2)) {
+            return Infinity;
+        }
         const R = 6371000;
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLon = (lon2 - lon1) * Math.PI / 180;
         const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
                   Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                   Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const safeA = Math.max(0, Math.min(1, a));
+        const c = 2 * Math.atan2(Math.sqrt(safeA), Math.sqrt(1 - safeA));
         return Math.round(R * c);
     }
 

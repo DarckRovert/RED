@@ -41,12 +41,28 @@ export class OpticalGasAqiEngine {
     public analyzeOpticalFrame(
         meanLuminance: number,     // 0 a 255
         stdDevContrast: number,    // 0 a 128 (menor desviación = mayor opacidad por humo)
-        colorShift: { r: number; g: number; b: number }, // Balance relativo de color
+        colorShift?: { r: number; g: number; b: number }, // Balance relativo de color
         flameFlickerVariance: number = 0 // Varianza temporal de brillo para detectar fuego
     ): AtmosphericTelemetry {
+        const safeContrast = (typeof stdDevContrast === 'number' && isFinite(stdDevContrast) && stdDevContrast >= 0)
+            ? stdDevContrast
+            : 48; // Atmósfera limpia por defecto
+        const safeLuma = (typeof meanLuminance === 'number' && isFinite(meanLuminance) && meanLuminance >= 0)
+            ? Math.min(255, meanLuminance)
+            : 120;
+        const safeFlicker = (typeof flameFlickerVariance === 'number' && isFinite(flameFlickerVariance) && flameFlickerVariance >= 0)
+            ? flameFlickerVariance
+            : 0;
+
+        const safeColor = {
+            r: (colorShift && typeof colorShift.r === 'number' && isFinite(colorShift.r) && colorShift.r >= 0) ? colorShift.r : 100,
+            g: (colorShift && typeof colorShift.g === 'number' && isFinite(colorShift.g) && colorShift.g >= 0) ? colorShift.g : 100,
+            b: (colorShift && typeof colorShift.b === 'number' && isFinite(colorShift.b) && colorShift.b >= 0) ? colorShift.b : 100,
+        };
+
         // Modelo de extinción óptica Beer-Lambert & Dispersión Mie
         // En aire limpio: contraste alto (stdDev > 45). En humo denso: contraste se atenúa (stdDev < 15)
-        const normalizedContrast = Math.max(5, Math.min(60, stdDevContrast));
+        const normalizedContrast = Math.max(5, Math.min(60, safeContrast));
         const smokeOpacityPct = Math.round(Math.max(0, Math.min(100, (1 - (normalizedContrast / 55)) * 100)));
 
         // Partículas suspendidas PM2.5 y PM10 estimadas por opacidad óptica
@@ -57,8 +73,8 @@ export class OpticalGasAqiEngine {
         const estimatedCoPpm = Math.round((smokeOpacityPct / 100) * 120);
 
         // Detección de parpadeo de llama (3 a 15 Hz)
-        const flameFlickerDetected = flameFlickerVariance > 18;
-        const flickerFrequencyHz = flameFlickerDetected ? Math.round((6 + (flameFlickerVariance % 6)) * 10) / 10 : 0;
+        const flameFlickerDetected = safeFlicker > 18;
+        const flickerFrequencyHz = flameFlickerDetected ? Math.round((6 + (safeFlicker % 6)) * 10) / 10 : 0;
 
         // Cálculo de AQI (0 a 500) según estándar EPA PM2.5
         let aqiIndex = 0;
@@ -103,6 +119,15 @@ export class OpticalGasAqiEngine {
             safeStayMinutesWithoutMask = 5; // 5 minutos
             recommendedMask = 'Máscara Facial Completa CBRN / ERA (Equipo de Respiración Autónoma)';
             description = 'PELIGRO MORTAL: Toxicidad crítica / Asfixia inminente. Evacuar inmediatamente.';
+        }
+
+        // Análisis espectral de partículas suspendidas
+        if (smokeOpacityPct > 15) {
+            if (safeColor.r > safeColor.b * 1.35) {
+                description += ' Dispersión Mie: Humo de combustión / incendio.';
+            } else if (safeColor.g > safeColor.b * 1.35 && safeColor.g > safeColor.r * 1.1) {
+                description += ' Alerta espectral: Posibles vapores industriales o gas clorado.';
+            }
         }
 
         return {

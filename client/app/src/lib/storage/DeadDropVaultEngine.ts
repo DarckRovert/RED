@@ -121,7 +121,13 @@ function openVaultDB(): Promise<IDBDatabase> {
                 db.createObjectStore(VAULT_STORE_NAME); // key = drop.id
             }
         };
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            const db: IDBDatabase = req.result;
+            db.onversionchange = () => {
+                db.close();
+            };
+            resolve(db);
+        };
         req.onerror = () => reject(req.error);
     });
 }
@@ -229,6 +235,10 @@ export class DeadDropVaultEngine {
                 try {
                     const json = await vaultDecrypt(key, blob);
                     const drop: DeadDropItem = JSON.parse(json);
+                    // Descartar geocachés ya expirados en disco
+                    if (drop.expiresAt && drop.expiresAt <= Date.now()) {
+                        continue;
+                    }
                     // Never re-hydrate plaintext from disk - only ciphertext
                     drop.plaintextPayload = undefined;
                     drop.isUnlocked = false;
@@ -277,6 +287,18 @@ export class DeadDropVaultEngine {
             const db = await openVaultDB();
             const tx = db.transaction(VAULT_STORE_NAME, 'readwrite');
             const store = tx.objectStore(VAULT_STORE_NAME);
+
+            // Purgar claves huérfanas o eliminadas que ya no existen en memoria
+            const allKeys: IDBValidKey[] = await new Promise((res, rej) => {
+                const req = store.getAllKeys();
+                req.onsuccess = () => res(req.result);
+                req.onerror = () => rej(req.error);
+            });
+            for (const idbKey of allKeys) {
+                if (typeof idbKey === 'string' && !this.drops.has(idbKey)) {
+                    store.delete(idbKey);
+                }
+            }
 
             for (const drop of this.drops.values()) {
                 // Strip plaintext before writing - only ciphertextPayload is stored
@@ -348,6 +370,13 @@ export class DeadDropVaultEngine {
         passphraseHint?: string;
         ttlDays?: number;
     }): Promise<DeadDropItem> {
+        if (!params.secretContent || !params.secretContent.trim()) {
+            throw new Error("El contenido del Dead Drop no puede estar vacío.");
+        }
+        if (!isFinite(params.lat) || !isFinite(params.lon) || (Math.abs(params.lat) < 0.0001 && Math.abs(params.lon) < 0.0001)) {
+            throw new Error("Coordenadas inválidas: No se puede depositar un Dead Drop en (0,0) o sin fix GNSS.");
+        }
+
         const now = Date.now();
         const idBytes = crypto.getRandomValues(new Uint8Array(5));
         const idSuffix = Array.from(idBytes).map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
@@ -519,6 +548,10 @@ export class DeadDropVaultEngine {
 
     public destroy(): void {
         this.listeners.clear();
+        if (this.autoScrubInterval) {
+            clearInterval(this.autoScrubInterval);
+            this.autoScrubInterval = null;
+        }
     }
 }
 

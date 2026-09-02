@@ -42,6 +42,10 @@ export class CallRingtoneEngine {
         }
     }
 
+    public static unlockAudioContext(): AudioContext | null {
+        return this.getAudioContext();
+    }
+
     private static triggerVibration(pattern: number[] = [400, 200, 400, 200, 800]) {
         if (typeof navigator !== "undefined" && navigator.vibrate) {
             try {

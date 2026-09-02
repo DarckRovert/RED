@@ -115,27 +115,39 @@ export class RfSigintWatchdogEngine {
     private processScanResult(result: any) {
         if (!result || !result.device) return;
 
-        const deviceId = result.device.deviceId || 'UNKNOWN_EMITTER';
-        const name = result.device.name || result.localName;
-        const rssi = result.rssi ?? -80;
+        const rawDeviceId = result.device.deviceId;
+        const deviceId = (typeof rawDeviceId === 'string' && rawDeviceId.trim().length > 0)
+            ? rawDeviceId.trim()
+            : 'UNKNOWN_EMITTER';
+        const name = (typeof result.device.name === 'string' && result.device.name) ||
+                     (typeof result.localName === 'string' && result.localName) ||
+                     undefined;
+        const rawRssi = result.rssi;
+        const rssi = (typeof rawRssi === 'number' && isFinite(rawRssi))
+            ? Math.max(-140, Math.min(0, rawRssi))
+            : -80;
 
         // Path Loss RSSI a distancia estimada en metros
         const measuredPower = -59;
         const n = 2.2;
         const rawDist = Math.pow(10, (measuredPower - rssi) / (10 * n));
-        const estimatedDistanceMeters = Math.max(0.5, Math.min(100, Math.round(rawDist * 10) / 10));
+        const estimatedDistanceMeters = isFinite(rawDist)
+            ? Math.max(0.5, Math.min(100, Math.round(rawDist * 10) / 10))
+            : 10;
 
         // Clasificación de tipo
         let type: EmitterType = 'UNKNOWN_BLE';
         let isSuspicious = false;
 
-        const mfgData = result.manufacturerData;
-        const serviceUuids = result.serviceData || result.uuids;
+        const mfgData = (result.manufacturerData && typeof result.manufacturerData === 'object') ? result.manufacturerData : null;
+        const serviceUuids = (result.serviceData && typeof result.serviceData === 'object')
+            ? result.serviceData
+            : (result.uuids && typeof result.uuids === 'object') ? result.uuids : null;
 
         if (name && (name.toLowerCase().includes('drone') || name.toLowerCase().includes('dji') || name.toLowerCase().includes('opendroneid') || name.toLowerCase().includes('remoteid'))) {
             type = 'OPEN_DRONE_ID';
             isSuspicious = true;
-        } else if (serviceUuids && Object.keys(serviceUuids).some(k => k.toLowerCase().includes('fffa') || k.toLowerCase().includes('0000fffa'))) {
+        } else if (serviceUuids && Object.keys(serviceUuids).some(k => typeof k === 'string' && (k.toLowerCase().includes('fffa') || k.toLowerCase().includes('0000fffa')))) {
             // OpenDroneID ASTM F3411 Service UUID 0xFFFA
             type = 'OPEN_DRONE_ID';
             isSuspicious = true;

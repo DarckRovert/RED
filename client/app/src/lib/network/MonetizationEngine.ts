@@ -217,7 +217,8 @@ class MonetizationEngineService {
      */
     public recordTransaction(type: TacticalTransaction['type'], amount: number, description: string): TacticalTransaction {
         const currentBal = this.getProStatus().credits;
-        const newBal = Math.max(0, currentBal + amount);
+        const safeAmount = (typeof amount === 'number' && isFinite(amount)) ? amount : 0;
+        const newBal = Math.max(0, currentBal + safeAmount);
         
         if (typeof window !== 'undefined') {
             localStorage.setItem('red_tactic_credits', newBal.toString());
@@ -429,8 +430,10 @@ class MonetizationEngineService {
         }
 
         const now = Date.now();
-        const expiresAt = parseInt(localStorage.getItem('red_pro_expires_at') || '0', 10);
-        const credits = parseInt(localStorage.getItem('red_tactic_credits') || '0', 10);
+        const rawExp = parseInt(localStorage.getItem('red_pro_expires_at') || '0', 10);
+        const rawCred = parseInt(localStorage.getItem('red_tactic_credits') || '0', 10);
+        const expiresAt = (!isNaN(rawExp) && isFinite(rawExp) && rawExp >= 0) ? rawExp : 0;
+        const credits = (!isNaN(rawCred) && isFinite(rawCred) && rawCred >= 0) ? rawCred : 0;
         
         const isPro = expiresAt > now;
         const remainingHours = isPro ? Math.max(1, Math.ceil((expiresAt - now) / (3600 * 1000))) : 0;
@@ -441,6 +444,10 @@ class MonetizationEngineService {
             remainingHours,
             credits
         };
+    }
+
+    public destroy(): void {
+        this.onRewardCallbacks = [];
     }
 }
 

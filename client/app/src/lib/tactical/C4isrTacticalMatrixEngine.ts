@@ -45,28 +45,85 @@ export class C4isrTacticalMatrixEngine {
     }
 
     public getSnapshot(): C4isrSnapshot {
-        const shield = globalShield.getTelemetry();
-        const swarm = dynamicBearerGovernor.getTelemetry();
-        const sigint = rfSigintWatchdog.getTelemetry();
-        const rad = cbrnRadiation.getTelemetry();
-        const tqs = tacticalTccc.getActiveTourniquets();
-        const bb = forensicBlackBox.getEvents();
-        const sosCount = meshSosBeacon.getActiveDistressCount();
+        let defconLevel = 5;
+        let primaryBearer = 'OFFLINE_MESH';
+        let isElectronicWarfareActive = false;
+        let activeSosCount = 0;
+        let blackBoxEventsLogged = 0;
+        let droneThreatLevel = 'CLEAR';
+        let radiationRateUsVh = 0.12;
+        let radiationThreatLevel = 'BACKGROUND_NORMAL';
+        let activeTourniquetsCount = 0;
+        let hasIschemicAlert = false;
+
+        try {
+            const shield = globalShield.getTelemetry();
+            if (shield && typeof shield.currentDefcon === 'number' && isFinite(shield.currentDefcon)) {
+                defconLevel = shield.currentDefcon;
+            }
+        } catch {}
+
+        try {
+            const swarm = dynamicBearerGovernor.getTelemetry();
+            if (swarm) {
+                primaryBearer = swarm.primaryBearer || 'OFFLINE_MESH';
+                isElectronicWarfareActive = !!swarm.isElectronicWarfareActive;
+            }
+        } catch {}
+
+        try {
+            const sigint = rfSigintWatchdog.getTelemetry();
+            if (sigint && sigint.threatLevel) {
+                droneThreatLevel = String(sigint.threatLevel);
+            }
+        } catch {}
+
+        try {
+            const rad = cbrnRadiation.getTelemetry();
+            if (rad) {
+                radiationRateUsVh = (typeof rad.doseRateUsVh === 'number' && isFinite(rad.doseRateUsVh))
+                    ? rad.doseRateUsVh
+                    : 0.12;
+                radiationThreatLevel = String(rad.threatLevel || 'BACKGROUND_NORMAL');
+            }
+        } catch {}
+
+        try {
+            const tqs = tacticalTccc.getActiveTourniquets();
+            if (Array.isArray(tqs)) {
+                activeTourniquetsCount = tqs.length;
+                hasIschemicAlert = tqs.some(t => t && t.isIschemicAlert);
+            }
+        } catch {}
+
+        try {
+            const bb = forensicBlackBox.getEvents();
+            if (Array.isArray(bb)) {
+                blackBoxEventsLogged = bb.length;
+            }
+        } catch {}
+
+        try {
+            const count = meshSosBeacon.getActiveDistressCount();
+            if (typeof count === 'number' && isFinite(count)) {
+                activeSosCount = count;
+            }
+        } catch {}
 
         return {
             timestamp: Date.now(),
-            defconLevel: shield.currentDefcon,
-            primaryBearer: swarm.primaryBearer,
-            isElectronicWarfareActive: swarm.isElectronicWarfareActive,
-            activeSosCount: sosCount,
-            blackBoxEventsLogged: bb.length,
+            defconLevel,
+            primaryBearer,
+            isElectronicWarfareActive,
+            activeSosCount,
+            blackBoxEventsLogged,
 
-            droneThreatLevel: sigint.threatLevel,
-            radiationRateUsVh: rad.doseRateUsVh,
-            radiationThreatLevel: rad.threatLevel,
+            droneThreatLevel,
+            radiationRateUsVh,
+            radiationThreatLevel,
 
-            activeTourniquetsCount: tqs.length,
-            hasIschemicAlert: tqs.some(t => t.isIschemicAlert),
+            activeTourniquetsCount,
+            hasIschemicAlert,
         };
     }
 
@@ -75,10 +132,19 @@ export class C4isrTacticalMatrixEngine {
      */
     public generateExecutiveReport(): string {
         const s = this.getSnapshot();
+        let dateStr = 'DESCONOCIDA';
+        try {
+            dateStr = (typeof s.timestamp === 'number' && isFinite(s.timestamp))
+                ? new Date(s.timestamp).toISOString()
+                : new Date().toISOString();
+        } catch {
+            dateStr = new Date().toISOString();
+        }
+
         return `══════════════════════════════════════════════════════
      RED C4ISR THEATER OF OPERATIONS EXECUTIVE REPORT
 ══════════════════════════════════════════════════════
-FECHA/HORA : ${new Date(s.timestamp).toISOString()}
+FECHA/HORA : ${dateStr}
 
 [1. C4 — MANDO, CONTROL Y TELECOMUNICACIONES]
   • Estado DEFCON       : DEFCON ${s.defconLevel}

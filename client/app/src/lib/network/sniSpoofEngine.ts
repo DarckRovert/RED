@@ -37,8 +37,12 @@ export class SniSpoofEngine {
     body: string;
     sniHost: string;
   } {
-    const target = this.ZERO_RATING_TARGETS[targetSniIndex % this.ZERO_RATING_TARGETS.length];
+    const safeIdx = (typeof targetSniIndex === 'number' && isFinite(targetSniIndex))
+      ? Math.abs(Math.floor(targetSniIndex))
+      : 0;
+    const target = this.ZERO_RATING_TARGETS[safeIdx % this.ZERO_RATING_TARGETS.length];
     this.stats.currentHostFront = `${target.sniHost} (${target.provider})`;
+    const safeBody = typeof encryptedPayloadHex === 'string' ? encryptedPayloadHex : '';
     
     return {
       headers: {
@@ -47,7 +51,7 @@ export class SniSpoofEngine {
         "Content-Type": "application/x-red-noise-frame",
         "User-Agent": "Mozilla/5.0 (Mobile; Android 14; RED Mesh Node)"
       },
-      body: encryptedPayloadHex,
+      body: safeBody,
       sniHost: target.sniHost
     };
   }
@@ -67,15 +71,16 @@ export class SniSpoofEngine {
    * el tunelado SNI real requiere una implementación nativa (NDK/JNI).
    */
   public static async transmitSniBypass(encryptedPayloadHex: string): Promise<{ success: boolean; latencyMs: number; provider: string; reason?: string }> {
+    const safePayload = typeof encryptedPayloadHex === 'string' ? encryptedPayloadHex : '';
     const startTime = performance.now();
     this.stats.requestsSent++;
-    this.stats.bytesBypassed += encryptedPayloadHex.length;
+    this.stats.bytesBypassed += safePayload.length;
 
-    const targetIdx = this.stats.requestsSent % this.ZERO_RATING_TARGETS.length;
+    const targetIdx = Math.abs(this.stats.requestsSent) % this.ZERO_RATING_TARGETS.length;
     const target = this.ZERO_RATING_TARGETS[targetIdx];
     this.stats.currentHostFront = `${target.sniHost} (${target.provider})`;
 
-    const { headers, body } = this.createSpoofedFrontRequest(encryptedPayloadHex, targetIdx);
+    const { headers, body } = this.createSpoofedFrontRequest(safePayload, targetIdx);
 
     try {
       const response = await fetch(`https://${target.sniHost}/red-tunnel`, {
@@ -111,5 +116,14 @@ export class SniSpoofEngine {
 
   public static getStats(): SniSpoofStats {
     return { ...this.stats };
+  }
+
+  public static resetStats(): void {
+    this.stats = {
+      requestsSent: 0,
+      bypassSuccessRate: 100.0,
+      currentHostFront: "recargas.claro.com (Zero-Rating Port)",
+      bytesBypassed: 0
+    };
   }
 }

@@ -175,6 +175,22 @@ export class MeshSosBeaconEngine {
     }
 
     /**
+     * Actualiza las coordenadas de la baliza SOS activa cuando se obtiene un fix GNSS tardío
+     * y difunde inmediatamente la actualización a la malla.
+     */
+    public async updateCoords(coords: { lat: number; lon: number; alt?: number }) {
+        if (!this.myBeacon || !this.myBeacon.active) return;
+        this.myBeacon.coords = {
+            lat: coords.lat,
+            lon: coords.lon,
+            alt: coords.alt
+        };
+        this.myBeacon.timestamp = Date.now();
+        this.saveState();
+        await this.broadcastSosHeartbeat();
+    }
+
+    /**
      * Emite una ráfaga de telemetría de la baliza SOS activa
      */
     public async broadcastSosHeartbeat() {

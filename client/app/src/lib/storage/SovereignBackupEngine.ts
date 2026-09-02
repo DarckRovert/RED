@@ -129,6 +129,9 @@ export class SovereignBackupEngine {
      * Restores an Identity object deterministically from a 12-word seed phrase
      */
     public static restoreIdentityFromMnemonic(mnemonic: string, customNickname?: string): any {
+        if (!mnemonic || typeof mnemonic !== "string") {
+            throw new Error("La frase semilla debe ser una cadena de texto válida.");
+        }
         const cleanWords = mnemonic.trim().toLowerCase().split(/\s+/);
         if (cleanWords.length < 12) {
             throw new Error("La frase semilla debe contener al menos 12 palabras.");
@@ -159,6 +162,9 @@ export class SovereignBackupEngine {
      */
     public static async createEncryptedCapsule(passphrase: string, mnemonicSeed?: string): Promise<{ blob: Blob; fileName: string; capsuleSize: number }> {
         if (typeof window === "undefined") throw new Error("Entorno no disponible");
+        if (!passphrase || typeof passphrase !== "string" || passphrase.trim().length === 0) {
+            throw new Error("La contraseña para cifrar la cápsula es obligatoria.");
+        }
 
         // 1. Gather all local state
         const identityRaw = localStorage.getItem("red_identity");
@@ -269,8 +275,14 @@ export class SovereignBackupEngine {
      */
     public static async decryptAndImportCapsule(buffer: ArrayBuffer, passphrase: string): Promise<SovereignVaultCapsule> {
         if (typeof window === "undefined") throw new Error("Entorno no disponible");
+        if (!passphrase || typeof passphrase !== "string" || passphrase.trim().length === 0) {
+            throw new Error("La contraseña de descifrado es obligatoria.");
+        }
+        if (!buffer || !(buffer instanceof ArrayBuffer || ArrayBuffer.isView(buffer))) {
+            throw new Error("Buffer de respaldo inválido o nulo.");
+        }
 
-        const bytes = new Uint8Array(buffer);
+        const bytes = new Uint8Array(buffer as any);
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
         const magicBytes = encoder.encode(this.MAGIC_HEADER);

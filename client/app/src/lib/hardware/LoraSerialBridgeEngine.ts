@@ -78,6 +78,9 @@ export class LoraSerialBridgeEngine {
     // ─── COBS (Consistent Overhead Byte Stuffing) ───────────────────────────────
 
     public static encodeCOBS(data: Uint8Array): Uint8Array {
+        if (!data || !(data instanceof Uint8Array) || data.length === 0) {
+            return new Uint8Array([0x01, 0x00]);
+        }
         const dest: number[] = [];
         let codeIndex = 0;
         let code = 1;
@@ -107,6 +110,9 @@ export class LoraSerialBridgeEngine {
     }
 
     public static decodeCOBS(encoded: Uint8Array): Uint8Array {
+        if (!encoded || !(encoded instanceof Uint8Array) || encoded.length === 0) {
+            return new Uint8Array(0);
+        }
         // Remover delimitador final si existe
         let len = encoded.length;
         if (len > 0 && encoded[len - 1] === 0x00) {
@@ -135,6 +141,7 @@ export class LoraSerialBridgeEngine {
     // ─── Checksum CRC-32 IEEE 802.3 ─────────────────────────────────────────────
 
     public static calculateCRC32(data: Uint8Array): number {
+        if (!data || !(data instanceof Uint8Array)) return 0;
         let crc = 0xFFFFFFFF;
         for (let i = 0; i < data.length; i++) {
             crc ^= data[i];
@@ -148,6 +155,7 @@ export class LoraSerialBridgeEngine {
     // ─── Empaquetado & Desempaquetado de Tramas LoRa RED ──────────────────────────
 
     public static framePacket(payload: Uint8Array): Uint8Array {
+        if (!payload || !(payload instanceof Uint8Array)) return new Uint8Array(0);
         // [Payload (N bytes)] + [CRC-32 (4 bytes, Big Endian)]
         const crc = this.calculateCRC32(payload);
         const withCrc = new Uint8Array(payload.length + 4);
@@ -161,6 +169,7 @@ export class LoraSerialBridgeEngine {
     }
 
     public static unframePacket(framed: Uint8Array): { valid: boolean; payload?: Uint8Array } {
+        if (!framed || !(framed instanceof Uint8Array) || framed.length < 5) return { valid: false };
         try {
             const decoded = this.decodeCOBS(framed);
             if (decoded.length < 4) return { valid: false };
@@ -234,9 +243,14 @@ export class LoraSerialBridgeEngine {
     }
 
     public feedRawBytes(bytes: Uint8Array, rssi?: number, snr?: number) {
+        if (!bytes || !(bytes instanceof Uint8Array)) return;
         this.telemetry.bytesReceived += bytes.length;
-        if (rssi !== undefined) this.telemetry.lastRssiDbm = rssi;
-        if (snr !== undefined) this.telemetry.lastSnrDb = snr;
+        if (rssi !== undefined && typeof rssi === 'number' && isFinite(rssi)) {
+            this.telemetry.lastRssiDbm = rssi;
+        }
+        if (snr !== undefined && typeof snr === 'number' && isFinite(snr)) {
+            this.telemetry.lastSnrDb = snr;
+        }
 
         for (let i = 0; i < bytes.length; i++) {
             const b = bytes[i];

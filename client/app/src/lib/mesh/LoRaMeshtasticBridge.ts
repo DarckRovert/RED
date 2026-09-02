@@ -211,8 +211,9 @@ export class LoRaMeshtasticBridge {
      */
     public framePacket(packet: LoRaPacket): Uint8Array {
         // Simple serialization of header + payload
+        const payload = (packet.payload instanceof Uint8Array) ? packet.payload : new Uint8Array(0);
         const headerLen = 16;
-        const totalLen = headerLen + packet.payload.length;
+        const totalLen = headerLen + payload.length;
         const out = new Uint8Array(4 + totalLen);
 
         // Meshtastic Sync Header
@@ -223,15 +224,15 @@ export class LoRaMeshtasticBridge {
 
         // Packet fields
         const dv = new DataView(out.buffer, 4);
-        dv.setUint32(0, packet.from, false);
-        dv.setUint32(4, packet.to, false);
-        dv.setUint8(8, packet.channel);
-        dv.setUint8(9, packet.portnum);
-        dv.setUint32(10, packet.id, false);
+        dv.setUint32(0, packet.from || 0, false);
+        dv.setUint32(4, packet.to || 0, false);
+        dv.setUint8(8, packet.channel || 0);
+        dv.setUint8(9, packet.portnum || 0);
+        dv.setUint32(10, packet.id || 0, false);
         dv.setUint8(14, packet.hopLimit || 3);
         dv.setUint8(15, packet.wantAck ? 1 : 0);
 
-        out.set(packet.payload, 4 + headerLen);
+        out.set(payload, 4 + headerLen);
         return out;
     }
 
@@ -239,11 +240,11 @@ export class LoRaMeshtasticBridge {
      * Decodes a framed Meshtastic byte buffer back into a LoRaPacket
      */
     public unframePacket(buf: Uint8Array): LoRaPacket | null {
-        if (buf.length < 20) return null;
+        if (!buf || !(buf instanceof Uint8Array) || buf.length < 20) return null;
         if (buf[0] !== 0x94 || buf[1] !== 0xC3) return null;
 
         const len = (buf[2] << 8) | buf[3];
-        if (buf.length < 4 + len) return null;
+        if (len < 16 || buf.length < 4 + len) return null;
 
         const dv = new DataView(buf.buffer, buf.byteOffset + 4, len);
         const from = dv.getUint32(0, false);
@@ -333,6 +334,17 @@ export class LoRaMeshtasticBridge {
                 listener(packet);
             } catch {}
         }
+    }
+
+    /**
+     * Libera recursos serie, vacía listeners y reinicia la instancia singleton
+     */
+    public async destroy(): Promise<void> {
+        await this.disconnect();
+        this.packetListeners.clear();
+        this.knownNodes.clear();
+        this.localNodeInfo = null;
+        LoRaMeshtasticBridge.instance = null;
     }
 }
 

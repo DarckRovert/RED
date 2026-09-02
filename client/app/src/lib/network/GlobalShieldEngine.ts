@@ -157,12 +157,13 @@ export class GlobalShieldEngine {
      * Sets the global network DEFCON level and enforces security parameters
      */
     public setDefcon(level: DefconLevel): void {
-        this.currentDefcon = level;
+        const safeLevel: DefconLevel = ([1, 2, 3, 4].includes(level as any)) ? level : 4;
+        this.currentDefcon = safeLevel;
         this.lastDefconTransition = Date.now();
         if (typeof window !== "undefined") {
-            localStorage.setItem(STORAGE_DEFCON_KEY, level.toString());
+            localStorage.setItem(STORAGE_DEFCON_KEY, safeLevel.toString());
         }
-        this.applyDefconPolicies(level);
+        this.applyDefconPolicies(safeLevel);
         this.notifyListeners();
     }
 
@@ -313,6 +314,7 @@ export class GlobalShieldEngine {
             this.unsubscribeKinetic = null;
         }
         this.listeners.clear();
+        GlobalShieldEngine.instance = null;
     }
 }
 

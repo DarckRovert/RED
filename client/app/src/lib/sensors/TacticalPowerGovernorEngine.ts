@@ -57,18 +57,24 @@ export class TacticalPowerGovernorEngine {
         nominalVoltage: number = 3.85,
         profileKey: MissionPowerProfile = 'ACTIVE_MESH'
     ): { remainingHours: number; remainingEnergyWh: number; powerMw: number } {
-        const totalEnergyWh = (batteryCapacityMah / 1000) * nominalVoltage;
-        const currentEnergyWh = totalEnergyWh * (Math.max(1, batteryPct) / 100);
-        const profile = TacticalPowerGovernorEngine.PROFILES[profileKey];
+        const safeCapacity = Math.max(100, isFinite(batteryCapacityMah) ? batteryCapacityMah : 5000);
+        const safeVoltage = Math.max(1.0, isFinite(nominalVoltage) ? nominalVoltage : 3.85);
+        const safeBatteryPct = Math.max(0, Math.min(100, isFinite(batteryPct) ? batteryPct : 0));
+
+        const totalEnergyWh = (safeCapacity / 1000) * safeVoltage;
+        const currentEnergyWh = totalEnergyWh * (safeBatteryPct / 100);
+        const profile = TacticalPowerGovernorEngine.PROFILES[profileKey] || TacticalPowerGovernorEngine.PROFILES['ACTIVE_MESH'];
         const powerW = profile.powerMilliwatts / 1000;
 
-        const remainingHours = Math.round((currentEnergyWh / powerW) * 10) / 10;
+        const remainingHours = safeBatteryPct === 0 
+            ? 0.0 
+            : Math.round((currentEnergyWh / powerW) * 10) / 10;
 
         // Auto-throttle mesh bearer if critical
-        if (batteryPct <= 15) {
+        if (safeBatteryPct <= 15 && safeBatteryPct > 0) {
             import("../mesh/DynamicBearerGovernor").then(({ dynamicBearerGovernor }) => {
-                dynamicBearerGovernor.applyPowerBudgetThrottle(batteryPct);
-            });
+                dynamicBearerGovernor.applyPowerBudgetThrottle(safeBatteryPct);
+            }).catch(() => {});
         }
 
         return {
@@ -88,12 +94,21 @@ export class TacticalPowerGovernorEngine {
         targetPct: number = 100,
         solarEfficiencyPct: number = 75 // Pérdidas térmicas y ángulo solar
     ): { chargeTimeHours: number; effectiveSolarWatts: number } {
-        const nominalVoltage = 3.85;
-        const totalEnergyWh = (batteryCapacityMah / 1000) * nominalVoltage;
-        const energyNeededWh = totalEnergyWh * ((targetPct - currentPct) / 100);
+        const safeCapacity = Math.max(100, isFinite(batteryCapacityMah) ? batteryCapacityMah : 5000);
+        const safePanelWatts = Math.max(0.1, isFinite(panelWatts) ? panelWatts : 15);
+        const safeCurrentPct = Math.max(0, Math.min(100, isFinite(currentPct) ? currentPct : 0));
+        const safeTargetPct = Math.max(0, Math.min(100, isFinite(targetPct) ? targetPct : 100));
+        const safeEfficiency = Math.max(10, Math.min(100, isFinite(solarEfficiencyPct) ? solarEfficiencyPct : 75));
 
-        const effectiveWatts = panelWatts * (solarEfficiencyPct / 100);
-        const chargeTimeHours = Math.round((energyNeededWh / Math.max(0.5, effectiveWatts)) * 10) / 10;
+        const nominalVoltage = 3.85;
+        const totalEnergyWh = (safeCapacity / 1000) * nominalVoltage;
+        const deltaPct = Math.max(0, safeTargetPct - safeCurrentPct);
+        const energyNeededWh = totalEnergyWh * (deltaPct / 100);
+
+        const effectiveWatts = safePanelWatts * (safeEfficiency / 100);
+        const chargeTimeHours = deltaPct === 0
+            ? 0.0
+            : Math.round((energyNeededWh / Math.max(0.5, effectiveWatts)) * 10) / 10;
 
         return {
             chargeTimeHours,

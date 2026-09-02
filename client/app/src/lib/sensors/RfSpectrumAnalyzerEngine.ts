@@ -116,9 +116,13 @@ export class RfSpectrumAnalyzerEngine {
             };
         });
         
-        const validRssi = activeChannels.map(c => c.rssiCurrentDbm ?? c.rssiDb ?? -100);
-        const avgRssi = validRssi.reduce((a, b) => a + b, 0) / activeChannels.length;
-        const variance = validRssi.reduce((sum, r) => sum + Math.pow(r - avgRssi, 2), 0) / activeChannels.length;
+        const validRssi = activeChannels.map(c => {
+            const val = c.rssiCurrentDbm ?? c.rssiDb;
+            return (typeof val === 'number' && isFinite(val)) ? val : -100;
+        });
+        const chLen = Math.max(1, activeChannels.length);
+        const avgRssi = validRssi.reduce((a, b) => a + b, 0) / chLen;
+        const variance = validRssi.reduce((sum, r) => sum + Math.pow(r - avgRssi, 2), 0) / chLen;
 
         return {
             averageRssiDb: Math.round(avgRssi),
@@ -131,7 +135,7 @@ export class RfSpectrumAnalyzerEngine {
             activeChannels,
             channels: activeChannels,
             avgSnrDb: Math.max(0, Math.round(avgRssi - (-100))),
-            congestionPct: Math.round((activeChannels.filter(c => c.isOccupied).length / Math.max(1, activeChannels.length)) * 100),
+            congestionPct: Math.round((activeChannels.filter(c => c.isOccupied).length / chLen) * 100),
             optimalChannelNumber: 1
         };
     }
@@ -141,7 +145,12 @@ export class RfSpectrumAnalyzerEngine {
         
         // Use real hardware data ONLY if we are actually scanning BLE
         const isBleMode = bandMode === "BLE_2_4GHZ";
-        const rssiList = isBleMode ? bleDevices.map(d => d.rssi).filter(r => typeof r === 'number' && r < 0) : [];
+        const safeDevices = Array.isArray(bleDevices) ? bleDevices : [];
+        const rssiList = isBleMode
+            ? safeDevices
+                .map(d => (d && typeof d.rssi === 'number' && isFinite(d.rssi)) ? d.rssi : null)
+                .filter((r): r is number => r !== null && r < 0 && r >= -140)
+            : [];
         
         if (rssiList.length === 0) {
             return this.getInitialMetrics(bandMode);
@@ -165,14 +174,24 @@ export class RfSpectrumAnalyzerEngine {
             
             if (bandMode === "BLE_2_4GHZ") {
                 // Map real BLE devices consistently to channels based on their ID string
-                const devicesOnThisChannel = bleDevices.filter(dev => {
-                    const hash = dev.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-                    return (hash % baseChannels.length) === (ch.channel % baseChannels.length);
+                const devicesOnThisChannel = safeDevices.filter((dev, idx) => {
+                    if (!dev) return false;
+                    const rawId = (typeof dev.id === 'string' && dev.id) ||
+                                 (typeof dev.deviceId === 'string' && dev.deviceId) ||
+                                 (typeof dev.address === 'string' && dev.address) ||
+                                 String(idx);
+                    const hash = rawId.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+                    const numChannels = Math.max(1, baseChannels.length);
+                    return (hash % numChannels) === (ch.channel % numChannels);
                 });
                 
                 if (devicesOnThisChannel.length > 0) {
-                    const strongest = Math.max(...devicesOnThisChannel.map(d => d.rssi));
-                    finalRssi = strongest;
+                    const validDeviceRssi = devicesOnThisChannel
+                        .map(d => d.rssi)
+                        .filter((r): r is number => typeof r === 'number' && isFinite(r));
+                    if (validDeviceRssi.length > 0) {
+                        finalRssi = Math.max(...validDeviceRssi);
+                    }
                 }
             }
 
@@ -196,6 +215,10 @@ export class RfSpectrumAnalyzerEngine {
             threatLevel = 'ELEVADO';
         }
 
+        const unoccupied = activeChannels.filter(c => !c.isOccupied);
+        const sortedUnoccupied = unoccupied.sort((a, b) => (a.rssiCurrentDbm ?? -100) - (b.rssiCurrentDbm ?? -100));
+        const optimalChannelNumber = sortedUnoccupied[0]?.channelNumber ?? activeChannels[0]?.channelNumber ?? 1;
+
         return {
             averageRssiDb: Math.round(avgRssi),
             rssiVariance: Math.round(variance * 10) / 10,
@@ -207,8 +230,12 @@ export class RfSpectrumAnalyzerEngine {
             activeChannels,
             channels: activeChannels,
             avgSnrDb: Math.max(0, Math.round(avgRssi - (-100))),
-            congestionPct: Math.round((occupiedCount / activeChannels.length) * 100),
-            optimalChannelNumber: activeChannels.filter(c => !c.isOccupied).sort((a,b) => a.rssiCurrentDbm! - b.rssiCurrentDbm!)[0]?.channelNumber || activeChannels[0].channelNumber
+            congestionPct: Math.round((occupiedCount / Math.max(1, activeChannels.length)) * 100),
+            optimalChannelNumber
         };
+    }
+
+    public static resetHistory(): void {
+        this.rssiHistory = [];
     }
 }

@@ -113,7 +113,18 @@ export class ShamirSecretSharingEngine {
             throw new Error("Se requieren al menos 3 fragmentos distintos (índices únicos) para la reconstrucción SSS");
         }
 
-        const shareLength = this.hexToBytes(uniqueShares[0].shareHex).length;
+        const firstLen = this.hexToBytes(uniqueShares[0].shareHex).length;
+        if (firstLen === 0) {
+            throw new Error("Los fragmentos contienen datos vacíos o no válidos");
+        }
+        for (let i = 1; i < uniqueShares.length; i++) {
+            const l = this.hexToBytes(uniqueShares[i].shareHex).length;
+            if (l !== firstLen) {
+                throw new Error(`Inconsistencia en longitud de fragmentos: fragmento #${uniqueShares[i].shareIndex} (${l} bytes) no coincide con fragmento #${uniqueShares[0].shareIndex} (${firstLen} bytes)`);
+            }
+        }
+
+        const shareLength = firstLen;
         const secretBytes = new Uint8Array(shareLength);
 
         const xValues = uniqueShares.map(s => s.shareIndex);

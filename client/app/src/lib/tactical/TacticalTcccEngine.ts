@@ -74,7 +74,7 @@ export class TacticalTcccEngine {
             let changed = false;
 
             this.activeTourniquets.forEach(tq => {
-                const mins = Math.floor((now - tq.appliedTimestamp) / 60000);
+                const mins = Math.max(0, Math.floor((now - tq.appliedTimestamp) / 60000));
                 if (mins !== tq.elapsedMinutes) {
                     tq.elapsedMinutes = mins;
                     tq.isIschemicAlert = mins >= 120;
@@ -117,19 +117,29 @@ export class TacticalTcccEngine {
      * Genera la Tarjeta de Bajas TCCC (DD Form 1380) en formato estandarizado militar
      */
     public generateDdForm1380(card: TcccCasualtyCard): string {
-        const tqStr = card.tourniquets.length > 0 
+        const tqStr = card.tourniquets && card.tourniquets.length > 0 
             ? card.tourniquets.map(t => `${t.limb} (${t.type}) - ${t.elapsedMinutes}min`).join(' | ') 
             : 'NINGUNO';
 
+        const validTimestamp = (typeof card.createdTimestamp === 'number' && isFinite(card.createdTimestamp))
+            ? card.createdTimestamp
+            : Date.now();
+        let timeIso = '';
+        try {
+            timeIso = new Date(validTimestamp).toISOString();
+        } catch {
+            timeIso = new Date().toISOString();
+        }
+
         return `=== DD FORM 1380 — TARJETA DE BAJA TCCC ===
-FECHA/HORA : ${new Date(card.createdTimestamp).toISOString()}
-ROSTER ID  : ${card.rosterNumber} · NOMBRE: ${card.casualtyName}
-PRIORIDAD  : [ ${card.evacPriority} ]
+FECHA/HORA : ${timeIso}
+ROSTER ID  : ${card.rosterNumber || 'DESCONOCIDO'} · NOMBRE: ${card.casualtyName || 'DESCONOCIDO'}
+PRIORIDAD  : [ ${card.evacPriority || 'ROUTINE'} ]
 
 [M] HEMORRAGIA MASIVA: ${card.massiveBleedingControlled ? 'CONTROLADA' : 'ACTIVA'}
     TORNIQUETES : ${tqStr}
-[A] VÍA AÉREA   : ${card.airwayStatus}
-[R] RESPIRACIÓN : ${card.respirationStatus}
+[A] VÍA AÉREA   : ${card.airwayStatus || 'INTACT'}
+[R] RESPIRACIÓN : ${card.respirationStatus || 'NORMAL'}
 [C] CIRCULACIÓN : Pulso: ${card.circulationPulsePresent ? 'PRESENTE' : 'AUSENTE'} | TXA: ${card.txaAdministered ? 'SÍ (1g IV/IO)' : 'NO'}
 [H] HIPOTERMIA  : Manta térmica: ${card.hypothermiaCoverApplied ? 'APLICADA' : 'PENDIENTE'}
 [P] ANALGESIA   : ${card.painMedication || 'NINGUNA'}
@@ -144,7 +154,10 @@ PRIORIDAD  : [ ${card.evacPriority} ]
             clearInterval(this.tickerInterval);
             this.tickerInterval = null;
         }
+        this.activeTourniquets = [];
+        this.casualtyCards = [];
         this.listeners.clear();
+        TacticalTcccEngine.instance = null;
     }
 }
 

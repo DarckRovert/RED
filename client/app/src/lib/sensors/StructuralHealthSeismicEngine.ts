@@ -76,20 +76,26 @@ export class StructuralHealthSeismicEngine {
 
         this.motionListener = (e: DeviceMotionEvent) => {
             let mag = 0;
-            if (e.acceleration && typeof e.acceleration.x === 'number' && typeof e.acceleration.y === 'number' && typeof e.acceleration.z === 'number') {
+            if (e.acceleration && typeof e.acceleration.x === 'number' && typeof e.acceleration.y === 'number' && typeof e.acceleration.z === 'number' && isFinite(e.acceleration.x) && isFinite(e.acceleration.y) && isFinite(e.acceleration.z)) {
                 const x = e.acceleration.x || 0;
                 const y = e.acceleration.y || 0;
                 const z = e.acceleration.z || 0;
                 mag = Math.sqrt(x * x + y * y + z * z);
-            } else if (e.accelerationIncludingGravity) {
+            } else if (e.accelerationIncludingGravity && typeof e.accelerationIncludingGravity.x === 'number' && typeof e.accelerationIncludingGravity.y === 'number' && typeof e.accelerationIncludingGravity.z === 'number' && isFinite(e.accelerationIncludingGravity.x) && isFinite(e.accelerationIncludingGravity.y) && isFinite(e.accelerationIncludingGravity.z)) {
                 const acc = e.accelerationIncludingGravity;
                 const x = acc.x || 0;
                 const y = acc.y || 0;
                 const z = acc.z || 0;
                 const totalMag = Math.sqrt(x * x + y * y + z * z);
-                // Dynamic exponential moving average DC filter to isolate vibration regardless of tilt/orientation
-                this.gravityEma = 0.95 * this.gravityEma + 0.05 * (totalMag > 0 ? totalMag : 9.81);
-                mag = Math.abs(totalMag - this.gravityEma);
+                if (isFinite(totalMag)) {
+                    // Dynamic exponential moving average DC filter to isolate vibration regardless of tilt/orientation
+                    this.gravityEma = 0.95 * this.gravityEma + 0.05 * (totalMag > 0 ? totalMag : 9.81);
+                    mag = Math.abs(totalMag - this.gravityEma);
+                }
+            }
+
+            if (!isFinite(mag) || mag < 0) {
+                mag = 0;
             }
 
             this.sampleBuffer.push(mag);
@@ -214,6 +220,9 @@ export class StructuralHealthSeismicEngine {
                     }
                 }
                 if (!this.audioCtx) return;
+                if (this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume().catch(() => {});
+                }
 
                 const osc = this.audioCtx.createOscillator();
                 const gain = this.audioCtx.createGain();
@@ -222,6 +231,13 @@ export class StructuralHealthSeismicEngine {
                 osc.frequency.linearRampToValueAtTime(440, this.audioCtx.currentTime + 0.4);
                 gain.gain.setValueAtTime(0.4, this.audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, this.audioCtx.currentTime + 0.5);
+
+                osc.onended = () => {
+                    try {
+                        osc.disconnect();
+                        gain.disconnect();
+                    } catch {}
+                };
 
                 osc.connect(gain);
                 gain.connect(this.audioCtx.destination);

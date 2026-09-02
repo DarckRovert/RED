@@ -65,15 +65,32 @@ export class SubsurfaceAcousticEngine {
         if (this.isTransmitting) return;
 
         if (customConfig) {
-            this.config = { ...this.config, ...customConfig };
+            const safeFreq = (typeof customConfig.frequencyHz === 'number' && isFinite(customConfig.frequencyHz))
+                ? Math.max(15, Math.min(120, Math.round(customConfig.frequencyHz)))
+                : this.config.frequencyHz;
+            const safeDuration = (typeof customConfig.pulseDurationMs === 'number' && isFinite(customConfig.pulseDurationMs))
+                ? Math.max(200, Math.min(5000, Math.round(customConfig.pulseDurationMs)))
+                : this.config.pulseDurationMs;
+            const safeInterval = (typeof customConfig.repeatIntervalSec === 'number' && isFinite(customConfig.repeatIntervalSec))
+                ? Math.max(1, Math.min(60, Math.round(customConfig.repeatIntervalSec)))
+                : this.config.repeatIntervalSec;
+
+            this.config = {
+                ...this.config,
+                ...customConfig,
+                frequencyHz: safeFreq,
+                pulseDurationMs: safeDuration,
+                repeatIntervalSec: safeInterval,
+            };
         }
 
         this.isTransmitting = true;
         this.emitPulse();
 
+        const intervalMs = Math.max(1000, this.config.repeatIntervalSec * 1000);
         this.timer = setInterval(() => {
             this.emitPulse();
-        }, this.config.repeatIntervalSec * 1000);
+        }, intervalMs);
 
         this.notify();
     }
@@ -118,17 +135,25 @@ export class SubsurfaceAcousticEngine {
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
                     const startTime = ctx.currentTime;
-                    const durationSec = this.config.pulseDurationMs / 1000;
+                    const durationSec = Math.max(0.2, this.config.pulseDurationMs / 1000);
+                    const attackTime = Math.min(0.08, durationSec * 0.2);
 
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(this.config.frequencyHz, startTime);
 
                     gain.gain.setValueAtTime(0.01, startTime);
-                    gain.gain.exponentialRampToValueAtTime(0.9, startTime + 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.9, startTime + attackTime);
                     gain.gain.exponentialRampToValueAtTime(0.01, startTime + durationSec);
 
                     osc.connect(gain);
                     gain.connect(ctx.destination);
+
+                    osc.onended = () => {
+                        try {
+                            osc.disconnect();
+                            gain.disconnect();
+                        } catch {}
+                    };
 
                     osc.start(startTime);
                     osc.stop(startTime + durationSec);

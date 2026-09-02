@@ -21,6 +21,22 @@ export interface LocalModelMetaData {
     downloadedBytes?: number;
 }
 
+export interface SovereignEndpointConfig {
+    url: string;
+    modelName: string;
+    apiKey?: string;
+    label?: string;
+}
+
+export const SOVEREIGN_PRESETS: SovereignEndpointConfig[] = [
+    { label: "🦙 Ollama (11434)", url: "http://127.0.0.1:11434", modelName: "qwen2.5:0.5b" },
+    { label: "🖥️ LM Studio (1234)", url: "http://127.0.0.1:1234/v1", modelName: "local-model" },
+    { label: "🍋 Lemonade Server (8000)", url: "http://127.0.0.1:8000/v1", modelName: "default" },
+    { label: "📦 LocalAI / vLLM (8080)", url: "http://127.0.0.1:8080/v1", modelName: "default" },
+    { label: "🤖 Jan.ai (1337)", url: "http://127.0.0.1:1337/v1", modelName: "default" },
+    { label: "🛡️ Nodo RED Nativo (7333)", url: "http://127.0.0.1:7333/api/ai", modelName: "red-tactical-qwen" }
+];
+
 export const SUPPORTED_MODELS: LocalModelMetaData[] = [
     {
         id: 'qwen-2.5-0.5b-q4',
@@ -775,7 +791,7 @@ class ModelManagerClass {
     }
 
     /** Obtiene la configuración del endpoint soberano (Ollama / Local API) si está habilitado */
-    public getSovereignEndpoint(): { url: string; modelName: string; apiKey?: string } | null {
+    public getSovereignEndpoint(): SovereignEndpointConfig | null {
         if (typeof window === 'undefined') return null;
         try {
             const raw = localStorage.getItem('red_sovereign_ai_endpoint');
@@ -786,8 +802,23 @@ class ModelManagerClass {
         return null;
     }
 
+    /** Indica si hay un endpoint soberano configurado y activo */
+    public isSovereignActive(): boolean {
+        return this.getSovereignEndpoint() !== null;
+    }
+
+    /** Descripción legible del endpoint o modelo activo */
+    public getActiveEndpointDescription(): string {
+        const sov = this.getSovereignEndpoint();
+        if (sov) {
+            return `Sovereign (${sov.modelName || 'Host Local'} @ ${sov.url})`;
+        }
+        const active = this.getActiveModel();
+        return active ? active.name : 'Motor Neuronal Local WASM';
+    }
+
     /** Guarda o elimina la configuración del endpoint soberano */
-    public setSovereignEndpoint(config: { url: string; modelName: string; apiKey?: string } | null): void {
+    public setSovereignEndpoint(config: SovereignEndpointConfig | null): void {
         if (typeof window === 'undefined') return;
         if (config) {
             localStorage.setItem('red_sovereign_ai_endpoint', JSON.stringify(config));
@@ -801,7 +832,10 @@ class ModelManagerClass {
     public async testSovereignEndpoint(url: string, modelName: string, apiKey?: string): Promise<{ ok: boolean; message: string; latencyMs: number }> {
         const start = performance.now();
         try {
-            const cleanUrl = url.replace(/\/+$/, '');
+            let cleanUrl = url.trim().replace(/\/+$/, '');
+            if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+                cleanUrl = `http://${cleanUrl}`;
+            }
             const targetUrl = cleanUrl.includes('/v1') ? `${cleanUrl}/chat/completions` : `${cleanUrl}/api/generate`;
             
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };

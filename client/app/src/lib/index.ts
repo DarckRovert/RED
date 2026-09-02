@@ -21,3 +21,4 @@ export * from './telemetry';
 export * from './settingsManager';
 export * from './updateManager';
 export * from './version';
+export * from './qr/OfflineQrEngine';

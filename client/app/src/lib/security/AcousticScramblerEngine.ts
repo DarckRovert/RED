@@ -43,7 +43,7 @@ export class AcousticScramblerEngine {
     }
 
     private initAudio() {
-        if (!this.audioCtx) {
+        if (!this.audioCtx || this.audioCtx.state === 'closed') {
             const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
             this.audioCtx = new AudioContextClass();
             this.gainNode = this.audioCtx.createGain();
@@ -51,7 +51,7 @@ export class AcousticScramblerEngine {
             this.gainNode.connect(this.audioCtx.destination);
         }
         if (this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume();
+            this.audioCtx.resume().catch(() => {});
         }
     }
 

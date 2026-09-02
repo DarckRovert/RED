@@ -48,11 +48,15 @@ export class AirGapAnimatedQrEngine {
      * Fragmenta una carga útil en tramas para flujo de QR animado
      */
     public encodeIntoChunks(payload: string, maxChunkChars: number = 180): string[] {
-        const total = Math.ceil(payload.length / maxChunkChars) || 1;
+        if (!payload || typeof payload !== 'string' || payload.length === 0) {
+            return [];
+        }
+        const safeChunkSize = Math.max(10, Math.min(1000, Number(maxChunkChars) || 180));
+        const total = Math.ceil(payload.length / safeChunkSize) || 1;
         const chunks: string[] = [];
 
         for (let i = 0; i < total; i++) {
-            const chunkData = payload.slice(i * maxChunkChars, (i + 1) * maxChunkChars);
+            const chunkData = payload.slice(i * safeChunkSize, (i + 1) * safeChunkSize);
             const crc = AirGapAnimatedQrEngine.calculateCRC32(chunkData);
             const frame = `RED_CHUNK:${i + 1}:${total}:${crc}:${chunkData}`;
             chunks.push(frame);
@@ -82,6 +86,10 @@ export class AirGapAnimatedQrEngine {
         const total = parseInt(parts[2], 10);
         const expectedCrc = parts[3];
         const data = parts.slice(4).join(':');
+
+        if (!isFinite(index) || !isFinite(total) || index <= 0 || total <= 0 || index > total || total > 2000) {
+            return { isComplete: false, progressPct: 0 };
+        }
 
         if (AirGapAnimatedQrEngine.calculateCRC32(data) !== expectedCrc) {
             console.warn('[AirGapAnimatedQrEngine] CRC32 mismatch on chunk', index);

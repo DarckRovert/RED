@@ -103,32 +103,57 @@ export class SitrepEngine {
     }
 
     public exportFormattedText(report: SitrepReport): string {
-        const dateStr = new Date(report.timestamp).toISOString();
+        let dateStr = '';
+        try {
+            const validTime = (typeof report.timestamp === 'number' && isFinite(report.timestamp))
+                ? report.timestamp
+                : Date.now();
+            dateStr = new Date(validTime).toISOString();
+        } catch {
+            dateStr = new Date().toISOString();
+        }
+
+        const safeLat = (typeof report.location?.lat === 'number' && isFinite(report.location.lat))
+            ? report.location.lat.toFixed(5)
+            : '0.00000';
+        const safeLon = (typeof report.location?.lon === 'number' && isFinite(report.location.lon))
+            ? report.location.lon.toFixed(5)
+            : '0.00000';
+
+        const casualties = report.casualties || {
+            t1ImmediateRed: 0,
+            t2DelayedYellow: 0,
+            t3MinimalGreen: 0,
+            t4ExpectantBlack: 0,
+        };
+
         return [
             `═══════════════════════════════════════════`,
             `  SITUATION REPORT (SITREP) // RED TACTICAL`,
             `  ID: ${report.id} | FECHA: ${dateStr}`,
             `═══════════════════════════════════════════`,
-            `1. UNIDAD / INDICATIVO : ${report.unitCallsign} (${report.operatorName})`,
-            `2. COORDENADAS GPS     : ${report.location.lat.toFixed(5)}°, ${report.location.lon.toFixed(5)}°`,
-            `3. ESTADO DE AMENAZA   : ${report.threatStatus}`,
-            `4. EFECTIVOS ACTIVOS   : ${report.friendlyTroopsCount} Operadores`,
+            `1. UNIDAD / INDICATIVO : ${report.unitCallsign || 'DESCONOCIDO'} (${report.operatorName || 'OPERADOR'})`,
+            `2. COORDENADAS GPS     : ${safeLat}°, ${safeLon}°`,
+            `3. ESTADO DE AMENAZA   : ${report.threatStatus || 'GREEN_CLEAR'}`,
+            `4. EFECTIVOS ACTIVOS   : ${report.friendlyTroopsCount || 0} Operadores`,
             `5. BAJAS TRIAGE TCCC   :`,
-            `   - T1 INMEDIATO (ROJO)   : ${report.casualties.t1ImmediateRed}`,
-            `   - T2 RETARDADO (AMAR)   : ${report.casualties.t2DelayedYellow}`,
-            `   - T3 LEVE (VERDE)       : ${report.casualties.t3MinimalGreen}`,
-            `   - T4 FALLECIDOS (NEGRO) : ${report.casualties.t4ExpectantBlack}`,
+            `   - T1 INMEDIATO (ROJO)   : ${casualties.t1ImmediateRed}`,
+            `   - T2 RETARDADO (AMAR)   : ${casualties.t2DelayedYellow}`,
+            `   - T3 LEVE (VERDE)       : ${casualties.t3MinimalGreen}`,
+            `   - T4 FALLECIDOS (NEGRO) : ${casualties.t4ExpectantBlack}`,
             `6. LOGÍSTICA & NIVELES :`,
-            `   - Munición : ${report.suppliesAmmoPct}%`,
-            `   - Médico   : ${report.suppliesMedicalPct}%`,
-            `   - Batería  : ${report.suppliesBatteryPct}%`,
+            `   - Munición : ${report.suppliesAmmoPct ?? 100}%`,
+            `   - Médico   : ${report.suppliesMedicalPct ?? 100}%`,
+            `   - Batería  : ${report.suppliesBatteryPct ?? 100}%`,
             `7. OBSERVACIONES       : ${report.remarks || 'Sin novedades'}`,
             `═══════════════════════════════════════════`
         ].join('\n');
     }
 
     public destroy(): void {
+        this.sitreps = [];
         this.listeners.clear();
+        SitrepEngine.instance = null;
     }
 }
 

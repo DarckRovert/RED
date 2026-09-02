@@ -24,6 +24,9 @@ export class BackupRestoreEngine {
      */
     public static async exportEncryptedBackup(passphrase: string): Promise<Blob> {
         if (typeof window === "undefined") throw new Error("Window not available");
+        if (!passphrase || typeof passphrase !== "string" || passphrase.trim().length === 0) {
+            throw new Error("La contraseña para exportar la copia de seguridad es obligatoria.");
+        }
 
         // 1. Recolectar datos de la bóveda local
         const backupData: BackupData = {
@@ -104,8 +107,14 @@ export class BackupRestoreEngine {
      */
     public static async importEncryptedBackup(fileData: ArrayBuffer, passphrase: string): Promise<BackupData> {
         if (typeof window === "undefined") throw new Error("Window not available");
+        if (!passphrase || typeof passphrase !== "string" || passphrase.trim().length === 0) {
+            throw new Error("La contraseña para descifrar la copia de seguridad es obligatoria.");
+        }
+        if (!fileData || !(fileData instanceof ArrayBuffer || ArrayBuffer.isView(fileData))) {
+            throw new Error("Buffer de datos de respaldo inválido o nulo.");
+        }
 
-        const bytes = new Uint8Array(fileData);
+        const bytes = new Uint8Array(fileData as any);
         const encoder = new TextEncoder();
         const decoder = new TextDecoder();
         const magicBytes = encoder.encode(this.MAGIC_HEADER);
