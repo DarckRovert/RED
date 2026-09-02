@@ -146,13 +146,13 @@ const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
 function ContextMenu({
-    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onClose
+    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onClose
 }: {
     x: number; y: number; isMine: boolean; isDeleted: boolean;
     onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void;
     onEdit?: () => void; onDeleteForEveryone?: () => void; onDeleteLocal: () => void;
     onSelect?: () => void; onReact: (e: string) => void;
-    onTranslate?: () => void; onAskCopilot?: () => void; onClose: () => void;
+    onTranslate?: () => void; onAskCopilot?: () => void; onSpeakMessage?: () => void; onClose: () => void;
 }) {
     const { t } = useTranslation();
     return (
@@ -196,6 +196,7 @@ function ContextMenu({
             }}>
                 {[
                     ...(!isDeleted ? [{ label: t.chat_extended?.reply_to || "Responder", icon: "↩️", action: onReply }] : []),
+                    ...(!isDeleted && onSpeakMessage ? [{ label: "Escuchar mensaje", icon: "🔊", action: onSpeakMessage }] : []),
                     ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: "🌐", action: onTranslate }] : []),
                     ...(!isDeleted && onAskCopilot ? [{ label: "Consultar a Copiloto", icon: "🤖", action: onAskCopilot }] : []),
                     ...(!isDeleted && onForward ? [{ label: t.chat_extended?.forward_btn || "Reenviar", icon: "➡️", action: onForward }] : []),
@@ -451,6 +452,22 @@ export const MessageBubble = memo(({
         }
     };
 
+    const handleSpeakMessage = async () => {
+        const textToSpeak = translatedText || msg.content;
+        if (!textToSpeak) return;
+        const { TacticalSpeechEngine } = await import("../../lib/ai");
+        if (TacticalSpeechEngine.isSpeaking()) {
+            TacticalSpeechEngine.stopSpeaking();
+            toast.info("Lectura de voz pausada");
+        } else {
+            TacticalSpeechEngine.speak(textToSpeak, {
+                lang: "es-ES",
+                onStart: () => toast.info("🔊 Reproduciendo mensaje en voz alta..."),
+                onError: () => toast.error("Error al reproducir audio")
+            });
+        }
+    };
+
     const handleAskCopilot = () => {
         if (!msg.content) return;
         if (typeof window !== "undefined") {
@@ -502,6 +519,7 @@ export const MessageBubble = memo(({
                     onReact={(e) => onReaction(msg.id, e)}
                     onTranslate={msg.content && !msg.content.startsWith("data:") ? handleTranslate : undefined}
                     onAskCopilot={msg.content && !msg.content.startsWith("data:") ? handleAskCopilot : undefined}
+                    onSpeakMessage={msg.content && !msg.content.startsWith("data:") ? handleSpeakMessage : undefined}
                 />
             )}
 
@@ -913,19 +931,45 @@ export const MessageBubble = memo(({
                             {/* Inline AI Translation Pill Box */}
                             {translatedText && (
                                 <div style={{
-                                    marginTop: "4px", padding: "6px 10px", borderRadius: "8px",
-                                    background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                    marginTop: "6px", padding: "8px 10px", borderRadius: "8px",
+                                    background: "rgba(0, 229, 255, 0.14)", border: "1px solid rgba(0, 229, 255, 0.35)",
                                     fontSize: "0.82rem", color: "#E0F7FA", animation: "fadeIn 0.2s ease"
                                 }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
                                         <span style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
                                             🌐 TRADUCCIÓN IA LOCAL
                                         </span>
-                                        <button onClick={() => setTranslatedText(null)} style={{ background: "none", border: "none", color: "var(--accent-cyan)", cursor: "pointer", fontSize: "0.7rem", padding: 0 }}>
-                                            ✕
-                                        </button>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                            <button
+                                                onClick={async () => {
+                                                    const { TacticalSpeechEngine } = await import("../../lib/ai");
+                                                    if (TacticalSpeechEngine.isSpeaking()) {
+                                                        TacticalSpeechEngine.stopSpeaking();
+                                                    } else {
+                                                        TacticalSpeechEngine.speak(translatedText, { lang: "es-ES" });
+                                                    }
+                                                }}
+                                                style={{ background: "none", border: "none", color: "var(--accent-cyan)", cursor: "pointer", fontSize: "0.75rem", padding: 0 }}
+                                                title="Escuchar traducción en voz alta"
+                                            >
+                                                🔊
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard?.writeText(translatedText);
+                                                    toast.success("📋 Traducción copiada");
+                                                }}
+                                                style={{ background: "none", border: "none", color: "var(--accent-cyan)", cursor: "pointer", fontSize: "0.75rem", padding: 0 }}
+                                                title="Copiar traducción"
+                                            >
+                                                📋
+                                            </button>
+                                            <button onClick={() => setTranslatedText(null)} style={{ background: "none", border: "none", color: "var(--accent-cyan)", cursor: "pointer", fontSize: "0.75rem", padding: 0 }}>
+                                                ✕
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div>{translatedText}</div>
+                                    <div style={{ lineHeight: 1.45 }}>{translatedText}</div>
                                 </div>
                             )}
                         </>

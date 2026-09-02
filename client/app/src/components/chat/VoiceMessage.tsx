@@ -357,20 +357,81 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
             {/* Local Whisper Transcription View */}
             {transcription && (
                 <div style={{
-                    padding: "6px 10px",
+                    padding: "8px 10px",
                     borderRadius: "8px",
-                    background: "rgba(0, 0, 0, 0.35)",
+                    background: "rgba(0, 0, 0, 0.45)",
                     borderLeft: `3px solid ${primaryColor}`,
-                    fontSize: "0.75rem",
-                    color: "rgba(255, 255, 255, 0.92)",
-                    lineHeight: 1.4,
-                    marginTop: "2px",
+                    fontSize: "0.78rem",
+                    color: "rgba(255, 255, 255, 0.95)",
+                    lineHeight: 1.45,
+                    marginTop: "4px",
                     animation: "fadeIn 0.2s ease-out"
                 }}>
-                    <div style={{ fontSize: "0.62rem", fontWeight: 800, color: primaryColor, marginBottom: "2px", fontFamily: "JetBrains Mono, monospace" }}>
-                        📝 TRANSCRIPCIÓN IA LOCAL (WHISPER)
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "0.62rem", fontWeight: 800, color: primaryColor, fontFamily: "JetBrains Mono, monospace" }}>
+                            📝 TRANSCRIPCIÓN IA LOCAL
+                        </span>
+                        <div style={{ display: "flex", gap: "6px" }}>
+                            <button
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const { TacticalSpeechEngine } = await import("../../lib/ai");
+                                    if (TacticalSpeechEngine.isSpeaking()) {
+                                        TacticalSpeechEngine.stopSpeaking();
+                                    } else {
+                                        TacticalSpeechEngine.speak(transcription, { lang: "es-ES" });
+                                    }
+                                }}
+                                style={{
+                                    background: "rgba(255, 255, 255, 0.1)",
+                                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                                    borderRadius: "4px",
+                                    padding: "1px 5px",
+                                    fontSize: "0.62rem",
+                                    color: "#FFFFFF",
+                                    cursor: "pointer"
+                                }}
+                                title="Escuchar transcripción en voz alta"
+                            >
+                                🔊
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard?.writeText(transcription);
+                                    toast.success("📋 Transcripción copiada");
+                                }}
+                                style={{
+                                    background: "rgba(255, 255, 255, 0.1)",
+                                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                                    borderRadius: "4px",
+                                    padding: "1px 5px",
+                                    fontSize: "0.62rem",
+                                    color: "#FFFFFF",
+                                    cursor: "pointer"
+                                }}
+                                title="Copiar texto"
+                            >
+                                📋
+                            </button>
+                        </div>
                     </div>
-                    {transcription}
+                    <div>{transcription}</div>
+                </div>
+            )}
+            {isTranscribing && (
+                <div style={{
+                    padding: "6px 10px",
+                    borderRadius: "8px",
+                    background: "rgba(0, 229, 255, 0.08)",
+                    border: "1px dashed rgba(0, 229, 255, 0.3)",
+                    fontSize: "0.72rem",
+                    color: "var(--accent-cyan)",
+                    fontFamily: "JetBrains Mono, monospace",
+                    marginTop: "2px",
+                    animation: "pulse 1s infinite alternate"
+                }}>
+                    ⏳ Transcribiendo audio con IA local (Whisper)...
                 </div>
             )}
         </div>

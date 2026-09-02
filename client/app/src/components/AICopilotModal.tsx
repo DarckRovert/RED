@@ -44,6 +44,7 @@ export const AICopilotModal: React.FC = () => {
         contacts,
         status,
         sendMessage,
+        navigate,
         goBack
     } = useRedStore();
 
@@ -169,68 +170,73 @@ export const AICopilotModal: React.FC = () => {
         toast.success(`Enviado al canal`);
     };
 
-    const speakText = (text: string) => {
-        if (typeof window !== "undefined" && "speechSynthesis" in window) {
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = "es-ES";
-            utterance.rate = 1.05;
-            window.speechSynthesis.speak(utterance);
-            toast.info("Reproduciendo respuesta por voz...");
-        } else {
-            toast.warning("Síntesis de voz no disponible en este dispositivo");
+    const [isSpeakingActive, setIsSpeakingActive] = useState(false);
+
+    const speakText = async (text: string, lang: string = "es-ES") => {
+        const { TacticalSpeechEngine } = await import("../lib/ai");
+        if (TacticalSpeechEngine.isSpeaking()) {
+            TacticalSpeechEngine.stopSpeaking();
+            setIsSpeakingActive(false);
+            toast.info("Lectura de voz pausada");
+            return;
         }
+
+        setIsSpeakingActive(true);
+        TacticalSpeechEngine.speak(text, {
+            lang,
+            onStart: () => {
+                setIsSpeakingActive(true);
+                toast.info("🔊 Reproduciendo respuesta por voz...");
+            },
+            onEnd: () => {
+                setIsSpeakingActive(false);
+            },
+            onError: () => {
+                setIsSpeakingActive(false);
+                toast.warning("Síntesis de voz no disponible o interrumpida");
+            }
+        });
     };
 
-    const toggleVoiceInput = () => {
-        if (typeof window === "undefined") return;
-        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-        if (!SpeechRecognition) {
+    const toggleVoiceInput = async () => {
+        const { TacticalSpeechEngine } = await import("../lib/ai");
+        if (!TacticalSpeechEngine.isSttSupported()) {
             toast.error(t('copilot.voice_unsupported') || "Reconocimiento de voz no soportado");
             return;
         }
 
         if (isListening) {
-            if (recognitionRef.current) {
-                recognitionRef.current.stop();
-            }
+            TacticalSpeechEngine.stopListening();
             setIsListening(false);
+            toast.info("Dictado pausado");
             return;
         }
 
-        try {
-            const recognition = new SpeechRecognition();
-            recognition.lang = "es-ES";
-            recognition.continuous = false;
-            recognition.interimResults = false;
-
-            recognition.onstart = () => {
+        setIsListening(true);
+        const ok = TacticalSpeechEngine.startListening({
+            lang: "es-ES",
+            onStart: () => {
                 setIsListening(true);
                 toast.info(t('copilot.listening') || "🎙️ Escuchando dictado...");
-            };
-
-            recognition.onresult = (event: any) => {
-                const transcript = event.results[0][0].transcript;
+            },
+            onResult: (transcript, isFinal) => {
                 if (transcript) {
                     setInput(prev => (prev ? `${prev} ${transcript}` : transcript));
                 }
+                if (isFinal) {
+                    setIsListening(false);
+                }
+            },
+            onError: (err) => {
                 setIsListening(false);
-            };
-
-            recognition.onerror = (event: any) => {
-                console.error("[SpeechRecognition Error]", event.error);
+                console.warn("[AICopilotModal] STT Error:", err);
+            },
+            onEnd: () => {
                 setIsListening(false);
-                toast.error(`Error de voz: ${event.error}`);
-            };
+            }
+        });
 
-            recognition.onend = () => {
-                setIsListening(false);
-            };
-
-            recognitionRef.current = recognition;
-            recognition.start();
-        } catch (e) {
-            console.error("[SpeechRecognition Init]", e);
+        if (!ok) {
             setIsListening(false);
         }
     };
@@ -632,6 +638,68 @@ export const AICopilotModal: React.FC = () => {
                                         </div>
 
                                         {isAI && (
+                                            (() => {
+                                                const chips: { label: string; icon: string; screen: any }[] = [];
+                                                const low = (msg.text || "").toLowerCase();
+                                                if (low.includes("radar") || low.includes("proximidad") || low.includes("nodos en rango")) {
+                                                    chips.push({ label: "Abrir Radar", icon: "📡", screen: "nearby" });
+                                                }
+                                                if (low.includes("mapa") || low.includes("topología") || low.includes("georrefer")) {
+                                                    chips.push({ label: "Abrir Mapa", icon: "🗺️", screen: "nodemap" });
+                                                }
+                                                if (low.includes("brújula") || low.includes("brujula") || low.includes("azimut") || low.includes("navegación")) {
+                                                    chips.push({ label: "Brújula Táctica", icon: "🧭", screen: "offGridCompass" });
+                                                }
+                                                if (low.includes("salud") || low.includes("batería") || low.includes("bateria") || low.includes("telemetría") || low.includes("diagnóstico")) {
+                                                    chips.push({ label: "Diagnóstico", icon: "📊", screen: "systemHealth" });
+                                                }
+                                                if (low.includes("tccc") || low.includes("torniquete") || low.includes("triaje") || low.includes("herida") || low.includes("vital")) {
+                                                    chips.push({ label: "Triaje Táctico", icon: "🩺", screen: "vitalScan" });
+                                                }
+                                                if (low.includes("walkie") || low.includes("voz en tiempo real")) {
+                                                    chips.push({ label: "Walkie-Talkie", icon: "🎙️", screen: "walkie" });
+                                                }
+                                                if (low.includes("acústica") || low.includes("scrambler") || low.includes("ultrasonido")) {
+                                                    chips.push({ label: "Guerra Acústica", icon: "🔇", screen: "acousticWarfare" });
+                                                }
+                                                if (low.includes("sonar") || low.includes("ecosonda") || low.includes("sismógrafo")) {
+                                                    chips.push({ label: "Ecosonda Sonar", icon: "🦇", screen: "sonarSeismic" });
+                                                }
+                                                if (low.includes("espectro") || low.includes("radiofrecuencia") || low.includes("ble 2.4")) {
+                                                    chips.push({ label: "Espectro RF", icon: "📻", screen: "rfSpectrum" });
+                                                }
+                                                if (low.includes("clima") || low.includes("barómetro") || low.includes("presión") || low.includes("meteorolog")) {
+                                                    chips.push({ label: "Alertas Clima", icon: "⛈️", screen: "weather" });
+                                                }
+
+                                                if (chips.length === 0) return null;
+                                                return (
+                                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                                                        {chips.slice(0, 3).map((c, i) => (
+                                                            <button
+                                                                key={i}
+                                                                onClick={() => navigate(c.screen)}
+                                                                style={{
+                                                                    display: "flex", alignItems: "center", gap: "4px",
+                                                                    padding: "3px 8px", borderRadius: "8px",
+                                                                    background: "rgba(0, 229, 255, 0.12)",
+                                                                    border: "1px solid rgba(0, 229, 255, 0.35)",
+                                                                    color: "var(--accent-cyan, #00E5FF)",
+                                                                    fontSize: "0.70rem", fontWeight: 700, cursor: "pointer",
+                                                                    fontFamily: "JetBrains Mono, monospace"
+                                                                }}
+                                                                title={`Ir a ${c.label}`}
+                                                            >
+                                                                <span>{c.icon}</span>
+                                                                <span>{c.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            })()
+                                        )}
+
+                                        {isAI && (
                                             <div style={{
                                                 marginTop: "8px", paddingTop: "6px",
                                                 borderTop: "1px solid rgba(255, 255, 255, 0.08)",
@@ -772,23 +840,55 @@ export const AICopilotModal: React.FC = () => {
                                     <option value="pt">Português (Portugués)</option>
                                     <option value="fr">Français (Francés)</option>
                                     <option value="de">Deutsch (Alemán)</option>
+                                    <option value="ru">Русский (Ruso)</option>
+                                    <option value="uk">Українська (Ucraniano)</option>
+                                    <option value="zh">中文 (Mandarín)</option>
                                     <option value="qu">Runasimi (Quechua)</option>
                                     <option value="es">Español (Nativo)</option>
                                 </select>
                             </div>
 
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <textarea
-                                    value={translatorInput}
-                                    onChange={e => setTranslatorInput(e.target.value)}
-                                    placeholder="Escribe o pega texto en español para traducir..."
-                                    rows={3}
-                                    style={{
-                                        width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
-                                        border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
-                                        color: "#FFFFFF", fontSize: "0.82rem", outline: "none"
-                                    }}
-                                />
+                                <div style={{ position: "relative" }}>
+                                    <textarea
+                                        value={translatorInput}
+                                        onChange={e => setTranslatorInput(e.target.value)}
+                                        placeholder="Escribe, pega o dicta texto para traducir..."
+                                        rows={3}
+                                        style={{
+                                            width: "100%", padding: "10px 42px 10px 10px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(255, 255, 255, 0.15)", borderRadius: "10px",
+                                            color: "#FFFFFF", fontSize: "0.82rem", outline: "none"
+                                        }}
+                                    />
+                                    <button
+                                        onClick={async () => {
+                                            const { TacticalSpeechEngine } = await import("../lib/ai");
+                                            if (TacticalSpeechEngine.isListening()) {
+                                                TacticalSpeechEngine.stopListening();
+                                                toast.info("Dictado finalizado");
+                                            } else {
+                                                TacticalSpeechEngine.startListening({
+                                                    lang: "es-ES",
+                                                    onStart: () => toast.info("🎙️ Escuchando dictado para traducción..."),
+                                                    onResult: (transcript) => {
+                                                        if (transcript) setTranslatorInput(transcript);
+                                                    },
+                                                    onError: () => toast.error("Error en dictado")
+                                                });
+                                            }
+                                        }}
+                                        style={{
+                                            position: "absolute", right: "8px", top: "8px",
+                                            background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                            borderRadius: "6px", width: "30px", height: "30px", display: "flex",
+                                            alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: "0.9rem"
+                                        }}
+                                        title="Dictar con micrófono"
+                                    >
+                                        🎙️
+                                    </button>
+                                </div>
                                 <button
                                     onClick={() => handleTranslate()}
                                     disabled={isTranslating || !translatorInput.trim()}
@@ -807,10 +907,40 @@ export const AICopilotModal: React.FC = () => {
                                     padding: "12px", background: "rgba(0, 230, 118, 0.1)",
                                     border: "1px solid rgba(0, 230, 118, 0.35)", borderRadius: "10px"
                                 }}>
-                                    <div style={{ fontSize: "0.68rem", fontWeight: 900, color: "#00E676", marginBottom: "4px" }}>
-                                        TRADUCCIÓN RESULTANTE ({targetLang.toUpperCase()}):
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                                        <div style={{ fontSize: "0.68rem", fontWeight: 900, color: "#00E676" }}>
+                                            TRADUCCIÓN RESULTANTE ({targetLang.toUpperCase()}):
+                                        </div>
+                                        <div style={{ display: "flex", gap: "8px" }}>
+                                            <button
+                                                onClick={async () => {
+                                                    const { TacticalSpeechEngine } = await import("../lib/ai");
+                                                    TacticalSpeechEngine.speak(translatorOutput, { lang: targetLang });
+                                                }}
+                                                style={{
+                                                    background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)",
+                                                    borderRadius: "6px", padding: "2px 8px", fontSize: "0.7rem", color: "#FFFFFF", cursor: "pointer"
+                                                }}
+                                                title="Escuchar pronunciación"
+                                            >
+                                                🔊 Escuchar
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard?.writeText(translatorOutput);
+                                                    toast.success("📋 Traducción copiada");
+                                                }}
+                                                style={{
+                                                    background: "rgba(255, 255, 255, 0.1)", border: "1px solid rgba(255, 255, 255, 0.2)",
+                                                    borderRadius: "6px", padding: "2px 8px", fontSize: "0.7rem", color: "#FFFFFF", cursor: "pointer"
+                                                }}
+                                                title="Copiar texto"
+                                            >
+                                                📋 Copiar
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "#FFFFFF" }}>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "#FFFFFF", lineHeight: 1.45 }}>
                                         {translatorOutput}
                                     </div>
                                 </div>

@@ -48,6 +48,13 @@ export interface HealthDiagnosticResponse {
     status: string;
     recommendation: string;
     score: number;
+    batteryLevel: number;
+    isCharging: boolean;
+    peersCount: number;
+    activeSosCount: number;
+    totalChatMessages: number;
+    onnxStatus: string;
+    issues: string[];
     executionTimeMs: number;
 }
 
@@ -210,31 +217,114 @@ class LocalAIEngineClass {
     }
 
     /**
+     * Decodifica cualquier formato de audio (Base64 dataURL, Blob o ArrayBuffer)
+     * a un Float32Array mono a 16000 Hz, listo para inferencia Whisper WASM.
+     */
+    public async decodeAudioTo16kHzPcm(audioData: string | Blob | ArrayBuffer): Promise<Float32Array> {
+        if (typeof window === 'undefined') {
+            return new Float32Array(0);
+        }
+
+        let arrayBuffer: ArrayBuffer;
+        if (typeof audioData === 'string') {
+            if (audioData.startsWith('data:')) {
+                const base64 = audioData.split(',')[1] || '';
+                const binary = atob(base64);
+                const len = binary.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                arrayBuffer = bytes.buffer;
+            } else if (audioData.startsWith('http') || audioData.startsWith('blob:')) {
+                const resp = await fetch(audioData);
+                arrayBuffer = await resp.arrayBuffer();
+            } else {
+                // Asume raw base64 string
+                const binary = atob(audioData);
+                const len = binary.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                arrayBuffer = bytes.buffer;
+            }
+        } else if (audioData instanceof Blob) {
+            arrayBuffer = await audioData.arrayBuffer();
+        } else {
+            arrayBuffer = audioData;
+        }
+
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) {
+            throw new Error('Web Audio API no soportada en este entorno');
+        }
+
+        const audioCtx = new AudioCtx();
+        try {
+            const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+            const targetSampleRate = 16000;
+            const numChannels = 1;
+            const targetLength = Math.ceil(decodedBuffer.duration * targetSampleRate);
+
+            if (decodedBuffer.sampleRate === targetSampleRate && decodedBuffer.numberOfChannels === 1) {
+                return decodedBuffer.getChannelData(0);
+            }
+
+            const OfflineCtx = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext;
+            if (OfflineCtx && targetLength > 0) {
+                const offlineCtx = new OfflineCtx(numChannels, targetLength, targetSampleRate);
+                const source = offlineCtx.createBufferSource();
+                source.buffer = decodedBuffer;
+                source.connect(offlineCtx.destination);
+                source.start(0);
+                const rendered = await offlineCtx.startRendering();
+                return rendered.getChannelData(0);
+            }
+
+            // Fallback manual de remuestreo lineal
+            const originalData = decodedBuffer.getChannelData(0);
+            const ratio = decodedBuffer.sampleRate / targetSampleRate;
+            const result = new Float32Array(targetLength);
+            for (let i = 0; i < targetLength; i++) {
+                const originalIndex = Math.min(Math.floor(i * ratio), originalData.length - 1);
+                result[i] = originalData[originalIndex];
+            }
+            return result;
+        } finally {
+            if (audioCtx.state !== 'closed') {
+                audioCtx.close().catch(() => {});
+            }
+        }
+    }
+
+    /**
      * Transcribe audio (Blob, DataURL or ArrayBuffer) into text using local Whisper model.
      */
-    public async transcribeAudio(audioData: string | Blob): Promise<{ text: string; executionTimeMs: number }> {
+    public async transcribeAudio(audioData: string | Blob | ArrayBuffer): Promise<{ text: string; executionTimeMs: number }> {
         const start = performance.now();
         try {
+            const pcmData = await this.decodeAudioTo16kHzPcm(audioData);
+            if (!pcmData || pcmData.length === 0) {
+                return {
+                    text: '⚠️ No se pudo decodificar el buffer de audio.',
+                    executionTimeMs: Math.round(performance.now() - start)
+                };
+            }
+
             const asr = await this.getTranscriber();
-            let audioUrl: string;
-            if (typeof audioData === 'string') {
-                audioUrl = audioData;
-            } else {
-                audioUrl = URL.createObjectURL(audioData);
-            }
+            const out = await this.withTimeout(
+                asr(pcmData, {
+                    chunk_length_s: 30,
+                    stride_length_s: 5,
+                    language: 'spanish',
+                    task: 'transcribe'
+                }),
+                25000,
+                'Whisper ASR'
+            );
 
-            const out = await asr(audioUrl, {
-                chunk_length_s: 30,
-                stride_length_s: 5,
-                language: 'spanish',
-                task: 'transcribe'
-            });
-
-            if (typeof audioData !== 'string') {
-                URL.revokeObjectURL(audioUrl);
-            }
-
-            const text = typeof out === 'object' && out.text ? out.text.trim() : (Array.isArray(out) ? out[0]?.text : '');
+            const text = out && typeof out === 'object' && (out as any).text ? (out as any).text.trim() : (Array.isArray(out) ? (out as any)[0]?.text : '');
             return {
                 text: text || 'Transcripción completada sin texto audible.',
                 executionTimeMs: Math.round(performance.now() - start)
@@ -242,7 +332,7 @@ class LocalAIEngineClass {
         } catch (err: any) {
             console.warn('[LocalAIEngine] Whisper transcription note:', err);
             return {
-                text: 'Audio de voz recibido.',
+                text: `⚠️ Fallo en motor Whisper: ${err?.message || 'Error de procesamiento de voz'}`,
                 executionTimeMs: Math.round(performance.now() - start)
             };
         }
@@ -609,7 +699,7 @@ class LocalAIEngineClass {
                     finalAnswer = `🛡️ **${matchedFrag.title}**\n\n${matchedFrag.summary}\n\n📖 **Procedimiento:**\n${matchedFrag.content}`;
                     topicCategory = `Táctico: ${matchedFrag.title}`;
                 } else {
-                    finalAnswer = this.synthesizeConversationalAnswer(cleanQuery, lowerQ, tokens);
+                    finalAnswer = await this.synthesizeConversationalAnswer(cleanQuery, lowerQ, tokens);
                     topicCategory = 'Copiloto Conversacional';
                 }
             }
@@ -675,10 +765,51 @@ class LocalAIEngineClass {
     }
 
     /**
-     * Motor de Síntesis Conversacional Fluida en Español (Zero-Cloud NLG)
-     * Responde de forma directa, educada, precisa y técnica sin menús ni cadenas estáticas.
+     * Motor de Síntesis Conversacional Fluida en Español con Telemetría en Vivo (Zero-Cloud NLG)
+     * Responde de forma directa, educada, precisa y técnica sin cadenas estáticas.
      */
-    private synthesizeConversationalAnswer(query: string, lowerQ: string, tokens: string[]): string {
+    private async synthesizeConversationalAnswer(query: string, lowerQ: string, tokens: string[]): Promise<string> {
+        // Consultas de Diagnóstico en Vivo, Salud y Estado del Nodo
+        if (/salud|diagnost|bater|batería|estado del nodo|rendimiento|telemetr/i.test(lowerQ)) {
+            try {
+                const diag = await this.diagnoseHealth();
+                const issuesText = diag.issues.length > 0
+                    ? diag.issues.map(i => `• ${i}`).join('\n')
+                    : '• Todos los subsistemas operan dentro de los parámetros nominales.';
+
+                return `📊 **Diagnóstico de Salud y Telemetría en Vivo del Nodo**\n\n` +
+                       `• **Índice de Resiliencia:** ${diag.score}/100\n` +
+                       `• **Batería:** ${diag.batteryLevel >= 0 ? `${diag.batteryLevel}%` : 'Sensor no reportado'} ${diag.isCharging ? '🔌 (Cargando)' : ''}\n` +
+                       `• **Pares Conectados:** ${diag.peersCount} nodos en radio\n` +
+                       `• **Balizas SOS Activas:** ${diag.activeSosCount}\n` +
+                       `• **Mensajes en Bóveda Sled:** ${diag.totalChatMessages}\n` +
+                       `• **Inferencia Local:** ${diag.onnxStatus}\n\n` +
+                       `**Telemetría de Subsistemas:**\n${issuesText}`;
+            } catch {}
+        }
+
+        // Consultas sobre Nodos y Topología Mesh
+        if (/cuantos nodos|cuántos nodos|pares|contactos|malla|mesh|dispositivos cerca/i.test(lowerQ)) {
+            let peerCount = 0;
+            let contactsCount = 0;
+            let myAlias = 'Operador';
+            if (typeof window !== 'undefined') {
+                try {
+                    const { useRedStore } = await import('../../store/useRedStore');
+                    const st = useRedStore.getState() as any;
+                    peerCount = st.status?.peer_count ?? (st.conversations?.length || 0);
+                    contactsCount = st.contacts?.length || 0;
+                    myAlias = st.identity?.alias || st.identity?.name || 'Operador';
+                } catch {}
+            }
+            return `📡 **Estado de la Malla Táctica RED**\n\n` +
+                   `• **Operador Local:** ${myAlias}\n` +
+                   `• **Nodos en Rango de Enlace:** ${peerCount} nodo(s) activo(s)\n` +
+                   `• **Contactos en Libreta Criptográfica:** ${contactsCount} par(es)\n` +
+                   `• **Canales Mesh Sintonizados:** Canal Público 915 MHz / BLE Broadcast activo\n\n` +
+                   `Puedes abrir el **Radar de Proximidad** o el **Mapa de Nodos** para visualizar la topología geoespacial y vector de señal RSSI de cada par.`;
+        }
+
         // Saludos y cortesía
         if (/^(hola|buenos|buenas|saludos|hey|hi|hello|que tal|qué tal)/i.test(lowerQ)) {
             return `¡Saludos, Operador! Soy el Copiloto IA de RED. Estoy completamente operativo en tu dispositivo, funcionando 100% desconectado de Internet.\n\n` +
@@ -871,16 +1002,179 @@ class LocalAIEngineClass {
         };
     }
 
-    /** 4. Traductor Táctico Off-Grid 100% Offline (Glosario Táctico Estructurado) */
+    /** 4. Traductor Táctico Neuronal Off-Grid (Modelo Activo + Fallback Glosario) */
     public async translateText(text: string, targetLang: string = 'es'): Promise<TranslationResponse> {
         const start = performance.now();
-        const res = EmergencyGlossaryEngine.translate(text, (targetLang || 'es') as GlossaryLanguage);
+        const trimmed = text.trim();
+        if (!trimmed) {
+            return { originalText: '', translatedText: '', targetLang, executionTimeMs: 0 };
+        }
 
+        const langNames: Record<string, string> = {
+            'es': 'español',
+            'en': 'inglés',
+            'fr': 'francés',
+            'pt': 'portugués',
+            'de': 'alemán',
+            'ru': 'ruso',
+            'uk': 'ucraniano',
+            'zh': 'chino mandarín',
+            'qu': 'quechua',
+            'it': 'italiano',
+            'ja': 'japonés',
+            'ar': 'árabe',
+            'ko': 'coreano'
+        };
+        const targetName = langNames[targetLang.toLowerCase()] || targetLang;
+
+        // 1. Inferencia neuronal mediante el modelo activo
+        try {
+            const prompt = `<|im_start|>system\nEres un traductor táctico militar y de emergencias de alta fidelidad. Traduce el siguiente texto al ${targetName}. Devuelve EXCLUSIVAMENTE la traducción exacta del mensaje, sin preámbulos, sin comillas, sin explicaciones ni texto adicional.\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
+
+            const generator = await this.getGenerator();
+            if (generator) {
+                const output = await this.withTimeout(
+                    generator(prompt, {
+                        max_new_tokens: Math.max(60, Math.min(256, Math.round(trimmed.length * 2))),
+                        temperature: 0.2,
+                        top_p: 0.9,
+                        do_sample: false
+                    }),
+                    15000,
+                    'Neural Translation'
+                );
+
+                let raw = '';
+                if (Array.isArray(output) && output[0]?.generated_text) {
+                    raw = output[0].generated_text;
+                } else if (output && typeof output === 'object' && (output as any).generated_text) {
+                    raw = (output as any).generated_text;
+                }
+
+                if (raw) {
+                    if (raw.startsWith(prompt)) {
+                        raw = raw.slice(prompt.length);
+                    } else if (raw.includes('<|im_start|>assistant\n')) {
+                        raw = raw.split('<|im_start|>assistant\n').pop() || '';
+                    }
+                    const cleaned = raw
+                        .replace(/<\|im_end\|>/g, '')
+                        .replace(/<\|eot_id\|>/g, '')
+                        .replace(/<\|end\|>/g, '')
+                        .replace(/<\|endoftext\|>/g, '')
+                        .replace(/^["']|["']$/g, '')
+                        .trim();
+
+                    if (cleaned && cleaned.length > 0) {
+                        return {
+                            originalText: text,
+                            translatedText: cleaned,
+                            targetLang,
+                            executionTimeMs: Math.round(performance.now() - start),
+                        };
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[LocalAIEngine] Inferencia neuronal de traducción fallback a glosario:', e);
+        }
+
+        // 2. Fallback al glosario estructurado de emergencia
+        const res = EmergencyGlossaryEngine.translate(text, (targetLang || 'es') as GlossaryLanguage);
         return {
             originalText: text,
             translatedText: res.translatedText,
             targetLang,
             executionTimeMs: Math.round(performance.now() - start),
+        };
+    }
+
+    /** 5. Asistente Neuronal de Redacción Táctica & SITREP */
+    public async rephraseText(text: string, mode: 'sitrep' | 'urgent' | 'camouflage' | 'grammar' = 'sitrep'): Promise<{ originalText: string; rephrasedText: string; mode: string; executionTimeMs: number }> {
+        const start = performance.now();
+        const trimmed = text.trim();
+        if (!trimmed) {
+            return { originalText: '', rephrasedText: '', mode, executionTimeMs: 0 };
+        }
+
+        if (mode === 'camouflage') {
+            const camouflaged = trimmed
+                .replace(/a/gi, '4')
+                .replace(/e/gi, '3')
+                .replace(/i/gi, '1')
+                .replace(/o/gi, '0')
+                .replace(/s/gi, '5');
+            return {
+                originalText: text,
+                rephrasedText: `[OBSC-RED] ${camouflaged}`,
+                mode,
+                executionTimeMs: Math.round(performance.now() - start)
+            };
+        }
+
+        let systemInstruction = 'Transforma el siguiente mensaje en un reporte táctico militar conciso y profesional en formato SITREP (Situación, Ubicación, Estado). Devuelve únicamente el texto transformado sin comentarios adicionales.';
+        if (mode === 'urgent') {
+            systemInstruction = 'Transforma el mensaje en una directiva de emergencia de máxima urgencia, clara, directa y concisa.';
+        } else if (mode === 'grammar') {
+            systemInstruction = 'Corrige la ortografía y redacción del siguiente texto militar manteniendo su sentido original con máxima claridad.';
+        }
+
+        try {
+            const prompt = `<|im_start|>system\n${systemInstruction}\n<|im_end|>\n<|im_start|>user\n${trimmed}\n<|im_end|>\n<|im_start|>assistant\n`;
+            const generator = await this.getGenerator();
+            if (generator) {
+                const output = await this.withTimeout(
+                    generator(prompt, {
+                        max_new_tokens: 150,
+                        temperature: 0.3,
+                        do_sample: false
+                    }),
+                    12000,
+                    'Neural Rephrase'
+                );
+
+                let raw = '';
+                if (Array.isArray(output) && output[0]?.generated_text) {
+                    raw = output[0].generated_text;
+                } else if (output && typeof output === 'object' && (output as any).generated_text) {
+                    raw = (output as any).generated_text;
+                }
+
+                if (raw) {
+                    if (raw.startsWith(prompt)) {
+                        raw = raw.slice(prompt.length);
+                    } else if (raw.includes('<|im_start|>assistant\n')) {
+                        raw = raw.split('<|im_start|>assistant\n').pop() || '';
+                    }
+                    const cleaned = raw
+                        .replace(/<\|im_end\|>/g, '')
+                        .replace(/<\|eot_id\|>/g, '')
+                        .replace(/<\|end\|>/g, '')
+                        .replace(/<\|endoftext\|>/g, '')
+                        .trim();
+
+                    if (cleaned) {
+                        return {
+                            originalText: text,
+                            rephrasedText: cleaned,
+                            mode,
+                            executionTimeMs: Math.round(performance.now() - start)
+                        };
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[LocalAIEngine] Rephrase neuronal fallback:', e);
+        }
+
+        // Fallback determinista
+        let fallback = `[SITREP TÁCTICO] ${trimmed} // FIN DE TRANSMISIÓN`;
+        if (mode === 'urgent') fallback = `🚨 [URGENTE / ALERTA MESH] ${trimmed}`;
+        return {
+            originalText: text,
+            rephrasedText: fallback,
+            mode,
+            executionTimeMs: Math.round(performance.now() - start)
         };
     }
 
@@ -971,6 +1265,13 @@ class LocalAIEngineClass {
             status: score > 75 ? '🟢 Óptimo' : score > 45 ? '🟡 Moderado' : '🔴 Crítico',
             score: Math.max(0, score),
             recommendation: issues.join('\n• '),
+            batteryLevel,
+            isCharging,
+            peersCount,
+            activeSosCount,
+            totalChatMessages,
+            onnxStatus,
+            issues,
             executionTimeMs: Math.round(performance.now() - start),
         };
     }

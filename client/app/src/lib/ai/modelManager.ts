@@ -773,6 +773,63 @@ class ModelManagerClass {
         }
         return total;
     }
+
+    /** Obtiene la configuración del endpoint soberano (Ollama / Local API) si está habilitado */
+    public getSovereignEndpoint(): { url: string; modelName: string; apiKey?: string } | null {
+        if (typeof window === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem('red_sovereign_ai_endpoint');
+            if (raw) {
+                return JSON.parse(raw);
+            }
+        } catch {}
+        return null;
+    }
+
+    /** Guarda o elimina la configuración del endpoint soberano */
+    public setSovereignEndpoint(config: { url: string; modelName: string; apiKey?: string } | null): void {
+        if (typeof window === 'undefined') return;
+        if (config) {
+            localStorage.setItem('red_sovereign_ai_endpoint', JSON.stringify(config));
+        } else {
+            localStorage.removeItem('red_sovereign_ai_endpoint');
+        }
+        this.notify();
+    }
+
+    /** Valida la conectividad contra un endpoint soberano */
+    public async testSovereignEndpoint(url: string, modelName: string, apiKey?: string): Promise<{ ok: boolean; message: string; latencyMs: number }> {
+        const start = performance.now();
+        try {
+            const cleanUrl = url.replace(/\/+$/, '');
+            const targetUrl = cleanUrl.includes('/v1') ? `${cleanUrl}/chat/completions` : `${cleanUrl}/api/generate`;
+            
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (apiKey) {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+
+            const body = cleanUrl.includes('/v1')
+                ? { model: modelName || 'llama3', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }
+                : { model: modelName || 'llama3', prompt: 'ping', stream: false };
+
+            const resp = await fetch(targetUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(5000)
+            });
+
+            const latencyMs = Math.round(performance.now() - start);
+            if (resp.ok) {
+                return { ok: true, message: `Conexión exitosa (${latencyMs}ms)`, latencyMs };
+            } else {
+                return { ok: false, message: `Error HTTP ${resp.status}: ${resp.statusText}`, latencyMs };
+            }
+        } catch (e: any) {
+            return { ok: false, message: e.message || 'Error de conexión con el host', latencyMs: Math.round(performance.now() - start) };
+        }
+    }
 }
 
 export const ModelManager = new ModelManagerClass();

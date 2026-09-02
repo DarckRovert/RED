@@ -77,22 +77,76 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
     const text = inputText !== undefined ? inputText : localText;
     const setText = setInputText || setLocalText;
+    const textRef = useRef(text);
+    textRef.current = text;
+
     const isAttachOpen = attachOpen !== undefined ? attachOpen : localAttachOpen;
     const setIsAttachOpen = setAttachOpen || setLocalAttachOpen;
 
     const [aiMenuOpen, setAiMenuOpen] = useState(false);
+    const [isAiProcessing, setIsAiProcessing] = useState(false);
+    const [isDictating, setIsDictating] = useState(false);
 
-    const handleAiRephraseTactical = () => {
+    const toggleDictation = async () => {
+        const { TacticalSpeechEngine } = await import("../../lib/ai");
+        if (!TacticalSpeechEngine.isSttSupported()) {
+            toast.warning("Dictado por voz no disponible en este dispositivo");
+            return;
+        }
+
+        if (isDictating) {
+            TacticalSpeechEngine.stopListening();
+            setIsDictating(false);
+            toast.info("Dictado finalizado");
+        } else {
+            const ok = TacticalSpeechEngine.startListening({
+                lang: "es-ES",
+                onStart: () => {
+                    setIsDictating(true);
+                    toast.info("🎙️ Escuchando dictado en vivo...");
+                },
+                onResult: (transcript, isFinal) => {
+                    if (transcript) {
+                        const base = (textRef.current || "").trim();
+                        const updated = base ? `${base} ${transcript}` : transcript;
+                        setText(updated);
+                    }
+                    if (isFinal) {
+                        setIsDictating(false);
+                    }
+                },
+                onError: (err: any) => {
+                    setIsDictating(false);
+                    console.warn("[ChatInput] Dictation error:", err);
+                },
+                onEnd: () => {
+                    setIsDictating(false);
+                }
+            });
+            if (!ok) {
+                setIsDictating(false);
+            }
+        }
+    };
+
+    const handleAiRephraseTactical = async () => {
         if (!text.trim()) return;
-        const raw = text.trim();
-        const tactical = `[SITREP TÁCTICO] ${raw} // FIN DE TRANSMISIÓN`;
-        setText(tactical);
-        setAiMenuOpen(false);
-        toast.success("✨ Mensaje transformado a formato táctico");
+        setIsAiProcessing(true);
+        try {
+            const res = await LocalAIEngine.rephraseText(text.trim(), 'sitrep');
+            setText(res.rephrasedText);
+            setAiMenuOpen(false);
+            toast.success("✨ Mensaje transformado a formato táctico");
+        } catch {
+            toast.error("Error al transformar formato");
+        } finally {
+            setIsAiProcessing(false);
+        }
     };
 
     const handleAiTranslateEn = async () => {
         if (!text.trim()) return;
+        setIsAiProcessing(true);
         try {
             const res = await LocalAIEngine.translateText(text.trim(), 'en');
             setText(res.translatedText);
@@ -100,6 +154,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             toast.success("🌐 Mensaje traducido al inglés con IA Local");
         } catch {
             toast.error("Error al traducir mensaje");
+        } finally {
+            setIsAiProcessing(false);
         }
     };
 
@@ -575,7 +631,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                                 ✨ ASISTENTE IA DE REDACCIÓN
                                             </div>
                                             <button
+                                                onClick={toggleDictation}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: isDictating ? "rgba(0,229,255,0.2)" : "transparent",
+                                                    border: "none", color: "var(--accent-cyan)", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = isDictating ? "rgba(0,229,255,0.2)" : "transparent")}
+                                            >
+                                                <span>🎙️</span>
+                                                <span>{isDictating ? "Detener Dictado" : "Dictado por Voz"}</span>
+                                            </button>
+                                            <button
                                                 onClick={handleAiRephraseTactical}
+                                                disabled={isAiProcessing}
                                                 style={{
                                                     display: "flex", alignItems: "center", gap: "8px",
                                                     padding: "8px 10px", borderRadius: "8px", background: "transparent",
@@ -586,10 +657,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                                 onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
                                             >
                                                 <span>🎯</span>
-                                                <span>Formato Táctico Militar</span>
+                                                <span>{isAiProcessing ? "Procesando..." : "Formato Táctico Militar"}</span>
                                             </button>
                                             <button
                                                 onClick={handleAiTranslateEn}
+                                                disabled={isAiProcessing}
                                                 style={{
                                                     display: "flex", alignItems: "center", gap: "8px",
                                                     padding: "8px 10px", borderRadius: "8px", background: "transparent",
@@ -600,7 +672,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                                 onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
                                             >
                                                 <span>🌐</span>
-                                                <span>Traducir a Inglés</span>
+                                                <span>{isAiProcessing ? "Traduciendo..." : "Traducir a Inglés"}</span>
                                             </button>
                                             <button
                                                 onClick={handleAiCamouflage}
@@ -642,21 +714,41 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                 ➔
                             </button>
                         ) : (
-                            <button
-                                onClick={startRecording}
-                                className="btn-icon"
-                                style={{
-                                    width: 42,
-                                    height: 42,
-                                    borderRadius: "50%",
-                                    fontSize: "1.2rem",
-                                    background: "rgba(255,255,255,0.08)",
-                                    flexShrink: 0,
-                                }}
-                                title="Grabar nota de voz"
-                            >
-                                🎙️
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <button
+                                    onClick={toggleDictation}
+                                    className="btn-icon"
+                                    style={{
+                                        width: 38,
+                                        height: 38,
+                                        borderRadius: "50%",
+                                        fontSize: "1.1rem",
+                                        background: isDictating ? "rgba(0, 229, 255, 0.25)" : "rgba(255,255,255,0.06)",
+                                        border: isDictating ? "1px solid var(--accent-cyan)" : "1px solid rgba(255,255,255,0.1)",
+                                        color: isDictating ? "var(--accent-cyan)" : "#FFFFFF",
+                                        flexShrink: 0,
+                                        animation: isDictating ? "pulse 1s infinite alternate" : "none"
+                                    }}
+                                    title="Dictar mensaje por voz"
+                                >
+                                    🗣️
+                                </button>
+                                <button
+                                    onClick={startRecording}
+                                    className="btn-icon"
+                                    style={{
+                                        width: 42,
+                                        height: 42,
+                                        borderRadius: "50%",
+                                        fontSize: "1.2rem",
+                                        background: "rgba(255,255,255,0.08)",
+                                        flexShrink: 0,
+                                    }}
+                                    title="Grabar nota de voz"
+                                >
+                                    🎙️
+                                </button>
+                            </div>
                         )}
                     </>
                 )}

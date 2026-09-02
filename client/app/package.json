@@ -1,6 +1,6 @@
 {
   "name": "red-app",
-  "version": "82.0.0",
+  "version": "83.0.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "scripts": {
@@ -24,7 +24,8 @@
     "test:phase8": "node scripts/test-phase8-cot-meshtastic.js",
     "test:vision": "node scripts/test-phase9-vision-engine.js",
     "test:cellular": "node scripts/test-cellular-dtn-failover.js",
-    "test:all": "node scripts/test-crypto-core.js && node scripts/test-phase1-sensors.js && node scripts/test-phase2-audio-comms.js && node scripts/test-phase3-vault-crypto.js && node scripts/test-phase4-depin-mesh.js && node scripts/test-phase5-evolutionary-hardening.js && node scripts/test-phase6-chaos-mesh-stress.js && node scripts/test-phase7-miniapps-payments.js && node scripts/test-phase8-cot-meshtastic.js && node scripts/test-phase9-vision-engine.js && node scripts/test-cellular-dtn-failover.js",
+    "test:ai": "node scripts/test-ai-orchestrator.js",
+    "test:all": "node scripts/test-crypto-core.js && node scripts/test-phase1-sensors.js && node scripts/test-phase2-audio-comms.js && node scripts/test-phase3-vault-crypto.js && node scripts/test-phase4-depin-mesh.js && node scripts/test-phase5-evolutionary-hardening.js && node scripts/test-phase6-chaos-mesh-stress.js && node scripts/test-phase7-miniapps-payments.js && node scripts/test-phase8-cot-meshtastic.js && node scripts/test-phase9-vision-engine.js && node scripts/test-cellular-dtn-failover.js && node scripts/test-ai-orchestrator.js",
     "postinstall": "node scripts/copy-wasm.js",
     "copy-wasm": "node scripts/copy-wasm.js"
   },
