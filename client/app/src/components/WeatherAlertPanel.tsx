@@ -204,21 +204,13 @@ export const WeatherAlertPanel: React.FC = () => {
             let lon: number | null = null;
 
             try {
-                const { Geolocation } = await import("@capacitor/geolocation");
-                const pos = await Geolocation.getCurrentPosition({ timeout: 6000, enableHighAccuracy: true });
-                lat = pos.coords.latitude;
-                lon = pos.coords.longitude;
-            } catch {
-                if (typeof navigator !== "undefined" && "geolocation" in navigator) {
-                    await new Promise<void>((resolve) => {
-                        navigator.geolocation.getCurrentPosition(
-                            (p) => { lat = p.coords.latitude; lon = p.coords.longitude; resolve(); },
-                            () => resolve(),
-                            { timeout: 5000 }
-                        );
-                    });
+                const { TacticalLocationEngine } = await import("../lib/sensors/TacticalLocationEngine");
+                const loc = await TacticalLocationEngine.getEmergencyLocation(6000);
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    lat = loc.lat!;
+                    lon = loc.lon!;
                 }
-            }
+            } catch {}
 
             if (lat !== null && lon !== null) {
                 setLatitude(lat);

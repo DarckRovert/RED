@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { localTransport } from "../lib/mesh/localTransport";
@@ -27,6 +27,7 @@ export default function RadarWindow() {
 
     // QR Code State
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
+    const shouldScanRef = useRef(false);
 
     // QR Generation Hook
     useEffect(() => {
@@ -34,17 +35,18 @@ export default function RadarWindow() {
             const pk = identity.public_key || identity.identity_hash;
             const nameParam = encodeURIComponent(identity.nickname || "Operador RED");
             const qrText = `did:red:${identity.identity_hash}:${pk}:${nameParam}`;
-            import("qrcode").then(QRCode => {
-                QRCode.toDataURL(qrText, {
+            import('../lib/qr/OfflineQrEngine').then(({ OfflineQrEngine }) => {
+                OfflineQrEngine.generateDataUrl(qrText, {
                     width: 320,
                     margin: 1,
-                    color: { dark: "#00E676", light: "#04060A" }
+                    darkColor: "#00E676",
+                    lightColor: "#04060A"
                 }).then(setQrDataUrl);
             });
         }
     }, [identity]);
 
-    // BLE Peers Discovery Poll
+    // BLE Peers Discovery Poll & Scanner Cleanup
     useEffect(() => {
         const updatePeers = () => {
             const peers = localTransport.discoveredBluetoothPeers || [];
@@ -52,7 +54,10 @@ export default function RadarWindow() {
         };
         updatePeers();
         const interval = setInterval(updatePeers, 2500);
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            stopScan();
+        };
     }, []);
 
     const handleRefreshNearby = () => {
@@ -78,6 +83,7 @@ export default function RadarWindow() {
     };
 
     const startScan = async () => {
+        shouldScanRef.current = true;
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (!Capacitor.isNativePlatform()) {
@@ -88,6 +94,10 @@ export default function RadarWindow() {
             const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
             
             const status = await BarcodeScanner.checkPermission({ force: true });
+            if (!shouldScanRef.current) {
+                await stopScan();
+                return;
+            }
             if (status.denied) {
                 toast.error("Permiso de cámara denegado. Actívalo en la configuración.");
                 return;
@@ -98,10 +108,18 @@ export default function RadarWindow() {
             }
 
             await BarcodeScanner.hideBackground();
+            if (!shouldScanRef.current) {
+                await stopScan();
+                return;
+            }
             document.body.classList.add("scanner-active");
             setScanning(true);
 
             const result = await BarcodeScanner.startScan();
+            if (!shouldScanRef.current) {
+                await stopScan();
+                return;
+            }
 
             if (result.hasContent) {
                 const raw = result.content.trim();
@@ -171,14 +189,15 @@ export default function RadarWindow() {
     };
 
     const stopScan = async () => {
+        shouldScanRef.current = false;
         setScanning(false);
         document.body.classList.remove("scanner-active");
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
-                await BarcodeScanner.showBackground();
-                await BarcodeScanner.stopScan();
+                await BarcodeScanner.showBackground().catch(() => {});
+                await BarcodeScanner.stopScan().catch(() => {});
             }
         } catch {}
     };

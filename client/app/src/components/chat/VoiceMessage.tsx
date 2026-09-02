@@ -62,7 +62,17 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     
     const [isDragging, setIsDragging] = useState(false);
     const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string>("");
-    const [transcription, setTranscription] = useState<string | null>(msg.transcription || null);
+    const [transcription, setTranscription] = useState<string | null>(() => {
+        if (msg.transcription) return msg.transcription;
+        if (typeof window !== "undefined" && msg.id) {
+            try {
+                return localStorage.getItem(`red_voice_tx_${msg.id}`) || null;
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    });
     const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
     // Register with global coordinator to prevent overlapping playback
@@ -75,6 +85,11 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         });
         return () => {
             globalVoiceCoordinator.unregister(msg.id);
+            if (audioRef.current) {
+                try {
+                    audioRef.current.pause();
+                } catch {}
+            }
         };
     }, [msg.id]);
 
@@ -220,9 +235,14 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         try {
             const res = await LocalAIEngine.transcribeAudio(audioSrc);
             setTranscription(res.text);
-            toast.success("📝 Audio transcrito localmente");
+            if (typeof window !== "undefined" && msg.id && res.text) {
+                try {
+                    localStorage.setItem(`red_voice_tx_${msg.id}`, res.text);
+                } catch {}
+            }
+            toast.success("📝 Transcripción completada");
         } catch (err: any) {
-            toast.error("Error en transcripción local");
+            toast.error("Error en transcripción");
         } finally {
             setIsTranscribing(false);
         }
@@ -353,6 +373,25 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                     />
                 )}
             </div>
+
+            {/* Indicador de Transcripción en Progreso */}
+            {isTranscribing && (
+                <div style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    padding: "6px 10px",
+                    borderRadius: "8px",
+                    background: "rgba(0, 229, 255, 0.08)",
+                    border: "1px dashed rgba(0, 229, 255, 0.35)",
+                    fontSize: "0.72rem",
+                    color: "var(--accent-cyan, #00E5FF)",
+                    fontFamily: "monospace"
+                }}>
+                    <span style={{ fontSize: "0.85rem" }}>⚡</span>
+                    <span>Transcribiendo audio con IA...</span>
+                </div>
+            )}
 
             {/* Local Whisper Transcription View */}
             {transcription && (

@@ -45,13 +45,14 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
 
     // Monitoreo GPS y Brújula
     useEffect(() => {
-        if (typeof window !== "undefined" && "geolocation" in navigator) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => setGpsCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                () => {},
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        }
+        let unsubGps: (() => void) | null = null;
+        import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
+            unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    setGpsCoords({ lat: loc.lat!, lng: loc.lon! });
+                }
+            });
+        });
 
         const handleOrientation = (e: DeviceOrientationEvent) => {
             if (e.alpha !== null) {
@@ -64,6 +65,8 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             window.addEventListener("deviceorientation", handleOrientation, true);
         }
         return () => {
+            stopAcousticBeacon();
+            if (unsubGps) (unsubGps as any)();
             if (typeof window !== "undefined") {
                 window.removeEventListener("deviceorientation", handleOrientation, true);
             }
@@ -106,6 +109,7 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
     // Generador de tono acústico de emergencia
     const startAcousticBeacon = () => {
         try {
+            stopAcousticBeacon();
             const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
             if (!AudioCtx) return;
             const ctx = new AudioCtx();
@@ -124,6 +128,12 @@ export const ExtremeSurvivalHudModal: React.FC = () => {
             osc.start();
             osc.stop(ctx.currentTime + 0.45);
             setAudioContextRef(ctx);
+
+            setTimeout(() => {
+                try {
+                    if (ctx.state !== "closed") ctx.close();
+                } catch {}
+            }, 500);
         } catch {}
     };
 

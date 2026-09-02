@@ -159,6 +159,51 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }
     };
 
+    const handleAiTranslateEs = async () => {
+        if (!text.trim()) return;
+        setIsAiProcessing(true);
+        try {
+            const res = await LocalAIEngine.translateText(text.trim(), 'es');
+            setText(res.translatedText);
+            setAiMenuOpen(false);
+            toast.success("🌐 Mensaje traducido al español con IA");
+        } catch {
+            toast.error("Error al traducir mensaje");
+        } finally {
+            setIsAiProcessing(false);
+        }
+    };
+
+    const handleAiUrgent = async () => {
+        if (!text.trim()) return;
+        setIsAiProcessing(true);
+        try {
+            const res = await LocalAIEngine.rephraseText(text.trim(), 'urgent');
+            setText(res.rephrasedText);
+            setAiMenuOpen(false);
+            toast.success("🚨 Mensaje transformado a alerta urgente");
+        } catch {
+            toast.error("Error al transformar a urgente");
+        } finally {
+            setIsAiProcessing(false);
+        }
+    };
+
+    const handleAiGrammar = async () => {
+        if (!text.trim()) return;
+        setIsAiProcessing(true);
+        try {
+            const res = await LocalAIEngine.rephraseText(text.trim(), 'grammar');
+            setText(res.rephrasedText);
+            setAiMenuOpen(false);
+            toast.success("✏️ Corrección gramatical aplicada");
+        } catch {
+            toast.error("Error al corregir texto");
+        } finally {
+            setIsAiProcessing(false);
+        }
+    };
+
     const handleAiCamouflage = () => {
         if (!text.trim()) return;
         const camouflaged = text
@@ -671,8 +716,53 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                                 onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
                                                 onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
                                             >
-                                                <span>🌐</span>
+                                                <span>🇬🇧</span>
                                                 <span>{isAiProcessing ? "Traduciendo..." : "Traducir a Inglés"}</span>
+                                            </button>
+                                            <button
+                                                onClick={handleAiTranslateEs}
+                                                disabled={isAiProcessing}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                            >
+                                                <span>🇪🇸</span>
+                                                <span>{isAiProcessing ? "Traduciendo..." : "Traducir a Español"}</span>
+                                            </button>
+                                            <button
+                                                onClick={handleAiUrgent}
+                                                disabled={isAiProcessing}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,51,85,0.12)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                            >
+                                                <span>🚨</span>
+                                                <span>Alerta de Máxima Urgencia</span>
+                                            </button>
+                                            <button
+                                                onClick={handleAiGrammar}
+                                                disabled={isAiProcessing}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "8px",
+                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
+                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
+                                                    cursor: "pointer", textAlign: "left"
+                                                }}
+                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
+                                            >
+                                                <span>✏️</span>
+                                                <span>Corrección Gramatical</span>
                                             </button>
                                             <button
                                                 onClick={handleAiCamouflage}

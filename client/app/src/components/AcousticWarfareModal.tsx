@@ -21,6 +21,8 @@ export function AcousticWarfareModal() {
         return () => {
             unsubScrambler();
             unsubBinaural();
+            acousticScrambler.stopScrambler();
+            tacticalBinaural.stopPreset();
         };
     }, []);
 

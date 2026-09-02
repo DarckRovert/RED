@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { queryAICopilot, CopilotResponse, summarizeChannelAI } from "../lib/api";
 import { LocalAIEngine } from "../lib/localAiEngine";
-import { ModelManager, LocalModelMetaData, DeviceMemoryBudget } from "../lib/modelManager";
+import { ModelManager, LocalModelMetaData, DeviceMemoryBudget, SovereignEndpointConfig, SOVEREIGN_PRESETS } from "../lib/modelManager";
 import { GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
@@ -123,6 +123,14 @@ export const AICopilotModal: React.FC = () => {
         sentiment?: string;
     } | null>(null);
 
+    // Sovereign Endpoint State
+    const [sovereignConfig, setSovereignConfig] = useState<SovereignEndpointConfig | null>(() => ModelManager.getSovereignEndpoint());
+    const [sovereignUrlInput, setSovereignUrlInput] = useState<string>(() => ModelManager.getSovereignEndpoint()?.url || "http://127.0.0.1:11434");
+    const [sovereignModelInput, setSovereignModelInput] = useState<string>(() => ModelManager.getSovereignEndpoint()?.modelName || "qwen2.5:0.5b");
+    const [sovereignApiKeyInput, setSovereignApiKeyInput] = useState<string>(() => ModelManager.getSovereignEndpoint()?.apiKey || "");
+    const [sovereignTesting, setSovereignTesting] = useState<boolean>(false);
+    const [sovereignTestStatus, setSovereignTestStatus] = useState<{ ok: boolean; message: string; latencyMs: number } | null>(null);
+
     const chatContainerRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = useCallback(() => {
@@ -148,6 +156,7 @@ export const AICopilotModal: React.FC = () => {
         setAvailableModels(models);
         setActiveModel(ModelManager.getActiveModel());
         setMemoryBudget(ModelManager.getDeviceMemoryBudget());
+        setSovereignConfig(ModelManager.getSovereignEndpoint());
     }, []);
 
     useEffect(() => {
@@ -155,6 +164,64 @@ export const AICopilotModal: React.FC = () => {
         const interval = setInterval(refreshModels, 3000);
         return () => clearInterval(interval);
     }, [refreshModels]);
+
+    const handleTestSovereign = async () => {
+        if (!sovereignUrlInput.trim()) return;
+        setSovereignTesting(true);
+        setSovereignTestStatus(null);
+        try {
+            const res = await ModelManager.testSovereignEndpoint(
+                sovereignUrlInput.trim(),
+                sovereignModelInput.trim() || 'default',
+                sovereignApiKeyInput.trim() || undefined
+            );
+            setSovereignTestStatus(res);
+            if (res.ok) {
+                toast.success(`⚡ Conexión exitosa (${res.latencyMs}ms)`);
+            } else {
+                toast.error(`Fallo: ${res.message}`);
+            }
+        } catch (e: any) {
+            setSovereignTestStatus({ ok: false, message: e.message || 'Error de conexión', latencyMs: 0 });
+            toast.error("Error al conectar con endpoint");
+        } finally {
+            setSovereignTesting(false);
+        }
+    };
+
+    const handleSaveSovereign = () => {
+        if (!sovereignUrlInput.trim()) {
+            toast.error("Ingresa la URL del host");
+            return;
+        }
+        let clean = sovereignUrlInput.trim().replace(/\/+$/, '');
+        if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+            clean = `http://${clean}`;
+        }
+        const cfg: SovereignEndpointConfig = {
+            url: clean,
+            modelName: sovereignModelInput.trim() || 'default',
+            apiKey: sovereignApiKeyInput.trim() || undefined
+        };
+        ModelManager.setSovereignEndpoint(cfg);
+        setSovereignUrlInput(clean);
+        setSovereignConfig(cfg);
+        toast.success(`🛰️ Endpoint Soberano activado (${cfg.modelName})`);
+    };
+
+    const handleClearSovereign = () => {
+        ModelManager.setSovereignEndpoint(null);
+        setSovereignConfig(null);
+        setSovereignTestStatus(null);
+        toast.info("⚪ Retornando a Inferencia Local WASM");
+    };
+
+    const handleApplyPreset = (preset: SovereignEndpointConfig) => {
+        setSovereignUrlInput(preset.url);
+        setSovereignModelInput(preset.modelName);
+        if (preset.apiKey) setSovereignApiKeyInput(preset.apiKey);
+        toast.info(`Preset seleccionado: ${preset.label || preset.url}`);
+    };
 
     const copyToClipboard = (text: string, id: string) => {
         if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -671,6 +738,24 @@ export const AICopilotModal: React.FC = () => {
                                                 if (low.includes("clima") || low.includes("barómetro") || low.includes("presión") || low.includes("meteorolog")) {
                                                     chips.push({ label: "Alertas Clima", icon: "⛈️", screen: "weather" });
                                                 }
+                                                if (low.includes("pago") || low.includes("pagar") || low.includes("voucher") || low.includes("saldo") || low.includes("dinero") || low.includes("transfer")) {
+                                                    chips.push({ label: "Bóveda P2P Pay", icon: "💳", screen: "p2pPay" });
+                                                }
+                                                if (low.includes("sos") || low.includes("auxilio") || low.includes("rescate") || low.includes("baliza")) {
+                                                    chips.push({ label: "Baliza SOS", icon: "🚨", screen: "sos" });
+                                                }
+                                                if (low.includes("visión") || low.includes("vision") || low.includes("dron") || low.includes("cámara") || low.includes("camara")) {
+                                                    chips.push({ label: "Visión Táctica", icon: "👁️", screen: "tacticalVisionScan" });
+                                                }
+                                                if (low.includes("radar") || low.includes("malla") || low.includes("nodos cercanos") || low.includes("vecinos")) {
+                                                    chips.push({ label: "Radar Mesh", icon: "📡", screen: "radar" });
+                                                }
+                                                if (low.includes("stego") || low.includes("esteganograf") || low.includes("cifrado") || low.includes("bóveda oculta")) {
+                                                    chips.push({ label: "Bóveda Stego", icon: "🛡️", screen: "stegoVault" });
+                                                }
+                                                if (low.includes("ecomesh") || low.includes("ahorro") || low.includes("ciclo activo") || low.includes("duty cycle")) {
+                                                    chips.push({ label: "Gestión EcoMesh", icon: "⚡", screen: "ecoMesh" });
+                                                }
 
                                                 if (chips.length === 0) return null;
                                                 return (
@@ -1069,6 +1154,151 @@ export const AICopilotModal: React.FC = () => {
                                     <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>NIVEL DISPOSITIVO</div>
                                     <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>{memoryBudget.performanceTier.toUpperCase()}</div>
                                 </div>
+                            </div>
+                        </div>
+
+                        {/* Sovereign Endpoint Card */}
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 22, 45, 0.95) 0%, rgba(8, 12, 28, 0.98) 100%)",
+                            border: sovereignConfig ? "1.5px solid var(--accent-cyan, #00E5FF)" : "1.5px solid rgba(255, 255, 255, 0.15)",
+                            borderRadius: "20px", padding: "18px",
+                            display: "flex", flexDirection: "column", gap: "12px",
+                            boxShadow: sovereignConfig ? "0 0 15px rgba(0, 229, 255, 0.15)" : "none"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{ fontSize: "1.1rem" }}>🛰️</span>
+                                    <div>
+                                        <div style={{ fontSize: "0.92rem", fontWeight: 900, color: sovereignConfig ? "var(--accent-cyan, #00E5FF)" : "#FFFFFF" }}>
+                                            ORQUESTADOR & ENDPOINT SOBERANO
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                            Conecta Ollama, LM Studio o el Nodo RED local para inferencia táctica ultrarrápida
+                                        </div>
+                                    </div>
+                                </div>
+                                <span style={{
+                                    fontSize: "0.65rem", fontWeight: 800, padding: "2px 8px", borderRadius: "10px",
+                                    background: sovereignConfig ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 255, 255, 0.08)",
+                                    color: sovereignConfig ? "#00E676" : "rgba(255, 255, 255, 0.5)",
+                                    border: sovereignConfig ? "1px solid rgba(0, 230, 118, 0.4)" : "1px solid rgba(255, 255, 255, 0.15)"
+                                }}>
+                                    {sovereignConfig ? "🟢 ACTIVO" : "⚪ LOCAL WASM"}
+                                </span>
+                            </div>
+
+                            {/* Presets rápidos */}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                                {SOVEREIGN_PRESETS.map((p, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => handleApplyPreset(p)}
+                                        style={{
+                                            padding: "4px 10px", borderRadius: "8px",
+                                            background: "rgba(255, 255, 255, 0.06)",
+                                            border: sovereignUrlInput === p.url ? "1px solid var(--accent-cyan)" : "1px solid rgba(255, 255, 255, 0.12)",
+                                            color: sovereignUrlInput === p.url ? "var(--accent-cyan)" : "rgba(255, 255, 255, 0.8)",
+                                            fontSize: "0.68rem", fontWeight: 700, cursor: "pointer"
+                                        }}
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Inputs */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                                <div>
+                                    <label style={{ fontSize: "0.62rem", color: "var(--text-secondary)", display: "block", marginBottom: "3px" }}>
+                                        URL DEL HOST (REST / OLLAMA)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={sovereignUrlInput}
+                                        onChange={e => setSovereignUrlInput(e.target.value)}
+                                        placeholder="http://127.0.0.1:11434"
+                                        style={{
+                                            width: "100%", padding: "7px 10px", borderRadius: "8px",
+                                            background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255, 255, 255, 0.2)",
+                                            color: "#FFFFFF", fontSize: "0.75rem", fontFamily: "monospace", boxSizing: "border-box"
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label style={{ fontSize: "0.62rem", color: "var(--text-secondary)", display: "block", marginBottom: "3px" }}>
+                                        NOMBRE DEL MODELO
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={sovereignModelInput}
+                                        onChange={e => setSovereignModelInput(e.target.value)}
+                                        placeholder="qwen2.5:0.5b"
+                                        style={{
+                                            width: "100%", padding: "7px 10px", borderRadius: "8px",
+                                            background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255, 255, 255, 0.2)",
+                                            color: "#FFFFFF", fontSize: "0.75rem", fontFamily: "monospace", boxSizing: "border-box"
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Tip táctico de red local */}
+                            <div style={{ fontSize: "0.64rem", color: "rgba(255, 255, 255, 0.6)", lineHeight: 1.35 }}>
+                                💡 <strong style={{ color: "#FFFFFF" }}>Tip Móvil:</strong> Para conectar desde tu teléfono/tablet a LM Studio en tu PC, usa la IP de red local (ej. <span style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>http://192.168.1.50:1234/v1</span>) y activa <strong style={{ color: "#FFFFFF" }}>Serve on Local Network</strong> + <strong style={{ color: "#FFFFFF" }}>CORS</strong> en LM Studio.
+                            </div>
+
+                            {/* Status message */}
+                            {sovereignTestStatus && (
+                                <div style={{
+                                    padding: "6px 10px", borderRadius: "8px",
+                                    background: sovereignTestStatus.ok ? "rgba(0, 230, 118, 0.12)" : "rgba(255, 51, 85, 0.12)",
+                                    border: sovereignTestStatus.ok ? "1px solid rgba(0, 230, 118, 0.35)" : "1px solid rgba(255, 51, 85, 0.35)",
+                                    fontSize: "0.72rem",
+                                    color: sovereignTestStatus.ok ? "#00E676" : "var(--primary-bright, #FF3355)"
+                                }}>
+                                    {sovereignTestStatus.ok ? "⚡ " : "⚠️ "}{sovereignTestStatus.message}
+                                </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                                <button
+                                    onClick={handleTestSovereign}
+                                    disabled={sovereignTesting}
+                                    style={{
+                                        padding: "6px 14px", borderRadius: "8px",
+                                        background: "rgba(255, 255, 255, 0.1)",
+                                        border: "1px solid rgba(255, 255, 255, 0.25)",
+                                        color: "#FFFFFF", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer"
+                                    }}
+                                >
+                                    {sovereignTesting ? "Probando..." : "⚡ Probar Conexión"}
+                                </button>
+                                {sovereignConfig ? (
+                                    <button
+                                        onClick={handleClearSovereign}
+                                        style={{
+                                            padding: "6px 14px", borderRadius: "8px",
+                                            background: "rgba(255, 51, 85, 0.18)",
+                                            border: "1px solid rgba(255, 51, 85, 0.4)",
+                                            color: "#FF3355", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer"
+                                        }}
+                                    >
+                                        Desconectar
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleSaveSovereign}
+                                        style={{
+                                            padding: "6px 14px", borderRadius: "8px",
+                                            background: "linear-gradient(135deg, rgba(0,229,255,0.3) 0%, rgba(0,230,118,0.3) 100%)",
+                                            border: "1px solid var(--accent-cyan)",
+                                            color: "#FFFFFF", fontSize: "0.75rem", fontWeight: 800, cursor: "pointer"
+                                        }}
+                                    >
+                                        Activar Endpoint
+                                    </button>
+                                )}
                             </div>
                         </div>
 

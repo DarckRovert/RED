@@ -9,6 +9,7 @@ import { RedAPI, EmergencyBeaconRecord } from "../lib/api";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { opticalMorseLiFi, MorseTransmissionState } from "../lib/sensors/OpticalMorseLiFiEngine";
+import { TacticalLocationEngine, TacticalLocation } from "../lib/sensors/TacticalLocationEngine";
 
 type BeaconTab = "sos" | "actuators" | "soundmesh" | "feed";
 
@@ -32,7 +33,7 @@ export function SurvivalBeaconModal() {
     const [isBroadcasting, setIsBroadcasting] = useState(false);
 
     // Telemetry from Device Hardware
-    const [coords, setCoords] = useState<{ lat?: number; lon?: number; alt?: number }>({});
+    const [coords, setCoords] = useState<{ lat?: number; lon?: number; alt?: number; isEstimated?: boolean }>({});
     const [batteryLevel, setBatteryLevel] = useState<number>(() => {
         if (typeof window !== "undefined" && typeof (window as any).__red_last_battery === "number") {
             return (window as any).__red_last_battery;
@@ -56,7 +57,10 @@ export function SurvivalBeaconModal() {
 
     useEffect(() => {
         const unsub = opticalMorseLiFi.subscribe(setMorseState);
-        return unsub;
+        return () => {
+            unsub();
+            opticalMorseLiFi.stopTransmission();
+        };
     }, []);
 
     const handleTransmitMorse = async () => {
@@ -101,20 +105,15 @@ export function SurvivalBeaconModal() {
         loadBeacons();
         const beaconPoll = setInterval(loadBeacons, 4000);
 
-        // GPS Telemetry
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    setCoords({
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude,
-                        alt: pos.coords.altitude !== null ? Math.round(pos.coords.altitude) : undefined
-                    });
-                },
-                () => {},
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        }
+        // GNSS Telemetry con TacticalLocationEngine (Caché táctica, watch continuo y cero Null Island)
+        const unsubGps = TacticalLocationEngine.watchLocation((loc: TacticalLocation) => {
+            setCoords({
+                lat: loc.lat,
+                lon: loc.lon,
+                alt: loc.alt,
+                isEstimated: loc.isEstimated
+            });
+        });
 
         // Battery Telemetry from Native Capacitor & Web APIs
         const fetchBattery = async () => {
@@ -146,6 +145,7 @@ export function SurvivalBeaconModal() {
 
         return () => {
             clearInterval(beaconPoll);
+            unsubGps();
             if (sirenOscRef.current) {
                 try { sirenOscRef.current.stop(); } catch {}
                 sirenOscRef.current = null;
@@ -501,8 +501,8 @@ export function SurvivalBeaconModal() {
                             <div className="hud-grid">
                                 <div className="hud-metric">
                                     <div className="hud-metric-label">Latitud / Longitud</div>
-                                    <div className="hud-metric-val" style={{ fontSize: "0.9rem", color: "var(--accent-cyan)" }}>
-                                        {coords.lat && coords.lon ? `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}` : "Buscando GPS..."}
+                                    <div className="hud-metric-val" style={{ fontSize: "0.85rem", color: coords.isEstimated ? "var(--accent-amber, #FFB300)" : "var(--accent-cyan)" }}>
+                                        {coords.lat && coords.lon ? `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}${coords.isEstimated ? ' ⏳(Caché)' : ''}` : "Buscando satélites GNSS..."}
                                     </div>
                                 </div>
                                 <div className="hud-metric">

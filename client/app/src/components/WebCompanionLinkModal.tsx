@@ -28,6 +28,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     const [isGeneratingQr, setIsGeneratingQr] = useState(false);
 
     const isScanningRef = useRef(false);
+    const shouldScanRef = useRef(false);
 
     // Detección inicial de plataforma
     useEffect(() => {
@@ -51,6 +52,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
         return () => {
             isMounted = false;
+            stopCamera();
         };
     }, []);
 
@@ -105,11 +107,12 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 setPairingSession(session);
                 sessionCleanup = session.cleanup;
 
-                import("qrcode").then((QRCode) => {
-                    QRCode.toDataURL(session.qrPayload, {
+                import("../lib/qr/OfflineQrEngine").then(({ OfflineQrEngine }) => {
+                    OfflineQrEngine.generateDataUrl(session.qrPayload, {
                         width: 240,
                         margin: 1,
-                        color: { dark: "#00F0FF", light: "#04060A" }
+                        darkColor: "#00F0FF",
+                        lightColor: "#04060A"
                     }).then((url) => {
                         if (isMounted) {
                             setQrDataUrl(url);
@@ -138,25 +141,30 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
     // ── Control de Cámara para Escaneo en Móvil ──────────────────────────────
     const stopCamera = async () => {
+        shouldScanRef.current = false;
         document.body.classList.remove("scanner-active");
-        if (!isScanningRef.current) return;
         isScanningRef.current = false;
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
-                await BarcodeScanner.showBackground();
-                await BarcodeScanner.stopScan();
+                await BarcodeScanner.showBackground().catch(() => {});
+                await BarcodeScanner.stopScan().catch(() => {});
             }
         } catch {}
     };
 
     const startNativeScan = async () => {
+        shouldScanRef.current = true;
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
                 const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
                 const perm = await BarcodeScanner.checkPermission({ force: true });
+                if (!shouldScanRef.current) {
+                    await stopCamera();
+                    return;
+                }
                 if (perm.denied || !perm.granted) {
                     toast.warning("Permiso de cámara no concedido. Puedes ingresar el código manualmente.");
                     setMode("manual");
@@ -164,11 +172,19 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 }
 
                 await BarcodeScanner.hideBackground();
+                if (!shouldScanRef.current) {
+                    await stopCamera();
+                    return;
+                }
                 document.body.classList.add("scanner-active");
                 isScanningRef.current = true;
                 setMode("send_scan");
 
                 const result = await BarcodeScanner.startScan();
+                if (!shouldScanRef.current) {
+                    await stopCamera();
+                    return;
+                }
                 if (result.hasContent) {
                     await stopCamera();
                     await handleSendVaultWithCode(result.content);
@@ -179,7 +195,9 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         } catch (e: any) {
             console.warn("[WebCompanionLink] Camera init error:", e);
             await stopCamera();
-            setMode("manual");
+            if (shouldScanRef.current) {
+                setMode("manual");
+            }
         }
     };
 

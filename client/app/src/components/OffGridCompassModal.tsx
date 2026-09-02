@@ -152,6 +152,7 @@ export function OffGridCompassModal() {
                 (pos) => {
                     const lat = pos.coords.latitude;
                     const lon = pos.coords.longitude;
+                    if (!isFinite(lat) || !isFinite(lon) || (Math.abs(lat) < 0.0001 && Math.abs(lon) < 0.0001)) return;
                     const coords = { lat, lon };
                     setUserCoords(coords);
                     setUtmString(OffGridNavigationEngine.gpsToUtm(lat, lon));

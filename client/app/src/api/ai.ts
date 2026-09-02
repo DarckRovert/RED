@@ -55,14 +55,17 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
         } catch {}
     }
 
-    // 1. Si estamos en Android nativo y el modelo descargado tiene ruta local GGUF
-    if (isNative && activeModel && activeModel.isDownloaded && activeModel.localPath) {
+    // 1. Si el modelo descargado tiene ruta local GGUF (Android nativo o Daemon Rust local)
+    if (activeModel && activeModel.isDownloaded && activeModel.localPath) {
         try {
+            const systemContext = `Eres el Copiloto IA de RED OS, un asistente inteligente, empático y experto que opera 100% en el dispositivo del usuario sin conexión a internet. Conversa con fluidez y precisión en español sobre cualquier tema militar, técnico o de emergencia.${categoryContext ? ` Contexto táctico: ${categoryContext}` : ''}`;
+            const formattedGgufPrompt = `<|im_start|>system\n${systemContext}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
+
             const nativeResp = await fetchWithFallback<CopilotResponse>('/api/ai/copilot', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    prompt,
+                    prompt: formattedGgufPrompt,
                     context: categoryContext,
                     model_id: activeModel.id,
                     model_path: activeModel.localPath,

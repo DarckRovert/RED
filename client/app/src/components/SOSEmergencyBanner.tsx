@@ -5,6 +5,7 @@ import { useRedStore } from '../store/useRedStore';
 import { emitSos, getActiveSos, resolveSos, SosBeacon } from '../lib/api';
 import { toast } from './Toast';
 import { useTranslation } from '../lib/i18n/i18nEngine';
+import { TacticalLocationEngine } from '../lib/sensors/TacticalLocationEngine';
 
 export const SOSEmergencyBanner: React.FC = () => {
     const { navigate, identity, isAuthenticated, currentScreen, activeSosBeacons, setSosBeacons } = useRedStore();
@@ -38,76 +39,19 @@ export const SOSEmergencyBanner: React.FC = () => {
         }
     }, [currentScreen]);
 
-    const getGpsCoords = async (): Promise<{ lat: number; lon: number }> => {
+    const getGpsCoords = async (): Promise<{ lat?: number; lon?: number }> => {
         setGpsStatus('locating');
-
-        return new Promise((resolve) => {
-            let done = false;
-
-            const finish = (coords: { lat: number; lon: number }, status: 'ok' | 'error') => {
-                if (done) return;
-                done = true;
-                setGpsCoords(coords);
-                setGpsStatus(status);
-                resolve(coords);
-            };
-
-            const timer = setTimeout(() => {
-                finish({ lat: 0, lon: 0 }, 'error');
-            }, 2500);
-
-            import('@capacitor/geolocation').then(({ Geolocation: GeoPlugin }) => {
-                GeoPlugin.getCurrentPosition({ enableHighAccuracy: false, timeout: 2000 })
-                    .then((pos: any) => {
-                        clearTimeout(timer);
-                        finish({
-                            lat: parseFloat(pos.coords.latitude.toFixed(6)),
-                            lon: parseFloat(pos.coords.longitude.toFixed(6))
-                        }, 'ok');
-                    })
-                    .catch(() => {
-                        if (typeof navigator !== 'undefined' && navigator.geolocation) {
-                            navigator.geolocation.getCurrentPosition(
-                                (pos) => {
-                                    clearTimeout(timer);
-                                    finish({
-                                        lat: parseFloat(pos.coords.latitude.toFixed(6)),
-                                        lon: parseFloat(pos.coords.longitude.toFixed(6))
-                                    }, 'ok');
-                                },
-                                () => {
-                                    clearTimeout(timer);
-                                    finish({ lat: 0, lon: 0 }, 'error');
-                                },
-                                { enableHighAccuracy: false, timeout: 2000 }
-                            );
-                        } else {
-                            clearTimeout(timer);
-                            finish({ lat: 0, lon: 0 }, 'error');
-                        }
-                    });
-            }).catch(() => {
-                if (typeof navigator !== 'undefined' && navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                            clearTimeout(timer);
-                            finish({
-                                lat: parseFloat(pos.coords.latitude.toFixed(6)),
-                                lon: parseFloat(pos.coords.longitude.toFixed(6))
-                            }, 'ok');
-                        },
-                        () => {
-                            clearTimeout(timer);
-                            finish({ lat: 0, lon: 0 }, 'error');
-                        },
-                        { enableHighAccuracy: false, timeout: 2000 }
-                    );
-                } else {
-                    clearTimeout(timer);
-                    finish({ lat: 0, lon: 0 }, 'error');
-                }
-            });
-        });
+        try {
+            const loc = await TacticalLocationEngine.getEmergencyLocation(6000);
+            if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                const c = { lat: loc.lat!, lon: loc.lon! };
+                setGpsCoords(c);
+                setGpsStatus('ok');
+                return c;
+            }
+        } catch {}
+        setGpsStatus('error');
+        return {};
     };
 
     const handleBroadcastSos = async () => {

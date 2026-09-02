@@ -71,28 +71,26 @@ export function VitalScanModal() {
     useEffect(() => {
         loadTriageReports();
 
-        // Read real altitude and GPS from device
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (pos) => {
-                    if (pos.coords.altitude !== null && pos.coords.altitude !== undefined) {
-                        setAltitudeMeters(Math.round(pos.coords.altitude).toString());
-                    }
-                    if (pos.coords.latitude && pos.coords.longitude) {
-                        setCoords({
-                            lat: pos.coords.latitude,
-                            lon: pos.coords.longitude,
-                        });
-                    }
-                },
-                () => {},
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        }
+        // Read real altitude and GPS from TacticalLocationEngine
+        let unsubGps: (() => void) | null = null;
+        import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
+            unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+                if (loc.alt !== undefined) {
+                    setAltitudeMeters(loc.alt.toString());
+                }
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    setCoords({
+                        lat: loc.lat!,
+                        lon: loc.lon!,
+                    });
+                }
+            });
+        });
 
         drawMedicalGrid();
 
         return () => {
+            if (unsubGps) (unsubGps as any)();
             VitalScanEngine.stopPPGScan();
         };
     }, [loadTriageReports]);

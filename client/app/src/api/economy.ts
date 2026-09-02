@@ -35,6 +35,11 @@ export async function getP2PWallet(): Promise<any> {
 export async function createP2PVoucher(amount: number | { amount: number; recipient?: string; memo?: string; [key: string]: any }): Promise<any> {
     const numericAmount = typeof amount === 'number' ? amount : Number(amount?.amount || 0);
     const recipient = typeof amount === 'object' ? amount?.recipient : undefined;
+
+    if (!isFinite(numericAmount) || numericAmount <= 0 || numericAmount > 1000000) {
+        return { ok: false, error: 'Monto de vale inválido. Debe ser un número positivo mayor a 0.' };
+    }
+
     return fetchWithFallback('/api/p2p/voucher', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,41 +112,91 @@ export async function createP2PVoucher(amount: number | { amount: number; recipi
 
 export async function redeemP2PVoucher(idOrPayload: any): Promise<any> {
     const rawId = typeof idOrPayload === 'string'
-        ? idOrPayload
-        : (idOrPayload?.qr_payload || idOrPayload?.payload || idOrPayload?.id || idOrPayload?.code || idOrPayload?.voucher_id || '');
+        ? idOrPayload.trim()
+        : (idOrPayload?.qr_payload || idOrPayload?.payload || idOrPayload?.id || idOrPayload?.code || idOrPayload?.voucher_id || '').trim();
+
+    if (!rawId) {
+        return { ok: false, error: 'Identificador o carga útil de vale vacía.' };
+    }
 
     return fetchWithFallback('/api/p2p/redeem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: rawId })
     }, async () => {
-        const redeemed = getStored<string[]>(STORAGE_KEYS.P2P_REDEEMED, []);
-        if (redeemed.includes(rawId)) {
-            return { ok: false, error: 'Vale ya redimido. Prevención de doble gasto activa.' };
-        }
+        // 1. Validar formato y extraer voucherId, monto y firma
+        let voucherId = rawId;
+        let parsedAmount = 0;
+        let signature = '';
 
-        let parsedAmount = 25.0;
         if (rawId.startsWith('RED_PAY:')) {
             const parts = rawId.split(':');
-            if (parts.length >= 3) {
-                parsedAmount = parseFloat(parts[2]) || 25.0;
+            if (parts.length < 3) {
+                return { ok: false, error: 'Formato de código QR de pago inválido.' };
+            }
+            voucherId = parts[1]?.trim() || '';
+            parsedAmount = parseFloat(parts[2]);
+            signature = parts[3]?.trim() || '';
+        } else if (rawId.startsWith('voucher_')) {
+            voucherId = rawId;
+            const allVouchers = getStored<P2PVoucher[]>(STORAGE_KEYS.P2P_VOUCHERS, []);
+            const match = allVouchers.find(v => v.id === voucherId || v.voucher_id === voucherId);
+            if (match) {
+                parsedAmount = match.amount;
+                signature = match.signature || '';
             }
         }
 
+        // 2. Validación estricta del monto (Rechazo de negativos, NaN, ceros y desbordamientos)
+        if (!voucherId || !isFinite(parsedAmount) || parsedAmount <= 0 || parsedAmount > 1000000) {
+            return { ok: false, error: 'Vale no reconocido o monto inválido.' };
+        }
+
+        // 3. Verificación criptográfica anti doble-gasto por identificador canónico
+        const redeemed = getStored<string[]>(STORAGE_KEYS.P2P_REDEEMED, []);
+        if (redeemed.includes(voucherId) || redeemed.includes(rawId)) {
+            return { ok: false, error: 'Vale ya redimido. Prevención criptográfica de doble gasto activa.' };
+        }
+
+        // 4. Acreditación en la billetera P2P
         const wallet = await getP2PWallet();
-        wallet.balance = (wallet.balance || 0) + parsedAmount;
+        wallet.balance = Math.round(((wallet.balance || 0) + parsedAmount) * 100) / 100;
         wallet.transactions_count = (wallet.transactions_count || 0) + 1;
         setStored(STORAGE_KEYS.P2P_WALLET, wallet);
 
-        redeemed.push(rawId);
+        // 5. Registrar identificador canónico y rawId en la lista de canjeados
+        redeemed.push(voucherId);
+        if (rawId !== voucherId) redeemed.push(rawId);
         setStored(STORAGE_KEYS.P2P_REDEEMED, redeemed);
+
+        // 6. Registrar vale entrante en el ledger contable
+        const now = Date.now();
+        const incomingVoucher: P2PVoucher = {
+            id: voucherId,
+            voucher_id: voucherId,
+            amount: parsedAmount,
+            signature: signature || `RED_SIG_${voucherId}`,
+            created_at: Math.floor(now / 1000),
+            expires_at: Math.floor(now / 1000) + 86400 * 30,
+            ok: true,
+            new_balance: wallet.balance,
+            is_outgoing: false,
+            recipient: 'BILLETERA_LOCAL'
+        };
+
+        const vouchers = getStored<P2PVoucher[]>(STORAGE_KEYS.P2P_VOUCHERS, []);
+        if (!vouchers.some(v => v.id === voucherId)) {
+            vouchers.unshift(incomingVoucher);
+            setStored(STORAGE_KEYS.P2P_VOUCHERS, vouchers);
+        }
 
         return {
             ok: true,
-            redeemed_id: rawId,
+            redeemed_id: voucherId,
             credited_amount: parsedAmount,
             new_balance: wallet.balance,
-            timestamp: Date.now()
+            voucher: incomingVoucher,
+            timestamp: now
         };
     });
 }

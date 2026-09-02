@@ -37,11 +37,7 @@ export function IncomingCallBanner() {
         CallRingtoneEngine.stop();
         // Unlock Web Audio synchronously on user gesture to bypass browser/WebView autoplay restrictions
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioContextClass) {
-                const ctx = new AudioContextClass();
-                ctx.resume().catch(() => {});
-            }
+            CallRingtoneEngine.unlockAudioContext();
         } catch {}
 
         const callerId = incomingCall.callerHash;

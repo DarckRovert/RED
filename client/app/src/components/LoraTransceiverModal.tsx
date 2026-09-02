@@ -303,18 +303,25 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     
                                     mediaRecorder.onstop = async () => {
                                         stream.getTracks().forEach(t => t.stop());
-                                        audioCtx.close();
-                                        const blob = new Blob(chunks, { type: 'audio/webm' });
-                                        const arrayBuffer = await blob.arrayBuffer();
-                                        const decodedAudio = await new AudioContext().decodeAudioData(arrayBuffer);
-                                        const rawChannel = decodedAudio.getChannelData(0);
-                                        const { LowBitrateVocoder } = await import('../lib/audio/LowBitrateVocoder');
-                                        const pcm16 = LowBitrateVocoder.resampleTo8kHz(rawChannel, decodedAudio.sampleRate);
-                                        const compressedBytes = LowBitrateVocoder.encode(pcm16);
-                                        const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
-                                        await loraMeshtastic.broadcastVocoderAudio(compressedBytes);
-                                        toast.success(`🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (${compressedBytes.length}B, 1.2 kbps)`);
-                                        setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · ${compressedBytes.length}B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 49)]);
+                                        try {
+                                            const blob = new Blob(chunks, { type: 'audio/webm' });
+                                            const arrayBuffer = await blob.arrayBuffer();
+                                            const decodedAudio = await audioCtx.decodeAudioData(arrayBuffer);
+                                            const rawChannel = decodedAudio.getChannelData(0);
+                                            const { LowBitrateVocoder } = await import('../lib/audio/LowBitrateVocoder');
+                                            const pcm16 = LowBitrateVocoder.resampleTo8kHz(rawChannel, decodedAudio.sampleRate);
+                                            const compressedBytes = LowBitrateVocoder.encode(pcm16);
+                                            const { loraMeshtastic } = await import('../lib/mesh/LoRaMeshtasticBridge');
+                                            await loraMeshtastic.broadcastVocoderAudio(compressedBytes);
+                                            toast.success(`🎙️ Ráfaga de Voz Vocoder transmitida por LoRa (${compressedBytes.length}B, 1.2 kbps)`);
+                                            setLogs(prev => [`[TX-VOICE] ${new Date().toLocaleTimeString()} · ${compressedBytes.length}B · Ráfaga Vocoder LoRa Port 64`, ...prev.slice(0, 49)]);
+                                        } catch (err: any) {
+                                            toast.error("Error al procesar audio Vocoder: " + err.message);
+                                        } finally {
+                                            try {
+                                                if (audioCtx.state !== 'closed') await audioCtx.close();
+                                            } catch {}
+                                        }
                                     };
                                     
                                     mediaRecorder.start();
@@ -353,15 +360,14 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     
                                     let lat = 0;
                                     let lon = 0;
-                                    if (typeof navigator !== "undefined" && navigator.geolocation) {
-                                        try {
-                                            const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-                                                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000, enableHighAccuracy: true });
-                                            });
-                                            lat = pos.coords.latitude;
-                                            lon = pos.coords.longitude;
-                                        } catch {}
-                                    }
+                                    try {
+                                        const { TacticalLocationEngine } = await import('../lib/sensors/TacticalLocationEngine');
+                                        const loc = await TacticalLocationEngine.getEmergencyLocation(5000);
+                                        if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                                            lat = loc.lat!;
+                                            lon = loc.lon!;
+                                        }
+                                    } catch {}
                                     
                                     let batt = 100;
                                     if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {

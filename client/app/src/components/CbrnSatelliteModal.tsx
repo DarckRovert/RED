@@ -32,12 +32,13 @@ export function CbrnSatelliteModal() {
         const unsubCbrn = cbrnRadiation.subscribe(setCbrn);
         const unsubSat = satelliteMeshGateway.subscribe(setSat);
 
-        // Fetch live GPS location for plume and satellite orbital calculation
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
+        // Live GPS location for plume and satellite orbital calculation
+        let unsubGps: (() => void) | null = null;
+        import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
+            unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    const lat = loc.lat!;
+                    const lon = loc.lon!;
                     satelliteMeshGateway.setObserverLocation(lat, lon);
                     setPlumeZone(cbrnPlumeDispersionEngine.calculatePlumeDispersion({
                         id: `INCIDENT-${Date.now()}`,
@@ -50,13 +51,12 @@ export function CbrnSatelliteModal() {
                         stabilityClass: 'D',
                         timestamp: Date.now()
                     }, lat + 0.002, lon + 0.002));
-                },
-                () => {},
-                { timeout: 5000, enableHighAccuracy: true }
-            );
-        }
+                }
+            });
+        });
 
         return () => {
+            if (unsubGps) (unsubGps as any)();
             unsubCbrn();
             unsubSat();
             cbrnRadiation.stopMonitoring();

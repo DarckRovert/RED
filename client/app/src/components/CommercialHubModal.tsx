@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from '../lib/i18n/i18nEngine';
 import { MonetizationEngine, ProPerkStatus, TacticalProduct, TacticalTransaction } from '../lib/network/MonetizationEngine';
 import { bazaarSync } from '../lib/storage/BazaarSyncEngine';
-import { voucherVault } from '../lib/blockchain/VoucherVaultEngine';
 import { toast } from './Toast';
 
 import { useRedStore } from '../store/useRedStore';
@@ -55,7 +54,11 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
 
         const handleUpdate = () => refreshData();
         window.addEventListener('red_pro_status_updated', handleUpdate);
-        return () => window.removeEventListener('red_pro_status_updated', handleUpdate);
+        const unsubBazaar = bazaarSync.subscribe(handleUpdate);
+        return () => {
+            window.removeEventListener('red_pro_status_updated', handleUpdate);
+            unsubBazaar();
+        };
     }, [isOpen]);
 
     if (!isOpen) return null;
@@ -143,8 +146,9 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
     };
 
     const handleBuyWithP2PVoucher = async (item: TacticalProduct) => {
-        const match = item.priceEst.match(/\d+/);
-        const amount = match ? parseInt(match[0], 10) : 25;
+        const match = item.priceEst.match(/\d+(\.\d+)?/);
+        const parsed = match ? parseFloat(match[0]) : 25;
+        const amount = (isFinite(parsed) && parsed > 0) ? Math.round(parsed) : 25;
 
         setIsIssuingVoucher(true);
         try {
@@ -160,17 +164,14 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                 const qrString = `RED_PAY:${res.voucher.id}:${res.voucher.amount}:${res.voucher.signature}`;
                 setP2pQrData(qrString);
 
-                try {
-                    const QRCode = await import('qrcode');
-                    const qrLib: any = QRCode.default || QRCode;
-                    const url = await qrLib.toDataURL(qrString, {
-                        width: 260, margin: 1,
-                        color: { dark: "#00E676", light: "#04060A" }
-                    });
-                    setP2pQrUrl(url);
-                } catch {
-                    setP2pQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrString)}&color=00e676&bgcolor=04060a`);
-                }
+                const { OfflineQrEngine } = await import('../lib/qr/OfflineQrEngine');
+                const url = await OfflineQrEngine.generateDataUrl(qrString, {
+                    width: 260,
+                    margin: 1,
+                    darkColor: "#00E676",
+                    lightColor: "#04060A"
+                });
+                setP2pQrUrl(url);
 
                 setP2pModalItem(item);
 

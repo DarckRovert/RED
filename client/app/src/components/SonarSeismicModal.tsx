@@ -42,6 +42,7 @@ export function SonarSeismicModal() {
             unsubStruct();
             acousticSonar.stopContinuousScan();
             structuralHealthSeismic.stopMonitoring();
+            acousticSonar.destroy();
         };
     }, []);
 

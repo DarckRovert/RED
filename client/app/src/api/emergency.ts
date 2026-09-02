@@ -1,7 +1,5 @@
-// RED Emergency, AMBER Alerts & SOS Beacons API
-
 import { AmberAlert, AmberAlertCreate, AmberSighting, SosBeacon, TriageReport, TriageReportRecord, EmergencyBeaconRecord } from './types';
-import { fetchWithFallback, getStored, setStored, hashStringSha256, STORAGE_KEYS } from './core';
+import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, stripExifCanvas, STORAGE_KEYS } from './core';
 import { RedAPI } from './client';
 
 export async function getAmberAlerts(): Promise<AmberAlert[]> {
@@ -41,14 +39,23 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
         }
         const now = Date.now();
         const idHash = await hashStringSha256(`amber_${now}_${payload.name}`);
+
+        const isNullIsland = (typeof payload.last_seen_lat === 'number' && typeof payload.last_seen_lon === 'number')
+            && (Math.abs(payload.last_seen_lat) < 0.0001 && Math.abs(payload.last_seen_lon) < 0.0001);
+
+        const safeLat = (!isNullIsland && typeof payload.last_seen_lat === 'number' && isFinite(payload.last_seen_lat))
+            ? payload.last_seen_lat : undefined;
+        const safeLon = (!isNullIsland && typeof payload.last_seen_lon === 'number' && isFinite(payload.last_seen_lon))
+            ? payload.last_seen_lon : undefined;
+
         const alert: AmberAlert = {
             id: `amber_${now}_${idHash.slice(0, 8)}`,
             name: payload.name,
             age: payload.age,
             description: payload.description,
             photo_b64: payload.photo_b64,
-            last_seen_lat: payload.last_seen_lat,
-            last_seen_lon: payload.last_seen_lon,
+            last_seen_lat: safeLat,
+            last_seen_lon: safeLon,
             last_seen_location: payload.last_seen_location,
             issued_at: Math.floor(now / 1000),
             expires_at: Math.floor(now / 1000) + (payload.ttl_secs || 86400),
@@ -59,7 +66,21 @@ export async function createAmberAlert(payload: AmberAlertCreate): Promise<{ ok:
         };
         const alerts = getStored<AmberAlert[]>(STORAGE_KEYS.AMBER_ALERTS, []);
         alerts.unshift(alert);
+        if (alerts.length > 200) alerts.length = 200;
         setStored(STORAGE_KEYS.AMBER_ALERTS, alerts);
+
+        // Broadcast AMBER alert across P2P Mesh
+        try {
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: alert.id,
+                msg_type: 'amber_alert',
+                alert,
+                timestamp: alert.issued_at
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
         return { ok: true, alert };
     });
 }
@@ -104,65 +125,13 @@ export async function reportSighting(
     });
 }
 
-// ─── Real Crypto & Canvas Helpers ─────────────────────────────────────────────
-
-async function sha256Hex(data: string): Promise<string> {
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-        try {
-            const bytes = new TextEncoder().encode(data);
-            const hashBuffer = await window.crypto.subtle.digest('SHA-256', bytes);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch {}
-    }
-    let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-        hash = (hash << 5) - hash + data.charCodeAt(i);
-        hash |= 0;
-    }
-    return Math.abs(hash).toString(16).padStart(64, '0');
-}
-
-async function stripExifCanvas(imageB64: string): Promise<{ cleanedB64: string; bytesStripped: number }> {
-    if (typeof window === 'undefined') {
-        return { cleanedB64: imageB64, bytesStripped: 0 };
-    }
-    return new Promise((resolve) => {
-        const img = new Image();
-        img.onload = () => {
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width || 800;
-                canvas.height = img.naturalHeight || img.height || 600;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    resolve({ cleanedB64: imageB64, bytesStripped: 0 });
-                    return;
-                }
-                ctx.drawImage(img, 0, 0);
-                const cleanedB64 = canvas.toDataURL('image/jpeg', 0.92);
-                const originalBytes = imageB64.length;
-                const cleanedBytes = cleanedB64.length;
-                const bytesStripped = Math.max(0, originalBytes - cleanedBytes);
-                resolve({ cleanedB64, bytesStripped });
-            } catch {
-                resolve({ cleanedB64: imageB64, bytesStripped: 0 });
-            }
-        };
-        img.onerror = () => {
-            resolve({ cleanedB64: imageB64, bytesStripped: 0 });
-        };
-        img.src = imageB64.startsWith('data:') ? imageB64 : `data:image/jpeg;base64,${imageB64}`;
-    });
-}
-
 // ─── v19.0: Funciones API Guardian ───────────────────────────────────────────
 
 
 export async function emitSos(payload: {
     sender_name: string;
-    lat: number;
-    lon: number;
+    lat?: number;
+    lon?: number;
     altitude?: number;
     battery_level: number;
     note: string;
@@ -187,36 +156,74 @@ export async function emitSos(payload: {
             } catch {}
         }
 
+        const isNullIsland = (typeof payload.lat === 'number' && typeof payload.lon === 'number')
+            && (Math.abs(payload.lat) < 0.0001 && Math.abs(payload.lon) < 0.0001);
+
+        const safeLat = (!isNullIsland && typeof payload.lat === 'number' && isFinite(payload.lat))
+            ? payload.lat : undefined;
+        const safeLon = (!isNullIsland && typeof payload.lon === 'number' && isFinite(payload.lon))
+            ? payload.lon : undefined;
+        const safeAlt = (typeof payload.altitude === 'number' && isFinite(payload.altitude))
+            ? payload.altitude : undefined;
+
         const idHash = await sha256Hex(`sos_${now}_${sender_did}`);
         const sos: SosBeacon = {
             id: `sos_${now}_${idHash.slice(0, 8)}`,
             sender_did,
             sender_name: payload.sender_name || identity.nickname || 'Operador',
-            lat: payload.lat,
-            lon: payload.lon,
-            altitude: payload.altitude,
+            lat: safeLat,
+            lon: safeLon,
+            altitude: safeAlt,
             timestamp: now,
             battery_level: battLevel || 100,
             note: payload.note || 'ALERTA SOS SOLICITANDO AUXILIO',
             is_active: true,
-            signature: await sha256Hex(`sos_${now}_${payload.lat}_${payload.lon}`),
+            signature: await sha256Hex(`sos_${now}_${safeLat ?? 'none'}_${safeLon ?? 'none'}`),
         };
         const beacons = getStored<SosBeacon[]>(STORAGE_KEYS.SOS_BEACONS, []);
         beacons.unshift(sos);
+        if (beacons.length > 200) beacons.length = 200;
         setStored(STORAGE_KEYS.SOS_BEACONS, beacons);
+
+        // Broadcast SOS packet across P2P Mesh
+        try {
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: sos.id,
+                msg_type: 'sos_beacon',
+                beacon: sos,
+                sender: sos.sender_did,
+                timestamp: sos.timestamp
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
         return { ok: true, sos };
     });
 }
 
 /** Desactivar baliza SOS */
 export async function resolveSos(sosId: string): Promise<{ ok: boolean; resolved: boolean }> {
-    return fetchWithFallback(`/api/sos/resolve/${sosId}`, { method: 'POST' }, () => {
+    return fetchWithFallback(`/api/sos/resolve/${sosId}`, { method: 'POST' }, async () => {
         const beacons = getStored<SosBeacon[]>(STORAGE_KEYS.SOS_BEACONS, []);
         const target = beacons.find(b => b.id === sosId);
         if (target) {
             target.is_active = false;
             setStored(STORAGE_KEYS.SOS_BEACONS, beacons);
         }
+
+        // Broadcast resolution packet across P2P Mesh
+        try {
+            const { meshRouter } = await import('../lib/mesh/meshRouter');
+            const payloadBytes = new TextEncoder().encode(JSON.stringify({
+                id: `resolve_${sosId}`,
+                msg_type: 'sos_resolve',
+                sos_id: sosId,
+                timestamp: Date.now()
+            }));
+            await meshRouter.send('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff', payloadBytes);
+        } catch {}
+
         return { ok: true, resolved: true };
     });
 }

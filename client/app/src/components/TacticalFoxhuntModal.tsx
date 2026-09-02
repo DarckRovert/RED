@@ -37,17 +37,17 @@ export function TacticalFoxhuntModal() {
         window.addEventListener("deviceorientationabsolute" as any, handleOrientation, true);
 
         // Live Geolocation for RDF fixes
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    setCoords({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-                },
-                () => {},
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        }
+        let unsubGps: (() => void) | null = null;
+        import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
+            unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    setCoords({ lat: loc.lat!, lon: loc.lon! });
+                }
+            });
+        });
 
         return () => {
+            if (unsubGps) (unsubGps as any)();
             unsubRdf();
             unsubTriang();
             window.removeEventListener("deviceorientation", handleOrientation, true);

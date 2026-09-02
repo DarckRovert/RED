@@ -39,58 +39,71 @@ export function AtmosphericSafetyModal() {
 
         startCamera();
 
-        const processFrame = () => {
-            if (videoRef.current && canvasRef.current && videoRef.current.readyState === 4) {
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    ctx.drawImage(videoRef.current, 0, 0, 160, 120);
-                    const frameData = ctx.getImageData(0, 0, 160, 120);
-                    const data = frameData.data;
+        let isActive = true;
+        let lastProcessTime = 0;
 
-                    let totalLuma = 0;
-                    let rTotal = 0, gTotal = 0, bTotal = 0;
-                    const count = data.length / 4;
+        const loop = (timestamp: number) => {
+            if (!isActive) return;
 
-                    for (let i = 0; i < data.length; i += 4) {
-                        const r = data[i];
-                        const g = data[i + 1];
-                        const b = data[i + 2];
-                        const luma = 0.299 * r + 0.587 * g + 0.114 * b;
-                        totalLuma += luma;
-                        rTotal += r; gTotal += g; bTotal += b;
+            if (timestamp - lastProcessTime >= 500) {
+                lastProcessTime = timestamp;
+                if (videoRef.current && canvasRef.current && videoRef.current.readyState === 4) {
+                    const canvas = canvasRef.current;
+                    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                    if (ctx) {
+                        ctx.drawImage(videoRef.current, 0, 0, 160, 120);
+                        const frameData = ctx.getImageData(0, 0, 160, 120);
+                        const data = frameData.data;
+
+                        let totalLuma = 0;
+                        let rTotal = 0, gTotal = 0, bTotal = 0;
+                        const count = data.length / 4;
+
+                        if (count > 0) {
+                            for (let i = 0; i < data.length; i += 4) {
+                                const r = data[i];
+                                const g = data[i + 1];
+                                const b = data[i + 2];
+                                const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+                                totalLuma += luma;
+                                rTotal += r; gTotal += g; bTotal += b;
+                            }
+
+                            const meanLuma = totalLuma / count;
+                            let variance = 0;
+                            for (let i = 0; i < data.length; i += 4) {
+                                const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                                variance += Math.pow(luma - meanLuma, 2);
+                            }
+                            const stdDev = Math.sqrt(variance / count);
+
+                            // Varianza de parpadeo temporal calculada empíricamente entre fotogramas consecutivos
+                            const flickerVariance = prevLumaRef.current !== null
+                                ? Math.abs(meanLuma - prevLumaRef.current)
+                                : 0;
+                            prevLumaRef.current = meanLuma;
+
+                            const result = opticalGasAqiEngine.analyzeOpticalFrame(
+                                meanLuma,
+                                stdDev,
+                                { r: rTotal / count, g: gTotal / count, b: bTotal / count },
+                                flickerVariance
+                            );
+                            setTelemetry(result);
+                        }
                     }
-
-                    const meanLuma = totalLuma / count;
-                    let variance = 0;
-                    for (let i = 0; i < data.length; i += 4) {
-                        const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-                        variance += Math.pow(luma - meanLuma, 2);
-                    }
-                    const stdDev = Math.sqrt(variance / count);
-
-                    // Varianza de parpadeo temporal calculada empíricamente entre fotogramas consecutivos
-                    const flickerVariance = prevLumaRef.current !== null
-                        ? Math.abs(meanLuma - prevLumaRef.current)
-                        : 0;
-                    prevLumaRef.current = meanLuma;
-
-                    const result = opticalGasAqiEngine.analyzeOpticalFrame(
-                        meanLuma,
-                        stdDev,
-                        { r: rTotal / count, g: gTotal / count, b: bTotal / count },
-                        flickerVariance
-                    );
-                    setTelemetry(result);
                 }
             }
-            animationFrame = requestAnimationFrame(processFrame);
+
+            if (isActive) {
+                animationFrame = requestAnimationFrame(loop);
+            }
         };
 
-        const interval = setInterval(processFrame, 500);
+        animationFrame = requestAnimationFrame(loop);
 
         return () => {
-            clearInterval(interval);
+            isActive = false;
             if (animationFrame) cancelAnimationFrame(animationFrame);
             if (stream) {
                 stream.getTracks().forEach(t => t.stop());

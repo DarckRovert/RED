@@ -23,18 +23,15 @@ export function CelestialPdrModal() {
     const [estimatedCoords, setEstimatedCoords] = useState<{ estimatedLat: number; estimatedLon: number } | null>(null);
 
     useEffect(() => {
-        if (typeof navigator !== "undefined" && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                pos => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-                    setCoords({ lat, lon });
-                    setEphemeris(celestialNav.calculateEphemeris(lat, lon));
-                },
-                () => {},
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        }
+        let unsubGps: (() => void) | null = null;
+        import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
+            unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    setCoords({ lat: loc.lat!, lon: loc.lon! });
+                    setEphemeris(celestialNav.calculateEphemeris(loc.lat!, loc.lon!));
+                }
+            });
+        });
 
         const interval = setInterval(() => {
             setEphemeris(celestialNav.calculateEphemeris(coords.lat, coords.lon));
@@ -42,6 +39,7 @@ export function CelestialPdrModal() {
         const unsubPdr = pedestrianDeadReckoning.subscribe(setPdr);
 
         return () => {
+            if (unsubGps) (unsubGps as any)();
             clearInterval(interval);
             unsubPdr();
         };

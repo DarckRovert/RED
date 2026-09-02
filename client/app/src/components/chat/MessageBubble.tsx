@@ -442,9 +442,16 @@ export const MessageBubble = memo(({
         if (!msg.content) return;
         setIsTranslating(true);
         try {
-            const res = await LocalAIEngine.translateText(msg.content, 'es');
+            // Detección heurística de idioma para alternar inteligentemente entre Español e Inglés
+            const text = msg.content.toLowerCase();
+            const spanishKeywords = ['que', 'el', 'la', 'los', 'las', 'por', 'para', 'con', 'este', 'esta', 'está', 'están', 'saludos', 'hola', 'bien', 'bueno', 'gracias', 'reporte', 'emergencia', 'equipo'];
+            const words = text.split(/\s+/);
+            const spanishHits = words.filter(w => spanishKeywords.includes(w)).length;
+            const targetLang = (spanishHits >= 2 || /[áéíóúñ¿¡]/.test(text)) ? 'en' : 'es';
+
+            const res = await LocalAIEngine.translateText(msg.content, targetLang);
             setTranslatedText(res.translatedText);
-            toast.success("🌐 Traducción táctica generada con IA Local");
+            toast.success(`🌐 Traducido al ${targetLang === 'en' ? 'Inglés' : 'Español'}`);
         } catch {
             toast.error("Error al traducir mensaje");
         } finally {
@@ -925,6 +932,19 @@ export const MessageBubble = memo(({
                             {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
                                     {renderFormattedContent(msg.content, searchQuery)}
+                                </div>
+                            )}
+
+                            {/* Inline AI Translation Loading State */}
+                            {isTranslating && (
+                                <div style={{
+                                    marginTop: "6px", padding: "6px 10px", borderRadius: "8px",
+                                    background: "rgba(0, 229, 255, 0.08)", border: "1px dashed rgba(0, 229, 255, 0.35)",
+                                    fontSize: "0.74rem", color: "var(--accent-cyan, #00E5FF)",
+                                    display: "flex", alignItems: "center", gap: "6px", fontFamily: "monospace"
+                                }}>
+                                    <span>🌐</span>
+                                    <span>Traduciendo con IA táctica...</span>
                                 </div>
                             )}
 

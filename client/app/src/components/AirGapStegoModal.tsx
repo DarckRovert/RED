@@ -16,9 +16,7 @@ export function AirGapStegoModal() {
     // Morse RX State
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
-    const [morseState, setMorseState] = useState<MorseRxState>(() => opticalMorseRxEngine.subscribe(() => {}) as any || {
-        isReceiving: false, currentLuminance: 0, thresholdLuminance: 128, isLightOn: false, currentSymbolBuffer: '', decodedText: '', detectedWpm: 12, lastDecodedChar: ''
-    });
+    const [morseState, setMorseState] = useState<MorseRxState>(() => opticalMorseRxEngine.getState());
 
     // QR Animated State
     const [qrText, setQrText] = useState<string>("");
@@ -58,13 +56,13 @@ export function AirGapStegoModal() {
         if (qrChunks.length === 0) return;
         const currentFrame = qrChunks[currentChunkIdx] || qrChunks[0];
 
-        import("qrcode").then(async (QRCode) => {
-            const qrLib: any = (QRCode as any).default || QRCode;
+        import("../lib/qr/OfflineQrEngine").then(async ({ OfflineQrEngine }) => {
             try {
-                const url = await qrLib.toDataURL(currentFrame, {
+                const url = await OfflineQrEngine.generateDataUrl(currentFrame, {
                     width: 260,
                     margin: 1,
-                    color: { dark: "#00E5FF", light: "#050812" }
+                    darkColor: "#00E5FF",
+                    lightColor: "#050812"
                 });
                 setQrDataUrl(url);
             } catch (e) {
@@ -74,6 +72,9 @@ export function AirGapStegoModal() {
     }, [qrChunks, currentChunkIdx]);
 
     const handleSynthesizeAudio = () => {
+        if (carrierAudioUrl) {
+            try { URL.revokeObjectURL(carrierAudioUrl); } catch {}
+        }
         const blob = psychoacousticStego.synthesizeCarrierWav(secretMessage, 4);
         const url = URL.createObjectURL(blob);
         setCarrierAudioUrl(url);
@@ -81,9 +82,21 @@ export function AirGapStegoModal() {
         toast.success("🎵 Audio sintetizado con mensaje psicoacústico embebido");
     };
 
+    // Cleanup audio blob URL on unmount
+    useEffect(() => {
+        return () => {
+            if (carrierAudioUrl) {
+                try { URL.revokeObjectURL(carrierAudioUrl); } catch {}
+            }
+        };
+    }, [carrierAudioUrl]);
+
     useEffect(() => {
         const unsub = opticalMorseRxEngine.subscribe(setMorseState);
-        return () => unsub();
+        return () => {
+            unsub();
+            opticalMorseRxEngine.reset();
+        };
     }, []);
 
     // Camera Stream for Optical Morse RX
@@ -92,16 +105,23 @@ export function AirGapStegoModal() {
 
         let stream: MediaStream | null = null;
         let animationFrame: number | null = null;
+        let isActive = true;
+        let lastSampleTime = 0;
 
         const startCamera = async () => {
             try {
                 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    stream = await navigator.mediaDevices.getUserMedia({
+                    const s = await navigator.mediaDevices.getUserMedia({
                         video: { facingMode: "environment", width: { ideal: 320 }, height: { ideal: 240 } }
                     });
+                    if (!isActive) {
+                        s.getTracks().forEach(t => t.stop());
+                        return;
+                    }
+                    stream = s;
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
-                        videoRef.current.play();
+                        videoRef.current.play().catch(() => {});
                     }
                 }
             } catch (e) {
@@ -111,30 +131,35 @@ export function AirGapStegoModal() {
 
         startCamera();
 
-        const processLuma = () => {
-            if (videoRef.current && canvasRef.current && videoRef.current.readyState === 4) {
-                const ctx = canvasRef.current.getContext("2d");
-                if (ctx) {
-                    ctx.drawImage(videoRef.current, 0, 0, 64, 48);
-                    const imgData = ctx.getImageData(16, 12, 32, 24); // Center ROI
-                    const data = imgData.data;
-                    let totalLuma = 0;
-                    const count = data.length / 4;
-                    for (let i = 0; i < data.length; i += 4) {
-                        totalLuma += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        const processLuma = (time: number) => {
+            if (!isActive) return;
+
+            if (time - lastSampleTime >= 50) { // Estricto muestreo a 20 FPS (cero bucles explosivos)
+                lastSampleTime = time;
+                if (videoRef.current && canvasRef.current && videoRef.current.readyState >= 2) {
+                    const ctx = canvasRef.current.getContext("2d", { willReadFrequently: true });
+                    if (ctx) {
+                        ctx.drawImage(videoRef.current, 0, 0, 64, 48);
+                        const imgData = ctx.getImageData(16, 12, 32, 24); // Center ROI
+                        const data = imgData.data;
+                        let totalLuma = 0;
+                        const count = data.length / 4;
+                        for (let i = 0; i < data.length; i += 4) {
+                            totalLuma += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                        }
+                        const avgLuma = totalLuma / count;
+                        opticalMorseRxEngine.processFrameLuminance(avgLuma);
                     }
-                    const avgLuma = totalLuma / count;
-                    opticalMorseRxEngine.processFrameLuminance(avgLuma);
                 }
             }
             animationFrame = requestAnimationFrame(processLuma);
         };
 
-        const interval = setInterval(processLuma, 50); // 20 FPS sampling
+        animationFrame = requestAnimationFrame(processLuma);
 
         return () => {
-            clearInterval(interval);
-            if (animationFrame) cancelAnimationFrame(animationFrame);
+            isActive = false;
+            if (animationFrame !== null) cancelAnimationFrame(animationFrame);
             if (stream) stream.getTracks().forEach(t => t.stop());
         };
     }, [activeTab]);

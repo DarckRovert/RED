@@ -595,9 +595,17 @@ export default function ChatWindow() {
         }
         const mr = mediaRecorderRef.current;
         if (mr && mr.state !== "inactive") {
-            mr.stop();
-            mr.stream.getTracks().forEach(t => t.stop());
-            await new Promise(resolve => { mr.onstop = resolve; });
+            await new Promise<void>((resolve) => {
+                mr.onstop = () => resolve();
+                try {
+                    mr.stop();
+                } catch {
+                    resolve();
+                }
+            });
+            try {
+                mr.stream.getTracks().forEach(t => t.stop());
+            } catch {}
             const blob = new Blob(audioChunksRef.current, { type: recordedMimeTypeRef.current });
             if (blob.size > 100) {
                 // Show preview instead of sending directly
@@ -758,20 +766,18 @@ export default function ChatWindow() {
     const handleLocation = async () => {
         if (!peerHash) return;
         try {
-            if (typeof navigator !== "undefined" && "geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(
-                    async (pos) => {
-                        const lat = pos.coords.latitude.toFixed(6);
-                        const lon = pos.coords.longitude.toFixed(6);
-                        const locText = `📍 Ubicación Táctica: ${lat}, ${lon}\nhttps://maps.google.com/?q=${lat},${lon}`;
-                        await sendMessage(locText, { msg_type: "text" });
-                        toast.success("Ubicación GPS enviada");
-                    },
-                    () => {
-                        toast.error("No se pudo obtener la ubicación GPS");
-                    },
-                    { enableHighAccuracy: true, timeout: 5000 }
-                );
+            const { TacticalLocationEngine } = await import("../lib/sensors/TacticalLocationEngine");
+            const loc = await TacticalLocationEngine.getEmergencyLocation(6000);
+            if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                const lat = loc.lat!.toFixed(6);
+                const lon = loc.lon!.toFixed(6);
+                const altText = loc.alt !== undefined ? ` | Alt: ${loc.alt}m` : "";
+                const estText = loc.isEstimated ? " ⏳ (Última Posición Registrada)" : "";
+                const locText = `📍 Ubicación Táctica: ${lat}, ${lon}${altText}${estText}\ngeo:${lat},${lon}\nhttps://maps.google.com/?q=${lat},${lon}`;
+                await sendMessage(locText, { msg_type: "text" });
+                toast.success("Ubicación táctica enviada");
+            } else {
+                toast.error("Sin señal satelital GNSS ni posición en memoria");
             }
         } catch {
             toast.error("Error al obtener ubicación");

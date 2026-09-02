@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher, P2PVoucher } from "../lib/api";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
 type WalletTab = "emit" | "redeem" | "ledger";
@@ -70,16 +71,13 @@ export const RedP2PPayModal: React.FC = () => {
                 const qrString = `RED_PAY:${res.voucher.id}:${res.voucher.amount}:${res.voucher.signature}`;
                 setActiveQrString(qrString);
 
-                try {
-                    const QRCode = await import("qrcode");
-                    const dataUrl = await QRCode.toDataURL(qrString, {
-                        width: 260, margin: 1,
-                        color: { dark: "#00E676", light: "#04060A" }
-                    });
-                    setActiveQr(dataUrl);
-                } catch {
-                    setActiveQr(`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrString)}&color=00e676&bgcolor=04060a`);
-                }
+                const dataUrl = await OfflineQrEngine.generateDataUrl(qrString, {
+                    width: 260,
+                    margin: 1,
+                    darkColor: "#00E676",
+                    lightColor: "#04060A"
+                });
+                setActiveQr(dataUrl);
 
                 setAmountInput("");
                 setRecipientInput("");

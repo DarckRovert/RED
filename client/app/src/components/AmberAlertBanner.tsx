@@ -76,15 +76,14 @@ export default function AmberAlertBanner({ onMinimize }: AmberAlertBannerProps) 
     let lat: number | undefined;
     let lon: number | undefined;
 
-    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000, enableHighAccuracy: true });
-        });
-        lat = pos.coords.latitude;
-        lon = pos.coords.longitude;
-      } catch {}
-    }
+    try {
+      const { TacticalLocationEngine } = await import('../lib/sensors/TacticalLocationEngine');
+      const loc = await TacticalLocationEngine.getEmergencyLocation(5000);
+      if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+        lat = loc.lat;
+        lon = loc.lon;
+      }
+    } catch {}
 
     try {
       await reportSighting(currentAlert.id, {

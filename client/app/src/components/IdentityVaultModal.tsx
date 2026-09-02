@@ -6,6 +6,7 @@ import { ShamirSecretSharingEngine, SecretShare } from "../lib/ShamirSecretShari
 import { PqcCryptoEngine, HybridKeyPair } from "../lib/PqcCryptoEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 
 const STORAGE_KEY = "red_identity_vault_v1";
 
@@ -59,14 +60,13 @@ export const IdentityVaultModal: React.FC = () => {
             const pk = identity.public_key || identity.identity_hash;
             const nameParam = encodeURIComponent(nickname || 'Operador RED');
             const qrText = `did:red:${identity.identity_hash}:${pk}:${nameParam}`;
-            import("qrcode").then(QRCode => {
-                QRCode.toDataURL(qrText, {
-                    width: 320,
-                    margin: 1,
-                    color: { dark: "#00E676", light: "#04060A" }
-                }).then(url => setIdentityQrCodeData(url))
-                .catch(() => {});
-            }).catch(() => {});
+            OfflineQrEngine.generateDataUrl(qrText, {
+                width: 320,
+                margin: 1,
+                darkColor: "#00E676",
+                lightColor: "#04060A"
+            }).then(url => setIdentityQrCodeData(url))
+            .catch(() => {});
         }
     }, [identity, nickname]);
 
@@ -142,10 +142,11 @@ export const IdentityVaultModal: React.FC = () => {
         const medicalPayload = `RED_MED_V1:${idHash}:${bloodType || 'N/A'}:${allergies || 'N/A'}:${emergencyContact || 'N/A'}:${signatureHex}`;
 
         try {
-            const QRCode = await import("qrcode");
-            const dataUrl = await QRCode.toDataURL(medicalPayload, {
-                width: 280, margin: 1,
-                color: { dark: "#FF3355", light: "#04060A" }
+            const dataUrl = await OfflineQrEngine.generateDataUrl(medicalPayload, {
+                width: 280,
+                margin: 1,
+                darkColor: "#FF3355",
+                lightColor: "#04060A"
             });
             setQrCodeData(dataUrl);
         } catch {
@@ -219,13 +220,51 @@ export const IdentityVaultModal: React.FC = () => {
     };
 
     const handleReconstructSecret = () => {
-        if (!sharesToReconstruct.trim()) {
-            toast.warning("Pega al menos 3 fragmentos en formato JSON.");
+        const rawInput = sharesToReconstruct.trim();
+        if (!rawInput) {
+            toast.warning("Pega al menos 3 fragmentos SSS.");
             return;
         }
         try {
-            const parsed = JSON.parse(sharesToReconstruct.trim());
-            const secretHex = ShamirSecretSharingEngine.reconstructSecret(parsed);
+            let sharesList: SecretShare[] = [];
+
+            // 1. Intentar JSON parse directo (array u objeto con propiedad shares)
+            try {
+                const parsed = JSON.parse(rawInput);
+                if (Array.isArray(parsed)) {
+                    sharesList = parsed;
+                } else if (parsed && Array.isArray(parsed.shares)) {
+                    sharesList = parsed.shares;
+                }
+            } catch {
+                // 2. Si no es JSON estándar, procesar línea por línea o regex táctico
+                const lines = rawInput.split('\n').map(l => l.trim()).filter(Boolean);
+                for (const line of lines) {
+                    try {
+                        const parsedLine = JSON.parse(line);
+                        if (parsedLine && (parsedLine.shareIndex || parsedLine.x) && (parsedLine.shareHex || parsedLine.yHex)) {
+                            sharesList.push(parsedLine);
+                            continue;
+                        }
+                    } catch {}
+
+                    // Formato texto táctico RED_SSS:1:hex o 1:hex
+                    const match = line.match(/(?:RED_SSS:)?([1-9]):([0-9a-fA-F]+)/i);
+                    if (match) {
+                        sharesList.push({
+                            shareIndex: parseInt(match[1], 10),
+                            shareHex: match[2].toLowerCase()
+                        });
+                    }
+                }
+            }
+
+            if (!sharesList || sharesList.length < 3) {
+                toast.error("Se requieren al menos 3 fragmentos válidos para reconstruir el secreto.");
+                return;
+            }
+
+            const secretHex = ShamirSecretSharingEngine.reconstructSecret(sharesList);
             const bytes = new Uint8Array(secretHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []);
             const secret = new TextDecoder().decode(bytes);
             setReconstructedSecret(secret);
@@ -578,7 +617,7 @@ export const IdentityVaultModal: React.FC = () => {
                                 <textarea
                                     value={sharesToReconstruct}
                                     onChange={e => setSharesToReconstruct(e.target.value)}
-                                    placeholder="Pega array JSON de al menos 3 fragmentos..."
+                                    placeholder="Pega array JSON, líneas de fragmentos o formato RED_SSS:1:hex..."
                                     rows={2}
                                     style={{
                                         padding: "8px 12px", background: "rgba(0,0,0,0.5)",

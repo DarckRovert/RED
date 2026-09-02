@@ -67,17 +67,14 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
         const pk = identity?.public_key || identity?.identity_hash || myHash;
         const nameParam = encodeURIComponent(displayName.trim() || `Operador ${shortId}`);
         const qrString = `did:red:${myHash}:${pk}:${nameParam}`;
-        try {
-            const QRCode = await import('qrcode');
-            const url = await QRCode.toDataURL(qrString, {
-                width: 200, margin: 1,
-                color: { dark: '#000000', light: '#FFFFFF' }
-            });
-            setQrDataUrl(url);
-        } catch {
-            // Fallback: QR server externo
-            setQrDataUrl(`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrString)}&color=000000&bgcolor=FFFFFF`);
-        }
+        const { OfflineQrEngine } = await import('../lib/qr/OfflineQrEngine');
+        const url = await OfflineQrEngine.generateDataUrl(qrString, {
+            width: 200,
+            margin: 1,
+            darkColor: '#000000',
+            lightColor: '#FFFFFF'
+        });
+        setQrDataUrl(url);
     }, [myHash, identity, displayName, shortId]);
 
     const AVATAR_PALETTE = ["#FF3355", "#00F0FF", "#00E676", "#FFB300", "#7C4DFF", "#FF4081"];

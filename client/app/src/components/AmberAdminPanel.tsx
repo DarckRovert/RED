@@ -96,18 +96,19 @@ export default function AmberAdminPanel({ onClose, localNodeId }: AmberAdminPane
         let lat = form.last_seen_lat;
         let lon = form.last_seen_lon;
 
-        if ((lat === undefined || lon === undefined) && typeof navigator !== "undefined" && "geolocation" in navigator) {
+        if (lat === undefined || lon === undefined) {
             try {
-                const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 4000, enableHighAccuracy: true });
-                });
-                lat = pos.coords.latitude;
-                lon = pos.coords.longitude;
+                const { TacticalLocationEngine } = await import("../lib/sensors/TacticalLocationEngine");
+                const loc = await TacticalLocationEngine.getEmergencyLocation(5000);
+                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                    lat = loc.lat;
+                    lon = loc.lon;
+                }
             } catch {}
         }
 
         try {
-            const payloadSummary = `${form.name.trim()}:${form.age}:${form.description.trim()}:${lat || 0}:${lon || 0}`;
+            const payloadSummary = `${form.name.trim()}:${form.age}:${form.description.trim()}:${lat ?? 'null'}:${lon ?? 'null'}`;
             const realSignature = await signAuthorityPayload(nodeId, payloadSummary);
 
             await createAmberAlert({
