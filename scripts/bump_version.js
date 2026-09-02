@@ -174,6 +174,17 @@ updateFile('client/Cargo.toml', (content) => {
     return content.replace(/^version\s*=\s*"[^"]+"/m, `version = "${targetVersion}"`);
 }, 'Rust client Crate');
 
+// 12.1 Cargo.lock (Workspace Packages Synchronization)
+updateFile('Cargo.lock', (content) => {
+    const localCrates = ['red-blockchain', 'red_core', 'red_mobile', 'red_node'];
+    let updated = content;
+    localCrates.forEach(crateName => {
+        const crateRegex = new RegExp(`(name = "${crateName}"[\\r\\n]+version = ")[^"]+(")`);
+        updated = updated.replace(crateRegex, `$1${targetVersion}$2`);
+    });
+    return updated;
+}, 'Rust Workspace Cargo.lock');
+
 // 13. README.md
 updateFile('README.md', (content) => {
     let updated = content.replace(/# 🛡️ RED — Sovereign Mesh OS v\d+\.\d+\.\d+/, `# 🛡️ RED — Sovereign Mesh OS v${targetVersion}`);

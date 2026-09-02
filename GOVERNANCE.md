@@ -82,6 +82,13 @@ RED/
 - ✅ `engines.node` debe especificar `>=18.0.0` mínimo
 - ✅ Todos los `dependencies` versiones deben ser ≥ "X.Y.Z" nunca `*`
 
+### Regla 1.3.1: Coherencia de Crate Names y Grafo de Dependencias en Cargo
+**Para TODOS los crates del workspace (`core`, `blockchain`, `node`, `red_mobile`):**
+- ❌ **PROHIBIDO** modificar o alternar el `name` del package en cualquier crate hijo sin sincronizar simultáneamente todos los dependientes en el workspace.
+- ✅ **Paridad Estricta de Nombres:** El crate `blockchain` debe conservar indefectiblemente `name = "red-blockchain"`. En Rust, los identificadores en código (`use red_blockchain::...`) mapean automáticamente los guiones a guiones bajos (`-` -> `_`), por lo que el `name` del manifiesto DEBE mantenerse como `red-blockchain` para coincidir con `red-blockchain = { path = "../blockchain" }` en `core`, `node` y `red_mobile`.
+- ✅ **Validación de Resolución:** Antes de cualquier commit o release, es MANDATORIO ejecutar `cargo check --workspace` para validar que Cargo resuelva el grafo completo de dependencias sin discrepancias entre nombres de paquete y llaves de dependencia.
+- ✅ **Sincronización de Lockfile:** Cada actualización de versión en `Cargo.toml` debe verificar que `Cargo.lock` sincronice los miembros locales a la misma versión SSOT.
+
 ### Regla 1.4: Markdown Documentation Validation
 **Para TODOS los `.md` en raíz y docs/:**
 - ✅ Validar sintaxis Markdown (no broken links)

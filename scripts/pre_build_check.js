@@ -167,6 +167,60 @@ filesToCheck.forEach(item => {
     }
 });
 
+// ── PASO 4: Verificación de Integridad del Workspace de Cargo & Crate Names ─
+console.log("\n🦀 4. Verificando integridad de nombres y grafo en Cargo Workspace...");
+
+// 4.1 Coherencia de nombre en blockchain/Cargo.toml
+const blockchainTomlPath = path.join(ROOT_DIR, 'blockchain', 'Cargo.toml');
+if (fs.existsSync(blockchainTomlPath)) {
+    const bToml = fs.readFileSync(blockchainTomlPath, 'utf8');
+    if (!bToml.includes('name = "red-blockchain"')) {
+        console.error("  ❌ [ERROR DE NOMBRADO] blockchain/Cargo.toml DEBE tener `name = \"red-blockchain\"` para coincidir con dependientes.");
+        hasError = true;
+    } else {
+        console.log("  ✅ blockchain/Cargo.toml: `name = \"red-blockchain\"` verificado.");
+    }
+}
+
+// 4.2 Verificación de referencias de dependencia en core, node y red_mobile
+const dependees = [
+    { name: 'core/Cargo.toml', path: path.join(ROOT_DIR, 'core', 'Cargo.toml') },
+    { name: 'node/Cargo.toml', path: path.join(ROOT_DIR, 'node', 'Cargo.toml') },
+    { name: 'red_mobile/Cargo.toml', path: path.join(ROOT_DIR, 'red_mobile', 'Cargo.toml') },
+];
+
+dependees.forEach(dep => {
+    if (fs.existsSync(dep.path)) {
+        const depContent = fs.readFileSync(dep.path, 'utf8');
+        if (!depContent.includes('red-blockchain = { path = "../blockchain" }') &&
+            !depContent.includes('red-blockchain = { path = "../blockchain", package = "red_blockchain" }')) {
+            console.error(`  ❌ [ERROR DE DEPENDENCIA] ${dep.name} no tiene referencia válida a red-blockchain.`);
+            hasError = true;
+        } else {
+            console.log(`  ✅ ${dep.name}: dependencia red-blockchain alineada.`);
+        }
+    }
+});
+
+// 4.3 Verificación de Cargo.lock si existe
+const cargoLockPath = path.join(ROOT_DIR, 'Cargo.lock');
+if (fs.existsSync(cargoLockPath)) {
+    const lockContent = fs.readFileSync(cargoLockPath, 'utf8');
+    const localCrates = ['red-blockchain', 'red_core', 'red_mobile', 'red_node'];
+    localCrates.forEach(crateName => {
+        const crateRegex = new RegExp(`name = "${crateName}"[\\r\\n]+version = "([^"]+)"`);
+        const lockMatch = lockContent.match(crateRegex);
+        if (lockMatch) {
+            if (lockMatch[1] === authoritativeVersion) {
+                console.log(`  ✅ Cargo.lock [${crateName}]: v${lockMatch[1]} sincronizado.`);
+            } else {
+                console.error(`  ❌ [LOCKFILE DESFASADO] Cargo.lock [${crateName}] tiene v${lockMatch[1]} (Esperado: v${authoritativeVersion})`);
+                hasError = true;
+            }
+        }
+    });
+}
+
 // ── RESULTADO FINAL ──────────────────────────────────────────────────────────
 console.log(`\n${"=".repeat(70)}`);
 if (hasError) {

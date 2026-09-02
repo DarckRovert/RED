@@ -1,11 +1,11 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v82.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v83.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 
 ## Directrices Operativas Clave para el Asistente:
 1. **Nivel 0 - Path Segregation & Cero Binarios en Raíz**:
    - `core/`: Rust `red_core`.
-   - `blockchain/`: Rust `red_blockchain`.
+   - `blockchain/`: Rust `red-blockchain`.
    - `node/`: Rust CLI `red-node`.
    - `red_mobile/`: Rust + JNI `red_mobile`.
    - `client/app/`: Next.js 16 + React 19 + Capacitor.
@@ -43,5 +43,10 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
    - **Independencia de Cloud Runners**: Ante retenciones administrativas de cuenta (Billing issues/holds), agotamiento de cuotas de minutos en GitHub Actions o indisponibilidad de la nube, el despliegue del portal web y cliente companion (`https://darckrovert.github.io/RED/`) NUNCA debe detenerse.
    - **Comando Estándar de Despliegue Local Soberano**: Todo despliegue web soberano debe ejecutarse directamente mediante `npm run deploy:gh` en `client/app` o mediante el script `scripts/deploy_gh_pages.ps1` / `scripts/deploy_web.bat`.
    - **Requisitos de Empaquetado Web**: La exportación estática de Next.js DEBE compilarse con `NEXT_PUBLIC_BASE_PATH='/RED'`, generar `out/404.html` (copia de `index.html` para enrutamiento SPA sin servidor) y crear `out/.nojekyll`, publicando directamente en la rama `gh-pages`.
+
+8. **Nivel 8 - Coherencia de Manifiestos Cargo & Grafo de Dependencias Rust**:
+   - **Nombre Inmutable de Crates**: El crate de blockchain DEBE mantenerse estrictamente como `name = "red-blockchain"` en `blockchain/Cargo.toml` para coincidir con las declaraciones `red-blockchain = { path = "../blockchain" }` en `core/Cargo.toml`, `node/Cargo.toml` y `red_mobile/Cargo.toml`.
+   - **Prohibición de Renombrado Huérfano**: Queda prohibido alterar guiones o guiones bajos (`-` vs `_`) en los paquetes del workspace sin actualizar simétricamente todos los dependientes y comprobar `cargo check --workspace`.
+   - **Sincronización de Lockfile**: Cualquier modificación en crates locales debe ser validada contra `Cargo.lock` para garantizar que no existan discrepancias entre las versiones declaradas y bloqueadas.
 
 
