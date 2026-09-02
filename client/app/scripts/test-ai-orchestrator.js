@@ -212,6 +212,43 @@ runTest('Sovereign Endpoints: Normalización de URLs de Ollama y Local APIs', ()
     assert.strictEqual(sanitizeSovereignUrl('localhost:11434'), 'http://localhost:11434');
     assert.strictEqual(sanitizeSovereignUrl('http://192.168.1.50:11434/'), 'http://192.168.1.50:11434');
     assert.strictEqual(sanitizeSovereignUrl('https://api.openai.com/v1///'), 'https://api.openai.com/v1');
+    assert.strictEqual(sanitizeSovereignUrl('127.0.0.1:7333/api/ai/'), 'http://127.0.0.1:7333/api/ai');
+});
+
+runTest('Sovereign Presets: Estructura y Validación de Hosts Predeterminados', () => {
+    const SOVEREIGN_PRESETS = [
+        { label: "🦙 Ollama (11434)", url: "http://127.0.0.1:11434", modelName: "qwen2.5:0.5b" },
+        { label: "🖥️ LM Studio (1234)", url: "http://127.0.0.1:1234/v1", modelName: "local-model" },
+        { label: "🍋 Lemonade Server (8000)", url: "http://127.0.0.1:8000/v1", modelName: "default" },
+        { label: "📦 LocalAI / vLLM (8080)", url: "http://127.0.0.1:8080/v1", modelName: "default" },
+        { label: "🤖 Jan.ai (1337)", url: "http://127.0.0.1:1337/v1", modelName: "default" },
+        { label: "🛡️ Nodo RED Nativo (7333)", url: "http://127.0.0.1:7333/api/ai", modelName: "red-tactical-qwen" }
+    ];
+
+    assert.strictEqual(SOVEREIGN_PRESETS.length, 6, 'Debe incluir los 6 presets estándar');
+    for (const p of SOVEREIGN_PRESETS) {
+        assert(p.url.startsWith('http'), `La URL debe incluir protocolo: ${p.url}`);
+        assert(p.modelName.length > 0, `El modelo debe estar definido: ${p.modelName}`);
+        assert(p.label.length > 0, 'La etiqueta debe ser descriptiva');
+    }
+});
+
+runTest('Orchestrator Telemetry: Resolución Dinámica de Modelo Activo', () => {
+    function resolveModelTag(sovereignConfig, activeLocalModel) {
+        if (sovereignConfig && sovereignConfig.url) {
+            return `Sovereign (${sovereignConfig.modelName || 'Host Local'} @ ${sovereignConfig.url})`;
+        }
+        return activeLocalModel ? `${activeLocalModel.name} (ARM64 / WASM Local)` : 'Qwen 2.5 0.5B + Vector INT8 (100% Offline)';
+    }
+
+    const localTag = resolveModelTag(null, { name: 'SmolLM2 360M' });
+    assert.strictEqual(localTag, 'SmolLM2 360M (ARM64 / WASM Local)');
+
+    const sovTag = resolveModelTag({ url: 'http://127.0.0.1:11434', modelName: 'llama3.2' }, null);
+    assert.strictEqual(sovTag, 'Sovereign (llama3.2 @ http://127.0.0.1:11434)');
+
+    const offlineTag = resolveModelTag(null, null);
+    assert.strictEqual(offlineTag, 'Qwen 2.5 0.5B + Vector INT8 (100% Offline)');
 });
 
 console.log('\n================================================================================');
