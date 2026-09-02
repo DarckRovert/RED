@@ -275,6 +275,174 @@ export class CursorOnTargetEngine {
         });
     }
 
+    /**
+     * Serializes a CotEvent into a 28-byte Ultra-Compact Binary PLI packet (for LoRa & SoundMesh).
+     * Compresses verbose XML (450-600B) down to 28 bytes (-94.9% reduction).
+     * 
+     * Structure:
+     * [0-1] Magic Header (0x52, 0x43 - 'RC')
+     * [2]   Type Flags (Affiliation: 2 bits, Role: 4 bits)
+     * [3]   Battery Level (0-100)
+     * [4-7] Latitude as Int32 (microdegrees, scale 1e6)
+     * [8-11] Longitude as Int32 (microdegrees, scale 1e6)
+     * [12-13] Altitude HAE as Int16 (-500 to +32000m)
+     * [14-17] Timestamp as Uint32 (epoch seconds)
+     * [18-25] Callsign (8 bytes ASCII/UTF-8)
+     * [26-27] Checksum CRC-16-CCITT
+     */
+    public serializeToCompactBinary(event: CotEvent): Uint8Array {
+        const buffer = new Uint8Array(28);
+        const view = new DataView(buffer.buffer);
+
+        // Header
+        buffer[0] = 0x52; // 'R'
+        buffer[1] = 0x43; // 'C'
+
+        // Affiliation & Role
+        const { affiliation, role } = this.parseCotType(event.type || 'a-f-G-U-C-I');
+        let affNum = 0;
+        if (affiliation === 'HOSTILE') affNum = 1;
+        else if (affiliation === 'NEUTRAL') affNum = 2;
+        else if (affiliation === 'UNKNOWN') affNum = 3;
+
+        let roleNum = 0;
+        if (role === 'MEDICAL') roleNum = 1;
+        else if (role === 'COMMAND_HQ') roleNum = 2;
+        else if (role === 'RECON_DRONE') roleNum = 3;
+        else if (role === 'SUPPLY_AMMO') roleNum = 4;
+        else if (role === 'MEDEVAC') roleNum = 5;
+
+        buffer[2] = (affNum & 0x03) | ((roleNum & 0x0F) << 2);
+
+        // Battery
+        const batt = event.detail?.status?.battery;
+        buffer[3] = (typeof batt === 'number' && isFinite(batt)) ? Math.max(0, Math.min(100, Math.round(batt))) : 100;
+
+        // Lat / Lon in microdegrees
+        const lat = (typeof event.point?.lat === 'number' && isFinite(event.point.lat))
+            ? Math.max(-90, Math.min(90, event.point.lat)) : 0;
+        const lon = (typeof event.point?.lon === 'number' && isFinite(event.point.lon))
+            ? Math.max(-180, Math.min(180, event.point.lon)) : 0;
+
+        view.setInt32(4, Math.round(lat * 1e6), false);
+        view.setInt32(8, Math.round(lon * 1e6), false);
+
+        // Altitude
+        const hae = (typeof event.point?.hae === 'number' && isFinite(event.point.hae))
+            ? Math.max(-500, Math.min(32000, Math.round(event.point.hae))) : 0;
+        view.setInt16(12, hae, false);
+
+        // Timestamp (seconds)
+        const tsSec = Math.floor((event.time ? new Date(event.time).getTime() : Date.now()) / 1000);
+        view.setUint32(14, isFinite(tsSec) && tsSec > 0 ? tsSec : Math.floor(Date.now() / 1000), false);
+
+        // Callsign (8 bytes ASCII)
+        const callsign = (event.detail?.contact?.callsign || event.uid || 'RED-OP').trim();
+        const callsignBytes = new TextEncoder().encode(callsign);
+        for (let i = 0; i < 8; i++) {
+            buffer[18 + i] = i < callsignBytes.length ? callsignBytes[i] : 0;
+        }
+
+        // CRC-16 over bytes 0-25
+        const crc = this.computeCrc16(buffer.subarray(0, 26));
+        view.setUint16(26, crc, false);
+
+        return buffer;
+    }
+
+    /**
+     * Parses a 28-byte Ultra-Compact Binary PLI packet into a standard CotEvent.
+     */
+    public parseCompactBinary(buffer: Uint8Array): CotEvent | null {
+        if (!buffer || !(buffer instanceof Uint8Array) || buffer.length < 28) {
+            return null;
+        }
+
+        if (buffer[0] !== 0x52 || buffer[1] !== 0x43) {
+            return null; // Invalid magic header
+        }
+
+        const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+        // Verify CRC-16
+        const expectedCrc = view.getUint16(26, false);
+        const actualCrc = this.computeCrc16(buffer.subarray(0, 26));
+        if (expectedCrc !== actualCrc) {
+            return null; // Corrupted packet
+        }
+
+        const typeFlag = buffer[2];
+        const affNum = typeFlag & 0x03;
+        const roleNum = (typeFlag >> 2) & 0x0F;
+
+        let affiliation: TacticalAffiliation = 'FRIEND';
+        if (affNum === 1) affiliation = 'HOSTILE';
+        else if (affNum === 2) affiliation = 'NEUTRAL';
+        else if (affNum === 3) affiliation = 'UNKNOWN';
+
+        let role: TacticalRole = 'INFANTRY';
+        if (roleNum === 1) role = 'MEDICAL';
+        else if (roleNum === 2) role = 'COMMAND_HQ';
+        else if (roleNum === 3) role = 'RECON_DRONE';
+        else if (roleNum === 4) role = 'SUPPLY_AMMO';
+        else if (roleNum === 5) role = 'MEDEVAC';
+
+        const battery = buffer[3];
+        const lat = view.getInt32(4, false) / 1e6;
+        const lon = view.getInt32(8, false) / 1e6;
+        const hae = view.getInt16(12, false);
+        const tsSec = view.getUint32(14, false);
+
+        // Extract callsign
+        let callsign = '';
+        for (let i = 0; i < 8; i++) {
+            const byte = buffer[18 + i];
+            if (byte === 0) break;
+            callsign += String.fromCharCode(byte);
+        }
+        if (!callsign) callsign = 'RED-NODE';
+
+        const timeIso = new Date(tsSec * 1000).toISOString();
+        const staleIso = new Date((tsSec + 180) * 1000).toISOString();
+
+        return {
+            version: '2.0',
+            uid: `RED-${callsign}`,
+            type: this.toCotType(affiliation, role),
+            time: timeIso,
+            start: timeIso,
+            stale: staleIso,
+            how: 'm-g',
+            point: {
+                lat,
+                lon,
+                hae,
+                ce: 5.0,
+                le: 5.0
+            },
+            detail: {
+                contact: { callsign },
+                status: { battery },
+                remarks: 'Decoded from RED 28-Byte Compact Binary PLI via LoRa/SoundMesh'
+            }
+        };
+    }
+
+    private computeCrc16(data: Uint8Array): number {
+        let crc = 0xFFFF;
+        for (let i = 0; i < data.length; i++) {
+            crc ^= (data[i] << 8);
+            for (let j = 0; j < 8; j++) {
+                if ((crc & 0x8000) !== 0) {
+                    crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+                } else {
+                    crc = (crc << 1) & 0xFFFF;
+                }
+            }
+        }
+        return crc & 0xFFFF;
+    }
+
     public destroy(): void {
         CursorOnTargetEngine.instance = null;
     }

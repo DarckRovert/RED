@@ -22,3 +22,4 @@ export * from './LoRaMeshtasticBridge';
 export * from './EcoMeshDutyCycleEngine';
 export * from './BroadcastStormGuardEngine';
 export * from './LamportMeshClockEngine';
+export * from './CognitiveRadioArbiter';

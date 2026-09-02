@@ -37,6 +37,8 @@ import {
 import { RedAPI } from '../api';
 import { slottedGossip } from './SlottedGossipEngine';
 import { DnsTunnelEngine } from '../network/dnsTunnelEngine';
+import { cognitiveArbiter } from './CognitiveRadioArbiter';
+import { SoundMeshEngine } from '../audio/SoundMeshEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -1418,10 +1420,31 @@ class MeshRouter {
 
     let anySent = false;
 
-    // ─── 1. SMART UNICAST DIRECT ROUTING (Fast Path) ───
+    // ─── 1. SMART COGNITIVE UNICAST DIRECT ROUTING (Fast Path) ───
     if (!isBroadcast) {
       const canonicalRecipient = this.getCanonicalId(packet.recipient);
       const directPeer = this.getPeerByAnyId(canonicalRecipient);
+      const decision = cognitiveArbiter.evaluateRoutingDecision(directPeer, encoded.length);
+
+      // Cognitive Fallback A: Electronic Warfare / Jamming active in RF -> route via SoundMesh
+      if (decision.isElectronicWarfareActive && encoded.length <= 255) {
+        console.log(`[MeshRouter] 🛡️ Jamming EW Active: Routing via SoundMesh (${decision.rationale})`);
+        const ok = await SoundMeshEngine.transmitPayload(encoded);
+        if (ok) {
+          dtnStorage.markAttempt(packet.nonce, false);
+          return 'sent';
+        }
+      }
+
+      // Cognitive Fallback B: Long-distance target (>90m) or dedicated LoRa link -> LoRa RF
+      if (decision.primaryBearer === 'LORA_RF') {
+        const ok = await this.sendViaLoRa(encoded);
+        if (ok) {
+          console.log(`[MeshRouter] 📡 Cognitive Radio: Delivered via LoRa RF (${decision.rationale})`);
+          dtnStorage.markAttempt(packet.nonce, false);
+          return 'sent';
+        }
+      }
 
       if (directPeer) {
         // Direct Fast-Path 1: Direct WebRTC DataChannel (54 Mbps, <30ms)
@@ -1517,7 +1540,7 @@ class MeshRouter {
 
   private async sendToPeer(
     peerId: string,
-    transport: 'wifi' | 'ble' | 'lora',
+    transport: 'wifi' | 'ble' | 'lora' | 'soundmesh',
     payload: Uint8Array
   ): Promise<boolean> {
     try {
@@ -1529,6 +1552,9 @@ class MeshRouter {
       }
       if (transport === 'lora') {
         return await this.sendViaLoRa(payload);
+      }
+      if (transport === 'soundmesh') {
+        return await SoundMeshEngine.transmitPayload(payload);
       }
     } catch (e) {
       console.warn(`[MeshRouter] Send to ${peerId} via ${transport} failed:`, e);

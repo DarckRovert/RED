@@ -167,6 +167,22 @@ export class LoRaMeshtasticBridge {
     }
 
     /**
+     * Encapsulates and broadcasts a 28-byte Ultra-Compact Binary CoT-PLI beacon over LoRa RF
+     */
+    public async broadcastCompactCot(binaryCot: Uint8Array): Promise<boolean> {
+        return this.sendPacket({
+            from: this.localNodeInfo?.nodeNum || 0x12345678,
+            to: 0xFFFFFFFF,
+            channel: 0,
+            portnum: MeshtasticPortNum.RED_SOVEREIGN_MESH_APP,
+            payload: binaryCot,
+            id: this.packetCounter++,
+            hopLimit: 3,
+            wantAck: false
+        });
+    }
+
+    /**
      * Sends a plain text message compatible with standard Meshtastic nodes
      */
     public async sendTextMessage(text: string, toNodeNum = 0xFFFFFFFF): Promise<boolean> {

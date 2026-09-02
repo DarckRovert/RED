@@ -378,10 +378,10 @@ export function LoraTransceiverModal({ onClose }: LoraTransceiverModalProps) {
                                     const callsign = identity?.nickname || 'TACTICAL-OP';
                                     
                                     const cotEvt = cursorOnTarget.createBftEvent(nodeId, callsign, lat, lon, 'INFANTRY', batt);
-                                    const cotXml = cursorOnTarget.serializeToXml(cotEvt);
-                                    await loraMeshtastic.sendTextMessage(cotXml);
-                                    toast.success("🎯 Baliza ATAK Cursor-on-Target emitida por LoRa");
-                                    setLogs(prev => [`[TX-CoT] ${new Date().toLocaleTimeString()} · ${cotXml.length}B · ATAK CoT XML Broadcast`, ...prev.slice(0, 49)]);
+                                    const cotBinary = cursorOnTarget.serializeToCompactBinary(cotEvt);
+                                    await loraMeshtastic.broadcastCompactCot(cotBinary);
+                                    toast.success("🎯 Baliza ATAK Compact-PLI emitida por LoRa (28 Bytes, -94.9%)");
+                                    setLogs(prev => [`[TX-CoT] ${new Date().toLocaleTimeString()} · ${cotBinary.length}B (MTU Opt) · Ultra-Compact PLI Broadcast`, ...prev.slice(0, 49)]);
                                 } catch (e: any) {
                                     toast.error("Error al emitir CoT: " + e.message);
                                 }
