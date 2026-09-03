@@ -1,5 +1,41 @@
 # Changelog
 
+## [85.0.0-tactical-fortification-edition] - 2026-09-03
+
+### 🛡️ Tactical Fortification & Resilient Hardware Mesh Edition (Release Oficial v85.0.0)
+
+- **Ciclos 1 & 2 — Acústica & Voz Táctica:**
+  - Dictado por voz (STT) offline multi-motor con Whisper WASM, Web Speech API y resampleo PCM a 16 kHz.
+  - Notas de voz tácticas con códec Opus a 24 kbps y analizador espectral `TacticalVoiceAnalyzer` (waveform gaussiana de 28 barras, mitigación de duración infinita en WebM y VU-meter reactivo).
+- **Ciclo 3 — Web Companion & Enlace Físico Air-Gap:**
+  - Escaneo nativo con `@capacitor-community/barcode-scanner`, desbloqueo de rotación de pantalla y limpieza garantizada de cámara física.
+  - Cápsulas Air-Gap cifradas con PBKDF2 (100,000 iteraciones) y AES-256-GCM para intercambio seguro de llaves sin contacto de radio.
+- **Ciclo 4 — Cartografía Táctica Offline & PDR:**
+  - `TileCacheEngine` en IndexedDB para almacenamiento persistente de teselas cartográficas offline.
+  - Navegación inercial Dead Reckoning (PDR) con normalización angular $[0, 360)^\circ$ y salvaguardas contra singularidades polares de Mercator.
+- **Ciclo 5 — Llamadas Mesh WebRTC & Vocoder:**
+  - RTCDataChannel fuera de banda (<5ms de latencia) para señalización y telemetría de escuadrón.
+  - Vocoder de contingencia militar ADPCM de 8 kHz a 32 kbps (-97.9% vs Float32) para enlaces LoRa y acústicos.
+- **Ciclo 6 — Sensores Tácticos de Campo:**
+  - Calibración cero de línea base en brújula triaxial y sensor sísmico $f_0$.
+  - Ecuaciones de dispersión óptica Mie, dosimetría nuclear CMOS e inmunidad a temperaturas criogénicas en sónar acústico.
+- **Ciclo 7 — Bóveda Soberana & Economía P2P Barter ZK:**
+  - Generación y canje de vales QR de trueque mediante cámara física nativa.
+  - Pruebas de conocimiento cero offline (`ZeroKnowledgeBarterEngine`) y cupones soberanos anti-doble gasto.
+- **Ciclo 8 — Modelos Neuronales Locales GGUF:**
+  - Verificación de firma binaria mágica `0x47475546` y parseo de cabeceras de arquitectura.
+  - Descargas seguras y reanudables mediante cabecera HTTP `Range` con purga atómica de archivos parciales `.part`.
+- **Fortificaciones Adicionales & DMS:**
+  - Interruptor de Hombre Muerto (`DeadManSwitchEngine`) con reseteo de inactividad, panic wipe y endpoints simétricos en nodo Rust y cliente TypeScript.
+  - Manejo de ciclo de vida en Android (`handleOnDestroy()`) en `RedNodePlugin.java` para prevenir fugas de memoria y liberación del micrófono.
+- **Despliegue & Depuración en Hardware Real:**
+  - Despliegue en limpio verificado vía ADB en **Motorola Moto G22** (`ZT322B386P`) y **Lenovo Tab M9** (`HA2CHKZ2`), auditado con `adb logcat` en tiempo real (0 fallos, 0 ANR, carga nativa de `libred_mobile.so` exitosa).
+- **Validación Exhaustiva 100% PASS:**
+  - 66/66 suites automatizadas superadas (`npm run test:all`).
+  - TypeScript estricto con 0 errores (`npx tsc --noEmit`).
+  - Rust workspace con 0 errores (`cargo check --workspace`).
+- **Versión Oficial:** `85.0.0` / `versionCode 85000`.
+
 ## [84.0.0-cognitive-radio-multi-transport-edition] - 2026-09-02
 
 ### 🛡️ Cognitive Radio & Multi-Transport Autonomous Sovereign Master Edition (Release Oficial v84.0.0)

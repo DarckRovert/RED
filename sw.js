@@ -1,4 +1,4 @@
-// RED Service Worker v84.0.0
+// RED Service Worker v85.0.0
 // Sovereign Mesh OS — PWA & Full Offline Cache Engine
 // Handles: Push Notifications, Offline Cache Storage, Stale-While-Revalidate,
 //          Background Sync, and Scheduled Messages via IndexedDB
