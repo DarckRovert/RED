@@ -7,6 +7,7 @@
  */
 
 import { registerPlugin, Capacitor } from '@capacitor/core';
+import { AudioContextManager } from '../audio/AudioContextManager';
 
 export interface MorseTransmissionState {
     isTransmitting: boolean;
@@ -202,14 +203,7 @@ export class OpticalMorseLiFiEngine {
     }
 
     private startAudioTone() {
-        if (!this.audioCtx || this.audioCtx.state === 'closed') {
-            const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioCtxClass) this.audioCtx = new AudioCtxClass();
-        }
-        if (this.audioCtx && this.audioCtx.state === 'suspended') {
-            this.audioCtx.resume().catch(() => {});
-        }
-
+        this.audioCtx = AudioContextManager.getSharedContext();
         if (!this.audioCtx) return;
 
         this.stopAudioTone();

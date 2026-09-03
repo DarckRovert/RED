@@ -1,4 +1,4 @@
-import { BleClient, numberToUUID } from '@capacitor-community/bluetooth-le';
+import { BleClient, numberToUUID, ScanResult } from '@capacitor-community/bluetooth-le';
 import { dynamicBearerGovernor } from './DynamicBearerGovernor';
 import { KineticDutyGovernor, DutyCycleProfile } from '../sensors/KineticDutyGovernor';
 
@@ -143,10 +143,7 @@ class BluetoothTransport {
             clearTimeout(this.dutyCycleTimer);
             this.dutyCycleTimer = null;
         }
-        if (this.isScanning) {
-            BleClient.stopLEScan().catch(() => {});
-            this.isScanning = false;
-        }
+        this.stopPhysicalScanIfIdle().catch(() => {});
     }
 
     /** Calculate Link Quality Score (LQS 0-100%) from RSSI and packet delivery */
@@ -225,42 +222,131 @@ class BluetoothTransport {
         this.isInitialized = true;
     }
 
+    // ─── Árbitro Unificado de Escaneo BLE Multiplexado ────────────────────────
+    private rawScanListeners: Map<string, (result: ScanResult) => void> = new Map();
+    private continuousScanRequesters: Set<string> = new Set();
+    private scanDeviceListeners: Map<string, (device: RedDevice) => void> = new Map();
+    private activeScanHolders = 0;
     private isScanning = false;
+    private scanStartingPromise: Promise<void> | null = null;
 
-    async scan(onDeviceFound: (device: RedDevice) => void, timeoutMs: number = 4000) {
+    /**
+     * Inicia o mantiene activa la sesión física de escaneo BLE si no está ya corriendo.
+     * Garantiza una única llamada nativa a BleClient.requestLEScan multiplexando
+     * los paquetes recibidos a todos los consumidores registrados.
+     */
+    private async ensurePhysicalScanRunning(): Promise<void> {
         if (this.isScanning) return;
-        await this.init();
-        try {
-            this.isScanning = true;
-            await BleClient.requestLEScan(
-                // We scan all devices and check both the 'RED-' name prefix and the RED service UUID in advertisements.
-                { allowDuplicates: false },
-                (result) => {
-                    const devName = result.device.name ?? result.localName ?? '';
-                    const hasRedService = result.uuids?.some(
-                        (uuid) => uuid.toLowerCase() === RED_BLE_SERVICE.toLowerCase()
-                    );
+        if (this.scanStartingPromise) {
+            await this.scanStartingPromise;
+            return;
+        }
 
-                    if (devName.startsWith('RED-') || hasRedService || (result.serviceData && Object.keys(result.serviceData).some(k => k.includes('1818') || k.includes('5246')))) {
-                        const rssi = result.rssi ?? -85;
-                        this.recordRssi(result.device.deviceId, rssi);
-                        onDeviceFound({
-                            id: result.device.deviceId,
-                            name: devName || 'Dispositivo RED',
-                            rssi
+        this.scanStartingPromise = (async () => {
+            await this.init();
+            try {
+                this.isScanning = true;
+                await BleClient.requestLEScan(
+                    { allowDuplicates: false },
+                    (result: ScanResult) => {
+                        // 1. Fan-out inmediato a escuchas crudos (SIGINT C-UAS, analizadores de espectro)
+                        this.rawScanListeners.forEach((listener) => {
+                            try { listener(result); } catch (e) { console.warn('[BLE-Arbiter] Listener error:', e); }
                         });
-                    }
-                }
-            );
 
-            await new Promise((resolve) => setTimeout(resolve, timeoutMs));
-        } catch (e) {
-            console.warn('[BLE] Scan error:', e);
-        } finally {
+                        // 2. Filtrado y notificación canónica para pares de la malla RED
+                        const devName = result.device?.name ?? (result as any).localName ?? '';
+                        const hasRedService = result.uuids?.some(
+                            (uuid) => uuid.toLowerCase() === RED_BLE_SERVICE.toLowerCase()
+                        );
+
+                        if (devName.startsWith('RED-') || hasRedService || (result.serviceData && Object.keys(result.serviceData).some(k => k.includes('1818') || k.includes('5246')))) {
+                            const rssi = result.rssi ?? -85;
+                            this.recordRssi(result.device.deviceId, rssi);
+                            const device: RedDevice = {
+                                id: result.device.deviceId,
+                                name: devName || 'Dispositivo RED',
+                                rssi
+                            };
+                            this.scanDeviceListeners.forEach((listener) => {
+                                try { listener(device); } catch (e) { console.warn('[BLE] Scan listener error:', e); }
+                            });
+                        }
+                    }
+                );
+            } catch (e) {
+                console.warn('[BLE-Arbiter] Failed to start physical scan:', e);
+                this.isScanning = false;
+            } finally {
+                this.scanStartingPromise = null;
+            }
+        })();
+
+        await this.scanStartingPromise;
+    }
+
+    /**
+     * Detiene el escaneo físico si y solo si ningún consumidor continuo ni ventana temporal
+     * de escaneo requiere el hardware de radio activo.
+     */
+    public async stopPhysicalScanIfIdle(): Promise<void> {
+        if (this.scanStartingPromise) {
+            try { await this.scanStartingPromise; } catch {}
+        }
+        if (this.continuousScanRequesters.size > 0) {
+            // Hay consumidores continuos activos (ej: RfSigintWatchdogEngine)
+            return;
+        }
+        if (this.activeScanHolders > 0) {
+            // Hay ventanas temporales activas (mesh duty-cycle o modal de espectro)
+            return;
+        }
+        if (this.isScanning) {
             try {
                 await BleClient.stopLEScan();
-            } catch {}
+            } catch (e) {
+                console.warn('[BLE-Arbiter] Stop scan warning:', e);
+            }
             this.isScanning = false;
+        }
+    }
+
+    /**
+     * Registra un consumidor de escaneo continuo (ej. radar SIGINT / monitor de espectro)
+     * manteniendo el hardware activo sin ser interrumpido por el duty-cycle del mesh.
+     */
+    public async startContinuousScan(requesterId: string, listener: (result: ScanResult) => void): Promise<void> {
+        this.continuousScanRequesters.add(requesterId);
+        this.rawScanListeners.set(requesterId, listener);
+        await this.ensurePhysicalScanRunning();
+    }
+
+    /**
+     * Da de baja un consumidor de escaneo continuo. Si no quedan otros requerimientos,
+     * el hardware BLE entra en reposo.
+     */
+    public async stopContinuousScan(requesterId: string): Promise<void> {
+        this.continuousScanRequesters.delete(requesterId);
+        this.rawScanListeners.delete(requesterId);
+        await this.stopPhysicalScanIfIdle();
+    }
+
+    /**
+     * Realiza un escaneo temporal para descubrimiento de pares RED.
+     * Es multiplexado y compatible con múltiples invocaciones simultáneas.
+     */
+    async scan(onDeviceFound: (device: RedDevice) => void, timeoutMs: number = 4000) {
+        const listenerId = `scan_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        this.activeScanHolders++;
+        this.scanDeviceListeners.set(listenerId, onDeviceFound);
+        await this.ensurePhysicalScanRunning();
+
+        try {
+            await new Promise((resolve) => setTimeout(resolve, timeoutMs));
+        } finally {
+            this.scanDeviceListeners.delete(listenerId);
+            this.activeScanHolders = Math.max(0, this.activeScanHolders - 1);
+            await this.stopPhysicalScanIfIdle();
         }
     }
 

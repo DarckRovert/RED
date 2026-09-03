@@ -55,40 +55,40 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
         } catch {}
     }
 
-    // 1. PRIORIDAD ABSOLUTA: Si el modelo descargado tiene ruta local GGUF (Android nativo o Daemon Rust local)
-    if (activeModel && activeModel.isDownloaded && activeModel.localPath) {
-        try {
-            const systemContext = `Eres el Copiloto IA de RED OS, un asistente inteligente, empático y experto que opera 100% en el dispositivo del usuario sin conexión a internet. Conversa con fluidez y precisión en español sobre cualquier tema militar, técnico o de emergencia.${categoryContext ? ` Contexto táctico: ${categoryContext}` : ''}`;
-            const formattedGgufPrompt = `<|im_start|>system\n${systemContext}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
-            const cleanLocalPath = activeModel.localPath.replace(/^file:\/\//, '');
+    // 1. PRIORIDAD ABSOLUTA: Consultar motor nativo Rust (Android JNI o Daemon Desktop)
+    // El motor nativo auto-detecta modelos GGUF descargados en disco incluso si activeModel no tiene ruta absoluta explícita.
+    try {
+        const cleanLocalPath = activeModel?.localPath ? activeModel.localPath.replace(/^file:\/\//, '') : undefined;
+        const modelId = activeModel?.id || 'red-tactical';
 
-            const nativeResp = await fetchWithFallback<CopilotResponse>('/api/ai/copilot', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: formattedGgufPrompt,
-                    context: categoryContext,
-                    model_id: activeModel.id,
-                    model_path: cleanLocalPath,
-                })
-            }, async () => {
-                const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
-                return {
-                    answer: res.answer,
-                    topic_category: res.topicCategory,
-                    source: res.modelInfo,
-                    execution_time_ms: res.executionTimeMs,
-                    thoughtChain: res.thoughtChain,
-                    thought_chain: res.thoughtChain,
-                };
-            });
+        const nativeResp = await fetchWithFallback<CopilotResponse>('/api/ai/copilot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: prompt,
+                context: categoryContext,
+                model_id: modelId,
+                model_path: cleanLocalPath,
+            }),
+            timeoutMs: 60000,
+            maxRetries: 1
+        }, async () => {
+            const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
+            return {
+                answer: res.answer,
+                topic_category: res.topicCategory,
+                source: res.modelInfo,
+                execution_time_ms: res.executionTimeMs,
+                thoughtChain: res.thoughtChain,
+                thought_chain: res.thoughtChain,
+            };
+        });
 
-            if (nativeResp && nativeResp.answer) {
-                return nativeResp;
-            }
-        } catch (err) {
-            console.warn('[queryAICopilot] Native inference fallback to WASM:', err);
+        if (nativeResp && nativeResp.answer && !nativeResp.answer.includes("No se detectó ningún archivo de modelo neural GGUF")) {
+            return nativeResp;
         }
+    } catch (err) {
+        console.warn('[queryAICopilot] Native inference fallback to LocalAIEngine:', err);
     }
 
     // 2. Si no hay modelo local descargado, consultar Endpoint Soberano externo (LM Studio / Ollama en PC remota)
@@ -117,25 +117,44 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
     };
 }
 
-/** Resumir Canal Mesh con IA */
+/** Resumir Canal Mesh con IA (Híbrido: Daemon Nativo Rust / NLP Local) */
 export async function summarizeChannelAI(channelId: string, messages: any[]): Promise<ChannelSummaryResponse> {
-    const res = await LocalAIEngine.summarizeChannel(messages);
-    return {
-        channel_id: channelId,
-        summary_bullets: res.summaryBullets,
-        total_messages_analyzed: res.totalMessages,
-        sentiment: res.sentiment,
-        execution_time_ms: res.executionTimeMs,
-    };
+    const rawStringMessages = messages.map(m => typeof m === 'string' ? m : (m?.content || String(m)));
+    return fetchWithFallback<ChannelSummaryResponse>('/api/ai/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            channel_id: channelId,
+            messages: rawStringMessages,
+        }),
+    }, async () => {
+        const res = await LocalAIEngine.summarizeChannel(rawStringMessages);
+        return {
+            channel_id: channelId,
+            summary_bullets: res.summaryBullets,
+            total_messages_analyzed: res.totalMessages,
+            sentiment: res.sentiment,
+            execution_time_ms: res.executionTimeMs,
+        };
+    });
 }
 
-/** Traducir texto P2P multilingüe con IA */
+/** Traducir texto P2P multilingüe con IA (Híbrido: Daemon Nativo Rust / Glosario Táctico) */
 export async function translateTextAI(text: string, targetLang: string): Promise<TranslateResponse> {
-    const res = await LocalAIEngine.translateText(text, targetLang);
-    return {
-        original_text: res.originalText,
-        translated_text: res.translatedText,
-        target_language: res.targetLang,
-        execution_time_ms: res.executionTimeMs,
-    };
+    return fetchWithFallback<TranslateResponse>('/api/ai/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            text,
+            target_language: targetLang,
+        }),
+    }, async () => {
+        const res = await LocalAIEngine.translateText(text, targetLang);
+        return {
+            original_text: res.originalText,
+            translated_text: res.translatedText,
+            target_language: res.targetLang,
+            execution_time_ms: res.executionTimeMs,
+        };
+    });
 }

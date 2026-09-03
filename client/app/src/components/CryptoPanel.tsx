@@ -6,6 +6,7 @@ import { RedAPI } from "../lib/api";
 import { BackupRestoreModal } from "./BackupRestoreModal";
 import { NodeLogsModal } from "./NodeLogsModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
+import { queryAICopilot } from "../api/ai";
 import { web3Bridge, Web3WalletState } from "../lib/Web3BridgeEngine";
 import { tokenomicsEngine, TokenomicsMetrics } from "../lib/TokenomicsEngine";
 import { toast } from "./Toast";
@@ -71,11 +72,11 @@ export default function CryptoPanel() {
         setAiCryptoAudit(null);
         try {
             const prompt = `Evalúa en 2 oraciones la salud criptográfica y conectividad del nodo con balance ${tokenomics.localCredits} RED y ${status?.peer_count ?? 0} pares conectados.`;
-            const res = await LocalAIEngine.generateCopilotResponse(prompt);
+            const res = await queryAICopilot(prompt);
             setAiCryptoAudit(res.answer || "El modelo no generó un dictamen criptográfico válido.");
         } catch (e: any) {
-            setAiCryptoAudit(`⚠️ Motor de IA Local no disponible: ${e.message || "Modelos ONNX no cargados"}.`);
-            toast.error("IA Local no disponible");
+            setAiCryptoAudit(`⚠️ Motor de IA no disponible: ${e.message || "Modelos no cargados"}.`);
+            toast.error("IA no disponible");
         } finally {
             setAuditLoading(false);
         }

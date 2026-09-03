@@ -7,6 +7,8 @@
  * triggering automated evacuation alarms when shear degradation or imminent secondary collapse is detected.
  */
 
+import { AudioContextManager } from '../audio/AudioContextManager';
+
 export interface StructuralHealthTelemetry {
     isMonitoring: boolean;
     structuralIntegrityPct: number; // 0 a 100%
@@ -251,12 +253,7 @@ export class StructuralHealthSeismicEngine {
         this.lastAlarmTimeMs = now;
         try {
             if (typeof window !== 'undefined') {
-                if (!this.audioCtx || this.audioCtx.state === 'closed') {
-                    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                    if (AudioContextClass) {
-                        this.audioCtx = new AudioContextClass();
-                    }
-                }
+                this.audioCtx = AudioContextManager.getSharedContext();
                 if (!this.audioCtx) return;
                 if (this.audioCtx.state === 'suspended') {
                     this.audioCtx.resume().catch(() => {});

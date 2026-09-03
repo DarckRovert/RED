@@ -126,7 +126,7 @@ impl Libp2pTransport {
                     .validation_mode(gossipsub::ValidationMode::Strict)
                     .max_transmit_size(4 * 1024 * 1024)
                     .build()
-                    .map_err(|e| std::io::Error::other(e))?;
+                    .map_err(std::io::Error::other)?;
 
                 let kad_store = kad::store::MemoryStore::new(key.public().to_peer_id());
                 let mut kademlia = kad::Behaviour::new(key.public().to_peer_id(), kad_store);
@@ -162,7 +162,7 @@ impl Libp2pTransport {
                             ..Default::default()
                         },
                         key.public().to_peer_id(),
-                    ).map_err(|e| std::io::Error::other(e))?,
+                    ).map_err(std::io::Error::other)?,
                 })
             }).map_err(|e| NetworkError::TransportError(e.to_string()))?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
@@ -221,18 +221,16 @@ impl Libp2pTransport {
                 tokio::time::sleep(Duration::from_secs(45)).await;
                 let count = connected_count.lock().unwrap().len();
                 if count == 0 {
-                    if let Ok(ip) = get_local_ip() {
-                        if let IpAddr::V4(ipv4) = ip {
-                            let octets = ipv4.octets();
-                            for i in (octets[3].saturating_sub(5))..=(octets[3].saturating_add(5)) {
-                                if i == octets[3] { continue; }
-                                let target_ip = Ipv4Addr::new(octets[0], octets[1], octets[2], i);
-                                
-                                // GAP-42 FIX: Try both current (7331) and legacy (4556) ports for cross-version compatibility
-                                for port in [7331, 4556] {
-                                    let target_ma: Multiaddr = format!("/ip4/{}/tcp/{}", target_ip, port).parse().unwrap();
-                                    let _ = cmd_tx_loop.send(TransportCommand::Connect(target_ma)).await;
-                                }
+                    if let Ok(IpAddr::V4(ipv4)) = get_local_ip() {
+                        let octets = ipv4.octets();
+                        for i in (octets[3].saturating_sub(5))..=(octets[3].saturating_add(5)) {
+                            if i == octets[3] { continue; }
+                            let target_ip = Ipv4Addr::new(octets[0], octets[1], octets[2], i);
+                            
+                            // GAP-42 FIX: Try both current (7331) and legacy (4556) ports for cross-version compatibility
+                            for port in [7331, 4556] {
+                                let target_ma: Multiaddr = format!("/ip4/{}/tcp/{}", target_ip, port).parse().unwrap();
+                                let _ = cmd_tx_loop.send(TransportCommand::Connect(target_ma)).await;
                             }
                         }
                     }

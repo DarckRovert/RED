@@ -4,14 +4,44 @@
  * using Web Crypto API (AES-256-GCM + PBKDF2-SHA256 with 100,000 iterations).
  */
 
+export interface ContactBackup {
+    id?: string;
+    identityHash?: string;
+    alias?: string;
+    nickname?: string;
+    avatar?: string;
+    bio?: string;
+    publicKey?: string;
+    lastSeen?: number;
+    [key: string]: unknown;
+}
+
+export interface ConversationBackup {
+    id: string;
+    recipientId?: string;
+    title?: string;
+    lastMessage?: unknown;
+    unreadCount?: number;
+    pinned?: boolean;
+    [key: string]: unknown;
+}
+
+export interface IdentityBackup {
+    identityHash: string;
+    publicKey?: string;
+    nickname?: string;
+    mnemonic?: string;
+    [key: string]: unknown;
+}
+
 export interface BackupData {
     version: string;
     timestamp: number;
-    identity: any;
-    contacts: any[];
-    conversations: any[];
-    messages: Record<string, any[]>;
-    preferences: any;
+    identity: IdentityBackup | null;
+    contacts: ContactBackup[];
+    conversations: ConversationBackup[];
+    messages: Record<string, unknown[]>;
+    preferences: Record<string, unknown>;
     pinnedChatIds: string[];
     archivedChatIds: string[];
 }
@@ -36,7 +66,7 @@ export class BackupRestoreEngine {
             contacts: this.getJSON("red_web_contacts") || this.getJSON("red_contacts") || [],
             conversations: this.getJSON("red_web_conversations") || this.getJSON("red_conversations") || [],
             messages: {},
-            preferences: this.getJSON("red_user_preferences_v1"),
+            preferences: this.getJSON("red_user_preferences_v1") || {},
             pinnedChatIds: this.getJSON("red_pinned_chats") || [],
             archivedChatIds: this.getJSON("red_archived_chats") || [],
         };
@@ -187,10 +217,10 @@ export class BackupRestoreEngine {
         }
     }
 
-    private static getJSON(key: string): any {
+    private static getJSON<T = unknown>(key: string): T | null {
         try {
             const raw = localStorage.getItem(key);
-            return raw ? JSON.parse(raw) : null;
+            return raw ? (JSON.parse(raw) as T) : null;
         } catch {
             return null;
         }

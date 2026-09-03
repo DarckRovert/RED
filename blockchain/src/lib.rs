@@ -9,7 +9,7 @@
 //!
 //! Messages are NOT stored on the blockchain.
 
-#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::all)]
+#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated)]
 #![forbid(unsafe_code)]
 
 pub mod block;
@@ -59,4 +59,4 @@ pub const BLOCK_TIME_SECS: u64 = 6;
 pub const MAX_TXS_PER_BLOCK: usize = 1000;
 
 /// Minimum stake to become a validator (in smallest unit)
-pub const MIN_VALIDATOR_STAKE: u64 = 1000_000_000_000; // 1000 RED
+pub const MIN_VALIDATOR_STAKE: u64 = 1_000_000_000_000; // 1000 RED

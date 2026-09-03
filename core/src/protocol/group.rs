@@ -157,7 +157,7 @@ impl Group {
         let id = GroupId::generate();
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let mut members = HashMap::new();
@@ -181,7 +181,7 @@ impl Group {
     pub fn create_with_id(id: GroupId, name: String, creator: GroupMember) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         let mut members = HashMap::new();

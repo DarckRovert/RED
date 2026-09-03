@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::all)]
+#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::manual_strip, clippy::unnecessary_sort_by, clippy::needless_range_loop, clippy::manual_flatten)]
 //! RED Network Node
 //!
 //! A full node for the RED decentralized messaging network.
@@ -232,7 +232,7 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     // Initialize consensus
     let consensus = Arc::new(red_blockchain::consensus::Consensus::new());
     // For now, we are always a validator if we have an identity (Phase 3 Sim)
-    consensus.register_validator(*identity.public_key().as_bytes(), 1000_000_000_000)?;
+    consensus.register_validator(*identity.public_key().as_bytes(), 1_000_000_000_000)?;
 
     let chain = Arc::new(chain);
 

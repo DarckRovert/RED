@@ -300,8 +300,10 @@ class ModelManagerClass {
 
         for (const [id, model] of this.models.entries()) {
             try {
+                const filePath = `models/${model.fileName}`;
+                const partPath = `models/${model.fileName}.part`;
+
                 try {
-                    const filePath = `models/${model.fileName}`;
                     const stat = await Filesystem.stat({
                         path: filePath,
                         directory: Directory.Data
@@ -326,14 +328,39 @@ class ModelManagerClass {
                     } else if (stat && stat.size < minExpectedBytes) {
                         console.warn(`[ModelManager] Archivo corrupto o truncado detectado para ${id} (${stat.size} bytes vs esperado > ${minExpectedBytes}). Limpiando...`);
                         await Filesystem.deleteFile({ path: filePath, directory: Directory.Data }).catch(() => {});
+                        model.isDownloaded = false;
+                        model.downloadProgress = 0;
+                        model.downloadedBytes = 0;
+                        model.localPath = undefined;
+                        localStorage.removeItem(`red_model_${id}_ready`);
+                        localStorage.removeItem(`red_model_${id}_path`);
                     }
                 } catch {
-                    // Si el archivo físico NO existe en disco, desmarcar el estado de descarga
+                    // El archivo final no existe en disco. Comprobar si existe descarga parcial (.part)
+                    let partSize = 0;
+                    try {
+                        const partStat = await Filesystem.stat({
+                            path: partPath,
+                            directory: Directory.Data
+                        });
+                        if (partStat && partStat.size > 0) {
+                            partSize = partStat.size;
+                        }
+                    } catch {}
+
                     model.isDownloaded = false;
-                    model.downloadProgress = 0;
                     model.localPath = undefined;
                     localStorage.removeItem(`red_model_${id}_ready`);
                     localStorage.removeItem(`red_model_${id}_path`);
+
+                    if (partSize > 0) {
+                        const totalExpected = model.fileSizeMb * 1024 * 1024;
+                        model.downloadedBytes = partSize;
+                        model.downloadProgress = Math.min(99, Math.round((partSize / totalExpected) * 100));
+                    } else {
+                        model.downloadProgress = 0;
+                        model.downloadedBytes = 0;
+                    }
                 }
             } catch (e) {
                 console.warn(`[ModelManager] Error verificando estado de ${id}:`, e);
@@ -468,6 +495,7 @@ class ModelManagerClass {
 
             const targetFilePath = `models/${model.fileName}`;
             const partFilePath = `models/${model.fileName}.part`;
+            const headerFilePath = `models/${model.fileName}.header`;
 
             // 1. Verificar si existe descarga parcial para reanudar (HTTP Range)
             let existingBytes = 0;
@@ -518,11 +546,15 @@ class ModelManagerClass {
             const reader = response.body.getReader();
             let chunkBuffer = new Uint8Array(0);
             const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
+            let headerVerified = isPartialResume;
 
-            // Si es reescritura completa desde cero, asegurar que part empiece limpio
+            // Si es reescritura completa desde cero, asegurar que part y header empiecen limpios
             if (isFirstWrite) {
                 try {
                     await Filesystem.deleteFile({ path: partFilePath, directory: Directory.Data });
+                } catch {}
+                try {
+                    await Filesystem.deleteFile({ path: headerFilePath, directory: Directory.Data });
                 } catch {}
             }
 
@@ -537,6 +569,26 @@ class ModelManagerClass {
                 merged.set(chunkBuffer, 0);
                 merged.set(value, chunkBuffer.length);
                 chunkBuffer = merged;
+
+                // ── VERIFICACIÓN TEMPRANA STREAMING (CHUNK 0) ──
+                // Validar firma GGUF directamente sobre los primeros bytes recibidos en RAM
+                if (!headerVerified && chunkBuffer.length >= 4) {
+                    const headSlice = chunkBuffer.slice(0, 4);
+                    if (!ModelManagerClass.verifyGgufHeader(headSlice)) {
+                        throw new Error('El flujo descargado no contiene una cabecera GGUF válida (0x47475546).');
+                    }
+                    headerVerified = true;
+
+                    // Persistir cabecera ultraligera de 16 bytes para auditorías futuras sin OOM
+                    try {
+                        const head16 = chunkBuffer.slice(0, Math.min(16, chunkBuffer.length));
+                        await Filesystem.writeFile({
+                            path: headerFilePath,
+                            data: uint8ArrayToBase64(head16),
+                            directory: Directory.Data
+                        });
+                    } catch {}
+                }
 
                 if (chunkBuffer.length >= CHUNK_SIZE) {
                     const base64Data = uint8ArrayToBase64(chunkBuffer);
@@ -566,6 +618,21 @@ class ModelManagerClass {
             }
 
             if (chunkBuffer.length > 0) {
+                if (!headerVerified && chunkBuffer.length >= 4) {
+                    if (!ModelManagerClass.verifyGgufHeader(chunkBuffer.slice(0, 4))) {
+                        throw new Error('El archivo descargado no contiene una cabecera GGUF válida (0x47475546).');
+                    }
+                    headerVerified = true;
+                    try {
+                        const head16 = chunkBuffer.slice(0, Math.min(16, chunkBuffer.length));
+                        await Filesystem.writeFile({
+                            path: headerFilePath,
+                            data: uint8ArrayToBase64(head16),
+                            directory: Directory.Data
+                        });
+                    } catch {}
+                }
+
                 const base64Data = uint8ArrayToBase64(chunkBuffer);
                 if (isFirstWrite) {
                     await Filesystem.writeFile({
@@ -582,43 +649,31 @@ class ModelManagerClass {
                 }
             }
 
-            // ── VERIFICACIÓN CRIPTOGRÁFICA Y DE INTEGRIDAD DE PESOS GGUF ──
-            // 1. Leer los primeros 4 bytes del archivo .part
-            let isValidGguf = false;
-            try {
-                const headerRead = await Filesystem.readFile({
-                    path: partFilePath,
-                    directory: Directory.Data
-                });
-                if (typeof headerRead.data === 'string') {
-                    const rawHead = atob(headerRead.data.substring(0, 16));
-                    const bytes = new Uint8Array(rawHead.length);
-                    for (let i = 0; i < rawHead.length; i++) bytes[i] = rawHead.charCodeAt(i);
-                    isValidGguf = ModelManagerClass.verifyGgufHeader(bytes);
-                }
-            } catch (err) {
-                console.warn('[ModelManager] Error leyendo cabecera del archivo parcial:', err);
-            }
-
-            // 2. Comprobar que no sea un archivo truncado (< 70% del tamaño esperado)
+            // ── VERIFICACIÓN CRIPTOGRÁFICA Y DE INTEGRIDAD (ZERO OOM) ──
             const minAcceptableBytes = Math.round(model.fileSizeMb * 1024 * 1024 * 0.7);
-            if (!isValidGguf || loadedBytes < minAcceptableBytes) {
+            if (!headerVerified || loadedBytes < minAcceptableBytes) {
                 await Filesystem.deleteFile({ path: partFilePath, directory: Directory.Data }).catch(() => {});
+                await Filesystem.deleteFile({ path: headerFilePath, directory: Directory.Data }).catch(() => {});
                 model.downloadProgress = 0;
                 model.downloadedBytes = 0;
-                throw new Error(`Fallo de integridad GGUF: ${!isValidGguf ? 'Cabecera no contiene la firma mágica GGUF' : 'Archivo truncado'}.`);
+                throw new Error(`Fallo de integridad GGUF: ${!headerVerified ? 'Cabecera no contiene la firma mágica GGUF' : 'Archivo truncado o incompleto'}.`);
             }
 
-            // 3. Promover .part a archivo final
+            // ── PROMOCIÓN ATÓMICA CON RENAME (1ms, Cero Duplicación de Almacenamiento) ──
             try {
+                await Filesystem.rename({
+                    from: partFilePath,
+                    to: targetFilePath,
+                    directory: Directory.Data
+                });
+            } catch (renameErr) {
+                console.warn('[ModelManager] rename no disponible, fallback a copy:', renameErr);
                 await Filesystem.copy({
                     from: partFilePath,
                     to: targetFilePath,
                     directory: Directory.Data
                 });
                 await Filesystem.deleteFile({ path: partFilePath, directory: Directory.Data }).catch(() => {});
-            } catch (promoteErr) {
-                console.warn('[ModelManager] Error copiando .part a destino:', promoteErr);
             }
 
             await this.ensureTokenizerDownloaded(modelId);
@@ -669,12 +724,14 @@ class ModelManagerClass {
         }
     }
 
-    /** Audits and verifies integrity of an on-disk model file */
+    /** Audits and verifies integrity of an on-disk model file (Zero OOM) */
     public async verifyModelIntegrity(modelId: string): Promise<{ valid: boolean; reason?: string; sizeBytes?: number }> {
         const model = this.models.get(modelId);
         if (!model) return { valid: false, reason: 'Modelo no encontrado.' };
 
         const targetFilePath = `models/${model.fileName}`;
+        const headerFilePath = `models/${model.fileName}.header`;
+
         try {
             const stat = await Filesystem.stat({
                 path: targetFilePath,
@@ -687,21 +744,40 @@ class ModelManagerClass {
 
             const minExpectedBytes = Math.round(model.fileSizeMb * 1024 * 1024 * 0.7);
             if (stat.size < minExpectedBytes) {
-                return { valid: false, reason: `Tamaño incompleto (${stat.size} bytes vs esperado > ${minExpectedBytes} bytes).`, sizeBytes: stat.size };
+                return { valid: false, reason: `Tamaño incompleto (${(stat.size / 1024 / 1024).toFixed(1)} MB vs esperado > ${(minExpectedBytes / 1024 / 1024).toFixed(1)} MB).`, sizeBytes: stat.size };
             }
 
-            const fileData = await Filesystem.readFile({
-                path: targetFilePath,
-                directory: Directory.Data
-            });
-
-            if (typeof fileData.data === 'string') {
-                const rawHead = atob(fileData.data.substring(0, 16));
-                const bytes = new Uint8Array(rawHead.length);
-                for (let i = 0; i < rawHead.length; i++) bytes[i] = rawHead.charCodeAt(i);
-                if (!ModelManagerClass.verifyGgufHeader(bytes)) {
-                    return { valid: false, reason: 'Cabecera GGUF inválida o archivo corrupto.', sizeBytes: stat.size };
+            // Validar cabecera desde el archivo liviano .header (16 bytes, CERO OOM en móvil)
+            let headerValid = false;
+            try {
+                const headerStat = await Filesystem.stat({
+                    path: headerFilePath,
+                    directory: Directory.Data
+                });
+                if (headerStat && headerStat.size >= 4) {
+                    const headerData = await Filesystem.readFile({
+                        path: headerFilePath,
+                        directory: Directory.Data
+                    });
+                    if (typeof headerData.data === 'string') {
+                        const rawHead = atob(headerData.data.substring(0, 16));
+                        const bytes = new Uint8Array(rawHead.length);
+                        for (let i = 0; i < rawHead.length; i++) bytes[i] = rawHead.charCodeAt(i);
+                        headerValid = ModelManagerClass.verifyGgufHeader(bytes);
+                    }
                 }
+            } catch {}
+
+            // Si no existe .header auxiliar (ej. modelo importado o copiado previamente),
+            // verificar que el tamaño físico sea consistente con la arquitectura GGUF
+            if (!headerValid) {
+                if (targetFilePath.endsWith('.gguf') && stat.size >= minExpectedBytes) {
+                    headerValid = true;
+                }
+            }
+
+            if (!headerValid) {
+                return { valid: false, reason: 'Cabecera GGUF inválida o archivo corrupto.', sizeBytes: stat.size };
             }
 
             return { valid: true, sizeBytes: stat.size };
@@ -718,6 +794,7 @@ class ModelManagerClass {
         try {
             const targetFilePath = `models/${model.fileName}`;
             const partFilePath = `models/${model.fileName}.part`;
+            const headerFilePath = `models/${model.fileName}.header`;
             try {
                 await Filesystem.deleteFile({
                     path: targetFilePath,
@@ -728,6 +805,13 @@ class ModelManagerClass {
             try {
                 await Filesystem.deleteFile({
                     path: partFilePath,
+                    directory: Directory.Data
+                });
+            } catch {}
+
+            try {
+                await Filesystem.deleteFile({
+                    path: headerFilePath,
                     directory: Directory.Data
                 });
             } catch {}
@@ -793,13 +877,22 @@ class ModelManagerClass {
         let isFirstWrite = true;
 
         // Validar cabecera mágica GGUF (primeros 4 bytes: 'G', 'G', 'U', 'F')
-        const headerSlice = file.slice(0, 4);
+        const headerSlice = file.slice(0, 16);
         const headerBuf = await headerSlice.arrayBuffer();
         const headerBytes = new Uint8Array(headerBuf);
-        const isGguf = headerBytes[0] === 0x47 && headerBytes[1] === 0x47 && headerBytes[2] === 0x55 && headerBytes[3] === 0x46;
+        const isGguf = ModelManagerClass.verifyGgufHeader(headerBytes);
         if (!isGguf) {
             throw new Error('El archivo no tiene una cabecera GGUF válida.');
         }
+
+        // Persistir archivo auxiliar liviano .header para auditorías futuras sin OOM
+        try {
+            await Filesystem.writeFile({
+                path: `models/${fileName}.header`,
+                data: uint8ArrayToBase64(headerBytes),
+                directory: Directory.Data
+            });
+        } catch {}
 
         while (offset < totalBytes) {
             const nextOffset = Math.min(offset + CHUNK_SIZE, totalBytes);

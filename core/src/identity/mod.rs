@@ -6,6 +6,7 @@
 //! - Zero-knowledge proofs for identity verification
 //! - Blockchain registration
 
+#[allow(clippy::module_inception)]
 mod identity;
 pub mod registry;
 

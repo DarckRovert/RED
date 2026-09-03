@@ -18,6 +18,8 @@ export const RINGTONE_OPTIONS: RingtoneOption[] = [
     { id: "silent", name: "Silencioso (Solo Vibración)", description: "Sin emisión de sonido, únicamente patrón táctil de vibración" },
 ];
 
+import { AudioContextManager } from './AudioContextManager';
+
 export class CallRingtoneEngine {
     private static audioCtx: AudioContext | null = null;
     private static intervalTimer: any = null;
@@ -25,21 +27,7 @@ export class CallRingtoneEngine {
     private static activeOscillators: OscillatorNode[] = [];
 
     private static getAudioContext(): AudioContext | null {
-        if (typeof window === "undefined") return null;
-        try {
-            if (!this.audioCtx || this.audioCtx.state === "closed") {
-                const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-                if (AudioCtxClass) {
-                    this.audioCtx = new AudioCtxClass();
-                }
-            }
-            if (this.audioCtx && this.audioCtx.state === "suspended") {
-                this.audioCtx.resume().catch(() => {});
-            }
-            return this.audioCtx;
-        } catch {
-            return null;
-        }
+        return AudioContextManager.getSharedContext();
     }
 
     public static unlockAudioContext(): AudioContext | null {

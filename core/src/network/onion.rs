@@ -391,7 +391,7 @@ mod tests {
         let message = b"Hello, World!";
         let padded = pad_message(message);
         
-        assert!(padded.len() % CELL_SIZE == 0);
+        assert!(padded.len().is_multiple_of(CELL_SIZE));
         
         let unpadded = unpad_message(&padded).unwrap();
         assert_eq!(unpadded, message);

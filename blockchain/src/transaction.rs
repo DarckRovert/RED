@@ -114,7 +114,7 @@ impl Transaction {
             nonce,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs(),
             sender,
             signature: [0u8; 64], // To be signed
@@ -135,7 +135,7 @@ impl Transaction {
             nonce,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs(),
             sender,
             signature: [0u8; 64],
@@ -167,7 +167,7 @@ impl Transaction {
         // Check timestamp is not too far in the future
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         
         if self.timestamp > now + 300 {

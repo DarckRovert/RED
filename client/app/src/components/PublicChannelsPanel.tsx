@@ -66,8 +66,8 @@ export const PublicChannelsPanel: React.FC = () => {
             setInputText("");
             if (inputEl) inputEl.value = "";
             await loadMessages();
-        } catch {
-            toast.error("Error al publicar en el canal");
+        } catch (err: any) {
+            toast.error(err?.message || "Error al publicar en el canal");
         } finally {
             setLoading(false);
         }
@@ -81,6 +81,8 @@ export const PublicChannelsPanel: React.FC = () => {
             const summary = await summarizeChannelAI(channelId, msgStrings);
             if (summary?.summary_bullets?.length > 0) {
                 toast.info(`🤖 Resumen IA:\n${summary.summary_bullets.join('\n')}`);
+            } else {
+                toast.info("ℹ️ No se detectaron puntos clave suficientes para resumir en este canal.");
             }
         } catch {
             toast.error("Error al resumir canal");

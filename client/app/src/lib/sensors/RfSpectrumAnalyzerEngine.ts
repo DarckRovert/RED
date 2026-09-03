@@ -39,6 +39,14 @@ export interface RfSpectrumMetrics {
     optimalChannelNumber: number;
 }
 
+export interface BleSpectrumDevice {
+    id?: string;
+    deviceId?: string;
+    address?: string;
+    name?: string;
+    rssi?: number;
+}
+
 export class RfSpectrumAnalyzerEngine {
     private static rssiHistory: number[] = [];
 
@@ -140,7 +148,10 @@ export class RfSpectrumAnalyzerEngine {
         };
     }
 
-    public static analyzeSpectrum(bandMode: any, bleDevices: any[]): RfSpectrumMetrics {
+    public static analyzeSpectrum(
+        bandMode: RfBandMode,
+        bleDevices: BleSpectrumDevice[] = []
+    ): RfSpectrumMetrics {
         const baseChannels = this.getChannelsForBand(bandMode);
         
         // Use real hardware data ONLY if we are actually scanning BLE

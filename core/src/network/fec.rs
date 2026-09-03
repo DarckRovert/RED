@@ -88,6 +88,7 @@ impl FecEncoder {
     }
 
     /// Encode a payload into K + M FecChunks
+    #[allow(clippy::needless_range_loop)]
     pub fn encode(&self, stream_id: u32, payload: &[u8]) -> Vec<FecChunk> {
         let original_len = payload.len() as u32;
         let chunk_size = payload.len().div_ceil(self.k);
@@ -194,6 +195,7 @@ impl FecDecoder {
     }
 
     /// Decode the original payload if at least K chunks are received
+    #[allow(clippy::needless_range_loop)]
     pub fn decode(&self) -> Option<Vec<u8>> {
         if self.received_chunks.len() < self.k || self.k == 0 {
             return None;

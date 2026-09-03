@@ -97,7 +97,7 @@ export async function dispatchIncomingMessage(
     set: any,
     get: () => RedStore
 ): Promise<void> {
-    const handler = (data: any) => {
+    const handler = async (data: any) => {
         if (!data) return;
         const item: MessageItem = data.message_item || data.payload || (data.id && data.sender ? data : null);
         if (!item) return;
@@ -1779,7 +1779,7 @@ export async function dispatchIncomingMessage(
 
             // ── Guardian IA Incoming Protection: Filter incoming threats/CSAM in strict mode ──
             if (!resolvedIsMine && item.content && (!item.msg_type || item.msg_type === 'text')) {
-                const incomingVerdict = GuardianEngine.evaluateText(item.content);
+                const incomingVerdict = await GuardianEngine.evaluateTextAsync(item.content);
                 if (!incomingVerdict.allowed && GuardianEngine.getConfig().mode === 'strict') {
                     console.warn('[RED Guardian] Intercepted hostile incoming packet:', incomingVerdict.reason);
                     return;
@@ -2141,5 +2141,5 @@ export async function dispatchIncomingMessage(
         // Only refresh sidebar for messages in OTHER conversations (badge count update).
         // The early `return` above handles the active chat case without a round-trip.
     };
-    return handler(item);
+    return await handler(item);
 }

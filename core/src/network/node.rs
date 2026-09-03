@@ -597,7 +597,7 @@ impl Node {
                                 _ => MessageType::Text(content_str.to_string()),
                             };
                             let ts = parsed.get("timestamp").and_then(|t| t.as_u64()).unwrap_or_else(|| {
-                                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+                                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()
                             });
                             let msg = Message {
                                 id: crate::protocol::MessageId::generate(),
@@ -634,7 +634,7 @@ impl Node {
                                 sender: sender_hash,
                                 recipient: recipient_hash,
                                 content: MessageType::Text(content_str.to_string()),
-                                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+                                timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
                                 status: crate::protocol::MessageStatus::Sent,
                                 edited: false,
                                 reply_to: None,
@@ -771,7 +771,7 @@ impl Node {
                     sender: my_hash.clone(),
                     recipient: message.sender.clone(),
                     content: resp,
-                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64,
+                    timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,
                     reply_to: None,
                     status: crate::protocol::MessageStatus::Sent,
                     edited: false,
@@ -790,7 +790,7 @@ impl Node {
                 if let Some(mut contact) = s.get_contact(&message.sender) {
                     contact.avatar = avatar.clone();
                     contact.bio = bio.clone();
-                    contact.last_sync = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    contact.last_sync = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                     let _ = s.add_contact(contact);
                     info!("Updated contact profile for {}", message.sender.short());
                 }
@@ -979,7 +979,7 @@ impl Node {
                 content: message_type.clone(),
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_millis() as u64,
                 reply_to: None,
                 status: crate::protocol::MessageStatus::Sent,
@@ -1005,7 +1005,7 @@ impl Node {
                 content: MessageType::GroupPayload(group_msg.clone()),
                 timestamp: std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_millis() as u64,
                 reply_to: None,
                 status: crate::protocol::MessageStatus::Pending,
@@ -1076,9 +1076,11 @@ impl Node {
     ///   and dropping every message into pending_deliveries forever.
     ///
     /// NEW (CORRECT): check if recipient is in known_peers() FIRST.
-    ///   - Recipient FOUND locally  → 1-hop direct GossipSub (always fast-path)
-    ///   - Recipient NOT found AND ≥3 relay peers exist → multi-hop onion via Kademlia
-    ///   - Recipient NOT found AND <3 relay peers       → WAN Kademlia best-effort
+    ///
+    /// * Recipient FOUND locally  → 1-hop direct GossipSub (always fast-path)
+    /// * Recipient NOT found AND ≥3 relay peers exist → multi-hop onion via Kademlia
+    /// * Recipient NOT found AND <3 relay peers       → WAN Kademlia best-effort
+    ///
     /// ─────────────────────────────────────────────────────────────────────────
     async fn deliver_message(&mut self, recipient: &IdentityHash, message: &Message) -> NetworkResult<()> {
         self.packets_sent.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1345,7 +1347,7 @@ impl Node {
             public_key: self.identity.public_key().clone(),
             joined_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs(),
             role: MemberRole::Admin,
             muted: false,
@@ -1415,7 +1417,7 @@ impl Node {
             },
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis() as u64,
             reply_to: None,
             status: crate::protocol::MessageStatus::Pending,
@@ -1439,7 +1441,7 @@ impl Node {
         // (c) codes are different for each device name.
         let timestamp_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         
         // 30-second validity window
@@ -1471,7 +1473,7 @@ impl Node {
             // Also accept the previous 30-second window for clock skew tolerance
             let prev_window = {
                 let secs = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
                 let prev_window_num = secs.saturating_sub(30) / 30;
                 let mut data = self.identity.identity_hash().as_bytes().to_vec();
                 data.extend_from_slice(name.as_bytes());
@@ -1495,7 +1497,7 @@ impl Node {
             name,
             authorized_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs(),
             last_seen: 0,
         };
@@ -1597,7 +1599,7 @@ impl Node {
             public_key,
             joined_at: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs(),
             role: crate::protocol::MemberRole::Member,
             muted: false,

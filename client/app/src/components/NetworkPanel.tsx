@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { BlackoutSimulatorModal } from "./BlackoutSimulatorModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
+import { queryAICopilot } from "../api/ai";
 import { DnsTunnelEngine } from "../lib/dnsTunnelEngine";
 import { SniSpoofEngine } from "../lib/sniSpoofEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
@@ -129,11 +130,11 @@ export default function NetworkPanel() {
         setAiNetworkDiag(null);
         try {
             const prompt = `Evalúa la topología de red P2P. Nodos activos por transporte: ${peersByTransport.ble} BLE, ${peersByTransport.wifi} WiFi/WS, ${peersByTransport.lorawan} LoRaWAN, ${peersByTransport.tcp} TCP, ${peersByTransport.quic} QUIC.`;
-            const res = await LocalAIEngine.generateCopilotResponse(prompt);
+            const res = await queryAICopilot(prompt);
             setAiNetworkDiag(res.answer || "El modelo no generó una respuesta válida.");
         } catch (e: any) {
-            setAiNetworkDiag(`⚠️ Error del motor de IA Local: ${e.message || "LLM inaccesible. Verifique que el servicio llama.cpp esté corriendo en el puerto 8080."}`);
-            toast.error("No se pudo contactar a la IA local");
+            setAiNetworkDiag(`⚠️ Error del motor de IA: ${e.message || "Motor de IA inaccesible."}`);
+            toast.error("No se pudo contactar a la IA");
         } finally {
             setDiagLoading(false);
         }

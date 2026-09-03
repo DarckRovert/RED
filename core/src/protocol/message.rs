@@ -22,7 +22,7 @@ impl MessageId {
         // Add timestamp for uniqueness
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_nanos() as u64;
         bytes[16..24].copy_from_slice(&timestamp.to_le_bytes());
         
@@ -344,7 +344,7 @@ impl Message {
             content: MessageType::Text(text),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis() as u64,
             reply_to: None,
             status: MessageStatus::Pending,

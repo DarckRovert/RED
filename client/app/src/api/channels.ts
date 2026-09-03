@@ -21,6 +21,13 @@ export async function getChannelMessages(channelId = 'red-local-general'): Promi
 
 /** Publicar en canal público local con moderación Guardian IA y Mesh Flood */
 export async function postChannelMessage(payload: { channel_id: string; sender_name: string; content: string }): Promise<{ ok: boolean; message: ChannelMessage }> {
+    // 1. Moderación Pre-Publicación con Guardian IA en Cliente
+    const { GuardianEngine } = await import('../lib/ai/guardianEngine');
+    const verdict = await GuardianEngine.evaluateTextAsync(payload.content);
+    if (!verdict.allowed) {
+        throw new Error(`⛔ RED Guardian: ${verdict.reason || 'Contenido bloqueado por infracción de seguridad'}`);
+    }
+
     return fetchWithFallback('/api/channels/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

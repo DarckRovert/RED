@@ -40,8 +40,8 @@ where
             A: de::SeqAccess<'de>,
         {
             let mut array = [0u8; 64];
-            for i in 0..64 {
-                array[i] = seq.next_element()?
+            for (i, item) in array.iter_mut().enumerate() {
+                *item = seq.next_element()?
                     .ok_or_else(|| de::Error::invalid_length(i, &self))?;
             }
             Ok(array)

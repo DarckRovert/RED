@@ -117,17 +117,25 @@ export function invalidateSessionTokenCache(): void {
     _sessionTokenCache = null;
 }
 
+export interface FetchNodeOptions extends RequestInit {
+    timeoutMs?: number;
+    maxRetries?: number;
+}
+
 /** Resilient helper for GET/POST API endpoints with local offline fallback engines */
-/** Fetch al nodo local con AbortController timeout (4s) y retry exponencial (2 intentos) */
-/** Fetch al nodo local con AbortController timeout (4s), token de sesión y retry exponencial (2 intentos) */
-async function fetchNodeWithRetry(url: string, options?: RequestInit): Promise<Response> {
-    const MAX_ATTEMPTS = 2;
+/** Fetch al nodo local con AbortController timeout dinámico (60s para IA, 5s estándar), token de sesión y retry */
+async function fetchNodeWithRetry(url: string, options?: FetchNodeOptions): Promise<Response> {
+    const isAiInference = url.includes('/api/ai/') || url.includes('/v1/chat/') || url.includes('/api/generate');
+    const defaultTimeout = isAiInference ? 60000 : 5000;
+    const timeoutMs = options?.timeoutMs ?? defaultTimeout;
+    const maxAttempts = options?.maxRetries ?? (isAiInference ? 1 : 2);
+
     let lastError: unknown;
     // Obtener token de sesión una vez (cacheado en memoria tras el primer fetch)
     const sessionToken = await getSessionToken();
-    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4000);
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
             const res = await fetch(url, {
                 ...options,
@@ -144,7 +152,7 @@ async function fetchNodeWithRetry(url: string, options?: RequestInit): Promise<R
         } catch (e) {
             clearTimeout(timer);
             lastError = e;
-            if (attempt < MAX_ATTEMPTS - 1) {
+            if (attempt < maxAttempts - 1) {
                 await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
             }
         }
@@ -154,7 +162,7 @@ async function fetchNodeWithRetry(url: string, options?: RequestInit): Promise<R
 
 export async function fetchWithFallback<T>(
     path: string,
-    options?: RequestInit,
+    options?: FetchNodeOptions,
     fallbackFn?: () => T | Promise<T>
 ): Promise<T> {
     try {

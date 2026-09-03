@@ -84,11 +84,6 @@ impl OnionRouter {
         !cache.insert(*nonce)
     }
 
-    /// Create a new onion router with default path length
-    pub fn default() -> Self {
-        Self::new(ONION_PATH_LENGTH)
-    }
-
     /// Select a random route through available peers
     pub fn select_route(
         &self,

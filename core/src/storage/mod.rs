@@ -333,14 +333,12 @@ impl Storage {
         // 1. Prune inactive emergency beacons older than cutoff
         if let Ok(tree) = db.open_tree("emergency_beacons") {
             let mut to_remove = Vec::new();
-            for item in tree.iter() {
-                if let Ok((k, encrypted_data)) = item {
-                    if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
-                        if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
-                            if let Ok(b) = bincode::deserialize::<EmergencyBeaconRecord>(&decrypted) {
-                                if !b.active && b.timestamp < cutoff {
-                                    to_remove.push(k);
-                                }
+            for (k, encrypted_data) in tree.iter().flatten() {
+                if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
+                    if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
+                        if let Ok(b) = bincode::deserialize::<EmergencyBeaconRecord>(&decrypted) {
+                            if !b.active && b.timestamp < cutoff {
+                                to_remove.push(k);
                             }
                         }
                     }
@@ -357,14 +355,12 @@ impl Storage {
         // 2. Prune old voice bursts older than cutoff
         if let Ok(tree) = db.open_tree("voice_bursts") {
             let mut to_remove = Vec::new();
-            for item in tree.iter() {
-                if let Ok((k, encrypted_data)) = item {
-                    if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
-                        if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
-                            if let Ok(b) = bincode::deserialize::<VoiceBurstRecord>(&decrypted) {
-                                if b.timestamp < cutoff {
-                                    to_remove.push(k);
-                                }
+            for (k, encrypted_data) in tree.iter().flatten() {
+                if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
+                    if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
+                        if let Ok(b) = bincode::deserialize::<VoiceBurstRecord>(&decrypted) {
+                            if b.timestamp < cutoff {
+                                to_remove.push(k);
                             }
                         }
                     }
@@ -383,14 +379,12 @@ impl Storage {
         //    geographic coordinates and peer DIDs are never stored in readable form on NAND.
         if let Ok(tree) = db.open_tree("proximity_nodes") {
             let mut to_remove = Vec::new();
-            for item in tree.iter() {
-                if let Ok((k, encrypted_data)) = item {
-                    if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
-                        if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
-                            if let Ok(record) = bincode::deserialize::<ProximityNodeRecord>(&decrypted) {
-                                if record.last_seen < cutoff {
-                                    to_remove.push(k);
-                                }
+            for (k, encrypted_data) in tree.iter().flatten() {
+                if let Ok(encrypted) = EncryptedData::from_bytes(&encrypted_data) {
+                    if let Ok(decrypted) = decrypt(&self.encryption_key, &encrypted) {
+                        if let Ok(record) = bincode::deserialize::<ProximityNodeRecord>(&decrypted) {
+                            if record.last_seen < cutoff {
+                                to_remove.push(k);
                             }
                         }
                     }
@@ -622,7 +616,7 @@ impl Storage {
     pub fn prune_expired_messages(&mut self) -> StorageResult<usize> {
         let mut pruned = 0;
         let convs = self.get_conversations();
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
         for mut conv in convs {
             let p = conv.prune_expired(now);
             if p > 0 {
@@ -696,7 +690,7 @@ impl Storage {
 
     pub fn get_social_feed(&self, limit: usize) -> StorageResult<Vec<SocialPost>> {
         let mut posts: Vec<SocialPost> = self.fetch_all("social_posts")?;
-        posts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        posts.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         posts.truncate(limit);
         Ok(posts)
     }
@@ -767,7 +761,7 @@ impl Storage {
 
     pub fn get_p2p_vouchers(&self) -> StorageResult<Vec<P2PVoucherRecord>> {
         let mut list: Vec<P2PVoucherRecord> = self.fetch_all("p2p_vouchers")?;
-        list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        list.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         Ok(list)
     }
 
@@ -788,7 +782,7 @@ impl Storage {
 
     pub fn get_triage_reports(&self) -> StorageResult<Vec<TriageReportRecord>> {
         let mut list: Vec<TriageReportRecord> = self.fetch_all("triage_reports")?;
-        list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        list.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         Ok(list)
     }
 
@@ -807,7 +801,7 @@ impl Storage {
 
     pub fn get_emergency_beacons(&self) -> StorageResult<Vec<EmergencyBeaconRecord>> {
         let mut list: Vec<EmergencyBeaconRecord> = self.fetch_all("emergency_beacons")?;
-        list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        list.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         Ok(list)
     }
 
@@ -826,7 +820,7 @@ impl Storage {
 
     pub fn get_stego_capsules(&self) -> StorageResult<Vec<StegoCapsuleRecord>> {
         let mut list: Vec<StegoCapsuleRecord> = self.fetch_all("stego_vault")?;
-        list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        list.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         Ok(list)
     }
 
@@ -906,7 +900,7 @@ impl Storage {
 
     pub fn get_voice_bursts(&self) -> StorageResult<Vec<VoiceBurstRecord>> {
         let mut list: Vec<VoiceBurstRecord> = self.fetch_all("voice_bursts")?;
-        list.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        list.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
         Ok(list)
     }
 

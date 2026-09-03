@@ -90,7 +90,7 @@ impl Block {
             state_root,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_secs(),
             validator,
             signature: [0u8; 64], // To be signed

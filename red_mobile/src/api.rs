@@ -1974,6 +1974,17 @@ async fn handle_post_channel_message(
     State(state): State<ApiState>,
     Json(req): Json<crate::channels::PostChannelMessageRequest>,
 ) -> impl IntoResponse {
+    let verdict = state.guardian_engine.analyze_text(&req.content);
+    if let red_core::protocol::tactical::GuardianVerdict::Block { category, reason } = verdict {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": format!("⛔ RED Guardian: {}", reason),
+                "category": category
+            }))
+        ).into_response();
+    }
     let node = state.node.lock().await;
     let sender_did = node.identity_hash().to_hex();
     let msg = state.channel_store.post_message(sender_did, req);

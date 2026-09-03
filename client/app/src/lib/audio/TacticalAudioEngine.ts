@@ -5,26 +5,13 @@
  */
 
 import { SettingsManager } from '../settingsManager';
+import { AudioContextManager } from './AudioContextManager';
 
 export class TacticalAudioEngine {
     private static ctx: AudioContext | null = null;
 
     private static getContext(): AudioContext | null {
-        if (typeof window === "undefined") return null;
-        try {
-            if (!this.ctx || this.ctx.state === "closed") {
-                const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-                if (AudioCtxClass) {
-                    this.ctx = new AudioCtxClass();
-                }
-            }
-            if (this.ctx && this.ctx.state === "suspended") {
-                this.ctx.resume().catch(() => {});
-            }
-            return this.ctx;
-        } catch {
-            return null;
-        }
+        return AudioContextManager.getSharedContext();
     }
 
     /** Chirp ultrasónico ascendente confirmando mensaje cifrado transmitido (880Hz -> 1760Hz, 70ms) */

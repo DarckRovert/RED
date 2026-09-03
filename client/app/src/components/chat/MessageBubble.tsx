@@ -9,6 +9,7 @@ import { VoiceMessage } from "./VoiceMessage";
 import { PollMessage } from "./PollMessage";
 import { ImageViewerModal } from "./ImageViewerModal";
 import { LocalAIEngine } from "../../lib/localAiEngine";
+import { translateTextAI } from "../../api/ai";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 
@@ -449,8 +450,8 @@ export const MessageBubble = memo(({
             const spanishHits = words.filter(w => spanishKeywords.includes(w)).length;
             const targetLang = (spanishHits >= 2 || /[áéíóúñ¿¡]/.test(text)) ? 'en' : 'es';
 
-            const res = await LocalAIEngine.translateText(msg.content, targetLang);
-            setTranslatedText(res.translatedText);
+            const res = await translateTextAI(msg.content, targetLang);
+            setTranslatedText(res.translated_text);
             toast.success(`🌐 Traducido al ${targetLang === 'en' ? 'Inglés' : 'Español'}`);
         } catch {
             toast.error("Error al traducir mensaje");

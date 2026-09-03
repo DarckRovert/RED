@@ -40,11 +40,8 @@ impl Validator {
         }
         
         // Weight based on stake and performance
-        let performance = if self.blocks_produced + self.missed_slots > 0 {
-            (self.blocks_produced * 100) / (self.blocks_produced + self.missed_slots)
-        } else {
-            100
-        };
+        let total_slots = self.blocks_produced + self.missed_slots;
+        let performance = (self.blocks_produced * 100).checked_div(total_slots).unwrap_or(100);
         
         (self.stake * performance) / 100
     }

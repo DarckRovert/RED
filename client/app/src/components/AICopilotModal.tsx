@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
-import { queryAICopilot, CopilotResponse, summarizeChannelAI } from "../lib/api";
+import { queryAICopilot, CopilotResponse, summarizeChannelAI, translateTextAI } from "../lib/api";
 import { LocalAIEngine } from "../lib/localAiEngine";
 import { ModelManager, LocalModelMetaData, DeviceMemoryBudget, SovereignEndpointConfig, SOVEREIGN_PRESETS } from "../lib/modelManager";
 import { GlossaryLanguage, GlossaryEntry, EMERGENCY_GLOSSARY } from "../lib/emergencyGlossary";
@@ -161,8 +161,13 @@ export const AICopilotModal: React.FC = () => {
 
     useEffect(() => {
         refreshModels();
+        ModelManager.checkLocalModelsStatus().then(refreshModels).catch(() => {});
+        const unsubscribe = ModelManager.subscribe(refreshModels);
         const interval = setInterval(refreshModels, 3000);
-        return () => clearInterval(interval);
+        return () => {
+            unsubscribe();
+            clearInterval(interval);
+        };
     }, [refreshModels]);
 
     const handleTestSovereign = async () => {
@@ -328,7 +333,7 @@ export const AICopilotModal: React.FC = () => {
         try {
             const ragResults = await vectorKnowledgeStore.search(text, 1);
             let ragSnippet = "";
-            if (ragResults.length > 0 && ragResults[0].similarityScore > 0.52) {
+            if (ragResults.length > 0 && ragResults[0].similarityScore >= 0.45) {
                 const topDoc = ragResults[0].document;
                 ragSnippet = `[RAG Táctico INT8: ${topDoc.title}]: ${topDoc.content}`;
             }
@@ -343,7 +348,7 @@ export const AICopilotModal: React.FC = () => {
 
             const res: CopilotResponse = await queryAICopilot(text, contextStr);
             const latency = Math.round(performance.now() - startTime);
-            const tag = res.source || (activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : "Qwen 2.5 0.5B + Vector INT8 (100% Offline)");
+            const tag = res.source || (activeModel ? `${activeModel.name} (ARM64 / WASM Local)` : "RAG Vectorial INT8 + Protocolos TCCC (100% Offline)");
 
             const aiMsg: ChatMessage = {
                 id: `msg_${Date.now()}_${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Date.now().toString(36)}`,
@@ -400,6 +405,8 @@ export const AICopilotModal: React.FC = () => {
             if (success) {
                 LocalAIEngine.disposePipelines();
                 ModelManager.setActiveModel(modelId);
+                await ModelManager.checkLocalModelsStatus().catch(() => {});
+                refreshModels();
                 toast.success("Modelo descargado, verificado y activado");
             } else {
                 toast.info("Descarga en pausa o cancelada. Se reanudará al presionar descargar.");
@@ -421,6 +428,8 @@ export const AICopilotModal: React.FC = () => {
         LocalAIEngine.disposePipelines();
         const ok = await ModelManager.deleteModel(modelId);
         if (ok) {
+            await ModelManager.checkLocalModelsStatus().catch(() => {});
+            refreshModels();
             toast.success(t('copilot.delete_success') || "Modelo eliminado para liberar espacio");
         } else {
             toast.error("No se pudo eliminar el archivo");
@@ -439,6 +448,8 @@ export const AICopilotModal: React.FC = () => {
             const imported = await ModelManager.importModelFromLocalFile(file, (progress) => {
                 setImportProgress(progress);
             });
+            await ModelManager.checkLocalModelsStatus().catch(() => {});
+            refreshModels();
             handleSelectModel(imported.id);
             toast.success(`✅ Modelo ${imported.name} importado y activado`);
         } catch (err: any) {
@@ -465,8 +476,8 @@ export const AICopilotModal: React.FC = () => {
 
         setIsTranslating(true);
         try {
-            const res = await LocalAIEngine.translateText(textToTranslate, targetLang);
-            setTranslatorOutput(res.translatedText);
+            const res = await translateTextAI(textToTranslate, targetLang);
+            setTranslatorOutput(res.translated_text);
             toast.success("Traducción completada");
         } catch {
             toast.error("Error al procesar traducción");
@@ -572,7 +583,7 @@ export const AICopilotModal: React.FC = () => {
                             </span>
                         </div>
                         <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
-                            Motor: <span style={{ color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>{activeModel?.name || "Qwen 2.5 0.5B Instruct"}</span>
+                            Motor: <span style={{ color: "var(--accent-cyan, #00E5FF)", fontWeight: 800 }}>{sovereignConfig ? `🛰️ ${sovereignConfig.modelName} (Soberano)` : (activeModel?.name || "🛡️ RAG Táctico Preinstalado INT8")}</span>
                         </div>
                     </div>
                 </div>

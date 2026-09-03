@@ -165,7 +165,7 @@ impl Identity {
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         now >= self.expires_at
     }
@@ -174,7 +174,7 @@ impl Identity {
     pub fn should_rotate(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         now >= self.created_at + ROTATION_INTERVAL_SECS
     }
@@ -257,7 +257,7 @@ impl IdentityBuilder {
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         Ok(Identity {
@@ -295,7 +295,7 @@ impl PublicIdentity {
     pub fn is_expired(&self) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         now >= self.expires_at
     }

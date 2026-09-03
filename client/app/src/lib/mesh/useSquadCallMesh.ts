@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { RedAPI } from '../api';
 import { useRedStore } from '../../store/useRedStore';
+import { AudioContextManager } from '../audio/AudioContextManager';
 
 export interface SquadPeerState {
     peerHash: string;
@@ -42,6 +43,7 @@ export function useSquadCallMesh({
     const analysersRef = useRef<Map<string, AnalyserNode>>(new Map());
     const vadIntervalRef = useRef<any>(null);
     const squadDataChannelsRef = useRef<Map<string, RTCDataChannel>>(new Map());
+    const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
     const { callSignalQueue } = useRedStore();
     const processedSignalsRef = useRef<Set<string>>(new Set());
@@ -100,9 +102,8 @@ export function useSquadCallMesh({
     const setupVAD = () => {
         if (typeof window === 'undefined') return;
         try {
-            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (!AudioContextClass) return;
-            const ctx = new AudioContextClass();
+            const ctx = AudioContextManager.acquireDedicatedContext('squad_call_vad');
+            if (!ctx) return;
             audioContextRef.current = ctx;
 
             if (localStreamRef.current) {
@@ -370,10 +371,25 @@ export function useSquadCallMesh({
         });
     }, [callSignalQueue, groupId, myIdentityHash]);
 
+    // ── Helper to drain pending ICE candidates once remoteDescription is set ───
+    const drainPendingCandidates = async (peerHash: string, pc: RTCPeerConnection) => {
+        const pending = pendingCandidatesRef.current.get(peerHash);
+        if (!pending || pending.length === 0) return;
+        const candidates = [...pending];
+        pendingCandidatesRef.current.set(peerHash, []);
+        for (const cand of candidates) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(cand));
+            } catch (err) {
+                console.warn('[SquadVoiceMesh] Error aplicando candidato ICE en cola:', err);
+            }
+        }
+    };
+
     const handleIncomingSignal = async (senderHash: string, signal: any) => {
         try {
             if (signal.type === 'group_call_join') {
-                // Incoming new peer joined room -> We initiate an offer to them
+                // Incoming peer joined room -> Initiate an offer to negotiate full-mesh E2E connection
                 const pc = getOrCreatePeerConnection(senderHash);
                 const rawOffer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
                 // Apply tactical voice SDP constraints before sending
@@ -389,9 +405,30 @@ export function useSquadCallMesh({
                     offer: tacticalOffer,
                 });
             } else if (signal.type === 'group_call_offer') {
-                // Incoming offer from peer -> We respond with answer
                 const pc = getOrCreatePeerConnection(senderHash);
+
+                // Perfect Negotiation (RFC 8829): Glare resolution with polite rollback
+                const isPolite = myIdentityHash.localeCompare(senderHash) < 0;
+                const offerCollision = pc.signalingState !== 'stable';
+
+                if (offerCollision) {
+                    if (!isPolite) {
+                        // Impolite peer rejects/discards the incoming colliding offer; our own offer takes precedence
+                        console.log(`[SquadVoiceMesh] Glare detectado con ${senderHash.slice(0, 8)}: peer impolite mantiene oferta local`);
+                        return;
+                    }
+                    // Polite peer yields: roll back local offer to accept remote offer
+                    console.log(`[SquadVoiceMesh] Glare detectado con ${senderHash.slice(0, 8)}: peer polite ejecuta rollback`);
+                    try {
+                        await pc.setLocalDescription({ type: 'rollback' });
+                    } catch (rbErr) {
+                        console.warn('[SquadVoiceMesh] Rollback error:', rbErr);
+                    }
+                }
+
                 await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+                await drainPendingCandidates(senderHash, pc);
+
                 const rawAnswer = await pc.createAnswer();
                 // Apply tactical voice SDP constraints before sending
                 const tacticalAnswer = new RTCSessionDescription({
@@ -407,13 +444,23 @@ export function useSquadCallMesh({
                 });
             } else if (signal.type === 'group_call_answer') {
                 const pc = peerConnectionsRef.current.get(senderHash);
-                if (pc) {
+                if (pc && pc.signalingState === 'have-local-offer') {
                     await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+                    await drainPendingCandidates(senderHash, pc);
                 }
             } else if (signal.type === 'group_call_candidate') {
+                if (!signal.candidate) return;
                 const pc = peerConnectionsRef.current.get(senderHash);
-                if (pc && signal.candidate) {
-                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
+                    // Remote description not ready yet: buffer candidate
+                    if (!pendingCandidatesRef.current.has(senderHash)) {
+                        pendingCandidatesRef.current.set(senderHash, []);
+                    }
+                    pendingCandidatesRef.current.get(senderHash)!.push(signal.candidate);
+                } else {
+                    await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch((e) => {
+                        console.warn('[SquadVoiceMesh] addIceCandidate error:', e);
+                    });
                 }
             } else if (signal.type === 'group_call_leave') {
                 closePeer(senderHash);
@@ -433,6 +480,11 @@ export function useSquadCallMesh({
         if (dc) {
             try { dc.close(); } catch {}
             squadDataChannelsRef.current.delete(peerHash);
+        }
+        pendingCandidatesRef.current.delete(peerHash);
+        const stream = remoteStreamsRef.current.get(peerHash);
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
         }
         remoteStreamsRef.current.delete(peerHash);
         analysersRef.current.delete(peerHash);
@@ -531,7 +583,7 @@ export function useSquadCallMesh({
             vadIntervalRef.current = null;
         }
         if (audioContextRef.current) {
-            audioContextRef.current.close().catch(() => {});
+            AudioContextManager.releaseDedicatedContext('squad_call_vad').catch(() => {});
             audioContextRef.current = null;
         }
 
@@ -544,6 +596,12 @@ export function useSquadCallMesh({
 
         peerConnectionsRef.current.forEach(pc => pc.close());
         peerConnectionsRef.current.clear();
+        squadDataChannelsRef.current.forEach(dc => { try { dc.close(); } catch {} });
+        squadDataChannelsRef.current.clear();
+        pendingCandidatesRef.current.clear();
+        remoteStreamsRef.current.forEach(stream => {
+            stream.getTracks().forEach(t => t.stop());
+        });
         remoteStreamsRef.current.clear();
         analysersRef.current.clear();
 

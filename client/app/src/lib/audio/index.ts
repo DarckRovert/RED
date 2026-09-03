@@ -6,4 +6,5 @@ export * from './CallHistoryEngine';
 export * from './SoundMeshEngine';
 export * from './TacticalVoiceCompressor';
 export * from './TacticalVoiceAnalyzer';
+export * from './AudioContextManager';
 

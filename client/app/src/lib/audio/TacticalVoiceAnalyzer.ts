@@ -12,18 +12,13 @@ export interface VoiceAnalysisResult {
     waveform: number[];
 }
 
+import { AudioContextManager } from './AudioContextManager';
+
 export class TacticalVoiceAnalyzer {
     private static audioCtx: AudioContext | null = null;
 
     private static getAudioContext(): AudioContext | null {
-        if (typeof window === 'undefined') return null;
-        if (!this.audioCtx || this.audioCtx.state === 'closed') {
-            const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-            if (AudioCtxClass) {
-                this.audioCtx = new AudioCtxClass();
-            }
-        }
-        return this.audioCtx;
+        return AudioContextManager.getSharedContext();
     }
 
     /**

@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from "react"
 import { MessageItem } from "../../lib/api";
 import { useRedStore } from "../../store/useRedStore";
 import { LocalAIEngine } from "../../lib/localAiEngine";
+import { translateTextAI } from "../../api/ai";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { TacticalEmojiPicker } from "./TacticalEmojiPicker";
@@ -169,10 +170,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         if (!text.trim()) return;
         setIsAiProcessing(true);
         try {
-            const res = await LocalAIEngine.translateText(text.trim(), 'en');
-            setText(res.translatedText);
+            const res = await translateTextAI(text.trim(), 'en');
+            setText(res.translated_text);
             setAiMenuOpen(false);
-            toast.success("🌐 Mensaje traducido al inglés con IA Local");
+            toast.success("🌐 Mensaje traducido al inglés con IA");
         } catch {
             toast.error("Error al traducir mensaje");
         } finally {
@@ -184,8 +185,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         if (!text.trim()) return;
         setIsAiProcessing(true);
         try {
-            const res = await LocalAIEngine.translateText(text.trim(), 'es');
-            setText(res.translatedText);
+            const res = await translateTextAI(text.trim(), 'es');
+            setText(res.translated_text);
             setAiMenuOpen(false);
             toast.success("🌐 Mensaje traducido al español con IA");
         } catch {

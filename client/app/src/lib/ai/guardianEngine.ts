@@ -73,11 +73,14 @@ const EXPLOITATION_PATTERNS = [
     /\b(vendo\s*cp|packs?\s*de\s*niñ[ao]s?|fotos?\s*de\s*menores?\s*desnud[ao]s?)\b/i,
 ];
 
-// 2. Patrones de Amenazas Violentas Directas y Terrorismo
+// 2. Patrones de Amenazas Violentas Directas, Terrorismo y Extorsión de Claves
 const THREAT_PATTERNS = [
-    /\b(te\s*voy\s*a\s*(matar|acribillar|degollar|violar|descuartizar))\b/i,
-    /\b(voy\s*a\s*poner\s*una\s*bomba|atentado\s*terrorista|masacre\s*en)\b/i,
-    /\b(amenaza\s*de\s*muerte|contratar\s*sicario|tiroteo\s*masivo)\b/i,
+    /\b(te\s*voy\s*a\s*(matar|acribillar|degollar|violar|descuartizar|asesinar|aniquilar|eliminar|destruir))\b/i,
+    /\b(voy\s*a\s*(matarte|acribillarte|degollarte|violarte|descuartizarte|asesinarte|pegarte\s*un\s*tiro))\b/i,
+    /\b(voy\s*a\s*poner\s*una\s*bomba|atentado\s*terrorista|masacre\s*en|ataque\s*armado)\b/i,
+    /\b(amenaza\s*de\s*muerte|contratar\s*sicario|tiroteo\s*masivo|fusilamiento)\b/i,
+    /\b(te\s*vas\s*a\s*morir|vas\s*a\s*morir|muerete\s*maldit[ao]|moriras\s*pronto)\b/i,
+    /\b(dame\s*tu\s*(clave\s*privada|frase\s*semilla|seed\s*phrase|private\s*key)|pasa\s*tu\s*seed|robo\s*de\s*identidad)\b/i,
 ];
 
 // 3. Patrones de Spam Masivo y Phishing / Malicious Links
@@ -127,8 +130,9 @@ function normalizeAndDeobfuscate(text: string): string {
     // Reducir caracteres repetidos consecutivos (ej. "maaaataaar" -> "matar")
     clean = clean.replace(/(.)\1{2,}/g, '$1');
     
-    // Quitar separadores camuflados entre letras (ej. "p.e.d.o" -> "pedo")
-    clean = clean.replace(/([a-z])[\s._\-*#]+(?=[a-z])/g, '$1');
+    // Quitar separadores de puntuación camuflados entre letras (ej. "p.e.d.o" -> "pedo", "m-a-t-a-r" -> "matar")
+    clean = clean.replace(/([a-z0-9])[._*#\-]+(?=[a-z0-9])/g, '$1');
+    clean = clean.replace(/\s+/g, ' ').trim();
     
     return clean;
 }

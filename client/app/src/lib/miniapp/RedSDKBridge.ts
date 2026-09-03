@@ -20,6 +20,7 @@ import { encode, createPacket } from '../mesh/meshProtocol';
 import { Web3BridgeEngine } from '../network/Web3BridgeEngine';
 import { MonetizationEngine } from '../network/MonetizationEngine';
 import { LocalAIEngine } from '../ai/localAiEngine';
+import { queryAICopilot } from '../../api/ai';
 import { toast } from '../../components/Toast';
 
 const BROADCAST_RECIPIENT = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
@@ -279,16 +280,16 @@ export class RedSDKBridge {
                 }
                 const startTime = Date.now();
                 try {
-                    const aiResult = await LocalAIEngine.generateCopilotResponse(query, this.manifest.name);
+                    const aiResult = await queryAICopilot(query, this.manifest.name);
                     return {
                         response: aiResult.answer,
-                        model: aiResult.modelInfo || 'RED-Local-ONNX-S4',
-                        topicCategory: aiResult.topicCategory,
-                        confidence: aiResult.confidence,
-                        latencyMs: aiResult.executionTimeMs || (Date.now() - startTime),
+                        model: aiResult.source || 'RED-Unified-AI',
+                        topicCategory: aiResult.topic_category,
+                        confidence: 0.95,
+                        latencyMs: aiResult.execution_time_ms || (Date.now() - startTime),
                     };
                 } catch (aiErr: any) {
-                    console.warn('[RedSDKBridge] LocalAIEngine fallback error:', aiErr);
+                    console.warn('[RedSDKBridge] queryAICopilot fallback error:', aiErr);
                     return {
                         response: `[RED AI]: No se pudo procesar la inferencia (${aiErr?.message || 'error'}).`,
                         model: 'RED-Local-Fallback',

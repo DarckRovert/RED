@@ -75,7 +75,7 @@ impl GossipMessage {
         let id = MessageId::from_content(&id_input);
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         Self {
@@ -108,7 +108,7 @@ impl GossipMessage {
     pub fn is_expired(&self, max_age_secs: u64) -> bool {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
         
         now.saturating_sub(self.timestamp) > max_age_secs

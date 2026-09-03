@@ -19,6 +19,7 @@ import {
 import { meshRouter } from '../mesh/meshRouter';
 import { ModelManager } from '../ai/modelManager';
 import { LocalAIEngine } from '../ai/localAiEngine';
+import { queryAICopilot } from '../../api/ai';
 
 class HiveMindEngineClass {
     private knownNodeCapabilities: Map<string, NodeCapacityAdvertisement> = new Map();
@@ -148,7 +149,7 @@ class HiveMindEngineClass {
         const start = performance.now();
         let myId = meshRouter.myIdentityHash || (typeof window !== 'undefined' ? localStorage.getItem('red_identity_hash') : '') || 'local_node';
         try {
-            const copilotRes = await LocalAIEngine.generateCopilotResponse(req.prompt);
+            const copilotRes = await queryAICopilot(req.prompt);
             const execTime = Math.round(performance.now() - start);
 
             // Si el solicitante pidió streaming, emitir tokens progresivamente por la malla
@@ -163,7 +164,7 @@ class HiveMindEngineClass {
                         token,
                         isFinal,
                         totalTokensGenerated: words.length,
-                        executionTimeMs: Math.round(performance.now() - start),
+                        executionTimeMs: Math.round(performance.now() - start)
                     };
                     const encChunk = new TextEncoder().encode(JSON.stringify({
                         type: 'HIVE_STREAM_CHUNK',
@@ -180,7 +181,7 @@ class HiveMindEngineClass {
                 requestId: req.requestId,
                 fullAnswer: copilotRes.answer,
                 executorNodeId: myId,
-                modelUsed: copilotRes.modelInfo,
+                modelUsed: copilotRes.source || 'Unified-Node-AI',
                 executionTimeMs: execTime,
                 tokensPerSecond: Math.round((copilotRes.answer.length / 4) / (execTime / 1000 || 1))
             };

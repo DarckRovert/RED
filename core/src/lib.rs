@@ -10,7 +10,7 @@
 //! - `storage`: Local encrypted storage
 //! - `protocol`: Message protocol implementation
 
-#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated, clippy::all)]
+#![allow(dead_code, unused_imports, missing_docs, unused_variables, deprecated)]
 #![allow(rust_2018_idioms)]
 
 pub mod crypto;

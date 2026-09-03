@@ -258,7 +258,7 @@ pub fn populate_decoy_vault(storage: &mut crate::storage::Storage, my_id: &crate
         ("Suscripción de Streaming", "Su factura ha sido pagada. Su plan termina el 30."),
         ("Carlos Universidad", "¿Ya hiciste la tarea de finanzas? Está imposible hermano")];
 
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
 
     for (i, (name, first_msg)) in fake_contacts.iter().enumerate() {
         use crate::identity::IdentityBuilder;

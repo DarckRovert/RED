@@ -6,7 +6,7 @@
  * and adversarial radio surveillance proximity.
  */
 
-import { BleClient } from '@capacitor-community/bluetooth-le';
+import { bluetoothTransport } from '../mesh/bluetoothTransport';
 
 export type SigintThreatLevel = 'CLEAR' | 'ELEVATED' | 'HOSTILE_SURVEILLANCE' | 'DRONE_DETECTED';
 export type EmitterType = 'UNKNOWN_BLE' | 'OPEN_DRONE_ID' | 'APPLE_FIND_MY' | 'TILE_TRACKER' | 'MESH_PEER';
@@ -93,12 +93,14 @@ export class RfSigintWatchdogEngine {
         this.notify();
 
         try {
-            await BleClient.initialize();
-            await BleClient.requestLEScan({}, (result) => {
+            await bluetoothTransport.startContinuousScan('rf_sigint_watchdog', (result) => {
                 this.processScanResult(result);
             });
         } catch (e) {
+            this.isScanning = false;
             console.warn('[RfSigintWatchdogEngine] BLE Native scan initialization error:', e);
+            this.notify();
+            return false;
         }
 
         return true;
@@ -107,7 +109,7 @@ export class RfSigintWatchdogEngine {
     public async stopScanning() {
         this.isScanning = false;
         try {
-            await BleClient.stopLEScan();
+            await bluetoothTransport.stopContinuousScan('rf_sigint_watchdog');
         } catch {}
         this.notify();
     }

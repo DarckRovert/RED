@@ -183,7 +183,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
 
         // ── RED GUARDIAN IA MODERATION EVALUATION ──────────────────────────────
         if (content && !isControlMessage && (!options?.msg_type || options.msg_type === 'text')) {
-            const verdict = GuardianEngine.evaluateText(content);
+            const verdict = await GuardianEngine.evaluateTextAsync(content);
             if (!verdict.allowed) {
                 toast.error(`⛔ RED Guardian: ${verdict.reason}`);
                 return;

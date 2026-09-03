@@ -201,11 +201,9 @@ export default function CallScreen() {
                     const bytes = new Uint8Array(event.data);
                     if (bytes.length > 0 && (bytes[0] === 0x56 || bytes[0] === 0x58)) {
                         const { LowBitrateVocoder } = await import("../lib/audio/LowBitrateVocoder");
-                        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-                        if (AudioContextClass) {
-                            if (!audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
-                            const ctx = audioCtxRef.current;
-                            if (ctx.state === "suspended") await ctx.resume();
+                        const { AudioContextManager } = await import("../lib/audio/AudioContextManager");
+                        const ctx = AudioContextManager.getSharedContext();
+                        if (ctx) {
                             const buffer = LowBitrateVocoder.createAudioBufferFromEncoded(ctx, bytes);
                             const source = ctx.createBufferSource();
                             source.buffer = buffer;

@@ -5,6 +5,7 @@ import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { BlockDetailsModal } from "./BlockDetailsModal";
 import { LocalAIEngine } from "../lib/localAiEngine";
+import { queryAICopilot } from "../api/ai";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
@@ -138,11 +139,11 @@ export default function BlockchainExplorer() {
         setAiAudit(null);
         try {
             const prompt = `Evalúa en 2 oraciones la salud de la blockchain local con altura #${chainHeight} y ${blocks.length} bloques minados.`;
-            const res = await LocalAIEngine.generateCopilotResponse(prompt);
+            const res = await queryAICopilot(prompt);
             setAiAudit(res.answer || "El modelo no generó una evaluación para la cadena.");
         } catch (e: any) {
-            setAiAudit(`⚠️ Motor de IA Local no disponible: ${e.message || "Modelos ONNX no cargados"}.`);
-            toast.error("IA Local no disponible");
+            setAiAudit(`⚠️ Motor de IA no disponible: ${e.message || "Modelos no cargados"}.`);
+            toast.error("IA no disponible");
         } finally {
             setAuditLoading(false);
         }

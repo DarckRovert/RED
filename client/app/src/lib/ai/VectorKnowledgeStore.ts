@@ -6,6 +6,8 @@
  * manuales tácticos de supervivencia, guías médicas TCCC y frecuencias de telecomunicaciones.
  */
 
+import { EMERGENCY_KNOWLEDGE_BASE } from '../emergency/emergencyKnowledgeBase';
+
 export interface KnowledgeDocument {
     id: string;
     category: 'TCCC_MEDICINE' | 'SURVIVAL_RESCUE' | 'RADIO_COMMS' | 'WATER_FOOD' | 'NBC_DEFENSE';
@@ -151,11 +153,28 @@ export class VectorKnowledgeStore {
 
     // ─── Base Táctica Precargada de Supervivencia TCCC ──────────────────────────
 
-    private static readonly RAG_CACHE_KEY = 'red_rag_index_v1';
-    private static readonly RAG_VERSION = 1;
+    private static readonly RAG_CACHE_KEY = 'red_rag_index_v2';
+    private static readonly RAG_VERSION = 2;
 
     private async loadPreloadedTacticalBase() {
+        const emergencyDocs: Array<Omit<KnowledgeDocument, 'vectorInt8'>> = (EMERGENCY_KNOWLEDGE_BASE || []).map(frag => {
+            let cat: KnowledgeDocument['category'] = 'SURVIVAL_RESCUE';
+            if (frag.category === 'medico') cat = 'TCCC_MEDICINE';
+            else if (frag.category === 'comunicacion' || frag.category === 'tactico') cat = 'RADIO_COMMS';
+            else if (frag.category === 'cbrn' || frag.category === 'incendio') cat = 'NBC_DEFENSE';
+            else if (frag.category === 'supervivencia') cat = 'WATER_FOOD';
+
+            return {
+                id: frag.id,
+                category: cat,
+                title: frag.title,
+                content: `${frag.summary}\n\n${frag.content}\n\nPasos:\n${frag.actionSteps.join('\n')}\n\nAdvertencias:\n${frag.vitalWarnings.join('\n')}`,
+                tags: [...frag.keywords, frag.category, frag.priorityLevel.toLowerCase()]
+            };
+        });
+
         const rawDocs: Array<Omit<KnowledgeDocument, 'vectorInt8'>> = [
+            ...emergencyDocs,
             {
                 id: 'tccc-01-massive-bleed',
                 category: 'TCCC_MEDICINE',

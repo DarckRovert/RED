@@ -21,6 +21,23 @@ export interface PolarSector {
     sampleCount: number;
 }
 
+export interface PeakBearingInfo {
+    peakHeadingDeg: number;
+    peakRssiDbm: number;
+    estimatedDistMeters: number;
+    confidencePct: number;
+    isSignalLocked: boolean;
+}
+
+export interface TacticalRdfState {
+    currentHeading: number;
+    currentRssi: number;
+    targetType: TargetSignalType;
+    sectors: PolarSector[];
+    peakBearing: PeakBearingInfo;
+    sampleCount: number;
+}
+
 export class TacticalRdfEngine {
     private static instance: TacticalRdfEngine | null = null;
 
@@ -33,7 +50,7 @@ export class TacticalRdfEngine {
     private currentRssi: number = -75;
     private targetType: TargetSignalType = 'EMERGENCY_BEACON';
 
-    private listeners: Set<(state: any) => void> = new Set();
+    private listeners: Set<(state: TacticalRdfState) => void> = new Set();
 
     private constructor() {
         this.resetSectors();
@@ -56,7 +73,7 @@ export class TacticalRdfEngine {
         }));
     }
 
-    public subscribe(cb: (state: any) => void): () => void {
+    public subscribe(cb: (state: TacticalRdfState) => void): () => void {
         this.listeners.add(cb);
         cb(this.getState());
         return () => this.listeners.delete(cb);
@@ -106,13 +123,7 @@ export class TacticalRdfEngine {
         this.notify();
     }
 
-    public getPeakBearing(): {
-        peakHeadingDeg: number;
-        peakRssiDbm: number;
-        estimatedDistMeters: number;
-        confidencePct: number;
-        isSignalLocked: boolean;
-    } {
+    public getPeakBearing(): PeakBearingInfo {
         if (this.samples.length === 0) {
             return {
                 peakHeadingDeg: 0,
@@ -164,7 +175,7 @@ export class TacticalRdfEngine {
         this.notify();
     }
 
-    public getState() {
+    public getState(): TacticalRdfState {
         return {
             currentHeading: this.currentHeading,
             currentRssi: this.currentRssi,

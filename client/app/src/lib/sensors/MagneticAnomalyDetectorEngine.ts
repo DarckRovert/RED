@@ -6,6 +6,8 @@
  * with real-time acoustic Geiger-counter frequency modulation feedback.
  */
 
+import { AudioContextManager } from '../audio/AudioContextManager';
+
 export type AnomalySeverity = 'NORMAL' | 'ELEVATED' | 'HIGH' | 'EXTREME';
 
 export interface MagneticTelemetry {
@@ -218,19 +220,7 @@ export class MagneticAnomalyDetectorEngine {
     }
 
     private getAudioContext(): AudioContext | null {
-        if (typeof window === 'undefined') return null;
-        try {
-            if (!this.audioCtx || this.audioCtx.state === 'closed') {
-                const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-                if (AudioCtxClass) this.audioCtx = new AudioCtxClass();
-            }
-            if (this.audioCtx && this.audioCtx.state === 'suspended') {
-                this.audioCtx.resume().catch(() => {});
-            }
-            return this.audioCtx;
-        } catch {
-            return null;
-        }
+        return AudioContextManager.getSharedContext();
     }
 
     private currentDelayMs: number = 600;
