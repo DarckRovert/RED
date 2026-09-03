@@ -141,7 +141,8 @@ export class ZeroKnowledgeBarterEngine {
     public verifyProof(proof: ZkBarterProof): boolean {
         if (!proof || typeof proof !== 'object') return false;
         if (typeof proof.commitment !== 'string' || typeof proof.nullifierHash !== 'string' || typeof proof.merkleRoot !== 'string') return false;
-        if (!Array.isArray(proof.proofSteps) || typeof proof.amount !== 'number' || proof.amount <= 0) return false;
+        if (!Array.isArray(proof.proofSteps) || typeof proof.amount !== 'number' || !isFinite(proof.amount) || proof.amount <= 0) return false;
+        if (typeof proof.resourceType !== 'string' || proof.resourceType.trim().length === 0) return false;
         if (this.isSpent(proof.nullifierHash)) {
             return false; // Nullifier ya gastado (intento de doble gasto)
         }
@@ -158,6 +159,38 @@ export class ZeroKnowledgeBarterEngine {
         }
 
         return currentHash === proof.merkleRoot;
+    }
+
+    /**
+     * Serializa una prueba ZK para intercambio visual en código QR offline
+     */
+    public exportProofToQrString(proof: ZkBarterProof): string {
+        const json = JSON.stringify(proof);
+        const b64 = typeof btoa !== 'undefined' ? btoa(json) : Buffer.from(json).toString('base64');
+        return `ZK_PROOF:1:${b64}`;
+    }
+
+    /**
+     * Reconstruye y valida una prueba ZK desde una cadena escaneada por QR
+     */
+    public parseProofFromQrString(qrString: string): ZkBarterProof | null {
+        if (!qrString || typeof qrString !== 'string') return null;
+        const trimmed = qrString.trim();
+        try {
+            if (trimmed.startsWith('ZK_PROOF:1:')) {
+                const b64 = trimmed.substring('ZK_PROOF:1:'.length);
+                const json = typeof atob !== 'undefined' ? atob(b64) : Buffer.from(b64, 'base64').toString('utf8');
+                const parsed = JSON.parse(json);
+                return this.verifyProof(parsed) ? parsed : null;
+            }
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                const parsed = JSON.parse(trimmed);
+                return this.verifyProof(parsed) ? parsed : null;
+            }
+        } catch {
+            return null;
+        }
+        return null;
     }
 
     public isSpent(nullifierHash: string): boolean {

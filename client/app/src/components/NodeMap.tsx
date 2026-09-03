@@ -15,7 +15,7 @@ import { tacticalGeofence } from "../lib/sensors/TacticalGeofenceEngine";
 import { deadDropVault } from "../lib/storage/DeadDropVaultEngine";
 import { milStd2525 } from "../lib/tactical/MilStd2525Engine";
 import { sitrepEngine } from "../lib/tactical/SitrepEngine";
-import { pedestrianDeadReckoning } from "../lib/sensors/PedestrianDeadReckoningEngine";
+import { pedestrianDeadReckoning, PdrState } from "../lib/sensors/PedestrianDeadReckoningEngine";
 import { tacticalRdf } from "../lib/sensors/TacticalRdfEngine";
 import { meshUavRelayEngine } from "../lib/mesh/MeshUavRelayEngine";
 import { cbrnPlumeDispersionEngine } from "../lib/tactical/CbrnPlumeDispersionEngine";
@@ -123,14 +123,52 @@ export default function NodeMap() {
     const [isDownloadingVault, setIsDownloadingVault] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
 
+    // ── Navegación Inercial Pedestrian Dead Reckoning (PDR) ───────────────
+    const [pdrState, setPdrState] = useState<PdrState>(() => pedestrianDeadReckoning.getState());
+    const [isPdrActive, setIsPdrActive] = useState(false);
+    const pdrOriginRef = useRef<{ lat: number; lng: number }>({ lat: 0, lng: 0 });
+
+    useEffect(() => {
+        const unsub = pedestrianDeadReckoning.subscribe((state) => {
+            setPdrState(state);
+        });
+        return () => unsub();
+    }, []);
+
+    const handleTogglePdr = () => {
+        if (isPdrActive) {
+            pedestrianDeadReckoning.stopTracking();
+            setIsPdrActive(false);
+            toast.info("Rastreo inercial PDR pausado");
+        } else {
+            const originLat = gpsData.lat !== 0 ? gpsData.lat : 19.4326;
+            const originLng = gpsData.lng !== 0 ? gpsData.lng : -99.1332;
+            pdrOriginRef.current = { lat: originLat, lng: originLng };
+            pedestrianDeadReckoning.reset();
+            pedestrianDeadReckoning.startTracking();
+            setIsPdrActive(true);
+            toast.success("🧭 Navegación inercial PDR activada (Sin GPS)");
+        }
+    };
+
+    // Coordenadas efectivas: Si PDR está activo, avanza con el vector inercial; si no, usa GPS
+    const effectiveLat = isPdrActive && pdrOriginRef.current.lat !== 0
+        ? pdrOriginRef.current.lat + (pdrState.displacementNorthMeters / 111000)
+        : gpsData.lat;
+    const effectiveLng = isPdrActive && pdrOriginRef.current.lng !== 0
+        ? pdrOriginRef.current.lng + (pdrState.displacementEastMeters / (111000 * Math.max(0.01, Math.cos((pdrOriginRef.current.lat * Math.PI) / 180))))
+        : gpsData.lng;
+
     const loadVaultStats = async () => {
         const stats = await offlineTileCacheEngine.getCacheStats();
         setVaultStats(stats);
     };
 
     const handleStartVaultDownload = async () => {
-        if (gpsData.lat === 0 && gpsData.lng === 0) {
-            toast.warning("Esperando coordenadas GPS válidas para calcular el centro de la zona.");
+        const centerLat = effectiveLat !== 0 ? effectiveLat : gpsData.lat;
+        const centerLng = effectiveLng !== 0 ? effectiveLng : gpsData.lng;
+        if (centerLat === 0 && centerLng === 0) {
+            toast.warning("Esperando coordenadas GPS o PDR válidas para calcular el centro de la zona.");
             return;
         }
 
@@ -218,8 +256,14 @@ export default function NodeMap() {
         toast.info("Objetivo táctico cancelado");
     };
 
-    const tacticalGuidance = (gpsData.lat !== 0 && gpsData.lng !== 0 && target)
-        ? OffGridNavigationEngine.calculateTacticalGuidance(gpsData.lat, gpsData.lng, target.lat, target.lon, gpsData.heading || 0)
+    const tacticalGuidance = (effectiveLat !== 0 && effectiveLng !== 0 && target)
+        ? OffGridNavigationEngine.calculateTacticalGuidance(
+            effectiveLat,
+            effectiveLng,
+            target.lat,
+            target.lon,
+            isPdrActive ? pdrState.currentHeadingDeg : (gpsData.heading || 0)
+        )
         : null;
 
     // 1. Geolocalización en tiempo real continua de hardware y broadcast por la malla
@@ -488,18 +532,6 @@ export default function NodeMap() {
                     errorTileUrl: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256' fill='%23050812'%3E%3Crect width='256' height='256'/%3E%3Cpath d='M0 0h256v256H0z' stroke='%2300E5FF' stroke-width='0.4' stroke-opacity='0.2' fill='none'/%3E%3C/svg%3E"
                 });
 
-                // Fallback a Esri World Dark Gray Base si OSM experimenta latencia o desconexión
-                osmLayer.on("tileerror", () => {
-                    if (!mapInstance) return;
-                    try {
-                        const fallbackLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
-                            maxZoom: 16,
-                            className: "tactical-dark-tile"
-                        });
-                        fallbackLayer.addTo(mapInstance);
-                    } catch {}
-                });
-
                 osmLayer.addTo(mapInstance);
 
                 // Listener de fijación de Objetivo Táctico con click
@@ -525,18 +557,22 @@ export default function NodeMap() {
             if (markersGroupRef.current) {
                 markersGroupRef.current.clearLayers();
 
-                // Marcador de Ubicación Propia
+                // Marcador de Ubicación Propia (GPS Real o PDR Inercial)
                 const selfIcon = L.divIcon({
                     className: "custom-self-marker",
-                    html: `<div style="width:22px;height:22px;border-radius:50%;background:#00E5FF;border:3px solid #fff;box-shadow:0 0 20px #00E5FF;animation:pulse 1.5s infinite;display:flex;align-items:center;justify-content:center;color:#000;font-size:10px;font-weight:900;">📍</div>`,
-                    iconSize: [22, 22],
-                    iconAnchor: [11, 11]
+                    html: isPdrActive ? (
+                        `<div style="width:26px;height:26px;border-radius:50%;background:#FF9100;border:3px solid #fff;box-shadow:0 0 20px #FF9100;animation:pulse 1.2s infinite;display:flex;align-items:center;justify-content:center;color:#000;font-size:12px;font-weight:900;transform:rotate(${pdrState.currentHeadingDeg}deg);">🧭</div>`
+                    ) : (
+                        `<div style="width:22px;height:22px;border-radius:50%;background:#00E5FF;border:3px solid #fff;box-shadow:0 0 20px #00E5FF;animation:pulse 1.5s infinite;display:flex;align-items:center;justify-content:center;color:#000;font-size:10px;font-weight:900;">📍</div>`
+                    ),
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13]
                 });
-                L.marker([gpsData.lat, gpsData.lng], { icon: selfIcon }).addTo(markersGroupRef.current);
+                L.marker([effectiveLat, effectiveLng], { icon: selfIcon }).addTo(markersGroupRef.current);
 
                 // Anillos Concéntricos de Radar Táctico (25m, 50m, 100m)
                 [25, 50, 100].forEach(radius => {
-                    L.circle([gpsData.lat, gpsData.lng], {
+                    L.circle([effectiveLat, effectiveLng], {
                         radius,
                         color: radius === 100 ? "rgba(0,229,255,0.4)" : "rgba(0,229,255,0.18)",
                         weight: 1,
@@ -752,17 +788,17 @@ export default function NodeMap() {
         };
 
         initMap();
-    }, [gpsData.lat, gpsData.lng, peers, target]);
+    }, [effectiveLat, effectiveLng, peers, target, isPdrActive]);
 
     const recenterMap = () => {
         if (leafletMapRef.current) {
-            leafletMapRef.current.flyTo([gpsData.lat, gpsData.lng], 17, { duration: 1 });
-            toast.info("Centrado en ubicación GPS local");
+            leafletMapRef.current.flyTo([effectiveLat, effectiveLng], 17, { duration: 1 });
+            toast.info(isPdrActive ? "Centrado en posición PDR inercial" : "Centrado en ubicación GPS local");
         }
     };
 
     const focusOnPeer = (peer: CanonicalNode) => {
-        const pos = derivePeerPosition(gpsData.lat, gpsData.lng, peer);
+        const pos = derivePeerPosition(effectiveLat, effectiveLng, peer);
         if (leafletMapRef.current) {
             leafletMapRef.current.flyTo([pos.lat, pos.lng], 18, { duration: 1 });
         }
@@ -836,6 +872,14 @@ export default function NodeMap() {
                         🎯 CoT
                     </button>
                     <button
+                        onClick={handleTogglePdr}
+                        className={isPdrActive ? "btn-tactical-primary" : "btn-tactical-secondary"}
+                        style={{ padding: "6px 9px", fontSize: "0.74rem", background: isPdrActive ? "#FF9100" : undefined, borderColor: isPdrActive ? "#FFB74D" : undefined }}
+                        title={isPdrActive ? "Desactivar PDR Inercial" : "Activar PDR Inercial (Sin GPS)"}
+                    >
+                        🧭 {isPdrActive ? `${pdrState.totalSteps}p` : "PDR"}
+                    </button>
+                    <button
                         onClick={() => { setShowVaultModal(true); loadVaultStats(); }}
                         className="btn-tactical-secondary"
                         style={{ padding: "6px 9px", fontSize: "0.74rem" }}
@@ -882,10 +926,19 @@ export default function NodeMap() {
                     display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px"
                 }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontSize: "0.56rem", color: realGPS ? "var(--accent-cyan)" : "var(--accent-amber)", fontWeight: 700, letterSpacing: "0.5px" }}>
-                            {realGPS ? "COORDENADAS GPS REALES" : "RECEPTOR GPS"}
+                        <div style={{ fontSize: "0.56rem", color: isPdrActive ? "#FF9100" : realGPS ? "var(--accent-cyan)" : "var(--accent-amber)", fontWeight: 700, letterSpacing: "0.5px" }}>
+                            {isPdrActive 
+                                ? `🧭 PDR INERCIAL ACTIVO (${pdrState.totalSteps} PASOS)` 
+                                : realGPS ? "COORDENADAS GPS REALES" : "RECEPTOR GPS"}
                         </div>
-                        {realGPS ? (
+                        {isPdrActive ? (
+                            <div style={{ fontSize: "0.75rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "#FF9100", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {effectiveLat.toFixed(5)}, {effectiveLng.toFixed(5)}
+                                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", marginLeft: "6px" }}>
+                                    {pdrState.distanceMeters.toFixed(1)}m · {pdrState.currentHeadingDeg}°
+                                </span>
+                            </div>
+                        ) : realGPS ? (
                             <div style={{ fontSize: "0.75rem", fontWeight: 800, fontFamily: "JetBrains Mono, monospace", color: "var(--accent-cyan)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                                 {gpsData.lat.toFixed(5)}, {gpsData.lng.toFixed(5)}
                                 <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", marginLeft: "6px" }}>

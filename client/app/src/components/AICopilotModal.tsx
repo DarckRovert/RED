@@ -393,15 +393,19 @@ export const AICopilotModal: React.FC = () => {
         setDownloadProgress(0);
         setDownloadBytes({ loaded: 0, total: 0 });
         try {
-            await ModelManager.downloadModel(modelId, (pct, loaded, total) => {
+            const success = await ModelManager.downloadModel(modelId, (pct, loaded, total) => {
                 setDownloadProgress(pct);
                 setDownloadBytes({ loaded, total });
             });
-            LocalAIEngine.disposePipelines();
-            ModelManager.setActiveModel(modelId);
-            toast.success("Modelo descargado y activado");
-        } catch {
-            toast.error("Error al descargar modelo");
+            if (success) {
+                LocalAIEngine.disposePipelines();
+                ModelManager.setActiveModel(modelId);
+                toast.success("Modelo descargado, verificado y activado");
+            } else {
+                toast.info("Descarga en pausa o cancelada. Se reanudará al presionar descargar.");
+            }
+        } catch (err: any) {
+            toast.error(err.message || "Error al descargar modelo");
         } finally {
             setDownloadingId(null);
         }
@@ -1243,8 +1247,8 @@ export const AICopilotModal: React.FC = () => {
                             </div>
 
                             {/* Tip táctico de red local */}
-                            <div style={{ fontSize: "0.64rem", color: "rgba(255, 255, 255, 0.6)", lineHeight: 1.35 }}>
-                                💡 <strong style={{ color: "#FFFFFF" }}>Tip Móvil:</strong> Para conectar desde tu teléfono/tablet a LM Studio en tu PC, usa la IP de red local (ej. <span style={{ color: "var(--accent-cyan)", fontFamily: "monospace" }}>http://192.168.1.50:1234/v1</span>) y activa <strong style={{ color: "#FFFFFF" }}>Serve on Local Network</strong> + <strong style={{ color: "#FFFFFF" }}>CORS</strong> en LM Studio.
+                            <div style={{ fontSize: "0.64rem", color: "rgba(255, 255, 255, 0.7)", lineHeight: 1.4, background: "rgba(0, 229, 255, 0.05)", padding: "6px 10px", borderRadius: "8px", border: "1px solid rgba(0, 229, 255, 0.15)" }}>
+                                💡 <strong style={{ color: "var(--accent-cyan)" }}>Tip de Conexión:</strong> Si estás en un móvil o tablet y deseas usar la potencia de tu PC (LM Studio, Ollama o Nodo RED Desktop), ingresa la IP local de tu PC (ej. <span style={{ color: "#FFFFFF", fontFamily: "monospace" }}>http://192.168.1.50:1234/v1</span> o <span style={{ color: "#FFFFFF", fontFamily: "monospace" }}>:7333</span>). Si estás en la misma PC donde corre RED, usa <span style={{ color: "#FFFFFF", fontFamily: "monospace" }}>http://127.0.0.1:7333</span>.
                             </div>
 
                             {/* Status message */}
@@ -1397,6 +1401,25 @@ export const AICopilotModal: React.FC = () => {
                                                             ACTIVAR
                                                         </button>
                                                     )}
+                                                    <button
+                                                        onClick={async () => {
+                                                            toast.info("Auditoría de integridad GGUF en curso...");
+                                                            const audit = await ModelManager.verifyModelIntegrity(m.id);
+                                                            if (audit.valid) {
+                                                                toast.success(`✓ Integridad GGUF válida (${Math.round((audit.sizeBytes || 0)/1024/1024)} MB). Cabecera y pesos intactos.`);
+                                                            } else {
+                                                                toast.error(`⚠️ Integridad falló: ${audit.reason}`);
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            padding: "6px 10px", borderRadius: "8px",
+                                                            background: "rgba(0, 230, 118, 0.1)", border: "1px solid rgba(0, 230, 118, 0.3)",
+                                                            color: "#00E676", fontSize: "0.74rem", fontWeight: 800, cursor: "pointer"
+                                                        }}
+                                                        title="Verificar firma mágica GGUF e integridad de pesos"
+                                                    >
+                                                        🛡️ AUDITAR
+                                                    </button>
                                                     <button
                                                         onClick={() => handleExportModel(m.id)}
                                                         style={{

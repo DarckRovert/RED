@@ -19,6 +19,7 @@ import { meshRouter } from "../lib/mesh/meshRouter";
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { SettingsManager } from "../lib/settingsManager";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { TacticalVoiceAnalyzer } from "../lib/audio/TacticalVoiceAnalyzer";
 
 /* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
@@ -460,6 +461,11 @@ export default function ChatWindow() {
     const [voicePreviewBlob, setVoicePreviewBlob] = useState<Blob | null>(null);
     const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
     const [voiceDurationSec, setVoiceDurationSec] = useState(0);
+    const [voicePreviewWaveform, setVoicePreviewWaveform] = useState<number[]>([]);
+    const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(false);
+    const [voicePreviewCurrentTime, setVoicePreviewCurrentTime] = useState(0);
+    const voicePreviewAudioRef = useRef<HTMLAudioElement | null>(null);
+    const recordStartTimeRef = useRef<number>(0);
     // Media preview state
     const [mediaPreview, setMediaPreview] = useState<{ dataUrl: string; type: "image" | "video"; mimeType: string; caption: string } | null>(null);
 
@@ -529,10 +535,18 @@ export default function ChatWindow() {
     const handleSendVoice = async (blob?: Blob) => {
         if (!blob || !peerHash) return;
         try {
+            const elapsedMs = Math.max(500, Date.now() - recordStartTimeRef.current);
+            const analysis = await TacticalVoiceAnalyzer.analyzeAudioBlob(blob, elapsedMs, 28);
             const reader = new FileReader();
             reader.onload = async () => {
                 const b64 = reader.result as string;
-                await sendMessage(b64, { msg_type: "voice", mime_type: recordedMimeTypeRef.current, duration_ms: recordSec * 1000 });
+                await sendMessage(b64, {
+                    msg_type: "voice",
+                    mime_type: recordedMimeTypeRef.current,
+                    duration_ms: analysis.durationMs,
+                    waveform: analysis.waveform
+                });
+                TacticalAudioEngine.playMessageSent();
             };
             reader.readAsDataURL(blob);
             toast.success("Nota de voz enviada");
@@ -545,6 +559,7 @@ export default function ChatWindow() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioChunksRef.current = [];
+            recordStartTimeRef.current = Date.now();
 
             // Determine best supported tactical voice codec (Opus 24 kbps)
             let mimeType: string | undefined = undefined;
@@ -608,32 +623,54 @@ export default function ChatWindow() {
             } catch {}
             const blob = new Blob(audioChunksRef.current, { type: recordedMimeTypeRef.current });
             if (blob.size > 100) {
-                // Show preview instead of sending directly
+                const elapsedMs = Math.max(500, Date.now() - recordStartTimeRef.current);
                 const url = URL.createObjectURL(blob);
                 setVoicePreviewBlob(blob);
                 setVoicePreviewUrl(url);
-                setVoiceDurationSec(recordSec);
+                setVoicePreviewPlaying(false);
+                setVoicePreviewCurrentTime(0);
+
+                // Asynchronous acoustic analysis: extract real duration and 28-bar waveform
+                TacticalVoiceAnalyzer.analyzeAudioBlob(blob, elapsedMs, 28).then(analysis => {
+                    setVoiceDurationSec(Math.max(1, Math.round(analysis.durationMs / 1000)));
+                    setVoicePreviewWaveform(analysis.waveform);
+                }).catch(() => {
+                    setVoiceDurationSec(Math.max(1, Math.round(elapsedMs / 1000)));
+                    setVoicePreviewWaveform([]);
+                });
             }
         }
     };
 
     const cancelVoicePreview = () => {
+        if (voicePreviewAudioRef.current) {
+            try { voicePreviewAudioRef.current.pause(); } catch {}
+        }
         if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
         setVoicePreviewBlob(null);
         setVoicePreviewUrl(null);
         setVoiceDurationSec(0);
+        setVoicePreviewWaveform([]);
+        setVoicePreviewPlaying(false);
+        setVoicePreviewCurrentTime(0);
     };
 
     const confirmVoiceSend = async () => {
         if (!voicePreviewBlob) return;
         const blob = voicePreviewBlob;
-        const dur = voiceDurationSec;
+        const durSec = voiceDurationSec;
+        const waveform = voicePreviewWaveform;
         cancelVoicePreview();
         try {
             const reader = new FileReader();
             reader.onload = async () => {
                 const b64 = reader.result as string;
-                await sendMessage(b64, { msg_type: "voice", mime_type: recordedMimeTypeRef.current, duration_ms: dur * 1000 });
+                await sendMessage(b64, {
+                    msg_type: "voice",
+                    mime_type: recordedMimeTypeRef.current,
+                    duration_ms: Math.max(500, durSec * 1000),
+                    waveform: waveform.length > 0 ? waveform : undefined
+                });
                 TacticalAudioEngine.playMessageSent();
             };
             reader.readAsDataURL(blob);
@@ -1084,22 +1121,126 @@ export default function ChatWindow() {
                 </div>
             )}
 
-            {/* Voice Preview Sheet */}
+            {/* Tactical Voice Preview Sheet with Interactive Player */}
             {voicePreviewUrl && (
                 <div style={{
                     position: "absolute", inset: 0, zIndex: 50,
-                    background: "rgba(6,6,16,0.96)", backdropFilter: "blur(12px)",
-                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "24px"
+                    background: "rgba(6, 8, 16, 0.94)", backdropFilter: "blur(16px)",
+                    display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px",
+                    padding: "24px", animation: "fadeIn 0.2s ease-out"
                 }}>
-                    <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontFamily: "monospace" }}>Vista previa — Nota de voz</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "14px", background: "rgba(20,22,40,0.9)", borderRadius: "40px", padding: "14px 22px", border: "1px solid var(--glass-border)" }}>
-                        <span style={{ fontSize: "1.4rem" }}>🎤</span>
-                        <audio src={voicePreviewUrl} controls style={{ width: "200px", accentColor: "var(--accent-cyan)" }} />
-                        <span style={{ fontSize: "0.78rem", fontFamily: "monospace", color: "var(--text-muted)" }}>{voiceDurationSec}s</span>
+                    <div style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        fontSize: "0.85rem", fontWeight: 700, color: "var(--accent-cyan)",
+                        letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "JetBrains Mono, monospace"
+                    }}>
+                        <span>🎙️</span>
+                        <span>Vista Previa de Audio Táctico</span>
                     </div>
+
+                    <div style={{
+                        width: "100%", maxWidth: "380px",
+                        background: "rgba(18, 22, 38, 0.92)",
+                        border: "1.5px solid var(--accent-cyan)",
+                        borderRadius: "20px", padding: "16px 20px",
+                        boxShadow: "0 8px 32px rgba(0, 229, 255, 0.22)",
+                        display: "flex", flexDirection: "column", gap: "12px"
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                            {/* Play / Pause Toggle Button */}
+                            <button
+                                onClick={() => {
+                                    const a = voicePreviewAudioRef.current;
+                                    if (!a) return;
+                                    if (voicePreviewPlaying) {
+                                        a.pause();
+                                        setVoicePreviewPlaying(false);
+                                    } else {
+                                        a.play().catch(() => {});
+                                        setVoicePreviewPlaying(true);
+                                    }
+                                }}
+                                style={{
+                                    width: 44, height: 44, borderRadius: "50%",
+                                    background: "rgba(0, 229, 255, 0.2)",
+                                    border: "1.5px solid var(--accent-cyan)",
+                                    color: "#FFFFFF", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    fontSize: "1.1rem", fontWeight: 900,
+                                    boxShadow: "0 0 12px rgba(0, 229, 255, 0.35)",
+                                    flexShrink: 0
+                                }}
+                                title={voicePreviewPlaying ? "Pausar" : "Reproducir"}
+                            >
+                                {voicePreviewPlaying ? "❚❚" : "▶"}
+                            </button>
+
+                            {/* Waveform preview bars */}
+                            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "3px", height: "30px" }}>
+                                {voicePreviewWaveform.map((h, i) => {
+                                    const totalBars = voicePreviewWaveform.length || 1;
+                                    const progress = (voiceDurationSec > 0) ? (voicePreviewCurrentTime / voiceDurationSec) : 0;
+                                    const isPlayed = i <= Math.floor(progress * totalBars);
+                                    return (
+                                        <div
+                                            key={i}
+                                            style={{
+                                                flex: 1,
+                                                height: h,
+                                                borderRadius: "3px",
+                                                background: isPlayed ? "var(--accent-cyan)" : "rgba(0, 229, 255, 0.25)",
+                                                transition: "background 0.1s ease, transform 0.1s ease",
+                                                transform: isPlayed && voicePreviewPlaying ? "scaleY(1.15)" : "scaleY(1)"
+                                            }}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Timing and codec indicator */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", fontFamily: "JetBrains Mono, monospace" }}>
+                            <span style={{ color: "#FFFFFF", fontWeight: 700 }}>
+                                {Math.floor(voicePreviewCurrentTime / 60)}:{(Math.floor(voicePreviewCurrentTime % 60) < 10 ? "0" : "")}{Math.floor(voicePreviewCurrentTime % 60)} / {Math.floor(voiceDurationSec / 60)}:{(Math.floor(voiceDurationSec % 60) < 10 ? "0" : "")}{Math.floor(voiceDurationSec % 60)}
+                            </span>
+                            <span style={{ color: "var(--accent-emerald)", fontWeight: 700 }}>
+                                OPUS 24 KBPS • P2P READY
+                            </span>
+                        </div>
+
+                        <audio
+                            ref={voicePreviewAudioRef}
+                            src={voicePreviewUrl}
+                            onTimeUpdate={() => {
+                                if (voicePreviewAudioRef.current) {
+                                    setVoicePreviewCurrentTime(voicePreviewAudioRef.current.currentTime);
+                                }
+                            }}
+                            onEnded={() => {
+                                setVoicePreviewPlaying(false);
+                                setVoicePreviewCurrentTime(0);
+                            }}
+                            style={{ display: "none" }}
+                        />
+                    </div>
+
                     <div style={{ display: "flex", gap: "16px" }}>
-                        <button onClick={cancelVoicePreview} className="btn-tactical-secondary" style={{ padding: "10px 28px", borderRadius: "40px" }}>✕ Cancelar</button>
-                        <button onClick={confirmVoiceSend} className="btn-tactical-primary" style={{ padding: "10px 28px", borderRadius: "40px" }}>➤ Enviar</button>
+                        <button
+                            onClick={cancelVoicePreview}
+                            className="btn-tactical-secondary"
+                            style={{ padding: "10px 24px", borderRadius: "30px", display: "flex", alignItems: "center", gap: "8px" }}
+                        >
+                            <span>🗑️</span>
+                            <span>Descartar</span>
+                        </button>
+                        <button
+                            onClick={confirmVoiceSend}
+                            className="btn-tactical-primary"
+                            style={{ padding: "10px 28px", borderRadius: "30px", display: "flex", alignItems: "center", gap: "8px" }}
+                        >
+                            <span>➤</span>
+                            <span>Enviar Nota de Voz</span>
+                        </button>
                     </div>
                 </div>
             )}

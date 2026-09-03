@@ -156,9 +156,14 @@ export class DnsTunnelEngine {
       } catch {}
     }
 
-    // 2. Fallback a UDP Puerto 53 sin saldo (vía backend local RED en puerto 7333 / Native UDP Socket)
+    // 2. Fallback a UDP Puerto 53 sin saldo (vía backend local RED / Native UDP Socket)
     try {
-      const res = await fetch('http://127.0.0.1:7333/api/dns/query', {
+      let nodeUrl = 'http://127.0.0.1:7333';
+      try {
+        const { getNodeUrl } = await import('../../api/core');
+        nodeUrl = getNodeUrl();
+      } catch {}
+      const res = await fetch(`${nodeUrl}/api/dns/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: safeHostname, record_type: 'TXT', port: 53 }),

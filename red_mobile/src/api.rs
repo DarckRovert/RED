@@ -1578,6 +1578,12 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/api/logs",     get(handle_logs_async))
         .route("/api/network/outbound", get(handle_outbound_sse_async))
         .route("/local-signal", get(handle_local_signal))
+        .route("/api/ai/status", get(handle_ai_status_public).post(handle_ai_status_public))
+        .route("/api/tags",      get(handle_ollama_tags_public))
+        .route("/v1/models",     get(handle_openai_models_public))
+        .route("/api/ai/copilot", post(handle_ai_copilot_query_async))
+        .route("/api/generate",  post(handle_ollama_generate_async))
+        .route("/v1/chat/completions", post(handle_openai_chat_completions_async))
         // All other routes: 503 if not ready, delegate to full router if ready
         .route("/api/contacts",                           get(handle_contacts_get_async).post(handle_contacts_post_async))
         .route("/api/conversations",                      get(handle_conversations_get_async))
@@ -1649,8 +1655,7 @@ pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>
         .route("/api/battery/optimize",    post(handle_update_battery_optimize_async))
         .route("/api/ephemeral/set_timer", post(handle_set_ephemeral_timer_async))
         .route("/api/sanitizer/clean",     post(handle_clean_image_exif))
-        // AI Copilot / Summarizer / Translator
-        .route("/api/ai/copilot",   post(handle_ai_copilot_query_async))
+        // AI Summarizer / Translator / Embeddings (Copilot & LLM endpoints are registered above as public early-boot routes)
         .route("/api/ai/summarize", post(handle_ai_summarize_channel_async))
         .route("/api/ai/translate", post(handle_ai_translate_text_async))
         .route("/api/ai/embeddings", post(handle_extract_embeddings_async))
@@ -1689,7 +1694,7 @@ async fn validate_auth(
     next: axum::middleware::Next,
 ) -> Response {
     let path = request.uri().path();
-    if path == "/local-signal" || path == "/api/status" || path == "/api/events" {
+    if path == "/local-signal" || path == "/api/status" || path == "/api/events" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
         return next.run(request).await;
     }
 
@@ -1714,7 +1719,7 @@ async fn validate_auth_async(
 ) -> Response {
     // Bypass auth for public boot endpoints.
     let path = request.uri().path();
-    if path == "/api/status" || path == "/api/identity" || path == "/api/events" || path == "/local-signal" {
+    if path == "/api/status" || path == "/api/identity" || path == "/api/events" || path == "/local-signal" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
         return next.run(request).await;
     }
 
@@ -2121,6 +2126,139 @@ async fn handle_clean_image_exif(
 }
 
 // AI Handlers
+async fn handle_ai_status_public() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "ok",
+        "service": "RED Sovereign Node AI",
+        "version": env!("CARGO_PKG_VERSION"),
+        "engine": "Candle GGUF / Offline Hybrid",
+        "model": "red-tactical",
+        "capabilities": ["copilot", "chat_completions", "emergency_triage"]
+    }))).into_response()
+}
+
+async fn handle_ollama_tags_public() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "models": [
+            {
+                "name": "red-tactical",
+                "model": "red-tactical:latest",
+                "modified_at": "2026-09-02T00:00:00Z",
+                "size": 420000000,
+                "digest": "sha256:rednode000000000000000000000000000000000000000000000000000000000",
+                "details": {
+                    "parent_model": "",
+                    "format": "gguf",
+                    "family": "qwen2",
+                    "parameter_size": "0.5B",
+                    "quantization_level": "Q4_K_M"
+                }
+            }
+        ]
+    }))).into_response()
+}
+
+async fn handle_openai_models_public() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "object": "list",
+        "data": [
+            {
+                "id": "red-tactical",
+                "object": "model",
+                "created": 1700000000,
+                "owned_by": "red-node"
+            }
+        ]
+    }))).into_response()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OllamaGenerateRequest {
+    pub model: Option<String>,
+    pub prompt: String,
+    pub stream: Option<bool>,
+}
+
+async fn handle_ollama_generate(
+    State(state): State<ApiState>,
+    Json(req): Json<OllamaGenerateRequest>,
+) -> impl IntoResponse {
+    let copilot_req = crate::ai_copilot::CopilotQueryRequest {
+        prompt: req.prompt,
+        context: None,
+        model_path: None,
+        model_id: req.model,
+    };
+    let res = state.ai_copilot.query_async(copilot_req).await;
+    (StatusCode::OK, Json(serde_json::json!({
+        "model": "red-tactical",
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "response": res.answer,
+        "done": true
+    }))).into_response()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAIChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAIChatCompletionRequest {
+    pub model: Option<String>,
+    pub messages: Vec<OpenAIChatMessage>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<usize>,
+}
+
+async fn handle_openai_chat_completions(
+    State(state): State<ApiState>,
+    Json(req): Json<OpenAIChatCompletionRequest>,
+) -> impl IntoResponse {
+    let last_user_msg = req.messages.iter().rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.clone())
+        .unwrap_or_else(|| "ping".to_string());
+    
+    let system_context = req.messages.iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.clone());
+
+    let copilot_req = crate::ai_copilot::CopilotQueryRequest {
+        prompt: last_user_msg,
+        context: system_context,
+        model_path: None,
+        model_id: req.model.clone(),
+    };
+    let res = state.ai_copilot.query_async(copilot_req).await;
+    
+    let completion_id = format!("chatcmpl-{}", red_core::protocol::MessageId::generate().to_hex());
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": now,
+        "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": res.answer
+                },
+                "finish_reason": "stop"
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30
+        }
+    }))).into_response()
+}
+
 async fn handle_ai_copilot_query(
     State(state): State<ApiState>,
     Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
@@ -3696,11 +3834,95 @@ async fn handle_ai_copilot_query_async(
     State(state): State<AsyncState>,
     Json(req): Json<crate::ai_copilot::CopilotQueryRequest>,
 ) -> impl IntoResponse {
-    let s = state.lock().await;
-    match &*s {
-        Some(r) => handle_ai_copilot_query(State(r.clone()), Json(req)).await.into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({"error":"Node initializing"}))).into_response(),
-    }
+    let copilot_engine = {
+        let s = state.lock().await;
+        match &*s {
+            Some(r) => r.ai_copilot.clone(),
+            None => crate::ai_copilot::AICopilotEngine::global(),
+        }
+    };
+    let res = copilot_engine.query_async(req).await;
+    (StatusCode::OK, Json(res)).into_response()
+}
+
+async fn handle_ollama_generate_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<OllamaGenerateRequest>,
+) -> impl IntoResponse {
+    let copilot_engine = {
+        let s = state.lock().await;
+        match &*s {
+            Some(r) => r.ai_copilot.clone(),
+            None => crate::ai_copilot::AICopilotEngine::global(),
+        }
+    };
+    let copilot_req = crate::ai_copilot::CopilotQueryRequest {
+        prompt: req.prompt,
+        context: None,
+        model_path: None,
+        model_id: req.model,
+    };
+    let res = copilot_engine.query_async(copilot_req).await;
+    (StatusCode::OK, Json(serde_json::json!({
+        "model": "red-tactical",
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "response": res.answer,
+        "done": true
+    }))).into_response()
+}
+
+async fn handle_openai_chat_completions_async(
+    State(state): State<AsyncState>,
+    Json(req): Json<OpenAIChatCompletionRequest>,
+) -> impl IntoResponse {
+    let copilot_engine = {
+        let s = state.lock().await;
+        match &*s {
+            Some(r) => r.ai_copilot.clone(),
+            None => crate::ai_copilot::AICopilotEngine::global(),
+        }
+    };
+    let last_user_msg = req.messages.iter().rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.clone())
+        .unwrap_or_else(|| "ping".to_string());
+    
+    let system_context = req.messages.iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.clone());
+
+    let copilot_req = crate::ai_copilot::CopilotQueryRequest {
+        prompt: last_user_msg,
+        context: system_context,
+        model_path: None,
+        model_id: req.model.clone(),
+    };
+    let res = copilot_engine.query_async(copilot_req).await;
+    
+    let completion_id = format!("chatcmpl-{}", red_core::protocol::MessageId::generate().to_hex());
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": now,
+        "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": res.answer
+                },
+                "finish_reason": "stop"
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30
+        }
+    }))).into_response()
 }
 
 async fn handle_ai_summarize_channel_async(

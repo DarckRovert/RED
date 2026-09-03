@@ -17,6 +17,7 @@ export interface MagneticTelemetry {
     anomalySeverity: AnomalySeverity;
     isAudioBeepActive: boolean;
     isCalibrated: boolean;
+    isSensorOnline: boolean;
 }
 
 export class MagneticAnomalyDetectorEngine {
@@ -30,13 +31,27 @@ export class MagneticAnomalyDetectorEngine {
     private isCalibrated: boolean = false;
     private isAudioBeepActive: boolean = false;
     private isListening: boolean = false;
+    private isSensorOnline: boolean = false;
 
     private sensorListener: any = null;
     private audioCtx: AudioContext | null = null;
     private beepInterval: any = null;
     private listeners: Set<(t: MagneticTelemetry) => void> = new Set();
 
-    private constructor() {}
+    private constructor() {
+        if (typeof window !== 'undefined') {
+            try {
+                const savedBaseline = localStorage.getItem('red_magnetic_baseline_ut');
+                if (savedBaseline) {
+                    const parsed = parseFloat(savedBaseline);
+                    if (isFinite(parsed) && parsed > 0 && parsed < 300) {
+                        this.baseline = parsed;
+                        this.isCalibrated = true;
+                    }
+                }
+            } catch {}
+        }
+    }
 
     public static getInstance(): MagneticAnomalyDetectorEngine {
         if (!this.instance) {
@@ -75,6 +90,7 @@ export class MagneticAnomalyDetectorEngine {
             anomalySeverity,
             isAudioBeepActive: this.isAudioBeepActive,
             isCalibrated: this.isCalibrated,
+            isSensorOnline: this.isSensorOnline,
         };
     }
 
@@ -101,13 +117,18 @@ export class MagneticAnomalyDetectorEngine {
 
         // 2. Fallback con DeviceOrientation / Compass Heading
         const orientationHandler = (e: DeviceOrientationEvent) => {
-            // Sintetizar fluctuación a partir de aceleración y orientación
-            const alpha = e.alpha || 0;
-            const beta = e.beta || 0;
-            const gamma = e.gamma || 0;
+            const alpha = (typeof e.alpha === 'number' && isFinite(e.alpha)) ? e.alpha : 0;
+            const beta = (typeof e.beta === 'number' && isFinite(e.beta)) ? e.beta : 0;
+            const gamma = (typeof e.gamma === 'number' && isFinite(e.gamma)) ? e.gamma : 0;
+
+            if (e.alpha !== null || e.beta !== null || e.gamma !== null) {
+                this.isSensorOnline = true;
+            }
 
             const synthMagnitude = 45.0 + Math.sin((alpha * Math.PI) / 180) * 12.0 + Math.cos((beta * Math.PI) / 180) * 8.0;
-            this.processMagnitude(synthMagnitude);
+            if (isFinite(synthMagnitude)) {
+                this.processMagnitude(synthMagnitude);
+            }
         };
 
         window.addEventListener('deviceorientation', orientationHandler);
@@ -139,10 +160,31 @@ export class MagneticAnomalyDetectorEngine {
         MagneticAnomalyDetectorEngine.instance = null;
     }
 
-    public calibrateBaseline() {
-        this.baseline = this.magnitude;
+    public calibrateBaseline(targetBaseline?: number) {
+        if (targetBaseline !== undefined && isFinite(targetBaseline) && targetBaseline > 0 && targetBaseline < 300) {
+            this.baseline = Math.round(targetBaseline * 10) / 10;
+        } else {
+            this.baseline = isFinite(this.magnitude) ? Math.round(this.magnitude * 10) / 10 : 45.0;
+        }
         this.delta = 0;
         this.isCalibrated = true;
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('red_magnetic_baseline_ut', this.baseline.toString());
+            } catch {}
+        }
+        this.notify();
+    }
+
+    public resetCalibration() {
+        this.baseline = 45.0;
+        this.delta = this.magnitude - this.baseline;
+        this.isCalibrated = false;
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.removeItem('red_magnetic_baseline_ut');
+            } catch {}
+        }
         this.notify();
     }
 
@@ -159,6 +201,7 @@ export class MagneticAnomalyDetectorEngine {
 
     private processRawMagneticVector(x: number, y: number, z: number) {
         if (!isFinite(x) || !isFinite(y) || !isFinite(z)) return;
+        this.isSensorOnline = true;
         const mag = Math.sqrt(x * x + y * y + z * z);
         this.processMagnitude(mag);
     }

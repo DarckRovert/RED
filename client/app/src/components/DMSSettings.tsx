@@ -36,14 +36,20 @@ export default function DMSSettings() {
             const data = await RedAPI.getDmsConfig();
             if (data) {
                 setDmsStatus(data);
+                const trigHours = (typeof data.trigger_hours === 'number' && isFinite(data.trigger_hours) && data.trigger_hours > 0)
+                    ? data.trigger_hours
+                    : 72;
                 setConfig({
-                    enabled: data.enabled,
-                    trigger_hours: data.trigger_hours || 72,
+                    enabled: !!data.enabled,
+                    trigger_hours: trigHours,
                     wipe_messages: data.wipe_messages ?? true,
                     wipe_identity: !!data.wipe_identity,
                     dead_message: data.dead_message || ""
                 });
-                setSecondsLeft(data.seconds_remaining);
+                const rem = (typeof data.seconds_remaining === 'number' && isFinite(data.seconds_remaining) && data.seconds_remaining >= 0)
+                    ? data.seconds_remaining
+                    : (trigHours * 3600);
+                setSecondsLeft(rem);
             }
         } catch (e: any) {
             setError(e.message || "Fallo al contactar el motor de base de datos.");
@@ -60,16 +66,23 @@ export default function DMSSettings() {
     useEffect(() => {
         if (!config.enabled) return;
         const interval = setInterval(() => {
-            setSecondsLeft(prev => Math.max(0, prev - 1));
+            setSecondsLeft(prev => {
+                const base = (typeof prev === 'number' && isFinite(prev)) ? prev : ((config.trigger_hours || 72) * 3600);
+                return Math.max(0, base - 1);
+            });
         }, 1000);
         return () => clearInterval(interval);
-    }, [config.enabled]);
+    }, [config.enabled, config.trigger_hours]);
 
     // ── 1. Guardar Configuración ────────────────────────────────────────────────────
     const handleSave = async () => {
         setSaving(true);
         try {
-            await RedAPI.saveDmsConfig(config);
+            const now = Math.floor(Date.now() / 1000);
+            await RedAPI.saveDmsConfig({
+                ...config,
+                last_active_timestamp: now,
+            });
             toast.success("✅ Configuración DMS actualizada.");
             loadDmsStatus();
         } catch (err: any) {
@@ -108,12 +121,23 @@ export default function DMSSettings() {
         }
     };
 
+    // ── 4. Disparo Automático del Protocolo ante Agotamiento del Cronómetro ────────
+    useEffect(() => {
+        if (config.enabled && secondsLeft === 0 && !isWiping && !isLoading) {
+            toast.error("⚠️ INTERRUPTOR DE HOMBRE MUERTO ACTIVADO: Iniciando protocolo de contingencia.");
+            void handleImmediateWipe();
+        }
+    }, [config.enabled, secondsLeft, isWiping, isLoading]);
+
     // Format Countdown
-    const hours = Math.floor(secondsLeft / 3600);
-    const minutes = Math.floor((secondsLeft % 3600) / 60);
-    const seconds = secondsLeft % 60;
-    const totalSec = (config.trigger_hours || 72) * 3600;
-    const progressPercent = Math.min(100, Math.max(0, (secondsLeft / totalSec) * 100));
+    const safeSecondsLeft = (typeof secondsLeft === 'number' && isFinite(secondsLeft) && secondsLeft >= 0)
+        ? secondsLeft
+        : ((config.trigger_hours || 72) * 3600);
+    const hours = Math.floor(safeSecondsLeft / 3600);
+    const minutes = Math.floor((safeSecondsLeft % 3600) / 60);
+    const seconds = safeSecondsLeft % 60;
+    const totalSec = Math.max(1, (config.trigger_hours || 72) * 3600);
+    const progressPercent = Math.min(100, Math.max(0, (safeSecondsLeft / totalSec) * 100));
 
     const Toggle = ({ value, onChange, label, desc }: { value: boolean; onChange: (v: boolean) => void; label: string; desc: string }) => (
         <div

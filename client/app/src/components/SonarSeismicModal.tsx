@@ -63,6 +63,21 @@ export function SonarSeismicModal() {
         }
     };
 
+    const handleToggleStructuralMonitoring = () => {
+        if (structTelemetry.isMonitoring) {
+            structuralHealthSeismic.stopMonitoring();
+            toast.info("Monitoreo sísmico estructural detenido");
+        } else {
+            structuralHealthSeismic.startMonitoring();
+            toast.success("Monitoreo sísmico estructural iniciado");
+        }
+    };
+
+    const handleCalibrateStructuralBaseline = () => {
+        structuralHealthSeismic.calibrateBaseline();
+        toast.success(`Frecuencia base f₀ calibrada a ${structuralHealthSeismic.getTelemetry().baselineFrequencyHz} Hz`);
+    };
+
     return (
         <div className="modal-viewport-adaptive" style={{
             background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
@@ -295,19 +310,31 @@ export function SonarSeismicModal() {
                             border: "1.5px solid rgba(255, 179, 0, 0.35)", borderRadius: "22px", padding: "20px",
                             display: "flex", flexDirection: "column", gap: "16px"
                         }}>
-                            <div>
-                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFB300" }}>
-                                    MONITOR DE INTEGRIDAD ESTRUCTURAL
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#FFB300" }}>
+                                        MONITOR DE INTEGRIDAD ESTRUCTURAL
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                        Alerta temprana de colapso en túneles, edificios dañados y puentes.
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                                    Alerta temprana de colapso en túneles, edificios dañados y puentes.
-                                </div>
+                                <span style={{
+                                    fontSize: "0.68rem", fontWeight: 900, padding: "3px 8px", borderRadius: "6px",
+                                    background: structTelemetry.isSensorAvailable ? "rgba(0,230,118,0.15)" : "rgba(255,179,0,0.15)",
+                                    color: structTelemetry.isSensorAvailable ? "#00E676" : "#FFB300",
+                                    border: `1px solid ${structTelemetry.isSensorAvailable ? "#00E676" : "#FFB300"}`
+                                }}>
+                                    {structTelemetry.isSensorAvailable ? "● Acelerómetro Activo" : "○ Sensor en Espera"}
+                                </span>
                             </div>
 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                                 <div style={{ padding: "12px", background: "rgba(0,0,0,0.5)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)" }}>
                                     <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>INTEGRIDAD ESTRUCTURAL</div>
-                                    <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#FFB300" }}>{structTelemetry.structuralIntegrityPct}%</div>
+                                    <div style={{ fontSize: "1.2rem", fontWeight: 900, color: structTelemetry.structuralIntegrityPct > 70 ? "#00E676" : structTelemetry.structuralIntegrityPct > 40 ? "#FFB300" : "#FF3355" }}>
+                                        {structTelemetry.structuralIntegrityPct}%
+                                    </div>
                                 </div>
                                 <div style={{ padding: "12px", background: "rgba(0,0,0,0.5)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)" }}>
                                     <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>ÍNDICE DE COLAPSO</div>
@@ -315,6 +342,43 @@ export function SonarSeismicModal() {
                                         {structTelemetry.collapseRiskLevel}
                                     </div>
                                 </div>
+                                <div style={{ padding: "12px", background: "rgba(0,0,0,0.5)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                                    <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>FRECUENCIA f₀ ACTUAL</div>
+                                    <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#38BDF8" }}>
+                                        {structTelemetry.dominantFrequencyHz} <span style={{ fontSize: "0.7rem" }}>Hz</span>
+                                    </div>
+                                </div>
+                                <div style={{ padding: "12px", background: "rgba(0,0,0,0.5)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                                    <div style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>f₀ LÍNEA BASE</div>
+                                    <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "#AAA" }}>
+                                        {structTelemetry.baselineFrequencyHz} <span style={{ fontSize: "0.7rem" }}>Hz</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: "flex", gap: "10px" }}>
+                                <button
+                                    onClick={handleToggleStructuralMonitoring}
+                                    style={{
+                                        flex: 1, padding: "10px", borderRadius: "10px",
+                                        background: structTelemetry.isMonitoring ? "rgba(255,51,85,0.2)" : "rgba(0,230,118,0.2)",
+                                        border: `1.5px solid ${structTelemetry.isMonitoring ? "#FF3355" : "#00E676"}`,
+                                        color: structTelemetry.isMonitoring ? "#FF3355" : "#00E676",
+                                        fontWeight: 800, fontSize: "0.78rem", cursor: "pointer"
+                                    }}
+                                >
+                                    {structTelemetry.isMonitoring ? "⏹️ Detener Monitoreo" : "▶️ Iniciar Monitoreo"}
+                                </button>
+                                <button
+                                    onClick={handleCalibrateStructuralBaseline}
+                                    style={{
+                                        padding: "10px 14px", borderRadius: "10px",
+                                        background: "rgba(255,179,0,0.15)", border: "1.5px solid #FFB300",
+                                        color: "#FFB300", fontWeight: 800, fontSize: "0.78rem", cursor: "pointer"
+                                    }}
+                                >
+                                    🎯 Calibrar f₀ Base
+                                </button>
                             </div>
                         </div>
                     )}

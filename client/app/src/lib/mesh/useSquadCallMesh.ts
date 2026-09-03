@@ -41,6 +41,7 @@ export function useSquadCallMesh({
     const audioContextRef = useRef<AudioContext | null>(null);
     const analysersRef = useRef<Map<string, AnalyserNode>>(new Map());
     const vadIntervalRef = useRef<any>(null);
+    const squadDataChannelsRef = useRef<Map<string, RTCDataChannel>>(new Map());
 
     const { callSignalQueue } = useRedStore();
     const processedSignalsRef = useRef<Set<string>>(new Set());
@@ -125,6 +126,17 @@ export function useSquadCallMesh({
                     }
                     const average = sum / dataArray.length;
                     const speaking = average > 25; // threshold
+
+                    // Broadcast VAD to squad peers via RTCDataChannel for <5ms out-of-band delivery
+                    if (hash === myIdentityHash) {
+                        squadDataChannelsRef.current.forEach((dc) => {
+                            if (dc.readyState === 'open') {
+                                try {
+                                    dc.send(JSON.stringify({ type: 'vad-speaking', isSpeaking: speaking }));
+                                } catch {}
+                            }
+                        });
+                    }
 
                     setPeers(prev => {
                         if (hash === myIdentityHash) return prev;
@@ -261,8 +273,52 @@ export function useSquadCallMesh({
             }
         };
 
+        // Out-of-Band Tactical RTCDataChannel (<5ms latency)
+        try {
+            const dc = pc.createDataChannel('red-squad-data', {
+                ordered: true,
+                maxRetransmits: 3
+            });
+            setupSquadDataChannel(targetPeerHash, dc);
+        } catch {}
+
+        pc.ondatachannel = (event) => {
+            setupSquadDataChannel(targetPeerHash, event.channel);
+        };
+
         peerConnectionsRef.current.set(targetPeerHash, pc);
         return pc;
+    };
+
+    const setupSquadDataChannel = (peerHash: string, channel: RTCDataChannel) => {
+        squadDataChannelsRef.current.set(peerHash, channel);
+        channel.binaryType = 'arraybuffer';
+
+        channel.onopen = () => {
+            console.log(`[SquadVoiceMesh] DataChannel abierto con ${peerHash.slice(0, 8)}`);
+        };
+
+        channel.onclose = () => {
+            squadDataChannelsRef.current.delete(peerHash);
+        };
+
+        channel.onmessage = (event) => {
+            if (typeof event.data === 'string') {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'vad-speaking') {
+                        setPeers(prev => {
+                            if (!prev[peerHash]) return prev;
+                            if (prev[peerHash].isSpeaking === msg.isSpeaking) return prev;
+                            return {
+                                ...prev,
+                                [peerHash]: { ...prev[peerHash], isSpeaking: msg.isSpeaking }
+                            };
+                        });
+                    }
+                } catch {}
+            }
+        };
     };
 
     // ── 4. SDP Bitrate Throttling — Tactical Voice (16 kbps Opus Mono) ────────
@@ -372,6 +428,11 @@ export function useSquadCallMesh({
         if (pc) {
             pc.close();
             peerConnectionsRef.current.delete(peerHash);
+        }
+        const dc = squadDataChannelsRef.current.get(peerHash);
+        if (dc) {
+            try { dc.close(); } catch {}
+            squadDataChannelsRef.current.delete(peerHash);
         }
         remoteStreamsRef.current.delete(peerHash);
         analysersRef.current.delete(peerHash);

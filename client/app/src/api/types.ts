@@ -80,12 +80,15 @@ export interface MessageItem {
     media_data?: string;
     mime_type?: string;
     duration_ms?: number;
+    waveform?: number[];
     target_id?: string;
     new_content?: string;
     conversation_id?: string;
     is_group?: boolean;
     group_id?: string;
     reaction?: string;
+    expires_at?: number;
+    ttl?: number;
     [key: string]: any;
 }
 
@@ -475,6 +478,8 @@ export interface DmsStatusResponse {
     wipe_identity: boolean;
     dead_message: string;
     last_active_timestamp?: number;
+    seconds_remaining?: number;
+    is_triggered?: boolean;
     [key: string]: any;
 }
 

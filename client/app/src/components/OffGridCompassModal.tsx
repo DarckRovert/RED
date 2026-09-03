@@ -1033,6 +1033,92 @@ export function OffGridCompassModal() {
                             </div>
                         </div>
 
+                        {/* Ferromagnetic Anomaly & Calibration HUD Card */}
+                        <div style={{
+                            background: 'linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)',
+                            border: `1.5px solid ${magTelemetry.isAnomalyDetected ? '#FF3355' : 'rgba(0, 229, 255, 0.35)'}`,
+                            borderRadius: '16px', padding: '16px',
+                            display: 'flex', flexDirection: 'column', gap: '12px',
+                            boxShadow: magTelemetry.isAnomalyDetected ? '0 0 20px rgba(255,51,85,0.25)' : 'none',
+                            boxSizing: 'border-box'
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '1.2rem' }}>🧲</span>
+                                    <div>
+                                        <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#FFF' }}>
+                                            DETECTOR DE ANOMALÍAS MAGNÉTICAS
+                                        </div>
+                                        <div style={{ fontSize: '0.68rem', color: magTelemetry.isSensorOnline ? '#00E676' : '#FFB300' }}>
+                                            {magTelemetry.isSensorOnline ? '● Magnetómetro en línea' : '○ Modo simulación / brújula virtual'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span style={{
+                                    fontSize: '0.72rem', fontWeight: 900, padding: '3px 8px', borderRadius: '6px',
+                                    background: magTelemetry.anomalySeverity === 'EXTREME' ? '#FF1744' :
+                                                magTelemetry.anomalySeverity === 'HIGH' ? '#FF5252' :
+                                                magTelemetry.anomalySeverity === 'ELEVATED' ? '#FFB300' : 'rgba(0,230,118,0.15)',
+                                    color: magTelemetry.anomalySeverity === 'NORMAL' ? '#00E676' : '#FFF',
+                                    border: `1px solid ${magTelemetry.anomalySeverity === 'NORMAL' ? '#00E676' : 'transparent'}`
+                                }}>
+                                    {magTelemetry.anomalySeverity}
+                                </span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>CAMPO ACTUAL</div>
+                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#00E5FF', fontFamily: 'monospace' }}>
+                                        {magTelemetry.magnitudeMicroteslas} <span style={{ fontSize: '0.7rem' }}>µT</span>
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>LÍNEA BASE (CERO)</div>
+                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#AAA', fontFamily: 'monospace' }}>
+                                        {magTelemetry.baselineMicroteslas} <span style={{ fontSize: '0.7rem' }}>µT</span>
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.4)', padding: '8px 10px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <div style={{ fontSize: '0.62rem', color: '#AAA' }}>DESVIACIÓN (Δ)</div>
+                                    <div style={{ fontSize: '1.15rem', fontWeight: 900, color: magTelemetry.isAnomalyDetected ? '#FF3355' : '#00E676', fontFamily: 'monospace' }}>
+                                        {magTelemetry.deltaFromBaselineMicroteslas > 0 ? `+${magTelemetry.deltaFromBaselineMicroteslas}` : magTelemetry.deltaFromBaselineMicroteslas} <span style={{ fontSize: '0.7rem' }}>µT</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                    onClick={() => {
+                                        magneticDetector.calibrateBaseline();
+                                        toast.success(`Cero magnético calibrado a ${magTelemetry.magnitudeMicroteslas} µT`);
+                                    }}
+                                    style={{
+                                        flex: 1, padding: '8px', borderRadius: '8px',
+                                        background: 'rgba(0,229,255,0.15)', border: '1px solid rgba(0,229,255,0.4)',
+                                        color: '#00E5FF', fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer'
+                                    }}
+                                >
+                                    🎯 Calibrar Cero Táctico
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const active = magneticDetector.toggleAudioBeeps();
+                                        toast.info(active ? "🔊 Audio Geiger Activado" : "🔇 Audio Geiger Silenciado");
+                                    }}
+                                    style={{
+                                        padding: '8px 14px', borderRadius: '8px',
+                                        background: magTelemetry.isAudioBeepActive ? 'rgba(255,179,0,0.25)' : 'rgba(255,255,255,0.06)',
+                                        border: `1px solid ${magTelemetry.isAudioBeepActive ? '#FFB300' : 'rgba(255,255,255,0.15)'}`,
+                                        color: magTelemetry.isAudioBeepActive ? '#FFB300' : '#AAA',
+                                        fontWeight: 800, fontSize: '0.76rem', cursor: 'pointer'
+                                    }}
+                                >
+                                    {magTelemetry.isAudioBeepActive ? '🔊 Geiger ON' : '🔈 Geiger OFF'}
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Tactical Stats & UTM Coordinate Box */}
                         <div style={{
                             background: 'rgba(15,23,42,0.9)', border: '1px solid rgba(255,255,255,0.1)',

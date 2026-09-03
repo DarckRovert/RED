@@ -17,12 +17,14 @@ export interface StructuralHealthTelemetry {
     alarmTriggered: boolean;
     sampleCount: number;
     timestamp: number;
+    isSensorAvailable: boolean;
 }
 
 export class StructuralHealthSeismicEngine {
     private static instance: StructuralHealthSeismicEngine | null = null;
 
     private isMonitoring: boolean = false;
+    private isSensorAvailable: boolean = false;
     private baselineFrequencyHz: number = 7.5; // Frecuencia típica de estructura de concreto
     private sampleBuffer: number[] = [];
     private motionListener: ((e: DeviceMotionEvent) => void) | null = null;
@@ -39,12 +41,26 @@ export class StructuralHealthSeismicEngine {
         alarmTriggered: false,
         sampleCount: 0,
         timestamp: Date.now(),
+        isSensorAvailable: false,
     };
 
     private gravityEma: number = 9.81;
     private lastAlarmTimeMs: number = 0;
 
-    private constructor() {}
+    private constructor() {
+        if (typeof window !== 'undefined') {
+            try {
+                const saved = localStorage.getItem('red_structural_baseline_hz');
+                if (saved) {
+                    const parsed = parseFloat(saved);
+                    if (isFinite(parsed) && parsed >= 0.5 && parsed <= 25) {
+                        this.baselineFrequencyHz = parsed;
+                        this.currentTelemetry.baselineFrequencyHz = parsed;
+                    }
+                }
+            } catch {}
+        }
+    }
 
     public static getInstance(): StructuralHealthSeismicEngine {
         if (!this.instance) {
@@ -77,11 +93,13 @@ export class StructuralHealthSeismicEngine {
         this.motionListener = (e: DeviceMotionEvent) => {
             let mag = 0;
             if (e.acceleration && typeof e.acceleration.x === 'number' && typeof e.acceleration.y === 'number' && typeof e.acceleration.z === 'number' && isFinite(e.acceleration.x) && isFinite(e.acceleration.y) && isFinite(e.acceleration.z)) {
+                this.isSensorAvailable = true;
                 const x = e.acceleration.x || 0;
                 const y = e.acceleration.y || 0;
                 const z = e.acceleration.z || 0;
                 mag = Math.sqrt(x * x + y * y + z * z);
             } else if (e.accelerationIncludingGravity && typeof e.accelerationIncludingGravity.x === 'number' && typeof e.accelerationIncludingGravity.y === 'number' && typeof e.accelerationIncludingGravity.z === 'number' && isFinite(e.accelerationIncludingGravity.x) && isFinite(e.accelerationIncludingGravity.y) && isFinite(e.accelerationIncludingGravity.z)) {
+                this.isSensorAvailable = true;
                 const acc = e.accelerationIncludingGravity;
                 const x = acc.x || 0;
                 const y = acc.y || 0;
@@ -135,11 +153,30 @@ export class StructuralHealthSeismicEngine {
         StructuralHealthSeismicEngine.instance = null;
     }
 
-    public calibrateBaseline() {
-        this.baselineFrequencyHz = this.currentTelemetry.dominantFrequencyHz || 7.5;
+    public calibrateBaseline(targetFreq?: number) {
+        const chosen = (targetFreq !== undefined && isFinite(targetFreq) && targetFreq >= 0.5 && targetFreq <= 25)
+            ? targetFreq
+            : (this.currentTelemetry.dominantFrequencyHz || 7.5);
+        this.baselineFrequencyHz = Math.round(chosen * 10) / 10;
         this.currentTelemetry.baselineFrequencyHz = this.baselineFrequencyHz;
         this.currentTelemetry.structuralIntegrityPct = 100;
         this.currentTelemetry.collapseRiskLevel = 'SAFE';
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('red_structural_baseline_hz', this.baselineFrequencyHz.toString());
+            } catch {}
+        }
+        this.notify();
+    }
+
+    public resetCalibration() {
+        this.baselineFrequencyHz = 7.5;
+        this.currentTelemetry.baselineFrequencyHz = 7.5;
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.removeItem('red_structural_baseline_hz');
+            } catch {}
+        }
         this.notify();
     }
 
@@ -198,8 +235,9 @@ export class StructuralHealthSeismicEngine {
             vibrationEnergyG2: Math.round(totalEnergy * 10000) / 10000,
             collapseRiskLevel: risk,
             alarmTriggered: alarm,
-            sampleCount: this.currentTelemetry.sampleCount + 1,
+            sampleCount: N,
             timestamp: Date.now(),
+            isSensorAvailable: this.isSensorAvailable,
         };
 
         this.notify();

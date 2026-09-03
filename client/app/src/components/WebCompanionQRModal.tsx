@@ -18,6 +18,12 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
     const [timeLeft, setTimeLeft] = useState<number>(120);
     const [status, setStatus] = useState<"connecting" | "ready" | "paired" | "expired" | "error">("connecting");
     const [errorMessage, setErrorMessage] = useState<string>("");
+    const [isP2pOffline, setIsP2pOffline] = useState(false);
+    const [rawPayload, setRawPayload] = useState<string>("");
+    const [showAirGap, setShowAirGap] = useState(false);
+    const [airGapToken, setAirGapToken] = useState("");
+    const [airGapPin, setAirGapPin] = useState("");
+    const [isImportingAirGap, setIsImportingAirGap] = useState(false);
 
     useEffect(() => {
         let currentSession: PairingSession | null = null;
@@ -51,6 +57,9 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
                 }
 
                 currentSession = session;
+                setRawPayload(session.qrPayload);
+                setIsP2pOffline(session.qrPayload.startsWith("RED_PAIR:2:"));
+
                 const url = await QRCode.toDataURL(session.qrPayload, {
                     width: 260,
                     margin: 2,
@@ -91,6 +100,37 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
         };
     }, [restoreCompanionVault, onClose]);
 
+    const handleCopyToken = () => {
+        if (!rawPayload) return;
+        navigator.clipboard.writeText(rawPayload);
+        toast.success("📋 Token copiado al portapapeles");
+    };
+
+    const handleImportAirGap = async () => {
+        if (!airGapToken.trim()) {
+            toast.warning("Pega un token válido con prefijo RED_VAULT:1:");
+            return;
+        }
+        setIsImportingAirGap(true);
+        try {
+            const payload = await companionSyncEngine.importAirGapVaultToken(airGapToken, airGapPin || undefined);
+            const ok = await restoreCompanionVault(payload);
+            if (ok) {
+                setStatus("paired");
+                toast.success("✅ ¡Bóveda Air-Gap descifrada e importada con éxito!");
+                setTimeout(() => {
+                    onClose();
+                }, 1200);
+            } else {
+                toast.error("Error al restaurar los datos de la bóveda");
+            }
+        } catch (e: any) {
+            toast.error(e?.message || "Fallo al descifrar cápsula Air-Gap");
+        } finally {
+            setIsImportingAirGap(false);
+        }
+    };
+
     return (
         <div style={{
             position: "fixed", inset: 0, zIndex: 100000,
@@ -101,13 +141,13 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
             <div 
                 className="modal-card-scrollable"
                 style={{
-                    maxWidth: "420px", width: "100%",
+                    maxWidth: "440px", width: "100%",
                     background: "linear-gradient(180deg, rgba(20,24,36,0.98) 0%, rgba(10,12,20,0.98) 100%)",
                     border: "1px solid rgba(0, 229, 255, 0.3)",
                     borderRadius: "24px",
                     boxShadow: "0 0 45px rgba(0, 229, 255, 0.15), 0 20px 50px rgba(0,0,0,0.8)",
-                    padding: "26px",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: "20px",
+                    padding: "24px",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "16px",
                     color: "#fff", position: "relative",
                     maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
                 }}
@@ -131,17 +171,22 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
                     <div style={{
                         display: "inline-flex", alignItems: "center", gap: "8px",
                         padding: "4px 12px", borderRadius: "12px",
-                        background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.25)",
-                        fontSize: "11px", fontWeight: 800, color: "var(--accent-cyan)", letterSpacing: "1px",
-                        marginBottom: "8px"
+                        background: isP2pOffline ? "rgba(0, 230, 118, 0.12)" : "rgba(0, 229, 255, 0.1)",
+                        border: `1px solid ${isP2pOffline ? "rgba(0, 230, 118, 0.35)" : "rgba(0, 229, 255, 0.25)"}`,
+                        fontSize: "11px", fontWeight: 800,
+                        color: isP2pOffline ? "var(--accent-emerald, #00E676)" : "var(--accent-cyan)",
+                        letterSpacing: "1px", marginBottom: "8px"
                     }}>
-                        🔗 RED WEB COMPANION
+                        {isP2pOffline ? "⚡ RED COMPANION: P2P SOBERANO (OFFLINE)" : "🔗 RED WEB COMPANION"}
                     </div>
                     <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 900, color: "#fff" }}>
                         Vincular con tu Teléfono
                     </h3>
                     <p style={{ margin: "6px 0 0 0", fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                        Escanea este código QR desde la App RED de tu móvil para sincronizar tus contactos y conversaciones al instante.
+                        {isP2pOffline 
+                            ? "Enlace P2P directo sin servidor central activo. Escanea con la cámara de RED."
+                            : "Escanea este código QR desde la App RED de tu móvil para sincronizar en tiempo real."
+                        }
                     </p>
                 </div>
 
@@ -154,7 +199,7 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
                     padding: "10px",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     boxShadow: "0 0 30px rgba(0, 229, 255, 0.25)",
-                    border: "3px solid rgba(0, 229, 255, 0.4)"
+                    border: `3px solid ${isP2pOffline ? "rgba(0, 230, 118, 0.5)" : "rgba(0, 229, 255, 0.4)"}`
                 }}>
                     {status === "ready" && qrDataUrl && (
                         <img
@@ -167,7 +212,7 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
                     {status === "connecting" && (
                         <div style={{ textAlign: "center", color: "#111", padding: "20px" }}>
                             <div style={{ fontSize: "2rem", marginBottom: "8px" }}>⚡</div>
-                            <div style={{ fontSize: "12px", fontWeight: 800 }}>Generando enlace seguro ECDH…</div>
+                            <div style={{ fontSize: "12px", fontWeight: 800 }}>Iniciando enlace E2E ECDH…</div>
                         </div>
                     )}
 
@@ -203,6 +248,84 @@ export const WebCompanionQRModal: React.FC<WebCompanionQRModalProps> = ({ onClos
                         </div>
                     )}
                 </div>
+
+                {/* Acciones auxiliares de emparejamiento */}
+                {status === "ready" && (
+                    <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                        <button
+                            onClick={handleCopyToken}
+                            style={{
+                                flex: 1, padding: "8px 12px", borderRadius: "12px",
+                                background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
+                                color: "#fff", fontSize: "0.74rem", fontWeight: 700, cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                            }}
+                        >
+                            <span>📋</span>
+                            <span>Copiar Token</span>
+                        </button>
+                        <button
+                            onClick={() => setShowAirGap(!showAirGap)}
+                            style={{
+                                flex: 1, padding: "8px 12px", borderRadius: "12px",
+                                background: showAirGap ? "rgba(0, 229, 255, 0.2)" : "rgba(255,255,255,0.06)",
+                                border: "1px solid rgba(0, 229, 255, 0.3)",
+                                color: "var(--accent-cyan)", fontSize: "0.74rem", fontWeight: 700, cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                            }}
+                        >
+                            <span>🛡️</span>
+                            <span>Modo Air-Gap</span>
+                        </button>
+                    </div>
+                )}
+
+                {/* Sección Air-Gap para ambientes 100% aislados */}
+                {showAirGap && (
+                    <div style={{
+                        width: "100%", background: "rgba(0, 229, 255, 0.05)",
+                        border: "1px solid rgba(0, 229, 255, 0.2)", borderRadius: "16px",
+                        padding: "14px", display: "flex", flexDirection: "column", gap: "10px",
+                        animation: "fadeIn 0.2s ease-out"
+                    }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                            Importación Manual Air-Gap (Búnker / Sin Red)
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Pega el token RED_VAULT:1:..."
+                            value={airGapToken}
+                            onChange={(e) => setAirGapToken(e.target.value)}
+                            style={{
+                                width: "100%", background: "rgba(0,0,0,0.5)",
+                                border: "1px solid rgba(255,255,255,0.15)", borderRadius: "10px",
+                                padding: "8px 10px", color: "#fff", fontSize: "0.75rem",
+                                fontFamily: "monospace"
+                            }}
+                        />
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <input
+                                type="password"
+                                placeholder="PIN Maestro (ej: 123456)"
+                                value={airGapPin}
+                                onChange={(e) => setAirGapPin(e.target.value)}
+                                style={{
+                                    flex: 1, background: "rgba(0,0,0,0.5)",
+                                    border: "1px solid rgba(255,255,255,0.15)", borderRadius: "10px",
+                                    padding: "8px 10px", color: "#fff", fontSize: "0.75rem"
+                                }}
+                            />
+                            <button
+                                onClick={handleImportAirGap}
+                                disabled={isImportingAirGap}
+                                className="btn-tactical-primary"
+                                style={{ padding: "8px 16px", borderRadius: "10px", fontSize: "0.75rem" }}
+                            >
+                                {isImportingAirGap ? "Descifrando…" : "Restaurar"}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Pasos e Instrucciones */}
                 <div style={{

@@ -312,20 +312,21 @@ class LocalAIEngineClass {
         const tf = await this.getTransformers();
         if (!tf) throw new Error('WebAssembly / Transformers.js no disponible.');
 
-        // Map local model IDs to lightweight ONNX pipelines
+        // Map local model IDs to lightweight multilingual ONNX pipelines
         const modelPipelineMap: Record<string, string[]> = {
-            'qwen-2.5-0.5b-q4': ['onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct', 'Xenova/LaMini-GPT-124M'],
-            'smollm-360m-q4': ['onnx-community/SmolLM2-360M-Instruct', 'Xenova/LaMini-GPT-124M', 'Xenova/distilgpt2'],
-            'qwen-2.5-1.5b-q4': ['onnx-community/Qwen2.5-1.5B-Instruct', 'onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct'],
-            'llama-3.2-1b-q4': ['onnx-community/Llama-3.2-1B-Instruct', 'onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct'],
+            'smollm-135m-q4': ['onnx-community/SmolLM2-135M-Instruct', 'onnx-community/SmolLM2-360M-Instruct'],
+            'smollm-360m-q4': ['onnx-community/SmolLM2-360M-Instruct', 'onnx-community/SmolLM2-135M-Instruct'],
+            'qwen-2.5-0.5b-q4': ['onnx-community/Qwen2.5-0.5B-Instruct', 'onnx-community/SmolLM2-360M-Instruct'],
+            'qwen-2.5-1.5b-q4': ['onnx-community/Qwen2.5-1.5B-Instruct', 'onnx-community/Qwen2.5-0.5B-Instruct'],
+            'llama-3.2-1b-q4': ['onnx-community/Llama-3.2-1B-Instruct', 'onnx-community/Qwen2.5-0.5B-Instruct'],
             'gemma-2b-q4': ['onnx-community/gemma-2-2b-it', 'onnx-community/Qwen2.5-0.5B-Instruct'],
             'phi-3-mini-q4': ['onnx-community/Phi-3-mini-4k-instruct', 'onnx-community/Qwen2.5-0.5B-Instruct']
         };
 
         const candidates = modelPipelineMap[activeId] || [
-            'onnx-community/Qwen2.5-0.5B-Instruct',
+            'onnx-community/SmolLM2-135M-Instruct',
             'onnx-community/SmolLM2-360M-Instruct',
-            'Xenova/LaMini-GPT-124M'
+            'onnx-community/Qwen2.5-0.5B-Instruct'
         ];
 
         for (const candidate of candidates) {
@@ -1044,14 +1045,19 @@ class LocalAIEngineClass {
                    `4. **Regla de Tres de Supervivencia:** 3 minutos sin aire, 3 horas sin refugio en clima extremo, 3 días sin agua, 3 semanas sin comida.`;
         }
 
-        // Respuesta conversacional estructurada general
-        const topKeywords = tokens.slice(0, 4).join(', ');
-        return `🤖 **Análisis del Copiloto RED**\n\n` +
-               `He analizado tu consulta sobre **${query}**.\n\n` +
-               `En el contexto operativo y táctico de RED, este tema se relaciona con la gestión de recursos, coordinación en malla y protocolos de seguridad.\n\n` +
-               `• **Puntos Clave:** ${topKeywords ? `Conceptos detectados: ${topKeywords}.` : 'Análisis contextual procesado.'}\n` +
-               `• **Recomendación Operativa:** Si requieres asistencia médica de emergencia, indica el síntoma exacto (ej. "hemorragia", "quemadura", "fractura") para desplegar de inmediato el protocolo clínico paso a paso.\n` +
-               `• **Continuidad:** Puedes preguntarme cualquier detalle específico o indicarme si deseas enviar una baliza de reporte al resto de operadores de la malla.`;
+        // Respuesta cuando el modelo generativo abierto aún no está cargado en memoria
+        const activeModel = ModelManager.getActiveModel();
+        if (activeModel && activeModel.isDownloaded) {
+            return `⏳ **Copiloto RED [${activeModel.name}]**\n\n` +
+                   `El modelo neuronal está instalado en tu almacenamiento (${activeModel.fileName}).\n\n` +
+                   `El motor nativo Rust está compilando el buffer de tensores en memoria RAM. Por favor reenvía tu consulta en un instante.`;
+        }
+
+        return `🧠 **Copiloto RED (Modo Táctico Base)**\n\n` +
+               `Actualmente estoy operando con la Base de Procedimientos Tácticos y Médicos locales (RAG).\n\n` +
+               `Para conversar de forma libre sobre cualquier tema o razonamiento abierto (como "${query}"), activa la inferencia neuronal:\n\n` +
+               `1. **En este dispositivo (100% Offline):** Ve a la pestaña **Modelos** y pulsa **Descargar** en *SmolLM2 (360M)* o *Qwen 2.5 (0.5B)* para ejecutar la red neuronal directamente en tu hardware.\n` +
+               `2. **Desde tu PC (Potencia Total):** En la pestaña **Endpoint Soberano**, conecta tu PC corriendo LM Studio u Ollama para razonamiento avanzado sin límites de memoria.`;
     }
 
     /** 3. Resumidor Neuronal y Extractor Estadístico NLP de Canales 100% Offline */

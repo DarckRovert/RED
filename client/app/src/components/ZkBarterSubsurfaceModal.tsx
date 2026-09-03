@@ -5,6 +5,7 @@ import { zkBarter, ZkBarterProof } from "../lib/crypto/ZeroKnowledgeBarterEngine
 import { subsurfaceAcoustic, SubsurfaceTelemetry } from "../lib/sensors/SubsurfaceAcousticEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 
 export function ZkBarterSubsurfaceModal() {
     const { navigate, identity, goBack } = useRedStore();
@@ -16,8 +17,11 @@ export function ZkBarterSubsurfaceModal() {
     const [resourceType, setResourceType] = useState<string>("RACION_TACTICA_MRE");
     const [amount, setAmount] = useState<number>(5);
     const [generatedProof, setGeneratedProof] = useState<ZkBarterProof | null>(null);
+    const [proofQrUrl, setProofQrUrl] = useState<string | null>(null);
     const [verifyInputJson, setVerifyInputJson] = useState<string>("");
     const [verifyResult, setVerifyResult] = useState<string | null>(null);
+    const [isScanningZk, setIsScanningZk] = useState<boolean>(false);
+    const shouldScanZkRef = React.useRef<boolean>(false);
 
     // Subsurface state
     const [medium, setMedium] = useState<"REINFORCED_CONCRETE" | "RUBBLE_EARTH" | "WATER_FLOODED">("REINFORCED_CONCRETE");
@@ -56,17 +60,114 @@ export function ZkBarterSubsurfaceModal() {
 
         const proof = zkBarter.generateProof(secret, nullifier, 2, leafHashes, resourceType, amount);
         setGeneratedProof(proof);
+        const qrPayload = zkBarter.exportProofToQrString(proof);
+        const url = await OfflineQrEngine.generateDataUrl(qrPayload, {
+            width: 220,
+            margin: 1,
+            darkColor: "#00E5FF",
+            lightColor: "#04060A"
+        });
+        setProofQrUrl(url);
         toast.success("🪙 Prueba de Conocimiento Cero generada con éxito");
     };
 
+    const stopZkCamera = async () => {
+        shouldScanZkRef.current = false;
+        if (typeof document !== "undefined") {
+            document.body.classList.remove("scanner-active");
+        }
+        setIsScanningZk(false);
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                await BarcodeScanner.showBackground().catch(() => {});
+                await BarcodeScanner.stopScan().catch(() => {});
+            }
+        } catch {}
+    };
+
+    const handleStartZkScan = async () => {
+        shouldScanZkRef.current = true;
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                const perm = await BarcodeScanner.checkPermission({ force: true });
+                if (!shouldScanZkRef.current) {
+                    await stopZkCamera();
+                    return;
+                }
+                if (perm.denied || !perm.granted) {
+                    toast.warning("Permiso de cámara no concedido. Introduce el código manualmente.");
+                    return;
+                }
+
+                await BarcodeScanner.hideBackground();
+                if (!shouldScanZkRef.current) {
+                    await stopZkCamera();
+                    return;
+                }
+                document.body.classList.add("scanner-active");
+                setIsScanningZk(true);
+
+                const result = await BarcodeScanner.startScan();
+                await stopZkCamera();
+                if (result.hasContent) {
+                    const scanned = result.content.trim();
+                    setVerifyInputJson(scanned);
+                    const parsed = zkBarter.parseProofFromQrString(scanned);
+                    if (parsed) {
+                        const isValid = zkBarter.verifyProof(parsed);
+                        if (isValid) {
+                            setVerifyResult(`✓ VÁLIDA: Propietario verificado contra Merkle Root. Recurso: ${parsed.amount}x ${parsed.resourceType}`);
+                            toast.success("Prueba ZK verificada con éxito por QR");
+                        } else {
+                            setVerifyResult("✗ INVÁLIDA: La prueba no coincide con el Merkle Root o el Nullifier ya fue gastado");
+                            toast.error("Prueba ZK inválida");
+                        }
+                    } else {
+                        toast.info("Código QR leído. Pulsa verificar para validar.");
+                    }
+                }
+            } else {
+                toast.info("Escaneo activo disponible en dispositivos móviles.");
+            }
+        } catch (err) {
+            console.warn("[ZkBarter] Error en escáner de cámara:", err);
+            await stopZkCamera();
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            stopZkCamera();
+        };
+    }, []);
+
 
     const handleVerifyProof = () => {
-        if (!verifyInputJson.trim()) {
-            toast.error("Pega el JSON de la prueba zk");
+        const text = verifyInputJson.trim();
+        if (!text) {
+            toast.error("Pega el JSON o la cadena ZK_PROOF:... de la prueba zk");
             return;
         }
+
+        const parsedFromQr = zkBarter.parseProofFromQrString(text);
+        if (parsedFromQr) {
+            const isValid = zkBarter.verifyProof(parsedFromQr);
+            if (isValid) {
+                setVerifyResult(`✓ VÁLIDA: Propietario verificado contra Merkle Root. Recurso: ${parsedFromQr.amount}x ${parsedFromQr.resourceType}`);
+                toast.success("Prueba ZK verificada con éxito");
+            } else {
+                setVerifyResult("✗ INVÁLIDA: La prueba no coincide con el Merkle Root o el Nullifier ya fue gastado");
+                toast.error("Prueba ZK inválida");
+            }
+            return;
+        }
+
         try {
-            const parsed: ZkBarterProof = JSON.parse(verifyInputJson.trim());
+            const parsed: ZkBarterProof = JSON.parse(text);
             const isValid = zkBarter.verifyProof(parsed);
             if (isValid) {
                 setVerifyResult(`✓ VÁLIDA: Propietario verificado contra Merkle Root. Recurso: ${parsed.amount}x ${parsed.resourceType}`);
@@ -76,7 +177,7 @@ export function ZkBarterSubsurfaceModal() {
                 toast.error("Prueba ZK inválida");
             }
         } catch {
-            setVerifyResult("✗ ERROR: Formato JSON inválido");
+            setVerifyResult("✗ ERROR: Formato JSON o QR inválido");
             toast.error("Error al parsear la prueba");
         }
     };
@@ -193,23 +294,40 @@ export function ZkBarterSubsurfaceModal() {
                             </button>
 
                             {generatedProof && (
-                                <div style={{ background: "rgba(0,0,0,0.6)", padding: "10px", borderRadius: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                                    <div style={{ fontSize: "0.7rem", color: "#00E676", fontWeight: 800 }}>✓ COMPROMISO ZK CREADO:</div>
-                                    <div style={{ fontSize: "0.62rem", color: "#AAA", wordBreak: "break-all" }}>
+                                <div style={{ background: "rgba(0,0,0,0.6)", padding: "12px", borderRadius: "10px", display: "flex", flexDirection: "column", alignItems: "center", gap: "10px" }}>
+                                    <div style={{ fontSize: "0.74rem", color: "#00E676", fontWeight: 800, width: "100%", textAlign: "left" }}>
+                                        ✓ COMPROMISO ZK CREADO:
+                                    </div>
+                                    {proofQrUrl && (
+                                        <img src={proofQrUrl} alt="QR Prueba ZK" style={{ width: 180, height: 180, borderRadius: "10px", border: "1.5px solid #00E5FF" }} />
+                                    )}
+                                    <div style={{ fontSize: "0.62rem", color: "#AAA", wordBreak: "break-all", width: "100%" }}>
                                         Merkle Root: {generatedProof.merkleRoot.substring(0, 24)}...
                                     </div>
-                                    <div style={{ fontSize: "0.62rem", color: "#AAA", wordBreak: "break-all" }}>
+                                    <div style={{ fontSize: "0.62rem", color: "#AAA", wordBreak: "break-all", width: "100%" }}>
                                         Nullifier Hash: {generatedProof.nullifierHash.substring(0, 24)}...
                                     </div>
-                                    <button
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(JSON.stringify(generatedProof, null, 2));
-                                            toast.info("Prueba copiada al portapapeles");
-                                        }}
-                                        style={{ padding: "6px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", color: "#FFF", border: "none", fontSize: "0.68rem", cursor: "pointer", marginTop: "4px" }}
-                                    >
-                                        📋 COPIAR JSON DE LA PRUEBA
-                                    </button>
+                                    <div style={{ display: "flex", gap: "8px", width: "100%" }}>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(JSON.stringify(generatedProof, null, 2));
+                                                toast.info("JSON copiado al portapapeles");
+                                            }}
+                                            style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.1)", color: "#FFF", border: "none", fontSize: "0.68rem", cursor: "pointer" }}
+                                        >
+                                            📋 COPIAR JSON
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                const qrStr = zkBarter.exportProofToQrString(generatedProof);
+                                                navigator.clipboard.writeText(qrStr);
+                                                toast.info("Cadena QR copiada al portapapeles");
+                                            }}
+                                            style={{ flex: 1, padding: "8px", borderRadius: "6px", background: "rgba(0,229,255,0.2)", color: "#00E5FF", border: "1px solid rgba(0,229,255,0.4)", fontSize: "0.68rem", cursor: "pointer" }}
+                                        >
+                                            ⚡ COPIAR QR
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -217,10 +335,23 @@ export function ZkBarterSubsurfaceModal() {
                         {/* Verifier */}
                         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "14px", display: "flex", flexDirection: "column", gap: "10px" }}>
                             <div style={{ fontSize: "0.8rem", fontWeight: 800, color: "#00E676" }}>2. VERIFICAR PRUEBA ZK DEL RECEPTOR:</div>
+                            
+                            <button
+                                onClick={handleStartZkScan}
+                                style={{
+                                    padding: "10px", background: "rgba(0, 230, 118, 0.15)",
+                                    border: "1.5px dashed #00E676", borderRadius: "10px",
+                                    color: "#00E676", fontWeight: 800, fontSize: "0.78rem", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                                }}
+                            >
+                                📷 ESCANEAR QR ZK CON LA CÁMARA
+                            </button>
+
                             <textarea
                                 value={verifyInputJson}
                                 onChange={(e) => setVerifyInputJson(e.target.value)}
-                                placeholder="Pega el JSON de la prueba ZK aquí..."
+                                placeholder="Pega el JSON o la cadena ZK_PROOF:1:... de la prueba ZK aquí..."
                                 rows={3}
                                 style={{ padding: "8px", borderRadius: "8px", background: "rgba(0,0,0,0.6)", color: "#FFF", border: "1px solid rgba(255,255,255,0.15)", fontSize: "0.68rem" }}
                             />

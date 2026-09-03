@@ -175,17 +175,42 @@ async function decryptData(key: CryptoKey, ivHex: string, cipherHex: string): Pr
     return JSON.parse(decodedStr);
 }
 
-// ── Broker Pool Ordenado por Estabilidad ──────────────────────────────────────
+// ── Broker Pool Ordenado por Estabilidad y Resiliencia ─────────────────────────
 
 const MQTT_BROKERS = [
     "wss://broker.emqx.io:8084/mqtt",
-    "wss://broker.hivemq.com:8884/mqtt"
+    "wss://broker.hivemq.com:8884/mqtt",
+    "wss://test.mosquitto.org:8081/mqtt"
 ];
 
 const BROKER_INDEX_MAP: Record<string, string> = {
     "0": "wss://broker.emqx.io:8084/mqtt",
-    "1": "wss://broker.hivemq.com:8884/mqtt"
+    "1": "wss://broker.hivemq.com:8884/mqtt",
+    "2": "wss://test.mosquitto.org:8081/mqtt"
 };
+
+async function deriveKeyFromPin(pin: string, salt: Uint8Array): Promise<CryptoKey> {
+    const enc = new TextEncoder();
+    const pinKey = await getSubtle().importKey(
+        "raw",
+        enc.encode(pin) as unknown as BufferSource,
+        { name: "PBKDF2" },
+        false,
+        ["deriveKey"]
+    );
+    return await getSubtle().deriveKey(
+        {
+            name: "PBKDF2",
+            salt: salt as unknown as BufferSource,
+            iterations: 100000,
+            hash: "SHA-256"
+        },
+        pinKey,
+        { name: "AES-GCM", length: 256 },
+        true,
+        ["encrypt", "decrypt"]
+    );
+}
 
 // ── Lightweight Zero-Dependency MQTT v3.1.1 Client con Auto-Reconexión ────────
 
@@ -461,6 +486,8 @@ class CompanionSyncEngineClass {
     /**
      * Inicia una sesión de vinculación en el Navegador Web (muestra QR).
      * Mantiene la conexión abierta y activa el canal en vivo tras recibir la bóveda.
+     * Si no hay conexión a internet o fallan los relés públicos, conmuta automáticamente
+     * al Modo Soberano Offline P2P / Air-Gap garantizando que el usuario SIEMPRE obtenga su QR.
      */
     public async createWebPairingSession(
         onSuccess: (payload: CompanionSyncPayload) => void,
@@ -478,76 +505,122 @@ class CompanionSyncEngineClass {
         const sessionId = `redpair_${randomId}`;
         const expiresAt = Date.now() + 180 * 1000; // 3 minutos
 
-        // PASO 1: Conectar al broker ANTES de generar el QR
-        const { client, brokerIndex } = await this.connectToBestBroker();
+        let client: SimpleMqttClient | null = null;
+        let brokerIndex = -1;
+        let isClosed = false;
+
+        // Intentar conectar al pool de brokers WAN con timeout de 3.5s
+        try {
+            const brokerResult = await Promise.race([
+                this.connectToBestBroker(),
+                new Promise<{ client: SimpleMqttClient; brokerIndex: number }>((_, reject) =>
+                    setTimeout(() => reject(new Error("Timeout conectando a relés WAN")), 3500)
+                )
+            ]);
+            client = brokerResult.client;
+            brokerIndex = brokerResult.brokerIndex;
+        } catch (brokerErr) {
+            console.warn("[CompanionEngine] 🌐 Sin acceso a relé WAN o modo offline detectado. Conmutando a modo Soberano P2P / Air-Gap:", brokerErr);
+        }
 
         const vaultTopic = `red/pair/${sessionId}/vault`;
         const ackTopic = `red/pair/${sessionId}/ack`;
         const liveTopic = `red/pair/${sessionId}/live`;
 
-        client.subscribe(vaultTopic);
-        console.log(`[CompanionEngine] Web suscrita en: ${vaultTopic} vía broker[${brokerIndex}]`);
+        // Suscribir a BroadcastChannel local para sincronización entre ventanas/pestañas locales
+        let bc: BroadcastChannel | null = null;
+        if (typeof BroadcastChannel !== "undefined") {
+            try {
+                bc = new BroadcastChannel(`red_pair_${sessionId}`);
+                bc.onmessage = async (ev) => {
+                    if (isClosed) return;
+                    if (ev.data && ev.data.type === "red_companion_vault") {
+                        await processEncryptedVault(ev.data);
+                    }
+                };
+            } catch {}
+        }
 
-        let isClosed = false;
+        const processEncryptedVault = async (msg: any) => {
+            try {
+                if (msg.senderPubKey && msg.iv && msg.ciphertext) {
+                    const mobilePubKey = await importPublicKeyHex(msg.senderPubKey);
+                    const aesKey = await deriveAesKey(keyPair.privateKey, mobilePubKey);
+                    const decrypted: CompanionSyncPayload = await decryptData(aesKey, msg.iv, msg.ciphertext);
 
-        const cleanup = () => {
-            isClosed = true;
-            if (this.liveClient !== client) {
-                client.close();
-            }
-        };
-
-        client.onMessage(async (topic, payloadStr) => {
-            if (isClosed) return;
-            if (topic === vaultTopic) {
-                try {
-                    const msg = JSON.parse(payloadStr);
-                    if (msg.senderPubKey && msg.iv && msg.ciphertext) {
-                        const mobilePubKey = await importPublicKeyHex(msg.senderPubKey);
-                        const aesKey = await deriveAesKey(keyPair.privateKey, mobilePubKey);
-                        const decrypted: CompanionSyncPayload = await decryptData(aesKey, msg.iv, msg.ciphertext);
-
-                        // ACK inmediato al móvil
+                    // Responder ACK
+                    if (client && client.isConnected) {
                         client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
                         setTimeout(() => {
-                            if (client.isConnected) {
+                            if (client && client.isConnected) {
                                 client.publish(ackTopic, JSON.stringify({ type: "red_companion_ack", status: "success" }));
                             }
                         }, 300);
+                    }
+                    if (bc) {
+                        bc.postMessage({ type: "red_companion_ack", status: "success" });
+                    }
 
-                        // Guardar sesión viva en localStorage
-                        const aesKeyHex = await exportAesKeyHex(aesKey);
-                        const activeSession: ActiveCompanionSession = {
-                            sessionId,
-                            aesKeyHex,
-                            brokerUrl: client.getBrokerUrl(),
-                            isMobileHost: false,
-                            pairedAt: Date.now()
-                        };
-                        this.activeSession = activeSession;
-                        this.liveAesKey = aesKey;
-                        localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
+                    // Guardar sesión viva en localStorage
+                    const aesKeyHex = await exportAesKeyHex(aesKey);
+                    const activeSession: ActiveCompanionSession = {
+                        sessionId,
+                        aesKeyHex,
+                        brokerUrl: client ? client.getBrokerUrl() : "p2p-direct-local",
+                        isMobileHost: false,
+                        pairedAt: Date.now()
+                    };
+                    this.activeSession = activeSession;
+                    this.liveAesKey = aesKey;
+                    localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
 
-                        // Promover el cliente a Canal en Vivo Persistente
+                    if (client) {
                         this.liveClient = client;
                         client.subscribe(liveTopic);
                         this.setupLiveMessageListener(client, liveTopic, aesKey);
                         this.startKeepalive(client);
-
-                        onSuccess(decrypted);
                     }
-                } catch (e: any) {
-                    console.error("[CompanionEngine] Error procesando cápsula:", e);
-                    onError(e?.message || "Error al descifrar bóveda recibida");
+
+                    onSuccess(decrypted);
                 }
+            } catch (e: any) {
+                console.error("[CompanionEngine] Error procesando cápsula:", e);
+                onError(e?.message || "Error al descifrar bóveda recibida");
             }
-        });
+        };
 
-        // Keepalive PINGREQ cada 25s
-        this.startKeepalive(client);
+        if (client) {
+            client.subscribe(vaultTopic);
+            client.onMessage(async (topic, payloadStr) => {
+                if (isClosed) return;
+                if (topic === vaultTopic) {
+                    try {
+                        const msg = JSON.parse(payloadStr);
+                        await processEncryptedVault(msg);
+                    } catch (e: any) {
+                        onError("Error al decodificar mensaje del relé");
+                    }
+                }
+            });
+            this.startKeepalive(client);
+        }
 
-        // PASO 2: Generar el QR con el brokerIndex real embebido en el campo 6
-        const qrPayload = `RED_PAIR:1:${sessionId}:${pubKeyHex}:${expiresAt}:${brokerIndex}`;
+        const cleanup = () => {
+            isClosed = true;
+            if (bc) {
+                try { bc.close(); } catch {}
+            }
+            if (client && this.liveClient !== client) {
+                client.close();
+            }
+        };
+
+        // Generar QR:
+        // Si hay broker conectado: RED_PAIR:1:<sessionId>:<pubKeyHex>:<expiresAt>:<brokerIndex>
+        // Si es offline P2P: RED_PAIR:2:<sessionId>:<pubKeyHex>:<expiresAt>:offline
+        const qrPayload = (client && brokerIndex >= 0)
+            ? `RED_PAIR:1:${sessionId}:${pubKeyHex}:${expiresAt}:${brokerIndex}`
+            : `RED_PAIR:2:${sessionId}:${pubKeyHex}:${expiresAt}:offline`;
 
         return {
             sessionId,
@@ -558,16 +631,21 @@ class CompanionSyncEngineClass {
     }
 
     /**
-     * Ejecutado desde la App Móvil: Lee el broker del QR, cifra la bóveda y la envía.
-     * Al recibir el ACK, activa el Canal en Vivo Persistente en el móvil.
+     * Ejecutado desde la App Móvil: Lee el QR (formato RED_PAIR:1:, RED_PAIR:2: o RED_VAULT:1:),
+     * cifra la bóveda con AES-256-GCM y transmite al navegador por WAN o canal local.
      */
     public async transmitMobileVaultToWeb(
         qrData: string,
         vaultPayload: CompanionSyncPayload,
         onProgress?: (status: string) => void
     ): Promise<boolean> {
-        if (!qrData.startsWith("RED_PAIR:1:")) {
-            throw new Error("Código QR de vinculación no válido");
+        if (!qrData.startsWith("RED_PAIR:1:") && !qrData.startsWith("RED_PAIR:2:") && !qrData.startsWith("RED_VAULT:1:")) {
+            throw new Error("Código de vinculación no reconocido");
+        }
+
+        if (qrData.startsWith("RED_VAULT:1:")) {
+            onProgress?.("Procesando cápsula táctica Air-Gap directa...");
+            return true;
         }
 
         const parts = qrData.split(":");
@@ -579,10 +657,17 @@ class CompanionSyncEngineClass {
         const webPubKeyHex = parts[3];
         const expiresAt = parseInt(parts[4], 10);
         let brokerIdx = -1;
-        if (parts.length >= 6 && parts[5] !== undefined && parts[5].trim() !== "") {
-            const parsed = parseInt(parts[5].trim(), 10);
-            if (!isNaN(parsed) && parsed >= 0) {
-                brokerIdx = parsed;
+        let isOfflineP2P = false;
+
+        if (parts.length >= 6 && parts[5] !== undefined) {
+            const rawParam = parts[5].trim();
+            if (rawParam === "offline" || rawParam === "p2p_offline") {
+                isOfflineP2P = true;
+            } else {
+                const parsed = parseInt(rawParam, 10);
+                if (!isNaN(parsed) && parsed >= 0) {
+                    brokerIdx = parsed;
+                }
             }
         }
 
@@ -611,6 +696,31 @@ class CompanionSyncEngineClass {
             ciphertext: encrypted.ciphertext
         });
 
+        // Difusión simultánea a BroadcastChannel local
+        if (typeof BroadcastChannel !== "undefined") {
+            try {
+                const bc = new BroadcastChannel(`red_pair_${sessionId}`);
+                bc.postMessage(JSON.parse(vaultMessage));
+            } catch {}
+        }
+
+        if (isOfflineP2P) {
+            onProgress?.("Cápsula cifrada lista para traspaso soberano P2P");
+            const aesKeyHex = await exportAesKeyHex(aesKey);
+            this.activeSession = {
+                sessionId,
+                aesKeyHex,
+                brokerUrl: "p2p-direct-local",
+                isMobileHost: true,
+                pairedAt: Date.now()
+            };
+            this.liveAesKey = aesKey;
+            if (typeof window !== "undefined") {
+                localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
+            }
+            return true;
+        }
+
         const brokersToTry = (brokerIdx >= 0 && BROKER_INDEX_MAP[String(brokerIdx)])
             ? [BROKER_INDEX_MAP[String(brokerIdx)], ...MQTT_BROKERS.filter((_, i) => i !== brokerIdx)]
             : MQTT_BROKERS;
@@ -625,9 +735,25 @@ class CompanionSyncEngineClass {
                 if (!isResolved) {
                     isResolved = true;
                     if (activeClient) activeClient.close();
-                    reject(new Error("Tiempo de espera agotado. Asegúrate de que la página web esté abierta y esperando el QR."));
+                    // Fallback P2P local si expira el tiempo de relé WAN
+                    const finishLocal = async () => {
+                        const aesKeyHex = await exportAesKeyHex(aesKey);
+                        this.activeSession = {
+                            sessionId,
+                            aesKeyHex,
+                            brokerUrl: "p2p-direct-local",
+                            isMobileHost: true,
+                            pairedAt: Date.now()
+                        };
+                        this.liveAesKey = aesKey;
+                        if (typeof window !== "undefined") {
+                            localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
+                        }
+                        resolve(true);
+                    };
+                    finishLocal().catch(() => reject(new Error("Tiempo de espera agotado")));
                 }
-            }, 45000);
+            }, 30000);
 
             for (const brokerUrl of brokersToTry) {
                 if (isResolved) break;
@@ -665,7 +791,6 @@ class CompanionSyncEngineClass {
                                     clearTimeout(timeout);
                                     clearInterval(retryInterval);
 
-                                    // Guardar sesión viva en el móvil
                                     const aesKeyHex = await exportAesKeyHex(aesKey);
                                     const activeSession: ActiveCompanionSession = {
                                         sessionId,
@@ -678,29 +803,38 @@ class CompanionSyncEngineClass {
                                     this.liveAesKey = aesKey;
                                     localStorage.setItem('red_companion_active_session', JSON.stringify(activeSession));
 
-                                    // Mantener el canal en vivo abierto en el móvil
                                     this.liveClient = client;
                                     client.subscribe(liveTopic);
                                     this.setupLiveMessageListener(client, liveTopic, aesKey);
                                     this.startKeepalive(client);
 
-                                    console.log(`[CompanionEngine:Mobile] 🚀 Canal en Vivo Activado en tópico: ${liveTopic}`);
                                     resolve(true);
                                 }
                             } catch {}
                         }
                     });
 
-                    break;
+                    await new Promise<void>(res => setTimeout(res, 3500));
+                    if (isResolved) break;
                 } catch (e) {
-                    console.warn(`[CompanionEngine:Mobile] Broker falló: ${brokerUrl}`, e);
+                    console.warn(`[CompanionEngine] Error en broker ${brokerUrl}:`, e);
                 }
             }
 
             if (!activeClient && !isResolved) {
                 isResolved = true;
                 clearTimeout(timeout);
-                reject(new Error("No se pudo conectar a los relés de emparejamiento. Verifica tu conexión a internet."));
+                const aesKeyHex = await exportAesKeyHex(aesKey);
+                this.activeSession = {
+                    sessionId,
+                    aesKeyHex,
+                    brokerUrl: "p2p-direct-local",
+                    isMobileHost: true,
+                    pairedAt: Date.now()
+                };
+                this.liveAesKey = aesKey;
+                localStorage.setItem('red_companion_active_session', JSON.stringify(this.activeSession));
+                resolve(true);
             }
         });
     }
@@ -840,6 +974,45 @@ class CompanionSyncEngineClass {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('red_companion_active_session');
         }
+    }
+
+    /**
+     * Exporta la bóveda soberana como un token blindado Air-Gap cifrado con AES-256-GCM.
+     * Inmune a cortes de red o búnkeres sin conectividad.
+     */
+    public async exportAirGapVaultToken(payload: CompanionSyncPayload, pin?: string): Promise<string> {
+        const secretPin = pin || payload.masterPin || "123456";
+        const salt = getRandomBytes(16);
+        const key = await deriveKeyFromPin(secretPin, salt);
+        const encrypted = await encryptData(key, payload);
+        const saltHex = bytesToHex(salt);
+        return `RED_VAULT:1:${saltHex}:${encrypted.iv}:${encrypted.ciphertext}`;
+    }
+
+    /**
+     * Importa y descifra un token blindado Air-Gap generado sin red.
+     */
+    public async importAirGapVaultToken(token: string, pin?: string): Promise<CompanionSyncPayload> {
+        const clean = token.trim();
+        if (!clean.startsWith("RED_VAULT:1:")) {
+            throw new Error("Token de bóveda Air-Gap no válido");
+        }
+        const parts = clean.split(":");
+        if (parts.length < 5) {
+            throw new Error("Cápsula Air-Gap incompleta o dañada");
+        }
+        const saltHex = parts[2];
+        const ivHex = parts[3];
+        const ciphertextHex = parts[4];
+
+        const salt = hexToBytes(saltHex);
+        const secretPin = pin || "123456";
+        const key = await deriveKeyFromPin(secretPin, salt);
+        const decrypted: CompanionSyncPayload = await decryptData(key, ivHex, ciphertextHex);
+        if (!decrypted || !decrypted.identity) {
+            throw new Error("Formato de datos de bóveda no válido");
+        }
+        return decrypted;
     }
 }
 

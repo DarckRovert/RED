@@ -31,6 +31,12 @@ impl AICopilotEngine {
         }
     }
 
+    /// Proveedor global seguro para early-boot sin requerir ApiState completo
+    pub fn global() -> Arc<Self> {
+        static ENGINE: std::sync::OnceLock<Arc<AICopilotEngine>> = std::sync::OnceLock::new();
+        ENGINE.get_or_init(|| Arc::new(AICopilotEngine::new())).clone()
+    }
+
     /// Método asíncrono para que no bloquee el event loop de Tokio (P2P Mesh Network)
     pub async fn query_async(&self, req: CopilotQueryRequest) -> CopilotResponse {
         let state_clone = self.state.clone();
@@ -65,24 +71,18 @@ impl AICopilotEngine {
         let model_name = req.model_id.unwrap_or_else(|| "Desconocido".to_string());
         let model_path = req.model_path.unwrap_or_default();
 
-        if model_path.is_empty() {
+        let clean_path = if model_path.starts_with("file://") {
+            &model_path[7..]
+        } else {
+            &model_path
+        };
+        let path = Path::new(clean_path);
+        if clean_path.is_empty() || !path.exists() {
             return CopilotResponse {
-                answer: "⚠️ [Error de Sistema de Archivos]: No se proporcionó la ruta del modelo GGUF. Por favor descarga los pesos del modelo en los ajustes de configuración de Gravity AI para iniciar la inferencia local.".to_string(),
-                topic_category: "Error de Configuración".to_string(),
-                source: "Rust Backend".to_string(),
-                model_used: "None".to_string(),
-                execution_time_ms: start.elapsed().as_millis() as u64,
-            };
-        }
-
-        let path = Path::new(&model_path);
-        if !path.exists() {
-            let msg = format!("⚠️ [Error de Sistema de Archivos]: No se encontró el archivo GGUF en la ruta local: {}", model_path);
-            return CopilotResponse {
-                answer: msg,
-                topic_category: "Error de I/O".to_string(),
-                source: "Sistema de Archivos Rust".to_string(),
-                model_used: model_name,
+                answer: "ℹ️ [Nodo RED Desktop]: No se detectó ningún archivo de modelo neural GGUF en el almacenamiento del sistema. Por favor descarga los pesos del modelo en la pestaña 'Modelos Locales' para activar la inferencia offline.".to_string(),
+                topic_category: "Configuración de Modelo".to_string(),
+                source: "RED Sovereign Desktop Node (Rust)".to_string(),
+                model_used: if model_name.is_empty() || model_name == "Desconocido" { "red-tactical".to_string() } else { model_name },
                 execution_time_ms: start.elapsed().as_millis() as u64,
             };
         }

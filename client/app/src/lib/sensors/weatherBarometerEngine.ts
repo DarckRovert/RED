@@ -305,3 +305,27 @@ function calculateZambretti(hpa: number, deltaP: number): { code: string; text: 
     return { code: 'Z-S4', text: 'Tiempo inestable estacionario con nubosidad baja.' };
   }
 }
+
+/**
+ * Calibrates barometric pressure to standard Sea-Level (QNH datum)
+ * using the ICAO standard atmosphere barometric hypsometric formula.
+ */
+export function calculateQnhSeaLevelPressure(
+  stationPressureHpa: number,
+  elevationMeters: number,
+  temperatureC: number = 15
+): number {
+  if (!isFinite(stationPressureHpa) || stationPressureHpa < 500 || stationPressureHpa > 1150) {
+    return 1013.25;
+  }
+  if (!isFinite(elevationMeters) || elevationMeters < -500 || elevationMeters > 9000) {
+    return Math.round(stationPressureHpa * 10) / 10;
+  }
+  const safeTemp = (typeof temperatureC === 'number' && isFinite(temperatureC)) ? temperatureC : 15;
+  const lapseRate = 0.0065; // K/m
+  const tKelvin = safeTemp + 273.15;
+  const factor = 1 - (lapseRate * elevationMeters) / (tKelvin + lapseRate * elevationMeters);
+  if (factor <= 0) return Math.round(stationPressureHpa * 10) / 10;
+  const seaLevel = stationPressureHpa * Math.pow(factor, -5.257);
+  return Math.round((isFinite(seaLevel) ? seaLevel : stationPressureHpa) * 10) / 10;
+}

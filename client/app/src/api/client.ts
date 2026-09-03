@@ -4,7 +4,7 @@ import {
     IdentityResponse, StatusResponse, ConversationItem, ContactItem,
     GroupItem, MessageItem, DmsConfig, BlockItem, ValidatorItem, ConsensusStatus
 } from './types';
-import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex } from './core';
+import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, STORAGE_KEYS } from './core';
 import { PeerItem, RustLogEntry, SystemHealthResponse } from './types';
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher } from './economy';
 import { getRfMetrics, triggerChannelHop, setRfFecMode } from './sensors';
@@ -1396,13 +1396,28 @@ export class RedAPIClient {
 
     async getDmsConfig(): Promise<any> {
         return fetchWithFallback('/api/settings/dms', undefined, async () => {
-            return getStored<any>('red_dms_config', {
+            const now = Math.floor(Date.now() / 1000);
+            const cfg = getStored<any>(STORAGE_KEYS.DMS_CONFIG, {
                 enabled: false,
                 trigger_hours: 72,
                 wipe_messages: true,
                 wipe_identity: false,
                 dead_message: '',
+                last_active_timestamp: now,
             });
+            const lastActive = (typeof cfg.last_active_timestamp === 'number' && isFinite(cfg.last_active_timestamp))
+                ? cfg.last_active_timestamp
+                : now;
+            const triggerHours = (typeof cfg.trigger_hours === 'number' && isFinite(cfg.trigger_hours) && cfg.trigger_hours > 0)
+                ? cfg.trigger_hours
+                : 72;
+            const elapsed = Math.max(0, now - lastActive);
+            const totalSec = triggerHours * 3600;
+            const secondsRemaining = Math.max(0, totalSec - elapsed);
+            return {
+                ...cfg,
+                seconds_remaining: secondsRemaining,
+            };
         });
     }
 
@@ -1412,7 +1427,16 @@ export class RedAPIClient {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config),
         }, async () => {
-            setStored('red_dms_config', config);
+            const now = Math.floor(Date.now() / 1000);
+            const existing = getStored<any>(STORAGE_KEYS.DMS_CONFIG, {});
+            const updated = {
+                ...existing,
+                ...config,
+                last_active_timestamp: (typeof config.last_active_timestamp === 'number' && isFinite(config.last_active_timestamp))
+                    ? config.last_active_timestamp
+                    : (existing.last_active_timestamp || now),
+            };
+            setStored(STORAGE_KEYS.DMS_CONFIG, updated);
         });
     }
 

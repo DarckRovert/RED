@@ -4,3 +4,4 @@ export * from './StegoEngine';
 export * from './ShamirSecretSharingEngine';
 export * from './MeshProofOfWork';
 export * from './BiometricLockEngine';
+export * from './ZeroKnowledgeBarterEngine';

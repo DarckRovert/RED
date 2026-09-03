@@ -51,6 +51,13 @@
     <uses-feature android:name="android.hardware.biometrics.iris" android:required="false" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
+    <!-- Package visibility queries for Android 11+ (API 30+) speech recognition service -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

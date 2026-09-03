@@ -158,6 +158,10 @@ export class PedestrianDeadReckoningEngine {
         this.notify();
     }
 
+    public reset() {
+        this.resetPdr();
+    }
+
     /**
      * Registra un paso y actualiza el vector de desplazamiento inercial
      */

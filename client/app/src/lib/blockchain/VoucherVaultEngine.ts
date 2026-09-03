@@ -116,6 +116,10 @@ export class VoucherVaultEngine {
         validityHours = 72,
         recipientDid?: string
     ): Promise<SovereignVoucher> {
+        if (typeof amount !== 'number' || !isFinite(amount) || amount <= 0) {
+            throw new Error('El monto del cupón debe ser un número positivo y finito.');
+        }
+
         const now = Date.now();
         const expiresAt = now + (validityHours * 3600 * 1000);
         
@@ -197,6 +201,14 @@ export class VoucherVaultEngine {
      * Valida la autenticidad e integridad criptográfica de un cupón recibido
      */
     public async verifyVoucher(voucher: SovereignVoucher): Promise<{ valid: boolean; reason?: string }> {
+        if (!voucher || typeof voucher !== 'object') {
+            return { valid: false, reason: 'Objeto de cupón inválido o nulo.' };
+        }
+
+        if (typeof voucher.amount !== 'number' || !isFinite(voucher.amount) || voucher.amount <= 0) {
+            return { valid: false, reason: 'El monto del cupón es inválido o contiene un valor no finito.' };
+        }
+
         const now = Date.now();
         if (now > voucher.expiresAt) {
             return { valid: false, reason: 'El cupón ha expirado.' };
@@ -294,6 +306,63 @@ export class VoucherVaultEngine {
 
     public isNullifierSpent(nullifierHash: string): boolean {
         return this.spentNullifiers.has(nullifierHash);
+    }
+
+    /**
+     * Serializa un cupón soberano para intercambio visual por código QR
+     */
+    public exportVoucherToQrString(voucher: SovereignVoucher): string {
+        const payload = [
+            'VOUCHER',
+            '1',
+            voucher.id,
+            voucher.issuerDid,
+            voucher.assetType,
+            voucher.amount.toString(),
+            voucher.expiresAt.toString(),
+            voucher.nullifierHash,
+            voucher.merkleRoot,
+            voucher.signature,
+            encodeURIComponent(voucher.description || 'Cupón Táctico'),
+            voucher.recipientDid || ''
+        ].join(':');
+        return payload;
+    }
+
+    /**
+     * Parsea y reconstruye un cupón soberano a partir de una cadena QR
+     */
+    public parseVoucherFromQrString(qrString: string): SovereignVoucher | null {
+        if (!qrString || typeof qrString !== 'string') return null;
+        const trimmed = qrString.trim();
+        if (!trimmed.startsWith('VOUCHER:1:')) return null;
+
+        const parts = trimmed.split(':');
+        if (parts.length < 10) return null;
+
+        const [
+            , , id, issuerDid, assetType, amountStr, expiresAtStr, nullifierHash, merkleRoot, signature, descEncoded, recipientDid
+        ] = parts;
+
+        const amount = parseFloat(amountStr);
+        const expiresAt = parseInt(expiresAtStr, 10);
+
+        if (!isFinite(amount) || amount <= 0 || !isFinite(expiresAt)) return null;
+
+        return {
+            id,
+            issuerDid,
+            assetType: assetType as VoucherAssetType,
+            amount,
+            expiresAt,
+            nullifierHash,
+            merkleRoot,
+            signature,
+            description: descEncoded ? decodeURIComponent(descEncoded) : 'Cupón Táctico',
+            recipientDid: recipientDid || undefined,
+            issuedAt: Date.now(),
+            redeemed: false
+        };
     }
 
     public destroy(): void {

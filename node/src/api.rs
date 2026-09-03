@@ -89,8 +89,20 @@ async fn verify_session_token(
     next: axum::middleware::Next,
 ) -> Result<Response, StatusCode> {
     let path = req.uri().path().to_string();
-    // Endpoints públicos: status y SSE de health
-    let public = ["/api/status", "/api/events", "/local-signal", "/", "/app.css", "/app.js"];
+    // Endpoints públicos: status, SSE de health, y endpoints estándar de IA soberana
+    let public = [
+        "/api/status",
+        "/api/events",
+        "/local-signal",
+        "/",
+        "/app.css",
+        "/app.js",
+        "/api/ai/status",
+        "/api/tags",
+        "/v1/models",
+        "/v1/chat/completions",
+        "/api/generate",
+    ];
     if public.iter().any(|p| path == *p) {
         return Ok(next.run(req).await);
     }
@@ -468,7 +480,9 @@ pub fn build_router(state: ApiState) -> Router {
             get(handle_get_profile).put(handle_set_profile),
         )
         .route("/api/settings/burner", post(handle_set_burner_mode))
-        .route("/api/settings/dms", post(handle_set_dms))
+        .route("/api/settings/dms", get(handle_get_dms).post(handle_set_dms))
+        .route("/api/settings/dms/ping", post(handle_ping_dms))
+        .route("/api/settings/dms/panic_wipe", post(handle_panic_wipe))
         // C1: LoRa config — persists serial port + baud so LoraBridge picks it up on restart
         .route("/api/settings/lora", post(handle_set_lora_config))
         // GAP-06: Local IP for NetworkPanel
@@ -535,7 +549,12 @@ pub fn build_router(state: ApiState) -> Router {
             "/api/battery/optimize",
             post(handle_update_battery_optimize),
         )
-        // ── v24.0: AI Copilot + Summarizer + Translator ───────────────────────
+        // ── v24.0: AI Copilot + Summarizer + Translator + Sovereign Endpoints ───
+        .route("/api/ai/status", get(handle_ai_status).post(handle_ai_status))
+        .route("/api/tags", get(handle_ollama_tags))
+        .route("/v1/models", get(handle_openai_models))
+        .route("/v1/chat/completions", post(handle_openai_chat_completions))
+        .route("/api/generate", post(handle_ollama_generate))
         .route("/api/ai/copilot", post(handle_ai_copilot_query))
         .route("/api/ai/summarize", post(handle_ai_summarize_channel))
         .route("/api/ai/translate", post(handle_ai_translate_text))
@@ -1436,8 +1455,11 @@ async fn handle_set_dms(
     State(state): State<ApiState>,
     Json(req): Json<DmsRequest>,
 ) -> impl IntoResponse {
-    // GAP-10 FIX: Actually persist to the Rust node's encrypted storage
-    // via the set_dms_config() method that already exists in core/src/network/node.rs
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
     let mut node = state.node.lock().await;
     node.set_dms_config(
         req.enabled,
@@ -1448,11 +1470,76 @@ async fn handle_set_dms(
     )
     .await;
 
+    // Update dms_last_active when configuring so countdown starts from now
+    {
+        let storage_arc = node.get_storage();
+        let mut s = storage_arc.lock().await;
+        let _ = s.set_config("dms_last_active", now.to_string());
+    }
+
     tracing::info!(
         "[API] Dead Man's Switch persisted: enabled={}, trigger_hours={}, wipe_messages={}, wipe_identity={}",
         req.enabled, req.trigger_hours, req.wipe_messages, req.wipe_identity
     );
     (StatusCode::OK, Json(serde_json::json!({"ok": true})))
+}
+
+async fn handle_get_dms(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let enabled = node.dms_enabled();
+    let trigger_hours = node.dms_trigger_hours();
+    let wipe_messages = node.dms_wipe_messages();
+    let wipe_identity = node.dms_wipe_identity();
+    let dead_message = node.dms_dead_message().unwrap_or_default();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let storage_arc = node.get_storage();
+    let s = storage_arc.lock().await;
+    let last_active: u64 = s.get_config("dms_last_active")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(now);
+
+    let elapsed = now.saturating_sub(last_active);
+    let trigger_secs = trigger_hours * 3600;
+    let seconds_remaining = if enabled { (trigger_secs as i64) - (elapsed as i64) } else { trigger_secs as i64 };
+    let is_triggered = enabled && seconds_remaining <= 0;
+
+    Json(serde_json::json!({
+        "enabled": enabled,
+        "trigger_hours": trigger_hours,
+        "wipe_messages": wipe_messages,
+        "wipe_identity": wipe_identity,
+        "dead_message": dead_message,
+        "last_active_timestamp": last_active,
+        "seconds_remaining": seconds_remaining.max(0),
+        "is_triggered": is_triggered
+    }))
+}
+
+async fn handle_ping_dms(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    let _ = s.set_config("dms_last_active", now.to_string());
+    tracing::info!("[API] DMS Check-in: operator presence recorded at {}", now);
+    (StatusCode::OK, Json(serde_json::json!({"success": true, "last_active_timestamp": now})))
+}
+
+async fn handle_panic_wipe(State(state): State<ApiState>) -> impl IntoResponse {
+    let node = state.node.lock().await;
+    let storage_arc = node.get_storage();
+    let mut s = storage_arc.lock().await;
+    let _ = s.self_destruct();
+    tracing::warn!("[API] 🚨 PANIC WIPE EXECUTED: Storage self-destructed");
+    (StatusCode::OK, Json(serde_json::json!({"success": true, "wiped": true})))
 }
 
 // ─── Blockchain Explorer Omega Protocol ───────────────────────────────────────
@@ -2893,6 +2980,139 @@ async fn handle_update_battery_optimize(
 }
 
 // ── v24.0: Handlers AI Copilot, Summarizer & Translator ───────────────────────
+
+async fn handle_ai_status() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "status": "ok",
+        "service": "RED Desktop Node AI",
+        "version": env!("CARGO_PKG_VERSION"),
+        "engine": "Candle GGUF / Offline Tactical AI",
+        "model": "red-tactical",
+        "capabilities": ["copilot", "chat_completions", "emergency_triage"]
+    }))).into_response()
+}
+
+async fn handle_ollama_tags() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "models": [
+            {
+                "name": "red-tactical",
+                "model": "red-tactical:latest",
+                "modified_at": "2026-09-02T00:00:00Z",
+                "size": 420000000,
+                "digest": "sha256:rednode000000000000000000000000000000000000000000000000000000000",
+                "details": {
+                    "parent_model": "",
+                    "format": "gguf",
+                    "family": "qwen2",
+                    "parameter_size": "0.5B",
+                    "quantization_level": "Q4_K_M"
+                }
+            }
+        ]
+    }))).into_response()
+}
+
+async fn handle_openai_models() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({
+        "object": "list",
+        "data": [
+            {
+                "id": "red-tactical",
+                "object": "model",
+                "created": 1700000000,
+                "owned_by": "red-node"
+            }
+        ]
+    }))).into_response()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OllamaGenerateRequest {
+    pub model: Option<String>,
+    pub prompt: String,
+    pub stream: Option<bool>,
+}
+
+async fn handle_ollama_generate(
+    State(state): State<ApiState>,
+    Json(req): Json<OllamaGenerateRequest>,
+) -> impl IntoResponse {
+    let copilot_req = crate::ai_copilot::CopilotQueryRequest {
+        prompt: req.prompt,
+        context: None,
+        model_path: None,
+        model_id: req.model,
+    };
+    let res = state.ai_copilot.query_async(copilot_req).await;
+    (StatusCode::OK, Json(serde_json::json!({
+        "model": "red-tactical",
+        "created_at": chrono::Utc::now().to_rfc3339(),
+        "response": res.answer,
+        "done": true
+    }))).into_response()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAIChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OpenAIChatCompletionRequest {
+    pub model: Option<String>,
+    pub messages: Vec<OpenAIChatMessage>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<usize>,
+}
+
+async fn handle_openai_chat_completions(
+    State(state): State<ApiState>,
+    Json(req): Json<OpenAIChatCompletionRequest>,
+) -> impl IntoResponse {
+    let last_user_msg = req.messages.iter().rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.clone())
+        .unwrap_or_else(|| "ping".to_string());
+    
+    let system_context = req.messages.iter()
+        .find(|m| m.role == "system")
+        .map(|m| m.content.clone());
+
+    let copilot_req = crate::ai_copilot::CopilotQueryRequest {
+        prompt: last_user_msg,
+        context: system_context,
+        model_path: None,
+        model_id: req.model.clone(),
+    };
+    let res = state.ai_copilot.query_async(copilot_req).await;
+    
+    let completion_id = format!("chatcmpl-{}", red_core::protocol::MessageId::generate().to_hex());
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+
+    (StatusCode::OK, Json(serde_json::json!({
+        "id": completion_id,
+        "object": "chat.completion",
+        "created": now,
+        "model": req.model.unwrap_or_else(|| "red-tactical".to_string()),
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": res.answer
+                },
+                "finish_reason": "stop"
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 20,
+            "total_tokens": 30
+        }
+    }))).into_response()
+}
 
 /// POST /api/ai/copilot — Consulta al Copiloto / Asistente Táctico de Emergencia Offline
 async fn handle_ai_copilot_query(

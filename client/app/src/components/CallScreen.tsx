@@ -137,6 +137,9 @@ export default function CallScreen() {
     });
 
     const peerRef = useRef<RTCPeerConnection | null>(null);
+    const dataChannelRef = useRef<RTCDataChannel | null>(null);
+    const [isDataChannelReady, setIsDataChannelReady] = useState<boolean>(false);
+    const [isVocoderActive, setIsVocoderActive] = useState<boolean>(false);
     const localStreamRef = useRef<MediaStream | null>(null);
     // Persistent MediaStream reference (holds native WebRTC MediaStream to prevent decoder detachment)
     const remoteStreamRef = useRef<MediaStream | null>(null);
@@ -144,6 +147,78 @@ export default function CallScreen() {
     const processedSignalsRef = useRef<Set<string>>(new Set());
     const callStartTimeRef = useRef<number>(Date.now());
     const initializedRef = useRef<boolean>(false);
+
+    // ── SDP Bitrate Throttling — Tactical Voice (16 kbps Opus Mono con in-band FEC) ──
+    const applyTacticalSdpConstraints = (sdp: string): string => {
+        return sdp
+            .replace(
+                /a=fmtp:111 ([^\r\n]*)/g,
+                'a=fmtp:111 minptime=20;useinbandfec=1;maxaveragebitrate=16000;stereo=0;sprop-stereo=0'
+            )
+            .replace(
+                /m=audio (\d+) ([^\r\n]*)/g,
+                (match: string) => `${match}\r\nb=AS:20`
+            );
+    };
+
+    // ── Configuración de Canal de Datos RTCDataChannel Out-of-Band ─────────────
+    const setupDataChannel = (channel: RTCDataChannel) => {
+        dataChannelRef.current = channel;
+        channel.binaryType = "arraybuffer";
+
+        channel.onopen = () => {
+            console.log("[WebRTC Call] DataChannel táctico abierto (red-tactical-comms)");
+            setIsDataChannelReady(true);
+            try {
+                channel.send(JSON.stringify({
+                    type: "tactical-handshake",
+                    sender: identity?.nickname || "Operador",
+                    timestamp: Date.now()
+                }));
+            } catch {}
+        };
+
+        channel.onclose = () => {
+            console.log("[WebRTC Call] DataChannel táctico cerrado");
+            setIsDataChannelReady(false);
+            dataChannelRef.current = null;
+        };
+
+        channel.onerror = (e) => {
+            console.warn("[WebRTC Call] DataChannel táctico error:", e);
+        };
+
+        channel.onmessage = async (event) => {
+            if (typeof event.data === "string") {
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === "vocoder-toggle") {
+                        setIsVocoderActive(!!msg.enabled);
+                    }
+                } catch {}
+            } else if (event.data instanceof ArrayBuffer) {
+                try {
+                    const bytes = new Uint8Array(event.data);
+                    if (bytes.length > 0 && (bytes[0] === 0x56 || bytes[0] === 0x58)) {
+                        const { LowBitrateVocoder } = await import("../lib/audio/LowBitrateVocoder");
+                        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                        if (AudioContextClass) {
+                            if (!audioCtxRef.current) audioCtxRef.current = new AudioContextClass();
+                            const ctx = audioCtxRef.current;
+                            if (ctx.state === "suspended") await ctx.resume();
+                            const buffer = LowBitrateVocoder.createAudioBufferFromEncoded(ctx, bytes);
+                            const source = ctx.createBufferSource();
+                            source.buffer = buffer;
+                            source.connect(ctx.destination);
+                            source.start();
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[WebRTC Call] Error decodificando frame vocoder:", e);
+                }
+            }
+        };
+    };
 
     // Web Audio API Visualizer Refs
     const audioCtxRef = useRef<AudioContext | null>(null);
@@ -647,6 +722,11 @@ export default function CallScreen() {
                     }
                 };
 
+                // Receiver listens for incoming DataChannel
+                pc.ondatachannel = (event) => {
+                    setupDataChannel(event.channel);
+                };
+
                 // Determine if we have an incoming offer (Callee Mode)
                 const pendingOffer = activeCallOffer || incomingCall?.offer;
                 const incomingStartedAt = (incomingCall as any)?.startedAt || (pendingOffer as any)?.startedAt;
@@ -662,7 +742,9 @@ export default function CallScreen() {
                     // Flush any early received ICE candidates
                     await drainPendingCandidates(pc);
 
-                    const answer = await pc.createAnswer();
+                    const rawAnswer = await pc.createAnswer();
+                    const tacticalAnswerSdp = applyTacticalSdpConstraints(rawAnswer.sdp || "");
+                    const answer = new RTCSessionDescription({ type: rawAnswer.type, sdp: tacticalAnswerSdp });
                     await pc.setLocalDescription(answer);
 
                     // Wait up to 600ms for candidate gathering before sending primary SDP
@@ -684,10 +766,24 @@ export default function CallScreen() {
                     setStatus("Llamando (Esperando respuesta E2E)...");
                     const sessionStartTime = Date.now();
                     callStartTimeRef.current = sessionStartTime;
-                    const offer = await pc.createOffer({
+
+                    // Caller initiates out-of-band RTCDataChannel
+                    try {
+                        const dc = pc.createDataChannel("red-tactical-comms", {
+                            ordered: true,
+                            maxRetransmits: 3
+                        });
+                        setupDataChannel(dc);
+                    } catch (dcErr) {
+                        console.warn("[WebRTC Call] DataChannel create error:", dcErr);
+                    }
+
+                    const rawOffer = await pc.createOffer({
                         offerToReceiveAudio: true,
                         offerToReceiveVideo: !requestedAudioOnly
                     });
+                    const tacticalOfferSdp = applyTacticalSdpConstraints(rawOffer.sdp || "");
+                    const offer = new RTCSessionDescription({ type: rawOffer.type, sdp: tacticalOfferSdp });
                     await pc.setLocalDescription(offer);
 
                     // Wait up to 600ms for candidate gathering before sending primary SDP
@@ -846,6 +942,11 @@ export default function CallScreen() {
         if (peerRef.current) {
             try { peerRef.current.close(); } catch {}
             peerRef.current = null;
+        }
+        if (dataChannelRef.current) {
+            try { dataChannelRef.current.close(); } catch {}
+            dataChannelRef.current = null;
+            setIsDataChannelReady(false);
         }
         if (localStreamRef.current) {
             localStreamRef.current.getTracks().forEach(t => {
@@ -1014,6 +1115,21 @@ export default function CallScreen() {
         }
     };
 
+    // ── Controls: Toggle Tactical Low-Bitrate Vocoder Mode ──────────────────
+    const toggleVocoderMode = () => {
+        const nextState = !isVocoderActive;
+        setIsVocoderActive(nextState);
+        if (dataChannelRef.current && dataChannelRef.current.readyState === "open") {
+            try {
+                dataChannelRef.current.send(JSON.stringify({
+                    type: "vocoder-toggle",
+                    enabled: nextState
+                }));
+            } catch {}
+        }
+        toast.info(nextState ? "📻 Modo Vocoder 16 kbps FEC activado" : "🎙️ Audio estándar reactivado");
+    };
+
     // ── Controls: Toggle Mirror Mode ────────────────────────────────────────
     const toggleMirror = () => {
         setIsMirror(m => !m);
@@ -1178,6 +1294,9 @@ export default function CallScreen() {
                 isMirror={isMirror}
                 toggleMirror={toggleMirror}
                 onOpenSafetyModal={() => setIsSafetyModalOpen(true)}
+                isDataChannelReady={isDataChannelReady}
+                isVocoderActive={isVocoderActive}
+                toggleVocoderMode={toggleVocoderMode}
             />
 
             {/* Live Telemetry Modal / Overlay */}

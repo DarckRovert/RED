@@ -21,6 +21,9 @@ interface CallHeaderProps {
     isMirror?: boolean;
     toggleMirror?: () => void;
     onOpenSafetyModal?: () => void;
+    isDataChannelReady?: boolean;
+    isVocoderActive?: boolean;
+    toggleVocoderMode?: () => void;
 }
 
 export const CallHeader: React.FC<CallHeaderProps> = ({
@@ -42,6 +45,9 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
     isMirror = true,
     toggleMirror,
     onOpenSafetyModal,
+    isDataChannelReady = false,
+    isVocoderActive = false,
+    toggleVocoderMode,
 }) => {
     const { t } = useTranslation();
     const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
@@ -63,6 +69,16 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                     <span style={{ color: "var(--accent-emerald)", fontSize: "0.78rem", fontWeight: 900, letterSpacing: "0.5px", textShadow: "0 0 8px rgba(0,230,118,0.4)" }}>
                         🔒 {isAudioOnly ? (t.calls_extended?.audio_only || "VOZ E2E") : (t.calls_extended?.video_call || "HD VIDEO E2E")}
                     </span>
+                    {isDataChannelReady && (
+                        <span style={{ color: "var(--accent-cyan)", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }} title="Canal de Datos P2P Activo (<5ms)">
+                            · ⚡ DC
+                        </span>
+                    )}
+                    {isVocoderActive && (
+                        <span style={{ color: "#FF9100", fontSize: "0.70rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 800 }} title="Códec Vocoder Táctico 16 kbps FEC Activo">
+                            · 🎙️ VOC-16K
+                        </span>
+                    )}
                     {callActive && (
                         <span style={{ color: "#FFFFFF", fontSize: "0.86rem", fontFamily: "JetBrains Mono, monospace", fontWeight: 900 }}>
                             · {formatDuration(callDuration)}
@@ -265,7 +281,28 @@ export const CallHeader: React.FC<CallHeaderProps> = ({
                         </div>
                     )}
 
-                    {/* 5. Safety Number / Verificación Criptográfica */}
+                    {/* 5. Vocoder Táctico de Bajo Bitrate */}
+                    {toggleVocoderMode && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: "0.76rem", color: "var(--text-secondary)", fontWeight: 700 }}>
+                                📻 Vocoder Táctico (16 kbps):
+                            </span>
+                            <button
+                                onClick={toggleVocoderMode}
+                                className="btn-tactical-secondary"
+                                style={{
+                                    padding: "4px 10px",
+                                    fontSize: "0.72rem",
+                                    color: isVocoderActive ? "#FF9100" : "var(--text-muted)",
+                                    borderColor: isVocoderActive ? "#FF9100" : "rgba(255,255,255,0.15)"
+                                }}
+                            >
+                                {isVocoderActive ? "Activo (16k)" : "Estándar"}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* 6. Safety Number / Verificación Criptográfica */}
                     {onOpenSafetyModal && (
                         <button
                             onClick={() => {

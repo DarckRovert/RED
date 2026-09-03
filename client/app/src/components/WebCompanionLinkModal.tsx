@@ -21,6 +21,8 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     const [mode, setMode] = useState<ModalMode>("receive_qr");
     const [statusMessage, setStatusMessage] = useState<string>("Iniciando protocolo de sincronización P2P…");
     const [manualCode, setManualCode] = useState<string>("");
+    const [airGapExportedToken, setAirGapExportedToken] = useState<string | null>(null);
+    const [isExportingAirGap, setIsExportingAirGap] = useState(false);
 
     // QR Session state (for Web/PC receiver)
     const [pairingSession, setPairingSession] = useState<PairingSession | null>(null);
@@ -215,11 +217,36 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         await stopCamera();
         const rawCode = code.trim();
 
-        if (!rawCode.startsWith("RED_PAIR:1:")) {
+        if (!rawCode.startsWith("RED_PAIR:1:") && !rawCode.startsWith("RED_PAIR:2:") && !rawCode.startsWith("RED_VAULT:1:")) {
             toast.error("El código no es un token de vinculación RED válido.");
             setMode("error");
             setStatusMessage("Código no reconocido");
             return;
+        }
+
+        // Si es una cápsula Air-Gap que se importa directamente
+        if (rawCode.startsWith("RED_VAULT:1:")) {
+            setMode("receiving");
+            setStatusMessage("Descifrando cápsula soberana Air-Gap con AES-256-GCM...");
+            try {
+                let masterPin = localStorage.getItem("master_pin") || "123456";
+                const payload = await companionSyncEngine.importAirGapVaultToken(rawCode, masterPin);
+                const ok = await restoreCompanionVault(payload);
+                if (ok) {
+                    if (fetchData) await fetchData();
+                    toast.success("✅ ¡Bóveda Air-Gap restaurada exitosamente!");
+                    setMode("success");
+                    setStatusMessage("Sesión vinculada por cápsula Air-Gap.");
+                    TacticalAudioEngine.playMessageSent();
+                    setTimeout(() => onClose(), 1500);
+                    return;
+                }
+            } catch (airErr: any) {
+                toast.error("Error al descifrar cápsula Air-Gap");
+                setMode("error");
+                setStatusMessage(airErr?.message || "Fallo en cápsula Air-Gap");
+                return;
+            }
         }
 
         setMode("encrypting");
@@ -237,9 +264,6 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 }
             } catch {}
 
-            // Cap both arrays to prevent exceeding the 256 KB MQTT broker payload limit.
-            // HiveMQ/EMQX drop the WebSocket connection silently on oversized frames.
-            // Subsequent LIVE_CONTACT_UPDATE events handle incremental synchronization.
             const convsToSync = Array.isArray(conversations) ? conversations.slice(0, 20) : [];
             const contactsToSync = Array.isArray(contacts) ? contacts.slice(0, 50) : [];
             const isPartialSync = (contacts?.length || 0) > 50 || (conversations?.length || 0) > 20;
@@ -259,7 +283,6 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 preferences: { is_partial: isPartialSync, total_contacts: contacts?.length || 0 }
             };
 
-
             await companionSyncEngine.transmitMobileVaultToWeb(
                 rawCode,
                 payload,
@@ -278,6 +301,45 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
             setMode("error");
             setStatusMessage(e?.message || "Error al transmitir bóveda");
             toast.error(e?.message || "Fallo en la vinculación");
+        }
+    };
+
+    const handleExportAirGapVault = async () => {
+        setIsExportingAirGap(true);
+        setStatusMessage("Generando cápsula soberana Air-Gap...");
+        try {
+            let masterPin = localStorage.getItem("master_pin") || "123456";
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
+                    if (res?.value) masterPin = res.value;
+                }
+            } catch {}
+
+            const payload: CompanionSyncPayload = {
+                version: 1,
+                timestamp: Date.now(),
+                identity: {
+                    identity_hash: identity?.identity_hash || "",
+                    short_id: identity?.short_id || "",
+                    public_key: identity?.public_key || identity?.identity_hash || "",
+                    nickname: identity?.nickname || "Operador RED"
+                },
+                masterPin,
+                contacts: Array.isArray(contacts) ? contacts.slice(0, 50) : [],
+                conversations: Array.isArray(conversations) ? conversations.slice(0, 20) : []
+            };
+
+            const token = await companionSyncEngine.exportAirGapVaultToken(payload, masterPin);
+            setAirGapExportedToken(token);
+            navigator.clipboard.writeText(token);
+            toast.success("🛡️ Cápsula Air-Gap generada y copiada al portapapeles");
+        } catch (e: any) {
+            toast.error("Error al generar cápsula: " + (e?.message || ""));
+        } finally {
+            setIsExportingAirGap(false);
         }
     };
 
@@ -458,14 +520,14 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                     </div>
                 )}
 
-                {/* ESTADO 2: ENTRADA MANUAL DE CÓDIGO */}
+                {/* ESTADO 2: ENTRADA MANUAL DE CÓDIGO Y AIR-GAP */}
                 {mode === "manual" && (
                     <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "12px" }}>
                         <label style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>
-                            Pega el token <code>RED_PAIR:1:...</code> generado en tu otro dispositivo:
+                            Pega el token <code>RED_PAIR:1:...</code>, <code>RED_PAIR:2:...</code> o la cápsula <code>RED_VAULT:1:...</code>:
                         </label>
                         <textarea
-                            placeholder="RED_PAIR:1:0:redpair_..."
+                            placeholder="RED_PAIR:... o RED_VAULT:1:..."
                             value={manualCode}
                             onChange={(e) => setManualCode(e.target.value)}
                             rows={3}
@@ -482,8 +544,31 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                             className="btn-tactical-primary"
                             style={{ width: "100%", padding: "12px", fontWeight: 800 }}
                         >
-                            ⚡ TRANSMITIR BÓVEDA AHORA
+                            ⚡ VINCULAR O IMPORTAR BÓVEDA
                         </button>
+
+                        <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "10px" }}>
+                            <button
+                                onClick={handleExportAirGapVault}
+                                disabled={isExportingAirGap}
+                                className="btn-tactical-secondary"
+                                style={{ width: "100%", padding: "10px", fontSize: "0.75rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                            >
+                                <span>🛡️</span>
+                                <span>{isExportingAirGap ? "Generando…" : "Generar Cápsula Air-Gap (Búnker / Sin Red)"}</span>
+                            </button>
+
+                            {airGapExportedToken && (
+                                <div style={{ marginTop: "10px", padding: "10px", borderRadius: "10px", background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.3)" }}>
+                                    <div style={{ fontSize: "0.7rem", color: "var(--accent-cyan)", fontWeight: 700, marginBottom: "4px" }}>
+                                        Cápsula Air-Gap Copiada:
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", fontFamily: "monospace", wordBreak: "break-all", color: "#ccc", maxHeight: "60px", overflowY: "auto" }}>
+                                        {airGapExportedToken}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 

@@ -45,29 +45,31 @@ export class AcousticSonarEngine {
     }
 
     public setAmbientTemperature(tempC: number): void {
-        if (!isNaN(tempC) && tempC >= -50 && tempC <= 70) {
+        if (typeof tempC === 'number' && isFinite(tempC) && tempC >= -50 && tempC <= 70) {
             this.ambientTempC = tempC;
         }
     }
 
     public setSalinityPpt(ppt: number): void {
-        if (!isNaN(ppt) && ppt >= 0 && ppt <= 45) {
+        if (typeof ppt === 'number' && isFinite(ppt) && ppt >= 0 && ppt <= 45) {
             this.salinityPpt = ppt;
         }
     }
 
     public getEffectiveSpeedOfSound(medium: SonarMediumType): number {
-        const T = this.ambientTempC;
+        const T = (typeof this.ambientTempC === 'number' && isFinite(this.ambientTempC)) ? this.ambientTempC : 20.0;
         if (medium === 'AIR_20C') {
-            // Ecuación acústica de Laplace para aire: c = 331.3 * sqrt(1 + T / 273.15)
-            return Math.round((331.3 * Math.sqrt(1 + T / 273.15)) * 10) / 10;
+            // Ecuación acústica de Laplace para aire: c = 331.3 * sqrt(max(0.01, 1 + T / 273.15))
+            const ratio = Math.max(0.01, 1 + T / 273.15);
+            return Math.round((331.3 * Math.sqrt(ratio)) * 10) / 10;
         }
         if (medium === 'WATER') {
             // Ecuación hidroacústica combinada de Bilaniuk-Wong y Mackenzie con corrección de salinidad
             const cBase = 1402.4 + 5.01 * T - 0.055 * (T * T) + 0.00022 * (T * T * T);
-            const salinityCorrection = 1.34 * this.salinityPpt;
+            const safeSalinity = (typeof this.salinityPpt === 'number' && isFinite(this.salinityPpt)) ? this.salinityPpt : 0;
+            const salinityCorrection = 1.34 * safeSalinity;
             const c = cBase + salinityCorrection;
-            return Math.round(c * 10) / 10;
+            return Math.round((isFinite(c) && c > 0 ? c : 1480.0) * 10) / 10;
         }
         return AcousticSonarEngine.SPEED_OF_SOUND[medium] || 343.0;
     }

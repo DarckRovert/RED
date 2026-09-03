@@ -86,6 +86,18 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     const [aiMenuOpen, setAiMenuOpen] = useState(false);
     const [isAiProcessing, setIsAiProcessing] = useState(false);
     const [isDictating, setIsDictating] = useState(false);
+    const baseTextBeforeDictationRef = useRef<string>("");
+    const finalAccumulatedRef = useRef<string>("");
+
+    useEffect(() => {
+        return () => {
+            import("../../lib/ai").then(({ TacticalSpeechEngine }) => {
+                if (TacticalSpeechEngine.isListening()) {
+                    TacticalSpeechEngine.stopListening();
+                }
+            }).catch(() => {});
+        };
+    }, []);
 
     const toggleDictation = async () => {
         const { TacticalSpeechEngine } = await import("../../lib/ai");
@@ -99,6 +111,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             setIsDictating(false);
             toast.info("Dictado finalizado");
         } else {
+            baseTextBeforeDictationRef.current = (textRef.current || "").trim();
+            finalAccumulatedRef.current = "";
+
             const ok = TacticalSpeechEngine.startListening({
                 lang: "es-ES",
                 onStart: () => {
@@ -106,13 +121,19 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     toast.info("🎙️ Escuchando dictado en vivo...");
                 },
                 onResult: (transcript, isFinal) => {
-                    if (transcript) {
-                        const base = (textRef.current || "").trim();
-                        const updated = base ? `${base} ${transcript}` : transcript;
-                        setText(updated);
-                    }
+                    if (!transcript) return;
+                    const base = baseTextBeforeDictationRef.current;
+
                     if (isFinal) {
-                        setIsDictating(false);
+                        const prevFinal = finalAccumulatedRef.current;
+                        finalAccumulatedRef.current = prevFinal ? `${prevFinal} ${transcript}` : transcript;
+                        const full = base ? `${base} ${finalAccumulatedRef.current}` : finalAccumulatedRef.current;
+                        setText(full);
+                    } else {
+                        const committed = finalAccumulatedRef.current;
+                        const prefix = (base && committed) ? `${base} ${committed}` : (base || committed);
+                        const full = prefix ? `${prefix} ${transcript}` : transcript;
+                        setText(full);
                     }
                 },
                 onError: (err: any) => {
@@ -475,6 +496,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
                                 {formatTimer(recordSec)}
                             </span>
+                            {/* Visualizador de audio animado en vivo */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "16px" }}>
+                                {[7, 14, 9, 16, 8, 13, 15, 6].map((h, idx) => (
+                                    <span
+                                        key={idx}
+                                        style={{
+                                            width: "3px",
+                                            height: `${h}px`,
+                                            borderRadius: "2px",
+                                            background: "#FF3355",
+                                            display: "inline-block",
+                                            animation: `pulse ${(0.35 + (idx % 4) * 0.15).toFixed(2)}s ease-in-out infinite alternate`,
+                                            boxShadow: "0 0 4px rgba(255, 51, 85, 0.4)"
+                                        }}
+                                    />
+                                ))}
+                            </div>
                             <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
                                 {isHandsFree ? "🔒 Manos libres activo" : "🎙️ Grabando audio P2P..."}
                             </span>
@@ -573,7 +611,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     }
                                 }}
                                 onKeyDown={handleKeyDown}
-                                placeholder={burnTimer ? `Burn message (${burnTimer}s)...` : t('chat.type_message')}
+                                placeholder={isDictating ? "🎙️ Escuchando dictado en vivo..." : (burnTimer ? `Burn message (${burnTimer}s)...` : t('chat.type_message'))}
                                 rows={1}
                                 style={{
                                     width: "100%",
@@ -819,9 +857,9 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                         flexShrink: 0,
                                         animation: isDictating ? "pulse 1s infinite alternate" : "none"
                                     }}
-                                    title="Dictar mensaje por voz"
+                                    title={isDictating ? "Detener dictado por voz" : "Dictar mensaje por voz"}
                                 >
-                                    🗣️
+                                    {isDictating ? "🔴" : "🗣️"}
                                 </button>
                                 <button
                                     onClick={startRecording}

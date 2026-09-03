@@ -33,8 +33,7 @@ export const SOVEREIGN_PRESETS: SovereignEndpointConfig[] = [
     { label: "🖥️ LM Studio (1234)", url: "http://127.0.0.1:1234/v1", modelName: "local-model" },
     { label: "🍋 Lemonade Server (8000)", url: "http://127.0.0.1:8000/v1", modelName: "default" },
     { label: "📦 LocalAI / vLLM (8080)", url: "http://127.0.0.1:8080/v1", modelName: "default" },
-    { label: "🤖 Jan.ai (1337)", url: "http://127.0.0.1:1337/v1", modelName: "default" },
-    { label: "🛡️ Nodo RED Nativo (7333)", url: "http://127.0.0.1:7333/api/ai", modelName: "red-tactical-qwen" }
+    { label: "🤖 Jan.ai (1337)", url: "http://127.0.0.1:1337/v1", modelName: "default" }
 ];
 
 export const SUPPORTED_MODELS: LocalModelMetaData[] = [
@@ -47,7 +46,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         hfModelId: 'onnx-community/Qwen2.5-0.5B-Instruct',
         downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf',
         fileName: 'qwen2.5-0.5b-instruct-q4_k_m.gguf',
-        tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/raw/main/tokenizer.json',
+        tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/main/tokenizer.json',
         tokenizerFileName: 'qwen2.5-0.5b-instruct-q4_k_m.json',
         recommendedMinRamMb: 600,
         isDownloaded: false,
@@ -62,7 +61,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         hfModelId: 'onnx-community/SmolLM2-360M-Instruct',
         downloadUrl: 'https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q4_K_M.gguf',
         fileName: 'SmolLM2-360M-Instruct-Q4_K_M.gguf',
-        tokenizerUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/raw/main/tokenizer.json',
+        tokenizerUrl: 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/resolve/main/tokenizer.json',
         tokenizerFileName: 'SmolLM2-360M-Instruct-Q4_K_M.json',
         recommendedMinRamMb: 500,
         isDownloaded: false,
@@ -77,7 +76,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         hfModelId: 'onnx-community/Qwen2.5-1.5B-Instruct',
         downloadUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf',
         fileName: 'qwen2.5-1.5b-instruct-q4_k_m.gguf',
-        tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/raw/main/tokenizer.json',
+        tokenizerUrl: 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct/resolve/main/tokenizer.json',
         tokenizerFileName: 'qwen2.5-1.5b-instruct-q4_k_m.json',
         recommendedMinRamMb: 1600,
         isDownloaded: false,
@@ -92,7 +91,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         hfModelId: 'onnx-community/Llama-3.2-1B-Instruct',
         downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf',
         fileName: 'Llama-3.2-1B-Instruct-Q4_K_M.gguf',
-        tokenizerUrl: 'https://huggingface.co/unsloth/Llama-3.2-1B-Instruct/raw/main/tokenizer.json',
+        tokenizerUrl: 'https://huggingface.co/unsloth/Llama-3.2-1B-Instruct/resolve/main/tokenizer.json',
         tokenizerFileName: 'Llama-3.2-1B-Instruct-Q4_K_M.json',
         recommendedMinRamMb: 1200,
         isDownloaded: false,
@@ -107,7 +106,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         hfModelId: 'onnx-community/gemma-2-2b-it',
         downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
         fileName: 'gemma-2-2b-it-Q4_K_M.gguf',
-        tokenizerUrl: 'https://huggingface.co/unsloth/gemma-2-2b-it/raw/main/tokenizer.json',
+        tokenizerUrl: 'https://huggingface.co/unsloth/gemma-2-2b-it/resolve/main/tokenizer.json',
         tokenizerFileName: 'gemma-2-2b-it-Q4_K_M.json',
         recommendedMinRamMb: 2500,
         isDownloaded: false,
@@ -122,7 +121,7 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         hfModelId: 'onnx-community/Phi-3-mini-4k-instruct',
         downloadUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct-gguf/resolve/main/Phi-3-mini-4k-instruct-q4.gguf',
         fileName: 'Phi-3-mini-4k-instruct-q4.gguf',
-        tokenizerUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/raw/main/tokenizer.json',
+        tokenizerUrl: 'https://huggingface.co/microsoft/Phi-3-mini-4k-instruct/resolve/main/tokenizer.json',
         tokenizerFileName: 'Phi-3-mini-4k-instruct-q4.json',
         recommendedMinRamMb: 3500,
         isDownloaded: false,
@@ -144,6 +143,16 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
         binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary);
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+    const binary = atob(base64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
 }
 
 class ModelManagerClass {
@@ -285,7 +294,7 @@ class ModelManagerClass {
         return { hasWebGpu, ramMb, cpuCores, recommendedModelId, reason };
     }
 
-    /** Checks persistent storage for installed models */
+    /** Checks persistent storage for installed models and audits their integrity */
     public async checkLocalModelsStatus(): Promise<LocalModelMetaData[]> {
         if (typeof window === 'undefined') return Array.from(this.models.values());
 
@@ -298,7 +307,9 @@ class ModelManagerClass {
                         directory: Directory.Data
                     });
 
-                    if (stat && stat.size > 10 * 1024 * 1024) {
+                    // Debe tener un tamaño creíble (mínimo 70% del tamaño esperado del modelo)
+                    const minExpectedBytes = Math.round(model.fileSizeMb * 1024 * 1024 * 0.7);
+                    if (stat && stat.size >= minExpectedBytes) {
                         const uri = await Filesystem.getUri({
                             path: filePath,
                             directory: Directory.Data
@@ -312,15 +323,17 @@ class ModelManagerClass {
                         
                         this.ensureTokenizerDownloaded(id).catch(() => {});
                         continue;
+                    } else if (stat && stat.size < minExpectedBytes) {
+                        console.warn(`[ModelManager] Archivo corrupto o truncado detectado para ${id} (${stat.size} bytes vs esperado > ${minExpectedBytes}). Limpiando...`);
+                        await Filesystem.deleteFile({ path: filePath, directory: Directory.Data }).catch(() => {});
                     }
                 } catch {
-                    const isCached = localStorage.getItem(`red_model_${id}_ready`) === 'true';
-                    if (isCached) {
-                        model.isDownloaded = true;
-                        model.downloadProgress = 100;
-                        model.localPath = localStorage.getItem(`red_model_${id}_path`) || `models/${model.fileName}`;
-                        this.ensureTokenizerDownloaded(id).catch(() => {});
-                    }
+                    // Si el archivo físico NO existe en disco, desmarcar el estado de descarga
+                    model.isDownloaded = false;
+                    model.downloadProgress = 0;
+                    model.localPath = undefined;
+                    localStorage.removeItem(`red_model_${id}_ready`);
+                    localStorage.removeItem(`red_model_${id}_path`);
                 }
             } catch (e) {
                 console.warn(`[ModelManager] Error verificando estado de ${id}:`, e);
@@ -346,16 +359,16 @@ class ModelManagerClass {
         
         if (activeId && this.models.has(activeId)) {
             const m = this.models.get(activeId)!;
-            return m;
+            if (m.isDownloaded) return m;
         }
 
-        // Si no hay selección explícita, buscar el primer modelo descargado
+        // Si el modelo seleccionado no está descargado, priorizar cualquier modelo que SÍ esté en disco
         for (const m of this.models.values()) {
             if (m.isDownloaded) return m;
         }
 
-        // Fallback a modelo ultraligero por defecto
-        return this.models.get('qwen-2.5-0.5b-q4') || this.models.get('smollm-360m-q4') || null;
+        // Fallback si ningún modelo está descargado
+        return this.models.get(activeId || 'qwen-2.5-0.5b-q4') || this.models.get('smollm-360m-q4') || null;
     }
 
     /** Sets the primary active model without forcing uninstalled defaults */
@@ -363,10 +376,8 @@ class ModelManagerClass {
         const target = this.models.get(modelId);
         if (target) {
             if (typeof window !== 'undefined') {
-                localStorage.setItem(`red_model_${modelId}_ready`, 'true');
                 localStorage.setItem('red_active_model_id', modelId);
             }
-            target.isDownloaded = true;
             this.ensureTokenizerDownloaded(modelId).catch(() => {});
             this.notify();
         }
@@ -387,7 +398,7 @@ class ModelManagerClass {
                     path: targetPath,
                     directory: Directory.Data
                 });
-                if (stat && stat.size > 100) {
+                if (stat && stat.size > 50 * 1024) {
                     return true;
                 }
             } catch {}
@@ -420,7 +431,15 @@ class ModelManagerClass {
         return false;
     }
 
-    /** Downloads model with low RAM usage (2MB chunked writing to disk) + Tokenizer pairing */
+    /**
+     * Valida si un búfer de bytes comienza con la firma canónica GGUF (0x47, 0x47, 0x55, 0x46 -> "GGUF")
+     */
+    public static verifyGgufHeader(bytes: Uint8Array): boolean {
+        if (!bytes || bytes.length < 4) return false;
+        return bytes[0] === 0x47 && bytes[1] === 0x47 && bytes[2] === 0x55 && bytes[3] === 0x46;
+    }
+
+    /** Downloads model with low RAM usage (2MB chunked writing to disk) + Resumable HTTP Range + Integrity Verification */
     public async downloadModel(
         modelId: string,
         onProgress?: (progress: number, loadedBytes: number, totalBytes: number) => void
@@ -438,8 +457,6 @@ class ModelManagerClass {
 
         try {
             console.log(`[ModelManager] Iniciando descarga nativa persistente para ${model.name}...`);
-            model.downloadProgress = 0;
-            model.downloadedBytes = 0;
 
             try {
                 await Filesystem.mkdir({
@@ -450,112 +467,158 @@ class ModelManagerClass {
             } catch {}
 
             const targetFilePath = `models/${model.fileName}`;
+            const partFilePath = `models/${model.fileName}.part`;
 
-            let nativeSuccess = false;
+            // 1. Verificar si existe descarga parcial para reanudar (HTTP Range)
+            let existingBytes = 0;
             try {
-                const progressListener = await Filesystem.addListener('progress', (status: any) => {
-                    if (status.bytes) {
-                        model.downloadedBytes = status.bytes;
-                        const total = status.contentLength || (model.fileSizeMb * 1024 * 1024);
-                        model.downloadProgress = Math.min(99, Math.round((status.bytes / total) * 100));
-                        if (onProgress) {
-                            onProgress(model.downloadProgress, model.downloadedBytes || 0, total);
-                        }
-                    }
+                const statPart = await Filesystem.stat({
+                    path: partFilePath,
+                    directory: Directory.Data
                 });
-
-                const res = await Filesystem.downloadFile({
-                    url: model.downloadUrl,
-                    path: targetFilePath,
-                    directory: Directory.Data,
-                    progress: true
-                });
-
-                await progressListener.remove();
-                if (res && res.path) {
-                    nativeSuccess = true;
+                if (statPart && statPart.size > 0) {
+                    existingBytes = statPart.size;
+                    console.log(`[ModelManager] Descarga parcial detectada para ${model.name}: ${existingBytes} bytes. Intentando reanudar...`);
                 }
-            } catch (nativeErr) {
-                console.warn('[ModelManager] DownloadFile nativo no disponible o falló en Web, intentando fetch stream:', nativeErr);
+            } catch {}
+
+            const headers: Record<string, string> = {};
+            if (existingBytes > 0) {
+                headers['Range'] = `bytes=${existingBytes}-`;
             }
 
-            if (!nativeSuccess) {
-                const response = await fetch(model.downloadUrl, {
-                    signal: controller.signal,
-                    mode: 'cors'
-                });
+            const response = await fetch(model.downloadUrl, {
+                signal: controller.signal,
+                mode: 'cors',
+                headers
+            });
 
-                if (!response.ok || !response.body) {
-                    throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+            if (!response.ok && response.status !== 206) {
+                throw new Error(`Error HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const isPartialResume = response.status === 206;
+            let loadedBytes = isPartialResume ? existingBytes : 0;
+            let isFirstWrite = !isPartialResume;
+
+            let totalBytes = model.fileSizeMb * 1024 * 1024;
+            const contentRange = response.headers.get('Content-Range');
+            if (contentRange) {
+                const match = contentRange.match(/\/(\d+)$/);
+                if (match) totalBytes = parseInt(match[1], 10);
+            } else {
+                const cl = response.headers.get('Content-Length');
+                if (cl) {
+                    totalBytes = isPartialResume ? (existingBytes + parseInt(cl, 10)) : parseInt(cl, 10);
                 }
+            }
 
-                const contentLength = response.headers.get('Content-Length');
-                const totalBytes = contentLength ? parseInt(contentLength, 10) : model.fileSizeMb * 1024 * 1024;
-                let loadedBytes = 0;
-                let chunkBuffer = new Uint8Array(0);
-                const CHUNK_SIZE = 2 * 1024 * 1024;
+            if (!response.body) throw new Error('Cuerpo de respuesta vacío.');
 
-                const reader = response.body.getReader();
-                let isFirstWrite = true;
+            const reader = response.body.getReader();
+            let chunkBuffer = new Uint8Array(0);
+            const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB chunks
 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
+            // Si es reescritura completa desde cero, asegurar que part empiece limpio
+            if (isFirstWrite) {
+                try {
+                    await Filesystem.deleteFile({ path: partFilePath, directory: Directory.Data });
+                } catch {}
+            }
 
-                    loadedBytes += value.byteLength;
-                    model.downloadedBytes = loadedBytes;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-                    const merged = new Uint8Array(chunkBuffer.length + value.byteLength);
-                    merged.set(chunkBuffer, 0);
-                    merged.set(value, chunkBuffer.length);
-                    chunkBuffer = merged;
+                loadedBytes += value.byteLength;
+                model.downloadedBytes = loadedBytes;
 
-                    if (chunkBuffer.length >= CHUNK_SIZE) {
-                        const base64Data = uint8ArrayToBase64(chunkBuffer);
-                        if (isFirstWrite) {
-                            await Filesystem.writeFile({
-                                path: targetFilePath,
-                                data: base64Data,
-                                directory: Directory.Data
-                            });
-                            isFirstWrite = false;
-                        } else {
-                            await Filesystem.appendFile({
-                                path: targetFilePath,
-                                data: base64Data,
-                                directory: Directory.Data
-                            });
-                        }
-                        chunkBuffer = new Uint8Array(0);
-                    }
+                const merged = new Uint8Array(chunkBuffer.length + value.byteLength);
+                merged.set(chunkBuffer, 0);
+                merged.set(value, chunkBuffer.length);
+                chunkBuffer = merged;
 
-                    const pct = Math.round((loadedBytes / totalBytes) * 100);
-                    model.downloadProgress = Math.min(99, pct);
-
-                    if (onProgress) {
-                        onProgress(model.downloadProgress, loadedBytes, totalBytes);
-                    }
-                }
-
-                if (chunkBuffer.length > 0) {
-                    const u8 = new Uint8Array(chunkBuffer);
-                    const base64Data = uint8ArrayToBase64(u8);
-                    // Si isFirstWrite sigue en true, el modelo entero cabe en un solo chunk:
-                    // se debe usar writeFile, no appendFile (que fallaría si el archivo no existe aún).
+                if (chunkBuffer.length >= CHUNK_SIZE) {
+                    const base64Data = uint8ArrayToBase64(chunkBuffer);
                     if (isFirstWrite) {
                         await Filesystem.writeFile({
-                            path: targetFilePath,
+                            path: partFilePath,
                             data: base64Data,
                             directory: Directory.Data
                         });
+                        isFirstWrite = false;
                     } else {
                         await Filesystem.appendFile({
-                            path: targetFilePath,
+                            path: partFilePath,
                             data: base64Data,
                             directory: Directory.Data
                         });
                     }
+                    chunkBuffer = new Uint8Array(0);
                 }
+
+                const pct = Math.min(99, Math.round((loadedBytes / totalBytes) * 100));
+                model.downloadProgress = pct;
+
+                if (onProgress) {
+                    onProgress(pct, loadedBytes, totalBytes);
+                }
+            }
+
+            if (chunkBuffer.length > 0) {
+                const base64Data = uint8ArrayToBase64(chunkBuffer);
+                if (isFirstWrite) {
+                    await Filesystem.writeFile({
+                        path: partFilePath,
+                        data: base64Data,
+                        directory: Directory.Data
+                    });
+                } else {
+                    await Filesystem.appendFile({
+                        path: partFilePath,
+                        data: base64Data,
+                        directory: Directory.Data
+                    });
+                }
+            }
+
+            // ── VERIFICACIÓN CRIPTOGRÁFICA Y DE INTEGRIDAD DE PESOS GGUF ──
+            // 1. Leer los primeros 4 bytes del archivo .part
+            let isValidGguf = false;
+            try {
+                const headerRead = await Filesystem.readFile({
+                    path: partFilePath,
+                    directory: Directory.Data
+                });
+                if (typeof headerRead.data === 'string') {
+                    const rawHead = atob(headerRead.data.substring(0, 16));
+                    const bytes = new Uint8Array(rawHead.length);
+                    for (let i = 0; i < rawHead.length; i++) bytes[i] = rawHead.charCodeAt(i);
+                    isValidGguf = ModelManagerClass.verifyGgufHeader(bytes);
+                }
+            } catch (err) {
+                console.warn('[ModelManager] Error leyendo cabecera del archivo parcial:', err);
+            }
+
+            // 2. Comprobar que no sea un archivo truncado (< 70% del tamaño esperado)
+            const minAcceptableBytes = Math.round(model.fileSizeMb * 1024 * 1024 * 0.7);
+            if (!isValidGguf || loadedBytes < minAcceptableBytes) {
+                await Filesystem.deleteFile({ path: partFilePath, directory: Directory.Data }).catch(() => {});
+                model.downloadProgress = 0;
+                model.downloadedBytes = 0;
+                throw new Error(`Fallo de integridad GGUF: ${!isValidGguf ? 'Cabecera no contiene la firma mágica GGUF' : 'Archivo truncado'}.`);
+            }
+
+            // 3. Promover .part a archivo final
+            try {
+                await Filesystem.copy({
+                    from: partFilePath,
+                    to: targetFilePath,
+                    directory: Directory.Data
+                });
+                await Filesystem.deleteFile({ path: partFilePath, directory: Directory.Data }).catch(() => {});
+            } catch (promoteErr) {
+                console.warn('[ModelManager] Error copiando .part a destino:', promoteErr);
             }
 
             await this.ensureTokenizerDownloaded(modelId);
@@ -571,6 +634,7 @@ class ModelManagerClass {
 
             model.isDownloaded = true;
             model.downloadProgress = 100;
+            model.downloadedBytes = loadedBytes;
             model.localPath = localUri;
 
             if (typeof window !== 'undefined') {
@@ -580,16 +644,18 @@ class ModelManagerClass {
             }
 
             this.activeDownloads.delete(modelId);
-            console.log(`[ModelManager] Descarga real finalizada para ${model.name} en ${localUri}!`);
+            this.notify();
+            console.log(`[ModelManager] ✅ Descarga e integridad verificada con éxito para ${model.name} (${loadedBytes} bytes)!`);
             return true;
         } catch (err: any) {
             this.activeDownloads.delete(modelId);
             if (err.name === 'AbortError') {
-                console.log(`[ModelManager] Download canceled for ${modelId}`);
+                console.log(`[ModelManager] Descarga pausada/cancelada para ${modelId}. Se conservan partes.`);
             } else {
-                console.error(`[ModelManager] Download failed for ${modelId}:`, err);
+                console.error(`[ModelManager] Falló la descarga de ${modelId}:`, err);
+                model.downloadProgress = 0;
             }
-            model.downloadProgress = 0;
+            this.notify();
             return false;
         }
     }
@@ -603,6 +669,47 @@ class ModelManagerClass {
         }
     }
 
+    /** Audits and verifies integrity of an on-disk model file */
+    public async verifyModelIntegrity(modelId: string): Promise<{ valid: boolean; reason?: string; sizeBytes?: number }> {
+        const model = this.models.get(modelId);
+        if (!model) return { valid: false, reason: 'Modelo no encontrado.' };
+
+        const targetFilePath = `models/${model.fileName}`;
+        try {
+            const stat = await Filesystem.stat({
+                path: targetFilePath,
+                directory: Directory.Data
+            });
+
+            if (!stat || stat.size === 0) {
+                return { valid: false, reason: 'El archivo físico no existe o está vacío.' };
+            }
+
+            const minExpectedBytes = Math.round(model.fileSizeMb * 1024 * 1024 * 0.7);
+            if (stat.size < minExpectedBytes) {
+                return { valid: false, reason: `Tamaño incompleto (${stat.size} bytes vs esperado > ${minExpectedBytes} bytes).`, sizeBytes: stat.size };
+            }
+
+            const fileData = await Filesystem.readFile({
+                path: targetFilePath,
+                directory: Directory.Data
+            });
+
+            if (typeof fileData.data === 'string') {
+                const rawHead = atob(fileData.data.substring(0, 16));
+                const bytes = new Uint8Array(rawHead.length);
+                for (let i = 0; i < rawHead.length; i++) bytes[i] = rawHead.charCodeAt(i);
+                if (!ModelManagerClass.verifyGgufHeader(bytes)) {
+                    return { valid: false, reason: 'Cabecera GGUF inválida o archivo corrupto.', sizeBytes: stat.size };
+                }
+            }
+
+            return { valid: true, sizeBytes: stat.size };
+        } catch (e: any) {
+            return { valid: false, reason: e.message || 'Error accediendo al archivo.' };
+        }
+    }
+
     /** Deletes a downloaded model and its tokenizer to free storage */
     public async deleteModel(modelId: string): Promise<boolean> {
         const model = this.models.get(modelId);
@@ -610,9 +717,17 @@ class ModelManagerClass {
 
         try {
             const targetFilePath = `models/${model.fileName}`;
+            const partFilePath = `models/${model.fileName}.part`;
             try {
                 await Filesystem.deleteFile({
                     path: targetFilePath,
+                    directory: Directory.Data
+                });
+            } catch {}
+
+            try {
+                await Filesystem.deleteFile({
+                    path: partFilePath,
                     directory: Directory.Data
                 });
             } catch {}
@@ -796,7 +911,13 @@ class ModelManagerClass {
         try {
             const raw = localStorage.getItem('red_sovereign_ai_endpoint');
             if (raw) {
-                return JSON.parse(raw);
+                const parsed = JSON.parse(raw);
+                // Purgar configuraciones obsoletas o loopback local erróneas
+                if (parsed.url && (parsed.url.includes(':7333') || parsed.url.includes('127.0.0.1') || parsed.url.includes('localhost'))) {
+                    localStorage.removeItem('red_sovereign_ai_endpoint');
+                    return null;
+                }
+                return parsed;
             }
         } catch {}
         return null;
@@ -836,7 +957,29 @@ class ModelManagerClass {
             if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
                 cleanUrl = `http://${cleanUrl}`;
             }
-            const targetUrl = cleanUrl.includes('/v1') ? `${cleanUrl}/chat/completions` : `${cleanUrl}/api/generate`;
+
+            // Probing especializado para Nodo RED Nativo (puerto 7333)
+            if (cleanUrl.includes(':7333')) {
+                const statusUrl = `${cleanUrl}/api/ai/status`;
+                try {
+                    const statusResp = await fetch(statusUrl, { signal: AbortSignal.timeout(3500) });
+                    if (statusResp.ok) {
+                        const data = await statusResp.json().catch(() => ({}));
+                        const latencyMs = Math.round(performance.now() - start);
+                        return {
+                            ok: true,
+                            message: `Conexión exitosa con Nodo RED Nativo (${data.engine || 'Activo'}, ${latencyMs}ms)`,
+                            latencyMs
+                        };
+                    }
+                } catch {
+                    // Fallthrough para probar compatibilidad general
+                }
+            }
+
+            const targetUrl = cleanUrl.includes('/v1') 
+                ? `${cleanUrl}/chat/completions` 
+                : `${cleanUrl}/api/generate`;
             
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (apiKey) {
@@ -844,14 +987,14 @@ class ModelManagerClass {
             }
 
             const body = cleanUrl.includes('/v1')
-                ? { model: modelName || 'llama3', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }
-                : { model: modelName || 'llama3', prompt: 'ping', stream: false };
+                ? { model: modelName || 'local-model', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }
+                : { model: modelName || 'red-tactical', prompt: 'ping', stream: false };
 
             const resp = await fetch(targetUrl, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify(body),
-                signal: AbortSignal.timeout(5000)
+                signal: AbortSignal.timeout(6000)
             });
 
             const latencyMs = Math.round(performance.now() - start);
@@ -861,7 +1004,12 @@ class ModelManagerClass {
                 return { ok: false, message: `Error HTTP ${resp.status}: ${resp.statusText}`, latencyMs };
             }
         } catch (e: any) {
-            return { ok: false, message: e.message || 'Error de conexión con el host', latencyMs: Math.round(performance.now() - start) };
+            const latencyMs = Math.round(performance.now() - start);
+            let msg = e.message || 'Error de conexión con el host';
+            if (url.includes('127.0.0.1') || url.includes('localhost')) {
+                msg += ' (Tip: En móvil/tablet, coloca la IP local de tu PC, ej. 192.168.1.50:1234)';
+            }
+            return { ok: false, message: msg, latencyMs };
         }
     }
 }

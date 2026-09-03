@@ -10,7 +10,11 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.provider.Settings;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -21,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,6 +34,8 @@ public class RedNodePlugin extends Plugin {
 
     private volatile boolean isMorseActive = false;
     private Thread morseThread = null;
+    private SpeechRecognizer speechRecognizer = null;
+    private volatile boolean isSpeechListening = false;
 
     /** true si libred_mobile.so cargó correctamente — verificar antes de toda llamada JNI */
     public static volatile boolean isNativeLoaded = false;
@@ -58,6 +65,22 @@ public class RedNodePlugin extends Plugin {
     public void load() {
         super.load();
         instance = this;
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        isMorseActive = false;
+        if (morseThread != null) {
+            morseThread.interrupt();
+            morseThread = null;
+        }
+        if (speechRecognizer != null) {
+            try {
+                speechRecognizer.destroy();
+            } catch (Exception ignored) {}
+            speechRecognizer = null;
+        }
+        super.handleOnDestroy();
     }
 
     public static void emitBleMessage(byte[] payload, String fromDevice) {
@@ -744,6 +767,177 @@ public class RedNodePlugin extends Plugin {
             call.resolve();
         } catch (Exception e) {
             call.reject("Destroy failed: " + e.getMessage());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // NATIVE SPEECH RECOGNITION (STT) BRIDGE
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    @PluginMethod
+    public void isSpeechRecognitionAvailable(PluginCall call) {
+        try {
+            boolean available = SpeechRecognizer.isRecognitionAvailable(getContext());
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("available", available);
+            call.resolve(ret);
+        } catch (Exception e) {
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("available", false);
+            call.resolve(ret);
+        }
+    }
+
+    @PluginMethod
+    public void startSpeechRecognition(PluginCall call) {
+        final String lang = call.getString("lang", "es-ES");
+        final boolean preferOffline = call.getBoolean("preferOffline", true);
+
+        if (getActivity() == null) {
+            call.reject("Activity no disponible para inicializar reconocimiento de voz");
+            return;
+        }
+
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (!SpeechRecognizer.isRecognitionAvailable(getContext())) {
+                    call.reject("El servicio de reconocimiento de voz de Android no está disponible.");
+                    return;
+                }
+
+                if (speechRecognizer != null) {
+                    try {
+                        speechRecognizer.destroy();
+                    } catch (Exception ignored) {}
+                    speechRecognizer = null;
+                }
+
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+                speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                    @Override
+                    public void onReadyForSpeech(Bundle params) {
+                        isSpeechListening = true;
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("status", "ready");
+                        notifyListeners("speechReady", ret);
+                    }
+
+                    @Override
+                    public void onBeginningOfSpeech() {
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("status", "listening");
+                        notifyListeners("speechStart", ret);
+                    }
+
+                    @Override
+                    public void onRmsChanged(float rmsdB) {
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("rmsdB", rmsdB);
+                        notifyListeners("speechRms", ret);
+                    }
+
+                    @Override
+                    public void onBufferReceived(byte[] buffer) {}
+
+                    @Override
+                    public void onEndOfSpeech() {
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("status", "processing");
+                        notifyListeners("speechEnd", ret);
+                    }
+
+                    @Override
+                    public void onError(int error) {
+                        isSpeechListening = false;
+                        String errorMsg = getSpeechErrorMsg(error);
+                        android.util.Log.w("RedNodePlugin", "SpeechRecognizer error: " + error + " (" + errorMsg + ")");
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("error", error);
+                        ret.put("message", errorMsg);
+                        notifyListeners("speechError", ret);
+                    }
+
+                    @Override
+                    public void onResults(Bundle results) {
+                        isSpeechListening = false;
+                        ArrayList<String> matches = results != null ? results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                        String transcript = (matches != null && !matches.isEmpty()) ? matches.get(0) : "";
+                        com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                        ret.put("transcript", transcript != null ? transcript.trim() : "");
+                        ret.put("isFinal", true);
+                        notifyListeners("speechResult", ret);
+                    }
+
+                    @Override
+                    public void onPartialResults(Bundle partialResults) {
+                        ArrayList<String> matches = partialResults != null ? partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) : null;
+                        String transcript = (matches != null && !matches.isEmpty()) ? matches.get(0) : "";
+                        if (transcript != null && !transcript.trim().isEmpty()) {
+                            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+                            ret.put("transcript", transcript.trim());
+                            ret.put("isFinal", false);
+                            notifyListeners("speechResult", ret);
+                        }
+                    }
+
+                    @Override
+                    public void onEvent(int eventType, Bundle params) {}
+                });
+
+                Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, lang);
+                intent.putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, lang);
+                intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+                if (preferOffline && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true);
+                }
+
+                speechRecognizer.startListening(intent);
+                call.resolve();
+            } catch (Exception e) {
+                android.util.Log.e("RedNodePlugin", "Error iniciando SpeechRecognizer: " + e.getMessage(), e);
+                call.reject("Error al iniciar reconocimiento: " + e.getMessage());
+            }
+        });
+    }
+
+    @PluginMethod
+    public void stopSpeechRecognition(PluginCall call) {
+        if (getActivity() == null) {
+            isSpeechListening = false;
+            call.resolve();
+            return;
+        }
+
+        getActivity().runOnUiThread(() -> {
+            try {
+                if (speechRecognizer != null) {
+                    speechRecognizer.stopListening();
+                }
+                isSpeechListening = false;
+                call.resolve();
+            } catch (Exception e) {
+                isSpeechListening = false;
+                call.reject("Error deteniendo reconocimiento: " + e.getMessage());
+            }
+        });
+    }
+
+    private String getSpeechErrorMsg(int error) {
+        switch (error) {
+            case SpeechRecognizer.ERROR_AUDIO: return "Error de captura de audio";
+            case SpeechRecognizer.ERROR_CLIENT: return "Error del cliente de voz";
+            case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS: return "Permisos de micrófono insuficientes";
+            case SpeechRecognizer.ERROR_NETWORK: return "Sin conexión para reconocimiento en línea";
+            case SpeechRecognizer.ERROR_NETWORK_TIMEOUT: return "Tiempo de espera de red agotado";
+            case SpeechRecognizer.ERROR_NO_MATCH: return "No se detectaron palabras reconocibles";
+            case SpeechRecognizer.ERROR_RECOGNIZER_BUSY: return "Servicio de reconocimiento ocupado";
+            case SpeechRecognizer.ERROR_SERVER: return "Error del servidor de reconocimiento";
+            case SpeechRecognizer.ERROR_SPEECH_TIMEOUT: return "Silencio prolongado";
+            default: return "Error de reconocimiento (" + error + ")";
         }
     }
 }

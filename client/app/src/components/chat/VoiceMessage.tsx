@@ -123,8 +123,20 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
 
     const audioSrc = resolvedAudioSrc;
 
-    // Generate deterministic tactical waveform profile based on message id/payload
+    const fallbackDuration = (msg.duration_ms && msg.duration_ms > 0) ? msg.duration_ms / 1000 : 0;
+    const effectiveDuration = (duration > 0 && isFinite(duration)) ? duration : (fallbackDuration > 0 ? fallbackDuration : 1);
+
+    // Render real tactical waveform peaks when available, or deterministic fallback
     const waveformBars = useMemo(() => {
+        if (Array.isArray(msg.waveform) && msg.waveform.length > 0) {
+            return msg.waveform.map(val => {
+                if (typeof val === 'number' && !isNaN(val)) {
+                    if (val <= 1.0) return Math.round(4 + val * 18);
+                    return Math.min(24, Math.max(4, Math.round(val)));
+                }
+                return 10;
+            });
+        }
         const seedStr = msg.id + (msg.content || "") + (msg.duration_ms || "");
         let hash = 0;
         for (let i = 0; i < seedStr.length; i++) {
@@ -132,16 +144,15 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
             hash |= 0;
         }
         const bars: number[] = [];
-        const count = 26;
+        const count = 28;
         for (let i = 0; i < count; i++) {
             const pseudoRand = Math.abs(Math.sin(hash + i * 1.37) * 10000);
             const val = pseudoRand - Math.floor(pseudoRand);
-            // Height between 4px and 22px
             const height = Math.round(4 + val * 18);
             bars.push(height);
         }
         return bars;
-    }, [msg.id, msg.content, msg.duration_ms]);
+    }, [msg.waveform, msg.id, msg.content, msg.duration_ms]);
 
     const togglePlay = () => {
         const a = audioRef.current;
@@ -176,33 +187,45 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const handleTimeUpdate = () => {
         if (!isDragging && audioRef.current) {
             setCurrentTime(audioRef.current.currentTime);
-            if (audioRef.current.duration && !isNaN(audioRef.current.duration) && isFinite(audioRef.current.duration)) {
+            if (audioRef.current.duration && !isNaN(audioRef.current.duration) && isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
                 setDuration(audioRef.current.duration);
             }
         }
     };
 
     const handleLoadedMetadata = () => {
-        if (audioRef.current && audioRef.current.duration && isFinite(audioRef.current.duration)) {
+        if (audioRef.current && audioRef.current.duration && isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
             setDuration(audioRef.current.duration);
+        } else if (fallbackDuration > 0) {
+            setDuration(fallbackDuration);
         }
     };
 
     const handleEnded = () => {
         setPlaying(false);
         setCurrentTime(0);
+        globalVoiceCoordinator.notifyStopped(msg.id);
     };
 
     const seekToPosition = useCallback((clientX: number) => {
         if (!waveContainerRef.current || !audioRef.current) return;
         const rect = waveContainerRef.current.getBoundingClientRect();
         const clickX = Math.max(0, Math.min(clientX - rect.left, rect.width));
-        const ratio = clickX / rect.width;
-        const totalDuration = duration > 0 ? duration : (msg.duration_ms ? msg.duration_ms / 1000 : 1);
-        const newTime = ratio * totalDuration;
-        audioRef.current.currentTime = newTime;
+        const ratio = clickX / Math.max(1, rect.width);
+        const totalDuration = effectiveDuration;
+        const newTime = Math.max(0, Math.min(ratio * totalDuration, totalDuration));
+
+        try {
+            audioRef.current.currentTime = newTime;
+        } catch (err) {
+            console.warn("[VoiceMessage] Seek warning:", err);
+        }
         setCurrentTime(newTime);
-    }, [duration, msg.duration_ms]);
+
+        if (typeof navigator !== "undefined" && navigator.vibrate) {
+            try { navigator.vibrate(5); } catch {}
+        }
+    }, [effectiveDuration]);
 
     const handlePointerDown = (e: React.PointerEvent) => {
         setIsDragging(true);
@@ -255,7 +278,7 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         return `${m}:${s < 10 ? "0" : ""}${s}`;
     };
 
-    const progressRatio = duration > 0 ? Math.min(1, Math.max(0, currentTime / duration)) : 0;
+    const progressRatio = effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDuration)) : 0;
     const activeBarIndex = Math.floor(progressRatio * waveformBars.length);
 
     const primaryColor = isMine ? "var(--primary-bright, #FF3355)" : "var(--accent-cyan, #00E5FF)";
@@ -306,18 +329,37 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                                         borderRadius: 3,
                                         background: isPlayed ? (isMine ? "#FFFFFF" : primaryColor) : inactiveColor,
                                         transform: isPlayed && playing ? "scaleY(1.15)" : "scaleY(1)",
+                                        boxShadow: isPlayed && playing ? `0 0 4px ${isMine ? "#FFFFFF" : primaryColor}` : "none",
                                         transition: "background 0.1s ease, transform 0.1s ease",
                                         flexShrink: 0
                                     }}
                                 />
                             );
                         })}
+
+                        {/* Tactical Scrub Thumb Needle */}
+                        <div
+                            style={{
+                                position: "absolute",
+                                left: `${progressRatio * 100}%`,
+                                top: "50%",
+                                transform: "translate(-50%, -50%)",
+                                width: 7,
+                                height: 7,
+                                borderRadius: "50%",
+                                background: isMine ? "#FFFFFF" : primaryColor,
+                                boxShadow: `0 0 8px ${isMine ? "#FFFFFF" : primaryColor}`,
+                                pointerEvents: "none",
+                                opacity: playing || isDragging ? 1 : 0.6,
+                                transition: isDragging ? "none" : "left 0.05s linear"
+                            }}
+                        />
                     </div>
 
                     {/* Sub-info: Time & Speed Toggle & Transcribe Button */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.68rem", fontFamily: "JetBrains Mono, monospace" }}>
                         <span style={{ color: "rgba(255, 255, 255, 0.85)", fontWeight: 700 }}>
-                            {formatTime(currentTime)} / {formatTime(duration || (msg.duration_ms ? msg.duration_ms / 1000 : 0))}
+                            {formatTime(currentTime)} / {formatTime(effectiveDuration)}
                         </span>
                         
                         <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>

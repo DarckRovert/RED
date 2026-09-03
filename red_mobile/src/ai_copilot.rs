@@ -4,7 +4,7 @@
 //! without third-party web cloud dependencies.
 
 use std::sync::{Arc, Mutex};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub use red_core::protocol::tactical::{CopilotQueryRequest, CopilotResponse};
 
@@ -32,6 +32,12 @@ impl AICopilotEngine {
                 active_model_path: String::new(),
             })),
         }
+    }
+
+    /// Proveedor global seguro para early-boot sin requerir ApiState completo
+    pub fn global() -> Arc<Self> {
+        static ENGINE: std::sync::OnceLock<Arc<AICopilotEngine>> = std::sync::OnceLock::new();
+        ENGINE.get_or_init(|| Arc::new(AICopilotEngine::new())).clone()
     }
 
     /// Método asíncrono para que no bloquee el event loop de Tokio (P2P Mesh Network)
@@ -68,27 +74,52 @@ impl AICopilotEngine {
         let model_name = req.model_id.unwrap_or_else(|| "Desconocido".to_string());
         let model_path = req.model_path.unwrap_or_default();
         
-        if model_path.is_empty() {
-            return CopilotResponse {
-                answer: "⚠️ [Error de Sistema de Archivos]: No se proporcionó la ruta del modelo GGUF. Por favor descarga los pesos del modelo en los ajustes de configuración de Gravity AI para iniciar la inferencia local.".to_string(),
-                topic_category: "Error de Configuración".to_string(),
-                source: "Rust Backend".to_string(),
-                model_used: "None".to_string(),
-                execution_time_ms: start.elapsed().as_millis() as u64,
-            };
-        }
-
-        let path = Path::new(&model_path);
-        if !path.exists() {
-            let msg = format!("⚠️ [Error de Sistema de Archivos]: No se encontró el archivo GGUF en la ruta local: {}", model_path);
-            return CopilotResponse {
-                answer: msg,
-                topic_category: "Error de I/O".to_string(),
-                source: "Sistema de Archivos Rust".to_string(),
-                model_used: model_name,
-                execution_time_ms: start.elapsed().as_millis() as u64,
-            };
-        }
+        let clean_path = if model_path.starts_with("file://") {
+            &model_path[7..]
+        } else {
+            &model_path
+        };
+        
+        // Resolución del archivo GGUF: si la ruta no existe o viene vacía, autodetectar cualquier GGUF en disco
+        let path_buf = if !clean_path.is_empty() && Path::new(clean_path).exists() {
+            PathBuf::from(clean_path)
+        } else {
+            let candidate_dirs = [
+                PathBuf::from("/data/user/0/f.red.app/files/models"),
+                PathBuf::from("files/models"),
+                PathBuf::from("models"),
+            ];
+            let mut found = None;
+            for dir in &candidate_dirs {
+                if let Ok(entries) = std::fs::read_dir(dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("gguf") {
+                            if let Ok(meta) = p.metadata() {
+                                if meta.len() > 50_000_000 {
+                                    found = Some(p);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if found.is_some() { break; }
+            }
+            match found {
+                Some(p) => p,
+                None => {
+                    return CopilotResponse {
+                        answer: "ℹ️ [Nodo RED]: No se detectó ningún archivo de modelo neural GGUF en el almacenamiento del dispositivo. Por favor ingresa a la pestaña 'Modelos Locales' y pulsa 'Descargar' para activar la inferencia offline en tu hardware.".to_string(),
+                        topic_category: "Configuración de Modelo".to_string(),
+                        source: "RED Sovereign Node (Rust)".to_string(),
+                        model_used: if model_name.is_empty() || model_name == "Desconocido" { "red-tactical".to_string() } else { model_name },
+                        execution_time_ms: start.elapsed().as_millis() as u64,
+                    };
+                }
+            }
+        };
+        let path = path_buf.as_path();
 
         // --- Guarda de Memoria OOM: Previene que Android LMK mate el proceso ---
         if let Ok(meta) = std::fs::metadata(path) {
@@ -162,7 +193,18 @@ impl AICopilotEngine {
         }
 
         let model_name_lower = model_name.to_lowercase();
-        let mut model = if model_name_lower.contains("qwen") {
+        let gguf_arch = content.metadata.get("general.architecture")
+            .and_then(|v| match v {
+                candle_core::quantized::gguf_file::Value::String(s) => Some(s.to_lowercase()),
+                _ => None,
+            })
+            .unwrap_or_default();
+        let path_str_lower = path.to_string_lossy().to_lowercase();
+
+        let is_qwen = gguf_arch.contains("qwen") || model_name_lower.contains("qwen") || path_str_lower.contains("qwen");
+        let is_phi = gguf_arch.contains("phi") || model_name_lower.contains("phi") || path_str_lower.contains("phi");
+
+        let mut model = if is_qwen {
             match candle_transformers::models::quantized_qwen2::ModelWeights::from_gguf(content, &mut file, &device) {
                 Ok(m) => LocalModel::Qwen2(m),
                 Err(e) => {
@@ -175,7 +217,7 @@ impl AICopilotEngine {
                     }
                 }
             }
-        } else if model_name_lower.contains("phi") {
+        } else if is_phi {
             // Phi-3 from_gguf requires an additional boolean argument, typically for `use_flash_attn` or `alibi` which we default to false.
             match candle_transformers::models::quantized_phi3::ModelWeights::from_gguf(false, content, &mut file, &device) {
                 Ok(m) => LocalModel::Phi3(m),
@@ -263,32 +305,51 @@ impl AICopilotEngine {
             }
         };
 
-        // Buscamos un tokenizer adjunto
-        let tokenizer_path = path.with_extension("").with_extension("json");
-        let tokenizer_path_alt = path.parent().unwrap_or_else(|| std::path::Path::new(".")).join("tokenizer.json");
-        
-        let tokenizer_file = if tokenizer_path.exists() {
-            Some(tokenizer_path)
-        } else if tokenizer_path_alt.exists() {
-            Some(tokenizer_path_alt)
-        } else {
-            None
-        };
+        // Buscamos un tokenizer adjunto con resolución profunda de candidatos
+        let parent_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let mut candidates = vec![
+            path.with_extension("").with_extension("json"),
+            path.with_extension("json"),
+            parent_dir.join("tokenizer.json"),
+            parent_dir.join("qwen2.5-0.5b-instruct-q4_k_m.json"),
+            parent_dir.join("SmolLM2-360M-Instruct-Q4_K_M.json"),
+            parent_dir.join("qwen2.5-1.5b-instruct-q4_k_m.json"),
+            parent_dir.join("Llama-3.2-1B-Instruct-Q4_K_M.json"),
+            parent_dir.join("gemma-2-2b-it-Q4_K_M.json"),
+            parent_dir.join("Phi-3-mini-4k-instruct-q4.json"),
+        ];
 
-        let tokenizer = match tokenizer_file {
-            Some(p) => match tokenizers::Tokenizer::from_file(p) {
-                Ok(t) => t,
-                Err(_) => return CopilotResponse {
-                    answer: "⚠️ [Error]: tokenizer.json no válido.".to_string(),
-                    topic_category: "Error Interno".to_string(),
-                    source: "Tokenizers".to_string(),
-                    model_used: model_name,
-                    execution_time_ms: start.elapsed().as_millis() as u64,
+        if let Ok(entries) = std::fs::read_dir(parent_dir) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("json") {
+                    if !candidates.contains(&p) {
+                        candidates.push(p);
+                    }
                 }
-            },
+            }
+        }
+
+        let mut tokenizer_opt = None;
+        for c in &candidates {
+            if c.exists() {
+                if let Ok(meta) = std::fs::metadata(c) {
+                    // Evitar stubs de Git LFS (un tokenizer real pesa más de 50 KB)
+                    if meta.len() > 50_000 {
+                        if let Ok(t) = tokenizers::Tokenizer::from_file(c) {
+                            tokenizer_opt = Some(t);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let tokenizer = match tokenizer_opt {
+            Some(t) => t,
             None => {
                 return CopilotResponse {
-                    answer: "⚠️ [Advertencia]: Falta el archivo tokenizer.json en el mismo directorio del modelo.".to_string(),
+                    answer: "⚠️ [Error de Tokenizer]: No se encontró un archivo tokenizer.json válido para el modelo en el almacenamiento local. Reintenta la descarga del modelo en la pestaña Modelos.".to_string(),
                     topic_category: "Error Interno".to_string(),
                     source: "Tokenizers".to_string(),
                     model_used: model_name,
@@ -301,7 +362,7 @@ impl AICopilotEngine {
             Ok(t) => t.get_ids().to_vec(),
             Err(e) => {
                 return CopilotResponse {
-                    answer: format!("⚠️ [Error]: Fallo al tokenizar: {}", e),
+                    answer: format!("⚠️ [Error]: Fallo al tokenizar el prompt: {}", e),
                     topic_category: "Error Interno".to_string(),
                     source: "Tokenizers".to_string(),
                     model_used: model_name,
@@ -310,6 +371,7 @@ impl AICopilotEngine {
             }
         };
 
+        let initial_prompt_tokens_len = tokens.len();
         let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.7), Some(0.9));
         let mut generated_text = String::new();
         let max_tokens = 512; // Límite para respuestas completas
@@ -382,7 +444,14 @@ impl AICopilotEngine {
             }
         }
 
-        let clean_answer = generated_text
+        // Decodificación atómica de la secuencia completa para preservar caracteres UTF-8 multibyte en español (tildes, ñ)
+        let raw_answer = if let Ok(full_decoded) = tokenizer.decode(&tokens[initial_prompt_tokens_len..], true) {
+            full_decoded
+        } else {
+            generated_text
+        };
+
+        let clean_answer = raw_answer
             .replace("<|im_end|>", "")
             .replace("<|endoftext|>", "")
             .replace("</s>", "")

@@ -23,6 +23,8 @@ export const RedP2PPayModal: React.FC = () => {
     const [activeTab, setActiveTab] = useState<WalletTab>("emit");
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+    const [isScanning, setIsScanning] = useState<boolean>(false);
+    const shouldScanRef = React.useRef<boolean>(false);
 
     const loadWallet = useCallback(async () => {
         try {
@@ -45,6 +47,68 @@ export const RedP2PPayModal: React.FC = () => {
         const interval = setInterval(loadWallet, 3000);
         return () => clearInterval(interval);
     }, [loadWallet]);
+
+    const stopCamera = async () => {
+        shouldScanRef.current = false;
+        if (typeof document !== "undefined") {
+            document.body.classList.remove("scanner-active");
+        }
+        setIsScanning(false);
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                await BarcodeScanner.showBackground().catch(() => {});
+                await BarcodeScanner.stopScan().catch(() => {});
+            }
+        } catch {}
+    };
+
+    const handleStartQrScan = async () => {
+        shouldScanRef.current = true;
+        try {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+                const { BarcodeScanner } = await import("@capacitor-community/barcode-scanner");
+                const perm = await BarcodeScanner.checkPermission({ force: true });
+                if (!shouldScanRef.current) {
+                    await stopCamera();
+                    return;
+                }
+                if (perm.denied || !perm.granted) {
+                    toast.warning("Permiso de cámara denegado. Introduce el código manualmente.");
+                    return;
+                }
+
+                await BarcodeScanner.hideBackground();
+                if (!shouldScanRef.current) {
+                    await stopCamera();
+                    return;
+                }
+                document.body.classList.add("scanner-active");
+                setIsScanning(true);
+
+                const result = await BarcodeScanner.startScan();
+                await stopCamera();
+                if (result.hasContent) {
+                    const scanned = result.content.trim();
+                    setRedeemInput(scanned);
+                    toast.success("Código QR escaneado con éxito");
+                }
+            } else {
+                toast.info("Escaneo activo disponible en dispositivos Android nativos.");
+            }
+        } catch (err: any) {
+            console.warn("[RedP2PPay] Error en escáner de cámara:", err);
+            await stopCamera();
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            stopCamera();
+        };
+    }, []);
 
     const handleCreateVoucher = async () => {
         const val = parseFloat(amountInput);
@@ -99,11 +163,25 @@ export const RedP2PPayModal: React.FC = () => {
             return;
         }
 
+        // Sanitización previa al dispatch hacia el nodo Rust
+        if (payload.startsWith("RED_PAY:")) {
+            const parts = payload.split(":");
+            if (parts.length >= 4) {
+                const amt = parseFloat(parts[2]);
+                if (!isFinite(amt) || amt <= 0) {
+                    toast.error("El voucher contiene un monto inválido o manipulado.");
+                    return;
+                }
+            }
+        }
+
         setIsSubmitting(true);
         try {
             const res = await redeemP2PVoucher({ qr_payload: payload });
             if (res && res.ok) {
-                if (res.new_balance !== undefined) setBalance(res.new_balance);
+                if (res.new_balance !== undefined && isFinite(res.new_balance)) {
+                    setBalance(res.new_balance);
+                }
                 const v = res.voucher;
                 if (v) {
                     setVouchers(prev => [v, ...prev]);
@@ -317,6 +395,18 @@ export const RedP2PPayModal: React.FC = () => {
                             </div>
 
                             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                                <button
+                                    onClick={handleStartQrScan}
+                                    style={{
+                                        padding: "12px", background: "rgba(0, 229, 255, 0.15)",
+                                        border: "1.5px dashed #00E5FF", borderRadius: "12px",
+                                        color: "#00E5FF", fontWeight: 800, fontSize: "0.82rem", cursor: "pointer",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                                    }}
+                                >
+                                    📷 ESCANEAR CÓDIGO QR CON LA CÁMARA
+                                </button>
+
                                 <textarea
                                     value={redeemInput}
                                     onChange={e => setRedeemInput(e.target.value)}
@@ -328,6 +418,25 @@ export const RedP2PPayModal: React.FC = () => {
                                         color: "#FFFFFF", fontSize: "0.82rem", outline: "none", fontFamily: "JetBrains Mono, monospace"
                                     }}
                                 />
+
+                                {redeemInput.startsWith("RED_PAY:") && (
+                                    <div style={{
+                                        padding: "10px 14px", background: "rgba(0, 230, 118, 0.12)",
+                                        border: "1px solid rgba(0, 230, 118, 0.4)", borderRadius: "10px",
+                                        display: "flex", flexDirection: "column", gap: "4px"
+                                    }}>
+                                        <div style={{ fontSize: "0.68rem", color: "#00E676", fontWeight: 800 }}>
+                                            ✓ FORMATO DE VALE RED VÁLIDO DETECTADO:
+                                        </div>
+                                        <div style={{ fontSize: "0.82rem", color: "#FFFFFF", fontWeight: 900 }}>
+                                            Monto a recibir: +{redeemInput.split(":")[2] || "0"} créditos
+                                        </div>
+                                        <div style={{ fontSize: "0.62rem", color: "#AAA", fontFamily: "monospace" }}>
+                                            ID: {redeemInput.split(":")[1] || "N/A"}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <button
                                     onClick={handleRedeemVoucher}
                                     disabled={isSubmitting || !redeemInput.trim()}

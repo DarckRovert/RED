@@ -55,11 +55,12 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
         } catch {}
     }
 
-    // 1. Si el modelo descargado tiene ruta local GGUF (Android nativo o Daemon Rust local)
+    // 1. PRIORIDAD ABSOLUTA: Si el modelo descargado tiene ruta local GGUF (Android nativo o Daemon Rust local)
     if (activeModel && activeModel.isDownloaded && activeModel.localPath) {
         try {
             const systemContext = `Eres el Copiloto IA de RED OS, un asistente inteligente, empático y experto que opera 100% en el dispositivo del usuario sin conexión a internet. Conversa con fluidez y precisión en español sobre cualquier tema militar, técnico o de emergencia.${categoryContext ? ` Contexto táctico: ${categoryContext}` : ''}`;
             const formattedGgufPrompt = `<|im_start|>system\n${systemContext}<|im_end|>\n<|im_start|>user\n${prompt}<|im_end|>\n<|im_start|>assistant\n`;
+            const cleanLocalPath = activeModel.localPath.replace(/^file:\/\//, '');
 
             const nativeResp = await fetchWithFallback<CopilotResponse>('/api/ai/copilot', {
                 method: 'POST',
@@ -68,7 +69,7 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
                     prompt: formattedGgufPrompt,
                     context: categoryContext,
                     model_id: activeModel.id,
-                    model_path: activeModel.localPath,
+                    model_path: cleanLocalPath,
                 })
             }, async () => {
                 const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
@@ -82,12 +83,26 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
                 };
             });
 
-            if (nativeResp && nativeResp.answer && !nativeResp.answer.startsWith('⚠️ [Error')) {
+            if (nativeResp && nativeResp.answer) {
                 return nativeResp;
             }
         } catch (err) {
             console.warn('[queryAICopilot] Native inference fallback to WASM:', err);
         }
+    }
+
+    // 2. Si no hay modelo local descargado, consultar Endpoint Soberano externo (LM Studio / Ollama en PC remota)
+    const sovereign = ModelManager.getSovereignEndpoint();
+    if (sovereign && sovereign.url) {
+        const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
+        return {
+            answer: res.answer,
+            topic_category: res.topicCategory,
+            source: res.modelInfo,
+            execution_time_ms: res.executionTimeMs,
+            thoughtChain: res.thoughtChain,
+            thought_chain: res.thoughtChain,
+        };
     }
 
     // 2. Inferencia en WebAssembly / ONNX Runtime

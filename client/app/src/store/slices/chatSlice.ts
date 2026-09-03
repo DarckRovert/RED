@@ -224,6 +224,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 msg_type: options?.msg_type || (content?.startsWith('data:image') ? 'image' : content?.startsWith('data:audio') ? 'voice' : content?.startsWith('data:video') ? 'video' : 'text'),
                 media_data: detectedMediaData,
                 duration_ms: options?.duration_ms,
+                waveform:    options?.waveform,
                 latitude:    options?.latitude,
                 longitude:   options?.longitude,
                 accuracy:    options?.accuracy,
