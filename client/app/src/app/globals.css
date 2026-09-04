@@ -1201,6 +1201,10 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   display: none !important;
 }
 
+.hidden-mobile-sponsor {
+  display: flex !important;
+}
+
 @media (min-width: 1280px) {
   .desktop-telemetry {
     display: flex !important;
@@ -1214,16 +1218,58 @@ body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder
   .mobile-hamburger {
     display: block !important;
   }
+  .hidden-mobile-sponsor {
+    display: none !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .mesh-sim-grid {
+    grid-template-columns: 1fr !important;
+    gap: 20px !important;
+  }
+}
+
+@media (max-width: 960px) {
+  .hero-split-grid {
+    grid-template-columns: 1fr !important;
+    gap: 32px !important;
+  }
+}
+
+@media (max-width: 868px) {
+  .scenario-split-grid {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+    padding: 24px 18px !important;
+  }
+  .how-it-works-grid {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+    padding: 24px 18px !important;
+  }
+  .calculator-grid {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+    padding: 24px 18px !important;
+  }
 }
 
 @media (max-width: 768px) {
   .showcase-bento-grid {
     grid-template-columns: 1fr !important;
+    gap: 16px !important;
   }
   .showcase-bento-grid > div {
     grid-column: span 1 !important;
+    padding: 24px 18px !important;
+  }
+  .bento-split-card {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
   }
 }
+
 
 /* ─── Tactical Command Center & Navigation Hub System ──────────────────────── */
 .command-center-container {

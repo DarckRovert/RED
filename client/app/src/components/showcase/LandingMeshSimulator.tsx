@@ -246,7 +246,7 @@ export const LandingMeshSimulator: React.FC = () => {
                 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "#64748B", fontFamily: "JetBrains Mono, monospace" }}>
                         <span>EMISIÓN</span>
-                        <span>SALTO EN MALLA</span>
+                        <span>RELÉ (NOTE 14)</span>
                         <span>RECEPCIÓN</span>
                     </div>
 
@@ -261,10 +261,10 @@ export const LandingMeshSimulator: React.FC = () => {
                     </div>
 
                     <div style={{ fontSize: "11px", color: isPacketInFlight ? "#00FF88" : "#94A3B8", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
-                        {packetStep === 1 && "🔐 Encapsulando ML-KEM-768..."}
-                        {packetStep === 2 && `📡 Retransmisión por ${selectedBand.toUpperCase()}...`}
-                        {packetStep === 3 && "✅ Descifrado en Destino"}
-                        {packetStep === 0 && "● Canal Libre a la Espera"}
+                        {packetStep === 1 && "🔐 Encapsulando ML-KEM-768 en Moto G22..."}
+                        {packetStep === 2 && `📡 Relé DTN por Redmi Note 14 (${selectedBand.toUpperCase()})...`}
+                        {packetStep === 3 && "✅ Descifrado en Lenovo Tab M9"}
+                        {packetStep === 0 && "● Malla Tri-Nodo Homologada (Moto G · Note 14 · Tab M9)"}
                     </div>
                 </div>
 
@@ -283,7 +283,7 @@ export const LandingMeshSimulator: React.FC = () => {
                 </div>
 
                 <div style={{ fontSize: "11px", color: "#94A3B8", fontFamily: "JetBrains Mono, monospace" }}>
-                    Cero Intermediarios Cloud • Cero Rastro
+                    Relé: Redmi Note 14 • Cero Intermediarios Cloud
                 </div>
               </div>
 
@@ -302,7 +302,8 @@ export const LandingMeshSimulator: React.FC = () => {
                           📟
                         </div>
                         <div>
-                          <div style={{ fontWeight: 900, color: "#FFF", fontSize: "14px" }}>Tablet Lenovo Tab</div>
+                          <div style={{ fontWeight: 900, color: "#FFF", fontSize: "14px" }}>Tablet Lenovo Tab M9</div>
+
                           <div style={{ fontSize: "10px", color: "#00E676", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>NODO RECEPTOR & BASE DE MANDO</div>
                         </div>
                       </div>

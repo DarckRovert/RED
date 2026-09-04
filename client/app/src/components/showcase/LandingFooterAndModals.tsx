@@ -60,7 +60,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                   Centro de Distribución Táctico
                 </h2>
                 <p style={{ fontSize: "15px", color: "#94A3B8", lineHeight: 1.6, marginBottom: "24px" }}>
-                  Instalador nativo firmado para Android ARM64 (`arm64-v8a`). Probado exhaustivamente en campo con Motorola Moto G22 y Tablet Lenovo Tab con soporte multi-radio simultáneo.
+                  Instalador nativo firmado para Android ARM64 (`arm64-v8a`). Probado y certificado en campo con Motorola Moto G22, Xiaomi Redmi Note 14 y Lenovo Tab M9 con soporte multi-radio simultáneo.
                 </p>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
@@ -174,8 +174,9 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                         <div>
                             <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF" }}>Smartphones & Tablets Soportados</div>
                             <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: 1.4 }}>
-                                Android 7.0+ (Nougat hasta Android 15), arquitectura ARM64 (`arm64-v8a`). Probado en Motorola Moto G22, Xiaomi, Samsung y Lenovo Tab.
+                                Android 7.0+ (Nougat hasta Android 15), arquitectura ARM64 (`arm64-v8a`). Homologado y certificado en hardware real: Motorola Moto G22, Xiaomi Redmi Note 14 (HyperOS) y Lenovo Tab M9.
                             </div>
+
                         </div>
                     </div>
 

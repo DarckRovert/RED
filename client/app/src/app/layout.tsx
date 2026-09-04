@@ -56,6 +56,47 @@ export default function RootLayout({
         <link rel="manifest" href={`${basePath}/manifest.json`} />
         <link rel="icon" href={`${basePath}/red_icon.png`} />
         <link rel="apple-touch-icon" href={`${basePath}/red_icon.png`} />
+
+        {/* Open Graph / Social Sharing (WhatsApp, Telegram, Facebook, LinkedIn) */}
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="RED — Sovereign Mesh OS" />
+        <meta property="og:title" content="RED — Sovereign Mesh OS v87.0.0" />
+        <meta property="og:description" content="Sistema operativo táctico de comunicaciones peer-to-peer y supervivencia 100% off-grid. Malla LoRa (15–25 km), Bluetooth LE, Wi-Fi Direct, voz Vocoder a 1.2 kbps y criptografía post-cuántica NIST FIPS 203." />
+        <meta property="og:image" content="https://darckrovert.github.io/RED/assets/red_hero_tactical_mesh.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="RED Sovereign Tactical Mesh Rugged Device" />
+        <meta property="og:url" content="https://darckrovert.github.io/RED/" />
+        <meta property="og:locale" content="es_ES" />
+
+        {/* Twitter / X Cards */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="RED — Sovereign Mesh OS v87.0.0" />
+        <meta name="twitter:description" content="Comunicaciones tácticas descentralizadas sin internet ni servidores centrales. Cifrado post-cuántico, interoperabilidad ATAK CoT y voz LoRa off-grid." />
+        <meta name="twitter:image" content="https://darckrovert.github.io/RED/assets/red_hero_tactical_mesh.png" />
+
+        {/* Schema.org SoftwareApplication JSON-LD */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "RED — Sovereign Mesh OS",
+              "operatingSystem": "Android 7.0+, Web, Linux",
+              "applicationCategory": "CommunicationApplication",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+              },
+              "softwareVersion": "87.0.0",
+              "downloadUrl": "https://github.com/DarckRovert/RED/releases/tag/v87.0.0",
+              "description": "Sistema operativo táctico de comunicaciones descentralizadas y supervivencia 100% off-grid."
+            })
+          }}
+        />
+
         <script
           dangerouslySetInnerHTML={{
             __html: `
