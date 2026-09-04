@@ -5,6 +5,7 @@ import "./globals.css";
 import AmberAlertBanner from "@/components/AmberAlertBanner";
 import { SOSEmergencyBanner } from "@/components/SOSEmergencyBanner";
 import { I18nProvider } from "@/lib/i18n/i18nEngine";
+import { RED_VERSION } from "@/lib/version";
 
 export default function RootLayout({
   children,
@@ -60,7 +61,7 @@ export default function RootLayout({
         {/* Open Graph / Social Sharing (WhatsApp, Telegram, Facebook, LinkedIn) */}
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="RED — Sovereign Mesh OS" />
-        <meta property="og:title" content="RED — Sovereign Mesh OS v87.0.0" />
+        <meta property="og:title" content={`RED — Sovereign Mesh OS v${RED_VERSION}`} />
         <meta property="og:description" content="Sistema operativo táctico de comunicaciones peer-to-peer y supervivencia 100% off-grid. Malla LoRa (15–25 km), Bluetooth LE, Wi-Fi Direct, voz Vocoder a 1.2 kbps y criptografía post-cuántica NIST FIPS 203." />
         <meta property="og:image" content="https://darckrovert.github.io/RED/assets/red_hero_tactical_mesh.png" />
         <meta property="og:image:width" content="1200" />
@@ -71,7 +72,7 @@ export default function RootLayout({
 
         {/* Twitter / X Cards */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="RED — Sovereign Mesh OS v87.0.0" />
+        <meta name="twitter:title" content={`RED — Sovereign Mesh OS v${RED_VERSION}`} />
         <meta name="twitter:description" content="Comunicaciones tácticas descentralizadas sin internet ni servidores centrales. Cifrado post-cuántico, interoperabilidad ATAK CoT y voz LoRa off-grid." />
         <meta name="twitter:image" content="https://darckrovert.github.io/RED/assets/red_hero_tactical_mesh.png" />
 
@@ -90,8 +91,8 @@ export default function RootLayout({
                 "price": "0",
                 "priceCurrency": "USD"
               },
-              "softwareVersion": "87.0.0",
-              "downloadUrl": "https://github.com/DarckRovert/RED/releases/tag/v87.0.0",
+              "softwareVersion": RED_VERSION,
+              "downloadUrl": `https://github.com/DarckRovert/RED/releases/tag/v${RED_VERSION}`,
               "description": "Sistema operativo táctico de comunicaciones descentralizadas y supervivencia 100% off-grid."
             })
           }}
