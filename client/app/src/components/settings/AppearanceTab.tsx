@@ -33,6 +33,136 @@ export const AppearanceTab: React.FC = () => {
 
     return (
                     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                        {/* ── SECCIÓN 0: MODO DE INTERFAZ (FAMILIAR VS TÁCTICO) ── */}
+                        <div>
+                            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span>📱</span> Modo de Interfaz & Ergonomía
+                            </h3>
+                            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                                Selecciona la experiencia visual y operativa del sistema RED.
+                            </p>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                            {/* Modo Familiar */}
+                            <div
+                                onClick={() => {
+                                    SettingsManager.triggerHaptic("medium");
+                                    updatePreferences({ uiMode: 'familiar' });
+                                    toast.success("💬 Modo Familiar activado (WhatsApp / Telegram / Signal)");
+                                }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "14px", borderRadius: "14px", cursor: "pointer",
+                                    border: (preferences.uiMode ?? 'familiar') === 'familiar' ? "2px solid #00A884" : "1px solid var(--glass-border)",
+                                    background: (preferences.uiMode ?? 'familiar') === 'familiar' ? "rgba(0, 168, 132, 0.12)" : "var(--glass-bg)",
+                                    boxShadow: (preferences.uiMode ?? 'familiar') === 'familiar' ? "0 0 16px rgba(0, 168, 132, 0.3)" : "none",
+                                    display: "flex", flexDirection: "column", gap: "8px"
+                                }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <span style={{ fontSize: "1.5rem" }}>💬</span>
+                                    {(preferences.uiMode ?? 'familiar') === 'familiar' && (
+                                        <span style={{
+                                            width: 20, height: 20, borderRadius: "50%",
+                                            background: "#00A884", color: "#FFFFFF",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontSize: "0.75rem", fontWeight: 900
+                                        }}>
+                                            ✓
+                                        </span>
+                                    )}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#FFFFFF" }}>
+                                        Modo Familiar
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "3px", lineHeight: 1.3 }}>
+                                        Paridad WhatsApp/Telegram/Signal, burbujas limpias, confirmaciones de lectura y ergonomía táctil fluida.
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modo Táctico */}
+                            <div
+                                onClick={() => {
+                                    SettingsManager.triggerHaptic("medium");
+                                    updatePreferences({ uiMode: 'tactical' });
+                                    toast.info("⚡ Modo Táctico HUD activado (Militar / Cyberpunk)");
+                                }}
+                                className="card-tactical-interactive"
+                                style={{
+                                    padding: "14px", borderRadius: "14px", cursor: "pointer",
+                                    border: preferences.uiMode === 'tactical' ? "2px solid var(--accent-cyan, #00E5FF)" : "1px solid var(--glass-border)",
+                                    background: preferences.uiMode === 'tactical' ? "rgba(0, 229, 255, 0.12)" : "var(--glass-bg)",
+                                    boxShadow: preferences.uiMode === 'tactical' ? "0 0 16px rgba(0, 229, 255, 0.3)" : "none",
+                                    display: "flex", flexDirection: "column", gap: "8px"
+                                }}
+                            >
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                    <span style={{ fontSize: "1.5rem" }}>⚡</span>
+                                    {preferences.uiMode === 'tactical' && (
+                                        <span style={{
+                                            width: 20, height: 20, borderRadius: "50%",
+                                            background: "var(--accent-cyan)", color: "#000",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontSize: "0.75rem", fontWeight: 900
+                                        }}>
+                                            ✓
+                                        </span>
+                                    )}
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: "0.88rem", fontWeight: 800, color: "#FFFFFF" }}>
+                                        Modo Táctico HUD
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "3px", lineHeight: 1.3 }}>
+                                        Centro C4ISR de alta visibilidad militar, telemetría de radio en vivo y 8 Hubs consolidados.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Selector de Wallpaper si está en Modo Familiar */}
+                        {(preferences.uiMode ?? 'familiar') === 'familiar' && (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#E9EDEF" }}>
+                                    Fondo de Pantalla del Chat (Wallpaper)
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                                    {[
+                                        { id: 'doodle_dark', label: 'Doodle Oscuro', icon: '🎨' },
+                                        { id: 'doodle_green', label: 'Doodle Verde', icon: '🌿' },
+                                        { id: 'void_black', label: 'Negro Sólido', icon: '⬛' },
+                                    ].map((wp) => {
+                                        const isSelected = (preferences.chatWallpaper ?? 'doodle_dark') === wp.id;
+                                        return (
+                                            <button
+                                                key={wp.id}
+                                                onClick={() => {
+                                                    SettingsManager.triggerHaptic("light");
+                                                    updatePreferences({ chatWallpaper: wp.id as any });
+                                                }}
+                                                style={{
+                                                    padding: "8px 6px", borderRadius: "10px",
+                                                    border: isSelected ? "1.5px solid #00A884" : "1px solid rgba(255,255,255,0.08)",
+                                                    background: isSelected ? "rgba(0, 168, 132, 0.15)" : "rgba(255,255,255,0.04)",
+                                                    color: isSelected ? "#FFFFFF" : "var(--text-secondary)",
+                                                    fontSize: "0.74rem", fontWeight: 700, cursor: "pointer",
+                                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                                }}
+                                            >
+                                                <span>{wp.icon}</span>
+                                                <span>{wp.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        <hr style={{ borderColor: "var(--glass-border)", margin: "4px 0" }} />
+
                         {/* ── SECCIÓN 1: IDIOMA DEL SISTEMA & LOCALIZACIÓN ── */}
                         <div>
                             <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>

@@ -75,6 +75,8 @@ public class RedNodeService extends Service {
     private int notifIdCounter = 2000;
     private java.util.concurrent.ScheduledExecutorService heartbeatExecutor = null;
     private final java.util.concurrent.ConcurrentHashMap<String, java.io.ByteArrayOutputStream> nativeBleBuffers = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, BluetoothDevice> connectedGattClients = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, Boolean> clientNotificationsEnabled = new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void onCreate() {
@@ -535,6 +537,8 @@ public class RedNodeService extends Service {
             try { gattServer.close(); } catch (Exception ignored) {}
             Log.i(TAG, "[BLE] GATT Server closed.");
         }
+        connectedGattClients.clear();
+        clientNotificationsEnabled.clear();
         nativeBleBuffers.clear();
 
         // Stop Rust node in a background thread with a 3s timeout to avoid
@@ -605,11 +609,41 @@ public class RedNodeService extends Service {
         @Override
         public void onConnectionStateChange(BluetoothDevice device, int status, int newState) {
             super.onConnectionStateChange(device, status, newState);
+            if (device == null) return;
+            String addr = device.getAddress();
             if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
-                Log.i(TAG, "[BLE Server] Device connected: " + device.getAddress());
+                Log.i(TAG, "[BLE Server] Device connected: " + addr);
+                connectedGattClients.put(addr, device);
             } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
-                Log.i(TAG, "[BLE Server] Device disconnected: " + device.getAddress());
-                nativeBleBuffers.remove(device.getAddress());
+                Log.i(TAG, "[BLE Server] Device disconnected: " + addr);
+                connectedGattClients.remove(addr);
+                clientNotificationsEnabled.remove(addr);
+                nativeBleBuffers.remove(addr);
+            }
+        }
+
+        @Override
+        public void onDescriptorWriteRequest(BluetoothDevice device, int requestId, BluetoothGattDescriptor descriptor, boolean preparedWrite, boolean responseNeeded, int offset, byte[] value) {
+            super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value);
+            if (descriptor != null && CCCD_UUID.equals(descriptor.getUuid())) {
+                boolean enabled = false;
+                if (value != null && value.length > 0) {
+                    if (java.util.Arrays.equals(value, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) || (value[0] & 0x01) != 0) {
+                        enabled = true;
+                    }
+                }
+                if (device != null) {
+                    clientNotificationsEnabled.put(device.getAddress(), enabled);
+                    connectedGattClients.put(device.getAddress(), device);
+                    Log.i(TAG, "[BLE Server] CCCD write from " + device.getAddress() + " -> notifications " + (enabled ? "ENABLED" : "DISABLED"));
+                }
+                if (responseNeeded && gattServer != null) {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return;
+                    gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value);
+                }
+            } else if (responseNeeded && gattServer != null) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return;
+                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value);
             }
         }
 
@@ -700,15 +734,6 @@ public class RedNodeService extends Service {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return;
                     gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_FAILURE, offset, null);
                 }
-            }
-        }
-
-        @Override
-        public void onDescriptorWriteRequest(BluetoothDevice device, int requestId, BluetoothGattDescriptor descriptor, boolean preparedWrite, boolean responseNeeded, int offset, byte[] value) {
-            super.onDescriptorWriteRequest(device, requestId, descriptor, preparedWrite, responseNeeded, offset, value);
-            if (responseNeeded) {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S && checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return;
-                gattServer.sendResponse(device, requestId, BluetoothGatt.GATT_SUCCESS, offset, value);
             }
         }
     };
@@ -823,5 +848,84 @@ public class RedNodeService extends Service {
                 Log.w(TAG, "[Heartbeat] Governor check exception: " + e.getMessage());
             }
         }, 30, 120, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /**
+     * Envía notificaciones GATT a clientes conectados (Centrales) sobre RED_BLE_RX_CHAR_UUID.
+     * Permite la comunicación bidireccional cuando el dispositivo actúa como Periférico.
+     */
+    public static boolean sendGattNotification(String clientAddress, byte[] data) {
+        if (activeInstance == null || activeInstance.gattServer == null || data == null || data.length == 0) {
+            return false;
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            if (activeInstance.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                Log.w(TAG, "[BLE Server] BLUETOOTH_CONNECT permission missing, cannot send notification");
+                return false;
+            }
+        }
+
+        BluetoothGattService service = activeInstance.gattServer.getService(UUID.fromString(RED_BLE_SERVICE_UUID));
+        if (service == null) {
+            Log.w(TAG, "[BLE Server] RED Service not found in GATT Server");
+            return false;
+        }
+
+        BluetoothGattCharacteristic rxChar = service.getCharacteristic(UUID.fromString(RED_BLE_RX_CHAR_UUID));
+        if (rxChar == null) {
+            Log.w(TAG, "[BLE Server] RX Characteristic not found in GATT Server");
+            return false;
+        }
+
+        java.util.List<BluetoothDevice> targets = new java.util.ArrayList<>();
+        if (clientAddress != null && !clientAddress.trim().isEmpty()) {
+            BluetoothDevice dev = connectedGattClients.get(clientAddress.trim());
+            if (dev != null) {
+                targets.add(dev);
+            }
+        } else {
+            targets.addAll(connectedGattClients.values());
+        }
+
+        if (targets.isEmpty()) {
+            Log.d(TAG, "[BLE Server] No connected GATT clients to notify (target was: " + clientAddress + ")");
+            return false;
+        }
+
+        final int CHUNK_SIZE = 180;
+        boolean anySuccess = false;
+
+        for (BluetoothDevice target : targets) {
+            int offset = 0;
+            while (offset < data.length) {
+                int sliceLen = Math.min(CHUNK_SIZE, data.length - offset);
+                byte[] chunk = new byte[sliceLen];
+                System.arraycopy(data, offset, chunk, 0, sliceLen);
+                offset += sliceLen;
+
+                rxChar.setValue(chunk);
+                boolean ok = activeInstance.gattServer.notifyCharacteristicChanged(target, rxChar, false);
+                if (ok) {
+                    anySuccess = true;
+                } else {
+                    Log.w(TAG, "[BLE Server] notifyCharacteristicChanged returned false for " + target.getAddress());
+                }
+
+                if (offset < data.length) {
+                    try {
+                        Thread.sleep(15);
+                    } catch (InterruptedException ignored) {}
+                }
+            }
+        }
+
+        return anySuccess;
+    }
+
+    /**
+     * Retorna la lista de direcciones MAC de clientes GATT actualmente conectados a nuestro servidor.
+     */
+    public static java.util.List<String> getConnectedClients() {
+        return new java.util.ArrayList<>(connectedGattClients.keySet());
     }
 }

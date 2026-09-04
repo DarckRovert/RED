@@ -14,6 +14,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { SidebarHeader, ChatFilterType } from "./sidebar/SidebarHeader";
 import { ConversationList } from "./sidebar/ConversationList";
 import { ContactList } from "./sidebar/ContactList";
+import { NewChatModal } from "./chat/NewChatModal";
 
 interface TacticalHubItem {
     id: string;
@@ -85,6 +86,14 @@ export default function Sidebar() {
     const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     const [storyModal, setStoryModal] = useState<"creator" | { type: "contact"; hash: string } | { type: "live"; id: string } | null>(null);
     const [drawerSearch, setDrawerSearch] = useState("");
+
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
+
+    React.useEffect(() => {
+        const handler = () => setAddContactOpen(true);
+        window.addEventListener("red:open_new_chat", handler);
+        return () => window.removeEventListener("red:open_new_chat", handler);
+    }, []);
 
     const unreadTotal = useMemo(() => {
         return conversations.reduce((acc: number, c: any) => acc + (c.unread_count || 0), 0);
@@ -314,7 +323,7 @@ export default function Sidebar() {
     const totalToolsCount = tacticalHubs.reduce((acc, h) => acc + h.tools.length, 0);
 
     return (
-        <aside style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", background: "var(--bg-void)", position: "relative", overflow: "hidden" }}>
+        <aside style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", background: isFamiliar ? "#111B21" : "var(--bg-void)", position: "relative", overflow: "hidden" }}>
 
             {/* Tactical Slide-Over Command Drawer: 8 Hubs Tácticos */}
             {menuOpen && (
@@ -612,7 +621,7 @@ export default function Sidebar() {
             />
 
             {/* Main Scrollable Content */}
-            <div className="scroll-container" style={{ flex: 1, padding: "8px 12px 28px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div className="scroll-container" style={{ flex: 1, padding: isFamiliar ? "0px" : "8px 12px 28px 12px", display: "flex", flexDirection: "column", gap: isFamiliar ? "0px" : "6px" }}>
                 {activeTab === "chats" ? (
                     <ConversationList
                         filteredConvs={filteredConvs}
@@ -638,11 +647,11 @@ export default function Sidebar() {
                     right: "18px",
                     width: "56px",
                     height: "56px",
-                    borderRadius: "16px",
-                    background: "linear-gradient(135deg, #00E676 0%, #00B368 100%)",
-                    color: "#000000",
+                    borderRadius: isFamiliar ? "50%" : "16px",
+                    background: isFamiliar ? "#00A884" : "linear-gradient(135deg, #00E676 0%, #00B368 100%)",
+                    color: "#FFFFFF",
                     border: "none",
-                    boxShadow: "0 8px 24px rgba(0, 230, 118, 0.45), 0 0 12px rgba(0, 230, 118, 0.3)",
+                    boxShadow: isFamiliar ? "0 4px 14px rgba(0, 0, 0, 0.4)" : "0 8px 24px rgba(0, 230, 118, 0.45), 0 0 12px rgba(0, 230, 118, 0.3)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -652,178 +661,20 @@ export default function Sidebar() {
                     zIndex: 30,
                     transition: "all 0.2s ease"
                 }}
+                onMouseEnter={e => {
+                    if (isFamiliar) e.currentTarget.style.background = "#02906f";
+                }}
+                onMouseLeave={e => {
+                    if (isFamiliar) e.currentTarget.style.background = "#00A884";
+                }}
                 title="Nuevo Chat / Agregar Contacto"
             >
                 💬
             </button>
 
 
-            {/* Modal para Agregar Contacto */}
-            {addContactOpen && (
-                <div 
-                    style={{
-                        position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-                        background: "rgba(2, 4, 12, 0.88)", backdropFilter: "blur(20px)",
-                        WebkitBackdropFilter: "blur(20px)",
-                        zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center",
-                        padding: "16px",
-                        animation: "fadeIn 0.2s ease"
-                    }}
-                    onClick={() => setAddContactOpen(false)}
-                >
-                    <div 
-                        className="animate-enter modal-card-scrollable"
-                        style={{
-                            maxWidth: "480px", width: "100%", padding: "24px",
-                            display: "flex", flexDirection: "column", gap: "16px",
-                            border: "1.5px solid rgba(0, 229, 255, 0.35)", background: "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
-                            borderRadius: "22px",
-                            boxShadow: "0 15px 50px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 229, 255, 0.15)",
-                            maxHeight: "calc(100dvh - 32px)", overflowY: "auto"
-                        }}
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "12px" }}>
-                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "10px" }}>
-                                <div style={{ width: 34, height: 34, borderRadius: "10px", background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                    ➕
-                                </div>
-                                <span>{t('sidebar.add_contact_btn') || "AGREGAR CONTACTO / NUEVO CHAT"}</span>
-                            </div>
-                            <button onClick={() => setAddContactOpen(false)} style={{ background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)", color: "#FFFFFF", width: 30, height: 30, borderRadius: "8px", cursor: "pointer", fontWeight: 900 }}>✕</button>
-                        </div>
-                        <div style={{ fontSize: "0.78rem", color: "var(--text-secondary)", lineHeight: 1.45 }}>
-                            Pega el DID Soberano, Hash (64 hex) o escanea el código QR del perfil de otro usuario para iniciar un canal cifrado post-cuántico.
-                        </div>
-
-                        {/* Botón Principal: Escáner QR de Contacto */}
-                        <button
-                            onClick={() => {
-                                setAddContactOpen(false);
-                                navigate("radar");
-                            }}
-                            style={{
-                                width: "100%", padding: "12px 14px", fontSize: "0.85rem", fontWeight: 900,
-                                display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-                                border: "1px solid rgba(0, 230, 118, 0.6)", color: "#00E676",
-                                background: "rgba(0, 230, 118, 0.1)",
-                                borderRadius: "12px", cursor: "pointer",
-                                boxShadow: "0 0 15px rgba(0, 230, 118, 0.15)"
-                            }}
-                        >
-                            <span>📷</span>
-                            <span>{t('radar.scan_scanner_btn') || "ESCANEAR QR DE CONTACTO (CÁMARA)"}</span>
-                        </button>
-
-                        {/* Enlace Directo a Vinculación con PC */}
-                        <div
-                            onClick={() => {
-                                setAddContactOpen(false);
-                                navigate("webCompanionLink");
-                            }}
-                            style={{
-                                display: "flex", alignItems: "center", justifyContent: "space-between",
-                                padding: "10px 14px", borderRadius: "10px",
-                                background: "rgba(0, 229, 255, 0.08)", border: "1px dashed rgba(0, 229, 255, 0.35)",
-                                cursor: "pointer", fontSize: "0.78rem", color: "var(--accent-cyan, #00E5FF)",
-                                transition: "all 0.15s ease"
-                            }}
-                        >
-                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <span>💻</span>
-                                <span>¿Quieres vincular tu cuenta con tu PC?</span>
-                            </div>
-                            <span style={{ fontWeight: 900 }}>Vincular Web →</span>
-                        </div>
-
-                        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                            <div>
-                                <label style={{ fontSize: "0.72rem", fontWeight: 900, color: "var(--text-secondary)", marginBottom: "5px", display: "block", letterSpacing: "0.5px" }}>
-                                    DID O CLAVE PÚBLICA MANUAL
-                                </label>
-                                <input
-                                    value={newContactInput}
-                                    onChange={e => setNewContactInput(e.target.value)}
-                                    placeholder="Ej: did:red:af10... o 3a7f8b9c..."
-                                    style={{
-                                        width: "100%", fontFamily: "JetBrains Mono, monospace", fontSize: "0.82rem", padding: "11px 14px",
-                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(0, 229, 255, 0.25)",
-                                        borderRadius: "10px", color: "#FFFFFF", outline: "none"
-                                    }}
-                                    autoFocus
-                                />
-                            </div>
-                            <div>
-                                <label style={{ fontSize: "0.72rem", fontWeight: 900, color: "var(--text-secondary)", marginBottom: "5px", display: "block", letterSpacing: "0.5px" }}>
-                                    ALIAS O INDICATIVO TÁCTICO
-                                </label>
-                                <input
-                                    value={newContactAlias}
-                                    onChange={e => setNewContactAlias(e.target.value)}
-                                    placeholder="Ej: Alfa-1 Base, Operador Central..."
-                                    style={{
-                                        width: "100%", fontSize: "0.85rem", padding: "11px 14px",
-                                        background: "rgba(0, 0, 0, 0.5)", border: "1px solid rgba(255, 255, 255, 0.15)",
-                                        borderRadius: "10px", color: "#FFFFFF", outline: "none"
-                                    }}
-                                />
-                            </div>
-                            <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
-                                <button
-                                    onClick={() => setAddContactOpen(false)}
-                                    style={{
-                                        flex: 1, padding: "12px", fontSize: "0.85rem", fontWeight: 800,
-                                        background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)",
-                                        borderRadius: "10px", color: "#FFFFFF", cursor: "pointer"
-                                    }}
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    disabled={!newContactInput.trim() || isSubmittingContact}
-                                    onClick={async () => {
-                                        const input = newContactInput.trim();
-                                        const alias = newContactAlias.trim();
-
-                                        // Detección de Vinculación RED Web Companion
-                                        if (input.startsWith("RED_PAIR:1:")) {
-                                            setAddContactOpen(false);
-                                            setNewContactInput("");
-                                            setNewContactAlias("");
-                                            setWebPairingCode(input);
-                                            return;
-                                        }
-
-                                        setIsSubmittingContact(true);
-                                        try {
-                                            const cleanHash = await addContact(input, alias);
-                                            setAddContactOpen(false);
-                                            setNewContactInput("");
-                                            setNewContactAlias("");
-                                            toast.success("✅ Contacto añadido. Iniciando chat P2P...");
-                                            const targetChat = (typeof cleanHash === 'string' && cleanHash) ? cleanHash : input;
-                                            setActiveTab("chats");
-                                            navigate("chat", targetChat);
-                                        } catch (err: any) {
-                                            toast.error(`❌ Error: ${err?.message || err}`);
-                                        } finally {
-                                            setIsSubmittingContact(false);
-                                        }
-                                    }}
-                                    style={{
-                                        flex: 2, padding: "12px", fontSize: "0.88rem", fontWeight: 900,
-                                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
-                                        border: "none", borderRadius: "10px", color: "#FFFFFF", cursor: "pointer",
-                                        boxShadow: "0 0 15px rgba(255, 51, 85, 0.3)"
-                                    }}
-                                >
-                                    {isSubmittingContact ? "Conectando..." : "⚡ CREAR CHAT O VINCULAR"}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Modal para Nuevo Chat / Contactos (Estilo WhatsApp) */}
+            <NewChatModal isOpen={addContactOpen} onClose={() => setAddContactOpen(false)} />
 
             {/* Global Search Modal */}
             {globalSearchOpen && <GlobalSearchModal onClose={() => setGlobalSearchOpen(false)} />}

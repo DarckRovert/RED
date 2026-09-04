@@ -10,7 +10,8 @@ import { toast } from "../Toast";
 
 export function CallsHistoryView() {
     const { t } = useTranslation();
-    const { contacts, conversations, navigate, setActiveCallType, identity } = useRedStore();
+    const { contacts, conversations, navigate, setActiveCallType, identity, preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
     const [history, setHistory] = useState<CallRecord[]>(() => callHistory.getHistory());
     const [filter, setFilter] = useState<"all" | "missed">("all");
     const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -106,27 +107,27 @@ export function CallsHistoryView() {
     return (
         <div style={{
             display: "flex", flexDirection: "column", height: "100%", width: "100%",
-            background: "var(--bg-void, #050812)", color: "#FFF", position: "relative",
+            background: isFamiliar ? "#111B21" : "var(--bg-void, #050812)", color: "#FFF", position: "relative",
             overflow: "hidden"
         }}>
             {/* Top Filter Bar */}
             <div style={{
                 padding: "12px 16px",
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                background: "rgba(10, 14, 28, 0.95)",
-                borderBottom: "1px solid rgba(0, 229, 255, 0.15)",
+                background: isFamiliar ? "#111B21" : "rgba(10, 14, 28, 0.95)",
+                borderBottom: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid rgba(0, 229, 255, 0.15)",
                 gap: "8px", flexShrink: 0
             }}>
                 <div style={{ display: "flex", gap: "8px" }}>
                     <button
                         onClick={() => setFilter("all")}
                         style={{
-                            padding: "6px 14px", borderRadius: "16px",
-                            fontSize: "0.78rem", fontWeight: 800, cursor: "pointer",
-                            background: filter === "all" ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 255, 255, 0.06)",
-                            color: filter === "all" ? "var(--accent-emerald, #00E676)" : "var(--text-muted, #888)",
-                            border: filter === "all" ? "1px solid rgba(0, 230, 118, 0.4)" : "1px solid transparent",
-                            transition: "all 0.2s ease"
+                            padding: "6px 16px", borderRadius: "20px",
+                            fontSize: "0.80rem", fontWeight: 700, cursor: "pointer",
+                            background: filter === "all" ? (isFamiliar ? "#00A884" : "rgba(0, 230, 118, 0.2)") : (isFamiliar ? "#202C33" : "rgba(255, 255, 255, 0.06)"),
+                            color: filter === "all" ? "#FFFFFF" : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)"),
+                            border: filter === "all" ? (isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.4)") : "none",
+                            transition: "all 0.15s ease"
                         }}
                     >
                         Todas ({history.length})
@@ -134,12 +135,12 @@ export function CallsHistoryView() {
                     <button
                         onClick={() => setFilter("missed")}
                         style={{
-                            padding: "6px 14px", borderRadius: "16px",
-                            fontSize: "0.78rem", fontWeight: 800, cursor: "pointer",
-                            background: filter === "missed" ? "rgba(255, 51, 85, 0.2)" : "rgba(255, 255, 255, 0.06)",
-                            color: filter === "missed" ? "#FF3355" : "var(--text-muted, #888)",
-                            border: filter === "missed" ? "1px solid rgba(255, 51, 85, 0.4)" : "1px solid transparent",
-                            transition: "all 0.2s ease"
+                            padding: "6px 16px", borderRadius: "20px",
+                            fontSize: "0.80rem", fontWeight: 700, cursor: "pointer",
+                            background: filter === "missed" ? (isFamiliar ? "rgba(241, 92, 109, 0.25)" : "rgba(255, 51, 85, 0.2)") : (isFamiliar ? "#202C33" : "rgba(255, 255, 255, 0.06)"),
+                            color: filter === "missed" ? (isFamiliar ? "#F15C6D" : "#FF3355") : (isFamiliar ? "#8696A0" : "var(--text-muted, #888)"),
+                            border: filter === "missed" ? (isFamiliar ? "1px solid rgba(241, 92, 109, 0.4)" : "1px solid rgba(255, 51, 85, 0.4)") : "none",
+                            transition: "all 0.15s ease"
                         }}
                     >
                         Perdidas ({history.filter(r => r.direction === "MISSED").length})
@@ -156,8 +157,8 @@ export function CallsHistoryView() {
                         }}
                         style={{
                             background: "transparent", border: "none",
-                            color: "var(--text-muted, #777)", fontSize: "0.72rem",
-                            cursor: "pointer", fontWeight: 700
+                            color: isFamiliar ? "#8696A0" : "var(--text-muted, #777)", fontSize: "0.76rem",
+                            cursor: "pointer", fontWeight: 600
                         }}
                     >
                         🗑️ Limpiar
@@ -171,36 +172,37 @@ export function CallsHistoryView() {
                 <div 
                     onClick={() => navigate("walkie")}
                     style={{
-                        margin: "12px 16px", padding: "14px 16px",
-                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.12) 0%, rgba(138, 43, 226, 0.08) 100%)",
-                        border: "1px solid rgba(0, 229, 255, 0.3)", borderRadius: "14px",
+                        margin: "12px 16px", padding: "12px 16px",
+                        background: isFamiliar ? "#182229" : "linear-gradient(135deg, rgba(0, 229, 255, 0.12) 0%, rgba(138, 43, 226, 0.08) 100%)",
+                        border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid rgba(0, 229, 255, 0.3)",
+                        borderRadius: "14px",
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         cursor: "pointer"
                     }}
                 >
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                         <div style={{
-                            width: "42px", height: "42px", borderRadius: "12px",
-                            background: "linear-gradient(135deg, #00E5FF, #0097A7)",
-                            color: "#000", display: "flex", alignItems: "center", justifyContent: "center",
+                            width: "42px", height: "42px", borderRadius: "50%",
+                            background: isFamiliar ? "#00A884" : "linear-gradient(135deg, #00E5FF, #0097A7)",
+                            color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
                             fontSize: "1.3rem", fontWeight: 900
                         }}>
                             📻
                         </div>
                         <div>
-                            <div style={{ fontSize: "0.92rem", fontWeight: 900, color: "#FFFFFF" }}>
+                            <div style={{ fontSize: "0.92rem", fontWeight: 700, color: isFamiliar ? "#E9EDEF" : "#FFFFFF" }}>
                                 Sala de Voz de Escuadrón (PTT)
                             </div>
-                            <div style={{ fontSize: "0.70rem", color: "var(--accent-cyan, #00E5FF)", fontFamily: "JetBrains Mono, monospace" }}>
-                                Canal de audio táctico multi-nodo 1.2 kbps
+                            <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#8696A0" : "var(--accent-cyan, #00E5FF)", fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace" }}>
+                                Canal de audio táctico multi-nodo
                             </div>
                         </div>
                     </div>
-                    <span style={{ fontSize: "1.1rem", color: "var(--accent-cyan, #00E5FF)" }}>➔</span>
+                    <span style={{ fontSize: "1.1rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)" }}>➔</span>
                 </div>
 
                 {/* Section Title */}
-                <div style={{ padding: "8px 18px 4px 18px", fontSize: "0.72rem", fontWeight: 800, color: "var(--text-muted, #777)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+                <div style={{ padding: "8px 18px 4px 18px", fontSize: "0.74rem", fontWeight: 700, color: isFamiliar ? "#8696A0" : "var(--text-muted, #777)", letterSpacing: "0.5px", textTransform: "uppercase" }}>
                     Recientes
                 </div>
 
@@ -208,28 +210,30 @@ export function CallsHistoryView() {
                 {filteredHistory.length === 0 ? (
                     <div style={{
                         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                        padding: "60px 24px", textAlign: "center", gap: "14px", color: "var(--text-muted, #777)"
+                        padding: "60px 24px", textAlign: "center", gap: "14px", color: isFamiliar ? "#8696A0" : "var(--text-muted, #777)"
                     }}>
                         <div style={{
                             width: "68px", height: "68px", borderRadius: "50%",
-                            background: "rgba(255, 255, 255, 0.04)", border: "1px solid rgba(255, 255, 255, 0.1)",
+                            background: isFamiliar ? "#202C33" : "rgba(255, 255, 255, 0.04)",
+                            border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(255, 255, 255, 0.1)",
                             display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.8rem"
                         }}>
                             📞
                         </div>
-                        <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#EEE" }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 700, color: isFamiliar ? "#E9EDEF" : "#EEE" }}>
                             {filter === "missed" ? "No hay llamadas perdidas" : "No hay llamadas recientes"}
                         </div>
-                        <div style={{ fontSize: "0.76rem", maxWidth: "280px", lineHeight: 1.4 }}>
-                            Las llamadas de voz y video P2P cifradas de extremo a extremo que realices aparecerán aquí.
+                        <div style={{ fontSize: "0.78rem", maxWidth: "280px", lineHeight: 1.45 }}>
+                            Las llamadas de voz y video P2P cifradas de extremo a extremo aparecerán aquí.
                         </div>
                         <button
                             onClick={() => setIsPickerOpen(true)}
-                            className="btn-tactical-primary"
                             style={{
                                 marginTop: "10px", padding: "10px 22px", borderRadius: "24px",
-                                background: "linear-gradient(135deg, #00E676, #00B368)", color: "#000",
-                                fontWeight: 900, fontSize: "0.82rem", cursor: "pointer"
+                                background: isFamiliar ? "#00A884" : "linear-gradient(135deg, #00E676, #00B368)",
+                                color: "#FFFFFF",
+                                fontWeight: 700, fontSize: "0.84rem", cursor: "pointer", border: "none",
+                                boxShadow: isFamiliar ? "0 4px 14px rgba(0, 168, 132, 0.4)" : "none"
                             }}
                         >
                             📞 Iniciar Nueva Llamada
@@ -249,15 +253,16 @@ export function CallsHistoryView() {
                                     onClick={() => navigate("chat", record.peerHash)}
                                     style={{
                                         display: "flex", alignItems: "center", justifyContent: "space-between",
-                                        padding: "12px 18px", borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-                                        transition: "background 0.2s ease", cursor: "pointer"
+                                        padding: "12px 18px",
+                                        borderBottom: isFamiliar ? "1px solid rgba(255, 255, 255, 0.04)" : "1px solid rgba(255, 255, 255, 0.05)",
+                                        transition: "background 0.15s ease", cursor: "pointer"
                                     }}
                                 >
-                                    <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0, flex: 1 }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0, flex: 1 }}>
                                         <div style={{
-                                            width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
+                                            width: 46, height: 46, borderRadius: "50%", flexShrink: 0,
                                             display: "flex", alignItems: "center", justifyContent: "center",
-                                            fontWeight: 900, color: "#FFFFFF", fontSize: "1.05rem",
+                                            fontWeight: 700, color: "#FFFFFF", fontSize: "1.1rem",
                                             ...avatarStyle(record.peerHash || "call")
                                         }}>
                                             {displayName.charAt(0).toUpperCase()}
@@ -265,26 +270,26 @@ export function CallsHistoryView() {
 
                                         <div style={{ minWidth: 0, overflow: "hidden" }}>
                                             <div style={{
-                                                fontSize: "0.92rem", fontWeight: 800,
-                                                color: isMissed ? "#FF3355" : "#FFFFFF",
+                                                fontSize: "0.95rem", fontWeight: 600,
+                                                color: isMissed ? (isFamiliar ? "#F15C6D" : "#FF3355") : (isFamiliar ? "#E9EDEF" : "#FFFFFF"),
                                                 overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
                                             }}>
                                                 {displayName}
                                             </div>
 
                                             <div style={{
-                                                fontSize: "0.72rem", color: "var(--text-muted, #888)",
+                                                fontSize: "0.75rem", color: isFamiliar ? "#8696A0" : "var(--text-muted, #888)",
                                                 display: "flex", alignItems: "center", gap: "6px", marginTop: "2px"
                                             }}>
                                                 <span style={{
-                                                    color: isMissed ? "#FF3355" : (isOutgoing ? "var(--accent-emerald, #00E676)" : "var(--accent-cyan, #00E5FF)"),
-                                                    fontSize: "0.85rem", fontWeight: 900
+                                                    color: isMissed ? (isFamiliar ? "#F15C6D" : "#FF3355") : (isOutgoing ? (isFamiliar ? "#8696A0" : "var(--accent-emerald)") : (isFamiliar ? "#00A884" : "var(--accent-cyan)")),
+                                                    fontSize: "0.90rem", fontWeight: 900
                                                 }}>
                                                     {isMissed ? "↙" : (isOutgoing ? "↗" : "↙")}
                                                 </span>
-                                                <span>{formatTimestamp(record.timestamp)}</span>
+                                                <span>{isVideo ? "📹 " : ""}{formatTimestamp(record.timestamp)}</span>
                                                 {record.durationSeconds > 0 && (
-                                                    <span style={{ color: "var(--accent-cyan, #00E5FF)", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    <span style={{ color: isFamiliar ? "#8696A0" : "var(--accent-cyan, #00E5FF)", fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace" }}>
                                                         {formatDuration(record.durationSeconds)}
                                                     </span>
                                                 )}
@@ -292,31 +297,21 @@ export function CallsHistoryView() {
                                         </div>
                                     </div>
 
-                                    {/* Action Buttons to Call Back or Delete */}
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, marginLeft: "10px" }} onClick={e => e.stopPropagation()}>
+                                    {/* Action Button to Call Back */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, marginLeft: "10px" }} onClick={e => e.stopPropagation()}>
                                         <button
-                                            onClick={() => startCallWithPeer(record.peerHash, "audio")}
+                                            onClick={() => startCallWithPeer(record.peerHash, isVideo ? "video" : "audio")}
                                             style={{
-                                                width: "36px", height: "36px", borderRadius: "50%",
-                                                background: "rgba(0, 230, 118, 0.12)", border: "1px solid rgba(0, 230, 118, 0.3)",
-                                                color: "var(--accent-emerald, #00E676)", display: "flex", alignItems: "center", justifyContent: "center",
-                                                cursor: "pointer", fontSize: "0.95rem"
+                                                width: "40px", height: "40px", borderRadius: "50%",
+                                                background: isFamiliar ? "transparent" : "rgba(0, 230, 118, 0.12)",
+                                                border: isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.3)",
+                                                color: isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                cursor: "pointer", fontSize: "1.15rem"
                                             }}
-                                            title="Llamada de voz"
+                                            title={isVideo ? "Videollamada" : "Llamada de voz"}
                                         >
-                                            📞
-                                        </button>
-                                        <button
-                                            onClick={() => startCallWithPeer(record.peerHash, "video")}
-                                            style={{
-                                                width: "36px", height: "36px", borderRadius: "50%",
-                                                background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                                                color: "var(--accent-cyan, #00E5FF)", display: "flex", alignItems: "center", justifyContent: "center",
-                                                cursor: "pointer", fontSize: "0.95rem"
-                                            }}
-                                            title="Videollamada"
-                                        >
-                                            📹
+                                            {isVideo ? "📹" : "📞"}
                                         </button>
                                         <button
                                             onClick={() => {
@@ -325,8 +320,8 @@ export function CallsHistoryView() {
                                             style={{
                                                 width: "30px", height: "30px", borderRadius: "50%",
                                                 background: "transparent", border: "none",
-                                                color: "var(--text-muted, #666)", display: "flex", alignItems: "center", justifyContent: "center",
-                                                cursor: "pointer", fontSize: "0.78rem"
+                                                color: isFamiliar ? "#8696A0" : "var(--text-muted, #666)", display: "flex", alignItems: "center", justifyContent: "center",
+                                                cursor: "pointer", fontSize: "0.80rem"
                                             }}
                                             title="Eliminar de historial"
                                         >
@@ -334,7 +329,6 @@ export function CallsHistoryView() {
                                         </button>
                                     </div>
                                 </div>
-
                             );
                         })}
                     </div>
@@ -350,18 +344,18 @@ export function CallsHistoryView() {
                     right: "20px",
                     width: "56px",
                     height: "56px",
-                    borderRadius: "16px",
-                    background: "linear-gradient(135deg, #00E676, #00B368)",
-                    color: "#000",
+                    borderRadius: isFamiliar ? "50%" : "16px",
+                    background: isFamiliar ? "#00A884" : "linear-gradient(135deg, #00E676, #00B368)",
+                    color: "#FFFFFF",
                     border: "none",
-                    boxShadow: "0 8px 24px rgba(0, 230, 118, 0.4)",
+                    boxShadow: isFamiliar ? "0 4px 16px rgba(0, 168, 132, 0.45)" : "0 8px 24px rgba(0, 230, 118, 0.4)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: "1.5rem",
+                    fontSize: "1.4rem",
                     cursor: "pointer",
                     zIndex: 100,
-                    transition: "transform 0.2s ease"
+                    transition: "transform 0.15s ease"
                 }}
                 title="Nueva Llamada P2P"
             >

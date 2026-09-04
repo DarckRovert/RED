@@ -20,6 +20,7 @@ import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { SettingsManager } from "../lib/settingsManager";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacticalVoiceAnalyzer } from "../lib/audio/TacticalVoiceAnalyzer";
+import { WhatsAppDoodleBackground } from "./chat/WhatsAppDoodleBackground";
 
 /* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
@@ -95,7 +96,24 @@ export default function ChatWindow() {
     const [searchOpen, setSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [currentMatchIdx, setCurrentMatchIdx] = useState(0);
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
     const [pinnedMessage, setPinnedMessage] = useState<MessageItem | null>(null);
+    const pinStorageKey = peerHash ? `red_pinned_${peerHash}` : null;
+
+    useEffect(() => {
+        if (!pinStorageKey || typeof window === 'undefined') return;
+        try {
+            const saved = localStorage.getItem(pinStorageKey);
+            if (saved) {
+                setPinnedMessage(JSON.parse(saved));
+            } else {
+                setPinnedMessage(null);
+            }
+        } catch {
+            setPinnedMessage(null);
+        }
+    }, [pinStorageKey]);
+
     const [menuOpen, setMenuOpen] = useState(false);
     const [burnTimer, setBurnTimer] = useState<number | undefined>(undefined);
     const [burnMenuOpen, setBurnMenuOpen] = useState(false);
@@ -339,9 +357,15 @@ export default function ChatWindow() {
     const handlePinMessage = (msg: MessageItem) => {
         if (pinnedMessage?.id === msg.id) {
             setPinnedMessage(null);
+            if (pinStorageKey && typeof window !== 'undefined') {
+                try { localStorage.removeItem(pinStorageKey); } catch {}
+            }
             toast.info("Mensaje desfijado");
         } else {
             setPinnedMessage(msg);
+            if (pinStorageKey && typeof window !== 'undefined') {
+                try { localStorage.setItem(pinStorageKey, JSON.stringify(msg)); } catch {}
+            }
             toast.success("Mensaje fijado en el canal");
         }
     };
@@ -1057,54 +1081,23 @@ export default function ChatWindow() {
                 </div>
             )}
 
-            {/* In-Chat Search Bar Overlay */}
-            {searchOpen && (
-                <div style={{
-                    display: "flex", alignItems: "center", gap: "10px", padding: "8px 16px",
-                    background: "rgba(18,20,36,0.98)", borderBottom: "1px solid var(--glass-border)",
-                    boxShadow: "0 4px 20px rgba(0,0,0,0.5)", zIndex: 9
-                }}>
-                    <span style={{ fontSize: "1.1rem" }}>🔍</span>
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => {
-                            setSearchQuery(e.target.value);
-                            setCurrentMatchIdx(0);
-                        }}
-                        placeholder="Buscar en esta conversación..."
-                        autoFocus
-                        style={{
-                            flex: 1, padding: "6px 12px", background: "rgba(255,255,255,0.06)",
-                            border: "1px solid var(--glass-border)", borderRadius: "var(--radius-full)",
-                            color: "#fff", fontSize: "0.85rem", outline: "none"
-                        }}
-                    />
-                    {searchMatches.length > 0 && (
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", fontFamily: "monospace", color: "var(--accent-amber)" }}>
-                            <span>{currentMatchIdx + 1}/{searchMatches.length}</span>
-                            <button onClick={handlePrevMatch} className="btn-icon" style={{ width: 28, height: 28 }} title="Anterior">▲</button>
-                            <button onClick={handleNextMatch} className="btn-icon" style={{ width: 28, height: 28 }} title="Siguiente">▼</button>
-                        </div>
-                    )}
-                    <button onClick={() => { setSearchOpen(false); setSearchQuery(""); }} className="btn-icon" style={{ width: 30, height: 30 }} title="Cerrar búsqueda">✕</button>
-                </div>
-            )}
-
             {/* Pinned Message Banner */}
             {pinnedMessage && (
                 <div
                     onClick={scrollToPinned}
                     style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
-                        padding: "6px 14px", background: "rgba(0,229,255,0.08)",
-                        borderBottom: "1px solid rgba(0,229,255,0.2)", cursor: "pointer",
-                        fontSize: "0.78rem", zIndex: 8
+                        padding: "8px 16px",
+                        background: isFamiliar ? "#202C33" : "rgba(0,229,255,0.08)",
+                        borderLeft: `4px solid ${isFamiliar ? "#00A884" : "var(--accent-cyan)"}`,
+                        borderBottom: isFamiliar ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,229,255,0.2)",
+                        cursor: "pointer",
+                        fontSize: "0.82rem", zIndex: 8
                     }}
                 >
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        <span style={{ color: "var(--accent-cyan)", fontWeight: 800 }}>📌 Fijado:</span>
-                        <span style={{ color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        <span style={{ color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontWeight: 700 }}>📌 Mensaje fijado:</span>
+                        <span style={{ color: isFamiliar ? "#E9EDEF" : "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {pinnedMessage.content?.startsWith("data:") ? "📎 Archivo adjunto" : pinnedMessage.content}
                         </span>
                     </div>
@@ -1112,6 +1105,10 @@ export default function ChatWindow() {
                         onClick={(e) => {
                             e.stopPropagation();
                             setPinnedMessage(null);
+                            if (pinStorageKey && typeof window !== 'undefined') {
+                                try { localStorage.removeItem(pinStorageKey); } catch {}
+                            }
+                            toast.info("Mensaje desfijado");
                         }}
                         style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.9rem" }}
                         title="Desfijar"
@@ -1245,62 +1242,105 @@ export default function ChatWindow() {
                 </div>
             )}
 
-            {/* Lista de Mensajes con Scroll Suave */}
-            <div
-                ref={scrollContainerRef}
-                onScroll={handleScroll}
-                className="scroll-container"
-                style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "4px", position: "relative" }}
-            >
-                {convMessages.length === 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "24px 16px" }}>
-                        <div className="cyber-hologram-shield" style={{ maxWidth: "340px", width: "100%", textAlign: "center" }}>
-                            <div style={{
-                                width: 64, height: 64, borderRadius: "20px",
-                                background: "linear-gradient(135deg, rgba(0, 229, 255, 0.2) 0%, rgba(232, 33, 58, 0.2) 100%)",
-                                border: "1px solid rgba(0, 229, 255, 0.4)",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: "2rem",
-                                animation: "cyberShieldGlow 3s ease-in-out infinite",
-                                boxShadow: "0 0 24px rgba(0, 229, 255, 0.35)"
-                            }}>
-                                🛡️
-                            </div>
-                            <div>
-                                <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
-                                    CANAL TÁCTICO CIFRADO
-                                </div>
-                                <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "2px" }}>
-                                    NOISE XK • KYBER-768 PQC • SLED DB
-                                </div>
-                            </div>
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
-                                Este canal está blindado contra interceptación. Los mensajes viajan de par a par sin intermediarios centrales.
-                            </div>
+            {/* Lista de Mensajes con Wallpaper Fijo */}
+            <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: isFamiliar ? "#0B141A" : "transparent" }}>
+                {isFamiliar && preferences.chatWallpaper !== 'void_black' && (
+                    <WhatsAppDoodleBackground
+                        opacity={0.06}
+                        variant={preferences.chatWallpaper === 'doodle_green' ? 'green' : 'dark'}
+                    />
+                )}
 
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginTop: "6px" }}>
-                                <button
-                                    onClick={() => setIsSafetyModalOpen(true)}
-                                    className="tactical-action-chip"
-                                >
-                                    <span>🛡️</span> Safety Number
-                                </button>
-                                <button
-                                    onClick={() => navigate("compass")}
-                                    className="tactical-action-chip"
-                                >
-                                    <span>🧭</span> Brújula Táctica
-                                </button>
-                                <button
-                                    onClick={() => navigate("radar")}
-                                    className="tactical-action-chip"
-                                >
-                                    <span>📡</span> Radar Malla
-                                </button>
-                            </div>
+                <div
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                    className="scroll-container"
+                    style={{ flex: 1, padding: "16px 14px", display: "flex", flexDirection: "column", gap: "4px", position: "relative", zIndex: 1 }}
+                >
+                    {convMessages.length === 0 ? (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, padding: "24px 16px", zIndex: 2 }}>
+                            {isFamiliar ? (
+                                <div style={{
+                                    maxWidth: "340px", width: "100%", textAlign: "center",
+                                    background: "#182229", borderRadius: "14px", padding: "18px 20px",
+                                    border: "1px solid rgba(255,255,255,0.06)",
+                                    boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+                                    display: "flex", flexDirection: "column", alignItems: "center", gap: "10px"
+                                }}>
+                                    <div style={{
+                                        width: 48, height: 48, borderRadius: "50%",
+                                        background: "rgba(0, 168, 132, 0.15)",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: "1.4rem"
+                                    }}>
+                                        🔒
+                                    </div>
+                                    <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#E9EDEF" }}>
+                                        Cifrado de extremo a extremo
+                                    </div>
+                                    <div style={{ fontSize: "0.76rem", color: "#8696A0", lineHeight: 1.45 }}>
+                                        Los mensajes y llamadas en este chat están protegidos con el protocolo criptográfico Noise y ML-KEM-768. Nadie fuera de esta conversación, ni siquiera los nodos repetidores de la malla, pueden leerlos ni escucharlos.
+                                    </div>
+                                    <button
+                                        onClick={() => setIsSafetyModalOpen(true)}
+                                        style={{
+                                            marginTop: "4px", padding: "6px 14px", borderRadius: "20px",
+                                            background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.35)",
+                                            color: "#00A884", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer"
+                                        }}
+                                    >
+                                        🛡️ Verificar Safety Number
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="cyber-hologram-shield" style={{ maxWidth: "340px", width: "100%", textAlign: "center" }}>
+                                    <div style={{
+                                        width: 64, height: 64, borderRadius: "20px",
+                                        background: "linear-gradient(135deg, rgba(0, 229, 255, 0.2) 0%, rgba(232, 33, 58, 0.2) 100%)",
+                                        border: "1px solid rgba(0, 229, 255, 0.4)",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: "2rem",
+                                        animation: "cyberShieldGlow 3s ease-in-out infinite",
+                                        boxShadow: "0 0 24px rgba(0, 229, 255, 0.35)"
+                                    }}>
+                                        🛡️
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: "1.05rem", fontWeight: 900, color: "#FFFFFF", letterSpacing: "0.4px" }}>
+                                            CANAL TÁCTICO CIFRADO
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700, marginTop: "2px" }}>
+                                            NOISE XK • KYBER-768 PQC • SLED DB
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                                        Este canal está blindado contra interceptación. Los mensajes viajan de par a par sin intermediarios centrales.
+                                    </div>
+
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center", marginTop: "6px" }}>
+                                        <button
+                                            onClick={() => setIsSafetyModalOpen(true)}
+                                            className="tactical-action-chip"
+                                        >
+                                            <span>🛡️</span> Safety Number
+                                        </button>
+                                        <button
+                                            onClick={() => navigate("compass")}
+                                            className="tactical-action-chip"
+                                        >
+                                            <span>🧭</span> Brújula Táctica
+                                        </button>
+                                        <button
+                                            onClick={() => navigate("radar")}
+                                            className="tactical-action-chip"
+                                        >
+                                            <span>📡</span> Radar Malla
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                ) : (
+                    ) : (
                     (convMessages ?? []).map((msg, index) => {
                         const isMine = Boolean(
                             msg.is_mine ||
@@ -1455,28 +1495,28 @@ export default function ChatWindow() {
                     style={{
                         position: "absolute",
                         right: "20px",
-                        bottom: "84px",
+                        bottom: "20px",
                         zIndex: 40,
-                        background: "rgba(18, 22, 38, 0.96)",
+                        background: isFamiliar ? "#202C33" : "rgba(18, 22, 38, 0.96)",
                         backdropFilter: "blur(14px)",
-                        border: "1.5px solid var(--accent-cyan)",
+                        border: isFamiliar ? "1px solid rgba(255,255,255,0.12)" : "1.5px solid var(--accent-cyan)",
                         borderRadius: "28px",
                         padding: unreadInChatCount > 0 ? "8px 14px" : "10px 14px",
-                        color: "#FFFFFF",
+                        color: isFamiliar ? "#00A884" : "#FFFFFF",
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
                         gap: "8px",
-                        boxShadow: "0 6px 24px rgba(0, 229, 255, 0.4)",
+                        boxShadow: isFamiliar ? "0 4px 16px rgba(0, 0, 0, 0.5)" : "0 6px 24px rgba(0, 229, 255, 0.4)",
                         animation: "fadeIn 0.2s ease-out"
                     }}
                     title="Bajar al mensaje más reciente"
                 >
-                    <span style={{ fontSize: "1.1rem", color: "var(--accent-cyan)", fontWeight: 900 }}>↓</span>
+                    <span style={{ fontSize: "1.1rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontWeight: 900 }}>↓</span>
                     {unreadInChatCount > 0 && (
                         <span style={{
-                            background: "var(--accent-cyan)",
-                            color: "#000",
+                            background: isFamiliar ? "#00A884" : "var(--accent-cyan)",
+                            color: isFamiliar ? "#FFFFFF" : "#000",
                             fontSize: "0.72rem",
                             fontWeight: 900,
                             borderRadius: "12px",
@@ -1488,6 +1528,7 @@ export default function ChatWindow() {
                     )}
                 </button>
             )}
+            </div>
 
             {/* Hidden Media Picker for Camera / Gallery / Video */}
             <input
@@ -1505,8 +1546,8 @@ export default function ChatWindow() {
                 onChange={handleDocumentSelected}
             />
 
-            {/* Input Bar Táctica */}
-            <div style={{ borderTop: "1px solid var(--glass-border)", background: "rgba(10, 10, 20, 0.95)", backdropFilter: "blur(20px)" }}>
+            {/* Input Bar Táctica / Familiar */}
+            <div style={{ borderTop: isFamiliar ? "1px solid rgba(255,255,255,0.06)" : "1px solid var(--glass-border)", background: isFamiliar ? "#202C33" : "rgba(10, 10, 20, 0.95)", backdropFilter: "blur(20px)" }}>
                 <ChatInput
                     onSendMessage={handleSendText}
                     onSendVoice={handleSendVoice}

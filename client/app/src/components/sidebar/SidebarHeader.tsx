@@ -44,17 +44,17 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     setChatFilter,
     unreadTotal = 0,
 }) => {
-    const { identity, nodeOnline, navigate } = useRedStore();
+    const { identity, nodeOnline, navigate, preferences, updatePreferences } = useRedStore();
     const { t } = useTranslation();
-    const [searchExpanded, setSearchExpanded] = useState(false);
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [quickMenuOpen, setQuickMenuOpen] = useState(false);
 
-    const filters: { id: ChatFilterType; label: string; icon: string; badge?: number }[] = [
-        { id: "all", label: t('common.all') || "Todos", icon: "💬" },
-        { id: "unread", label: t('common.unread') || "No Leídos", icon: "🔔", badge: unreadTotal },
-        { id: "groups", label: t('nav.squads') || "Escuadrones", icon: "👥" },
-        { id: "contacts", label: t('sidebar.contacts_header') || "Contactos", icon: "🪪", badge: pendingCount },
-        { id: "channels", label: t('nav.channels') || "Canales", icon: "📻" },
+    const filters: { id: ChatFilterType; label: string; icon?: string; badge?: number }[] = [
+        { id: "all", label: t('common.all') || "Todos" },
+        { id: "unread", label: t('common.unread') || "No leídos", badge: unreadTotal },
+        { id: "groups", label: t('nav.squads') || "Grupos" },
+        { id: "contacts", label: t('sidebar.contacts_header') || "Contactos", badge: pendingCount },
+        { id: "channels", label: t('nav.channels') || "Canales" },
     ];
 
     const handleFilterSelect = (filterId: ChatFilterType) => {
@@ -69,6 +69,265 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
     const currentActiveFilter = activeTab === "contacts" ? "contacts" : chatFilter;
 
+    if (isFamiliar) {
+        return (
+            <div style={{ flexShrink: 0, zIndex: 10, background: "#111B21" }}>
+                {/* ── Top Bar: WhatsApp Web Style ── */}
+                <header style={{
+                    padding: "0 16px",
+                    height: "56px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "#202C33",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                    position: "relative"
+                }}>
+                    {/* Left: User Identity */}
+                    <div 
+                        style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", minWidth: 0, flex: "1 1 auto" }} 
+                        onClick={() => navigate("idVault")}
+                        title="Mi Perfil P2P"
+                    >
+                        <div style={{
+                            width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontWeight: 700, color: "#FFFFFF", fontSize: "1rem",
+                            ...avatarStyle(identity?.identity_hash || "me")
+                        }}>
+                            {(identity?.short_id || "O").charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ minWidth: 0, overflow: "hidden" }}>
+                            <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {identity?.nickname || "Mi Perfil RED"}
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "#8696A0", display: "flex", alignItems: "center", gap: "5px" }}>
+                                <span style={{
+                                    width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                                    background: nodeOnline ? "#00A884" : "#FF3355",
+                                    display: "inline-block"
+                                }} />
+                                <span>{nodeOnline ? `Malla activa (${meshRouter.peers.size})` : "Desconectado"}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right: Authentic Action Icons */}
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, position: "relative" }}>
+                        {/* Status / Stories icon */}
+                        <button
+                            onClick={() => setStoryModal("creator")}
+                            style={{
+                                width: 38, height: 38, borderRadius: "50%",
+                                background: "transparent", border: "none",
+                                color: "#AEBAC1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.1rem", transition: "background 0.15s ease"
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                            title="Estados / Historias"
+                        >
+                            ⭕
+                        </button>
+
+                        {/* New Chat FAB icon */}
+                        <button
+                            onClick={() => setAddContactOpen(true)}
+                            style={{
+                                width: 38, height: 38, borderRadius: "50%",
+                                background: "transparent", border: "none",
+                                color: "#AEBAC1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.1rem", transition: "background 0.15s ease"
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                            title="Nuevo Chat"
+                        >
+                            💬
+                        </button>
+
+                        {/* 3-Dots Menu */}
+                        <button
+                            onClick={() => setQuickMenuOpen(m => !m)}
+                            style={{
+                                width: 38, height: 38, borderRadius: "50%",
+                                background: quickMenuOpen ? "rgba(255,255,255,0.08)" : "transparent",
+                                border: "none", color: "#AEBAC1",
+                                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.2rem", transition: "background 0.15s ease"
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                            onMouseLeave={e => {
+                                if (!quickMenuOpen) e.currentTarget.style.background = "transparent";
+                            }}
+                            title="Más opciones"
+                        >
+                            ⋮
+                        </button>
+
+                        {/* Dropdown Menu (WhatsApp Web Style) */}
+                        {quickMenuOpen && (
+                            <div 
+                                style={{
+                                    position: "absolute", top: "46px", right: 0, width: "210px",
+                                    background: "#233138", borderRadius: "8px",
+                                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.4)",
+                                    padding: "6px 0", display: "flex", flexDirection: "column",
+                                    zIndex: 100
+                                }}
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); navigate("groups"); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span>👥</span> Nuevo grupo
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setAddContactOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span>👤</span> Nuevo contacto
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); navigate("webCompanionLink"); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span>💻</span> Dispositivos vinculados
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setGlobalSearchOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#D1D7DB", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span>🔍</span> Búsqueda global
+                                </button>
+                                <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.08)", margin: "4px 0" }} />
+                                <button
+                                    onClick={() => {
+                                        setQuickMenuOpen(false);
+                                        updatePreferences({ uiMode: 'tactical' });
+                                    }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#00A884", fontSize: "0.86rem", fontWeight: 600, cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span>⚡</span> Cambiar a Modo Táctico
+                                </button>
+                                <button
+                                    onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
+                                    style={{
+                                        display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
+                                        background: "transparent", border: "none",
+                                        color: "#8696A0", fontSize: "0.86rem", cursor: "pointer", textAlign: "left"
+                                    }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#182229"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span>🛡️</span> 8 Hubs Tácticos
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </header>
+
+                {/* ── Search Bar: WhatsApp Capsule ── */}
+                <div style={{ padding: "8px 14px", borderBottom: "1px solid rgba(255, 255, 255, 0.06)", background: "#111B21" }}>
+                    <div style={{
+                        display: "flex", alignItems: "center", gap: "10px",
+                        background: "#202C33", borderRadius: "8px", padding: "7px 12px"
+                    }}>
+                        <span style={{ fontSize: "0.85rem", color: "#8696A0" }}>🔍</span>
+                        <input
+                            type="text"
+                            placeholder="Buscar un chat o iniciar uno nuevo"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            style={{
+                                flex: 1, background: "transparent", border: "none",
+                                color: "#E9EDEF", fontSize: "0.84rem", outline: "none"
+                            }}
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery("")}
+                                style={{ background: "transparent", border: "none", color: "#8696A0", cursor: "pointer", fontSize: "0.8rem" }}
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* ── Filter Pills: WhatsApp Rounded ── */}
+                <div style={{
+                    display: "flex", gap: "8px", overflowX: "auto", padding: "8px 14px 8px 14px",
+                    scrollbarWidth: "none", msOverflowStyle: "none",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.06)"
+                }}>
+                    {filters.map(f => {
+                        const isSelected = currentActiveFilter === f.id;
+                        return (
+                            <button
+                                key={f.id}
+                                onClick={() => handleFilterSelect(f.id)}
+                                style={{
+                                    display: "flex", alignItems: "center", gap: "6px",
+                                    padding: "6px 14px", borderRadius: "20px",
+                                    background: isSelected ? "#0A332C" : "#202C33",
+                                    border: isSelected ? "1px solid #00A884" : "none",
+                                    color: isSelected ? "#00A884" : "#8696A0",
+                                    fontSize: "0.78rem", fontWeight: isSelected ? 600 : 500,
+                                    cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                                    transition: "all 0.15s ease"
+                                }}
+                            >
+                                <span>{f.label}</span>
+                                {typeof f.badge === "number" && f.badge > 0 && (
+                                    <span style={{
+                                        background: "#25D366", color: "#111B21",
+                                        fontSize: "0.65rem", fontWeight: 700,
+                                        padding: "1px 6px", borderRadius: "10px"
+                                    }}>
+                                        {f.badge}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    }
+
+    // Modo Táctico (Cyberpunk HUD)
     return (
         <div style={{ flexShrink: 0, zIndex: 10, background: "linear-gradient(180deg, rgba(14, 18, 36, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)" }}>
             {/* Top Primary Bar */}
@@ -125,23 +384,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
                 {/* Right: Action Buttons */}
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0, position: "relative" }}>
-                    {/* Search Toggle */}
-                    <button 
-                        onClick={() => setSearchExpanded(s => !s)} 
-                        style={{
-                            width: 36, height: 36, borderRadius: "10px",
-                            background: searchExpanded ? "rgba(0, 229, 255, 0.2)" : "rgba(255, 255, 255, 0.06)",
-                            border: searchExpanded ? "1px solid var(--accent-cyan, #00E5FF)" : "1px solid rgba(255, 255, 255, 0.12)",
-                            color: searchExpanded ? "var(--accent-cyan, #00E5FF)" : "#FFFFFF",
-                            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: "0.95rem", transition: "all 0.2s ease"
-                        }} 
-                        title="Buscar Mensajes o Contactos"
-                    >
-                        🔍
-                    </button>
-
-                    {/* Web Companion Link */}
                     <button 
                         onClick={() => navigate("webCompanionLink")} 
                         style={{
@@ -155,7 +397,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         💻
                     </button>
 
-                    {/* 3-Dots Tactical Menu */}
                     <button 
                         onClick={() => setQuickMenuOpen(m => !m)} 
                         style={{ 
@@ -174,7 +415,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         ⋮
                     </button>
 
-                    {/* Dropdown Menu */}
                     {quickMenuOpen && (
                         <div 
                             style={{
@@ -248,47 +488,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                 </div>
             </header>
 
-            {/* Collapsible Clean Search Input */}
-            {searchExpanded && (
-                <div style={{ padding: "8px 14px", borderBottom: "1px solid rgba(255, 255, 255, 0.06)", background: "rgba(6, 8, 20, 0.95)" }}>
-                    <div style={{
-                        display: "flex", alignItems: "center", gap: "8px",
-                        background: "rgba(0, 0, 0, 0.6)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                        borderRadius: "12px", padding: "8px 12px"
-                    }}>
-                        <span style={{ fontSize: "0.85rem", color: "#00E5FF" }}>🔍</span>
-                        <input
-                            type="text"
-                            placeholder="Buscar chats, escuadrones o contactos..."
-                            value={searchQuery}
-                            autoFocus
-                            onChange={e => setSearchQuery(e.target.value)}
-                            style={{
-                                flex: 1, background: "transparent", border: "none",
-                                color: "#FFFFFF", fontSize: "0.84rem", outline: "none",
-                                fontFamily: "JetBrains Mono, monospace"
-                            }}
-                        />
-                        {searchQuery ? (
-                            <button
-                                onClick={() => setSearchQuery("")}
-                                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
-                            >
-                                ✕
-                            </button>
-                        ) : (
-                            <button
-                                onClick={() => setSearchExpanded(false)}
-                                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "0.75rem" }}
-                            >
-                                Cerrar
-                            </button>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Filter Chips Bar */}
+            {/* Filter Chips Bar (Tactical) */}
             <div style={{
                 display: "flex", gap: "8px", overflowX: "auto", padding: "8px 14px 10px 14px",
                 scrollbarWidth: "none", msOverflowStyle: "none",
@@ -312,7 +512,6 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 boxShadow: isSelected ? "0 0 12px rgba(0, 229, 255, 0.3)" : "none"
                             }}
                         >
-                            <span style={{ fontSize: "0.8rem" }}>{f.icon}</span>
                             <span>{f.label}</span>
                             {typeof f.badge === "number" && f.badge > 0 && (
                                 <span style={{
@@ -331,4 +530,3 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         </div>
     );
 };
-

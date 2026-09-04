@@ -137,6 +137,53 @@ public class RedNodePlugin extends Plugin {
         }
     }
 
+    /**
+     * Envía un payload a través del servidor GATT local hacia un cliente Central conectado,
+     * o a todos los clientes si device es nulo o vacío.
+     */
+    @PluginMethod
+    public void sendBleServerMessage(PluginCall call) {
+        try {
+            String device = call.getString("device", null);
+            com.getcapacitor.JSArray dataArray = call.getArray("data");
+            if (dataArray == null || dataArray.length() == 0) {
+                call.reject("Data array is required");
+                return;
+            }
+
+            byte[] bytes = new byte[dataArray.length()];
+            for (int i = 0; i < dataArray.length(); i++) {
+                bytes[i] = (byte) dataArray.getInt(i);
+            }
+
+            boolean ok = RedNodeService.sendGattNotification(device, bytes);
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("success", ok);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to send BLE server message: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Obtiene la lista de direcciones MAC de clientes GATT Centrales conectados a nuestro servidor.
+     */
+    @PluginMethod
+    public void getBleServerClients(PluginCall call) {
+        try {
+            java.util.List<String> clients = RedNodeService.getConnectedClients();
+            com.getcapacitor.JSArray array = new com.getcapacitor.JSArray();
+            for (String c : clients) {
+                array.put(c);
+            }
+            com.getcapacitor.JSObject ret = new com.getcapacitor.JSObject();
+            ret.put("clients", array);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Failed to get BLE server clients: " + e.getMessage());
+        }
+    }
+
     /** Expone el estado de carga de la librería nativa al frontend (Capacitor JS). */
     @PluginMethod
     public void isNativeReady(PluginCall call) {

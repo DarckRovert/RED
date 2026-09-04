@@ -29,10 +29,10 @@ export const PrivacyTab: React.FC = () => {
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <div>
                 <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#fff", marginBottom: "4px" }}>
-                    {t.settings?.tab_privacy || "Protocolos de Privacidad & Autoprotección"}
+                    {t('settings.tab_privacy') || "Protocolos de Privacidad & Autoprotección"}
                 </h3>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                    {t.security_panel?.subtitle || "Control de fugas visuales, efimeridad de datos y llaves biométricas de hardware."}
+                    {t('security_panel.subtitle') || "Control de fugas visuales, efimeridad de datos y llaves biométricas de hardware."}
                 </p>
             </div>
 
@@ -41,7 +41,7 @@ export const PrivacyTab: React.FC = () => {
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div>
                         <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span>🛡️</span> {t.settings?.autolock_title || "Bloqueo Biométrico / Passkeys"}
+                            <span>🛡️</span> Bloqueo Biométrico / Passkeys
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", marginTop: "2px", fontWeight: 700 }}>
                             Hardware: {bioHardware.biometryType}
@@ -89,7 +89,7 @@ export const PrivacyTab: React.FC = () => {
                         </div>
 
                         {/* Inactivity Timeout Selector */}
-                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>TIEMPO DE INACTIVIDAD PARA BLOQUEO:</div>
+                        <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{t('settings.autolock_title') || "TIEMPO DE INACTIVIDAD PARA BLOQUEO"}:</div>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
                             {[
                                 { id: "immediate", label: "Inmediato" },
@@ -132,6 +132,28 @@ export const PrivacyTab: React.FC = () => {
                         toast.info(e.target.checked ? "🛡️ Privacy Screen activado" : "Privacy Screen desactivado");
                     }}
                     style={{ width: 22, height: 22, accentColor: "var(--primary)" }}
+                />
+            </div>
+
+            {/* Confirmaciones de Lectura (Doble Check Azul) */}
+            <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                    <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span>✓✓</span> Confirmaciones de Lectura
+                    </div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                        Si se desactivan, no enviarás ni recibirás confirmaciones de lectura (dobles checks azules).
+                    </div>
+                </div>
+                <input
+                    type="checkbox"
+                    checked={preferences.readReceiptsEnabled !== false}
+                    onChange={(e) => {
+                        SettingsManager.triggerHaptic("medium");
+                        updatePreferences({ readReceiptsEnabled: e.target.checked });
+                        toast.info(e.target.checked ? "Confirmaciones de lectura activadas" : "Confirmaciones de lectura desactivadas");
+                    }}
+                    style={{ width: 22, height: 22, accentColor: "#00A884" }}
                 />
             </div>
 

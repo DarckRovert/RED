@@ -387,6 +387,23 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
                     timestamp: Date.now() / 1000
                 }));
                 meshRouter.send(cleanHash, rawBytes).catch(() => {});
+
+                // Targeted discovery broadcast: Ensures that even if physical MAC/UUID mapping
+                // is not yet bound to cleanHash, all nearby physical nodes receive the handshake,
+                // and the node matching cleanHash processes it immediately!
+                const bcPacket = new TextEncoder().encode(JSON.stringify({
+                    id: `creq_bc_${Date.now()}`,
+                    content: reqPayload,
+                    sender: myIdentity.identity_hash,
+                    sender_hash: myIdentity.identity_hash,
+                    sender_name: myName,
+                    sender_pk: myIdentity.public_key || null,
+                    recipient: cleanHash,
+                    target_hash: cleanHash,
+                    msg_type: 'contact_request',
+                    timestamp: Date.now() / 1000
+                }));
+                meshRouter.broadcast(bcPacket).catch(() => {});
             } catch {}
         }
 

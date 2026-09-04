@@ -103,18 +103,18 @@ export const SUPPORTED_MODELS: LocalModelMetaData[] = [
         downloadProgress: 0,
     },
     {
-        id: 'gemma-2b-q4',
-        name: 'Gemma 2B Instruct (Google)',
-        description: 'Modelo 2B de Google optimizado para razonamiento táctico estándar.',
-        parameterCount: '2.0B',
-        fileSizeMb: 1629,
-        expectedSizeBytes: 1708582752,
-        hfModelId: 'onnx-community/gemma-2-2b-it',
-        downloadUrl: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
-        fileName: 'gemma-2-2b-it-Q4_K_M.gguf',
-        tokenizerUrl: 'https://huggingface.co/unsloth/gemma-2-2b-it/resolve/main/tokenizer.json',
-        tokenizerFileName: 'gemma-2-2b-it-Q4_K_M.json',
-        recommendedMinRamMb: 2500,
+        id: 'llama-3.2-3b-q4',
+        name: 'Llama 3.2 3B Instruct (Meta)',
+        description: '🌟 RECOMENDADO PARA TELÉFONOS 6GB+ RAM (2.0 GB). Razonamiento táctico profundo y síntesis de alta precisión.',
+        parameterCount: '3.0B',
+        fileSizeMb: 2010,
+        expectedSizeBytes: 2107637760,
+        hfModelId: 'onnx-community/Llama-3.2-3B-Instruct',
+        downloadUrl: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+        fileName: 'Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+        tokenizerUrl: 'https://huggingface.co/unsloth/Llama-3.2-3B-Instruct/resolve/main/tokenizer.json',
+        tokenizerFileName: 'Llama-3.2-3B-Instruct-Q4_K_M.json',
+        recommendedMinRamMb: 3000,
         isDownloaded: false,
         downloadProgress: 0,
     },
@@ -288,8 +288,8 @@ class ModelManagerClass {
             recommendedModelId = 'qwen-2.5-0.5b-q4';
             reason = `Sin WebGPU y RAM intermedia (${ramMb} MB). Modelo compacto Qwen 0.5B.`;
         } else if (ramMb >= 6144) {
-            recommendedModelId = 'gemma-2b-q4';
-            reason = `RAM alta (${ramMb} MB)${hasWebGpu ? ' + WebGPU activo' : ''}. Modelo Gemma 2B para razonamiento avanzado.`;
+            recommendedModelId = 'llama-3.2-3b-q4';
+            reason = `RAM alta (${ramMb} MB)${hasWebGpu ? ' + WebGPU activo' : ''}. Modelo Llama 3.2 3B para razonamiento táctico avanzado.`;
         } else {
             // WebGPU disponible o RAM 4-6 GB → modelo de 1.5B
             recommendedModelId = 'qwen-2.5-1.5b-q4';
@@ -478,13 +478,16 @@ class ModelManagerClass {
             console.log(`[ModelManager] Auto-descargando tokenizer.json para ${model.name}...`);
             
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout de seguridad
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s timeout para descarga completa sin truncar
 
             const resp = await fetch(model.tokenizerUrl, { signal: controller.signal });
             clearTimeout(timeoutId);
 
             if (resp.ok) {
                 const text = await resp.text();
+                if (!text || text.length < 1000 || !text.trim().startsWith('{')) {
+                    throw new Error(`Tokenizer inválido o truncado (${text?.length || 0} bytes)`);
+                }
                 const encoder = new TextEncoder();
                 const bytes = encoder.encode(text);
                 const base64Data = uint8ArrayToBase64(bytes);
@@ -499,11 +502,11 @@ class ModelManagerClass {
                     data: base64Data,
                     directory: Directory.Data
                 });
-                console.log(`[ModelManager] ✅ Tokenizer sincronizado con éxito para ${model.name}`);
+                console.log(`[ModelManager] ✅ Tokenizer sincronizado y validado (${bytes.length} bytes) para ${model.name}`);
                 return true;
             }
         } catch (e) {
-            console.warn(`[ModelManager] Falló o timeout en la auto-descarga de tokenizer para ${modelId}:`, e);
+            console.warn(`[ModelManager] Falló la descarga o validación del tokenizer para ${modelId}:`, e);
         }
         return false;
     }
@@ -823,14 +826,23 @@ class ModelManagerClass {
                 onProgress(100, finalPartStat.size, totalBytes);
             }
 
+            // Descarga síncrona y verificación obligatoria del tokenizer antes de marcar el modelo como listo
+            console.log(`[ModelManager] Verificando tokenizer para ${model.name}...`);
+            const tokOk = await this.ensureTokenizerDownloaded(modelId).catch((tokErr) => {
+                console.warn(`[ModelManager] Error descargando tokenizer para ${modelId}:`, tokErr);
+                return false;
+            });
+
+            if (!tokOk) {
+                console.warn(`[ModelManager] Advertencia: Tokenizer para ${modelId} no pudo ser verificado de inmediato. Reintentando...`);
+                await this.ensureTokenizerDownloaded(modelId).catch(() => {});
+            }
+
             if (typeof window !== 'undefined') {
                 localStorage.setItem(`red_model_${modelId}_ready`, 'true');
                 localStorage.setItem(`red_model_${modelId}_path`, localUri);
                 localStorage.setItem('red_active_model_id', modelId);
             }
-
-            // Descarga secundaria de tokenizer en background (no bloquea el 100% ni la activación)
-            this.ensureTokenizerDownloaded(modelId).catch(() => {});
 
             this.activeDownloads.delete(modelId);
             this.notify();

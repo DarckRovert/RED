@@ -1334,6 +1334,41 @@ class MeshRouter {
 
       // 4. Contact & Location Signals
       isHandshakeMsg = payloadStr.includes('contact_request') || payloadStr.includes('contact_response') || payloadStr.includes('shake_pair_');
+      if (payloadStr.includes('contact_request')) {
+        try {
+          let parsedReq = JSON.parse(payloadStr);
+          if (typeof parsedReq.content === 'string' && parsedReq.content.trim().startsWith('{')) {
+            try {
+              const inner = JSON.parse(parsedReq.content);
+              parsedReq = { ...parsedReq, ...inner };
+            } catch {}
+          }
+          const reqSender = parsedReq.sender_hash || parsedReq.sender;
+          const reqName = parsedReq.sender_name || parsedReq.name;
+          const reqPk = parsedReq.sender_pk || parsedReq.pk;
+          const reqRecipient = parsedReq.recipient || parsedReq.target_hash;
+
+          let currentMyHash = this.myIdentityHash;
+          if (!currentMyHash && typeof window !== 'undefined') {
+            currentMyHash = localStorage.getItem('red_identity_hash') || '';
+          }
+
+          const isTargetedToMe = !reqRecipient || reqRecipient === 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' ||
+            (!!currentMyHash && reqRecipient.toLowerCase() === currentMyHash.toLowerCase()) ||
+            (!!currentMyHash && reqRecipient.length >= 8 && currentMyHash.toLowerCase().startsWith(reqRecipient.toLowerCase()));
+
+          if (isTargetedToMe && reqSender) {
+            if (fromTransportId) {
+              this.bindDeviceToCanonical(fromTransportId, reqSender, reqName, reqPk);
+            }
+            this.bindDeviceToCanonical(packet.sender, reqSender, reqName, reqPk);
+            this.updatePeer(reqSender, transportType || 'ble', undefined, reqSender, reqName, reqPk);
+            // Auto-respond with identity response so sender immediately learns our MAC/DID binding
+            this.sendIdentityResponse(reqSender, fromTransportId, transportType).catch(() => {});
+          }
+        } catch {}
+      }
+
       if (payloadStr.startsWith('{"type":"NODE_LOCATION_UPDATE"')) {
         isLocationMsg = true;
         const data = JSON.parse(payloadStr);

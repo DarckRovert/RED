@@ -1,5 +1,27 @@
 # Changelog
 
+## [88.0.0-familiar-mode-and-resilient-mesh-edition] - 2026-09-04
+
+### 🌟 Familiar Mode & Resilient Mesh Master Edition (Release Oficial v88.0.0)
+
+- **Paridad Estética y Ergonómica Total con WhatsApp / Telegram (Modo Familiar):**
+  - **Conversaciones Flat & Limpias:** Implementación de diseño plano en `ConversationList.tsx` con fondo `#111B21`, tarjeta de escuadrón táctico oculta en modo familiar, selector de chat activo en `#2A3942`, avatares circulares sin bordes poligonales y marcas de tiempo relativas ("14:20", "Ayer", "02/09").
+  - **Cabecera de Conversación Cotidiana:** Subtítulo "en línea" y "escribiendo..." en verde `#25D366` en `ChatHeader.tsx`, erradicando tecnicismos crípticos innecesarios en el modo cotidiano.
+  - **Burbujas de Mensaje WhatsApp:** Entrantes en `#202C33`, salientes en `#005C4B`, colas angulares laterales y checks vectoriales SVG entrelazados (reloj pendiente, ✓ gris, ✓✓ gris, ✓✓ azul leído).
+  - **Fondo con Patrón Doodle Vectorial:** Integración de `WhatsAppDoodleBackground.tsx` ultra ligero en CSS inline con soporte de wallpapers personalizables (`doodle_dark`, `doodle_green`, `void_black`).
+  - **Botón Dinámico de Enviar / Grabador de Audio:** Botón circular esmeralda (`#00A884`) en `ChatInput.tsx` que alterna dinámicamente entre avión de papel (cuando hay texto) y grabador de notas de voz P2P.
+  - **Modal de Nuevo Chat Rápido:** `NewChatModal.tsx` con acceso inmediato a escáner QR, compartir mi QR, nodos cercanos en radio de alcance y lista alfabética de contactos.
+  - **Lista de Contactos WhatsApp:** `ContactList.tsx` con fila de "Nuevo contacto", ordenamiento alfabético real y acciones directas.
+  - **Ajustes y Privacidad Refinados:** Configuración de confirmaciones de lectura (doble check azul), bloqueo biométrico con TEE nativo y selector de Modo Dual (Familiar vs. Táctico C4ISR).
+- **Hardening de Transporte Mesh y BLE:**
+  - Resolución robusta de identificadores de hardware y eliminación de dependencias fantasma.
+  - Sincronización reactiva sin polling ciego.
+- **Validación y Pruebas:**
+  - 0 errores en TypeScript (`tsc --noEmit`).
+  - Prerender estático completo en `next build`.
+  - Pruebas criptográficas y de gobernanza al 100% PASS.
+- **Versión Oficial:** `88.0.0` / `versionCode 88000`.
+
 ## [87.0.0-omnichannel-sovereign-mesh-edition] - 2026-09-04
 
 ### 🛡️ Omnichannel Sovereign Mesh & Zero-Trust Production Edition (Release Oficial v87.0.0)

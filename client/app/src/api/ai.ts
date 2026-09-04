@@ -97,8 +97,15 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
             };
         });
 
-        if (nativeResp && nativeResp.answer && !nativeResp.answer.includes("No se detectó ningún archivo de modelo neural GGUF")) {
+        const isFailure = !nativeResp || !nativeResp.answer ||
+            nativeResp.answer.includes("No se detectó ningún archivo de modelo neural GGUF") ||
+            nativeResp.answer.startsWith("⚠️ [Error") ||
+            nativeResp.answer.startsWith("⚠️ [Advertencia");
+
+        if (!isFailure) {
             return nativeResp;
+        } else {
+            console.warn('[queryAICopilot] Native inference returned warning/error, activating clean LocalAIEngine fallback:', nativeResp?.answer);
         }
     } catch (err) {
         console.warn('[queryAICopilot] Native inference fallback to LocalAIEngine:', err);

@@ -12,6 +12,7 @@ import { LocalAIEngine } from "../../lib/localAiEngine";
 import { translateTextAI } from "../../api/ai";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { MessageInfoModal } from "./MessageInfoModal";
 
 interface MessageBubbleProps {
     msg: MessageItem;
@@ -147,13 +148,14 @@ const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
 function ContextMenu({
-    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onClose
+    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onShowInfo, onClose
 }: {
     x: number; y: number; isMine: boolean; isDeleted: boolean;
     onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void;
     onEdit?: () => void; onDeleteForEveryone?: () => void; onDeleteLocal: () => void;
     onSelect?: () => void; onReact: (e: string) => void;
-    onTranslate?: () => void; onAskCopilot?: () => void; onSpeakMessage?: () => void; onClose: () => void;
+    onTranslate?: () => void; onAskCopilot?: () => void; onSpeakMessage?: () => void;
+    onShowInfo?: () => void; onClose: () => void;
 }) {
     const { t } = useTranslation();
     return (
@@ -197,6 +199,7 @@ function ContextMenu({
             }}>
                 {[
                     ...(!isDeleted ? [{ label: t.chat_extended?.reply_to || "Responder", icon: "↩️", action: onReply }] : []),
+                    ...(!isDeleted && onShowInfo ? [{ label: "Info. del mensaje", icon: "ℹ️", action: onShowInfo }] : []),
                     ...(!isDeleted && onSpeakMessage ? [{ label: "Escuchar mensaje", icon: "🔊", action: onSpeakMessage }] : []),
                     ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: "🌐", action: onTranslate }] : []),
                     ...(!isDeleted && onAskCopilot ? [{ label: "Consultar a Copiloto", icon: "🤖", action: onAskCopilot }] : []),
@@ -237,6 +240,9 @@ export const MessageBubble = memo(({
     isGroupChat,
 }: MessageBubbleProps) => {
     const { t } = useTranslation();
+    const { preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
+    const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
     const [viewingImageSrc, setViewingImageSrc] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const [swipeOffset, setSwipeOffset] = useState<number>(0);
@@ -422,6 +428,42 @@ export const MessageBubble = memo(({
         : undefined;
     const checkSymbol = isFailed ? "⚠️" : (isPending ? "🕒" : (isRead ? "✓✓" : (isDelivered ? "✓✓" : "✓")));
 
+    const renderVectorCheck = () => {
+        if (isFailed) {
+            return <span style={{ color: "#FF3B30", fontSize: "0.75rem", lineHeight: 1 }}>⚠️</span>;
+        }
+        if (isPending) {
+            return (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                    <circle cx="8" cy="8" r="6" stroke="#8696A0" strokeWidth="1.3" />
+                    <path d="M8 4.5V8L10.5 9.5" stroke="#8696A0" strokeWidth="1.3" strokeLinecap="round" />
+                </svg>
+            );
+        }
+        if (isRead) {
+            return (
+                <svg width="16" height="15" viewBox="0 0 16 15" fill="none" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                    <path d="M1.5 7.5L5 11L12.5 3.5" stroke="#53BDEB" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M5.5 7.5L9 11L15.5 3.5" stroke="#53BDEB" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            );
+        }
+        if (isDelivered) {
+            return (
+                <svg width="16" height="15" viewBox="0 0 16 15" fill="none" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                    <path d="M1.5 7.5L5 11L12.5 3.5" stroke="#8696A0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M5.5 7.5L9 11L15.5 3.5" stroke="#8696A0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            );
+        }
+        // Sent (Single check)
+        return (
+            <svg width="14" height="15" viewBox="0 0 14 15" fill="none" style={{ display: "inline-block", verticalAlign: "middle" }}>
+                <path d="M2.5 7.5L6 11L13.5 3.5" stroke="#8696A0" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    };
+
     // Location message detector
     const isLocationMessage = typeof msg.content === "string" && msg.content.includes("📍 Ubicación Táctica:");
     const locationCoords = isLocationMessage
@@ -528,12 +570,13 @@ export const MessageBubble = memo(({
                     onTranslate={msg.content && !msg.content.startsWith("data:") ? handleTranslate : undefined}
                     onAskCopilot={msg.content && !msg.content.startsWith("data:") ? handleAskCopilot : undefined}
                     onSpeakMessage={msg.content && !msg.content.startsWith("data:") ? handleSpeakMessage : undefined}
+                    onShowInfo={() => setShowInfoModal(true)}
                 />
             )}
 
             {showDate && (
                 <div style={{ display: "flex", justifyContent: "center", margin: "10px 0 4px 0" }}>
-                    <span className="badge-tactical" style={{ fontSize: "0.68rem", background: "rgba(18,18,30,0.85)" }}>
+                    <span className="badge-tactical" style={{ fontSize: "0.68rem", background: isFamiliar ? "rgba(18,27,34,0.9)" : "rgba(18,18,30,0.85)", color: isFamiliar ? "#8696A0" : undefined, border: isFamiliar ? "none" : undefined }}>
                         {datePill(msg.timestamp)}
                     </span>
                 </div>
@@ -592,25 +635,47 @@ export const MessageBubble = memo(({
                     style={{
                         maxWidth: "84%",
                         padding: (msg.msg_type === "image" || resolvedImage) && !isPaymentMessage ? "4px" : "8px 12px",
-                        borderRadius: `${tl}px ${tr}px ${br}px ${bl}px`,
+                        borderRadius: isFamiliar 
+                            ? (isMine 
+                                ? (isFirst ? "10px 0px 10px 10px" : "10px 10px 10px 10px") 
+                                : (isFirst ? "0px 10px 10px 10px" : "10px 10px 10px 10px"))
+                            : `${tl}px ${tr}px ${br}px ${bl}px`,
                         background: isSearchHighlight
                             ? "linear-gradient(135deg, rgba(255,167,38,0.4) 0%, rgba(255,109,0,0.6) 100%)"
-                            : (isMine
-                                ? "linear-gradient(135deg, rgba(232, 33, 58, 0.32) 0%, rgba(170, 18, 40, 0.46) 100%)"
-                                : "rgba(18, 22, 36, 0.95)"),
-                        color: "#FFFFFF",
+                            : (isFamiliar
+                                ? (isMine ? "#005C4B" : "#202C33")
+                                : (isMine
+                                    ? "linear-gradient(135deg, rgba(232, 33, 58, 0.32) 0%, rgba(170, 18, 40, 0.46) 100%)"
+                                    : "rgba(18, 22, 36, 0.95)")),
+                        color: isFamiliar ? "#E9EDEF" : "#FFFFFF",
                         border: isSearchHighlight
                             ? "2px solid var(--accent-amber)"
-                            : (isMine ? "1px solid rgba(255, 60, 95, 0.42)" : "1px solid rgba(255, 255, 255, 0.09)"),
-                        boxShadow: isMine
-                            ? "0 4px 16px rgba(232, 33, 58, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.16)"
-                            : "0 2px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+                            : (isFamiliar
+                                ? "none"
+                                : (isMine ? "1px solid rgba(255, 60, 95, 0.42)" : "1px solid rgba(255, 255, 255, 0.09)")),
+                        boxShadow: isFamiliar
+                            ? "0 1px 2px rgba(0, 0, 0, 0.35)"
+                            : (isMine
+                                ? "0 4px 16px rgba(232, 33, 58, 0.20), inset 0 1px 0 rgba(255, 255, 255, 0.16)"
+                                : "0 2px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05)"),
                         display: "flex", flexDirection: "column", gap: "4px",
                         userSelect: "none",
                         WebkitUserSelect: "none",
                         opacity: isDeleted ? 0.75 : 1,
+                        position: "relative",
                     }}
                 >
+                    {/* Authentic WhatsApp Bubble Tails */}
+                    {isFamiliar && isMine && isFirst && (
+                        <svg width="8" height="13" viewBox="0 0 8 13" style={{ position: "absolute", top: 0, right: -7, zIndex: 1, pointerEvents: "none" }}>
+                            <path d="M0 0 C3 2, 7 5, 8 13 C5 9, 2 5, 0 3 Z" fill="#005C4B" />
+                        </svg>
+                    )}
+                    {isFamiliar && !isMine && isFirst && (
+                        <svg width="8" height="13" viewBox="0 0 8 13" style={{ position: "absolute", top: 0, left: -7, zIndex: 1, transform: "scaleX(-1)", pointerEvents: "none" }}>
+                            <path d="M0 0 C3 2, 7 5, 8 13 C5 9, 2 5, 0 3 Z" fill="#202C33" />
+                        </svg>
+                    )}
                     {/* Group Chat Sender Nickname */}
                     {isGroupChat && !isMine && !isDeleted && (
                         <div style={{
@@ -1021,8 +1086,8 @@ export const MessageBubble = memo(({
                         {isEdited && !isDeleted && <span>(editado)</span>}
                         <span>{timeStr(msg.timestamp)}</span>
                         {isMine && !isDeleted && (
-                            <span style={{ fontSize: "0.75rem", fontWeight: 900, color: checkColor }}>
-                                {checkSymbol}
+                            <span style={{ display: "inline-flex", alignItems: "center", marginLeft: "4px" }}>
+                                {renderVectorCheck()}
                             </span>
                         )}
                     </div>
@@ -1065,6 +1130,15 @@ export const MessageBubble = memo(({
                 <ImageViewerModal
                     src={viewingImageSrc}
                     onClose={() => setViewingImageSrc(null)}
+                />
+            )}
+
+            {/* Message Traceability Info Modal */}
+            {showInfoModal && (
+                <MessageInfoModal
+                    message={msg}
+                    isMine={isMine}
+                    onClose={() => setShowInfoModal(false)}
                 />
             )}
         </React.Fragment>

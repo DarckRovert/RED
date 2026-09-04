@@ -392,8 +392,8 @@ class BluetoothTransport {
             }
         } catch {}
 
-        // 3. Fallback: formato aceptable por BleClient (al menos 8 caracteres alfanuméricos o con separadores)
-        if (/^[0-9a-fA-F:-]{8,}$/i.test(sanitized)) {
+        // 3. Fallback: formato aceptable por BleClient (MAC o UUID, pero NUNCA un DID de 64 caracteres)
+        if (sanitized.length < 64 && /^[0-9a-fA-F:-]{8,36}$/i.test(sanitized)) {
             return sanitized;
         }
 
@@ -466,6 +466,35 @@ class BluetoothTransport {
     }
 
     async send(deviceId: string, payload: Uint8Array): Promise<boolean> {
+        // 1. Si el dispositivo actúa como Peripheral, verificar si el objetivo (o el único Central en radio) es un cliente conectado a nuestro GATT Server local
+        if (typeof window !== 'undefined') {
+            try {
+                const { registerPlugin } = await import('@capacitor/core');
+                const RedNode = registerPlugin<any>('RedNode');
+                if (RedNode?.getBleServerClients && RedNode?.sendBleServerMessage) {
+                    const serverRes = await RedNode.getBleServerClients().catch(() => null);
+                    const serverClients: string[] = serverRes?.clients || [];
+                    if (serverClients.length > 0) {
+                        const targetUpper = deviceId.trim().toUpperCase();
+                        const isMatch = serverClients.some(c => c.toUpperCase() === targetUpper);
+                        const targetClient = isMatch ? deviceId.trim() : (serverClients.length === 1 ? serverClients[0] : null);
+                        if (targetClient) {
+                            const sendRes = await RedNode.sendBleServerMessage({
+                                device: targetClient,
+                                data: Array.from(payload)
+                            }).catch(() => null);
+                            if (sendRes?.success) {
+                                console.log(`[BLE] Delivered payload via local GATT Server notification to Central ${targetClient.slice(0, 8)}`);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            } catch (serverErr) {
+                console.warn('[BLE] Server notification delivery check error:', serverErr);
+            }
+        }
+
         const targetId = await this.resolveTargetMac(deviceId);
         if (!targetId) {
             return false;

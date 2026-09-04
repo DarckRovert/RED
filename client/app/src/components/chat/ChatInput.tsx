@@ -45,7 +45,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     handleLocation = () => {}, handlePay = () => {}, setShowPollModal = () => {}
 }) => {
     const { t } = useTranslation();
-    const { contacts } = useRedStore();
+    const { contacts, preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [localText, setLocalText] = useState("");
     const [localAttachOpen, setLocalAttachOpen] = useState(false);
@@ -323,7 +324,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     }, [text, onSendMessage, handleSend, setText, replyTo, setReplyTo, setEditingMsg, draftKey]);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); }
+        if (e.key === "Enter" && !e.shiftKey) {
+            if (preferences?.enterIsSend !== false) {
+                e.preventDefault();
+                onSend();
+            }
+        }
     };
 
     const formatTimer = (s: number) => {
@@ -333,7 +339,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", background: "rgba(10,12,22,0.98)", borderTop: "1px solid var(--glass-border)", zIndex: 30 }}>
+        <div style={{
+            display: "flex",
+            flexDirection: "column",
+            background: isFamiliar ? "#202C33" : "rgba(10,12,22,0.98)",
+            borderTop: isFamiliar ? "1px solid rgba(255,255,255,0.06)" : "1px solid var(--glass-border)",
+            zIndex: 30,
+            position: "relative"
+        }}>
             {/* ── Reply Quote Banner Bar ── */}
             {replyTo && (
                 <div style={{
@@ -341,13 +354,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "8px 16px",
-                    background: "rgba(0, 229, 255, 0.08)",
-                    borderLeft: "4px solid var(--accent-cyan)",
-                    borderBottom: "1px solid var(--glass-border)",
+                    background: isFamiliar ? "#182229" : "rgba(0, 229, 255, 0.08)",
+                    borderLeft: `4px solid ${isFamiliar ? "#00A884" : "var(--accent-cyan)"}`,
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
                     animation: "fadeIn 0.15s ease-out"
                 }}>
                     <div style={{ overflow: "hidden", paddingRight: "10px" }}>
-                        <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                        <div style={{ fontSize: "0.75rem", fontWeight: 800, color: isFamiliar ? "#00A884" : "var(--accent-cyan)" }}>
                             ↩️ Respondiendo a {replyTo.is_mine ? "ti mismo" : (peerName || "Operador")}
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "#fff", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
@@ -394,88 +407,130 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 </div>
             )}
 
-            {/* ── Attachments Bar (WhatsApp-style Clean Primary Actions + Tactical Expander) ── */}
+            {/* ── Attachments Floating Popover Card ── */}
             {isAttachOpen && (
-                <div style={{
-                    display: "flex", flexDirection: "column", gap: "8px", padding: "12px 16px",
-                    background: "rgba(14,16,28,0.98)", borderBottom: "1px solid var(--glass-border)",
-                    flexShrink: 0
-                }}>
-                    {/* Primary Everyday Actions */}
+                <>
+                    <div
+                        onClick={() => setIsAttachOpen(false)}
+                        style={{ position: "fixed", inset: 0, zIndex: 110 }}
+                    />
                     <div style={{
-                        display: "flex", gap: "12px", overflowX: "auto", paddingBottom: "4px",
-                        scrollbarWidth: "none"
+                        position: "absolute",
+                        bottom: "calc(100% + 8px)",
+                        left: "12px",
+                        maxWidth: "340px",
+                        width: "calc(100% - 24px)",
+                        background: isFamiliar ? "#233138" : "rgba(14,18,34,0.98)",
+                        backdropFilter: "blur(20px)",
+                        borderRadius: "20px",
+                        padding: "16px",
+                        border: isFamiliar ? "1px solid rgba(255,255,255,0.1)" : "1px solid var(--glass-border)",
+                        boxShadow: "0 12px 40px rgba(0, 0, 0, 0.65)",
+                        zIndex: 115,
+                        animation: "fadeIn 0.15s ease-out",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "14px"
                     }}>
-                        {[
-                            { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #EC407A, #D81B60)", action: () => { setIsAttachOpen(false); handleCamera(); } },
-                            { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AB47BC, #8E24AA)", action: () => { setIsAttachOpen(false); handleGallery(); } },
-                            { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5C6BC0, #3949AB)", action: () => { setIsAttachOpen(false); handleDocument(); } },
-                            { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #26A69A, #00897B)", action: () => { setIsAttachOpen(false); handleLocation(); } },
-                            { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #FFA726, #FB8C00)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
-                            { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00E5FF, #00B0FF)", action: () => { setIsAttachOpen(false); handlePay(); } },
-                            { icon: "🎛️", label: "Táctico", bg: "rgba(255,255,255,0.1)", action: () => { setAiMenuOpen(!aiMenuOpen); } },
-                        ].map(a => (
-                            <button
-                                key={a.label}
-                                onClick={a.action}
-                                style={{
-                                    display: "flex", flexDirection: "column", alignItems: "center", gap: "5px",
-                                    background: "transparent", border: "none", color: "#fff", cursor: "pointer",
-                                    flexShrink: 0, minWidth: "56px"
-                                }}
-                            >
-                                <div style={{
-                                    width: 44, height: 44, borderRadius: "50%", background: a.bg,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: "1.2rem", boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
-                                }}>
-                                    {a.icon}
-                                </div>
-                                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 600 }}>{a.label}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Collapsible Tactical Tools Sub-row */}
-                    {aiMenuOpen && (
+                        {/* Primary Everyday Actions Grid */}
                         <div style={{
-                            display: "flex", gap: "8px", overflowX: "auto", paddingTop: "8px",
-                            borderTop: "1px solid rgba(255,255,255,0.08)", scrollbarWidth: "none",
-                            animation: "fadeIn 0.2s ease-out"
+                            display: "grid",
+                            gridTemplateColumns: "repeat(3, 1fr)",
+                            gap: "14px 10px",
+                            justifyItems: "center"
                         }}>
                             {[
-                                { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
-                                { icon: "🫀", label: "Ficha VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
-                                { icon: "🔊", label: "SoundMesh Audio", action: () => {
-                                    setIsAttachOpen(false);
-                                    if (text.trim()) {
-                                        import("../../lib/audio/SoundMeshEngine").then(({ SoundMeshEngine }) => {
-                                            SoundMeshEngine.transmit(text.trim());
-                                            toast.success("🔊 Transmitiendo por SoundMesh FSK");
-                                        });
-                                    } else {
-                                        toast.info("✍️ Escribe un mensaje primero para emitirlo");
-                                    }
-                                } },
-                                { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
-                                { icon: "🖼️", label: "Esteganografía LSB", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
-                            ].map(t => (
+                                { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5F66CD, #5157C4)", action: () => { setIsAttachOpen(false); handleDocument(); } },
+                                { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #D3396D, #BE2D5E)", action: () => { setIsAttachOpen(false); handleCamera(); } },
+                                { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AC44CF, #9732B8)", action: () => { setIsAttachOpen(false); handleGallery(); } },
+                                { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #069F7B, #008767)", action: () => { setIsAttachOpen(false); handleLocation(); } },
+                                { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #00A389, #008F79)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
+                                { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00B0FF, #0091EA)", action: () => { setIsAttachOpen(false); handlePay(); } },
+                            ].map(a => (
                                 <button
-                                    key={t.label}
-                                    onClick={t.action}
-                                    className="btn-tactical-secondary"
+                                    key={a.label}
+                                    onClick={a.action}
                                     style={{
-                                        padding: "6px 12px", display: "flex", alignItems: "center", gap: "6px",
-                                        fontSize: "0.74rem", whiteSpace: "nowrap", flexShrink: 0
+                                        display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
+                                        background: "transparent", border: "none", color: "#fff", cursor: "pointer",
+                                        width: "76px"
                                     }}
                                 >
-                                    <span>{t.icon}</span>
-                                    <span>{t.label}</span>
+                                    <div style={{
+                                        width: 52, height: 52, borderRadius: "50%", background: a.bg,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: "1.35rem", boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
+                                        transition: "transform 0.1s ease"
+                                    }}>
+                                        {a.icon}
+                                    </div>
+                                    <span style={{ fontSize: "0.75rem", color: isFamiliar ? "#D1D7DB" : "var(--text-muted)", fontWeight: 500 }}>
+                                        {a.label}
+                                    </span>
                                 </button>
                             ))}
                         </div>
-                    )}
-                </div>
+
+                        {/* Collapsible Tactical Tools Sub-row */}
+                        <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "10px" }}>
+                            <button
+                                onClick={() => setAiMenuOpen(!aiMenuOpen)}
+                                style={{
+                                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    width: "100%", padding: "6px 10px", background: "rgba(255,255,255,0.04)",
+                                    border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px",
+                                    color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontSize: "0.78rem", fontWeight: 700,
+                                    cursor: "pointer"
+                                }}
+                            >
+                                <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                    🎛️ Herramientas Tácticas Malla
+                                </span>
+                                <span>{aiMenuOpen ? "▲" : "▼"}</span>
+                            </button>
+
+                            {aiMenuOpen && (
+                                <div style={{
+                                    display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px",
+                                    animation: "fadeIn 0.15s ease-out"
+                                }}>
+                                    {[
+                                        { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
+                                        { icon: "🫀", label: "VitalScan", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("vitalScan"); } } },
+                                        { icon: "🔊", label: "SoundMesh", action: () => {
+                                            setIsAttachOpen(false);
+                                            if (text.trim()) {
+                                                import("../../lib/audio/SoundMeshEngine").then(({ SoundMeshEngine }) => {
+                                                    SoundMeshEngine.transmit(text.trim());
+                                                    toast.success("🔊 Transmitiendo por SoundMesh FSK");
+                                                });
+                                            } else {
+                                                toast.info("✍️ Escribe un mensaje primero");
+                                            }
+                                        } },
+                                        { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
+                                        { icon: "🖼️", label: "Esteganografía", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
+                                    ].map(t => (
+                                        <button
+                                            key={t.label}
+                                            onClick={t.action}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "8px",
+                                                padding: "8px 10px", background: "rgba(255,255,255,0.05)",
+                                                border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px",
+                                                color: "#FFF", fontSize: "0.75rem", cursor: "pointer",
+                                                textAlign: "left"
+                                            }}
+                                        >
+                                            <span style={{ fontSize: "1rem" }}>{t.icon}</span>
+                                            <span style={{ fontWeight: 600 }}>{t.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </>
             )}
 
             {/* ── Main Input & Voice Recording Area ── */}
@@ -539,7 +594,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={stopRecording}
                                 className="btn-icon"
-                                style={{ width: 36, height: 36, fontSize: "1rem", background: "var(--primary)", color: "#fff", boxShadow: "0 0 12px rgba(232,33,58,0.4)" }}
+                                style={{ width: 36, height: 36, fontSize: "1rem", background: isFamiliar ? "#00A884" : "var(--primary)", color: "#fff", boxShadow: "0 0 12px rgba(0,168,132,0.4)" }}
                                 title="Enviar audio"
                             >
                                 📤
@@ -549,43 +604,34 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                 ) : (
                     /* Standard Chat Input Mode */
                     <>
-                        <button
-                            onClick={() => setIsAttachOpen(!isAttachOpen)}
-                            className={`btn-icon ${isAttachOpen ? "active" : ""}`}
-                            style={{ width: 38, height: 38, fontSize: "1.15rem", flexShrink: 0 }}
-                            title="Adjuntar multimedia"
-                        >
-                            📎
-                        </button>
-
-                        <button
-                            onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
-                            className={`btn-icon ${emojiPickerOpen ? "active" : ""}`}
-                            style={{
-                                width: 38,
-                                height: 38,
-                                fontSize: "1.15rem",
-                                flexShrink: 0,
-                                color: emojiPickerOpen ? "var(--accent-cyan)" : "var(--text-secondary)",
-                                background: emojiPickerOpen ? "rgba(0, 229, 255, 0.15)" : "transparent",
-                                borderRadius: "50%",
-                                transition: "all 0.15s ease",
-                            }}
-                            title="Símbolos & Emojis Tácticos"
-                        >
-                            😊
-                        </button>
-
+                        {/* Input Capsule (WhatsApp style pill) */}
                         <div style={{
                             flex: 1,
                             display: "flex",
                             alignItems: "center",
-                            background: "rgba(255,255,255,0.06)",
-                            border: "1px solid var(--glass-border)",
-                            borderRadius: multiline ? "16px" : "24px",
-                            padding: "6px 14px",
-                            minHeight: "40px",
+                            background: isFamiliar ? "#2A3942" : "rgba(255,255,255,0.06)",
+                            border: isFamiliar ? "none" : "1px solid var(--glass-border)",
+                            borderRadius: multiline ? "18px" : "24px",
+                            padding: "6px 10px 6px 12px",
+                            minHeight: "44px",
+                            gap: "8px",
                         }}>
+                            {/* Emoji Button */}
+                            <button
+                                onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
+                                style={{
+                                    background: "transparent", border: "none",
+                                    color: emojiPickerOpen ? (isFamiliar ? "#00A884" : "var(--accent-cyan)") : (isFamiliar ? "#8696A0" : "var(--text-secondary)"),
+                                    cursor: "pointer", padding: "4px", fontSize: "1.2rem",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    flexShrink: 0
+                                }}
+                                title="Emojis & Símbolos"
+                            >
+                                😊
+                            </button>
+
+                            {/* Text Area */}
                             <textarea
                                 ref={textareaRef}
                                 value={text}
@@ -600,7 +646,6 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     const atIdx = slice.lastIndexOf("@");
                                     if (atIdx !== -1) {
                                         const word = slice.substring(atIdx + 1);
-                                        // Only trigger if no space between @ and cursor
                                         if (!/\s/.test(word)) {
                                             mentionStartPos.current = atIdx;
                                             setMentionQuery(word);
@@ -612,21 +657,53 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     }
                                 }}
                                 onKeyDown={handleKeyDown}
-                                placeholder={isDictating ? "🎙️ Escuchando dictado en vivo..." : (burnTimer ? `Burn message (${burnTimer}s)...` : t('chat.type_message'))}
+                                placeholder={isDictating ? "🎙️ Escuchando dictado en vivo..." : (burnTimer ? `Mensaje efímero (${burnTimer}s)...` : (t('chat.type_message') || "Mensaje"))}
                                 rows={1}
                                 style={{
-                                    width: "100%",
+                                    flex: 1,
                                     background: "transparent",
                                     border: "none",
                                     outline: "none",
                                     color: "#fff",
-                                    fontSize: "0.90rem",
+                                    fontSize: "0.95rem",
                                     resize: "none",
                                     maxHeight: "120px",
                                     fontFamily: "inherit",
                                     lineHeight: "1.4",
                                 }}
                             />
+
+                            {/* Attachment Clip Button */}
+                            <button
+                                onClick={() => setIsAttachOpen(!isAttachOpen)}
+                                style={{
+                                    background: "transparent", border: "none",
+                                    color: isAttachOpen ? (isFamiliar ? "#00A884" : "var(--accent-cyan)") : (isFamiliar ? "#8696A0" : "var(--text-secondary)"),
+                                    cursor: "pointer", padding: "4px", fontSize: "1.2rem",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    flexShrink: 0
+                                }}
+                                title="Adjuntar multimedia"
+                            >
+                                📎
+                            </button>
+
+                            {/* AI Writing Assist Trigger (only when text is entered) */}
+                            {text.trim().length > 0 && (
+                                <button
+                                    onClick={() => setAiMenuOpen(!aiMenuOpen)}
+                                    style={{
+                                        background: "transparent", border: "none",
+                                        color: isFamiliar ? "#00A884" : "var(--accent-cyan)",
+                                        cursor: "pointer", padding: "4px", fontSize: "1.1rem",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        flexShrink: 0
+                                    }}
+                                    title="Asistente de Redacción IA"
+                                >
+                                    ✨
+                                </button>
+                            )}
                         </div>
 
                         {/* ── @Mention Autocomplete Popup ── */}
@@ -634,11 +711,11 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <div style={{
                                 position: "absolute",
                                 bottom: "calc(100% + 4px)",
-                                left: 52,
-                                right: 52,
-                                background: "rgba(14,16,30,0.98)",
+                                left: 16,
+                                right: 60,
+                                background: isFamiliar ? "#233138" : "rgba(14,16,30,0.98)",
                                 backdropFilter: "blur(16px)",
-                                border: "1px solid rgba(0,229,255,0.25)",
+                                border: isFamiliar ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,229,255,0.25)",
                                 borderRadius: "12px",
                                 overflow: "hidden",
                                 boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
@@ -651,7 +728,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                         <button
                                             key={c.identity_hash || c.id || name}
                                             onMouseDown={(e) => {
-                                                e.preventDefault(); // keep focus in textarea
+                                                e.preventDefault();
                                                 insertMention(name);
                                             }}
                                             style={{
@@ -663,15 +740,14 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                                 borderBottom: "1px solid rgba(255,255,255,0.05)",
                                                 textAlign: "left", transition: "background 0.1s"
                                             }}
-                                            onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
+                                            onMouseEnter={ev => (ev.currentTarget.style.background = isFamiliar ? "rgba(0,168,132,0.15)" : "rgba(0,229,255,0.1)")}
                                             onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
                                         >
                                             <span style={{
                                                 width: 28, height: 28, borderRadius: "50%",
-                                                background: "rgba(232,33,58,0.25)",
-                                                border: "1px solid rgba(232,33,58,0.4)",
+                                                background: isFamiliar ? "#00A884" : "rgba(232,33,58,0.25)",
                                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                                fontSize: "0.75rem", fontWeight: 900, color: "var(--accent-red, #E8213A)",
+                                                fontSize: "0.75rem", fontWeight: 900, color: "#FFFFFF",
                                                 flexShrink: 0
                                             }}>
                                                 {name.charAt(0).toUpperCase()}
@@ -683,201 +759,55 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             </div>
                         )}
 
-                        {/* ── AI Assist Popover & Trigger Button ── */}
-                        {text.trim().length > 0 && (
-                            <div style={{ position: "relative" }}>
-                                <button
-                                    onClick={() => setAiMenuOpen(!aiMenuOpen)}
-                                    className="btn-icon"
-                                    style={{
-                                        width: 38, height: 38, borderRadius: "50%",
-                                        fontSize: "1rem", color: "var(--accent-cyan)",
-                                        background: aiMenuOpen ? "rgba(0,229,255,0.2)" : "rgba(255,255,255,0.06)",
-                                        flexShrink: 0, border: "1px solid rgba(0,229,255,0.3)",
-                                        transition: "all 0.2s ease"
-                                    }}
-                                    title="Asistente de Redacción IA"
-                                >
-                                    ✨
-                                </button>
-                                {aiMenuOpen && (
-                                    <>
-                                        <div onClick={() => setAiMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 120 }} />
-                                        <div style={{
-                                            position: "absolute", bottom: "46px", right: 0, zIndex: 130,
-                                            background: "rgba(14, 18, 34, 0.98)", backdropFilter: "blur(20px)",
-                                            border: "1px solid rgba(0, 229, 255, 0.3)",
-                                            borderRadius: "14px", padding: "6px", width: "220px",
-                                            boxShadow: "0 -8px 32px rgba(0, 0, 0, 0.7)",
-                                            animation: "fadeIn 0.15s ease", display: "flex", flexDirection: "column", gap: "2px"
-                                        }}>
-                                            <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--accent-cyan)", padding: "4px 8px", fontFamily: "JetBrains Mono, monospace" }}>
-                                                ✨ ASISTENTE IA DE REDACCIÓN
-                                            </div>
-                                            <button
-                                                onClick={toggleDictation}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: isDictating ? "rgba(0,229,255,0.2)" : "transparent",
-                                                    border: "none", color: "var(--accent-cyan)", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = isDictating ? "rgba(0,229,255,0.2)" : "transparent")}
-                                            >
-                                                <span>🎙️</span>
-                                                <span>{isDictating ? "Detener Dictado" : "Dictado por Voz"}</span>
-                                            </button>
-                                            <button
-                                                onClick={handleAiRephraseTactical}
-                                                disabled={isAiProcessing}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
-                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
-                                            >
-                                                <span>🎯</span>
-                                                <span>{isAiProcessing ? "Procesando..." : "Formato Táctico Militar"}</span>
-                                            </button>
-                                            <button
-                                                onClick={handleAiTranslateEn}
-                                                disabled={isAiProcessing}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
-                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
-                                            >
-                                                <span>🇬🇧</span>
-                                                <span>{isAiProcessing ? "Traduciendo..." : "Traducir a Inglés"}</span>
-                                            </button>
-                                            <button
-                                                onClick={handleAiTranslateEs}
-                                                disabled={isAiProcessing}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
-                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
-                                            >
-                                                <span>🇪🇸</span>
-                                                <span>{isAiProcessing ? "Traduciendo..." : "Traducir a Español"}</span>
-                                            </button>
-                                            <button
-                                                onClick={handleAiUrgent}
-                                                disabled={isAiProcessing}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
-                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,51,85,0.12)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
-                                            >
-                                                <span>🚨</span>
-                                                <span>Alerta de Máxima Urgencia</span>
-                                            </button>
-                                            <button
-                                                onClick={handleAiGrammar}
-                                                disabled={isAiProcessing}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
-                                                    border: "none", color: "#FFFFFF", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(0,229,255,0.1)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
-                                            >
-                                                <span>✏️</span>
-                                                <span>Corrección Gramatical</span>
-                                            </button>
-                                            <button
-                                                onClick={handleAiCamouflage}
-                                                style={{
-                                                    display: "flex", alignItems: "center", gap: "8px",
-                                                    padding: "8px 10px", borderRadius: "8px", background: "transparent",
-                                                    border: "none", color: "var(--accent-amber)", fontSize: "0.80rem", fontWeight: 600,
-                                                    cursor: "pointer", textAlign: "left"
-                                                }}
-                                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,179,0,0.1)")}
-                                                onMouseLeave={ev => (ev.currentTarget.style.background = "transparent")}
-                                            >
-                                                <span>🛡️</span>
-                                                <span>Camuflaje Leetspeak</span>
-                                            </button>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        )}
-
+                        {/* ── Unified Circular Action Button (WhatsApp Send / Mic) ── */}
                         {text.trim() ? (
                             <button
                                 onClick={onSend}
-                                className="btn-tactical-primary"
                                 style={{
-                                    width: 42,
-                                    height: 42,
+                                    width: 44,
+                                    height: 44,
                                     borderRadius: "50%",
+                                    background: isFamiliar ? "#00A884" : "var(--primary)",
+                                    border: "none",
                                     display: "flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    fontSize: "1.1rem",
-                                    padding: 0,
+                                    cursor: "pointer",
+                                    color: "#FFFFFF",
+                                    boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.4)" : "0 0 12px rgba(232,33,58,0.4)",
                                     flexShrink: 0,
+                                    transition: "all 0.15s ease",
                                 }}
                                 title="Enviar mensaje"
                             >
-                                ➔
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                </svg>
                             </button>
                         ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                <button
-                                    onClick={toggleDictation}
-                                    className="btn-icon"
-                                    style={{
-                                        width: 38,
-                                        height: 38,
-                                        borderRadius: "50%",
-                                        fontSize: "1.1rem",
-                                        background: isDictating ? "rgba(0, 229, 255, 0.25)" : "rgba(255,255,255,0.06)",
-                                        border: isDictating ? "1px solid var(--accent-cyan)" : "1px solid rgba(255,255,255,0.1)",
-                                        color: isDictating ? "var(--accent-cyan)" : "#FFFFFF",
-                                        flexShrink: 0,
-                                        animation: isDictating ? "pulse 1s infinite alternate" : "none"
-                                    }}
-                                    title={isDictating ? "Detener dictado por voz" : "Dictar mensaje por voz"}
-                                >
-                                    {isDictating ? "🔴" : "🗣️"}
-                                </button>
-                                <button
-                                    onClick={startRecording}
-                                    className="btn-icon"
-                                    style={{
-                                        width: 42,
-                                        height: 42,
-                                        borderRadius: "50%",
-                                        fontSize: "1.2rem",
-                                        background: "rgba(255,255,255,0.08)",
-                                        flexShrink: 0,
-                                    }}
-                                    title="Grabar nota de voz"
-                                >
-                                    🎙️
-                                </button>
-                            </div>
+                            <button
+                                onClick={startRecording}
+                                style={{
+                                    width: 44,
+                                    height: 44,
+                                    borderRadius: "50%",
+                                    background: isFamiliar ? "#00A884" : "rgba(255,255,255,0.08)",
+                                    border: "none",
+                                    color: "#FFFFFF",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.4)" : "none",
+                                    flexShrink: 0,
+                                    transition: "all 0.15s ease",
+                                }}
+                                title="Grabar nota de voz"
+                            >
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                                </svg>
+                            </button>
                         )}
                     </>
                 )}
