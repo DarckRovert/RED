@@ -1,4 +1,4 @@
-# 🤖 RULESET AUTÓMATA RED v86.0.0 — FLUJO INTEGRAL DE GOBERNANZA
+# 🤖 RULESET AUTÓMATA RED v87.0.0 — FLUJO INTEGRAL DE GOBERNANZA
 
 ## **NIVEL 0: PRE-COMMIT (Git Hooks & Validation)**
 
@@ -682,6 +682,44 @@ ON RELEASE TAG:
 
 ---
 
+## **NIVEL 9: SOBERANÍA ABSOLUTA & CERO TELEMETRÍA PUBLICITARIA**
+
+- ❌ **Prohibición de SDKs de Publicidad y Rastreo**: Ninguna versión contendrá Google AdMob, Firebase Analytics, trackers ni telemetría externa.
+- ❌ **Prohibición de IDs de Redes Publicitarias**: `AndroidManifest.xml` y `capacitor.config.ts` no contendrán metadatos ni IDs publicitarios.
+- ✅ **Monetización Soberana Exclusiva**: Financiación y canje mediante minería Proof-of-Relay y vales criptográficos $RED locales.
+
+---
+
+## **NIVEL 10: SEGURIDAD ZERO-TRUST EN APIS & PROTECCIÓN DE BÓVEDAS**
+
+- ❌ **Cero Claves en Texto Claro**: Queda prohibido almacenar PIN maestro, de pánico o señuelo en `localStorage` o `sessionStorage`.
+- ❌ **Prohibición de Bypasses Inseguros**: Prohibido eludir autenticación local basándose en cabeceras manipulables (`X-Forwarded-For`).
+- ❌ **Prohibición de CORS Permisivo**: Servidores Axum locales deben restringir CORS a orígenes locales autorizados (`capacitor://localhost`, `127.0.0.1:7333`, etc.).
+- ✅ **Unificación de Cabeceras**: Cliente y servidores deben utilizar uniformemente `X-API-Key` validada en tiempo constante.
+- ❌ **Prohibición de Puertas Traseras**: Cero PINs hardcodeados en código fuente (`password === '9999'`).
+
+---
+
+## **NIVEL 11: INTEGRIDAD DE EMPAQUETADO & COMPILACIÓN ANDROID**
+
+- ❌ **Prohibición de Firma Debug en Release**: Bloque `release` en Gradle no debe referenciar `signingConfigs.debug`.
+- ✅ **Protección JNI en R8**: Reglas ProGuard deben proteger explícitamente `-keep class f.red.app.** { *; }`.
+- ❌ **Prohibición de Cleartext Global**: `usesCleartextTraffic="true"` debe reemplazarse por permisos acotados en `network_security_config.xml`.
+
+---
+
+## **NIVEL 12: COMPATIBILIDAD MULTIPLATAFORMA DE RADIOS**
+
+- ✅ **BLE Dual Addressing**: Todo motor BLE debe procesar indistintamente direcciones MAC de Android y UUIDs CoreBluetooth de iOS.
+
+---
+
+## **NIVEL 13: VERIFICACIÓN EMPÍRICA DE PRUEBAS**
+
+- ❌ **Prohibición de Tests Cosméticos**: Suites de pruebas deben ejecutar código en runtime y no limitarse a `fs.readFileSync` de strings.
+
+---
+
 ## **VALIDACIÓN FINAL: CHECKLIST POR SPRINT**
 
 - ✅ Todas las branchs se deletean después de merge
@@ -694,7 +732,10 @@ ON RELEASE TAG:
 - ✅ Security advisories resueltas dentro de 48h (critical)
 - ✅ ProVerif proofs ejecutadas y passing
 - ✅ Documentación refleja código
+- ✅ Cero telemetría externa o AdMob en el binario
+- ✅ Cero PINs en texto claro en almacenamiento web
 
 ---
 
 **Implementación**: Este ruleset debe ejecutarse automáticamente por **Husky** (pre-commit hooks) + **GitHub Actions** (CI/CD). Cero manual intervention = **100% deterministic governance**.
+

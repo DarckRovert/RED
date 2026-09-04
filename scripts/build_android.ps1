@@ -83,8 +83,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Set-Location $FRONTEND_PATH
-Write-Host "Installing dependencies..." -ForegroundColor Gray
-npm install --quiet --legacy-peer-deps
+if (-not (Test-Path "$FRONTEND_PATH\node_modules")) {
+    Write-Host "Installing dependencies..." -ForegroundColor Gray
+    npm install --quiet --legacy-peer-deps
+} else {
+    Write-Host "Dependencies present in node_modules, proceeding with build..." -ForegroundColor Gray
+}
 Write-Host "Building web distribution (Next.js)..." -ForegroundColor Gray
 npm run build
 

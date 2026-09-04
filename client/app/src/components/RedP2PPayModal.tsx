@@ -44,8 +44,21 @@ export const RedP2PPayModal: React.FC = () => {
 
     useEffect(() => {
         loadWallet();
-        const interval = setInterval(loadWallet, 3000);
-        return () => clearInterval(interval);
+
+        const handleWalletUpdate = () => {
+            if (typeof document !== "undefined" && document.hidden) return;
+            loadWallet();
+        };
+
+        window.addEventListener("red:wallet_updated", handleWalletUpdate);
+        document.addEventListener("visibilitychange", handleWalletUpdate);
+        const interval = setInterval(handleWalletUpdate, 12000);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("red:wallet_updated", handleWalletUpdate);
+            document.removeEventListener("visibilitychange", handleWalletUpdate);
+        };
     }, [loadWallet]);
 
     const stopCamera = async () => {

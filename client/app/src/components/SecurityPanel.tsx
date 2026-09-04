@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
-import { SecureStoragePlugin } from "capacitor-secure-storage-plugin";
 import { toast } from "./Toast";
 import { registerPlugin } from "@capacitor/core";
 import { SystemHealthModal } from "./SystemHealthModal";

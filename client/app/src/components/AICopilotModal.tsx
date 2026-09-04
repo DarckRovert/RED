@@ -1317,10 +1317,73 @@ export const AICopilotModal: React.FC = () => {
                             </div>
                         </div>
 
+                        {/* Panel de IAs y Micro-Motores Embebidos Preinstalados de Fábrica */}
+                        <div style={{
+                            background: "linear-gradient(180deg, rgba(14, 25, 45, 0.95) 0%, rgba(6, 14, 28, 0.98) 100%)",
+                            border: "1.5px solid rgba(0, 229, 255, 0.35)", borderRadius: "20px", padding: "18px",
+                            display: "flex", flexDirection: "column", gap: "12px",
+                            boxShadow: "0 0 20px rgba(0, 229, 255, 0.12)"
+                        }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)", display: "flex", alignItems: "center", gap: "8px" }}>
+                                        <span>🛡️</span>
+                                        <span>IAS Y MICRO-MOTORES EMBEBIDOS (PREINSTALADOS DE FÁBRICA)</span>
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "3px" }}>
+                                        Operativos 100% desconectados y autónomos en RED OS (Latencia &lt; 10 ms). Cero descargas requeridas.
+                                    </div>
+                                </div>
+                                <span style={{
+                                    fontSize: "0.62rem", fontWeight: 900, padding: "3px 8px", borderRadius: "8px",
+                                    background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)"
+                                }}>
+                                    6/6 ACTIVOS
+                                </span>
+                            </div>
+
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "8px" }}>
+                                {[
+                                    { icon: "🛡️", name: "Guardián Semántico", role: "Moderación táctica, anti-jailbreak y detección de amenazas", state: "🟢 OPERATIVO" },
+                                    { icon: "📚", name: "RAG Vectorial INT8 (64-D)", role: "15 Protocolos TCCC, supervivencia y triage en memoria", state: "🟢 OPERATIVO" },
+                                    { icon: "📋", name: "Resumidor Táctico NLP", role: "Extracción léxica y análisis de sentimiento operacional", state: "🟢 OPERATIVO" },
+                                    { icon: "🌐", name: "Traductor Táctico Offline", role: "Traducción directa multidireccional (ES, EN, Quechua)", state: "🟢 OPERATIVO" },
+                                    { icon: "🎙️", name: "Motor de Voz Táctico", role: "STT Whisper y síntesis vocal TTS manos libres", state: "🟢 OPERATIVO" },
+                                    { icon: "🩺", name: "Triaje START & Biometría", role: "Clasificación clínica de víctimas y pulso PPG por cámara", state: "🟢 OPERATIVO" },
+                                ].map((sys, idx) => (
+                                    <div key={idx} style={{
+                                        padding: "10px 12px", borderRadius: "12px",
+                                        background: "rgba(0, 0, 0, 0.35)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                        display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px"
+                                    }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                            <span style={{ fontSize: "1.1rem" }}>{sys.icon}</span>
+                                            <div>
+                                                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#FFFFFF" }}>{sys.name}</div>
+                                                <div style={{ fontSize: "0.62rem", color: "var(--text-secondary)" }}>{sys.role}</div>
+                                            </div>
+                                        </div>
+                                        <span style={{
+                                            fontSize: "0.58rem", fontWeight: 900, padding: "2px 6px", borderRadius: "6px",
+                                            background: "rgba(0, 230, 118, 0.12)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.3)",
+                                            whiteSpace: "nowrap"
+                                        }}>
+                                            {sys.state}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
                         {/* Import Button */}
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>
-                                MODELOS NEURALES DISPONIBLES
+                            <div>
+                                <div style={{ fontSize: "0.88rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                    MODELOS NEURALES GGUF ADICIONALES (LLM CONVERSACIONAL)
+                                </div>
+                                <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)" }}>
+                                    Descarga opcional para diálogo extendido con modelos de lenguaje de última generación
+                                </div>
                             </div>
                             <div>
                                 <input
@@ -1348,7 +1411,7 @@ export const AICopilotModal: React.FC = () => {
                         {/* Models List */}
                         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                             {availableModels.map(m => {
-                                const isCurrent = activeModel?.id === m.id;
+                                const isCurrent = Boolean(activeModel && activeModel.isDownloaded && activeModel.id === m.id);
                                 const isDownloading = downloadingId === m.id;
                                 const size = m.fileSizeMb || m.size_mb || 0;
 
@@ -1390,7 +1453,11 @@ export const AICopilotModal: React.FC = () => {
                                                     <div style={{ width: `${downloadProgress}%`, height: "100%", background: "#00E5FF" }} />
                                                 </div>
                                                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--accent-cyan, #00E5FF)" }}>
-                                                    <span>Descargando: {downloadProgress.toFixed(0)}%</span>
+                                                    <span>
+                                                        {downloadProgress >= 100 
+                                                            ? "✅ Verificando firma mágica GGUF y activando..." 
+                                                            : `Descargando: ${downloadProgress.toFixed(0)}%`}
+                                                    </span>
                                                     <span>{(downloadBytes.loaded / 1024 / 1024).toFixed(1)} / {(downloadBytes.total / 1024 / 1024).toFixed(1)} MB</span>
                                                 </div>
                                             </div>

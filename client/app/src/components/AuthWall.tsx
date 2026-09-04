@@ -7,7 +7,13 @@ import { BackupRestoreModal } from "./BackupRestoreModal";
 import { WebCompanionQRModal } from "./WebCompanionQRModal";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
-import { BiometricLockEngine } from "../lib/crypto/BiometricLockEngine";
+import { 
+    BiometricLockEngine, 
+    getSecurePin, 
+    setSecurePin, 
+    hasSecurePin, 
+    verifySecurePin 
+} from "../lib/crypto/BiometricLockEngine";
 
 /**
  * Authentication Wall — RED Unified Tactical Lockscreen & Biometric Sentinel
@@ -19,60 +25,6 @@ import { BiometricLockEngine } from "../lib/crypto/BiometricLockEngine";
  */
 
 type AuthMode = "checking" | "onboarding" | "unlock";
-
-async function getSecurePin(key: string): Promise<string | null> {
-    // 1. Instant synchronous check in localStorage / sessionStorage
-    if (typeof window !== "undefined") {
-        try {
-            const localVal = localStorage.getItem(key) || sessionStorage.getItem(key);
-            if (localVal && localVal.trim().length >= 4) {
-                return localVal.trim();
-            }
-        } catch {}
-    }
-
-    // 2. Hardware Keystore check via SecureStoragePlugin
-    try {
-        if (typeof window !== "undefined") {
-            const { Capacitor } = await import("@capacitor/core");
-            if (Capacitor.isNativePlatform()) {
-                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                const res = await SecureStoragePlugin.get({ key }).catch(() => null);
-                if (res && res.value && res.value.trim().length >= 4) {
-                    const val = res.value.trim();
-                    try { localStorage.setItem(key, val); } catch {}
-                    return val;
-                }
-            }
-        }
-    } catch {}
-
-    return null;
-}
-
-async function setSecurePin(key: string, value: string): Promise<void> {
-    const cleanVal = value.trim();
-    if (!cleanVal) return;
-
-    // 1. Instant synchronous persistence
-    if (typeof window !== "undefined") {
-        try {
-            localStorage.setItem(key, cleanVal);
-            sessionStorage.setItem(key, cleanVal);
-        } catch {}
-    }
-
-    // 2. Hardware-backed Keystore persistence
-    try {
-        if (typeof window !== "undefined") {
-            const { Capacitor } = await import("@capacitor/core");
-            if (Capacitor.isNativePlatform()) {
-                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                await SecureStoragePlugin.set({ key, value: cleanVal }).catch(() => null);
-            }
-        }
-    } catch {}
-}
 
 export default function AuthWall({ children }: { children: React.ReactNode }) {
     const { t } = useTranslation();
@@ -188,12 +140,13 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
                     setDisguiseEnabled(localStorage.getItem("red_disguise_mode") === "true");
                 }
 
-                // 1. Query master PIN
-                const masterPin = await getSecurePin("master_pin");
+                // 1. Query master PIN existence
+                const hasMaster = await hasSecurePin("master_pin");
+                const masterPin = hasMaster ? await getSecurePin("master_pin") : null;
 
                 if (!isMounted) return;
 
-                if (masterPin) {
+                if (hasMaster) {
                     setMode("unlock");
                 } else {
                     setMode("onboarding");
@@ -209,7 +162,7 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
                 // 3. Auto-Prompt on start if configured and not in disguise mode
                 const status = BiometricLockEngine.getStatus();
-                if (masterPin && bioStatus.isAvailable && status.isEnabled && status.autoPrompt && localStorage.getItem("red_disguise_mode") !== "true") {
+                if (hasMaster && bioStatus.isAvailable && status.isEnabled && status.autoPrompt && localStorage.getItem("red_disguise_mode") !== "true") {
                     setTimeout(() => {
                         if (isMounted && !isAuthenticated) {
                             handleBiometricUnlock();
@@ -219,8 +172,8 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             } catch (e) {
                 console.error("[AuthWall] Init error:", e);
                 if (isMounted) {
-                    const fallbackPin = typeof window !== "undefined" ? localStorage.getItem("master_pin") : null;
-                    setMode(fallbackPin ? "unlock" : "onboarding");
+                    const hasMaster = await hasSecurePin("master_pin").catch(() => false);
+                    setMode(hasMaster ? "unlock" : "onboarding");
                     setIsLoaded(true);
                 }
             }
@@ -319,20 +272,19 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     if (disguiseEnabled) {
         return <CalculatorScreen onUnlock={async (typedPin: string) => {
-            const masterPin = await getSecurePin("master_pin");
-            const panicPin = await getSecurePin("panic_pin");
-            const decoyPin = await getSecurePin("decoy_pin");
-
-            if (panicPin && typedPin === panicPin) {
+            const isPanic = await verifySecurePin("panic_pin", typedPin);
+            if (isPanic) {
                 await doLogin(typedPin);
                 return;
             }
-            if (decoyPin && typedPin === decoyPin) {
+            const isDecoy = await verifySecurePin("decoy_pin", typedPin);
+            if (isDecoy) {
                 await doLogin(typedPin);
                 return;
             }
-            if (masterPin && (typedPin === masterPin || typedPin.endsWith(masterPin))) {
-                await doLogin(masterPin);
+            const isMaster = await verifySecurePin("master_pin", typedPin);
+            if (isMaster) {
+                await doLogin(typedPin);
             }
         }} />;
     }

@@ -47,11 +47,22 @@ export default function OnboardingProfile({ onDone, onComplete }: OnboardingProf
                 const res = await Camera.requestPermissions({ permissions: ['camera'] }).catch(() => ({ camera: 'denied' }));
                 setCamGranted((res as any).camera === 'granted');
             } else if (type === 'ble') {
-                // BLE permissions are requested implicitly when BleClient.initialize() is called at mesh init
-                setBleGranted(true);
+                try {
+                    const { BleClient } = await import('@capacitor-community/bluetooth-le');
+                    await BleClient.initialize();
+                    setBleGranted(true);
+                } catch (e) {
+                    console.warn('[Onboarding] BLE permission request failed or BLE disabled:', e);
+                    setBleGranted(false);
+                }
             } else if (type === 'wifi') {
-                // Wi-Fi Direct permissions handled by Android manifest; mark as accepted
-                setWifiGranted(true);
+                try {
+                    const { Geolocation } = await import('@capacitor/geolocation');
+                    const res = await Geolocation.requestPermissions().catch(() => ({ location: 'denied' }));
+                    setWifiGranted((res as any).location === 'granted');
+                } catch {
+                    setWifiGranted(true);
+                }
             }
         } catch {
             // On web (non-native), just toggle state

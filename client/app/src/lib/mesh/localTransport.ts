@@ -133,6 +133,9 @@ class LocalTransport {
           // Proactive background auto-connect & MTU negotiation for warm zero-latency mesh link
           this.autoAssociateBlePeer(rawDevId).catch(() => {});
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('red:ble_peers_updated'));
+        }
       }, 5000);
     } catch (e) {
       // BLE not available (e.g. web browser or permission denied) — non-fatal

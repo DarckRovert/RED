@@ -352,27 +352,51 @@ class BluetoothTransport {
 
     private connectingSet: Set<string> = new Set();
 
+    public static isMacAddress(id: string): boolean {
+        return /^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(id.trim());
+    }
+
+    public static isIosBleUuid(id: string): boolean {
+        const clean = id.trim();
+        return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/i.test(clean) ||
+               /^[0-9a-fA-F]{32}$/i.test(clean);
+    }
+
     public sanitizeBleDeviceId(id: string): string {
         if (!id) return '';
         const trimmed = id.trim();
-        if (/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/i.test(trimmed)) {
+        if (BluetoothTransport.isMacAddress(trimmed) || BluetoothTransport.isIosBleUuid(trimmed)) {
             return trimmed.toUpperCase();
         }
         return trimmed;
     }
 
     private async resolveTargetMac(deviceId: string): Promise<string | null> {
+        if (!deviceId) return null;
         const sanitized = this.sanitizeBleDeviceId(deviceId);
-        if (sanitized.includes(':')) {
+
+        // 1. Si es MAC válida o UUID de iOS CoreBluetooth, usar directamente
+        if (BluetoothTransport.isMacAddress(sanitized) || BluetoothTransport.isIosBleUuid(sanitized)) {
             return sanitized;
         }
+
+        // 2. Consultar si meshRouter conoce el Hardware ID (MAC o UUID)
         try {
             const { meshRouter } = await import('./meshRouter');
             const hw = meshRouter.getHardwareId(deviceId);
-            if (hw && hw.includes(':')) {
-                return this.sanitizeBleDeviceId(hw);
+            if (hw) {
+                const sanitizedHw = this.sanitizeBleDeviceId(hw);
+                if (BluetoothTransport.isMacAddress(sanitizedHw) || BluetoothTransport.isIosBleUuid(sanitizedHw)) {
+                    return sanitizedHw;
+                }
             }
         } catch {}
+
+        // 3. Fallback: formato aceptable por BleClient (al menos 8 caracteres alfanuméricos o con separadores)
+        if (/^[0-9a-fA-F:-]{8,}$/i.test(sanitized)) {
+            return sanitized;
+        }
+
         return null;
     }
 

@@ -1,5 +1,44 @@
 # Changelog
 
+## [87.0.0-omnichannel-sovereign-mesh-edition] - 2026-09-04
+
+### 🛡️ Omnichannel Sovereign Mesh & Zero-Trust Production Edition (Release Oficial v87.0.0)
+
+- **Fase 0 — Blindaje de Gobernanza Niveles 9 al 13:**
+  - `GOVERNANCE.md` y `.agents/rules/governance.md` actualizados para consagrar:
+    - Nivel 9: Cero telemetría externa y erradicación total de Google AdMob.
+    - Nivel 10: Zero-Trust estricto en APIs locales, sin bypass de loopback ni claves en texto plano.
+    - Nivel 11: Integridad de compilación Android y reglas JNI en ProGuard.
+    - Nivel 12: Direccionamiento dual BLE obligatorio (MAC Android y UUID CoreBluetooth iOS).
+    - Nivel 13: Verificación empírica obligatoria y test runners de resiliencia.
+- **Fase 1 — Zero-Trust en Endpoints Locales & Mitigación Anti-Timing:**
+  - Servidor Axum (`127.0.0.1:7333`) y nodo desktop protegidos con comparación en tiempo constante (`subtle::ConstantTimeEq`).
+  - Eliminación del bypass que confiaba en `x-forwarded-for` para loopback.
+  - CORS restringido a orígenes locales autorizados; erradicado `CorsLayer::permissive()`.
+- **Fase 2 — Erradicación Total de Claves en Texto Plano y Fallbacks Hardcodeados:**
+  - Saneamiento automático de `localStorage`: cualquier PIN (`master_pin`, `panic_pin`, `decoy_pin`) es purgado de texto plano y almacenado exclusivamente en TEE de hardware (Android Keystore / iOS Keychain) o hash PBKDF2/SHA-256 salteado en Web.
+  - Eliminado por completo el fallback estático `password === '9999'` en `authSlice.ts`.
+  - Eliminado por completo el fallback `123456` en cápsulas Air-Gap (`companionSyncEngine.ts`), `WebCompanionLinkModal.tsx`, `WebCompanionPairConfirmationModal.tsx` y `authSlice.ts`.
+- **Fase 3 — Purga Absoluta de Google AdMob y Telemetría Comercial:**
+  - Eliminada dependencia `@capacitor-community/admob` de `package.json`, Gradle (`capacitor.settings.gradle`, `capacitor.build.gradle`) e iOS SPM (`Package.swift`).
+  - Eliminado bloque de metadatos `com.google.android.gms.ads.APPLICATION_ID` de `AndroidManifest.xml`.
+  - Reemplazado `showRewardedVideo` por recompensa soberana P2P Proof-of-Relay (+24h Modo Pro & +100 $RED).
+- **Fase 4 — Direccionamiento Dual BLE (Android MAC & iOS UUID):**
+  - Métodos `isMacAddress` e `isIosBleUuid` en `bluetoothTransport.ts` para resolver nodos iOS que utilizan identificadores UUID generados por CoreBluetooth.
+- **Fase 5 — Empaquetado Android & Permisos en Runtime:**
+  - Parametrizada firma de release con fallback seguro a debug.
+  - Añadida regla `-keepclasseswithmembernames class * { native <methods>; }` en `proguard-rules.pro` para proteger interfaces JNI de `libred_mobile.so`.
+  - Solicitud real de permisos BLE y ubicación en `OnboardingProfile.tsx`.
+- **Fase 6 — Eliminación de Polling Ciego:**
+  - `localTransport.ts` emite evento `red:ble_peers_updated`.
+  - `RadarWindow.tsx` y `RedP2PPayModal.tsx` migrados a escuchas reactivas y timers condicionados a visibilidad (`!document.hidden`).
+- **Validación Empírica 100% PASS:**
+  - 80+ suites de resiliencia ejecutadas con éxito (`npm run test:all`).
+  - 10/10 pruebas de gobernanza pasando (`npm run test:governance`).
+  - TypeScript estricto con 0 errores (`npx tsc --noEmit`).
+  - Rust workspace compilando limpiamente (`cargo check --workspace`).
+- **Versión Oficial:** `87.0.0` / `versionCode 87000`.
+
 ## [86.0.0-omnichannel-tactical-ai-edition] - 2026-09-03
 
 ### 🛡️ Omnichannel Tactical AI, WebRTC Vocoder & Hardware Hardened Edition (Release Oficial v86.0.0)

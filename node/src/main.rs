@@ -908,7 +908,7 @@ max_size_gb = 10
     storage.set_identity(identity.clone())?;
 
     // Phase 18: Autonomous Decoy Vault Generation
-    // When the Java/UI layer commands a stealth login via the Duress PIN (9999), it spawns
+    // When the Java/UI layer commands a stealth login via the configured Duress PIN, it spawns
     // the node with a '_decoy' data_dir suffix. We instantly forge a believable SQLite history.
     if data_dir.to_string_lossy().ends_with("_decoy") {
         red_core::network::dummy_traffic::populate_decoy_vault(

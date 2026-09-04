@@ -337,10 +337,10 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     name: "Seguridad Zero-Trust",
     category: "Ciberdefensa",
     icon: "🛡️",
-    summary: "FLAG_SECURE anti-capturas, PIN de pánico con autodestrucción y bóveda señuelo (PIN 9999).",
+    summary: "FLAG_SECURE anti-capturas, PIN de pánico con autodestrucción y bóveda señuelo configurable.",
     badge: "Anti-Coercion",
     techStack: "Android Keystore / Wipe Engine",
-    details: "Protecciones activas contra coerción física: ingresar el PIN de pánico borra instantáneamente todos los datos; ingresar el PIN señuelo 9999 abre una sesión falsa aparentemente normal.",
+    details: "Protecciones activas contra coerción física: ingresar el PIN de pánico borra instantáneamente todos los datos; ingresar el PIN señuelo configurado abre una sesión falsa aparentemente normal.",
     latency: "< 50ms",
     encryption: "Hardware Keystore TEE"
   },

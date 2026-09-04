@@ -33,7 +33,7 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             const isNative = typeof window !== 'undefined' && Capacitor.isNativePlatform();
 
             if (isNative) {
-                // 1. Check master_pin / panic_pin / decoy_pin in hardware Keystore & local storage
+                // 1. Check master_pin / panic_pin / decoy_pin in hardware Keystore
                 let storedMasterPin: string | null = null;
                 let storedPanicPin: string | null = null;
                 let storedDecoyPin: string | null = null;
@@ -48,14 +48,13 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     storedDecoyPin = decoyRes?.value?.trim() || null;
                 } catch {}
 
-                if (!storedMasterPin && typeof window !== 'undefined') {
-                    storedMasterPin = localStorage.getItem('master_pin') || sessionStorage.getItem('master_pin');
-                }
-                if (!storedPanicPin && typeof window !== 'undefined') {
-                    storedPanicPin = localStorage.getItem('panic_pin');
-                }
-                if (!storedDecoyPin && typeof window !== 'undefined') {
-                    storedDecoyPin = localStorage.getItem('decoy_pin');
+                // Sanitización estricta: purgar cualquier residuo de PINs en texto plano de localStorage
+                if (typeof window !== 'undefined') {
+                    try {
+                        localStorage.removeItem('master_pin');
+                        localStorage.removeItem('panic_pin');
+                        localStorage.removeItem('decoy_pin');
+                    } catch {}
                 }
 
                 // PANIC WIPE
@@ -75,8 +74,8 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     return false;
                 }
 
-                // DECOY VAULT
-                const isDecoy = (storedDecoyPin && password === storedDecoyPin) || password === '9999';
+                // DECOY VAULT (Únicamente si coincide con el decoy_pin configurado por el usuario; CERO fallback 9999)
+                const isDecoy = Boolean(storedDecoyPin && password === storedDecoyPin);
                 set({ isDecoyMode: isDecoy });
 
                 // STRICT MASTER PIN CHECK (If a master PIN has been registered, password MUST match)
@@ -85,16 +84,12 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     return false;
                 }
 
-                // FIRST ONBOARDING: If no master_pin yet exists, store this password as master_pin
+                // FIRST ONBOARDING: If no master_pin yet exists, store this password securely in Keystore
                 if (!storedMasterPin && password && password.length >= 6) {
                     try {
                         const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
                         await SecureStoragePlugin.set({ key: 'master_pin', value: password }).catch(() => null);
                     } catch {}
-                    if (typeof window !== 'undefined') {
-                        localStorage.setItem('master_pin', password);
-                        sessionStorage.setItem('master_pin', password);
-                    }
                 }
 
                 const RedNode = registerPlugin<any>('RedNode');
@@ -140,13 +135,12 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 }
                 return false;
             } else {
-                // Web Browser Platform (GitHub Pages SPA)
-                const masterPin = typeof window !== 'undefined' ? (localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin")) : null;
-                const panicPin = typeof window !== 'undefined' ? localStorage.getItem("panic_pin") : null;
-                const decoyPin = typeof window !== 'undefined' ? localStorage.getItem("decoy_pin") : null;
+                // Web Browser Platform (GitHub Pages SPA) - Zero-Trust Cryptographic Validation
+                const { verifySecurePin, hasSecurePin, setSecurePin } = await import('../../lib/crypto/BiometricLockEngine');
 
                 // 1. PROTOCOLO DE PÁNICO (Purga y reinicio seguro)
-                if (panicPin && password === panicPin) {
+                const isPanic = await verifySecurePin("panic_pin", password);
+                if (isPanic) {
                     if (typeof window !== 'undefined') {
                         localStorage.clear();
                         sessionStorage.clear();
@@ -156,21 +150,23 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     return false;
                 }
 
-                // 2. BÓVEDA DE SEÑUELO (Modo encubierto)
-                const isDecoy = Boolean(decoyPin && password === decoyPin);
+                // 2. BÓVEDA DE SEÑUELO (Modo encubierto - NUNCA fallback 9999)
+                const isDecoy = await verifySecurePin("decoy_pin", password);
                 set({ isDecoyMode: isDecoy });
 
                 // 3. VALIDACIÓN ESTRICTA DE PIN MAESTRO
-                if (masterPin && password !== masterPin && !isDecoy) {
+                const hasMaster = await hasSecurePin("master_pin");
+                const isMasterValid = hasMaster ? await verifySecurePin("master_pin", password) : false;
+
+                if (hasMaster && !isMasterValid && !isDecoy) {
                     console.warn("[RED Web Auth] Acceso denegado: PIN maestro incorrecto.");
                     return false;
                 }
 
-                // Si no había master_pin guardado aún, lo establecemos con el PIN ingresado
-                if (!masterPin && password && password.length >= 6 && typeof window !== 'undefined') {
-                    localStorage.setItem("master_pin", password);
-                    sessionStorage.setItem("master_pin", password);
-                } else if (!masterPin) {
+                // Si no había master_pin guardado aún, lo establecemos de forma segura (hash en localStorage, memoria volátil en sessionStorage)
+                if (!hasMaster && password && password.length >= 6) {
+                    await setSecurePin("master_pin", password);
+                } else if (!hasMaster) {
                     return false;
                 }
 
@@ -304,7 +300,8 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                     localStorage.setItem("user_nickname", payload.identity.nickname);
                 }
                 if (payload.masterPin) {
-                    localStorage.setItem("master_pin", payload.masterPin);
+                    const { setSecurePin } = await import('../../lib/crypto/BiometricLockEngine');
+                    await setSecurePin("master_pin", payload.masterPin);
                 }
                 if (Array.isArray(payload.contacts) && payload.contacts.length > 0) {
                     localStorage.setItem("red_web_contacts", JSON.stringify(payload.contacts));
@@ -317,8 +314,10 @@ export const createAuthSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 localStorage.setItem("red_onboarding_completed", "true");
             }
 
-            const pinToUse = payload.masterPin || "123456";
-            await get().login(pinToUse);
+            const resolvedPin = payload.masterPin || (await (await import('../../lib/crypto/BiometricLockEngine')).getSecurePin("master_pin"));
+            if (resolvedPin) {
+                await get().login(resolvedPin);
+            }
             await get().fetchData();
             toast.success(`🎉 ¡Dispositivo vinculado con éxito! Bienvenido ${payload.identity.nickname || 'Operador'}`);
             return true;

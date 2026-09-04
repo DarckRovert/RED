@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BiometricLockEngine } from "../lib/BiometricLockEngine";
+import { BiometricLockEngine, verifySecurePin } from "../lib/crypto/BiometricLockEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
@@ -35,11 +35,11 @@ export const BiometricShieldOverlay: React.FC = () => {
         }
     };
 
-    const handlePinSubmit = (e: React.FormEvent) => {
+    const handlePinSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setErrorMsg("");
-        const masterPin = typeof window !== "undefined" ? (localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin")) : null;
-        if (masterPin && pinInput === masterPin) {
+        const isValid = await verifySecurePin("master_pin", pinInput);
+        if (isValid) {
             BiometricLockEngine.unlock();
             setPinInput("");
             toast.success(t.common?.success || "Desbloqueado");

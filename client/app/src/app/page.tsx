@@ -463,12 +463,10 @@ export default function AppRouter() {
 
   const handleCalculatorUnlock = async (pin: string) => {
     try {
-      const { getSecurePin } = await import("../lib/crypto/BiometricLockEngine");
-      const masterPin = await getSecurePin("master_pin");
-      const decoyPin = await getSecurePin("decoy_pin");
-      const panicPin = await getSecurePin("panic_pin");
+      const { verifySecurePin } = await import("../lib/crypto/BiometricLockEngine");
+      const isPanic = await verifySecurePin("panic_pin", pin);
 
-      if (panicPin && pin === panicPin) {
+      if (isPanic) {
         if (typeof window !== "undefined") {
           localStorage.clear();
           sessionStorage.clear();
@@ -477,7 +475,10 @@ export default function AppRouter() {
         return false;
       }
 
-      if ((masterPin && pin === masterPin) || (decoyPin && pin === decoyPin)) {
+      const isDecoy = await verifySecurePin("decoy_pin", pin);
+      const isMaster = await verifySecurePin("master_pin", pin);
+
+      if (isMaster || isDecoy) {
         goBack();
         return true;
       }

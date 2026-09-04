@@ -1565,7 +1565,23 @@ async fn handle_renegotiate_crypto() -> impl IntoResponse {
 // other endpoints were permanently unreachable on mobile (BUG ROOT CAUSE).
 
 pub fn build_router_async(state: AsyncState, _msg_tx: broadcast::Sender<Message>) -> Router {
-    let cors = CorsLayer::permissive();
+    let origins = [
+        HeaderValue::from_static("http://localhost"),
+        HeaderValue::from_static("http://127.0.0.1"),
+        HeaderValue::from_static("http://localhost:7333"),
+        HeaderValue::from_static("http://127.0.0.1:7333"),
+        HeaderValue::from_static("http://localhost:3000"),
+        HeaderValue::from_static("http://127.0.0.1:3000"),
+        HeaderValue::from_static("capacitor://localhost"),
+        HeaderValue::from_static("ionic://localhost"),
+        HeaderValue::from_static("https://localhost"),
+        HeaderValue::from_static("https://darckrovert.github.io"),
+    ];
+
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any);
 
     // 3. Global Security Middleware (X-API-Key Zero-Trust)
     let auth_layer = axum::middleware::from_fn_with_state(state.clone(), validate_auth_async);
@@ -1694,18 +1710,25 @@ async fn validate_auth(
     next: axum::middleware::Next,
 ) -> Response {
     let path = request.uri().path();
-    if path == "/local-signal" || path == "/api/status" || path == "/api/events" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
+    if path == "/local-signal" || path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
         return next.run(request).await;
     }
 
-    let actual_key = request.headers().get("X-API-Key")
-        .and_then(|h| h.to_str().ok());
+    let headers = request.headers();
+    let actual_key = headers.get("X-API-Key")
+        .or_else(|| headers.get("X-Red-Session-Token"))
+        .and_then(|h| h.to_str().ok())
+        .or_else(|| {
+            headers.get("Authorization")
+                .and_then(|h| h.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "))
+        });
 
     let expected_key = hex::encode(state.api_key);
 
     if let Some(key) = actual_key {
-        // Use fully qualified trait method call to resolve ConstantTimeEq for &[u8]
-        if subtle::ConstantTimeEq::ct_eq(key.as_bytes(), expected_key.as_bytes()).unwrap_u8() == 1 {
+        let key_clean = key.trim();
+        if subtle::ConstantTimeEq::ct_eq(key_clean.as_bytes(), expected_key.as_bytes()).unwrap_u8() == 1 {
             return next.run(request).await;
         }
     }
@@ -1717,45 +1740,32 @@ async fn validate_auth_async(
     request: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> Response {
-    // Bypass auth for public boot endpoints.
+    // Bypass auth for public boot and SSE discovery endpoints.
     let path = request.uri().path();
-    if path == "/api/status" || path == "/api/identity" || path == "/api/events" || path == "/local-signal" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
+    if path == "/api/status" || path == "/api/events" || path == "/api/network/outbound" || path == "/local-signal" || path == "/api/ai/status" || path == "/api/tags" || path == "/v1/models" || path == "/v1/chat/completions" || path == "/api/generate" || path == "/api/ai/copilot" {
         return next.run(request).await;
     }
 
-    // Zero-Trust bypass for loopback clients (Capacitor WebView → 127.0.0.1).
-    // The X-API-Key guard only applies to external LAN peers.
-    let is_loopback = request
-        .headers()
-        .get("x-forwarded-for")
-        .is_none(); // Capacitor WebView never sets this header; external proxies always do.
-
-    if is_loopback {
-        // Verify node is ready before letting the request proceed.
-        // This preserves 503 semantics for early-boot without breaking auth.
-        let ready = {
-            let s = state.lock().await;
-            s.is_some()
-        };
-        if ready {
-            return next.run(request).await;
-        } else {
-            return (StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({"error": "Node initializing"}))).into_response();
-        }
-    }
-
-    // External peer: enforce Zero-Trust X-API-Key validation.
+    // Verify node is ready before letting the request proceed.
     let expected_key = {
         let s = state.lock().await;
         s.as_ref().map(|ready| hex::encode(ready.api_key))
     };
 
     if let Some(expected_key) = expected_key {
-        let actual_key = request.headers().get("X-API-Key")
-            .and_then(|h| h.to_str().ok());
+        let headers = request.headers();
+        let actual_key = headers.get("X-API-Key")
+            .or_else(|| headers.get("X-Red-Session-Token"))
+            .and_then(|h| h.to_str().ok())
+            .or_else(|| {
+                headers.get("Authorization")
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|v| v.strip_prefix("Bearer "))
+            });
+
         if let Some(key) = actual_key {
-            if subtle::ConstantTimeEq::ct_eq(key.as_bytes(), expected_key.as_bytes()).unwrap_u8() == 1 {
+            let key_clean = key.trim();
+            if subtle::ConstantTimeEq::ct_eq(key_clean.as_bytes(), expected_key.as_bytes()).unwrap_u8() == 1 {
                 return next.run(request).await;
             }
         }

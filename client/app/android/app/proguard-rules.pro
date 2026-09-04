@@ -10,6 +10,9 @@
     public static native *;
     public native *;
 }
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
 
 # ─── Capacitor Bridge ────────────────────────────────────────────────────────
 # Capacitor's plugin system uses reflection; prevent renaming of plugin classes

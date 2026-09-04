@@ -363,7 +363,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                     {/* TAB: CATALOG */}
                     {activeTab === 'catalog' && (
                         <>
-                            {/* AdMob Banner Box */}
+                            {/* Sovereign Relay Validation Box */}
                             <div style={{
                                 padding: '18px',
                                 borderRadius: '14px',
@@ -377,17 +377,17 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
                                     <div>
                                         <span style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '1px', color: 'var(--accent-crimson)', textTransform: 'uppercase', fontFamily: 'JetBrains Mono, monospace' }}>
-                                            ● CANAL DE PATROCINIO & CRÉDITOS
+                                            ● MODO SOBERANO & CRÉDITOS P2P
                                         </span>
                                         <h3 style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 800 }}>
-                                            Sintonizar Transmisión (+24h Modo Pro & +100 RED)
+                                            Validación Proof-of-Relay (+24h Modo Pro & +100 RED)
                                         </h3>
                                     </div>
-                                    <span style={{ fontSize: '24px' }}>🎬</span>
+                                    <span style={{ fontSize: '24px' }}>⚡</span>
                                 </div>
 
                                 <p style={{ margin: 0, fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.8)', lineHeight: 1.45 }}>
-                                    Visualiza una transmisión de 15 a 30 segundos para financiar la infraestructura mesh. Se te acreditarán inmediatamente <strong>+24 Horas de Acceso Pro</strong> y <strong>+100 Créditos</strong>.
+                                    Valida la integridad de retransmisión de paquetes en la malla distribuida P2P para respaldar la infraestructura soberana. Se te acreditarán inmediatamente <strong>+24 Horas de Acceso Pro</strong> y <strong>+100 Créditos</strong>.
                                 </p>
 
                                 {statusMessage && (
@@ -402,7 +402,7 @@ export const CommercialHubModal: React.FC<CommercialHubModalProps> = ({ isOpen, 
                                     className="btn-tactical-primary"
                                     style={{ padding: '12px 18px', fontSize: '0.86rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                                 >
-                                    {isLoadingAd ? '⏳ Conectando canal...' : '📺 VER TRANSMISIÓN & RECLAMAR +100 RED'}
+                                    {isLoadingAd ? '⏳ Validando retransmisión...' : '⚡ VALIDAR RETRANSMISIÓN & RECLAMAR +100 RED'}
                                 </button>
                             </div>
 

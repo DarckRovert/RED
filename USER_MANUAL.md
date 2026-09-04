@@ -1,4 +1,4 @@
-# 📘 Manual Operativo del Usuario — RED v86.0.0 Sovereign Tactical Master Edition
+# 📘 Manual Operativo del Usuario — RED v87.0.0 Sovereign Tactical Master Edition
 
 Bienvenido al manual de operaciones tácticas de **RED**, la plataforma descentralizada de comunicaciones soberanas, cifradas e inmunes a fallos de infraestructura, apagones o censura.
 

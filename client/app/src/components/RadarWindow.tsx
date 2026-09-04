@@ -49,13 +49,20 @@ export default function RadarWindow() {
     // BLE Peers Discovery Poll & Scanner Cleanup
     useEffect(() => {
         const updatePeers = () => {
+            if (typeof document !== 'undefined' && document.hidden) return;
             const peers = localTransport.discoveredBluetoothPeers || [];
             setNearbyPeers(peers);
         };
         updatePeers();
-        const interval = setInterval(updatePeers, 2500);
+
+        window.addEventListener('red:ble_peers_updated', updatePeers);
+        document.addEventListener('visibilitychange', updatePeers);
+        const interval = setInterval(updatePeers, 6000);
+
         return () => {
             clearInterval(interval);
+            window.removeEventListener('red:ble_peers_updated', updatePeers);
+            document.removeEventListener('visibilitychange', updatePeers);
             stopScan();
         };
     }, []);

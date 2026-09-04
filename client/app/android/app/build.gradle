@@ -8,8 +8,8 @@ android {
         applicationId "f.red.app"
         minSdkVersion 24
         targetSdkVersion 35
-        versionCode 86000
-        versionName "86.0.0"
+        versionCode 87000
+        versionName "87.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
 
@@ -23,6 +23,17 @@ android {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
 
+    signingConfigs {
+        release {
+            if (project.hasProperty('RED_RELEASE_STORE_FILE')) {
+                storeFile file(RED_RELEASE_STORE_FILE)
+                storePassword RED_RELEASE_STORE_PASSWORD
+                keyAlias RED_RELEASE_KEY_ALIAS
+                keyPassword RED_RELEASE_KEY_PASSWORD
+            }
+        }
+    }
+
     buildTypes {
         debug {
             minifyEnabled false
@@ -30,9 +41,13 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         release {
-            minifyEnabled false // Desactivamos temporalmente para evitar que R8 rompa el JNI de Rust
+            minifyEnabled false
             shrinkResources false
-            signingConfig signingConfigs.debug
+            if (project.hasProperty('RED_RELEASE_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

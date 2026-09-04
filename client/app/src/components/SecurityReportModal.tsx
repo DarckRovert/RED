@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { LocalAIEngine } from "../lib/localAiEngine";
-import { SecureStoragePlugin } from "capacitor-secure-storage-plugin";
+import { hasSecurePin } from "../lib/crypto/BiometricLockEngine";
 import { RED_VERSION_NAME } from "../lib/version";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 
@@ -58,22 +58,9 @@ export const SecurityReportModal: React.FC<SecurityReportModalProps> = ({ onClos
     // Escanear estado real del dispositivo y keystore
     useEffect(() => {
         const scanPosture = async () => {
-            let panic = false;
-            let decoy = false;
-            let master = false;
-
-            try {
-                const p = await SecureStoragePlugin.get({ key: "panic_pin" });
-                panic = !!p?.value;
-            } catch {}
-            try {
-                const d = await SecureStoragePlugin.get({ key: "decoy_pin" });
-                decoy = !!d?.value;
-            } catch {}
-            try {
-                const m = await SecureStoragePlugin.get({ key: "master_pin" });
-                master = !!m?.value;
-            } catch {}
+            const panic = await hasSecurePin("panic_pin").catch(() => false);
+            const decoy = await hasSecurePin("decoy_pin").catch(() => false);
+            const master = await hasSecurePin("master_pin").catch(() => false);
 
             const priv = typeof window !== "undefined" && localStorage.getItem("red_privacy_screen") === "true";
             const disg = typeof window !== "undefined" && localStorage.getItem("red_disguise_mode") === "true";

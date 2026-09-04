@@ -1,6 +1,6 @@
 [package]
 name = "red_client"
-version = "86.0.0"
+version = "87.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "RED command-line client"

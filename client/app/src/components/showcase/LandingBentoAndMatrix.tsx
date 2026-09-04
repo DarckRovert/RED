@@ -179,7 +179,7 @@ export const LandingBentoAndMatrix: React.FC = () => {
               <div style={{ fontSize: "30px", marginBottom: "10px" }}>🧮</div>
               <h3 style={{ fontSize: "18px", fontWeight: 800, color: "#FFF", marginBottom: "6px" }}>Defensa Táctica Anti-Coerción</h3>
               <p style={{ fontSize: "13px", color: "#94A3B8", lineHeight: 1.6 }}>
-                Camuflaje bajo calculadora funcional, PIN de pánico con autodestrucción inmediata de claves y bóveda señuelo (PIN 9999) para inspecciones forzadas.
+                Camuflaje bajo calculadora funcional, PIN de pánico con autodestrucción inmediata de claves y bóveda señuelo configurable para inspecciones forzadas.
               </p>
             </div>
 

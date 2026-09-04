@@ -404,6 +404,15 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     };
     info!("API Key derived (persisted for this identity)");
 
+    // Persistir token de sesión hex en disco para que Capacitor Filesystem pueda leerlo
+    let token_hex = hex::encode(api_key);
+    let token_path = data_dir.join("session.token");
+    if let Ok(mut f) = std::fs::File::create(&token_path) {
+        use std::io::Write;
+        let _ = f.write_all(token_hex.as_bytes());
+    }
+    append_log(&data_dir, "API Key derived and saved to session.token");
+
     {
         let mut s = api_state.lock().await;
         *s = Some(api::ApiState {

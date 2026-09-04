@@ -1,6 +1,6 @@
 [package]
 name = "red_node"
-version = "86.0.0"
+version = "87.0.0"
 edition = "2021"
 authors = ["RED Team"]
 description = "RED network node"
@@ -45,6 +45,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Cryptography (for signing key)
 ed25519-dalek = "2.0"
+subtle = "2.5"
 
 # Secure password input
 rpassword = "7.0"

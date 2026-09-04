@@ -22,7 +22,7 @@ export interface CompanionSyncPayload {
         public_key?: string;
         nickname: string;
     };
-    masterPin: string;
+    masterPin?: string;
     contacts: any[];
     conversations: any[];
     preferences?: any;
@@ -981,9 +981,12 @@ class CompanionSyncEngineClass {
      * Inmune a cortes de red o búnkeres sin conectividad.
      */
     public async exportAirGapVaultToken(payload: CompanionSyncPayload, pin?: string): Promise<string> {
-        const secretPin = pin || payload.masterPin || "123456";
+        const secretPin = pin || payload.masterPin;
+        if (!secretPin || secretPin.trim().length < 4) {
+            throw new Error("Se requiere un PIN de cifrado válido (mínimo 4 dígitos) para blindar la cápsula Air-Gap.");
+        }
         const salt = getRandomBytes(16);
-        const key = await deriveKeyFromPin(secretPin, salt);
+        const key = await deriveKeyFromPin(secretPin.trim(), salt);
         const encrypted = await encryptData(key, payload);
         const saltHex = bytesToHex(salt);
         return `RED_VAULT:1:${saltHex}:${encrypted.iv}:${encrypted.ciphertext}`;
@@ -1006,11 +1009,14 @@ class CompanionSyncEngineClass {
         const ciphertextHex = parts[4];
 
         const salt = hexToBytes(saltHex);
-        const secretPin = pin || "123456";
+        const secretPin = pin ? pin.trim() : "";
+        if (!secretPin || secretPin.length < 4) {
+            throw new Error("Se requiere un PIN de descifrado válido (mínimo 4 dígitos) para abrir la cápsula Air-Gap.");
+        }
         const key = await deriveKeyFromPin(secretPin, salt);
         const decrypted: CompanionSyncPayload = await decryptData(key, ivHex, ciphertextHex);
         if (!decrypted || !decrypted.identity) {
-            throw new Error("Formato de datos de bóveda no válido");
+            throw new Error("Formato de datos de bóveda no válido o PIN incorrecto");
         }
         return decrypted;
     }

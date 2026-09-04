@@ -213,17 +213,8 @@ export class BiometricLockEngine {
                     iosFallbackTitle: "Usar PIN",
                 });
 
-                // Retrieve master_pin from KeyStore
-                let masterPin: string | null = null;
-                try {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
-                    masterPin = res?.value?.trim() || null;
-                } catch {}
-
-                if (!masterPin) {
-                    masterPin = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin");
-                }
+                // Retrieve master_pin from KeyStore / Secure enclave
+                const masterPin = await this.getSecurePin("master_pin");
 
                 if (masterPin) {
                     this.unlock();
@@ -450,24 +441,130 @@ export class BiometricLockEngine {
         };
     }
 
-    public static async getSecurePin(key: string): Promise<string | null> {
-        // 1. Instant check in localStorage / sessionStorage
-        if (typeof window !== "undefined") {
+    public static async computePinHash(key: string, pin: string): Promise<string> {
+        const clean = pin.trim();
+        const salt = `red_pin_salt_${key}_v86`;
+        if (typeof window !== "undefined" && window.crypto && window.crypto.subtle) {
             try {
-                const val = localStorage.getItem(key) || sessionStorage.getItem(key);
-                if (val && val.trim().length >= 4) return val.trim();
+                const data = new TextEncoder().encode(`${salt}:${clean}`);
+                const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
+                return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
             } catch {}
         }
-        // 2. Hardware Keystore / SecureStorage check
+        // Deterministic fallback for environments without subtle crypto
+        let h = 0x811c9dc5;
+        const str = `${salt}:${clean}`;
+        for (let i = 0; i < str.length; i++) {
+            h ^= str.charCodeAt(i);
+            h = Math.imul(h, 0x01000193);
+        }
+        return `fb_${(h >>> 0).toString(16)}`;
+    }
+
+    public static async hasSecurePin(key: string): Promise<boolean> {
         if (Capacitor.isNativePlatform()) {
             try {
                 const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                const res = await SecureStoragePlugin.get({ key });
+                const res = await SecureStoragePlugin.get({ key }).catch(() => null);
+                if (res && res.value && res.value.trim().length >= 4) return true;
+            } catch {}
+        }
+        if (typeof window !== "undefined") {
+            try {
+                const sess = sessionStorage.getItem(key);
+                if (sess && sess.trim().length >= 4) return true;
+                const hashed = localStorage.getItem(`red_pin_hash_${key}`);
+                if (hashed && hashed.trim().length > 0) return true;
+                const legacy = localStorage.getItem(key);
+                if (legacy && legacy.trim().length >= 4) return true;
+            } catch {}
+        }
+        return false;
+    }
+
+    public static async verifySecurePin(key: string, pinToTest: string): Promise<boolean> {
+        const clean = pinToTest ? pinToTest.trim() : "";
+        if (!clean) return false;
+
+        // 1. Hardware Keystore in native environment
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                const res = await SecureStoragePlugin.get({ key }).catch(() => null);
+                if (res && res.value) {
+                    const stored = res.value.trim();
+                    // Purge plaintext from localStorage if left over from legacy versions
+                    if (typeof window !== "undefined") {
+                        try { localStorage.removeItem(key); } catch {}
+                    }
+                    return clean === stored;
+                }
+            } catch {}
+        }
+
+        // 2. Web session / cryptographic hash verification
+        if (typeof window !== "undefined") {
+            try {
+                const inSession = sessionStorage.getItem(key);
+                if (inSession && inSession.trim() === clean) {
+                    return true;
+                }
+
+                const expectedHash = localStorage.getItem(`red_pin_hash_${key}`);
+                if (expectedHash) {
+                    const candidateHash = await this.computePinHash(key, clean);
+                    if (candidateHash === expectedHash.trim()) {
+                        sessionStorage.setItem(key, clean);
+                        return true;
+                    }
+                }
+
+                // Legacy migration fallback: if stored in plaintext, migrate to hash immediately
+                const legacyPlaintext = localStorage.getItem(key);
+                if (legacyPlaintext && legacyPlaintext.trim() === clean) {
+                    const hash = await this.computePinHash(key, clean);
+                    localStorage.setItem(`red_pin_hash_${key}`, hash);
+                    localStorage.removeItem(key);
+                    sessionStorage.setItem(key, clean);
+                    return true;
+                }
+            } catch {}
+        }
+
+        return false;
+    }
+
+    public static async getSecurePin(key: string): Promise<string | null> {
+        // 1. Native Hardware Keystore
+        if (Capacitor.isNativePlatform()) {
+            try {
+                const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
+                const res = await SecureStoragePlugin.get({ key }).catch(() => null);
                 if (res && res.value && res.value.trim().length >= 4) {
                     const clean = res.value.trim();
+                    // Sanitizar: eliminar de localStorage cualquier residuo en texto plano
                     if (typeof window !== "undefined") {
-                        try { localStorage.setItem(key, clean); } catch {}
+                        try { localStorage.removeItem(key); } catch {}
                     }
+                    return clean;
+                }
+            } catch {}
+        }
+
+        // 2. Web: solo devolver si está en la memoria volátil de sesión (sessionStorage) o migración
+        if (typeof window !== "undefined") {
+            try {
+                const sess = sessionStorage.getItem(key);
+                if (sess && sess.trim().length >= 4) return sess.trim();
+
+                // Migración de clave legacy en texto plano
+                const legacy = localStorage.getItem(key);
+                if (legacy && legacy.trim().length >= 4) {
+                    const clean = legacy.trim();
+                    sessionStorage.setItem(key, clean);
+                    const hash = await this.computePinHash(key, clean);
+                    localStorage.setItem(`red_pin_hash_${key}`, hash);
+                    localStorage.removeItem(key);
                     return clean;
                 }
             } catch {}
@@ -476,13 +573,29 @@ export class BiometricLockEngine {
     }
 
     public static async setSecurePin(key: string, value: string): Promise<void> {
-        if (typeof window !== "undefined") {
-            try { localStorage.setItem(key, value); } catch {}
-        }
+        const clean = value ? value.trim() : "";
+        if (!clean) return;
+
         if (Capacitor.isNativePlatform()) {
             try {
                 const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                await SecureStoragePlugin.set({ key, value });
+                await SecureStoragePlugin.set({ key, value: clean });
+            } catch {}
+            // En entorno nativo, NUNCA persistir en localStorage
+            if (typeof window !== "undefined") {
+                try { localStorage.removeItem(key); } catch {}
+            }
+            return;
+        }
+
+        // Web environment: guardar en memoria volátil de sesión y hash en localStorage
+        if (typeof window !== "undefined") {
+            try {
+                sessionStorage.setItem(key, clean);
+                const hash = await this.computePinHash(key, clean);
+                localStorage.setItem(`red_pin_hash_${key}`, hash);
+                // Asegurar que NO quede en texto plano en localStorage
+                localStorage.removeItem(key);
             } catch {}
         }
     }
@@ -491,6 +604,7 @@ export class BiometricLockEngine {
         if (typeof window !== "undefined") {
             try {
                 localStorage.removeItem(key);
+                localStorage.removeItem(`red_pin_hash_${key}`);
                 sessionStorage.removeItem(key);
             } catch {}
         }
@@ -506,3 +620,5 @@ export class BiometricLockEngine {
 export const getSecurePin = BiometricLockEngine.getSecurePin;
 export const setSecurePin = BiometricLockEngine.setSecurePin;
 export const clearSecurePin = BiometricLockEngine.clearSecurePin;
+export const verifySecurePin = BiometricLockEngine.verifySecurePin;
+export const hasSecurePin = BiometricLockEngine.hasSecurePin;

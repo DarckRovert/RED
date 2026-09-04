@@ -8,10 +8,29 @@ use std::path::{Path, PathBuf};
 
 pub use red_core::protocol::tactical::{CopilotQueryRequest, CopilotResponse};
 
-/// Estado interno del Motor (Singleton para evitar recargar el GGUF)
+/// Modelos soportados cuantizados en CPU
+pub enum LocalModel {
+    Llama(candle_transformers::models::quantized_llama::ModelWeights),
+    Qwen2(candle_transformers::models::quantized_qwen2::ModelWeights),
+    Phi3(candle_transformers::models::quantized_phi3::ModelWeights),
+}
+
+impl LocalModel {
+    pub fn forward(&mut self, input: &candle_core::Tensor, start_pos: usize) -> candle_core::Result<candle_core::Tensor> {
+        match self {
+            LocalModel::Llama(m) => m.forward(input, start_pos),
+            LocalModel::Qwen2(m) => m.forward(input, start_pos),
+            LocalModel::Phi3(m) => m.forward(input, start_pos),
+        }
+    }
+}
+
+/// Estado interno del Motor (Caché en RAM para reutilizar el modelo sin reabrir 390 MB de flash)
 pub struct AICopilotState {
     pub is_loaded: bool,
     pub active_model_path: String,
+    pub cached_model: Option<LocalModel>,
+    pub cached_tokenizer: Option<tokenizers::Tokenizer>,
 }
 
 pub struct AICopilotEngine {
@@ -30,6 +49,8 @@ impl AICopilotEngine {
             state: Arc::new(Mutex::new(AICopilotState {
                 is_loaded: false,
                 active_model_path: String::new(),
+                cached_model: None,
+                cached_tokenizer: None,
             })),
         }
     }
@@ -138,121 +159,175 @@ impl AICopilotEngine {
             }
         }
 
-        // --- Inicio de Integración Real con Candle GGUF ---
-        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
-        if !st.is_loaded || st.active_model_path != model_path {
-            st.is_loaded = true;
-            st.active_model_path = model_path.clone();
-        }
-        
-        // Liberamos el Mutex para no bloquear durante la inferencia larga
-        drop(st);
+        // --- Inicio de Integración con Caché en Memoria RAM ---
+        let path_str = path.to_string_lossy().to_string();
 
-        // Cargamos el modelo real
+        // 1. Intentar reutilizar modelo y tokenizer en RAM si ya están cargados para esta misma ruta
+        let cached_opt = {
+            let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+            if st.active_model_path == path_str && st.cached_model.is_some() && st.cached_tokenizer.is_some() {
+                let m = st.cached_model.take().unwrap();
+                let t = st.cached_tokenizer.clone().unwrap();
+                Some((m, t))
+            } else {
+                // Si la ruta cambió, liberar la memoria anterior para evitar sobreconsumo
+                st.cached_model = None;
+                st.cached_tokenizer = None;
+                st.is_loaded = false;
+                None
+            }
+        };
+
         let device = candle_core::Device::Cpu;
-        let mut file = match std::fs::File::open(path) {
-            Ok(f) => f,
-            Err(e) => {
-                return CopilotResponse {
-                    answer: format!("⚠️ [Error]: No se pudo abrir GGUF: {}", e),
-                    topic_category: "Error Interno".to_string(),
-                    source: "Candle Engine".to_string(),
-                    model_used: model_name,
-                    execution_time_ms: start.elapsed().as_millis() as u64,
+
+        let (mut model, tokenizer) = match cached_opt {
+            Some(cached) => cached,
+            None => {
+                // --- Carga en frío desde almacenamiento local ---
+                let mut file = match std::fs::File::open(path) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        return CopilotResponse {
+                            answer: format!("⚠️ [Error]: No se pudo abrir GGUF: {}", e),
+                            topic_category: "Error Interno".to_string(),
+                            source: "Candle Engine".to_string(),
+                            model_used: model_name,
+                            execution_time_ms: start.elapsed().as_millis() as u64,
+                        }
+                    }
+                };
+
+                let content = match candle_core::quantized::gguf_file::Content::read(&mut file) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return CopilotResponse {
+                            answer: format!("⚠️ [Error]: Archivo GGUF corrupto o inválido: {}", e),
+                            topic_category: "Error Interno".to_string(),
+                            source: "Candle Engine".to_string(),
+                            model_used: model_name,
+                            execution_time_ms: start.elapsed().as_millis() as u64,
+                        }
+                    }
+                };
+
+                let model_name_lower = model_name.to_lowercase();
+                let gguf_arch = content.metadata.get("general.architecture")
+                    .and_then(|v| match v {
+                        candle_core::quantized::gguf_file::Value::String(s) => Some(s.to_lowercase()),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                let path_str_lower = path_str.to_lowercase();
+
+                let is_qwen = gguf_arch.contains("qwen") || model_name_lower.contains("qwen") || path_str_lower.contains("qwen");
+                let is_phi = gguf_arch.contains("phi") || model_name_lower.contains("phi") || path_str_lower.contains("phi");
+
+                let loaded_model = if is_qwen {
+                    match candle_transformers::models::quantized_qwen2::ModelWeights::from_gguf(content, &mut file, &device) {
+                        Ok(m) => LocalModel::Qwen2(m),
+                        Err(e) => {
+                            return CopilotResponse {
+                                answer: format!("⚠️ [Error]: Fallo al cargar pesos (posible OOM o arquitectura Qwen no válida): {}", e),
+                                topic_category: "Error de Memoria/Arquitectura".to_string(),
+                                source: "Candle Engine".to_string(),
+                                model_used: model_name,
+                                execution_time_ms: start.elapsed().as_millis() as u64,
+                            }
+                        }
+                    }
+                } else if is_phi {
+                    match candle_transformers::models::quantized_phi3::ModelWeights::from_gguf(false, content, &mut file, &device) {
+                        Ok(m) => LocalModel::Phi3(m),
+                        Err(e) => {
+                            return CopilotResponse {
+                                answer: format!("⚠️ [Error]: Fallo al cargar pesos (posible OOM o arquitectura Phi3 no válida): {}", e),
+                                topic_category: "Error de Memoria/Arquitectura".to_string(),
+                                source: "Candle Engine".to_string(),
+                                model_used: model_name,
+                                execution_time_ms: start.elapsed().as_millis() as u64,
+                            }
+                        }
+                    }
+                } else if model_name_lower.contains("gemma") {
+                    return CopilotResponse {
+                        answer: "⚠️ [Advertencia]: La arquitectura Gemma cuantizada no está soportada por el motor nativo actual. Por favor selecciona Qwen, Llama o Phi-3.".to_string(),
+                        topic_category: "Arquitectura No Soportada".to_string(),
+                        source: "Candle Engine".to_string(),
+                        model_used: model_name,
+                        execution_time_ms: start.elapsed().as_millis() as u64,
+                    }
+                } else {
+                    match candle_transformers::models::quantized_llama::ModelWeights::from_gguf(content, &mut file, &device) {
+                        Ok(m) => LocalModel::Llama(m),
+                        Err(e) => {
+                            return CopilotResponse {
+                                answer: format!("⚠️ [Error]: Fallo al cargar pesos (posible OOM o arquitectura no-Llama): {}", e),
+                                topic_category: "Error de Memoria/Arquitectura".to_string(),
+                                source: "Candle Engine".to_string(),
+                                model_used: model_name,
+                                execution_time_ms: start.elapsed().as_millis() as u64,
+                            }
+                        }
+                    }
+                };
+
+                // Buscamos un tokenizer adjunto con resolución profunda de candidatos
+                let parent_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+                let mut candidates = vec![
+                    path.with_extension("").with_extension("json"),
+                    path.with_extension("json"),
+                    parent_dir.join("tokenizer.json"),
+                    parent_dir.join("qwen2.5-0.5b-instruct-q4_k_m.json"),
+                    parent_dir.join("SmolLM2-360M-Instruct-Q4_K_M.json"),
+                    parent_dir.join("qwen2.5-1.5b-instruct-q4_k_m.json"),
+                    parent_dir.join("Llama-3.2-1B-Instruct-Q4_K_M.json"),
+                    parent_dir.join("gemma-2-2b-it-Q4_K_M.json"),
+                    parent_dir.join("Phi-3-mini-4k-instruct-q4.json"),
+                ];
+
+                if let Ok(entries) = std::fs::read_dir(parent_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("json") {
+                            if !candidates.contains(&p) {
+                                candidates.push(p);
+                            }
+                        }
+                    }
                 }
+
+                let mut tokenizer_opt = None;
+                for c in &candidates {
+                    if c.exists() {
+                        if let Ok(meta) = std::fs::metadata(c) {
+                            if meta.len() > 50_000 {
+                                if let Ok(t) = tokenizers::Tokenizer::from_file(c) {
+                                    tokenizer_opt = Some(t);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let loaded_tokenizer = match tokenizer_opt {
+                    Some(t) => t,
+                    None => {
+                        return CopilotResponse {
+                            answer: "⚠️ [Error de Tokenizer]: No se encontró un archivo tokenizer.json válido para el modelo en el almacenamiento local. Reintenta la descarga del modelo en la pestaña Modelos.".to_string(),
+                            topic_category: "Error Interno".to_string(),
+                            source: "Tokenizers".to_string(),
+                            model_used: model_name,
+                            execution_time_ms: start.elapsed().as_millis() as u64,
+                        }
+                    }
+                };
+
+                (loaded_model, loaded_tokenizer)
             }
         };
-
-        let content = match candle_core::quantized::gguf_file::Content::read(&mut file) {
-            Ok(c) => c,
-            Err(e) => {
-                return CopilotResponse {
-                    answer: format!("⚠️ [Error]: Archivo GGUF corrupto o inválido: {}", e),
-                    topic_category: "Error Interno".to_string(),
-                    source: "Candle Engine".to_string(),
-                    model_used: model_name,
-                    execution_time_ms: start.elapsed().as_millis() as u64,
-                }
-            }
-        };
-
-        enum LocalModel {
-            Llama(candle_transformers::models::quantized_llama::ModelWeights),
-            Qwen2(candle_transformers::models::quantized_qwen2::ModelWeights),
-            Phi3(candle_transformers::models::quantized_phi3::ModelWeights),
-        }
-
-        impl LocalModel {
-            fn forward(&mut self, input: &candle_core::Tensor, start_pos: usize) -> candle_core::Result<candle_core::Tensor> {
-                match self {
-                    LocalModel::Llama(m) => m.forward(input, start_pos),
-                    LocalModel::Qwen2(m) => m.forward(input, start_pos),
-                    LocalModel::Phi3(m) => m.forward(input, start_pos),
-                }
-            }
-        }
 
         let model_name_lower = model_name.to_lowercase();
-        let gguf_arch = content.metadata.get("general.architecture")
-            .and_then(|v| match v {
-                candle_core::quantized::gguf_file::Value::String(s) => Some(s.to_lowercase()),
-                _ => None,
-            })
-            .unwrap_or_default();
-        let path_str_lower = path.to_string_lossy().to_lowercase();
-
-        let is_qwen = gguf_arch.contains("qwen") || model_name_lower.contains("qwen") || path_str_lower.contains("qwen");
-        let is_phi = gguf_arch.contains("phi") || model_name_lower.contains("phi") || path_str_lower.contains("phi");
-
-        let mut model = if is_qwen {
-            match candle_transformers::models::quantized_qwen2::ModelWeights::from_gguf(content, &mut file, &device) {
-                Ok(m) => LocalModel::Qwen2(m),
-                Err(e) => {
-                    return CopilotResponse {
-                        answer: format!("⚠️ [Error]: Fallo al cargar pesos (posible OOM o arquitectura Qwen no válida): {}", e),
-                        topic_category: "Error de Memoria/Arquitectura".to_string(),
-                        source: "Candle Engine".to_string(),
-                        model_used: model_name,
-                        execution_time_ms: start.elapsed().as_millis() as u64,
-                    }
-                }
-            }
-        } else if is_phi {
-            // Phi-3 from_gguf requires an additional boolean argument, typically for `use_flash_attn` or `alibi` which we default to false.
-            match candle_transformers::models::quantized_phi3::ModelWeights::from_gguf(false, content, &mut file, &device) {
-                Ok(m) => LocalModel::Phi3(m),
-                Err(e) => {
-                    return CopilotResponse {
-                        answer: format!("⚠️ [Error]: Fallo al cargar pesos (posible OOM o arquitectura Phi3 no válida): {}", e),
-                        topic_category: "Error de Memoria/Arquitectura".to_string(),
-                        source: "Candle Engine".to_string(),
-                        model_used: model_name,
-                        execution_time_ms: start.elapsed().as_millis() as u64,
-                    }
-                }
-            }
-        } else if model_name_lower.contains("gemma") {
-            return CopilotResponse {
-                answer: "⚠️ [Advertencia]: La arquitectura Gemma cuantizada no está soportada por el motor nativo actual. Por favor selecciona Qwen, Llama o Phi-3.".to_string(),
-                topic_category: "Arquitectura No Soportada".to_string(),
-                source: "Candle Engine".to_string(),
-                model_used: model_name,
-                execution_time_ms: start.elapsed().as_millis() as u64,
-            }
-        } else {
-            match candle_transformers::models::quantized_llama::ModelWeights::from_gguf(content, &mut file, &device) {
-                Ok(m) => LocalModel::Llama(m),
-                Err(e) => {
-                    return CopilotResponse {
-                        answer: format!("⚠️ [Error]: Fallo al cargar pesos (posible OOM o arquitectura no-Llama): {}", e),
-                        topic_category: "Error de Memoria/Arquitectura".to_string(),
-                        source: "Candle Engine".to_string(),
-                        model_used: model_name,
-                        execution_time_ms: start.elapsed().as_millis() as u64,
-                    }
-                }
-            }
-        };
 
         // Formateo de ChatML / Instruct formal según la arquitectura
         let formatted_prompt = if model_name_lower.contains("qwen") || model_name_lower.contains("smollm") {
@@ -305,59 +380,6 @@ impl AICopilotEngine {
             }
         };
 
-        // Buscamos un tokenizer adjunto con resolución profunda de candidatos
-        let parent_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-        let mut candidates = vec![
-            path.with_extension("").with_extension("json"),
-            path.with_extension("json"),
-            parent_dir.join("tokenizer.json"),
-            parent_dir.join("qwen2.5-0.5b-instruct-q4_k_m.json"),
-            parent_dir.join("SmolLM2-360M-Instruct-Q4_K_M.json"),
-            parent_dir.join("qwen2.5-1.5b-instruct-q4_k_m.json"),
-            parent_dir.join("Llama-3.2-1B-Instruct-Q4_K_M.json"),
-            parent_dir.join("gemma-2-2b-it-Q4_K_M.json"),
-            parent_dir.join("Phi-3-mini-4k-instruct-q4.json"),
-        ];
-
-        if let Ok(entries) = std::fs::read_dir(parent_dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("json") {
-                    if !candidates.contains(&p) {
-                        candidates.push(p);
-                    }
-                }
-            }
-        }
-
-        let mut tokenizer_opt = None;
-        for c in &candidates {
-            if c.exists() {
-                if let Ok(meta) = std::fs::metadata(c) {
-                    // Evitar stubs de Git LFS (un tokenizer real pesa más de 50 KB)
-                    if meta.len() > 50_000 {
-                        if let Ok(t) = tokenizers::Tokenizer::from_file(c) {
-                            tokenizer_opt = Some(t);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        let tokenizer = match tokenizer_opt {
-            Some(t) => t,
-            None => {
-                return CopilotResponse {
-                    answer: "⚠️ [Error de Tokenizer]: No se encontró un archivo tokenizer.json válido para el modelo en el almacenamiento local. Reintenta la descarga del modelo en la pestaña Modelos.".to_string(),
-                    topic_category: "Error Interno".to_string(),
-                    source: "Tokenizers".to_string(),
-                    model_used: model_name,
-                    execution_time_ms: start.elapsed().as_millis() as u64,
-                }
-            }
-        };
-
         let mut tokens = match tokenizer.encode(formatted_prompt, true) {
             Ok(t) => t.get_ids().to_vec(),
             Err(e) => {
@@ -374,7 +396,7 @@ impl AICopilotEngine {
         let initial_prompt_tokens_len = tokens.len();
         let mut logits_processor = candle_transformers::generation::LogitsProcessor::new(299792458, Some(0.7), Some(0.9));
         let mut generated_text = String::new();
-        let max_tokens = 512; // Límite para respuestas completas
+        let max_tokens = 128; // Optimizado para respuestas tácticas ágiles en procesadores móviles ARM64 (4 a 8s)
 
         for index in 0..max_tokens {
             let context_size = if index > 0 { 1 } else { tokens.len() };
@@ -459,6 +481,15 @@ impl AICopilotEngine {
             .replace("<|eot_id|>", "")
             .trim()
             .to_string();
+
+        // Preservar la instancia en memoria RAM para inferencias instantáneas (0 ms I/O) en las siguientes consultas
+        {
+            let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+            st.cached_model = Some(model);
+            st.cached_tokenizer = Some(tokenizer);
+            st.active_model_path = path_str;
+            st.is_loaded = true;
+        }
 
         CopilotResponse {
             answer: if clean_answer.is_empty() { "Inferencia completada sin texto.".to_string() } else { clean_answer },

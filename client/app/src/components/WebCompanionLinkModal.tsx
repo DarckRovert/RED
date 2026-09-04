@@ -6,6 +6,7 @@ import { companionSyncEngine, CompanionSyncPayload, PairingSession } from "../li
 import { TacticalAudioEngine } from "../lib/audio/TacticalAudioEngine";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { getSecurePin } from "../lib/crypto/BiometricLockEngine";
 
 interface WebCompanionLinkModalProps {
     onClose: () => void;
@@ -229,7 +230,13 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
             setMode("receiving");
             setStatusMessage("Descifrando cápsula soberana Air-Gap con AES-256-GCM...");
             try {
-                let masterPin = localStorage.getItem("master_pin") || "123456";
+                const masterPin = await getSecurePin("master_pin");
+                if (!masterPin) {
+                    toast.error("Configura tu PIN maestro antes de restaurar la cápsula.");
+                    setMode("error");
+                    setStatusMessage("Se requiere PIN maestro");
+                    return;
+                }
                 const payload = await companionSyncEngine.importAirGapVaultToken(rawCode, masterPin);
                 const ok = await restoreCompanionVault(payload);
                 if (ok) {
@@ -254,15 +261,7 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         TacticalAudioEngine.playTap();
 
         try {
-            let masterPin = localStorage.getItem("master_pin") || "123456";
-            try {
-                const { Capacitor } = await import("@capacitor/core");
-                if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
-                    if (res?.value) masterPin = res.value;
-                }
-            } catch {}
+            const masterPin = (await getSecurePin("master_pin")) || undefined;
 
             const convsToSync = Array.isArray(conversations) ? conversations.slice(0, 20) : [];
             const contactsToSync = Array.isArray(contacts) ? contacts.slice(0, 50) : [];
@@ -308,15 +307,13 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
         setIsExportingAirGap(true);
         setStatusMessage("Generando cápsula soberana Air-Gap...");
         try {
-            let masterPin = localStorage.getItem("master_pin") || "123456";
-            try {
-                const { Capacitor } = await import("@capacitor/core");
-                if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
-                    if (res?.value) masterPin = res.value;
-                }
-            } catch {}
+            const masterPin = await getSecurePin("master_pin");
+            if (!masterPin) {
+                toast.error("Configura tu PIN maestro antes de exportar la cápsula.");
+                setIsExportingAirGap(false);
+                setStatusMessage("PIN maestro no configurado");
+                return;
+            }
 
             const payload: CompanionSyncPayload = {
                 version: 1,

@@ -55,11 +55,24 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
         } catch {}
     }
 
-    // 1. PRIORIDAD ABSOLUTA: Consultar motor nativo Rust (Android JNI o Daemon Desktop)
-    // El motor nativo auto-detecta modelos GGUF descargados en disco incluso si activeModel no tiene ruta absoluta explícita.
+    // 1. Si no hay modelo descargado en disco, responder instantáneamente (<10 ms)
+    // con el RAG Táctico INT8 preinstalado y la síntesis conversacional local.
+    if (!activeModel || !activeModel.isDownloaded) {
+        const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
+        return {
+            answer: res.answer,
+            topic_category: res.topicCategory,
+            source: res.modelInfo || '🛡️ RAG Táctico Preinstalado INT8',
+            execution_time_ms: res.executionTimeMs,
+            thoughtChain: res.thoughtChain,
+            thought_chain: res.thoughtChain,
+        };
+    }
+
+    // 2. Si el usuario descargó un modelo GGUF, ejecutar inferencia nativa en Rust Candle (ARM64)
     try {
-        const cleanLocalPath = activeModel?.localPath ? activeModel.localPath.replace(/^file:\/\//, '') : undefined;
-        const modelId = activeModel?.id || 'red-tactical';
+        const cleanLocalPath = activeModel.localPath ? activeModel.localPath.replace(/^file:\/\//, '') : undefined;
+        const modelId = activeModel.id;
 
         const nativeResp = await fetchWithFallback<CopilotResponse>('/api/ai/copilot', {
             method: 'POST',

@@ -88,5 +88,43 @@ let passedTests = 0;
     passedTests++;
 }
 
+// Test 7: Bucle Auto-Resume Resiliente (MAX_RETRIES con HTTP Range)
+{
+    const modelManagerPath = path.join(__dirname, '../src/lib/ai/modelManager.ts');
+    const content = fs.readFileSync(modelManagerPath, 'utf8');
+
+    assert.ok(content.includes('const MAX_RETRIES = 5;'), 'Debe definir MAX_RETRIES para el bucle de auto-reanudación');
+    assert.ok(content.includes('while (retryCount < MAX_RETRIES)'), 'Debe ejecutar bucle de descarga hasta completar el total de bytes');
+    assert.ok(content.includes('headers[\'Range\'] = `bytes=${existingBytes}-`;'), 'Debe enviar cabecera Range al reanudar');
+    console.log('✓ Test 7 PASÓ: Bucle Auto-Resume resiliente (MAX_RETRIES=5 con HTTP Range) verificado.');
+    passedTests++;
+}
+
+// Test 8: Auditoría de Tamaños Exactos en Bytes (expectedSizeBytes SSOT)
+{
+    const modelManagerPath = path.join(__dirname, '../src/lib/ai/modelManager.ts');
+    const content = fs.readFileSync(modelManagerPath, 'utf8');
+
+    assert.ok(content.includes('expectedSizeBytes: 491400032'), 'Qwen 0.5B debe tener exactamente 491400032 bytes');
+    assert.ok(content.includes('expectedSizeBytes: 270590880'), 'SmolLM 360M debe tener exactamente 270590880 bytes');
+    assert.ok(content.includes('expectedSizeBytes: 1117320736'), 'Qwen 1.5B debe tener exactamente 1117320736 bytes');
+    assert.ok(content.includes('expectedSizeBytes: 807694464'), 'Llama 3.2 1B debe tener exactamente 807694464 bytes');
+    console.log('✓ Test 8 PASÓ: Tamaños exactos de servidor (SSOT expectedSizeBytes) auditados sin discrepancias.');
+    passedTests++;
+}
+
+// Test 9: Auto-reparación Inteligente de Archivo Truncado (Promoción a .part sin pérdida de datos)
+{
+    const modelManagerPath = path.join(__dirname, '../src/lib/ai/modelManager.ts');
+    const content = fs.readFileSync(modelManagerPath, 'utf8');
+
+    assert.ok(content.includes('shouldPromoteToPart'), 'Debe implementar bandera de promoción segura a .part');
+    assert.ok(content.includes('Convirtiendo a descarga parcial .part'), 'Debe loggear la conversión auto-reparadora');
+    assert.ok(content.includes('finalPartStat.size < minAcceptableBytes') || content.includes('finalPartStat.size < totalBytes'), 'Jamás debe promover a .gguf si falta un solo byte');
+    console.log('✓ Test 9 PASÓ: Auto-reparación inteligente y barrera de promoción estricta al byte exacto certificadas.');
+    passedTests++;
+}
+
 console.log(`\n🎉 RESULTADO FINAL: ${passedTests}/${passedTests} TESTS PASARON EXITOSAMENTE (100%).`);
 process.exit(0);
+

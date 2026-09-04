@@ -107,7 +107,14 @@ async function getSessionToken(): Promise<string | null> {
             return token;
         }
     } catch {
-        // En browser o si el nodo no ha arrancado todavía: operar sin token
+        // En browser o si el nodo no ha arrancado todavía: verificar almacenamiento local
+    }
+    if (typeof window !== 'undefined') {
+        const stored = sessionStorage.getItem('red_session_token') || localStorage.getItem('red_api_key');
+        if (stored && stored.trim().length > 0) {
+            _sessionTokenCache = stored.trim();
+            return _sessionTokenCache;
+        }
     }
     return null;
 }
@@ -137,13 +144,19 @@ async function fetchNodeWithRetry(url: string, options?: FetchNodeOptions): Prom
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
         try {
+            const authHeaders: Record<string, string> = sessionToken ? {
+                'X-Red-Session-Token': sessionToken,
+                'X-API-Key': sessionToken,
+                'Authorization': `Bearer ${sessionToken}`
+            } : {};
+
             const res = await fetch(url, {
                 ...options,
                 signal: controller.signal,
                 headers: {
                     'Accept': 'application/json',
                     'Content-Type': 'application/json',
-                    ...(sessionToken ? { 'X-Red-Session-Token': sessionToken } : {}),
+                    ...authHeaders,
                     ...options?.headers
                 }
             });

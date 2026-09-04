@@ -600,29 +600,15 @@ export class SovereignBackupEngine {
     }
 
     /**
-     * Safely resolves the active Master PIN from memory, localStorage, or hardware Keystore
+     * Safely resolves the active Master PIN from memory, session, or hardware Keystore
      */
     public static async getSecureMasterPin(): Promise<string | null> {
-        if (typeof window !== "undefined") {
-            try {
-                const localVal = localStorage.getItem("master_pin") || sessionStorage.getItem("master_pin");
-                if (localVal && localVal.trim().length >= 4) return localVal.trim();
-            } catch {}
-
-            try {
-                const { Capacitor } = await import("@capacitor/core");
-                if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
-                    if (res && res.value && res.value.trim().length >= 4) {
-                        const val = res.value.trim();
-                        try { localStorage.setItem("master_pin", val); } catch {}
-                        return val;
-                    }
-                }
-            } catch {}
+        try {
+            const { getSecurePin } = await import("../crypto/BiometricLockEngine");
+            return await getSecurePin("master_pin");
+        } catch {
+            return null;
         }
-        return null;
     }
 
     /**
@@ -665,13 +651,8 @@ export class SovereignBackupEngine {
             localStorage.setItem("red_last_backup_ts", Date.now().toString());
             localStorage.setItem("red_pending_backup_changes", "0");
             try {
-                localStorage.setItem("master_pin", passwordToTry);
-                sessionStorage.setItem("master_pin", passwordToTry);
-                const { Capacitor } = await import("@capacitor/core");
-                if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    await SecureStoragePlugin.set({ key: "master_pin", value: passwordToTry }).catch(() => null);
-                }
+                const { setSecurePin } = await import("../crypto/BiometricLockEngine");
+                await setSecurePin("master_pin", passwordToTry);
             } catch {}
         }
         return capsule;

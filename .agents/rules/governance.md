@@ -1,4 +1,4 @@
-# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v86.0.0
+# GOBERNANZA AUTOMÁTICA Y ESTÁNDARES RED v87.0.0
 
 Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNANCE.md`.
 
@@ -48,5 +48,28 @@ Este espacio de trabajo se rige estrictamente bajo el documento maestro `GOVERNA
    - **Nombre Inmutable de Crates**: El crate de blockchain DEBE mantenerse estrictamente como `name = "red-blockchain"` en `blockchain/Cargo.toml` para coincidir con las declaraciones `red-blockchain = { path = "../blockchain" }` en `core/Cargo.toml`, `node/Cargo.toml` y `red_mobile/Cargo.toml`.
    - **Prohibición de Renombrado Huérfano**: Queda prohibido alterar guiones o guiones bajos (`-` vs `_`) en los paquetes del workspace sin actualizar simétricamente todos los dependientes y comprobar `cargo check --workspace`.
    - **Sincronización de Lockfile**: Cualquier modificación en crates locales debe ser validada contra `Cargo.lock` para garantizar que no existan discrepancias entre las versiones declaradas y bloqueadas.
+
+9. **Nivel 9 - Soberanía Absoluta contra SDKs Centralizados & Cero Telemetría Publicitaria**:
+   - **Prohibición Total de AdMob / Trackers**: Queda estrictamente prohibido incorporar SDKs de publicidad o telemetría corporativa (Google AdMob, Firebase Analytics, Facebook SDK, etc.). Todo modelo de sostenimiento debe ser descentralizado y soberano (Proof-of-Relay, vales $RED P2P locales).
+   - **Purga de Metadatos**: El manifiesto de Android y la configuración de Capacitor nunca deben incluir IDs de aplicación de redes publicitarias.
+
+10. **Nivel 10 - Seguridad Zero-Trust en APIs Locales & Protección de Bóvedas**:
+    - **Cero Claves en Texto Claro**: Queda prohibido almacenar PIN maestro, PIN de pánico o PIN señuelo en texto plano en `localStorage` o `sessionStorage`. La verificación debe usar derivación KDF o permanecer en memoria volátil de sesión.
+    - **Prohibición de Bypasses Inseguros**: Queda prohibido omitir la autenticación local basándose en la ausencia de cabeceras HTTP como `X-Forwarded-For`.
+    - **Aislamiento de CORS**: El servidor Axum local debe restringir CORS exclusivamente a orígenes locales autorizados (`capacitor://localhost`, `http://127.0.0.1:7333`, `http://localhost:7333`, `https://localhost`), prohibiendo `CorsLayer::permissive()`.
+    - **Unificación de Cabeceras**: El frontend y los servidores backend deben sincronizar estrictamente la cabecera `X-API-Key` con el token de sesión.
+    - **Cero Puertas Traseras**: Prohibido incluir PINs o contraseñas hardcodeadas en código fuente (ej. `password === '9999'`).
+
+11. **Nivel 11 - Integridad del Proceso de Empaquetado & Firmado de Producción**:
+    - **Prohibición de Firma Debug en Release**: Ningún APK o artefacto de release debe compilarse utilizando `signingConfigs.debug`.
+    - **Protección JNI en ProGuard/R8**: Las reglas de ProGuard deben conservar explícitamente las interfaces nativas JNI (`-keep class f.red.app.** { *; }`, `-keepclasseswithmembernames class * { native <methods>; }`) permitiendo que R8 optimice sin romper la carga de `libred_mobile.so`.
+    - **Tráfico en Texto Claro Acotado**: `android:usesCleartextTraffic="true"` debe erradicarse a nivel de aplicación global; el tráfico sin TLS solo se autoriza en loopback (`127.0.0.1` / `localhost`) mediante `network_security_config.xml`.
+
+12. **Nivel 12 - Compatibilidad Multiplataforma de Radios (iOS CoreBluetooth & Android)**:
+    - Todo transporte BLE debe aceptar de forma transparente tanto direcciones MAC físicas (`XX:XX:XX:...`) como identificadores UUID de CoreBluetooth (`[0-9a-fA-F-]{36}`) para no bloquear conexiones en dispositivos Apple.
+
+13. **Nivel 13 - Verificación Empírica de Pruebas (Cero Pruebas Fantasma)**:
+    - Las suites de pruebas en `client/app/scripts/` deben ejecutar lógica real en runtime, evitando pruebas que únicamente lean archivos fuente mediante `fs.readFileSync` para verificar presencia de cadenas.
+
 
 

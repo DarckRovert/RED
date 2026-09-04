@@ -1,6 +1,6 @@
-# 🔴 RED - Manual del Administrador (Node Ops v64.0.0)
+# 🔴 RED - Manual del Administrador (Node Ops v87.0.0)
 
-Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v64.0.0, con soporte para interconexión P2P Web $\leftrightarrow$ Mobile, suite de Respaldo Soberano en 1 Toque, llaves biométricas universales, enrutamiento autónomo multicapa LQS, validación Proof-of-Stake / Staking, actuadores de hardware nativos y arquitectura de eventos en tiempo real SSE unificada sin polling.
+Este manual está dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v87.0.0, con soporte para interconexión P2P Web $\leftrightarrow$ Mobile, suite de Respaldo Soberano en 1 Toque, llaves biométricas universales, enrutamiento autónomo multicapa LQS, validación Proof-of-Stake / Staking, actuadores de hardware nativos, autenticación Zero-Trust en loopback sin bypass, y arquitectura de eventos en tiempo real SSE unificada sin polling.
 
 ---
 
@@ -52,11 +52,12 @@ PORT=3001 node server.js
 
 ## 🌐 2. Conectividad y Hardware P2P
 
-### BLE Advertiser & Central Mode
+### BLE Advertiser & Central Mode (Dual Addressing Android & iOS)
 El dispositivo actúa como un Periférico y Central GATT simultáneo:
 - **UUID de Servicio:** `00001818-0000-1000-8000-00805f9b34fb`.
 - **Características:** `RED_BLE_RX_CHAR` (`00002a6e...`) y `RED_BLE_TX_CHAR` (`00002a4d...`).
-- **Inmunidad a VPNs:** Opera a nivel de hardware HCI sin atravesar la pila TCP/IP de Android.
+- **Direccionamiento Dual:** Soporta tanto direcciones MAC de hardware estándar en Android/Linux (`AA:BB:CC:DD:EE:FF`) como identificadores UUID de CoreBluetooth en iOS (`E621E1F8-C36C-495A-93FC-0C247A3E6E5F`), garantizando interoperabilidad multiplataforma total.
+- **Inmunidad a VPNs:** Opera a nivel de hardware HCI sin atravesar la pila TCP/IP de Android ni interferir con túneles VPN activos.
 
 ### WiFi Direct, LoRa & SoundMesh Ultrasonido
 - **WiFi Direct:** Canal de alta velocidad para ruteo local y llamadas WebRTC.
@@ -67,18 +68,22 @@ El dispositivo actúa como un Periférico y Central GATT simultáneo:
 
 ## 🔒 3. Seguridad Zero-Trust, Socket Axum & Base de Datos Sled
 
-### Aislamiento de Red
+### Aislamiento de Red & Autenticación de Bucle Local
 Tanto en Android (`red_mobile`) como en Desktop (`red_node`), el servidor Axum se enlaza **estrictamente a Loopback `127.0.0.1:7333`**:
 ```rust
 // red_mobile/src/lib.rs & node/src/main.rs
 let addr = SocketAddr::from(([127, 0, 0, 1], 7333));
 let listener = tokio::net::TcpListener::bind(addr).await?;
 ```
-Esto garantiza que ningún dispositivo en la red LAN o WiFi compartida pueda consultar la API del nodo ni enviar peticiones no autorizadas.
+- **Zero-Trust Autenticado:** Todo endpoint local (`/api/*`) exige autenticación obligatoria mediante token criptográfico efímero de sesión (`session.token` de 64 caracteres hex) o clave derivada. Se aceptan cabeceras `X-API-Key`, `X-Red-Session-Token` o `Authorization: Bearer <token>`.
+- **Mitigación Anti-Timing:** La validación de credenciales se ejecuta en tiempo constante estricto mediante `subtle::ConstantTimeEq`, evitando fugas de canal lateral.
+- **CORS Restrictivo:** Prohibido `CorsLayer::permissive()`. El servidor solo admite orígenes locales explícitos (`http://localhost:*`, `http://127.0.0.1:*`, `capacitor://localhost`, `https://darckrovert.github.io`).
+- **Erradicación de Bypass Loopback:** No se asume confianza por cabeceras `x-forwarded-for` forjadas en peticiones web locales.
 
 ### Base de Datos Cifrada Sled
 - **Cifrado Simétrico:** Todos los árboles de datos (`identity`, `contacts`, `conversations`, `messages`, `vault`) se cifran con **AES-256-GCM**.
 - **Validación al Arranque (`try_get_identity`):** Si la base de datos ya contiene una identidad previa y la clave simétrica derivada del PIN no puede desencriptarla, el nodo aborta inmediatamente con un error fatal (`FATAL: Storage decryption failed — Incorrect PIN / Master Password`), impidiendo la creación de identidades efímeras fraudulentas.
+- **Cero Texto Plano:** Los PINs de desbloqueo, pánico y señuelo nunca se almacenan en texto plano en `localStorage`. En entornos nativos residen en hardware TEE (Android Keystore), y en web se verifican mediante hashes criptográficos derivados con salts por instancia.
 
 ---
 

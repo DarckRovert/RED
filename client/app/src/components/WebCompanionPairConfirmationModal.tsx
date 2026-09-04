@@ -6,6 +6,7 @@ import { companionSyncEngine, CompanionSyncPayload } from "../lib/mesh/companion
 import { TacticalAudioEngine } from "../lib/TacticalAudioEngine";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
+import { getSecurePin } from "../lib/crypto/BiometricLockEngine";
 
 interface WebCompanionPairConfirmationModalProps {
     qrData: string;
@@ -24,16 +25,8 @@ export const WebCompanionPairConfirmationModal: React.FC<WebCompanionPairConfirm
             setStatusMessage("Estableciendo enlace criptográfico seguro con la Web…");
             TacticalAudioEngine.playTap();
 
-            // 1. Obtener PIN maestro
-            let masterPin = typeof window !== "undefined" ? localStorage.getItem("master_pin") || "123456" : "123456";
-            try {
-                const { Capacitor } = await import("@capacitor/core");
-                if (Capacitor.isNativePlatform()) {
-                    const { SecureStoragePlugin } = await import("capacitor-secure-storage-plugin");
-                    const res = await SecureStoragePlugin.get({ key: "master_pin" }).catch(() => null);
-                    if (res?.value) masterPin = res.value;
-                }
-            } catch {}
+            // 1. Obtener PIN maestro desde enclave seguro
+            const masterPin = (await getSecurePin("master_pin")) || undefined;
 
             // 2. Empaquetar datos de sincronización
             const convsToSync = Array.isArray(conversations) ? conversations.slice(0, 30) : [];
