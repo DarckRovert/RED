@@ -344,7 +344,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             flexDirection: "column",
             background: isFamiliar ? "#202C33" : "rgba(10,12,22,0.98)",
             borderTop: isFamiliar ? "1px solid rgba(255,255,255,0.06)" : "1px solid var(--glass-border)",
-            zIndex: 30,
+            zIndex: 100,
             position: "relative"
         }}>
             {/* ── Reply Quote Banner Bar ── */}
@@ -463,6 +463,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                         width: "76px",
                                         animation: `contact-item-enter 0.25s ease both`,
                                         animationDelay: `${i * 40}ms`,
+                                        touchAction: "manipulation",
+                                        pointerEvents: "auto"
                                     }}
                                 >
                                     <div style={{
@@ -689,7 +691,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         }}>
                             {/* Emoji Button */}
                             <button
-                                onClick={() => setEmojiPickerOpen(!emojiPickerOpen)}
+                                onClick={() => {
+                                    setEmojiPickerOpen(prev => {
+                                        if (!prev) setIsAttachOpen(false);
+                                        return !prev;
+                                    });
+                                }}
                                 style={{
                                     background: "transparent", border: "none",
                                     color: emojiPickerOpen ? (isFamiliar ? "#00A884" : "var(--accent-cyan)") : (isFamiliar ? "#8696A0" : "var(--text-secondary)"),
@@ -746,7 +753,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                             {/* Attachment Clip Button */}
                             <button
-                                onClick={() => setIsAttachOpen(!isAttachOpen)}
+                                onClick={() => {
+                                    setIsAttachOpen(prev => {
+                                        if (!prev) setEmojiPickerOpen(false);
+                                        return !prev;
+                                    });
+                                }}
                                 style={{
                                     background: "transparent", border: "none",
                                     color: isAttachOpen ? (isFamiliar ? "#00A884" : "var(--accent-cyan)") : (isFamiliar ? "#8696A0" : "var(--text-secondary)"),

@@ -1669,7 +1669,12 @@ export default function ChatWindow() {
             />
 
             {/* Input Bar Táctica / Familiar */}
-            <div style={{ borderTop: isFamiliar ? "1px solid rgba(255,255,255,0.06)" : "1px solid var(--glass-border)", background: isFamiliar ? "#202C33" : "rgba(10, 10, 20, 0.95)", backdropFilter: "blur(20px)" }}>
+            <div style={{
+                position: "relative",
+                zIndex: 100,
+                borderTop: isFamiliar ? "1px solid rgba(255,255,255,0.06)" : "1px solid var(--glass-border)",
+                background: isFamiliar ? "#202C33" : "rgba(10, 10, 20, 0.98)"
+            }}>
                 <ChatInput
                     onSendMessage={handleSendText}
                     onSendVoice={handleSendVoice}

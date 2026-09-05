@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { TacticalAudioEngine } from "../../lib/TacticalAudioEngine";
+import { useRedStore } from "../../store/useRedStore";
 
 interface TacticalEmojiPickerProps {
     isOpen: boolean;
@@ -47,7 +48,9 @@ export const TacticalEmojiPicker: React.FC<TacticalEmojiPickerProps> = ({
     onClose,
     onSelectEmoji,
 }) => {
-    const [activeTab, setActiveTab] = useState("tactical");
+    const { preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
+    const [activeTab, setActiveTab] = useState(isFamiliar ? "expressions" : "tactical");
     const [searchQuery, setSearchQuery] = useState("");
 
     if (!isOpen) return null;
@@ -80,18 +83,18 @@ export const TacticalEmojiPicker: React.FC<TacticalEmojiPickerProps> = ({
             <div
                 style={{
                     position: "absolute",
-                    bottom: "58px",
+                    bottom: "calc(100% + 8px)",
                     left: "12px",
                     zIndex: 160,
                     width: "320px",
                     maxWidth: "calc(100vw - 24px)",
-                    background: "rgba(12, 16, 30, 0.98)",
+                    background: isFamiliar ? "#233138" : "rgba(12, 16, 30, 0.98)",
                     backdropFilter: "blur(24px)",
                     WebkitBackdropFilter: "blur(24px)",
-                    border: "1.5px solid rgba(0, 229, 255, 0.35)",
+                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.12)" : "1.5px solid rgba(0, 229, 255, 0.35)",
                     borderRadius: "18px",
                     padding: "12px",
-                    boxShadow: "0 12px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 229, 255, 0.15)",
+                    boxShadow: isFamiliar ? "0 16px 48px rgba(0, 0, 0, 0.65)" : "0 12px 40px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 229, 255, 0.15)",
                     animation: "fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1)",
                     display: "flex",
                     flexDirection: "column",
@@ -157,8 +160,8 @@ export const TacticalEmojiPicker: React.FC<TacticalEmojiPickerProps> = ({
                                     padding: "6px 8px",
                                     borderRadius: "8px",
                                     border: "none",
-                                    background: activeTab === cat.id ? "rgba(0, 229, 255, 0.2)" : "transparent",
-                                    color: activeTab === cat.id ? "var(--accent-cyan)" : "var(--text-muted)",
+                                    background: activeTab === cat.id ? (isFamiliar ? "rgba(0, 168, 132, 0.25)" : "rgba(0, 229, 255, 0.2)") : "transparent",
+                                    color: activeTab === cat.id ? (isFamiliar ? "#00A884" : "var(--accent-cyan)") : "var(--text-muted)",
                                     fontSize: "0.74rem",
                                     fontWeight: activeTab === cat.id ? 800 : 600,
                                     cursor: "pointer",
@@ -167,6 +170,8 @@ export const TacticalEmojiPicker: React.FC<TacticalEmojiPickerProps> = ({
                                     justifyContent: "center",
                                     gap: "4px",
                                     transition: "all 0.15s ease",
+                                    touchAction: "manipulation",
+                                    pointerEvents: "auto"
                                 }}
                             >
                                 <span>{cat.icon}</span>
@@ -203,10 +208,12 @@ export const TacticalEmojiPicker: React.FC<TacticalEmojiPickerProps> = ({
                                 justifyContent: "center",
                                 cursor: "pointer",
                                 transition: "transform 0.1s ease, background 0.15s ease",
+                                touchAction: "manipulation",
+                                pointerEvents: "auto"
                             }}
                             onMouseEnter={(e) => {
                                 e.currentTarget.style.transform = "scale(1.2)";
-                                e.currentTarget.style.background = "rgba(0, 229, 255, 0.15)";
+                                e.currentTarget.style.background = isFamiliar ? "rgba(0, 168, 132, 0.2)" : "rgba(0, 229, 255, 0.15)";
                             }}
                             onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = "scale(1.0)";
