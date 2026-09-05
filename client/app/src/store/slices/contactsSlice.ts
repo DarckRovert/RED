@@ -407,6 +407,51 @@ export const createContactsSlice: StateCreator<RedStore, [], [], Partial<RedStor
             } catch {}
         }
 
+        // 7. Handshake Deadlock Fix: If the peer we are adding had a pending contact_request
+        //    towards us, clear it immediately and respond with accepted:true.
+        //    This prevents the pending badge from sticking indefinitely (cause root #4).
+        const currentPending = get().pendingContactRequests || [];
+        const matchingPending = currentPending.filter(r => {
+            const rh = normalizeIdentity(r.senderHash || '');
+            return rh === cleanHash || (cleanHash.length >= 8 && rh.startsWith(cleanHash.slice(0, 8)));
+        });
+        if (matchingPending.length > 0) {
+            const updatedPending = currentPending.filter(r => !matchingPending.includes(r));
+            if (typeof window !== 'undefined') {
+                try { localStorage.setItem('red_pending_contact_requests', JSON.stringify(updatedPending)); } catch {}
+            }
+            set({ pendingContactRequests: updatedPending, activeContactRequestModal: updatedPending[0] || null });
+
+            // Auto-respond to each matched pending request
+            const myIdentity = get().identity;
+            if (myIdentity?.identity_hash) {
+                for (const req of matchingPending) {
+                    const respPayload = JSON.stringify({
+                        type: 'contact_response',
+                        id: `cres_auto_${Date.now()}_${myIdentity.identity_hash.slice(0, 8)}`,
+                        sender_hash: myIdentity.identity_hash,
+                        sender_name: myIdentity.nickname || 'Operador RED',
+                        sender_pk: myIdentity.public_key || null,
+                        channel: req.channel || 'Mesh',
+                        accepted: true,
+                        timestamp: Date.now()
+                    });
+                    RedAPI.sendMessage(req.senderHash, respPayload, { msg_type: 'contact_response' }).catch(() => {});
+                    try {
+                        const rawBytes = new TextEncoder().encode(JSON.stringify({
+                            id: `cres_auto_${Date.now()}`,
+                            content: respPayload,
+                            sender: myIdentity.identity_hash,
+                            recipient: req.senderHash,
+                            msg_type: 'contact_response',
+                            timestamp: Date.now() / 1000
+                        }));
+                        meshRouter.send(req.senderHash, rawBytes).catch(() => {});
+                    } catch {}
+                }
+            }
+        }
+
         return cleanHash;
     },
 

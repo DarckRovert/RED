@@ -89,12 +89,207 @@ export default function RadarWindow() {
         }
     };
 
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const webCamStreamRef = useRef<MediaStream | null>(null);
+    const webCamRafRef = useRef<number | null>(null);
+
+    const processScannedQr = async (rawContent: string) => {
+        const raw = rawContent.trim();
+        if (raw.startsWith("RED_PAIR:1:")) {
+            await stopScan();
+            setWebPairingCode(raw);
+            return;
+        }
+
+        let cleanHash = "";
+        let pubKey: string | null = null;
+        let scannedName = "Operador RED";
+
+        if (raw.startsWith("{") && raw.endsWith("}")) {
+            try {
+                const parsed = JSON.parse(raw);
+                const rawHash = parsed.hash || parsed.peerHash || (parsed.did ? parsed.did.replace(/^did:red:/i, "") : "");
+                cleanHash = meshRouter.getCanonicalId(rawHash) || rawHash;
+                pubKey = parsed.pk || parsed.publicKey || null;
+                scannedName = parsed.name || parsed.nickname || `Operador ${cleanHash.slice(0, 6)}`;
+            } catch {
+                toast.error("Error al interpretar JSON QR");
+            }
+        } else if (raw.startsWith("RED_ID_VAULT:")) {
+            try {
+                const encoded = raw.split(":")[1];
+                const decoded = JSON.parse(atob(encoded));
+                cleanHash = meshRouter.getCanonicalId(decoded.did || "");
+                pubKey = decoded.pk || null;
+                scannedName = decoded.name || `Nodo ${cleanHash.slice(0, 8)}`;
+            } catch {
+                toast.error("Bóveda QR Inválida");
+            }
+        } else if (raw.startsWith("did:red:")) {
+            try {
+                const withoutScheme = raw.replace(/^did:red:/i, '');
+                const parts = withoutScheme.split(":");
+                const rawHash = parts[0] ? parts[0].trim() : "";
+                cleanHash = meshRouter.getCanonicalId(rawHash) || rawHash;
+                pubKey = parts[1] ? parts[1].trim() : null;
+                if (parts[2]) {
+                    try {
+                        scannedName = decodeURIComponent(parts[2].trim());
+                    } catch {
+                        scannedName = parts[2].trim();
+                    }
+                } else {
+                    scannedName = `Operador ${cleanHash.slice(0, 6)}`;
+                }
+            } catch (addErr) {
+                const msg = addErr instanceof Error ? addErr.message : String(addErr);
+                toast.error(`Error al interpretar QR: ${msg}`);
+            }
+        } else {
+            cleanHash = meshRouter.getCanonicalId(raw) || raw;
+            scannedName = `Operador ${cleanHash.slice(0, 6)}`;
+        }
+
+        if (cleanHash && cleanHash.length >= 8) {
+            try {
+                const resolvedHash = await addContact(cleanHash, scannedName, pubKey);
+
+                // Anunciar handshake en la malla para que el otro par registre el camino de retorno
+                try {
+                    const payload = new TextEncoder().encode(JSON.stringify({
+                        type: "contact_request",
+                        sender_hash: identity?.identity_hash,
+                        sender_name: identity?.nickname || "Operador RED",
+                        sender_pk: identity?.public_key,
+                        timestamp: Date.now()
+                    }));
+                    meshRouter.broadcast(payload);
+                } catch {}
+
+                toast.success(`🤝 ¡Contacto ${scannedName} añadido con éxito!`);
+                const targetChat = (typeof resolvedHash === "string" && resolvedHash) ? resolvedHash : cleanHash;
+                navigate("chat", targetChat);
+            } catch (addErr) {
+                const msg = addErr instanceof Error ? addErr.message : String(addErr);
+                toast.error(`Error al añadir contacto: ${msg}`);
+            }
+        }
+    };
+
+    const startWebCamScan = async () => {
+        try {
+            setScanning(true);
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }
+            });
+            webCamStreamRef.current = stream;
+
+            await new Promise<void>(resolve => {
+                const check = () => (videoRef.current ? resolve() : requestAnimationFrame(check));
+                check();
+            });
+
+            if (!shouldScanRef.current) {
+                await stopScan();
+                return;
+            }
+
+            const video = videoRef.current!;
+            video.srcObject = stream;
+            await video.play();
+
+            const hasBD = "BarcodeDetector" in window;
+            const detector = hasBD ? new (window as any).BarcodeDetector({ formats: ["qr_code"] }) : null;
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
+            const tick = async () => {
+                if (!shouldScanRef.current || !webCamStreamRef.current) return;
+                if (video.readyState >= 2 && ctx) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0);
+                    try {
+                        if (detector) {
+                            const codes = await detector.detect(canvas);
+                            if (codes.length > 0 && codes[0].rawValue) {
+                                await stopScan();
+                                await processScannedQr(codes[0].rawValue);
+                                return;
+                            }
+                        }
+                    } catch {}
+                }
+                webCamRafRef.current = requestAnimationFrame(tick);
+            };
+            webCamRafRef.current = requestAnimationFrame(tick);
+        } catch (err: any) {
+            console.warn("[RadarScanner] Fallback WebCam error:", err);
+            const msg = err?.name === "NotAllowedError"
+                ? "Permiso de cámara web denegado."
+                : "Cámara web no accesible en este navegador. Puedes usar la subida de imagen QR.";
+            toast.warning(msg);
+            setScanning(false);
+        }
+    };
+
+    const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        e.target.value = "";
+
+        toast.info("Analizando imagen QR...");
+        try {
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                const dataUrl = ev.target?.result as string;
+                if (!dataUrl) return;
+
+                const img = new Image();
+                img.onload = async () => {
+                    try {
+                        const canvas = document.createElement("canvas");
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext("2d");
+                        if (!ctx) throw new Error("Canvas context null");
+                        ctx.drawImage(img, 0, 0);
+
+                        if ("BarcodeDetector" in window) {
+                            try {
+                                const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+                                const barcodes = await detector.detect(canvas);
+                                if (barcodes.length > 0 && barcodes[0].rawValue) {
+                                    await stopScan();
+                                    await processScannedQr(barcodes[0].rawValue);
+                                    return;
+                                }
+                            } catch {}
+                        }
+
+                        toast.warning("No se detectó un código QR legible en esta imagen.");
+                    } catch {
+                        toast.error("Error al procesar imagen");
+                    }
+                };
+                img.src = dataUrl;
+            };
+            reader.readAsDataURL(file);
+        } catch {
+            toast.error("Error al leer archivo");
+        }
+    };
+
     const startScan = async () => {
         shouldScanRef.current = true;
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (!Capacitor.isNativePlatform()) {
-                toast.info("La cámara QR requiere un dispositivo físico Android.");
+                if (typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function") {
+                    await startWebCamScan();
+                } else {
+                    toast.info("Escaneo visual: sube una imagen de código QR.");
+                }
                 return;
             }
 
@@ -128,77 +323,40 @@ export default function RadarWindow() {
                 return;
             }
 
-            if (result.hasContent) {
-                const raw = result.content.trim();
-
-                if (raw.startsWith("RED_PAIR:1:")) {
-                    await stopScan();
-                    setWebPairingCode(raw);
-                    return;
-                }
-
-                let cleanHash = "";
-                let pubKey: string | null = null;
-                let scannedName = "Operador RED";
-
-                if (raw.startsWith("RED_ID_VAULT:")) {
-                    try {
-                        const encoded = raw.split(":")[1];
-                        const decoded = JSON.parse(atob(encoded));
-                        cleanHash = meshRouter.getCanonicalId(decoded.did || "");
-                        pubKey = decoded.pk || null;
-                        scannedName = decoded.name || `Nodo ${cleanHash.slice(0, 8)}`;
-                    } catch {
-                        toast.error("Bóveda QR Inválida");
-                    }
-                } else if (raw.startsWith("did:red:")) {
-                    try {
-                        const withoutScheme = raw.replace(/^did:red:/i, '');
-                        const parts = withoutScheme.split(":");
-                        const rawHash = parts[0] ? parts[0].trim() : "";
-                        cleanHash = meshRouter.getCanonicalId(rawHash) || rawHash;
-                        pubKey = parts[1] ? parts[1].trim() : null;
-                        if (parts[2]) {
-                            try {
-                                scannedName = decodeURIComponent(parts[2].trim());
-                            } catch {
-                                scannedName = parts[2].trim();
-                            }
-                        } else {
-                            scannedName = `Operador ${cleanHash.slice(0, 6)}`;
-                        }
-                    } catch (addErr) {
-                        const msg = addErr instanceof Error ? addErr.message : String(addErr);
-                        toast.error(`Error al interpretar QR: ${msg}`);
-                    }
-                } else {
-                    cleanHash = meshRouter.getCanonicalId(raw) || raw;
-                    scannedName = `Operador ${cleanHash.slice(0, 6)}`;
-                }
-
-                if (cleanHash && cleanHash.length >= 8) {
-                    try {
-                        await addContact(cleanHash, scannedName, pubKey);
-                        toast.success(`🤝 ¡Contacto ${scannedName} añadido con éxito!`);
-                        navigate("chat", cleanHash);
-                    } catch (addErr) {
-                        const msg = addErr instanceof Error ? addErr.message : String(addErr);
-                        toast.error(`Error al añadir contacto: ${msg}`);
-                    }
-                }
+            if (result.hasContent && result.content) {
+                await processScannedQr(result.content.trim());
             }
         } catch (e) {
             console.error("[Scanner]", e);
             toast.error("Error al inicializar cámara");
         } finally {
-            stopScan();
+            if (!shouldScanRef.current) {
+                stopScan();
+            }
         }
     };
 
     const stopScan = async () => {
         shouldScanRef.current = false;
+        if (webCamRafRef.current) {
+            cancelAnimationFrame(webCamRafRef.current);
+            webCamRafRef.current = null;
+        }
+        if (webCamStreamRef.current) {
+            try {
+                webCamStreamRef.current.getTracks().forEach(track => track.stop());
+            } catch {}
+            webCamStreamRef.current = null;
+        }
+        if (videoRef.current) {
+            try {
+                videoRef.current.srcObject = null;
+            } catch {}
+        }
         setScanning(false);
-        document.body.classList.remove("scanner-active");
+        if (typeof document !== "undefined") {
+            document.body.classList.remove("scanner-active");
+        }
         try {
             const { Capacitor } = await import("@capacitor/core");
             if (Capacitor.isNativePlatform()) {
@@ -248,7 +406,24 @@ export default function RadarWindow() {
 
     if (scanning) {
         return (
-            <div className="scanner-viewfinder-overlay">
+            <div className="scanner-viewfinder-overlay" style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "calc(20px + var(--safe-top, 0px)) 16px calc(24px + var(--safe-bottom, 0px)) 16px" }}>
+                {/* Elemento de video WebCam si la sesión de cámara web está activa */}
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        zIndex: -1,
+                        background: "#000"
+                    }}
+                />
+
                 <div style={{
                     padding: "14px 20px",
                     borderRadius: "16px",
@@ -258,7 +433,8 @@ export default function RadarWindow() {
                     textAlign: "center",
                     boxShadow: "0 4px 25px rgba(0, 230, 118, 0.35)",
                     maxWidth: "340px",
-                    width: "90%"
+                    width: "90%",
+                    zIndex: 2
                 }}>
                     <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                         <span>🤝</span> {t('radar.scanner_title')}
@@ -268,26 +444,53 @@ export default function RadarWindow() {
                     </div>
                 </div>
 
-                <div className="scanner-target-box" style={{ borderColor: "#00E676", boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 24px rgba(0, 230, 118, 0.45)" }}>
+                <div className="scanner-target-box" style={{ borderColor: "#00E676", boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 24px rgba(0, 230, 118, 0.45)", zIndex: 2 }}>
                     <div className="scanner-laser-line" style={{ background: "linear-gradient(90deg, transparent, #00E676, #00E5FF, transparent)", boxShadow: "0 0 12px #00E676" }} />
                 </div>
 
-                <button
-                    onClick={stopScan}
-                    style={{
-                        padding: "14px 36px",
-                        fontSize: "0.95rem",
-                        fontWeight: 900,
-                        background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
-                        color: "#FFFFFF",
-                        border: "none",
-                        boxShadow: "0 4px 25px rgba(232,33,58,0.5)",
-                        borderRadius: "12px",
-                        cursor: "pointer"
-                    }}
-                >
-                    {t('radar.cancel_scan')}
-                </button>
+                <div style={{ display: "flex", gap: "12px", zIndex: 2, flexWrap: "wrap", justifyContent: "center" }}>
+                    <label
+                        style={{
+                            padding: "14px 22px",
+                            fontSize: "0.9rem",
+                            fontWeight: 800,
+                            background: "rgba(0, 229, 255, 0.18)",
+                            color: "#00E5FF",
+                            border: "1.5px solid rgba(0, 229, 255, 0.5)",
+                            borderRadius: "12px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            boxShadow: "0 4px 20px rgba(0, 229, 255, 0.25)"
+                        }}
+                    >
+                        <span>📁</span> Subir Imagen QR
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageFile}
+                            style={{ display: "none" }}
+                        />
+                    </label>
+
+                    <button
+                        onClick={stopScan}
+                        style={{
+                            padding: "14px 30px",
+                            fontSize: "0.95rem",
+                            fontWeight: 900,
+                            background: "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)",
+                            color: "#FFFFFF",
+                            border: "none",
+                            boxShadow: "0 4px 25px rgba(232,33,58,0.5)",
+                            borderRadius: "12px",
+                            cursor: "pointer"
+                        }}
+                    >
+                        {t('radar.cancel_scan')}
+                    </button>
+                </div>
             </div>
         );
     }

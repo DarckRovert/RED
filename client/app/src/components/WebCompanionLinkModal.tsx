@@ -29,6 +29,8 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     const [pairingSession, setPairingSession] = useState<PairingSession | null>(null);
     const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
     const [isGeneratingQr, setIsGeneratingQr] = useState(false);
+    const [countdown, setCountdown] = useState<number>(60);
+    const [sessionKey, setSessionKey] = useState<number>(0);
 
     const isScanningRef = useRef(false);
     const shouldScanRef = useRef(false);
@@ -63,9 +65,11 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     useEffect(() => {
         let isMounted = true;
         let sessionCleanup: (() => void) | null = null;
+        let timerInterval: ReturnType<typeof setInterval> | null = null;
 
         if (mode === "receive_qr") {
             setIsGeneratingQr(true);
+            setCountdown(60);
             setStatusMessage("Generando canal E2E ECDH P-256...");
 
             companionSyncEngine.createWebPairingSession(
@@ -110,6 +114,18 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 setPairingSession(session);
                 sessionCleanup = session.cleanup;
 
+                setCountdown(60);
+                timerInterval = setInterval(() => {
+                    if (!isMounted) return;
+                    setCountdown((prev) => {
+                        if (prev <= 1) {
+                            if (timerInterval) clearInterval(timerInterval);
+                            return 0;
+                        }
+                        return prev - 1;
+                    });
+                }, 1000);
+
                 import("../lib/qr/OfflineQrEngine").then(({ OfflineQrEngine }) => {
                     OfflineQrEngine.generateDataUrl(session.qrPayload, {
                         width: 240,
@@ -138,9 +154,10 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
         return () => {
             isMounted = false;
+            if (timerInterval) clearInterval(timerInterval);
             if (sessionCleanup) sessionCleanup();
         };
-    }, [mode, fetchData, onClose]);
+    }, [mode, fetchData, onClose, sessionKey]);
 
     // ── Control de Cámara para Escaneo en Móvil ──────────────────────────────
     const stopCamera = async () => {
@@ -484,8 +501,30 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
 
                 {/* ESTADO 1: GENERAR QR PARA VINCULAR PC */}
                 {mode === "receive_qr" && (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", width: "100%" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", width: "100%" }}>
+                        {/* Countdown y Barra de Rotación Efímera */}
+                        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.70rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
+                                <span>ROTACIÓN DE TOKEN EFÍMERO</span>
+                                <span style={{
+                                    color: countdown > 20 ? "var(--accent-cyan, #00F0FF)" : (countdown > 8 ? "#FFB300" : "#FF3355"),
+                                    fontWeight: 900
+                                }}>
+                                    {countdown === 0 ? "EXPIRADO" : `${countdown}s`}
+                                </span>
+                            </div>
+                            <div style={{ width: "100%", height: "4px", background: "rgba(255,255,255,0.08)", borderRadius: "2px", overflow: "hidden" }}>
+                                <div style={{
+                                    width: `${(countdown / 60) * 100}%`,
+                                    height: "100%",
+                                    background: countdown > 20 ? "var(--accent-cyan, #00F0FF)" : (countdown > 8 ? "#FFB300" : "#FF3355"),
+                                    transition: "width 1s linear, background 0.3s ease"
+                                }} />
+                            </div>
+                        </div>
+
                         <div style={{
+                            position: "relative",
                             padding: "12px", borderRadius: "16px", background: "#04060A",
                             border: "1px solid rgba(0, 240, 255, 0.4)",
                             boxShadow: "0 0 24px rgba(0, 240, 255, 0.2)",
@@ -497,11 +536,42 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                                     ⏳ Generando par de claves...
                                 </div>
                             ) : (
-                                <img src={qrDataUrl} alt="QR de Vinculación" style={{ width: "220px", height: "220px", borderRadius: "8px" }} />
+                                <img src={qrDataUrl} alt="QR de Vinculación" style={{ width: "220px", height: "220px", borderRadius: "8px", filter: countdown === 0 ? "blur(4px) brightness(0.4)" : "none", transition: "filter 0.3s ease" }} />
+                            )}
+
+                            {countdown === 0 && (
+                                <div style={{
+                                    position: "absolute", inset: 0,
+                                    borderRadius: "16px", background: "rgba(4, 6, 12, 0.85)",
+                                    backdropFilter: "blur(6px)",
+                                    display: "flex", flexDirection: "column",
+                                    alignItems: "center", justifyContent: "center", gap: "8px",
+                                    padding: "16px", textAlign: "center"
+                                }}>
+                                    <span style={{ fontSize: "1.8rem" }}>⏳</span>
+                                    <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#FFFFFF" }}>
+                                        Código Expirado
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                        Los tokens efímeros rotan cada 60s por seguridad militar.
+                                    </div>
+                                    <button
+                                        onClick={() => setSessionKey(k => k + 1)}
+                                        style={{
+                                            marginTop: "4px", padding: "8px 16px",
+                                            background: "linear-gradient(135deg, #00F0FF 0%, #0077B6 100%)",
+                                            border: "none", borderRadius: "10px",
+                                            color: "#000", fontWeight: 900, fontSize: "0.75rem",
+                                            cursor: "pointer", boxShadow: "0 0 15px rgba(0,240,255,0.4)"
+                                        }}
+                                    >
+                                        🔄 RENOVAR TOKEN
+                                    </button>
+                                </div>
                             )}
                         </div>
 
-                        {pairingSession && (
+                        {pairingSession && countdown > 0 && (
                             <button
                                 onClick={handleCopyCode}
                                 className="btn-tactical-secondary"

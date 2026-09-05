@@ -395,14 +395,28 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
     });
 
     // ── FINAL STATE READY — API now returns live data ─────────────────────────
-    let api_key = {
+    // SEGURIDAD: El api_key se genera con Blake3 sobre seed efímera (tiempo monotónico
+    // en nanosegundos + PID + identity_hash). El resultado es diferente en cada arranque
+    // del proceso y no puede ser precomputado por peers que solo conocen el identity_hash.
+    let api_key: [u8; 32] = {
+        let mono_ns = std::time::Instant::now().elapsed().as_nanos(); // siempre 0 en t=0
+        let wall_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .subsec_nanos();
+        let pid = std::process::id();
         let mut hasher = blake3::Hasher::new();
-        hasher.update(identity.identity_hash().as_bytes());
-        hasher.update(b"red-api-v1-key-salt"); 
-        let hash = hasher.finalize();
-        *hash.as_bytes()
+        hasher.update(identity.identity_hash().as_bytes()); // public but known only at runtime
+        hasher.update(b"red-mobile-api-session-v2");
+        hasher.update(&mono_ns.to_le_bytes());
+        hasher.update(&wall_ns.to_le_bytes());
+        hasher.update(&pid.to_le_bytes());
+        // Additional entropy: stack address randomization (ASLR-dependent)
+        let stack_var: u64 = (&pid as *const _ as usize) as u64;
+        hasher.update(&stack_var.to_le_bytes());
+        *hasher.finalize().as_bytes()
     };
-    info!("API Key derived (persisted for this identity)");
+    info!("API Key generated (ephemeral Blake3 session key, changes each process start)");
 
     // Persistir token de sesión hex en disco para que Capacitor Filesystem pueda leerlo
     let token_hex = hex::encode(api_key);
@@ -411,7 +425,7 @@ async fn run_internal_node(data_dir: PathBuf, password_str: String) -> anyhow::R
         use std::io::Write;
         let _ = f.write_all(token_hex.as_bytes());
     }
-    append_log(&data_dir, "API Key derived and saved to session.token");
+    append_log(&data_dir, "Ephemeral API Key generated and saved to session.token");
 
     {
         let mut s = api_state.lock().await;

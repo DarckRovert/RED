@@ -1886,21 +1886,50 @@ async fn handle_mesh_receive(
     State(state): State<ApiState>,
     Json(req): Json<MeshReceiveRequest>,
 ) -> impl IntoResponse {
-    let bytes = match hex::decode(&req.payload_hex) {
+    let hex_str = req.payload_hex.trim();
+
+    // 1. Sanitización de longitud par
+    if hex_str.len() % 2 != 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Hex payload length must be even"})),
+        )
+            .into_response();
+    }
+
+    // 2. Control de desbordamiento DoS previo a asignación de memoria
+    if hex_str.len() > 1_048_576 {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(serde_json::json!({"error": "Payload exceeds maximum allowed radio frame size (512KB)"})),
+        )
+            .into_response();
+    }
+
+    let bytes = match hex::decode(hex_str) {
         Ok(b) => b,
         Err(_) => {
             return (
                 StatusCode::BAD_REQUEST,
                 Json(serde_json::json!({"error": "Invalid hex payload"})),
             )
-                .into_response()
+                .into_response();
         }
     };
 
-    if bytes.is_empty() {
+    // 3. Verificación de trama mínima para framing de red
+    if bytes.len() < 4 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"error": "Empty payload"})),
+            Json(serde_json::json!({"error": "Payload too short to be a valid mesh frame (min 4 bytes)"})),
+        )
+            .into_response();
+    }
+
+    if bytes.len() > 524_288 {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(serde_json::json!({"error": "Decoded frame exceeds maximum 512KB limit"})),
         )
             .into_response();
     }
@@ -1910,7 +1939,7 @@ async fn handle_mesh_receive(
         Ok(_) => {
             tracing::info!(
                 "[Mesh] Injected {} bytes from {} transport",
-                req.payload_hex.len() / 2,
+                hex_str.len() / 2,
                 if req.is_lora { "LoRa" } else { "BLE/WiFi" }
             );
             (StatusCode::OK, Json(serde_json::json!({"ok": true}))).into_response()
@@ -2132,10 +2161,24 @@ fn parse_identity_hash(input: &str) -> Result<IdentityHash, String> {
     }
 
     let parts: Vec<&str> = clean.split(':').collect();
-    let hash_part = parts[0];
+    let hash_part = parts[0].trim();
+
+    // Exact 64-char hex — canonical form
+    if hash_part.len() == 64 {
+        return IdentityHash::from_hex(hash_part)
+            .map_err(|_| "Formato HEX inválido".to_string());
+    }
+
+    // Short ID (8-16 hex chars): pad right with zeros and persist as best-effort contact.
+    // The contact will be resolved to a full canonical hash once the peer comes online.
+    if hash_part.len() >= 8 && hash_part.len() < 64 && hash_part.chars().all(|c| c.is_ascii_hexdigit()) {
+        let padded = format!("{:0<64}", hash_part);
+        return IdentityHash::from_hex(&padded)
+            .map_err(|_| format!("Short ID inválido: {}", hash_part));
+    }
 
     IdentityHash::from_hex(hash_part)
-        .map_err(|_| "Invalid identity hash format (must be 64-char hex)".to_string())
+        .map_err(|_| "Formato de identidad inválido (debe ser hex de 8-64 caracteres)".to_string())
 }
 
 // ─── A2: Delete message ───────────────────────────────────────────────────────

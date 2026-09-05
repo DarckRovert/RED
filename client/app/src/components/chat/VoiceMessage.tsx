@@ -292,7 +292,7 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         : (isMine ? "rgba(255, 255, 255, 0.28)" : "rgba(0, 229, 255, 0.25)");
 
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 230, userSelect: "none" }}>
+        <div className="animate-fade-scale" style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 230, userSelect: "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 {/* Play/Pause Button */}
                 <button
@@ -308,11 +308,17 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                         color: "#FFFFFF", cursor: "pointer",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: "1rem", fontWeight: 900,
-                        boxShadow: isFamiliar 
-                            ? (isMine ? "none" : "0 2px 8px rgba(0, 168, 132, 0.4)")
-                            : (isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)"),
-                        transition: "transform 0.1s ease, background 0.2s ease"
+                        boxShadow: playing
+                            ? `0 0 16px ${isMine ? "rgba(255,255,255,0.3)" : "rgba(0,229,255,0.4)"}`
+                            : (isFamiliar 
+                                ? (isMine ? "none" : "0 2px 8px rgba(0, 168, 132, 0.4)")
+                                : (isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)")),
+                        transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s ease, background 0.2s ease"
                     }}
+                    onMouseEnter={ev => (ev.currentTarget.style.transform = "scale(1.12)")}
+                    onMouseLeave={ev => (ev.currentTarget.style.transform = "scale(1)")}
+                    onMouseDown={ev => (ev.currentTarget.style.transform = "scale(0.92)")}
+                    onMouseUp={ev => (ev.currentTarget.style.transform = "scale(1.06)")}
                     title={playing ? "Pausar" : "Reproducir"}
                 >
                     {playing ? "❚❚" : "▶"}
@@ -341,10 +347,12 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                                         height: height,
                                         borderRadius: 3,
                                         background: isPlayed ? (isMine ? "#FFFFFF" : primaryColor) : inactiveColor,
-                                        transform: isPlayed && playing ? "scaleY(1.15)" : "scaleY(1)",
-                                        boxShadow: isPlayed && playing ? `0 0 4px ${isMine ? "#FFFFFF" : primaryColor}` : "none",
-                                        transition: "background 0.1s ease, transform 0.1s ease",
-                                        flexShrink: 0
+                                        transform: isPlayed && playing ? "scaleY(1.18)" : "scaleY(1)",
+                                        boxShadow: isPlayed && playing ? `0 0 5px ${isMine ? "rgba(255,255,255,0.7)" : primaryColor}` : "none",
+                                        transition: "background 0.08s ease, transform 0.08s ease",
+                                        flexShrink: 0,
+                                        animation: "contact-item-enter 0.3s ease both",
+                                        animationDelay: `${i * 12}ms`,
                                     }}
                                 />
                             );
@@ -450,17 +458,20 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
 
             {/* Local Whisper Transcription View */}
             {transcription && (
-                <div style={{
-                    padding: "8px 10px",
-                    borderRadius: "8px",
-                    background: "rgba(0, 0, 0, 0.45)",
-                    borderLeft: `3px solid ${primaryColor}`,
-                    fontSize: "0.78rem",
-                    color: "rgba(255, 255, 255, 0.95)",
-                    lineHeight: 1.45,
-                    marginTop: "4px",
-                    animation: "fadeIn 0.2s ease-out"
-                }}>
+                <div
+                    className="animate-fade-scale"
+                    style={{
+                        padding: "8px 10px",
+                        borderRadius: "8px",
+                        background: "rgba(0, 0, 0, 0.45)",
+                        borderLeft: `3px solid ${primaryColor}`,
+                        fontSize: "0.78rem",
+                        color: "rgba(255, 255, 255, 0.95)",
+                        lineHeight: 1.45,
+                        marginTop: "4px",
+                        transformOrigin: "top center",
+                    }}
+                >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
                         <span style={{ fontSize: "0.62rem", fontWeight: 800, color: primaryColor, fontFamily: "JetBrains Mono, monospace" }}>
                             📝 TRANSCRIPCIÓN IA LOCAL

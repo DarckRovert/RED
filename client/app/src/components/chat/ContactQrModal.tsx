@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { OfflineQrEngine } from "../../lib/qr/OfflineQrEngine";
 import { meshRouter } from "../../lib/mesh/meshRouter";
@@ -23,10 +23,14 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
     const [isTorchOn, setIsTorchOn] = useState(false);
     const [isScanningNative, setIsScanningNative] = useState(false);
+    const [isWebCamActive, setIsWebCamActive] = useState(false);
     const [scanError, setScanError] = useState<string | null>(null);
     const [isProcessingCode, setIsProcessingCode] = useState(false);
     const shouldScanRef = useRef(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const webCamStreamRef = useRef<MediaStream | null>(null);
+    const webCamRafRef = useRef<number | null>(null);
 
     // Sync initial tab when modal opens
     useEffect(() => {
@@ -56,10 +60,24 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
         });
     }, [isOpen, identity]);
 
+    // Stop webcam stream
+    const stopWebCam = useCallback(() => {
+        if (webCamRafRef.current != null) {
+            cancelAnimationFrame(webCamRafRef.current);
+            webCamRafRef.current = null;
+        }
+        if (webCamStreamRef.current) {
+            webCamStreamRef.current.getTracks().forEach(t => t.stop());
+            webCamStreamRef.current = null;
+        }
+        setIsWebCamActive(false);
+    }, []);
+
     // Stop camera and restore webview background
     const stopCamera = async () => {
         shouldScanRef.current = false;
         setIsScanningNative(false);
+        stopWebCam();
         if (typeof document !== "undefined") {
             document.body.classList.remove("scanner-active");
         }
@@ -78,6 +96,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
         return () => {
             stopCamera();
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -166,6 +185,63 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
         }
     };
 
+    /** Start web-camera scanning using getUserMedia + BarcodeDetector */
+    const startWebCamScan = useCallback(async () => {
+        setScanError(null);
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }
+            });
+            webCamStreamRef.current = stream;
+            setIsWebCamActive(true);
+
+            // Wait for video element to mount
+            await new Promise<void>(resolve => {
+                const check = () => videoRef.current ? resolve() : requestAnimationFrame(check);
+                check();
+            });
+
+            const video = videoRef.current!;
+            video.srcObject = stream;
+            await video.play();
+
+            // BarcodeDetector loop
+            const hasBD = "BarcodeDetector" in window;
+            const detector = hasBD ? new (window as any).BarcodeDetector({ formats: ["qr_code"] }) : null;
+
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+
+            const tick = async () => {
+                if (!shouldScanRef.current || !webCamStreamRef.current) return;
+                if (video.readyState >= 2 && ctx) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0);
+                    try {
+                        if (detector) {
+                            const codes = await detector.detect(canvas);
+                            if (codes.length > 0 && codes[0].rawValue) {
+                                stopWebCam();
+                                await handleCodeDetected(codes[0].rawValue);
+                                return;
+                            }
+                        }
+                    } catch { /* BarcodeDetector may throw on empty frame */ }
+                }
+                webCamRafRef.current = requestAnimationFrame(tick);
+            };
+            webCamRafRef.current = requestAnimationFrame(tick);
+        } catch (err: any) {
+            stopWebCam();
+            const msg = err?.name === "NotAllowedError"
+                ? "Permiso de cámara denegado. Habilítalo en la configuración del navegador."
+                : "No se pudo activar la cámara web. Usa la opción de subir imagen."; 
+            setScanError(msg);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [stopWebCam]);
+
     const startScan = async () => {
         setScanError(null);
         shouldScanRef.current = true;
@@ -207,13 +283,22 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                     await handleCodeDetected(result.content);
                 }
             } else {
-                // Non-native fallback (browser)
-                setIsScanningNative(false);
+                // Web / Desktop: try getUserMedia first
+                if (typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function") {
+                    await startWebCamScan();
+                } else {
+                    setScanError("Cámara web no disponible en este dispositivo.");
+                }
             }
         } catch (err: any) {
             console.warn("[ContactQrModal] Native camera error:", err);
             await stopCamera();
-            setScanError("No se pudo iniciar la cámara en este dispositivo. Puedes usar una foto del código QR.");
+            // Native failed — try web camera as final fallback
+            if (typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function") {
+                await startWebCamScan();
+            } else {
+                setScanError("No se pudo iniciar la cámara en este dispositivo. Puedes usar una foto del código QR.");
+            }
         }
     };
 
@@ -539,8 +624,61 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             onMouseEnter={e => e.currentTarget.style.background = "#02906f"}
                             onMouseLeave={e => e.currentTarget.style.background = "#00A884"}
                         >
-                            <span>📤</span> Compartir código
+                            <span>📤</span> Compartir / Copiar código
                         </button>
+
+                        {/* Copy DID directly */}
+                        <button
+                            onClick={async () => {
+                                if (!identity?.identity_hash) return;
+                                const did = `did:red:${identity.identity_hash}`;
+                                try {
+                                    await navigator.clipboard.writeText(did);
+                                    toast.success("📋 DID copiado al portapapeles");
+                                } catch {
+                                    toast.warning("No se pudo copiar. Usa el botón de compartir.");
+                                }
+                            }}
+                            style={{
+                                width: "100%", padding: "11px", borderRadius: "24px",
+                                background: "transparent",
+                                color: "#E9EDEF",
+                                border: "1px solid rgba(255,255,255,0.15)",
+                                fontSize: "0.88rem", fontWeight: 600, cursor: "pointer",
+                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                transition: "background 0.15s"
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.07)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >
+                            <span>📋</span> Copiar mi DID
+                        </button>
+
+                        {/* Save QR image as PNG */}
+                        {qrDataUrl && (
+                            <button
+                                onClick={() => {
+                                    const link = document.createElement("a");
+                                    link.href = qrDataUrl;
+                                    link.download = `RED_QR_${(identity?.identity_hash || "me").slice(0, 8)}.png`;
+                                    link.click();
+                                    toast.success("🖼️ Imagen QR guardada");
+                                }}
+                                style={{
+                                    width: "100%", padding: "11px", borderRadius: "24px",
+                                    background: "transparent",
+                                    color: "#8696A0",
+                                    border: "1px solid rgba(255,255,255,0.1)",
+                                    fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                    transition: "background 0.15s"
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                            >
+                                <span>💾</span> Guardar imagen QR
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -631,8 +769,55 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                 </button>
                             </div>
                         </div>
+                    ) : isWebCamActive ? (
+                        /* Web Camera Live Scan */
+                        <div style={{
+                            position: "relative", width: "100%", height: "100%",
+                            display: "flex", flexDirection: "column",
+                            alignItems: "center", justifyContent: "center",
+                            background: "#000"
+                        }}>
+                            <video
+                                ref={videoRef}
+                                muted
+                                playsInline
+                                style={{ width: "100%", maxHeight: "100%", objectFit: "cover" }}
+                            />
+                            {/* Scan frame overlay */}
+                            <div style={{
+                                position: "absolute",
+                                width: "220px", height: "220px",
+                                border: "2px solid rgba(0, 168, 132, 0.6)",
+                                borderRadius: "20px",
+                                pointerEvents: "none",
+                                boxShadow: "0 0 0 4000px rgba(0,0,0,0.45)"
+                            }}>
+                                <div style={{ position: "absolute", top: -2, left: -2, width: 24, height: 24, borderTop: "4px solid #00A884", borderLeft: "4px solid #00A884", borderTopLeftRadius: "14px" }} />
+                                <div style={{ position: "absolute", top: -2, right: -2, width: 24, height: 24, borderTop: "4px solid #00A884", borderRight: "4px solid #00A884", borderTopRightRadius: "14px" }} />
+                                <div style={{ position: "absolute", bottom: -2, left: -2, width: 24, height: 24, borderBottom: "4px solid #00A884", borderLeft: "4px solid #00A884", borderBottomLeftRadius: "14px" }} />
+                                <div style={{ position: "absolute", bottom: -2, right: -2, width: 24, height: 24, borderBottom: "4px solid #00A884", borderRight: "4px solid #00A884", borderBottomRightRadius: "14px" }} />
+                                <div style={{ position: "absolute", top: "50%", left: "5%", right: "5%", height: "2px", background: "linear-gradient(90deg, transparent, #00A884, transparent)", boxShadow: "0 0 10px #00A884", animation: "beaconPulse 2s infinite", transform: "translateY(-50%)" }} />
+                            </div>
+                            {/* Stop button */}
+                            <button
+                                onClick={() => { stopWebCam(); setScanError(null); }}
+                                style={{
+                                    position: "absolute", bottom: "24px",
+                                    padding: "9px 20px",
+                                    background: "rgba(255,255,255,0.18)",
+                                    backdropFilter: "blur(10px)",
+                                    border: "1px solid rgba(255,255,255,0.3)",
+                                    borderRadius: "24px",
+                                    color: "#FFFFFF",
+                                    fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
+                                    display: "flex", alignItems: "center", gap: "6px"
+                                }}
+                            >
+                                ✕ Cerrar cámara
+                            </button>
+                        </div>
                     ) : (
-                        /* Web / Fallback Mode (No native Capacitor barcode scanner) */
+                        /* Web / Fallback Mode — file picker + manual paste */
                         <div style={{
                             maxWidth: "340px",
                             width: "100%",
@@ -647,15 +832,10 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             border: "1px solid rgba(255, 255, 255, 0.08)"
                         }}>
                             <div style={{
-                                width: 64,
-                                height: 64,
-                                borderRadius: "50%",
+                                width: 64, height: 64, borderRadius: "50%",
                                 background: "rgba(0, 168, 132, 0.15)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontSize: "2rem",
-                                color: "#00A884"
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "2rem", color: "#00A884"
                             }}>
                                 📷
                             </div>
@@ -664,26 +844,33 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                 Escanear código de contacto
                             </div>
 
-                            <div style={{ fontSize: "0.82rem", color: "#8696A0", lineHeight: 1.45 }}>
-                                {scanError || "Sube una imagen o captura del código QR de tu contacto para enlazar automáticamente."}
+                            <div style={{ fontSize: "0.82rem", color: scanError ? "#FF5555" : "#8696A0", lineHeight: 1.45 }}>
+                                {scanError || "Activa la cámara o sube una imagen del código QR de tu contacto."}
                             </div>
+
+                            {/* Primary: activate webcam */}
+                            {typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getUserMedia === "function" && (
+                                <button
+                                    onClick={startWebCamScan}
+                                    style={{
+                                        width: "100%", padding: "12px", borderRadius: "24px",
+                                        background: "#00A884", color: "#FFFFFF", border: "none",
+                                        fontSize: "0.9rem", fontWeight: 700, cursor: "pointer",
+                                        display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
+                                    }}
+                                >
+                                    <span>📷</span> Abrir cámara web
+                                </button>
+                            )}
 
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 style={{
-                                    width: "100%",
-                                    padding: "12px",
-                                    borderRadius: "24px",
-                                    background: "#00A884",
-                                    color: "#FFFFFF",
-                                    border: "none",
-                                    fontSize: "0.9rem",
-                                    fontWeight: 700,
-                                    cursor: "pointer",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: "8px"
+                                    width: "100%", padding: "12px", borderRadius: "24px",
+                                    background: "rgba(255,255,255,0.07)",
+                                    color: "#E9EDEF", border: "1px solid rgba(255,255,255,0.15)",
+                                    fontSize: "0.9rem", fontWeight: 700, cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
                                 }}
                             >
                                 <span>🖼️</span> Seleccionar foto del QR
@@ -694,24 +881,16 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                     if (typeof navigator !== "undefined" && navigator.clipboard) {
                                         try {
                                             const text = await navigator.clipboard.readText();
-                                            if (text) {
-                                                handleCodeDetected(text);
-                                                return;
-                                            }
+                                            if (text) { handleCodeDetected(text); return; }
                                         } catch {}
                                     }
                                     toast.info("Copia el código DID o escanea una foto.");
                                 }}
                                 style={{
-                                    width: "100%",
-                                    padding: "10px",
-                                    borderRadius: "24px",
-                                    background: "transparent",
-                                    color: "#00A884",
+                                    width: "100%", padding: "10px", borderRadius: "24px",
+                                    background: "transparent", color: "#00A884",
                                     border: "1px solid rgba(0, 168, 132, 0.3)",
-                                    fontSize: "0.82rem",
-                                    fontWeight: 600,
-                                    cursor: "pointer"
+                                    fontSize: "0.82rem", fontWeight: 600, cursor: "pointer"
                                 }}
                             >
                                 📋 Pegar código del portapapeles

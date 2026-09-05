@@ -5,6 +5,7 @@ import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle } from "./types";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { ContactQrModal } from "../chat/ContactQrModal";
+import { NewContactModal } from "../chat/NewContactModal";
 
 export type ChatFilterType = "all" | "unread" | "groups" | "contacts" | "channels";
 
@@ -50,6 +51,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [quickMenuOpen, setQuickMenuOpen] = useState(false);
     const [qrModalOpen, setQrModalOpen] = useState(false);
+    const [newContactOpen, setNewContactOpen] = useState(false);
 
     const filters: { id: ChatFilterType; label: string; icon?: string; badge?: number }[] = [
         { id: "all", label: t('common.all') || "Todos" },
@@ -73,6 +75,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
     if (isFamiliar) {
         return (
+            <>
             <div style={{ flexShrink: 0, zIndex: 10, background: "#111B21" }}>
                 {/* ── Top Bar: WhatsApp Web Style ── */}
                 <header style={{
@@ -186,6 +189,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                         {/* Dropdown Menu (WhatsApp Web Style) */}
                         {quickMenuOpen && (
                             <div 
+                                className="animate-fade-scale"
                                 style={{
                                     position: "absolute", top: "46px", right: 0, width: "210px",
                                     background: "#233138", borderRadius: "8px",
@@ -208,7 +212,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     <span>👥</span> Nuevo grupo
                                 </button>
                                 <button
-                                    onClick={() => { setQuickMenuOpen(false); setAddContactOpen(true); }}
+                                    onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
                                     style={{
                                         display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px",
                                         background: "transparent", border: "none",
@@ -342,6 +346,20 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     })}
                 </div>
             </div>
+
+            {/* Contact QR Modal */}
+
+            <ContactQrModal
+                isOpen={qrModalOpen}
+                onClose={() => setQrModalOpen(false)}
+            />
+
+            {/* New Contact Modal — direct shortcut */}
+            <NewContactModal
+                isOpen={newContactOpen}
+                onClose={() => setNewContactOpen(false)}
+            />
+            </>
         );
     }
 
@@ -435,6 +453,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
                     {quickMenuOpen && (
                         <div 
+                            className="animate-fade-scale"
                             style={{
                                 position: "absolute", top: "44px", right: 0, width: "220px",
                                 background: "linear-gradient(180deg, #0F1428 0%, #080A18 100%)",
@@ -457,7 +476,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                 <span>👥</span> Nuevo Escuadrón P2P
                             </button>
                             <button
-                                onClick={() => { setQuickMenuOpen(false); setAddContactOpen(true); }}
+                                onClick={() => { setQuickMenuOpen(false); setNewContactOpen(true); }}
                                 style={{
                                     display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
                                     background: "transparent", border: "none", borderRadius: "8px",
@@ -564,6 +583,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
             <ContactQrModal
                 isOpen={qrModalOpen}
                 onClose={() => setQrModalOpen(false)}
+            />
+
+            {/* New Contact Modal — direct shortcut (Tactical mode) */}
+            <NewContactModal
+                isOpen={newContactOpen}
+                onClose={() => setNewContactOpen(false)}
             />
         </div>
     );

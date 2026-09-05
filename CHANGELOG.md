@@ -1,5 +1,41 @@
 # Changelog
 
+## [91.0.0-tri-hardware-and-carrier-sense-edition] - 2026-09-05
+
+### 🚀 Excelencia Tri-Hardware & Carrier Sense Edition (Release Oficial v91.0.0)
+
+- **Walkie-Talkie Táctico P2P con Carrier Sense & Shockwaves Visuales (`P2PWalkieTalkieModal.tsx`):**
+  - Indicador dinámico de canal en tiempo real: estado Libre (`#10B981`), Ocupado (`#EF4444`) o Transmitiendo (`#3B82F6`) con telemetría de decibelios (dBFS) y detección de portadora RF.
+  - Onda expansiva visual multicapa (shockwave pulse rings) sincronizada con el estado PTT (Push-to-Talk) y nivel de volumen de modulación de audio.
+  - Gestión rigurosa de AudioContext mediante singleton seguro con reanudación automática de estados `suspended` en interacción del usuario.
+
+- **Escáner QR Universal Hígrado en Radar (`RadarWindow.tsx`):**
+  - Motor de escaneo híbrido tri-capa: lector de código de barras nativo MLKit en Android (`@capacitor-community/barcode-scanner`), fallback WebCam directo (`navigator.mediaDevices.getUserMedia` + `BarcodeDetector`), y carga de imagen desde galería/archivo local (`HTMLCanvasElement`).
+  - Decodificación inteligente de payloads: extracción automática de DID `did:red:...`, direcciones de nodo, claves públicas Ed25519 y enlace instantáneo a la malla mediante handshake broadcast.
+  - Transición fluida con botón directo para abrir conversación en chat al detectar o escanear un nodo.
+
+- **PIP Flotante Universal con Pointer Events (`FloatingCallPIP.tsx`):**
+  - Arrastre bidireccional continuo con `PointerEvents` (compatible con mouse y eventos táctiles multitouch), clamping visual viewport-safe y persistencia de posición.
+  - Mini-onda de audio activa en tiempo real según el nivel de voz del par remoto y alternador de micrófono / silencio directo en el widget flotante.
+
+- **Visor de Estados Efímeros WhatsApp con Pausa Milimétrica (`StoryViewer.tsx`):**
+  - Control de tiempo con acumulador milimétrico (`accumulatedMsRef`) en eventos `onPointerDown`/`onPointerUp` para congelar la barra de progreso sin desfases.
+  - Ocultación automática de controles superpuestos durante la pausa táctil e inyección instantánea de reacciones emoji rápidas.
+
+- **Vinculación Segura de Web Companion (`WebCompanionLinkModal.tsx`):**
+  - Temporizador visual regresivo de 60 segundos con rotación atómica de tokens criptográficos y botón de renovación manual inmediata.
+
+- **Blindaje Anti-DoS Simétrico en Motores Rust JNI & CLI (`node/src/api.rs` & `red_mobile/src/api.rs`):**
+  - Validación estricta de longitud par en cadenas hexadecimales, cota superior de 1MB en buffer hex, marco mínimo de 4 bytes y límite de payload de 512KB.
+
+- **Certificación Tri-Hardware v91.0.0:**
+  - Despliegue en limpio y verificación en hardware real:
+    - **Lenovo Tab** (`HA2CHKZ2` / `TB305XU` / Android 14)
+    - **Motorola Moto G22** (`ZT322B386P` / `hawaiip_g` / Android 12)
+    - **Xiaomi Redmi Note 14 5G** (`6dife65ls485fega` / Android 15 / HyperOS)
+  - Cero datos simulados ni mocks; validación criptográfica y de audio en tiempo real.
+- **Versión Oficial:** `91.0.0` / `versionCode 91000`.
+
 ## [90.0.0-familiar-whatsapp-and-pqc-master-edition] - 2026-09-05
 
 ### 🚀 Modo Familiar WhatsApp & PQC Master Edition (Release Oficial v90.0.0)

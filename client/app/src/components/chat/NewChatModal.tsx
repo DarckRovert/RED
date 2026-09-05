@@ -7,6 +7,7 @@ import { toast } from "../Toast";
 import { avatarStyle } from "../sidebar/types";
 import { OfflineQrEngine } from "../../lib/qr/OfflineQrEngine";
 import { ContactQrModal } from "./ContactQrModal";
+import { NewContactModal } from "./NewContactModal";
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -30,6 +31,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     const [manualInput, setManualInput] = useState("");
     const [manualAlias, setManualAlias] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [newContactOpen, setNewContactOpen] = useState(false);
     // Tracks which nearby peer is currently being added (hash | null)
     const [addingPeerHash, setAddingPeerHash] = useState<string | null>(null);
 
@@ -117,6 +119,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     };
 
     return (
+    <>
         <div
             style={{
                 position: "fixed",
@@ -231,6 +234,34 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                 <div style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
                     {/* Primary Action Buttons (WhatsApp Standard) */}
                     <div style={{ borderBottom: "1px solid rgba(255, 255, 255, 0.06)", paddingBottom: "6px" }}>
+                        {/* 0. Nuevo Contacto — PRIMERA ACCIÓN (WhatsApp UX) */}
+                        <div
+                            onClick={() => setNewContactOpen(true)}
+                            style={{
+                                display: "flex", alignItems: "center", gap: "16px",
+                                padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#202C33")}
+                            onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                        >
+                            <div style={{
+                                width: "42px", height: "42px", borderRadius: "50%",
+                                backgroundColor: "#00A884", color: "#FFFFFF",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.2rem"
+                            }}>
+                                👤
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                    Nuevo contacto
+                                </div>
+                                <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
+                                    Añade con nombre + DID o código QR
+                                </div>
+                            </div>
+                        </div>
+
                         {/* 1. Nuevo Grupo */}
                         <div
                             onClick={() => { onClose(); navigate("groups"); }}
@@ -472,6 +503,13 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                 onClose={() => setQrModalTab(null)}
             />
         </div>
+
+        {/* New Contact Modal — Dedicated form with Name + DID */}
+        <NewContactModal
+            isOpen={newContactOpen}
+            onClose={() => setNewContactOpen(false)}
+        />
+    </>
     );
 };
 

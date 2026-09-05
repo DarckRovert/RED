@@ -147,7 +147,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
             {/* ── LISTA DE CONVERSACIONES ── */}
             {filteredConvs.length === 0 ? (
                 isFamiliar ? (
-                    <div style={{
+                    <div className="animate-fade-scale" style={{
                         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                         padding: "48px 24px", textAlign: "center", color: "#8696A0"
                     }}>
@@ -182,7 +182,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         </button>
                     </div>
                 ) : (
-                    <div className="empty-state-tactical">
+                    <div className="empty-state-tactical animate-fade-scale">
                         <div className="empty-state-icon">📡</div>
                         <div className="empty-state-title">{t('sidebar.no_contacts') || "Sin Transmisiones en Malla"}</div>
                         <div className="empty-state-desc">{t('sidebar.no_contacts_desc') || "Escanea un código QR o descubre nodos vecinos en el Radar táctico."}</div>
@@ -196,12 +196,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                     </div>
                 )
             ) : (
-                filteredConvs.map(c => {
+                filteredConvs.map((c, idx) => {
                     const rawTs = (typeof c.last_message === "object" && c.last_message?.timestamp) || (c as any).last_timestamp;
                     const lm = c.last_message;
                     let snippet = "Mensaje cifrado";
                     let isOwn = false;
                     let msgStatus: string | undefined = undefined;
+                    const animDelay = `${Math.min(idx * 30, 300)}ms`;
 
                     if (lm) {
                         const msgType = typeof lm === "object" ? lm.msg_type : null;
@@ -261,6 +262,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         return (
                             <div
                                 key={c.peer}
+                                className="contact-item-enter"
                                 onClick={() => navigate("chat", c.peer)}
                                 style={{
                                     display: "flex",
@@ -270,7 +272,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                     cursor: "pointer",
                                     background: isSelected ? "#2A3942" : "transparent",
                                     borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-                                    transition: "background 0.15s ease"
+                                    transition: "background 0.15s ease",
+                                    animationDelay: animDelay,
                                 }}
                                 onMouseEnter={e => {
                                     if (!isSelected) e.currentTarget.style.background = "#202C33";
@@ -291,13 +294,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                     </div>
                                     {isPeerOnline && !c.is_group && (
                                         <span
+                                            className="online-dot"
                                             title="En línea en la Malla"
-                                            style={{
-                                                position: "absolute", bottom: 0, right: 0,
-                                                width: 12, height: 12, borderRadius: "50%",
-                                                background: "#00A884",
-                                                border: "2px solid #111B21",
-                                            }}
                                         />
                                     )}
                                 </div>
@@ -330,9 +328,19 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                             display: "flex", alignItems: "center", gap: "4px"
                                         }}>
                                             {isTyping ? (
-                                                <span>✍️ escribiendo...</span>
+                                                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                                    <span className="typing-dots">
+                                                        <span />
+                                                        <span />
+                                                        <span />
+                                                    </span>
+                                                    <span>escribiendo...</span>
+                                                </span>
                                             ) : isRecording ? (
-                                                <span>🎙️ grabando audio...</span>
+                                                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                                    <span style={{ animation: "pulse 1s infinite" }}>🎙️</span>
+                                                    <span>grabando audio...</span>
+                                                </span>
                                             ) : hasDraft ? (
                                                 <span>
                                                     <span style={{ color: "#FFB300", fontWeight: 600 }}>Borrador: </span>
@@ -343,7 +351,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                                     {isOwn && (
                                                         <span style={{ display: "inline-flex", alignItems: "center", marginRight: "2px" }}>
                                                             {msgStatus === 'read' ? (
-                                                                <svg width="15" height="15" viewBox="0 0 16 15" fill="none">
+                                                                  <svg width="15" height="15" viewBox="0 0 16 15" fill="none">
                                                                     <path d="M15.01 3.316l-7.53 7.84-3.48-3.63.78-.75 2.7 2.82 6.75-7.03.78.75z" fill="#53BDEB"/>
                                                                     <path d="M11.95 3.316l-7.53 7.84L1 7.526l.78-.75 2.64 2.76 6.75-7.03.78.81z" fill="#53BDEB"/>
                                                                 </svg>
@@ -396,11 +404,12 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                         <div
                             key={c.peer}
                             onClick={() => navigate("chat", c.peer)}
-                            className="card-tactical-interactive"
+                            className="card-tactical-interactive contact-item-enter"
                             style={{
                                 padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px",
                                 border: isPeerOnline ? "1px solid rgba(0, 230, 118, 0.2)" : "1px solid var(--glass-border)",
-                                background: isPeerOnline ? "linear-gradient(135deg, rgba(0,230,118,0.03) 0%, rgba(18,18,32,0.85) 100%)" : undefined
+                                background: isPeerOnline ? "linear-gradient(135deg, rgba(0,230,118,0.03) 0%, rgba(18,18,32,0.85) 100%)" : undefined,
+                                animationDelay: animDelay,
                             }}
                         >
                             <div style={{ position: "relative", width: 44, height: 44, flexShrink: 0 }}>
@@ -416,15 +425,8 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                 </div>
                                 {isPeerOnline && (
                                     <span
+                                        className="online-dot online-dot--tactical"
                                         title="En línea en la Malla"
-                                        style={{
-                                            position: "absolute", bottom: -1, right: -1,
-                                            width: 12, height: 12, borderRadius: "50%",
-                                            background: "#00E676",
-                                            border: "2px solid #06060c",
-                                            boxShadow: "0 0 6px #00E676",
-                                            animation: "beaconPulse 2s infinite"
-                                        }}
                                     />
                                 )}
                             </div>
@@ -443,12 +445,18 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                     </div>
                                 </div>
                                 {isTyping ? (
-                                    <div style={{ fontSize: "0.80rem", color: "#00E676", fontWeight: 700, marginTop: "2px" }}>
-                                        ✍️ escribiendo...
+                                    <div style={{ fontSize: "0.80rem", color: "var(--accent-emerald, #00E676)", fontWeight: 700, marginTop: "2px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                        <span className="typing-dots typing-dots--tactical">
+                                            <span />
+                                            <span />
+                                            <span />
+                                        </span>
+                                        <span>escribiendo...</span>
                                     </div>
                                 ) : isRecording ? (
-                                    <div style={{ fontSize: "0.80rem", color: "#00E676", fontWeight: 700, marginTop: "2px" }}>
-                                        🎙️ grabando audio...
+                                    <div style={{ fontSize: "0.80rem", color: "var(--accent-emerald, #00E676)", fontWeight: 700, marginTop: "2px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                        <span style={{ animation: "pulse 1s infinite" }}>🎙️</span>
+                                        <span>grabando audio...</span>
                                     </div>
                                 ) : (
                                     <div style={{ fontSize: "0.78rem", color: hasDraft ? "var(--accent-amber, #FFB300)" : "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: "2px" }}>

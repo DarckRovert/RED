@@ -1032,13 +1032,46 @@ async fn handle_mesh_receive(
     State(state): State<ApiState>,
     Json(req): Json<MeshReceiveRequest>,
 ) -> impl IntoResponse {
-    let bytes = match hex::decode(&req.payload_hex) {
+    let hex_str = req.payload_hex.trim();
+
+    // 1. Sanitización de longitud par
+    if hex_str.len() % 2 != 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Hex payload length must be even"})),
+        ).into_response();
+    }
+
+    // 2. Control de desbordamiento DoS previo a asignación de memoria (max 1MB hex)
+    if hex_str.len() > 1_048_576 {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(serde_json::json!({"error": "Payload exceeds maximum allowed radio frame size (512KB)"})),
+        ).into_response();
+    }
+
+    let bytes = match hex::decode(hex_str) {
         Ok(b) => b,
         Err(_) => return (
             StatusCode::BAD_REQUEST, 
             Json(serde_json::json!({"error": "Invalid hex string"}))
         ).into_response(),
     };
+
+    // 3. Verificación de trama mínima para framing de red
+    if bytes.len() < 4 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"error": "Payload too short to be a valid mesh frame (min 4 bytes)"})),
+        ).into_response();
+    }
+
+    if bytes.len() > 524_288 {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(serde_json::json!({"error": "Decoded frame exceeds maximum 512KB limit"})),
+        ).into_response();
+    }
 
     let mut node = state.node.lock().await;
     
@@ -1197,12 +1230,22 @@ async fn handle_add_contact(
         Ok(h) => h,
         Err(e) if e.starts_with("SHORT_ID:") => {
             let short = &e[9..];
+            // First: try to resolve from active peers (peer online)
             let node = state.node.lock().await;
             let peers = node.get_peers().await.unwrap_or_default();
             if let Some(p) = peers.iter().find(|p| p.identity_hash.as_ref().map(|h| h.short() == short || h.to_hex().starts_with(short)).unwrap_or(false)) {
                 p.identity_hash.clone().unwrap_or_else(|| IdentityHash::from_bytes([0u8; 32]))
             } else {
-                return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": format!("No se encontró un peer activo con el ID corto {}", short)}))).into_response();
+                // Peer offline — persist as best-effort contact with padded hash.
+                // Frontend will upgrade to canonical hash once peer comes online via meshRouter.
+                drop(node); // release lock before constructing padded hash
+                let padded = format!("{:0<64}", short);
+                match IdentityHash::from_hex(&padded) {
+                    Ok(h) => h,
+                    Err(_) => return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                        "error": format!("Short ID inválido (no es hexadecimal): {}", short)
+                    }))).into_response(),
+                }
             }
         }
         Err(e) => {

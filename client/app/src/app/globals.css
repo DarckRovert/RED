@@ -686,6 +686,158 @@ textarea:focus {
 .animate-pop    { animation: popIn var(--dur-normal) var(--ease-bounce) both; }
 .animate-bubble { animation: bubbleIn var(--dur-fast) var(--ease-spring) both; }
 
+/* ─── Global Modal Slide-Up (shared by all bottom-sheet modals) ─────────────── */
+@keyframes slideUpModal {
+  from { transform: translateX(-50%) translateY(100%); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+@keyframes slideDownModal {
+  from { transform: translateX(-50%) translateY(0);    opacity: 1; }
+  to   { transform: translateX(-50%) translateY(100%); opacity: 0; }
+}
+
+/* ─── fadeInScale — for empty states and popover reveals ────────────────────── */
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.88); }
+  65%  { transform: scale(1.04); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-fade-scale { animation: fadeInScale 0.38s var(--ease-bounce) both; }
+
+/* ─── Skeleton Shimmer — real gradient sweep (replaces opacity-only pulse) ──── */
+@keyframes skeletonShimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.03) 0%,
+    rgba(255,255,255,0.09) 40%,
+    rgba(255,255,255,0.03) 80%
+  );
+  background-size: 600px 100%;
+  animation: skeletonShimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ─── Online Dot — animated green beacon for peer status ────────────────────── */
+@keyframes onlinePing {
+  0%   { transform: scale(1); opacity: 0.85; }
+  60%  { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.online-dot {
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #00A884;
+  border: 2.5px solid #111B21;
+  z-index: 1;
+}
+.online-dot::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: #00A884;
+  animation: onlinePing 2.4s cubic-bezier(0,0,0.2,1) infinite;
+}
+.online-dot--tactical {
+  background: #00E676;
+  border-color: #06060c;
+  box-shadow: 0 0 8px rgba(0,230,118,0.8);
+}
+.online-dot--tactical::after { background: #00E676; }
+
+/* ─── Typing Dots — 3-dot animated indicator ────────────────────────────────── */
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 16px;
+}
+.typing-dots span {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #25D366;
+  display: inline-block;
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+
+/* Tactical variant */
+.typing-dots--tactical span { background: var(--accent-emerald); }
+
+/* ─── Date Separator — conversation list date divider ───────────────────────── */
+.date-separator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  user-select: none;
+  pointer-events: none;
+}
+.date-separator::before,
+.date-separator::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.07);
+}
+.date-separator span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #8696A0;
+  background: #111B21;
+  padding: 2px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.08);
+  white-space: nowrap;
+}
+
+/* ─── Contact List Item staggered enter ─────────────────────────────────────── */
+@keyframes itemSlideIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.contact-item-enter {
+  animation: itemSlideIn 0.25s var(--ease-smooth) both;
+}
+
+/* ─── Verified Badge ─────────────────────────────────────────────────────────── */
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: #00A884;
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+/* ─── Unread Badge ───────────────────────────────────────────────────────────── */
+.unread-badge {
+  min-width: 18px; height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #25D366;
+  color: #111B21;
+  font-size: 0.70rem;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.unread-badge--muted {
+  background: #8696A0;
+  color: #111B21;
+}
+
 /* ─── Scrollbar Mechanics ────────────────────────────────────────────────────── */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

@@ -164,20 +164,12 @@ async fn main() -> anyhow::Result<()> {
 
 /// Genera un token de sesión local de 32 bytes (256 bits) usando el CSPRNG del OS.
 /// Persiste en `path`. Retorna el token como hex de 64 caracteres.
+/// SEGURIDAD: Si getrandom falla, aborta con panic — nunca usa entropía degradada.
 fn generate_session_token(path: &std::path::Path) -> String {
     use std::io::Write;
     let mut bytes = [0u8; 32];
-    if getrandom::getrandom(&mut bytes).is_err() {
-        // Fallback mínimo: timestamp + PID si getrandom falla (raro en Android)
-        let t = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let pid = std::process::id() as u128;
-        for (i, b) in bytes.iter_mut().enumerate() {
-            *b = ((t >> (i % 16)) ^ (pid >> (i % 8))) as u8;
-        }
-    }
+    getrandom::getrandom(&mut bytes)
+        .expect("[CRITICAL] CSPRNG del sistema operativo no disponible. El nodo no puede arrancar de forma segura.");
     let token: String = bytes.iter().map(|b| format!("{:02x}", b)).collect();
     if let Ok(mut f) = std::fs::File::create(path) {
         let _ = f.write_all(token.as_bytes());
@@ -576,10 +568,10 @@ async fn start_node(data_dir: PathBuf, port: u16, bootstrap: Vec<String>) -> any
     // We need a separate reference for the TCP API loop
     let node_api = node.clone();
 
-    // Start local API server for client requests
-    let api_addr = "0.0.0.0:7332";
+    // Start local API server for client requests (loopback-only — never exposed to external interfaces)
+    let api_addr = "127.0.0.1:7332";
     let listener = TcpListener::bind(api_addr).await?;
-    info!("Local API server listening on {}", api_addr);
+    info!("Local API server listening on {} (loopback only)", api_addr);
 
     info!("\n╔═════════════════════════════════════════════════════════════════════════╗");
     info!("║  🛡️  RED SOVEREIGN NODE v{:<44} ║", env!("CARGO_PKG_VERSION"));

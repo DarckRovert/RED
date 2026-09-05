@@ -6,6 +6,7 @@ import { SettingsManager } from "../../lib/settingsManager";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { ContactQrModal } from "../chat/ContactQrModal";
 import { toast } from "../Toast";
+import { RED_VERSION } from "../../lib/version";
 import { IdentityTab } from "./IdentityTab";
 import { AppearanceTab } from "./AppearanceTab";
 import { CallsTab } from "./CallsTab";
@@ -333,7 +334,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                                         Ayuda y Actualizaciones
                                     </div>
                                     <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
-                                        RED OS v90.0.0 · Estado del sistema
+                                        {`RED OS v${RED_VERSION} · Estado del sistema`}
                                     </div>
                                 </div>
                             </div>

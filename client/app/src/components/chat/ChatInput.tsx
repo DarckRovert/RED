@@ -414,24 +414,30 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                         onClick={() => setIsAttachOpen(false)}
                         style={{ position: "fixed", inset: 0, zIndex: 110 }}
                     />
-                    <div style={{
-                        position: "absolute",
-                        bottom: "calc(100% + 8px)",
-                        left: "12px",
-                        maxWidth: "340px",
-                        width: "calc(100% - 24px)",
-                        background: isFamiliar ? "#233138" : "rgba(14,18,34,0.98)",
-                        backdropFilter: "blur(20px)",
-                        borderRadius: "20px",
-                        padding: "16px",
-                        border: isFamiliar ? "1px solid rgba(255,255,255,0.1)" : "1px solid var(--glass-border)",
-                        boxShadow: "0 12px 40px rgba(0, 0, 0, 0.65)",
-                        zIndex: 115,
-                        animation: "fadeIn 0.15s ease-out",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "14px"
-                    }}>
+                    <div
+                        className="animate-fade-scale"
+                        style={{
+                            position: "absolute",
+                            bottom: "calc(100% + 8px)",
+                            left: "12px",
+                            maxWidth: "340px",
+                            width: "calc(100% - 24px)",
+                            background: isFamiliar ? "#233138" : "rgba(14,18,34,0.98)",
+                            backdropFilter: "blur(24px)",
+                            WebkitBackdropFilter: "blur(24px)",
+                            borderRadius: "20px",
+                            padding: "16px",
+                            border: isFamiliar ? "1px solid rgba(255,255,255,0.12)" : "1px solid var(--glass-border)",
+                            boxShadow: isFamiliar
+                                ? "0 16px 48px rgba(0,0,0,0.65)"
+                                : "0 16px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(0,229,255,0.06)",
+                            zIndex: 115,
+                            transformOrigin: "bottom left",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "14px"
+                        }}
+                    >
                         {/* Primary Everyday Actions Grid */}
                         <div style={{
                             display: "grid",
@@ -440,28 +446,35 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             justifyItems: "center"
                         }}>
                             {[
-                                { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5F66CD, #5157C4)", action: () => { setIsAttachOpen(false); handleDocument(); } },
-                                { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #D3396D, #BE2D5E)", action: () => { setIsAttachOpen(false); handleCamera(); } },
-                                { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AC44CF, #9732B8)", action: () => { setIsAttachOpen(false); handleGallery(); } },
-                                { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #069F7B, #008767)", action: () => { setIsAttachOpen(false); handleLocation(); } },
-                                { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #00A389, #008F79)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
-                                { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00B0FF, #0091EA)", action: () => { setIsAttachOpen(false); handlePay(); } },
-                            ].map(a => (
+                                { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5F66CD, #5157C4)", shadow: "rgba(95,102,205,0.5)", action: () => { setIsAttachOpen(false); handleDocument(); } },
+                                { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #D3396D, #BE2D5E)", shadow: "rgba(211,57,109,0.5)", action: () => { setIsAttachOpen(false); handleCamera(); } },
+                                { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AC44CF, #9732B8)", shadow: "rgba(172,68,207,0.5)", action: () => { setIsAttachOpen(false); handleGallery(); } },
+                                { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #069F7B, #008767)", shadow: "rgba(6,159,123,0.5)", action: () => { setIsAttachOpen(false); handleLocation(); } },
+                                { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #00A389, #008F79)", shadow: "rgba(0,163,137,0.5)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
+                                { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00B0FF, #0091EA)", shadow: "rgba(0,176,255,0.5)", action: () => { setIsAttachOpen(false); handlePay(); } },
+                            ].map((a, i) => (
                                 <button
                                     key={a.label}
                                     onClick={a.action}
+                                    className="attach-action-btn"
                                     style={{
                                         display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
                                         background: "transparent", border: "none", color: "#fff", cursor: "pointer",
-                                        width: "76px"
+                                        width: "76px",
+                                        animation: `contact-item-enter 0.25s ease both`,
+                                        animationDelay: `${i * 40}ms`,
                                     }}
                                 >
                                     <div style={{
                                         width: 52, height: 52, borderRadius: "50%", background: a.bg,
                                         display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "1.35rem", boxShadow: "0 4px 14px rgba(0,0,0,0.35)",
-                                        transition: "transform 0.1s ease"
-                                    }}>
+                                        fontSize: "1.35rem",
+                                        boxShadow: `0 4px 18px ${a.shadow}`,
+                                        transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s ease",
+                                    }}
+                                        onMouseEnter={ev => { (ev.currentTarget as HTMLDivElement).style.transform = "scale(1.12)"; (ev.currentTarget as HTMLDivElement).style.boxShadow = `0 8px 28px ${a.shadow}`; }}
+                                        onMouseLeave={ev => { (ev.currentTarget as HTMLDivElement).style.transform = "scale(1)"; (ev.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 18px ${a.shadow}`; }}
+                                    >
                                         {a.icon}
                                     </div>
                                     <span style={{ fontSize: "0.75rem", color: isFamiliar ? "#D1D7DB" : "var(--text-muted)", fontWeight: 500 }}>
@@ -480,19 +493,21 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     width: "100%", padding: "6px 10px", background: "rgba(255,255,255,0.04)",
                                     border: "1px solid rgba(255,255,255,0.08)", borderRadius: "10px",
                                     color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontSize: "0.78rem", fontWeight: 700,
-                                    cursor: "pointer"
+                                    cursor: "pointer", transition: "background 0.15s ease"
                                 }}
+                                onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                                onMouseLeave={ev => (ev.currentTarget.style.background = "rgba(255,255,255,0.04)")}
                             >
                                 <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                                     🎛️ Herramientas Tácticas Malla
                                 </span>
-                                <span>{aiMenuOpen ? "▲" : "▼"}</span>
+                                <span style={{ transition: "transform 0.2s", display: "inline-block", transform: aiMenuOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
                             </button>
 
                             {aiMenuOpen && (
-                                <div style={{
+                                <div className="animate-fade-scale" style={{
                                     display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginTop: "10px",
-                                    animation: "fadeIn 0.15s ease-out"
+                                    transformOrigin: "top center"
                                 }}>
                                     {[
                                         { icon: "🤖", label: "Copiloto IA", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("aiCopilot"); } } },
@@ -510,20 +525,22 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                         } },
                                         { icon: "🎞️", label: "QR Air-Gap", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("airGapStego"); } } },
                                         { icon: "🖼️", label: "Esteganografía", action: () => { setIsAttachOpen(false); if (typeof window !== "undefined") { const store = require("../../store/useRedStore").useRedStore.getState(); store.navigate("stegoVault"); } } },
-                                    ].map(t => (
+                                    ].map(tt => (
                                         <button
-                                            key={t.label}
-                                            onClick={t.action}
+                                            key={tt.label}
+                                            onClick={tt.action}
                                             style={{
                                                 display: "flex", alignItems: "center", gap: "8px",
                                                 padding: "8px 10px", background: "rgba(255,255,255,0.05)",
                                                 border: "1px solid rgba(255,255,255,0.06)", borderRadius: "8px",
                                                 color: "#FFF", fontSize: "0.75rem", cursor: "pointer",
-                                                textAlign: "left"
+                                                textAlign: "left", transition: "background 0.15s ease"
                                             }}
+                                            onMouseEnter={ev => (ev.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+                                            onMouseLeave={ev => (ev.currentTarget.style.background = "rgba(255,255,255,0.05)")}
                                         >
-                                            <span style={{ fontSize: "1rem" }}>{t.icon}</span>
-                                            <span style={{ fontWeight: 600 }}>{t.label}</span>
+                                            <span style={{ fontSize: "1rem" }}>{tt.icon}</span>
+                                            <span style={{ fontWeight: 600 }}>{tt.label}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -541,36 +558,75 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             }}>
                 {isRecording ? (
                     /* Tactical Recording Mode with Hands-Free Lock */
-                    <div style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between",
-                        flex: 1, height: "44px", padding: "0 14px",
-                        background: "rgba(232,33,58,0.14)", border: "1.5px solid rgba(232,33,58,0.45)",
-                        borderRadius: "24px", animation: "pulse 1.5s infinite"
-                    }}>
+                    <div
+                        className="animate-fade-scale"
+                        style={{
+                            display: "flex", alignItems: "center", justifyContent: "space-between",
+                            flex: 1, height: "48px", padding: "0 14px",
+                            background: isHandsFree
+                                ? "rgba(0,229,255,0.08)"
+                                : "rgba(232,33,58,0.12)",
+                            border: isHandsFree
+                                ? "1.5px solid rgba(0,229,255,0.5)"
+                                : "1.5px solid rgba(232,33,58,0.45)",
+                            borderRadius: "24px",
+                            boxShadow: isHandsFree
+                                ? "0 0 16px rgba(0,229,255,0.15), inset 0 0 8px rgba(0,229,255,0.05)"
+                                : "0 0 16px rgba(232,33,58,0.15)",
+                            animation: "pulse 1.5s ease-in-out infinite",
+                            transition: "border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease"
+                        }}
+                    >
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#FF3355", boxShadow: "0 0 10px #FF3355" }} />
-                            <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff", fontFamily: "JetBrains Mono, monospace" }}>
+                            {/* REC dot with lock indicator */}
+                            <div style={{ position: "relative", flexShrink: 0 }}>
+                                <span style={{
+                                    width: 10, height: 10, borderRadius: "50%",
+                                    background: isHandsFree ? "var(--accent-cyan)" : "#FF3355",
+                                    boxShadow: isHandsFree ? "0 0 10px var(--accent-cyan)" : "0 0 10px #FF3355",
+                                    display: "block"
+                                }} />
+                                {isHandsFree && (
+                                    <span style={{
+                                        position: "absolute", top: -6, right: -6,
+                                        fontSize: "0.55rem", lineHeight: 1,
+                                        background: "var(--accent-cyan)", color: "#000",
+                                        borderRadius: "3px", padding: "1px 2px", fontWeight: 900
+                                    }}>🔒</span>
+                                )}
+                            </div>
+                            <span style={{
+                                fontSize: "0.88rem", fontWeight: 800, color: "#fff",
+                                fontFamily: "JetBrains Mono, monospace",
+                                letterSpacing: "0.04em"
+                            }}>
                                 {formatTimer(recordSec)}
                             </span>
-                            {/* Visualizador de audio animado en vivo */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "16px" }}>
-                                {[7, 14, 9, 16, 8, 13, 15, 6].map((h, idx) => (
+                            {/* Live audio visualizer bars */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "18px" }}>
+                                {[7, 14, 9, 16, 8, 13, 15, 6, 11].map((h, idx) => (
                                     <span
                                         key={idx}
                                         style={{
-                                            width: "3px",
+                                            width: "2.5px",
                                             height: `${h}px`,
                                             borderRadius: "2px",
-                                            background: "#FF3355",
+                                            background: isHandsFree ? "var(--accent-cyan)" : "#FF3355",
                                             display: "inline-block",
-                                            animation: `pulse ${(0.35 + (idx % 4) * 0.15).toFixed(2)}s ease-in-out infinite alternate`,
-                                            boxShadow: "0 0 4px rgba(255, 51, 85, 0.4)"
+                                            animation: `pulse ${(0.30 + (idx % 5) * 0.12).toFixed(2)}s ease-in-out infinite alternate`,
+                                            boxShadow: isHandsFree
+                                                ? "0 0 4px rgba(0,229,255,0.5)"
+                                                : "0 0 4px rgba(255, 51, 85, 0.4)"
                                         }}
                                     />
                                 ))}
                             </div>
-                            <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                {isHandsFree ? "🔒 Manos libres activo" : "🎙️ Grabando audio P2P..."}
+                            <span style={{
+                                fontSize: "0.70rem",
+                                color: isHandsFree ? "var(--accent-cyan)" : "var(--text-muted)",
+                                fontWeight: isHandsFree ? 700 : 400
+                            }}>
+                                {isHandsFree ? "LOCK — Manos libres" : "🎙️ Grabando P2P..."}
                             </span>
                         </div>
 
@@ -578,7 +634,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={() => { setIsHandsFree(!isHandsFree); }}
                                 className="btn-icon"
-                                style={{ width: 32, height: 32, fontSize: "0.85rem", color: isHandsFree ? "var(--accent-cyan)" : "var(--text-muted)" }}
+                                style={{
+                                    width: 32, height: 32, fontSize: "0.85rem",
+                                    color: isHandsFree ? "var(--accent-cyan)" : "var(--text-muted)",
+                                    background: isHandsFree ? "rgba(0,229,255,0.12)" : "transparent",
+                                    borderRadius: "50%", border: "none",
+                                    transition: "background 0.2s ease, color 0.2s ease"
+                                }}
                                 title="Modo manos libres"
                             >
                                 {isHandsFree ? "🔓" : "🔒"}
@@ -594,8 +656,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             <button
                                 onClick={stopRecording}
                                 className="btn-icon"
-                                style={{ width: 36, height: 36, fontSize: "1rem", background: isFamiliar ? "#00A884" : "var(--primary)", color: "#fff", boxShadow: "0 0 12px rgba(0,168,132,0.4)" }}
+                                style={{
+                                    width: 38, height: 38, fontSize: "1rem",
+                                    background: isFamiliar ? "#00A884" : "var(--primary)",
+                                    color: "#fff",
+                                    boxShadow: isFamiliar ? "0 0 14px rgba(0,168,132,0.5)" : "0 0 14px rgba(232,33,58,0.5)",
+                                    borderRadius: "50%", border: "none",
+                                    transition: "transform 0.15s ease"
+                                }}
                                 title="Enviar audio"
+                                onMouseEnter={ev => (ev.currentTarget.style.transform = "scale(1.1)")}
+                                onMouseLeave={ev => (ev.currentTarget.style.transform = "scale(1)")}
                             >
                                 📤
                             </button>

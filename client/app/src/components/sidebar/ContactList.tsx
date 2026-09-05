@@ -145,7 +145,7 @@ export const ContactList: React.FC<ContactListProps> = ({
 
             {filteredContacts.length === 0 ? (
                 isFamiliar ? (
-                    <div style={{
+                    <div className="animate-fade-scale" style={{
                         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                         padding: "48px 24px", textAlign: "center", color: "#8696A0"
                     }}>
@@ -165,27 +165,31 @@ export const ContactList: React.FC<ContactListProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="empty-state-tactical">
+                    <div className="empty-state-tactical animate-fade-scale">
                         <div className="empty-state-icon">👥</div>
                         <div className="empty-state-title">{t('sidebar.no_contacts') || "Sin Contactos Guardados"}</div>
                         <div className="empty-state-desc">{t('sidebar.no_contacts_desc') || "Agrega el DID o hash de un nodo para iniciar un chat cifrado E2E."}</div>
                     </div>
                 )
             ) : (
-                filteredContacts.map(ct => {
+                filteredContacts.map((ct, idx) => {
                     const peerRecord = meshRouter.getPeerByAnyId(ct.identity_hash);
                     const isCtOnline = Boolean(peerRecord);
+                    const isVerified = Boolean(ct.is_verified || ct.verified);
+                    const animDelay = `${Math.min(idx * 30, 300)}ms`;
 
                     if (isFamiliar) {
                         return (
                             <div
                                 key={ct.identity_hash}
+                                className="contact-item-enter"
                                 onClick={() => { setActiveTab("chats"); navigate("chat", ct.identity_hash); }}
                                 style={{
                                     display: "flex", alignItems: "center", gap: "14px",
                                     padding: "12px 16px", cursor: "pointer",
                                     borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-                                    transition: "background 0.15s ease"
+                                    transition: "background 0.15s ease",
+                                    animationDelay: animDelay,
                                 }}
                                 onMouseEnter={e => e.currentTarget.style.background = "#202C33"}
                                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}
@@ -201,19 +205,23 @@ export const ContactList: React.FC<ContactListProps> = ({
                                     </div>
                                     {isCtOnline && (
                                         <span
+                                            className="online-dot"
                                             title="En línea en la Malla"
-                                            style={{
-                                                position: "absolute", bottom: 0, right: 0,
-                                                width: 12, height: 12, borderRadius: "50%",
-                                                background: "#00A884",
-                                                border: "2px solid #111B21",
-                                            }}
                                         />
                                     )}
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-                                    <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                        {ct.display_name || ct.identity_hash.substring(0, 8)}
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#E9EDEF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            {ct.display_name || ct.identity_hash.substring(0, 8)}
+                                        </span>
+                                        {isVerified && (
+                                            <span title="Identidad Verificada" style={{ display: "inline-flex", alignItems: "center", color: "#00A884", flexShrink: 0 }}>
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                                                </svg>
+                                            </span>
+                                        )}
                                     </div>
                                     <div style={{ fontSize: "0.78rem", color: isCtOnline ? "#00A884" : "#8696A0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                         {isCtOnline ? "En línea • Enlace Malla" : `${ct.identity_hash.substring(0, 16)}…`}
@@ -254,10 +262,11 @@ export const ContactList: React.FC<ContactListProps> = ({
                     return (
                         <div
                             key={ct.identity_hash}
-                            className="card-tactical-interactive"
+                            className="card-tactical-interactive contact-item-enter"
                             style={{
                                 padding: "12px 14px", display: "flex", alignItems: "center", gap: "12px",
-                                border: isCtOnline ? "1px solid rgba(0, 230, 118, 0.2)" : "1px solid var(--glass-border)"
+                                border: isCtOnline ? "1px solid rgba(0, 230, 118, 0.25)" : "1px solid var(--glass-border)",
+                                animationDelay: animDelay,
                             }}
                         >
                             <div
@@ -270,28 +279,30 @@ export const ContactList: React.FC<ContactListProps> = ({
                                         display: "flex", alignItems: "center", justifyContent: "center",
                                         fontSize: "1.1rem", fontWeight: 800, color: "#fff",
                                         ...avatarStyle(ct.identity_hash),
-                                        boxShadow: isCtOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
+                                        boxShadow: isCtOnline ? "0 0 12px rgba(0, 230, 118, 0.45)" : undefined,
                                         border: isCtOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
                                     }}>
                                         {(ct.display_name || "O").charAt(0).toUpperCase()}
                                     </div>
                                     {isCtOnline && (
                                         <span
+                                            className="online-dot online-dot--tactical"
                                             title="En línea en la Malla"
-                                            style={{
-                                                position: "absolute", bottom: -1, right: -1,
-                                                width: 12, height: 12, borderRadius: "50%",
-                                                background: "#00E676",
-                                                border: "2px solid #06060c",
-                                                boxShadow: "0 0 6px #00E676",
-                                                animation: "beaconPulse 2s infinite"
-                                            }}
                                         />
                                     )}
                                 </div>
                                 <div style={{ flex: 1, overflow: "hidden" }}>
                                     <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}>
-                                        <span>{ct.display_name || ct.identity_hash.substring(0, 8)}</span>
+                                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            {ct.display_name || ct.identity_hash.substring(0, 8)}
+                                        </span>
+                                        {isVerified && (
+                                            <span title="Identidad Verificada" style={{ display: "inline-flex", alignItems: "center", color: "var(--accent-emerald, #00E676)" }}>
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                                                </svg>
+                                            </span>
+                                        )}
                                         {isCtOnline && (
                                             <span style={{ fontSize: "0.55rem", padding: "1px 4px", borderRadius: "4px", background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)", fontFamily: "JetBrains Mono, monospace" }}>
                                                 MALLA

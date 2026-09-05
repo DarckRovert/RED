@@ -214,6 +214,24 @@ updateFile('ARCHITECTURE.md', (content) => {
     return content.replace(/# 🏛️ RED OS v\d+\.\d+\.\d+/, `# 🏛️ RED OS v${targetVersion}`);
 }, 'Arquitectura Técnica');
 
+// 18. ADMIN_MANUAL.md
+updateFile('ADMIN_MANUAL.md', (content) => {
+    let updated = content.replace(/# 🔴 RED - Manual del Administrador \(Node Ops v\d+\.\d+\.\d+\)/, `# 🔴 RED - Manual del Administrador (Node Ops v${targetVersion})`);
+    updated = updated.replace(/RED v\d+\.\d+\.\d+/g, `RED v${targetVersion}`);
+    updated = updated.replace(/v\d+\.\d+\.\d+:/g, `v${targetVersion}:`);
+    return updated;
+}, 'Manual de Administrador');
+
+// 19. .env.example
+updateFile('.env.example', (content) => {
+    return content.replace(/NEXT_PUBLIC_APP_VERSION=\d+\.\d+\.\d+/, `NEXT_PUBLIC_APP_VERSION=${targetVersion}`);
+}, 'Plantilla de Entorno');
+
+// 20. scripts/sync_release_apk.js
+updateFile('scripts/sync_release_apk.js', (content) => {
+    return content.replace(/'\d+\.\d+\.\d+'/, `'${targetVersion}'`);
+}, 'Script de Sincronización APK');
+
 // Imprimir Reporte de Resultados
 console.log("📋 REPORTE DE ACTUALIZACIÓN DE ARCHIVOS:");
 let hasErrors = false;

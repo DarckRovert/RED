@@ -389,6 +389,37 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Carrier Sense & Estado de Canal */}
+                            <div style={{
+                                width: "100%", padding: "8px 14px", borderRadius: "12px",
+                                background: isRecording
+                                    ? "rgba(255, 51, 85, 0.15)"
+                                    : (playingBurstId ? "rgba(255, 179, 0, 0.15)" : "rgba(0, 230, 118, 0.12)"),
+                                border: `1px solid ${isRecording ? '#FF3355' : (playingBurstId ? '#FFB300' : '#00E676')}50`,
+                                display: "flex", alignItems: "center", justifyContent: "space-between"
+                            }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                    <span style={{
+                                        width: 8, height: 8, borderRadius: "50%",
+                                        background: isRecording ? "#FF3355" : (playingBurstId ? "#FFB300" : "#00E676"),
+                                        boxShadow: `0 0 10px ${isRecording ? '#FF3355' : (playingBurstId ? '#FFB300' : '#00E676')}`,
+                                        animation: (isRecording || playingBurstId) ? "pulse 0.8s infinite" : "none"
+                                    }} />
+                                    <span style={{
+                                        fontSize: "0.72rem", fontWeight: 900,
+                                        color: isRecording ? "#FF3355" : (playingBurstId ? "#FFB300" : "#00E676"),
+                                        fontFamily: "JetBrains Mono, monospace"
+                                    }}>
+                                        {isRecording
+                                            ? "TX EN PROGRESO · CANAL BLOQUEADO"
+                                            : (playingBurstId ? "RX DETECTADO · CANAL OCUPADO" : "CARRIER SENSE · CANAL DESPEJADO")}
+                                    </span>
+                                </div>
+                                <span style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.6)", fontWeight: 800 }}>
+                                    {playingBurstId ? "RECIBIENDO" : (isRecording ? "TRANSMITIENDO" : "STANDBY")}
+                                </span>
+                            </div>
+
                             {/* VAD Dynamic Modulation Bar */}
                             <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "6px" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-secondary)", fontFamily: "JetBrains Mono, monospace" }}>
@@ -405,14 +436,36 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Botón PTT Circular Táctico */}
-                            <div style={{ position: "relative", width: "190px", height: "190px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {/* Botón PTT Circular Táctico con Ondas Expansivas de Radiofrecuencia */}
+                            <div style={{ position: "relative", width: "220px", height: "220px", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 {isRecording && (
+                                    <>
+                                        <div style={{
+                                            position: "absolute", inset: -8, borderRadius: "50%",
+                                            border: "2px solid #FF3355",
+                                            animation: "pulse 1.2s infinite",
+                                            boxShadow: "0 0 35px rgba(255, 51, 85, 0.6)"
+                                        }} />
+                                        <div style={{
+                                            position: "absolute", inset: -24, borderRadius: "50%",
+                                            border: "1.5px solid rgba(255, 112, 67, 0.6)",
+                                            animation: "pulse 1.8s infinite 0.3s",
+                                            boxShadow: "0 0 50px rgba(255, 112, 67, 0.35)"
+                                        }} />
+                                        <div style={{
+                                            position: "absolute", inset: -40, borderRadius: "50%",
+                                            border: "1px dashed rgba(255, 51, 85, 0.3)",
+                                            animation: "spin 8s linear infinite"
+                                        }} />
+                                    </>
+                                )}
+
+                                {playingBurstId && (
                                     <div style={{
-                                        position: "absolute", inset: -14, borderRadius: "50%",
-                                        border: "2px solid #FF3355",
-                                        animation: "pulse 1.2s infinite",
-                                        boxShadow: "0 0 30px rgba(255, 51, 85, 0.5)"
+                                        position: "absolute", inset: -10, borderRadius: "50%",
+                                        border: "2px solid #FFB300",
+                                        animation: "pulse 1s infinite",
+                                        boxShadow: "0 0 25px rgba(255, 179, 0, 0.5)"
                                     }} />
                                 )}
 
@@ -423,21 +476,26 @@ export const P2PWalkieTalkieModal: React.FC = () => {
                                         width: "160px", height: "160px", borderRadius: "50%",
                                         background: isRecording
                                             ? "linear-gradient(135deg, #FF3355 0%, #E8213A 100%)"
-                                            : "linear-gradient(135deg, rgba(30, 36, 60, 0.95) 0%, rgba(14, 18, 36, 0.98) 100%)",
-                                        border: isRecording ? "3px solid #FFFFFF" : "2px solid rgba(255, 112, 67, 0.4)",
+                                            : (playingBurstId
+                                                ? "linear-gradient(135deg, rgba(255, 179, 0, 0.25) 0%, rgba(20, 24, 45, 0.95) 100%)"
+                                                : "linear-gradient(135deg, rgba(30, 36, 60, 0.95) 0%, rgba(14, 18, 36, 0.98) 100%)"),
+                                        border: isRecording ? "3px solid #FFFFFF" : (playingBurstId ? "2.5px solid #FFB300" : "2px solid rgba(255, 112, 67, 0.4)"),
                                         boxShadow: isRecording
-                                            ? "0 0 40px rgba(255, 51, 85, 0.7)"
-                                            : "0 10px 30px rgba(0, 0, 0, 0.8), inset 0 2px 0 rgba(255, 255, 255, 0.1)",
+                                            ? "0 0 45px rgba(255, 51, 85, 0.8)"
+                                            : (playingBurstId
+                                                ? "0 0 30px rgba(255, 179, 0, 0.4)"
+                                                : "0 10px 30px rgba(0, 0, 0, 0.8), inset 0 2px 0 rgba(255, 255, 255, 0.1)"),
                                         color: "#FFFFFF", display: "flex", flexDirection: "column",
                                         alignItems: "center", justifyContent: "center", gap: "6px",
-                                        cursor: isProcessingStop ? "wait" : "pointer"
+                                        cursor: isProcessingStop ? "wait" : "pointer",
+                                        transition: "all 0.2s cubic-bezier(0.34,1.56,0.64,1)"
                                     }}
                                 >
                                     <span style={{ fontSize: "2.5rem" }}>
-                                        {isProcessingStop ? "⏳" : (isRecording ? "⏹️" : "🎙️")}
+                                        {isProcessingStop ? "⏳" : (isRecording ? "⏹️" : (playingBurstId ? "🔊" : "🎙️"))}
                                     </span>
                                     <span style={{ fontSize: "0.85rem", fontWeight: 900, letterSpacing: "0.5px" }}>
-                                        {isProcessingStop ? "PROCESANDO" : (isRecording ? `${recordingTime}s REC` : "PULSAR PTT")}
+                                        {isProcessingStop ? "PROCESANDO" : (isRecording ? `${recordingTime}s REC` : (playingBurstId ? "RX AUDIO" : "PULSAR PTT"))}
                                     </span>
                                 </button>
                             </div>

@@ -30,7 +30,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo [3/4] Synchronizing release APK binary to release-assets...
-powershell -Command "$v = (Get-Content '%~dp0\..\client\app\src\lib\version.ts' | Select-String 'RED_VERSION = \"\"([^\"\"]+)\"\"').Matches[0].Groups[1].Value; Copy-Item -Path '%~dp0\..\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination \"%~dp0\..\release-assets\red-v$v-release.apk\" -Force; Copy-Item -Path '%~dp0\..\client\app\android\app\build\outputs\apk\release\app-release.apk' -Destination '%~dp0\..\release-assets\red-latest.apk' -Force; Write-Host \"SHA256: $((Get-FileHash '%~dp0\..\release-assets\red-latest.apk' -Algorithm SHA256).Hash.ToUpper())\""
+node "%~dp0\sync_release_apk.js"
 
 echo.
 echo ====================================

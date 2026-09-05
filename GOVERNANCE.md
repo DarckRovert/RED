@@ -1,114 +1,114 @@
-# 🤖 RULESET AUTÓMATA RED v89.0.0 — FLUJO INTEGRAL DE GOBERNANZA
+﻿# ðŸ¤– RULESET AUTÃ“MATA RED v90.0.0 â€” FLUJO INTEGRAL DE GOBERNANZA
 
 ## **NIVEL 0: PRE-COMMIT (Git Hooks & Validation)**
 
-### Regla 0.1: Validación de Estructura de Archivo
+### Regla 0.1: ValidaciÃ³n de Estructura de Archivo
 **Antes de cualquier commit:**
-- ❌ NO permitir archivos binarios en raíz: `*.exe`, `*.apk`, `*.dll`, `*.so` deben ir a `release-assets/` y usar **Git LFS**
-- ❌ NO permitir archivos sin extensión sin shebang válido
-- ✅ Permitir SOLO: `.ts`, `.tsx`, `.rs`, `.java`, `.kt`, `.json`, `.md`, `.toml`, `.yml`, `.yaml`
-- ✅ Validar que cada archivo tenga encoding UTF-8
+- âŒ NO permitir archivos binarios en raÃ­z: `*.exe`, `*.apk`, `*.dll`, `*.so` deben ir a `release-assets/` y usar **Git LFS**
+- âŒ NO permitir archivos sin extensiÃ³n sin shebang vÃ¡lido
+- âœ… Permitir SOLO: `.ts`, `.tsx`, `.rs`, `.java`, `.kt`, `.json`, `.md`, `.toml`, `.yml`, `.yaml`
+- âœ… Validar que cada archivo tenga encoding UTF-8
 - Comando de control: `git lfs track "*.exe" "*.apk" "*.so"` + `.gitattributes` debe existir
 
 ### Regla 0.2: Path Segregation Obligatoria
 **Estructura permitida sin excepciones:**
 ```
 RED/
-├── core/                    # ← SOLO código Rust (red_core)
-├── blockchain/              # ← SOLO código Rust (red_blockchain)
-├── node/                    # ← SOLO binario CLI Rust
-├── red_mobile/              # ← SOLO código Rust + JNI
-├── client/app/              # ← SOLO Next.js + React
-├── signaling/               # ← SOLO Node.js Express
-├── proofs/                  # ← SOLO archivos ProVerif (.pv)
-├── specs/                   # ← SOLO archivos TLA+ (.tla)
-├── tests/                   # ← Tests integrados
-├── docs/                    # ← Documentación (.md)
-└── .github/workflows/       # ← CI/CD YAML
+â”œâ”€â”€ core/                    # â† SOLO cÃ³digo Rust (red_core)
+â”œâ”€â”€ blockchain/              # â† SOLO cÃ³digo Rust (red_blockchain)
+â”œâ”€â”€ node/                    # â† SOLO binario CLI Rust
+â”œâ”€â”€ red_mobile/              # â† SOLO cÃ³digo Rust + JNI
+â”œâ”€â”€ client/app/              # â† SOLO Next.js + React
+â”œâ”€â”€ signaling/               # â† SOLO Node.js Express
+â”œâ”€â”€ proofs/                  # â† SOLO archivos ProVerif (.pv)
+â”œâ”€â”€ specs/                   # â† SOLO archivos TLA+ (.tla)
+â”œâ”€â”€ tests/                   # â† Tests integrados
+â”œâ”€â”€ docs/                    # â† DocumentaciÃ³n (.md)
+â””â”€â”€ .github/workflows/       # â† CI/CD YAML
 ```
 
-**Si archivo no pertenece a carpeta categoría → RECHAZAR commit**
+**Si archivo no pertenece a carpeta categorÃ­a â†’ RECHAZAR commit**
 
-### Regla 0.3: Versionado Sincronizado Atómico (SSOT)
-**Antes de push a main o compilación:**
-- **Ejecución Obligatoria**: Todo cambio de versión DEBE realizarse exclusivamente mediante `node scripts/bump_version.js <X.Y.Z>`.
-- Verificar que `client/app/src/lib/version.ts`, `package.json`, `build.gradle`, `sw.js`, `public/sw.js` y los 6 `Cargo.toml` (`raíz`, `core`, `red_mobile`, `node`, `blockchain`, `client`) están en 100% de paridad.
-- ❌ RECHAZAR y ABORTAR si existe cualquier discrepancia en los 12 archivos SSOT.
+### Regla 0.3: Versionado Sincronizado AtÃ³mico (SSOT)
+**Antes de push a main o compilaciÃ³n:**
+- **EjecuciÃ³n Obligatoria**: Todo cambio de versiÃ³n DEBE realizarse exclusivamente mediante `node scripts/bump_version.js <X.Y.Z>`.
+- Verificar que `client/app/src/lib/version.ts`, `package.json`, `build.gradle`, `sw.js`, `public/sw.js` y los 6 `Cargo.toml` (`raÃ­z`, `core`, `red_mobile`, `node`, `blockchain`, `client`) estÃ¡n en 100% de paridad.
+- âŒ RECHAZAR y ABORTAR si existe cualquier discrepancia en los 12 archivos SSOT.
 
-### Regla 0.4: Validación de Dependencias
+### Regla 0.4: ValidaciÃ³n de Dependencias
 **Por cada cambio en `package.json`, `Cargo.toml`, o `Cargo.lock`:**
 - Ejecutar `npm audit` (permitir SOLO vulns de nivel bajo si no hay fix disponible)
 - Ejecutar `cargo audit` en cada crate del workspace
 - Generar SBOM (Software Bill of Materials) con `cargo sbom` si disponible
-- ❌ RECHAZAR si hay vulnerabilidades críticas o altas sin mitigación documentada
+- âŒ RECHAZAR si hay vulnerabilidades crÃ­ticas o altas sin mitigaciÃ³n documentada
 
 ### Regla 0.5: Pre-Flight Build Hygiene
-- Antes de ejecutar cualquier compilación (`next build`, `cap sync`, `gradlew`), es MANDATORIO ejecutar `node scripts/pre_build_check.js` para purgar `.next/`, `out/`, `build/` y prevenir artefactos obsoletos o binarios huérfanos en `public/`.
+- Antes de ejecutar cualquier compilaciÃ³n (`next build`, `cap sync`, `gradlew`), es MANDATORIO ejecutar `node scripts/pre_build_check.js` para purgar `.next/`, `out/`, `build/` y prevenir artefactos obsoletos o binarios huÃ©rfanos en `public/`.
 
 
 ---
 
-## **NIVEL 1: VALIDACIÓN SINTÁCTICA (Pre-Build Checks)**
+## **NIVEL 1: VALIDACIÃ“N SINTÃCTICA (Pre-Build Checks)**
 
 ### Regla 1.1: TypeScript/JavaScript Compliance
 **Para todos los `.ts`, `.tsx`, `.js` en `client/app/` y `signaling/`:**
-- ✅ `eslint --fix` con config Next.js strict
-- ✅ `prettier --write` (Vanilla + React standards)
-- ✅ Compilar con `tsc --noEmit --strict`
-- ✅ Resolver TODOS los `any` types → reemplazar con tipos explícitos
-- ✅ NO permitir `console.log()` en código que va a producción (solo console.error/warn)
+- âœ… `eslint --fix` con config Next.js strict
+- âœ… `prettier --write` (Vanilla + React standards)
+- âœ… Compilar con `tsc --noEmit --strict`
+- âœ… Resolver TODOS los `any` types â†’ reemplazar con tipos explÃ­citos
+- âœ… NO permitir `console.log()` en cÃ³digo que va a producciÃ³n (solo console.error/warn)
 - Validar imports: NO ciclos de dependencias
 
 ### Regla 1.2: Rust Compliance (Workspace-wide)
 **Para TODOS los `.rs` en core/, blockchain/, node/, red_mobile/:**
-- ✅ `cargo fmt --check` (formato Rust standard)
-- ✅ `cargo clippy --all-targets --all-features -- -D warnings` (NO warnings)
-- ✅ Compilar con `cargo check --all-features` antes de full build
-- ✅ `cargo audit` para dependencias de seguridad
-- ✅ Validar que no hay `unsafe` blocks a menos que sea en módulos específicos documentados (ej: crypto)
-- ✅ Si hay `unsafe`, debe tener comentario de 3 líneas explicando PORQUÉ es necesario
+- âœ… `cargo fmt --check` (formato Rust standard)
+- âœ… `cargo clippy --all-targets --all-features -- -D warnings` (NO warnings)
+- âœ… Compilar con `cargo check --all-features` antes de full build
+- âœ… `cargo audit` para dependencias de seguridad
+- âœ… Validar que no hay `unsafe` blocks a menos que sea en mÃ³dulos especÃ­ficos documentados (ej: crypto)
+- âœ… Si hay `unsafe`, debe tener comentario de 3 lÃ­neas explicando PORQUÃ‰ es necesario
 
-### Regla 1.3: Validación de Manifests
+### Regla 1.3: ValidaciÃ³n de Manifests
 **Para `Cargo.toml` en workspace:**
-- ✅ Validar sintaxis TOML (no espacios tabs)
-- ✅ Todos los `workspace.members` deben existir como directorios
-- ✅ Todas las dependencias en `[workspace.dependencies]` deben usarse en algún crate hijo
-- ✅ No permitir versiones flotantes (`*` o `>= X.Y`) excepto en dev-dependencies
-- ✅ Verificar que `[patch.crates-io]` tiene justificación en comentario
+- âœ… Validar sintaxis TOML (no espacios tabs)
+- âœ… Todos los `workspace.members` deben existir como directorios
+- âœ… Todas las dependencias en `[workspace.dependencies]` deben usarse en algÃºn crate hijo
+- âœ… No permitir versiones flotantes (`*` o `>= X.Y`) excepto en dev-dependencies
+- âœ… Verificar que `[patch.crates-io]` tiene justificaciÃ³n en comentario
 
 **Para `package.json` en client/app/ y signaling/:**
-- ✅ Validar sintaxis JSON
-- ✅ `scripts` section debe tener: `build`, `dev`, `lint`
-- ✅ `engines.node` debe especificar `>=18.0.0` mínimo
-- ✅ Todos los `dependencies` versiones deben ser ≥ "X.Y.Z" nunca `*`
+- âœ… Validar sintaxis JSON
+- âœ… `scripts` section debe tener: `build`, `dev`, `lint`
+- âœ… `engines.node` debe especificar `>=18.0.0` mÃ­nimo
+- âœ… Todos los `dependencies` versiones deben ser â‰¥ "X.Y.Z" nunca `*`
 
 ### Regla 1.3.1: Coherencia de Crate Names y Grafo de Dependencias en Cargo
 **Para TODOS los crates del workspace (`core`, `blockchain`, `node`, `red_mobile`):**
-- ❌ **PROHIBIDO** modificar o alternar el `name` del package en cualquier crate hijo sin sincronizar simultáneamente todos los dependientes en el workspace.
-- ✅ **Paridad Estricta de Nombres:** El crate `blockchain` debe conservar indefectiblemente `name = "red-blockchain"`. En Rust, los identificadores en código (`use red_blockchain::...`) mapean automáticamente los guiones a guiones bajos (`-` -> `_`), por lo que el `name` del manifiesto DEBE mantenerse como `red-blockchain` para coincidir con `red-blockchain = { path = "../blockchain" }` en `core`, `node` y `red_mobile`.
-- ✅ **Validación de Resolución:** Antes de cualquier commit o release, es MANDATORIO ejecutar `cargo check --workspace` para validar que Cargo resuelva el grafo completo de dependencias sin discrepancias entre nombres de paquete y llaves de dependencia.
-- ✅ **Sincronización de Lockfile:** Cada actualización de versión en `Cargo.toml` debe verificar que `Cargo.lock` sincronice los miembros locales a la misma versión SSOT.
+- âŒ **PROHIBIDO** modificar o alternar el `name` del package en cualquier crate hijo sin sincronizar simultÃ¡neamente todos los dependientes en el workspace.
+- âœ… **Paridad Estricta de Nombres:** El crate `blockchain` debe conservar indefectiblemente `name = "red-blockchain"`. En Rust, los identificadores en cÃ³digo (`use red_blockchain::...`) mapean automÃ¡ticamente los guiones a guiones bajos (`-` -> `_`), por lo que el `name` del manifiesto DEBE mantenerse como `red-blockchain` para coincidir con `red-blockchain = { path = "../blockchain" }` en `core`, `node` y `red_mobile`.
+- âœ… **ValidaciÃ³n de ResoluciÃ³n:** Antes de cualquier commit o release, es MANDATORIO ejecutar `cargo check --workspace` para validar que Cargo resuelva el grafo completo de dependencias sin discrepancias entre nombres de paquete y llaves de dependencia.
+- âœ… **SincronizaciÃ³n de Lockfile:** Cada actualizaciÃ³n de versiÃ³n en `Cargo.toml` debe verificar que `Cargo.lock` sincronice los miembros locales a la misma versiÃ³n SSOT.
 
 ### Regla 1.4: Markdown Documentation Validation
-**Para TODOS los `.md` en raíz y docs/:**
-- ✅ Validar sintaxis Markdown (no broken links)
-- ✅ Verificar que todos los `[links]` apunten a archivos o URLs válidas
-- ✅ Validar que bloques de código tienen language specifier (```rust, ```typescript, etc)
-- ✅ Verificar que CHANGELOG.md tiene entrada para versión actual
-- ✅ README.md debe mencionar: descripción, arquitectura, cómo compilar, licencia
+**Para TODOS los `.md` en raÃ­z y docs/:**
+- âœ… Validar sintaxis Markdown (no broken links)
+- âœ… Verificar que todos los `[links]` apunten a archivos o URLs vÃ¡lidas
+- âœ… Validar que bloques de cÃ³digo tienen language specifier (```rust, ```typescript, etc)
+- âœ… Verificar que CHANGELOG.md tiene entrada para versiÃ³n actual
+- âœ… README.md debe mencionar: descripciÃ³n, arquitectura, cÃ³mo compilar, licencia
 
-### Regla 1.5: Single Source of Truth (SSOT) de Protocolo & Cero Duplicación
+### Regla 1.5: Single Source of Truth (SSOT) de Protocolo & Cero DuplicaciÃ³n
 **Para TODOS los modelos y contratos de datos en core/, node/, red_mobile/:**
-- ✅ **Centralización Obligatoria**: Todo struct, enum, DTO o mensaje de red P2P (AMBER, SOS, Clima, Canales, Social, Guardian, Audio, Efímeros, Proximidad, Batería, Sanitizador, Chunker, IA Copilot) DEBE residir en `core/src/protocol/tactical.rs`.
-- ❌ **Prohibición de Duplicación**: Queda estrictamente prohibido redefinir structs duplicados en `node/src/` o `red_mobile/src/`. Ambos crates deben re-exportar e importar directamente desde `red_core::protocol::tactical`.
-- ✅ **Aislamiento de Plataforma**: `node` mantiene su persistencia en disco (`sled::Db`) y CLI, mientras que `red_mobile` mantiene su almacenamiento liviano en RAM (`RwLock<HashMap>`) y su puente JNI C-ABI intacto.
+- âœ… **CentralizaciÃ³n Obligatoria**: Todo struct, enum, DTO o mensaje de red P2P (AMBER, SOS, Clima, Canales, Social, Guardian, Audio, EfÃ­meros, Proximidad, BaterÃ­a, Sanitizador, Chunker, IA Copilot) DEBE residir en `core/src/protocol/tactical.rs`.
+- âŒ **ProhibiciÃ³n de DuplicaciÃ³n**: Queda estrictamente prohibido redefinir structs duplicados en `node/src/` o `red_mobile/src/`. Ambos crates deben re-exportar e importar directamente desde `red_core::protocol::tactical`.
+- âœ… **Aislamiento de Plataforma**: `node` mantiene su persistencia en disco (`sled::Db`) y CLI, mientras que `red_mobile` mantiene su almacenamiento liviano en RAM (`RwLock<HashMap>`) y su puente JNI C-ABI intacto.
 
 ---
 
-## **NIVEL 2: BUILD PIPELINE (Compilación Ordenada)**
+## **NIVEL 2: BUILD PIPELINE (CompilaciÃ³n Ordenada)**
 
-### Regla 2.1: Build Secuencia Determinística
-**Orden de compilación inmutable:**
+### Regla 2.1: Build Secuencia DeterminÃ­stica
+**Orden de compilaciÃ³n inmutable:**
 
 1. **Rust Workspace Base**
    ```bash
@@ -119,16 +119,16 @@ RED/
    cd ../node && cargo build --release
    cd ../red_mobile && cargo build --release
    ```
-   - ❌ DETENER si alguno falla
-   - ✅ Generar artifacts en `target/release/`
+   - âŒ DETENER si alguno falla
+   - âœ… Generar artifacts en `target/release/`
 
 2. **JavaScript/TypeScript (Parallel OK)**
    ```bash
    cd client/app && npm ci && npm run build
    cd ../../signaling && npm ci && npm run build
    ```
-   - ❌ DETENER si package-lock.json no existe
-   - ✅ Generar artifacts en `.next/`, `dist/`
+   - âŒ DETENER si package-lock.json no existe
+   - âœ… Generar artifacts en `.next/`, `dist/`
 
 3. **Android APK (Capacitor Bridge)**
    ```bash
@@ -144,106 +144,106 @@ RED/
    - Generar: `target/release/red-node`
 
 ### Regla 2.2: Output Artifact Validation
-**Después de CADA compilación:**
-- ✅ Verificar que binarios/librerías existen y tienen tamaño > 0
-- ✅ Para Rust: `file target/release/red-node` debe mostrar "ELF 64-bit" o "PE executable"
-- ✅ Para JavaScript: `dist/` debe contener `*.js` y `*.d.ts`
-- ✅ Para APK: Verificar que existe y es firmado (si es release)
-- ✅ Generar checksums SHA256: `sha256sum artifact > SHA256SUMS.txt`
+**DespuÃ©s de CADA compilaciÃ³n:**
+- âœ… Verificar que binarios/librerÃ­as existen y tienen tamaÃ±o > 0
+- âœ… Para Rust: `file target/release/red-node` debe mostrar "ELF 64-bit" o "PE executable"
+- âœ… Para JavaScript: `dist/` debe contener `*.js` y `*.d.ts`
+- âœ… Para APK: Verificar que existe y es firmado (si es release)
+- âœ… Generar checksums SHA256: `sha256sum artifact > SHA256SUMS.txt`
 
 ### Regla 2.3: Test Execution Mandatory
-**Por cada compilación exitosa:**
-- ✅ `cargo test --workspace` (Rust tests)
-- ✅ `npm run test` en client/app/ si existe jest.config.js
-- ✅ `npm run test` en signaling/ si existe
-- ✅ Verificar coverage > 70% para código crítico (cryptography, auth, mesh)
-- ❌ RECHAZAR build si algún test falla
-- ✅ Generar coverage report: `coverage/lcov.info`
+**Por cada compilaciÃ³n exitosa:**
+- âœ… `cargo test --workspace` (Rust tests)
+- âœ… `npm run test` en client/app/ si existe jest.config.js
+- âœ… `npm run test` en signaling/ si existe
+- âœ… Verificar coverage > 70% para cÃ³digo crÃ­tico (cryptography, auth, mesh)
+- âŒ RECHAZAR build si algÃºn test falla
+- âœ… Generar coverage report: `coverage/lcov.info`
 
 ---
 
-## **NIVEL 3: SEGURIDAD & CRIPTOGRAFÍA (Critical Layer)**
+## **NIVEL 3: SEGURIDAD & CRIPTOGRAFÃA (Critical Layer)**
 
 ### Regla 3.1: Post-Quantum Crypto Validation
 **Para TODOS los archivos que usen crypto (core/src/crypto.rs, etc):**
-- ✅ Verificar que `ml-kem-768` se usa SIEMPRE en par con X25519
-- ✅ Validar que `AES-256-GCM` nunca reutiliza nonces (contador monotónico)
-- ✅ Validar que random secrets usan `ChaCha20Rng` o OSRng, NUNCA arrays hardcodeados
-- ✅ Verifying que claves maestras se derivan con `HKDF-SHA256` nunca `SHA256` simple
-- ✅ Para `Argon2id`: parámetros deben ser: `m_cost >= 65536, t_cost >= 3, parallelism >= 4`
+- âœ… Verificar que `ml-kem-768` se usa SIEMPRE en par con X25519
+- âœ… Validar que `AES-256-GCM` nunca reutiliza nonces (contador monotÃ³nico)
+- âœ… Validar que random secrets usan `ChaCha20Rng` o OSRng, NUNCA arrays hardcodeados
+- âœ… Verifying que claves maestras se derivan con `HKDF-SHA256` nunca `SHA256` simple
+- âœ… Para `Argon2id`: parÃ¡metros deben ser: `m_cost >= 65536, t_cost >= 3, parallelism >= 4`
 
 ### Regla 3.2: Storage Encryption Validation
 **Para acceso a Sled DB:**
-- ✅ TODAS las writes a Sled deben pasar por `CryptoEngine::encrypt()`
-- ✅ TODAS las reads de Sled deben pasar por `CryptoEngine::decrypt()`
-- ✅ Ningún dato en plain text puede ser persistido
-- ✅ Claves de cifrado deben rotarse con `rotate_key()` cada 90 días (detectar en tests)
-- ✅ Verificar que `master_pin` NUNCA se almacena, solo derivación
+- âœ… TODAS las writes a Sled deben pasar por `CryptoEngine::encrypt()`
+- âœ… TODAS las reads de Sled deben pasar por `CryptoEngine::decrypt()`
+- âœ… NingÃºn dato en plain text puede ser persistido
+- âœ… Claves de cifrado deben rotarse con `rotate_key()` cada 90 dÃ­as (detectar en tests)
+- âœ… Verificar que `master_pin` NUNCA se almacena, solo derivaciÃ³n
 
 ### Regla 3.3: Biometric Authentication Flow
 **Para Android BiometricPrompt y WebAuthn (client/app/auth/bioauth.ts):**
-- ✅ Flujo: BiometricPrompt → Success → Retrieve PIN from KeyStore → Derive Key → Open Vault
-- ✅ NUNCA almacenar PIN directamente en LocalStorage
-- ✅ Android: Usar `USE_BIOMETRIC + USE_FINGERPRINT` flags
-- ✅ Web: Usar `navigator.credentials.get()` solo (NUNCA `create()` durante auth)
-- ✅ Decoy PIN path: PIN erróneo → abre `decoy_vault` (no falla, engaña)
-- ✅ Panic PIN path: PIN especial → destruye todas las claves (ATOMIC operation)
+- âœ… Flujo: BiometricPrompt â†’ Success â†’ Retrieve PIN from KeyStore â†’ Derive Key â†’ Open Vault
+- âœ… NUNCA almacenar PIN directamente en LocalStorage
+- âœ… Android: Usar `USE_BIOMETRIC + USE_FINGERPRINT` flags
+- âœ… Web: Usar `navigator.credentials.get()` solo (NUNCA `create()` durante auth)
+- âœ… Decoy PIN path: PIN errÃ³neo â†’ abre `decoy_vault` (no falla, engaÃ±a)
+- âœ… Panic PIN path: PIN especial â†’ destruye todas las claves (ATOMIC operation)
 
 ### Regla 3.4: Formal Proof Validation
 **Para cambios en proofs/ (ProVerif files):**
-- ✅ Ejecutar `proverif proofs/security_model.pv` después de cualquier cambio crypto
-- ✅ Verificar que output contiene: `Query ... is true.` (no `false.`)
-- ✅ Si ProVerif encuentra ataque: ❌ RECHAZAR commit hasta que se arregle
-- ✅ Generar `attack.txt` si vulnerabilidad encontrada
-- ✅ Documentar cambio en `ARCHITECTURE.md` sección 2
+- âœ… Ejecutar `proverif proofs/security_model.pv` despuÃ©s de cualquier cambio crypto
+- âœ… Verificar que output contiene: `Query ... is true.` (no `false.`)
+- âœ… Si ProVerif encuentra ataque: âŒ RECHAZAR commit hasta que se arregle
+- âœ… Generar `attack.txt` si vulnerabilidad encontrada
+- âœ… Documentar cambio en `ARCHITECTURE.md` secciÃ³n 2
 
 ---
 
 ## **NIVEL 4: INTEGRATION & NETWORK (Multi-Layer Communication)**
 
 ### Regla 4.1: IPC Bridge Validation
-**Para Capacitor + JNI Bridge (client/app → red_mobile):**
-- ✅ TODOS los `bridge.invoke()` calls en TypeScript deben tener handler correspondiente en RedNodePlugin.java
-- ✅ Parámetros JSON deben validarse contra TypeScript interfaces
-- ✅ NUNCA pasar datos sensibles (passwords, keys) por bridge sin encriptación
-- ✅ Timeout máximo: 5 segundos por IPC call (configurado en RedNodeService)
-- ✅ Error handling: TODOS los calls deben tener `.catch()` explícito
+**Para Capacitor + JNI Bridge (client/app â†’ red_mobile):**
+- âœ… TODOS los `bridge.invoke()` calls en TypeScript deben tener handler correspondiente en RedNodePlugin.java
+- âœ… ParÃ¡metros JSON deben validarse contra TypeScript interfaces
+- âœ… NUNCA pasar datos sensibles (passwords, keys) por bridge sin encriptaciÃ³n
+- âœ… Timeout mÃ¡ximo: 5 segundos por IPC call (configurado en RedNodeService)
+- âœ… Error handling: TODOS los calls deben tener `.catch()` explÃ­cito
 
 ### Regla 4.2: Axum Server Validation
 **Para servidor local (core/src/server.rs):**
-- ✅ BIND OBLIGATORIO: `127.0.0.1:7333` NUNCA `0.0.0.0`
-- ✅ TODOS los endpoints deben validar header `X-API-Key` (middleware auth)
-- ✅ Rutas disponibles (verifcar que existe cada ruta):
+- âœ… BIND OBLIGATORIO: `127.0.0.1:7333` NUNCA `0.0.0.0`
+- âœ… TODOS los endpoints deben validar header `X-API-Key` (middleware auth)
+- âœ… Rutas disponibles (verifcar que existe cada ruta):
   - `POST /api/messages` (enviar mensaje)
   - `GET /api/events` (SSE stream)
   - `GET /api/contacts` (listar contactos)
   - `POST /api/vault` (unlock request)
-- ✅ Response timeout: 30 segundos máximo
-- ✅ Request body size limit: 10 MB máximo
-- ✅ CORS: DISABLED (loopback-only, no cors needed)
+- âœ… Response timeout: 30 segundos mÃ¡ximo
+- âœ… Request body size limit: 10 MB mÃ¡ximo
+- âœ… CORS: DISABLED (loopback-only, no cors needed)
 
 ### Regla 4.3: Mesh Networking Validation
 **Para enrutamiento P2P (core/src/mesh.rs):**
-- ✅ Protocolo Gossipsub: TODOS los mensajes deben tener:
+- âœ… Protocolo Gossipsub: TODOS los mensajes deben tener:
   - Topic (ej: `/red/chat`, `/red/social`)
-  - Message ID único (hash del contenido + timestamp)
-  - TTL (Time-to-Live): 64 hops máximo
-- ✅ Multi-transport routing (seleccionar mejor según disponibilidad):
+  - Message ID Ãºnico (hash del contenido + timestamp)
+  - TTL (Time-to-Live): 64 hops mÃ¡ximo
+- âœ… Multi-transport routing (seleccionar mejor segÃºn disponibilidad):
   - BLE (< 10m): Usar si ambos nodos tienen BLE
   - WiFi Direct (< 100m): Fallback si BLE no disponible
   - LoRa (< 15km): Fallback si WiFi no disponible
   - SoundMesh (radio-blocked): Fallback si todas las anteriores fallan
   - Internet (WAN): Usar solo si todos los anteriores fallan
-- ✅ ACK protocol: TODOS los paquetes deben recibir DELIVERY_ACK dentro de 10 segundos
-- ✅ Store-and-Forward: Mensajes fallidos se guardan localmente 48 horas max
+- âœ… ACK protocol: TODOS los paquetes deben recibir DELIVERY_ACK dentro de 10 segundos
+- âœ… Store-and-Forward: Mensajes fallidos se guardan localmente 48 horas max
 
 ### Regla 4.4: WebRTC Signaling Validation
-**Para servidor de señalización (signaling/server.js):**
-- ✅ NUNCA inspeccionar, registrar o cachear contenido de SDP/ICE
-- ✅ Validar que JSON que llega es SDP o ICE válido (estructura correcta)
-- ✅ Timeout de sesión: 30 minutos inactividad → desconectar
-- ✅ Rate limiting: 10 signaling messages por segundo por cliente
-- ✅ Error responses deben ser genéricos (no revelar causas específicas)
+**Para servidor de seÃ±alizaciÃ³n (signaling/server.js):**
+- âœ… NUNCA inspeccionar, registrar o cachear contenido de SDP/ICE
+- âœ… Validar que JSON que llega es SDP o ICE vÃ¡lido (estructura correcta)
+- âœ… Timeout de sesiÃ³n: 30 minutos inactividad â†’ desconectar
+- âœ… Rate limiting: 10 signaling messages por segundo por cliente
+- âœ… Error responses deben ser genÃ©ricos (no revelar causas especÃ­ficas)
 
 ---
 
@@ -251,14 +251,14 @@ RED/
 
 ### Regla 5.1: Merkle Tree Validation
 **Para state integrity (core/src/merkle.rs):**
-- ✅ TODOS los cambios a storage deben actualizar raíz Merkle
-- ✅ Cada node debe verificar `merkle_verify()` antes de aplicar cambio remoto
-- ✅ Si verificación falla → RECHAZAR paquete + LOG incident
-- ✅ Generar `merkle_proof` para auditoría
+- âœ… TODOS los cambios a storage deben actualizar raÃ­z Merkle
+- âœ… Cada node debe verificar `merkle_verify()` antes de aplicar cambio remoto
+- âœ… Si verificaciÃ³n falla â†’ RECHAZAR paquete + LOG incident
+- âœ… Generar `merkle_proof` para auditorÃ­a
 
 ### Regla 5.2: Message Integrity
-**Para TODOS los mensajes en tránsito (core/src/crypto.rs):**
-- ✅ Estructura obligatoria:
+**Para TODOS los mensajes en trÃ¡nsito (core/src/crypto.rs):**
+- âœ… Estructura obligatoria:
   ```json
   {
     "id": "sha256(content + timestamp)",
@@ -267,20 +267,20 @@ RED/
     "delivery_ack": "signature(id, nonce)"
   }
   ```
-- ✅ Validar `id` matches hash de payload
-- ✅ Validar `delivery_ack` signature con sender public key
-- ✅ Rechazar si timestamp > 1 hora en el pasado
+- âœ… Validar `id` matches hash de payload
+- âœ… Validar `delivery_ack` signature con sender public key
+- âœ… Rechazar si timestamp > 1 hora en el pasado
 
 ### Regla 5.3: Audit Logging
 **Para TODOS los eventos sensibles:**
-- ✅ Login attempts (success + failure)
-- ✅ Vault unlock/lock
-- ✅ Message send/receive
-- ✅ Contact add/remove
-- ✅ Key rotation
-- ✅ Formato: JSON con timestamp, user_id (anónimo), action, result
-- ✅ Almacenar en archivo immutable (Sled con flag `no_overwrite`)
-- ✅ Rotar logs cada 7 días, máximo 12 meses de historia
+- âœ… Login attempts (success + failure)
+- âœ… Vault unlock/lock
+- âœ… Message send/receive
+- âœ… Contact add/remove
+- âœ… Key rotation
+- âœ… Formato: JSON con timestamp, user_id (anÃ³nimo), action, result
+- âœ… Almacenar en archivo immutable (Sled con flag `no_overwrite`)
+- âœ… Rotar logs cada 7 dÃ­as, mÃ¡ximo 12 meses de historia
 
 ---
 
@@ -383,26 +383,26 @@ jobs:
 
 ### Regla 6.2: Pull Request Validation
 **Obligatorio ANTES de merge a main:**
-- ✅ TODOS los checks en verde (lint, security, build, test)
-- ✅ Code review aprobado por 2+ contributors
-- ✅ Cambios en `core/` o `blockchain/` requieren crypto expert approval
-- ✅ Commit message debe seguir formato `type(scope): description`
+- âœ… TODOS los checks en verde (lint, security, build, test)
+- âœ… Code review aprobado por 2+ contributors
+- âœ… Cambios en `core/` o `blockchain/` requieren crypto expert approval
+- âœ… Commit message debe seguir formato `type(scope): description`
   - type: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`
   - scope: `crypto`, `auth`, `mesh`, `ui`, etc.
   - Ejemplo: `feat(crypto): add key rotation for AES`
-- ✅ Branch naming: `feature/description`, `fix/description`, `docs/description`
+- âœ… Branch naming: `feature/description`, `fix/description`, `docs/description`
 
 ### Regla 6.3: Release Management
 **Triggers a versionado + deployment:**
-- ✅ Versión automática = `X.Y.Z` (semántica)
-- ✅ CHANGELOG.md actualizado automáticamente
-- ✅ Git tags: `v64.0.0` apuntando a commit
-- ✅ Release artifacts generados:
+- âœ… VersiÃ³n automÃ¡tica = `X.Y.Z` (semÃ¡ntica)
+- âœ… CHANGELOG.md actualizado automÃ¡ticamente
+- âœ… Git tags: `v90.0.0` apuntando a commit
+- âœ… Release artifacts generados:
   - `red-node` (Linux/Windows/macOS)
   - `app-release.apk` (Android)
   - `SHA256SUMS.txt` (checksums)
   - SBOM (Software Bill of Materials)
-- ✅ Generar release notes automáticas del CHANGELOG
+- âœ… Generar release notes automÃ¡ticas del CHANGELOG
 
 ---
 
@@ -422,33 +422,33 @@ COPY --from=builder /app/target/release/red-node /usr/local/bin/
 CMD ["red-node"]
 ```
 
-- ✅ Scan imágenes con Trivy: `trivy image darckrovert/red-node:latest`
-- ✅ NO hardcode secrets en imagen
-- ✅ Usar multi-stage builds para minimizar size
+- âœ… Scan imÃ¡genes con Trivy: `trivy image darckrovert/red-node:latest`
+- âœ… NO hardcode secrets en imagen
+- âœ… Usar multi-stage builds para minimizar size
 
 ### Regla 7.2: Android APK Validation
 **Antes de publicar en Play Store:**
-- ✅ Verificar firma: `jarsigner -verify -verbose app-release.apk`
-- ✅ Scan con MobSF (Mobile Security Framework)
-- ✅ Test en Android 12+ emulator: instalación, flujo auth, envío mensaje
-- ✅ Verificar permisos solicitados (BiometricPrompt, BLE, GPS, etc.)
+- âœ… Verificar firma: `jarsigner -verify -verbose app-release.apk`
+- âœ… Scan con MobSF (Mobile Security Framework)
+- âœ… Test en Android 12+ emulator: instalaciÃ³n, flujo auth, envÃ­o mensaje
+- âœ… Verificar permisos solicitados (BiometricPrompt, BLE, GPS, etc.)
 
 ### Regla 7.3: Runtime Security Checks
-**En startup de aplicación:**
-- ✅ Verificar integridad de binary (checksum)
-- ✅ Verificar que Sled DB puede abrirse (no corrupted)
-- ✅ Verificar que certificados TLS son válidos (si aplica)
-- ✅ Verificar que proceso se ejecuta con permisos correctos (NO root si no necesario)
-- ✅ Inicializar logging (no revelar paths ni IPs internas)
+**En startup de aplicaciÃ³n:**
+- âœ… Verificar integridad de binary (checksum)
+- âœ… Verificar que Sled DB puede abrirse (no corrupted)
+- âœ… Verificar que certificados TLS son vÃ¡lidos (si aplica)
+- âœ… Verificar que proceso se ejecuta con permisos correctos (NO root si no necesario)
+- âœ… Inicializar logging (no revelar paths ni IPs internas)
 
-### Regla 7.4: Soberanía de Despliegue Web y Resiliencia ante Fallos de CI (Local-First Deployment)
+### Regla 7.4: SoberanÃ­a de Despliegue Web y Resiliencia ante Fallos de CI (Local-First Deployment)
 **Independencia de Servicios Centralizados de CI/CD:**
-- 🛡️ **Principio de Auto-Suficiencia**: Ante bloqueos administrativos en GitHub (Billing issues/holds), límites de cuota de minutos de Actions o caídas de infraestructura cloud, el portal web y Web Companion (`https://darckrovert.github.io/RED/`) DEBE poder compilarse y publicarse directamente de forma local y determinista sin intervención de runners remotos.
-- 🚀 **Flujo de Despliegue Local Oficial**:
-  1. Compilar bundle estático optimizado: `npm run build:gh` (en `client/app/` con `NEXT_PUBLIC_BASE_PATH='/RED'`).
-  2. Generar artefactos estáticos requeridos: Copiar `out/index.html` a `out/404.html` (para soportar SPA client-side routing en GitHub Pages) e inyectar `out/.nojekyll` (para evitar omisión de carpetas `_next/`).
+- ðŸ›¡ï¸ **Principio de Auto-Suficiencia**: Ante bloqueos administrativos en GitHub (Billing issues/holds), lÃ­mites de cuota de minutos de Actions o caÃ­das de infraestructura cloud, el portal web y Web Companion (`https://darckrovert.github.io/RED/`) DEBE poder compilarse y publicarse directamente de forma local y determinista sin intervenciÃ³n de runners remotos.
+- ðŸš€ **Flujo de Despliegue Local Oficial**:
+  1. Compilar bundle estÃ¡tico optimizado: `npm run build:gh` (en `client/app/` con `NEXT_PUBLIC_BASE_PATH='/RED'`).
+  2. Generar artefactos estÃ¡ticos requeridos: Copiar `out/index.html` a `out/404.html` (para soportar SPA client-side routing en GitHub Pages) e inyectar `out/.nojekyll` (para evitar omisiÃ³n de carpetas `_next/`).
   3. Publicar directamente en la rama `gh-pages`: `npx -y gh-pages -d out -b gh-pages` o ejecutando `scripts/deploy_gh_pages.ps1` / `scripts/deploy_web.bat` / `npm run deploy:gh`.
-- ❌ **Prohibición**: Queda prohibido dejar una release web desactualizada o bloqueada por depender exclusivamente de workflows remotos cuando el entorno local dispone de las herramientas de compilación y publicación directa.
+- âŒ **ProhibiciÃ³n**: Queda prohibido dejar una release web desactualizada o bloqueada por depender exclusivamente de workflows remotos cuando el entorno local dispone de las herramientas de compilaciÃ³n y publicaciÃ³n directa.
 
 ---
 
@@ -456,21 +456,21 @@ CMD ["red-node"]
 
 ### Regla 8.1: Documentation Requirements
 **ARCHIVOS OBLIGATORIOS:**
-- ✅ `README.md` (actualizado en cada version)
-- ✅ `ARCHITECTURE.md` (sincronizado con código)
-- ✅ `CHANGELOG.md` (entrada por cada commit a main)
-- ✅ `USER_MANUAL.md` (actualizado con nuevos features)
-- ✅ `ADMIN_MANUAL.md` (instrucciones deployment)
-- ✅ `CONTRIBUTING.md` (cómo contribuir, style guide)
-- ✅ `SECURITY.md` (cómo reportar vulnerabilidades, no público)
-- ✅ `LICENSE` (AGPL-3.0)
-- ✅ `CODE_OF_CONDUCT.md`
+- âœ… `README.md` (actualizado en cada version)
+- âœ… `ARCHITECTURE.md` (sincronizado con cÃ³digo)
+- âœ… `CHANGELOG.md` (entrada por cada commit a main)
+- âœ… `USER_MANUAL.md` (actualizado con nuevos features)
+- âœ… `ADMIN_MANUAL.md` (instrucciones deployment)
+- âœ… `CONTRIBUTING.md` (cÃ³mo contribuir, style guide)
+- âœ… `SECURITY.md` (cÃ³mo reportar vulnerabilidades, no pÃºblico)
+- âœ… `LICENSE` (AGPL-3.0)
+- âœ… `CODE_OF_CONDUCT.md`
 
 ### Regla 8.2: API Documentation
 **Para TODOS los endpoints Axum:**
-- ✅ Generar OpenAPI/Swagger spec
-- ✅ Documentar: método, path, params, request body, response, errors
-- ✅ Ejemplo para `POST /api/messages`:
+- âœ… Generar OpenAPI/Swagger spec
+- âœ… Documentar: mÃ©todo, path, params, request body, response, errors
+- âœ… Ejemplo para `POST /api/messages`:
   ```yaml
   /api/messages:
     post:
@@ -500,13 +500,13 @@ CMD ["red-node"]
 ```
 
 ### Regla 8.3: Compliance Checklist
-**Para release a producción:**
-- ✅ GDPR: No almacenar datos personales sin consentimiento
-- ✅ License compliance: Todos los deps tienen compatible licenses
-- ✅ Accessibility: WCAG 2.1 AA para UI web
-- ✅ Security: Zero critical/high vulns en dependencies
-- ✅ Performance: API response time < 500ms (p95)
-- ✅ Availability: Uptime >= 99.5% (si es servicio)
+**Para release a producciÃ³n:**
+- âœ… GDPR: No almacenar datos personales sin consentimiento
+- âœ… License compliance: Todos los deps tienen compatible licenses
+- âœ… Accessibility: WCAG 2.1 AA para UI web
+- âœ… Security: Zero critical/high vulns en dependencies
+- âœ… Performance: API response time < 500ms (p95)
+- âœ… Availability: Uptime >= 99.5% (si es servicio)
 
 ---
 
@@ -514,11 +514,11 @@ CMD ["red-node"]
 
 ### Regla 9.1: Logging Strategy
 **Niveles y uso:**
-- `ERROR`: Fallos que impiden operación (auth failed, DB error, crypto error)
-- `WARN`: Condiciones anómalas pero manejables (slow network, missing device)
+- `ERROR`: Fallos que impiden operaciÃ³n (auth failed, DB error, crypto error)
+- `WARN`: Condiciones anÃ³malas pero manejables (slow network, missing device)
 - `INFO`: Eventos importantes (user login, message sent, connection established)
-- `DEBUG`: Detalles de ejecución (sent X bytes, received ACK from Y)
-- `TRACE`: Datos muy verbosos (cada operación criptográfica)
+- `DEBUG`: Detalles de ejecuciÃ³n (sent X bytes, received ACK from Y)
+- `TRACE`: Datos muy verbosos (cada operaciÃ³n criptogrÃ¡fica)
 
 **Formato obligatorio:**
 ```json
@@ -545,12 +545,12 @@ CMD ["red-node"]
 - `red_battery_level_percent` (gauge)
 
 ### Regla 9.3: Alerting Rules
-**Basado en métricas, disparar alertas si:**
-- Error rate > 1% en última hora
+**Basado en mÃ©tricas, disparar alertas si:**
+- Error rate > 1% en Ãºltima hora
 - Latencia p99 > 5 segundos
 - Storage > 80% capacity
 - Menos de 2 peers conectados en malla
-- Batería < 10%
+- BaterÃ­a < 10%
 - ProVerif prueba FALLA
 
 ---
@@ -563,48 +563,48 @@ CMD ["red-node"]
 - **MINOR**: New features (new module, new encryption algo)
 - **PATCH**: Bug fixes, security patches
 
-**Regla**: TODOS los Cargo.toml deben sincronizar versión. Si alguno diverge → CI falla.
+**Regla**: TODOS los Cargo.toml deben sincronizar versiÃ³n. Si alguno diverge â†’ CI falla.
 
 ### Regla 10.2: Release Branch Strategy
 ```
 main (stable)
-  ↑
-  ├─ release/v64.0.0 (release candidate)
-  │   ↑
-  │   └─ develop (integration branch)
-  │       ↑
-  │       └─ feature/*, fix/*, docs/* (developer branches)
+  â†‘
+  â”œâ”€ release/v90.0.0 (release candidate)
+  â”‚   â†‘
+  â”‚   â””â”€ develop (integration branch)
+  â”‚       â†‘
+  â”‚       â””â”€ feature/*, fix/*, docs/* (developer branches)
 ```
 
 - **main**: Solo tags y hotfixes, CI/CD corre completo
 - **develop**: Integration branch, CI/CD sin deploy
-- **feature/**: Del developer, merge → develop after review
+- **feature/**: Del developer, merge â†’ develop after review
 
 ### Regla 10.3: Release Checklist
 **Antes de crear tag `vX.Y.Z` en main:**
-- ✅ Versión actualizada en Cargo.toml (workspace + crates)
-- ✅ Versión actualizada en package.json
-- ✅ CHANGELOG.md tiene sección `## [X.Y.Z] - YYYY-MM-DD`
-- ✅ README.md menciona versión actual
-- ✅ ARCHITECTURE.md sincronizado con cambios
-- ✅ TODO CI/CD jobs verdes
-- ✅ Security scan: zero critical vulns
-- ✅ Code coverage >= 70%
-- ✅ ProVerif proofs passed
-- ✅ Release notes generadas
-- ✅ Binarios compilados y checksummed
-- ✅ Git tag creado: `git tag -s v64.0.0 -m "Release 64.0.0"`
-- ✅ Tag pusheado: `git push origin v64.0.0`
+- âœ… VersiÃ³n actualizada en Cargo.toml (workspace + crates)
+- âœ… VersiÃ³n actualizada en package.json
+- âœ… CHANGELOG.md tiene secciÃ³n `## [X.Y.Z] - YYYY-MM-DD`
+- âœ… README.md menciona versiÃ³n actual
+- âœ… ARCHITECTURE.md sincronizado con cambios
+- âœ… TODO CI/CD jobs verdes
+- âœ… Security scan: zero critical vulns
+- âœ… Code coverage >= 70%
+- âœ… ProVerif proofs passed
+- âœ… Release notes generadas
+- âœ… Binarios compilados y checksummed
+- âœ… Git tag creado: `git tag -s v90.0.0 -m "Release 90.0.0"`
+- âœ… Tag pusheado: `git push origin v90.0.0`
 
 ---
 
 ## **NIVEL 11: INCIDENT RESPONSE & ROLLBACK**
 
 ### Regla 11.1: Critical Bug Procedure
-**Si bug crítico en main:**
+**Si bug crÃ­tico en main:**
 1. Crear branch `hotfix/issue-name` desde main
-2. Hacer fix mínimal (NO refactors)
-3. Bump PATCH version (63.0.X → 63.0.X+1)
+2. Hacer fix mÃ­nimal (NO refactors)
+3. Bump PATCH version (63.0.X â†’ 63.0.X+1)
 4. Update CHANGELOG.md con entrada `Security` o `Hotfix`
 5. PR review por 2+ core maintainers
 6. Merge a main y develop
@@ -613,32 +613,32 @@ main (stable)
 ### Regla 11.2: Rollback Procedure
 **Si release X tiene problema:**
 1. Revert tag: `git push -d origin vX.Y.Z`
-2. Revert commits: `git revert -n HEAD~N..HEAD` (N = número de commits)
+2. Revert commits: `git revert -n HEAD~N..HEAD` (N = nÃºmero de commits)
 3. Crear release `X.Y.Z-rollback`
-4. CI/CD valida versión anterior
+4. CI/CD valida versiÃ³n anterior
 
 ### Regla 11.3: Security Incident
 **Si vulnerabilidad descubierta:**
-1. NO publicar detalles públicamente
+1. NO publicar detalles pÃºblicamente
 2. Crear private security advisory en GitHub
 3. Fix en rama privada `security/cve-XXXX`
 4. Audit por security expert
 5. Patch release (X.Y.Z+1)
-6. Publicar advisory con créditos
+6. Publicar advisory con crÃ©ditos
 
 ---
 
-## **RESUMIDO: PIPELINE AUTOMATIZADO (PSEUDOCÓDIGO)**
+## **RESUMIDO: PIPELINE AUTOMATIZADO (PSEUDOCÃ“DIGO)**
 
 ```
 ON COMMIT TO FEATURE BRANCH:
-  ✅ Pre-commit hooks:
+  âœ… Pre-commit hooks:
     - Validar estructura archivos
     - Validar path segregation
     - Ejecutar fmt + lint
     - Validar Markdown links
   
-  ✅ Push a remote:
+  âœ… Push a remote:
     - Trigger GitHub Actions
     - Run linting jobs (Rust + JS)
     - Run security audits
@@ -648,94 +648,94 @@ ON COMMIT TO FEATURE BRANCH:
     - Comment results en PR
 
 ON PULL REQUEST:
-  ✅ Require:
-    - ✅ All CI checks pass
-    - ✅ 2+ code reviews
-    - ✅ No merge conflicts
-    - ✅ Commit message format valid
-    - ✅ Coverage improved or maintained
+  âœ… Require:
+    - âœ… All CI checks pass
+    - âœ… 2+ code reviews
+    - âœ… No merge conflicts
+    - âœ… Commit message format valid
+    - âœ… Coverage improved or maintained
 
 ON MERGE TO DEVELOP:
-  ✅ Auto update CHANGELOG draft
-  ✅ Run full test suite (redundant pero safe)
+  âœ… Auto update CHANGELOG draft
+  âœ… Run full test suite (redundant pero safe)
 
 ON MERGE TO MAIN:
-  ✅ Trigger semantic-release
-  ✅ Auto bump version
-  ✅ Generate release notes
-  ✅ Create git tag
-  ✅ Build release artifacts
-  ✅ Upload to release-assets/
-  ✅ Generate SBOM
-  ✅ Scan with Trivy
-  ✅ Deploy to staging (if applicable)
-  ✅ Run smoke tests
-  ✅ Create GitHub Release
-  ✅ Post to changelog
+  âœ… Trigger semantic-release
+  âœ… Auto bump version
+  âœ… Generate release notes
+  âœ… Create git tag
+  âœ… Build release artifacts
+  âœ… Upload to release-assets/
+  âœ… Generate SBOM
+  âœ… Scan with Trivy
+  âœ… Deploy to staging (if applicable)
+  âœ… Run smoke tests
+  âœ… Create GitHub Release
+  âœ… Post to changelog
 
 ON RELEASE TAG:
-  ✅ Docker build & push
-  ✅ Update website/docs
-  ✅ Notify community
-  ✅ Archive old releases (keep 5 latest)
+  âœ… Docker build & push
+  âœ… Update website/docs
+  âœ… Notify community
+  âœ… Archive old releases (keep 5 latest)
 ```
 
 ---
 
-## **NIVEL 9: SOBERANÍA ABSOLUTA & CERO TELEMETRÍA PUBLICITARIA**
+## **NIVEL 9: SOBERANÃA ABSOLUTA & CERO TELEMETRÃA PUBLICITARIA**
 
-- ❌ **Prohibición de SDKs de Publicidad y Rastreo**: Ninguna versión contendrá Google AdMob, Firebase Analytics, trackers ni telemetría externa.
-- ❌ **Prohibición de IDs de Redes Publicitarias**: `AndroidManifest.xml` y `capacitor.config.ts` no contendrán metadatos ni IDs publicitarios.
-- ✅ **Monetización Soberana Exclusiva**: Financiación y canje mediante minería Proof-of-Relay y vales criptográficos $RED locales.
-
----
-
-## **NIVEL 10: SEGURIDAD ZERO-TRUST EN APIS & PROTECCIÓN DE BÓVEDAS**
-
-- ❌ **Cero Claves en Texto Claro**: Queda prohibido almacenar PIN maestro, de pánico o señuelo en `localStorage` o `sessionStorage`.
-- ❌ **Prohibición de Bypasses Inseguros**: Prohibido eludir autenticación local basándose en cabeceras manipulables (`X-Forwarded-For`).
-- ❌ **Prohibición de CORS Permisivo**: Servidores Axum locales deben restringir CORS a orígenes locales autorizados (`capacitor://localhost`, `127.0.0.1:7333`, etc.).
-- ✅ **Unificación de Cabeceras**: Cliente y servidores deben utilizar uniformemente `X-API-Key` validada en tiempo constante.
-- ❌ **Prohibición de Puertas Traseras**: Cero PINs hardcodeados en código fuente (`password === '9999'`).
+- âŒ **ProhibiciÃ³n de SDKs de Publicidad y Rastreo**: Ninguna versiÃ³n contendrÃ¡ Google AdMob, Firebase Analytics, trackers ni telemetrÃ­a externa.
+- âŒ **ProhibiciÃ³n de IDs de Redes Publicitarias**: `AndroidManifest.xml` y `capacitor.config.ts` no contendrÃ¡n metadatos ni IDs publicitarios.
+- âœ… **MonetizaciÃ³n Soberana Exclusiva**: FinanciaciÃ³n y canje mediante minerÃ­a Proof-of-Relay y vales criptogrÃ¡ficos $RED locales.
 
 ---
 
-## **NIVEL 11: INTEGRIDAD DE EMPAQUETADO & COMPILACIÓN ANDROID**
+## **NIVEL 10: SEGURIDAD ZERO-TRUST EN APIS & PROTECCIÃ“N DE BÃ“VEDAS**
 
-- ❌ **Prohibición de Firma Debug en Release**: Bloque `release` en Gradle no debe referenciar `signingConfigs.debug`.
-- ✅ **Protección JNI en R8**: Reglas ProGuard deben proteger explícitamente `-keep class f.red.app.** { *; }`.
-- ❌ **Prohibición de Cleartext Global**: `usesCleartextTraffic="true"` debe reemplazarse por permisos acotados en `network_security_config.xml`.
+- âŒ **Cero Claves en Texto Claro**: Queda prohibido almacenar PIN maestro, de pÃ¡nico o seÃ±uelo en `localStorage` o `sessionStorage`.
+- âŒ **ProhibiciÃ³n de Bypasses Inseguros**: Prohibido eludir autenticaciÃ³n local basÃ¡ndose en cabeceras manipulables (`X-Forwarded-For`).
+- âŒ **ProhibiciÃ³n de CORS Permisivo**: Servidores Axum locales deben restringir CORS a orÃ­genes locales autorizados (`capacitor://localhost`, `127.0.0.1:7333`, etc.).
+- âœ… **UnificaciÃ³n de Cabeceras**: Cliente y servidores deben utilizar uniformemente `X-API-Key` validada en tiempo constante.
+- âŒ **ProhibiciÃ³n de Puertas Traseras**: Cero PINs hardcodeados en cÃ³digo fuente (`password === '9999'`).
+
+---
+
+## **NIVEL 11: INTEGRIDAD DE EMPAQUETADO & COMPILACIÃ“N ANDROID**
+
+- âŒ **ProhibiciÃ³n de Firma Debug en Release**: Bloque `release` en Gradle no debe referenciar `signingConfigs.debug`.
+- âœ… **ProtecciÃ³n JNI en R8**: Reglas ProGuard deben proteger explÃ­citamente `-keep class f.red.app.** { *; }`.
+- âŒ **ProhibiciÃ³n de Cleartext Global**: `usesCleartextTraffic="true"` debe reemplazarse por permisos acotados en `network_security_config.xml`.
 
 ---
 
 ## **NIVEL 12: COMPATIBILIDAD MULTIPLATAFORMA DE RADIOS**
 
-- ✅ **BLE Dual Addressing**: Todo motor BLE debe procesar indistintamente direcciones MAC de Android y UUIDs CoreBluetooth de iOS.
+- âœ… **BLE Dual Addressing**: Todo motor BLE debe procesar indistintamente direcciones MAC de Android y UUIDs CoreBluetooth de iOS.
 
 ---
 
-## **NIVEL 13: VERIFICACIÓN EMPÍRICA DE PRUEBAS**
+## **NIVEL 13: VERIFICACIÃ“N EMPÃRICA DE PRUEBAS**
 
-- ❌ **Prohibición de Tests Cosméticos**: Suites de pruebas deben ejecutar código en runtime y no limitarse a `fs.readFileSync` de strings.
-
----
-
-## **VALIDACIÓN FINAL: CHECKLIST POR SPRINT**
-
-- ✅ Todas las branchs se deletean después de merge
-- ✅ No hay código muerto o comentarios TODOs sin issue
-- ✅ Versión sincronizada en TODOS los places
-- ✅ No hay `console.log` en producción
-- ✅ No hay `println!` en producción Rust
-- ✅ No hay secretos en .env (use GitHub Secrets)
-- ✅ Dependencies actualizadas (al menos review semanal)
-- ✅ Security advisories resueltas dentro de 48h (critical)
-- ✅ ProVerif proofs ejecutadas y passing
-- ✅ Documentación refleja código
-- ✅ Cero telemetría externa o AdMob en el binario
-- ✅ Cero PINs en texto claro en almacenamiento web
+- âŒ **ProhibiciÃ³n de Tests CosmÃ©ticos**: Suites de pruebas deben ejecutar cÃ³digo en runtime y no limitarse a `fs.readFileSync` de strings.
 
 ---
 
-**Implementación**: Este ruleset debe ejecutarse automáticamente por **Husky** (pre-commit hooks) + **GitHub Actions** (CI/CD). Cero manual intervention = **100% deterministic governance**.
+## **VALIDACIÃ“N FINAL: CHECKLIST POR SPRINT**
+
+- âœ… Todas las branchs se deletean despuÃ©s de merge
+- âœ… No hay cÃ³digo muerto o comentarios TODOs sin issue
+- âœ… VersiÃ³n sincronizada en TODOS los places
+- âœ… No hay `console.log` en producciÃ³n
+- âœ… No hay `println!` en producciÃ³n Rust
+- âœ… No hay secretos en .env (use GitHub Secrets)
+- âœ… Dependencies actualizadas (al menos review semanal)
+- âœ… Security advisories resueltas dentro de 48h (critical)
+- âœ… ProVerif proofs ejecutadas y passing
+- âœ… DocumentaciÃ³n refleja cÃ³digo
+- âœ… Cero telemetrÃ­a externa o AdMob en el binario
+- âœ… Cero PINs en texto claro en almacenamiento web
+
+---
+
+**ImplementaciÃ³n**: Este ruleset debe ejecutarse automÃ¡ticamente por **Husky** (pre-commit hooks) + **GitHub Actions** (CI/CD). Cero manual intervention = **100% deterministic governance**.
 
