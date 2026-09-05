@@ -4,7 +4,7 @@ import {
     IdentityResponse, StatusResponse, ConversationItem, ContactItem,
     GroupItem, MessageItem, DmsConfig, BlockItem, ValidatorItem, ConsensusStatus
 } from './types';
-import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, STORAGE_KEYS } from './core';
+import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, STORAGE_KEYS, getSessionToken, invalidateSessionTokenCache } from './core';
 import { PeerItem, RustLogEntry, SystemHealthResponse } from './types';
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher } from './economy';
 import { getRfMetrics, triggerChannelHop, setRfFecMode } from './sensors';
@@ -68,15 +68,31 @@ export class RedAPIClient {
 
     public async req<T>(path: string, options?: RequestInit): Promise<T> {
         const url = `${this.getURL()}${path}`;
+
+        // Zero-Trust: inject session token on every request to the local Axum node.
+        // Token is cached in memory after the first read from Capacitor Filesystem.
+        const sessionToken = await getSessionToken();
+        const authHeaders: Record<string, string> = sessionToken ? {
+            'X-Red-Session-Token': sessionToken,
+            'X-API-Key': sessionToken,
+            'Authorization': `Bearer ${sessionToken}`
+        } : {};
+
         const res = await fetch(url, {
             ...options,
             headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json',
+                ...authHeaders,
                 ...options?.headers
             }
         });
+
         if (!res.ok) {
+            // If server rejects the token (e.g. node restarted), bust the cache so next call re-reads from disk.
+            if (res.status === 401) {
+                invalidateSessionTokenCache();
+            }
             const body = await res.text().catch(() => '(sin cuerpo)');
             throw new Error(`[RED ${res.status}] ${path}: ${body}`);
         }

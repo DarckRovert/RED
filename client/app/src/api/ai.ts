@@ -111,21 +111,7 @@ export async function queryAICopilot(prompt: string, categoryContext?: string): 
         console.warn('[queryAICopilot] Native inference fallback to LocalAIEngine:', err);
     }
 
-    // 2. Si no hay modelo local descargado, consultar Endpoint Soberano externo (LM Studio / Ollama en PC remota)
-    const sovereign = ModelManager.getSovereignEndpoint();
-    if (sovereign && sovereign.url) {
-        const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
-        return {
-            answer: res.answer,
-            topic_category: res.topicCategory,
-            source: res.modelInfo,
-            execution_time_ms: res.executionTimeMs,
-            thoughtChain: res.thoughtChain,
-            thought_chain: res.thoughtChain,
-        };
-    }
-
-    // 2. Inferencia en WebAssembly / ONNX Runtime
+    // 3. Inferencia en WebAssembly / ONNX Runtime (con Sovereign Endpoint como Fase 1 interna)
     const res = await LocalAIEngine.generateCopilotResponse(prompt, categoryContext);
     return {
         answer: res.answer,

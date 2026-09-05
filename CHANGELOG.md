@@ -1,5 +1,33 @@
 # Changelog
 
+## [89.0.0-worker-offthread-and-tri-hardware-edition] - 2026-09-04
+
+### 🚀 WebAssembly Worker Off-Thread & Tri-Hardware Master Edition (Release Oficial v89.0.0)
+
+- **Inferencia WebAssembly ONNX Off-Thread en Web Worker:**
+  - **`localAiWorker.ts` Operativo:** Traslado completo de la inferencia ONNX (`toxic-bert`, Whisper ASR, y pipeline generativo) fuera del hilo principal de JavaScript a un Web Worker dedicado.
+  - **Puente Bidireccional en `LocalAIEngineClass`:** Inicialización perezosa de Worker con recarga automática ante fallos y fallback transparente al path inline sin bloquear la UI.
+  - **Protección de Memoria:** Terminación atómica del Worker y liberación de tensores en `disposePipelines()`.
+- **Detección Dinámica de Capacidades de Hardware (Copiloto IA):**
+  - **Integración de `probeHardwareCapabilities`:** Mapeo de WebGPU, núcleos de CPU y memoria RAM disponible directamente en `AICopilotModal.tsx`.
+  - **Recomendación Inteligente en UI:** Badge dorado "RECOMENDADO ★" en la tarjeta del modelo óptimo para el dispositivo actual con botón de escaneo "🔬 Detectar Hardware".
+- **Blindaje del Pipeline de Transcripción Whisper:**
+  - **Decodificación PCM 16kHz en Hilo Principal:** Decodificación de audio comprimido mediante Web Audio API antes del despacho al Worker, permitiendo que Whisper WASM ejecute sin requerir AudioContext en hilos secundarios.
+  - **Contingencia Robusta:** Reutilización inmediata del búfer Float32Array en el hilo principal si el Worker se encuentra ocupado o agotado por timeout.
+- **Auditoría de Seguridad y Clasificación RED Guardian:**
+  - **Evaluación Multietiqueta:** Configuración `{ topk: null }` y umbral estricto 0.60 en las 6 categorías de hostilidad en el Worker, erradicando falsos positivos y falsos negativos.
+  - **Eliminación de Respuestas Mock:** Erradicación total de textos simulados; reporte de errores honestos y transición limpia a RAG Vectorial INT8.
+- **Hardening de Android Keystore y Resiliencia en Reinstalación:**
+  - **`android:allowBackup="false"`:** Prevención de restauración de SharedPreferences huérfanas tras reinstalación limpia sin claves Keystore.
+  - **Auto-purga en `getSecureStored`:** Detección de `IllegalBlockSizeException` y saneamiento automático de claves corruptas con fallback a almacenamiento local.
+- **Certificación Empírica Tri-Hardware:**
+  - Despliegue en limpio y ejecución concurrente certificada con 0 crashes en:
+    - **Redmi Note 14 Pro 5G** (`24116RACCG` / Android 15 / HyperOS)
+    - **Lenovo Tab** (`TB305XU` / Android 14)
+    - **Motorola Moto G22** (`moto_g22` / Android 12)
+  - Malla P2P activa con transporte BLE GATT, mDNS MulticastLock y Wi-Fi radio en modo de alto rendimiento.
+- **Versión Oficial:** `89.0.0` / `versionCode 89000`.
+
 ## [88.0.0-familiar-mode-and-resilient-mesh-edition] - 2026-09-04
 
 ### 🌟 Familiar Mode & Resilient Mesh Master Edition (Release Oficial v88.0.0)

@@ -30,6 +30,8 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     const [manualInput, setManualInput] = useState("");
     const [manualAlias, setManualAlias] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    // Tracks which nearby peer is currently being added (hash | null)
+    const [addingPeerHash, setAddingPeerHash] = useState<string | null>(null);
 
     useEffect(() => {
         if (showMyQr && identity?.identity_hash) {
@@ -74,9 +76,28 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
     if (!isOpen) return null;
 
+    // Called when the user taps an already-saved contact from the list.
+    // No handshake needed — contact already exists.
     const handleSelectContact = (peerHash: string) => {
         onClose();
         navigate("chat", peerHash);
+    };
+
+    // Called when the user taps "Chatear" on a nearby discovered (not yet saved) peer.
+    // Executes the full P2P handshake: saves contact → emits contact_request over BLE + meshRouter broadcast.
+    const handleAddNearbyPeer = async (peerHash: string, peerName: string) => {
+        if (addingPeerHash) return; // prevent double-tap
+        setAddingPeerHash(peerHash);
+        try {
+            await addContact(peerHash, peerName);
+            toast.success(`📡 Solicitud enviada a ${peerName}`);
+            onClose();
+            navigate("chat", peerHash);
+        } catch (err: any) {
+            toast.error(`❌ Error al conectar: ${err?.message || err}`);
+        } finally {
+            setAddingPeerHash(null);
+        }
     };
 
     const handleManualSubmit = async () => {
@@ -340,11 +361,10 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                                 {nearbyPeers.map(p => (
                                     <div
                                         key={p.hash}
-                                        onClick={() => handleSelectContact(p.hash)}
                                         style={{
                                             display: "flex", alignItems: "center", justifyContent: "space-between",
                                             padding: "10px 14px", backgroundColor: "#202C33", borderRadius: "12px",
-                                            cursor: "pointer", border: "1px solid rgba(0, 168, 132, 0.25)"
+                                            border: "1px solid rgba(0, 168, 132, 0.25)"
                                         }}
                                     >
                                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -359,13 +379,19 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                                             </div>
                                         </div>
                                         <button
+                                            disabled={addingPeerHash === p.hash}
+                                            onClick={() => handleAddNearbyPeer(p.hash, p.name)}
                                             style={{
-                                                padding: "5px 12px", backgroundColor: "#00A884", border: "none",
+                                                padding: "5px 12px",
+                                                backgroundColor: addingPeerHash === p.hash ? "#005C4B" : "#00A884",
+                                                border: "none",
                                                 borderRadius: "14px", color: "#FFFFFF", fontSize: "0.74rem", fontWeight: 700,
-                                                cursor: "pointer"
+                                                cursor: addingPeerHash === p.hash ? "not-allowed" : "pointer",
+                                                opacity: addingPeerHash === p.hash ? 0.7 : 1,
+                                                transition: "background 0.2s, opacity 0.2s"
                                             }}
                                         >
-                                            Chatear
+                                            {addingPeerHash === p.hash ? "Conectando..." : "Chatear"}
                                         </button>
                                     </div>
                                 ))}

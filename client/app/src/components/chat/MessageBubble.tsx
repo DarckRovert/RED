@@ -8,7 +8,7 @@ import { toast } from "../Toast";
 import { VoiceMessage } from "./VoiceMessage";
 import { PollMessage } from "./PollMessage";
 import { ImageViewerModal } from "./ImageViewerModal";
-import { LocalAIEngine } from "../../lib/localAiEngine";
+
 import { translateTextAI } from "../../api/ai";
 import { useRedStore } from "../../store/useRedStore";
 import { useTranslation } from "../../lib/i18n/i18nEngine";

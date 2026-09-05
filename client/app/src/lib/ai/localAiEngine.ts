@@ -66,13 +66,76 @@ class LocalAIEngineClass {
     private asrPipeline: any = null;
     private transformersLib: any = null;
 
+    // ─── Off-Main-Thread Worker Bridge ──────────────────────────────────────────
+    private worker: Worker | null = null;
+    private pendingWorkerRequests = new Map<string, { resolve: (v: any) => void; reject: (e: any) => void }>();
+
+    /** Crea (una sola vez) el Web Worker que ejecuta inferencia ONNX fuera del hilo principal */
+    private getWorker(): Worker | null {
+        if (this.worker) return this.worker;
+        if (typeof window === 'undefined' || typeof Worker === 'undefined') return null;
+        try {
+            // Vite/webpack resuelven new URL(..., import.meta.url) en build time
+            this.worker = new Worker(
+                new URL('./localAiWorker.ts', import.meta.url),
+                { type: 'module' }
+            );
+            this.worker.onmessage = (e: MessageEvent) => {
+                const { id, ...rest } = e.data;
+                const pending = this.pendingWorkerRequests.get(id);
+                if (pending) {
+                    this.pendingWorkerRequests.delete(id);
+                    if (rest.success === false) {
+                        pending.reject(new Error(rest.error || 'Worker error'));
+                    } else {
+                        pending.resolve(rest);
+                    }
+                }
+            };
+            this.worker.onerror = (err) => {
+                console.warn('[LocalAIEngine] Worker error, falling back to main-thread:', err.message);
+                // Rechazar todas las pendientes y marcar el worker como caído
+                for (const [, p] of this.pendingWorkerRequests) p.reject(new Error('Worker crashed'));
+                this.pendingWorkerRequests.clear();
+                this.worker = null; // Se recreará en la próxima operación
+            };
+            console.log('[LocalAIEngine] 📦 Web Worker ONNX iniciado — inferencia pesada fuera del hilo principal');
+            return this.worker;
+        } catch (err) {
+            console.warn('[LocalAIEngine] Web Worker no disponible, usando hilo principal:', err);
+            return null;
+        }
+    }
+
+    /** Despacha una tarea al worker y retorna una Promise con el resultado.
+     *  Si el worker no está disponible, retorna null y el caller cae al path inline. */
+    private dispatchToWorker<T>(type: string, payload: any, resultType: string, timeoutMs = 20000): Promise<T | null> {
+        const w = this.getWorker();
+        if (!w) return Promise.resolve(null);
+        const id = `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        return new Promise<T | null>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pendingWorkerRequests.delete(id);
+                resolve(null); // timeout → fallback al path inline
+            }, timeoutMs);
+            this.pendingWorkerRequests.set(id, {
+                resolve: (v) => { clearTimeout(timer); resolve(v as T); },
+                reject:  (e) => { clearTimeout(timer); resolve(null); } // error → fallback inline
+            });
+            w.postMessage({ id, type, payload });
+        });
+    }
+
     /** Dynamic import & local model configuration */
     private async getTransformers() {
         if (typeof window === 'undefined') return null;
         if (!this.transformersLib) {
             const mod = await import('@xenova/transformers');
 
-            // Offline first: allow local or cached browser assets
+            // Offline-first: prioriza modelos en /models/ o caché del browser.
+            // allowRemoteModels=true permite la descarga única de HF si el modelo no está
+            // en caché local (ej. toxic-bert en instalación limpia). Tras la primera descarga
+            // el browser lo cachea y ya no se necesita internet.
             mod.env.allowLocalModels = true;
             mod.env.allowRemoteModels = true;
             mod.env.useBrowserCache = true;
@@ -110,10 +173,17 @@ class LocalAIEngineClass {
         this.classifierPipeline = null;
         this.embeddingPipeline = null;
         this.asrPipeline = null;
+        // Terminar el worker ONNX off-thread y limpiar requests pendientes
+        if (this.worker) {
+            for (const [, p] of this.pendingWorkerRequests) p.reject(new Error('disposePipelines called'));
+            this.pendingWorkerRequests.clear();
+            this.worker.terminate();
+            this.worker = null;
+        }
         if (typeof window !== 'undefined' && (window as any).gc) {
             try { (window as any).gc(); } catch {}
         }
-        console.log('[LocalAIEngine] 🧹 Pipelines de IA liberados de memoria.');
+        console.log('[LocalAIEngine] 🧹 Pipelines de IA y Worker ONNX liberados de memoria.');
     }
 
     /** Utility to bound any async AI operation with a strict timeout */
@@ -177,16 +247,20 @@ class LocalAIEngineClass {
             if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
                 cleanUrl = `http://${cleanUrl}`;
             }
-            const targetUrl = cleanUrl.includes('/v1') 
-                ? `${cleanUrl}/chat/completions` 
-                : (cleanUrl.includes('/api') ? `${cleanUrl}/chat` : `${cleanUrl}/api/chat`);
+            
+            const isV1 = cleanUrl.includes('/v1');
+            // Construir la URL del endpoint correctamente según el tipo de servidor:
+            //   - Ollama nativo (sin /v1):  POST /api/chat
+            //   - OpenAI-compat (/v1):      POST /v1/chat/completions
+            const targetUrl = isV1
+                ? `${cleanUrl}/chat/completions`
+                : `${cleanUrl}/api/chat`;
             
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
             if (sovereign.apiKey) {
                 headers['Authorization'] = `Bearer ${sovereign.apiKey}`;
             }
 
-            const isV1 = targetUrl.includes('/v1');
             const body = isV1 ? {
                 model: sovereign.modelName || 'default',
                 messages,
@@ -448,10 +522,27 @@ class LocalAIEngineClass {
             };
         }
 
-        // 2. Nivel 2: Inferencia Whisper local WASM si está disponible
+        // 2. Nivel 2: Decodificación de audio a PCM 16kHz Float32Array (hilo principal con Web Audio API)
         try {
             const pcmData = await this.decodeAudioTo16kHzPcm(audioData);
             if (pcmData && pcmData.length > 0) {
+                // 2a. Inferencia Whisper en Web Worker off-thread (no congela la interfaz gráfica)
+                try {
+                    const workerRes = await this.dispatchToWorker<any>(
+                        'TRANSCRIBE_AUDIO',
+                        { audio: pcmData },
+                        'TRANSCRIBE_AUDIO_RESULT',
+                        25000
+                    );
+                    if (workerRes?.data?.text && workerRes.data.text.trim().length > 0) {
+                        return {
+                            text: workerRes.data.text.trim(),
+                            executionTimeMs: Math.round(performance.now() - start)
+                        };
+                    }
+                } catch {/* Worker no disponible o timeout — cae al fallback inline */}
+
+                // 2b. Inferencia Whisper WASM inline (fallback de contingencia)
                 const asr = await this.getTranscriber();
                 if (asr) {
                     const out = await this.withTimeout(
@@ -495,6 +586,23 @@ class LocalAIEngineClass {
         if (!trimmed) {
             return { isToxic: false, category: 'general', confidence: 1.0, executionTimeMs: 0 };
         }
+
+        // ─ Nivel 0: Off-main-thread via Worker (no bloquea UI) ──────────────────────────────
+        try {
+            const workerRes = await this.dispatchToWorker<any>(
+                'CLASSIFY_SAFETY', { text: trimmed }, 'CLASSIFY_SAFETY_RESULT', 15000
+            );
+            if (workerRes?.data) {
+                const d = workerRes.data;
+                return {
+                    isToxic: d.isToxic ?? false,
+                    category: d.category ?? 'general',
+                    reason: d.reason,
+                    confidence: d.confidence ?? 0.95,
+                    executionTimeMs: workerRes.executionTimeMs ?? Math.round(performance.now() - start),
+                };
+            }
+        } catch {/* worker no disponible — cae al path ONNX inline */}
 
         try {
             const classifier = await this.getClassifier();

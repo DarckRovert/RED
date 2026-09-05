@@ -1170,11 +1170,13 @@ class ModelManagerClass {
             const raw = localStorage.getItem('red_sovereign_ai_endpoint');
             if (raw) {
                 const parsed = JSON.parse(raw);
-                // Purgar configuraciones obsoletas o loopback local erróneas
-                if (parsed.url && (parsed.url.includes(':7333') || parsed.url.includes('127.0.0.1') || parsed.url.includes('localhost'))) {
+                // Solo bloquear el puerto 7333 (nodo RED propio) para evitar bucles de inferencia.
+                // Ollama (:11434), LM Studio (:1234), Jan.ai (:1337), etc. en loopback son VÁLIDOS.
+                if (parsed.url && parsed.url.includes(':7333')) {
                     localStorage.removeItem('red_sovereign_ai_endpoint');
                     return null;
                 }
+                if (!parsed.url || typeof parsed.url !== 'string') return null;
                 return parsed;
             }
         } catch {}

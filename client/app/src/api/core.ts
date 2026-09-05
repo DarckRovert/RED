@@ -60,7 +60,12 @@ export async function getSecureStored<T>(key: string, defaultVal: T): Promise<T>
         const result = await SecureStoragePlugin.get({ key });
         return JSON.parse(result.value) as T;
     } catch {
-        // Fuera de Capacitor o clave no encontrada — usar localStorage como fallback
+        // En caso de fallo de Keystore tras reinstalación o corrupción, purgar clave huérfana
+        try {
+            const { SecureStoragePlugin } = await import('capacitor-secure-storage-plugin');
+            await SecureStoragePlugin.remove({ key });
+        } catch {}
+        // Usar localStorage como fallback confiable
         return getStored(key, defaultVal);
     }
 }
@@ -91,8 +96,9 @@ export function getNodeUrl(): string {
 let _sessionTokenCache: string | null = null;
 
 /** Lee el token de sesión del nodo desde el archivo session.token (Capacitor nativo).
- *  En contexto web/browser retorna null (el nodo acepta sin token por loopback en dev). */
-async function getSessionToken(): Promise<string | null> {
+ *  En contexto web/browser retorna null (el nodo acepta sin token por loopback en dev).
+ *  Exportada para uso en RedAPIClient.req() — path Zero-Trust autenticado. */
+export async function getSessionToken(): Promise<string | null> {
     if (_sessionTokenCache) return _sessionTokenCache;
     try {
         const { Filesystem, Directory } = await import('@capacitor/filesystem');

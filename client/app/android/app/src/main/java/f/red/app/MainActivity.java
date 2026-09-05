@@ -11,6 +11,7 @@ import android.app.AlarmManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import f.red.app.BuildConfig;
 
 public class MainActivity extends BridgeActivity {
     // One-shot flags — prevents showing the dialog on every resume
@@ -26,6 +27,10 @@ public class MainActivity extends BridgeActivity {
         // Critical: Force WebView to use proper device-width scaling for CSS media queries
         android.webkit.WebView webView = this.bridge.getWebView();
         if (webView != null) {
+            // Enable Chrome DevTools remote debugging on debug builds.
+            // Allows inspecting JS console, network calls and SSE from chrome://inspect.
+            android.webkit.WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+
             android.webkit.WebSettings settings = webView.getSettings();
             settings.setUseWideViewPort(true);
             settings.setLoadWithOverviewMode(true);

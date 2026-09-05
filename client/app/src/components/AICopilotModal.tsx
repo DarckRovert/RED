@@ -107,6 +107,10 @@ export const AICopilotModal: React.FC = () => {
     const [importProgress, setImportProgress] = useState<number>(0);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+    // Hardware Probe State
+    const [isProbing, setIsProbing] = useState(false);
+    const [hwProbe, setHwProbe] = useState<{ recommendedModelId: string; hasWebGpu: boolean; ramMb: number; cpuCores: number; reason: string } | null>(null);
+
     // Offline Translator & Emergency Glossary State
     const [targetLang, setTargetLang] = useState<GlossaryLanguage>("en");
     const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -169,6 +173,19 @@ export const AICopilotModal: React.FC = () => {
             clearInterval(interval);
         };
     }, [refreshModels]);
+
+    const handleProbeHardware = async () => {
+        setIsProbing(true);
+        try {
+            const result = await ModelManager.probeHardwareCapabilities();
+            setHwProbe(result);
+            toast.success(`🔬 Hardware detectado: ${result.recommendedModelId} recomendado`);
+        } catch (e: any) {
+            toast.error(e?.message || 'Error al detectar hardware');
+        } finally {
+            setIsProbing(false);
+        }
+    };
 
     const handleTestSovereign = async () => {
         if (!sovereignUrlInput.trim()) return;
@@ -1153,23 +1170,63 @@ export const AICopilotModal: React.FC = () => {
                             border: "1.5px solid rgba(0, 230, 118, 0.35)", borderRadius: "20px", padding: "18px",
                             display: "flex", flexDirection: "column", gap: "10px"
                         }}>
-                            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
-                                📊 PRESUPUESTO DE MEMORIA & HARDWARE LOCAL
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "#00E676" }}>
+                                    📊 PRESUPUESTO DE MEMORIA & HARDWARE LOCAL
+                                </div>
+                                <button
+                                    onClick={handleProbeHardware}
+                                    disabled={isProbing}
+                                    style={{
+                                        padding: "5px 12px", borderRadius: "8px", fontSize: "0.7rem", fontWeight: 900,
+                                        background: hwProbe ? "rgba(0, 230, 118, 0.15)" : "rgba(0, 229, 255, 0.12)",
+                                        border: hwProbe ? "1px solid rgba(0, 230, 118, 0.5)" : "1px solid rgba(0, 229, 255, 0.4)",
+                                        color: hwProbe ? "#00E676" : "var(--accent-cyan, #00E5FF)",
+                                        cursor: isProbing ? "wait" : "pointer", whiteSpace: "nowrap"
+                                    }}
+                                >
+                                    {isProbing ? "Analizando..." : hwProbe ? "✅ Detectado" : "🔬 Detectar Hardware"}
+                                </button>
                             </div>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
                                 <div style={{ textAlign: "center", padding: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "8px" }}>
                                     <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>RAM DISPOSITIVO</div>
-                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#FFFFFF" }}>{(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#FFFFFF" }}>{hwProbe ? `${(hwProbe.ramMb / 1024).toFixed(1)} GB` : `${(memoryBudget.totalDeviceRamMb / 1024).toFixed(1)} GB`}</div>
                                 </div>
                                 <div style={{ textAlign: "center", padding: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "8px" }}>
                                     <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>MAX MODELO</div>
                                     <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E676" }}>{(memoryBudget.recommendedMaxModelMb / 1024).toFixed(1)} GB</div>
                                 </div>
-                                <div style={{ textAlign: "center", padding: "8px", background: "rgba(0,0,0,0.4)", borderRadius: "8px" }}>
-                                    <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>NIVEL DISPOSITIVO</div>
-                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF" }}>{memoryBudget.performanceTier.toUpperCase()}</div>
+                                <div style={{ textAlign: "center", padding: "8px", background: hwProbe ? "rgba(0,229,255,0.1)" : "rgba(0,0,0,0.4)", borderRadius: "8px", border: hwProbe ? "1px solid rgba(0,229,255,0.3)" : "none" }}>
+                                    <div style={{ fontSize: "0.6rem", color: "var(--text-secondary)" }}>WebGPU</div>
+                                    <div style={{ fontSize: "0.9rem", fontWeight: 900, color: hwProbe ? (hwProbe.hasWebGpu ? "#00E676" : "#FF6B6B") : "rgba(255,255,255,0.3)" }}>{hwProbe ? (hwProbe.hasWebGpu ? "✅ ACTIVO" : "❌ NO") : "—"}</div>
                                 </div>
                             </div>
+                            {hwProbe && (
+                                <div style={{
+                                    padding: "8px 12px", borderRadius: "10px", marginTop: "2px",
+                                    background: "linear-gradient(135deg, rgba(0,229,255,0.08) 0%, rgba(0,230,118,0.08) 100%)",
+                                    border: "1px solid rgba(0,229,255,0.25)",
+                                    display: "flex", alignItems: "center", gap: "10px"
+                                }}>
+                                    <span style={{ fontSize: "1.3rem" }}>🤖</span>
+                                    <div>
+                                        <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>MODELO RECOMENDADO PARA ESTE DISPOSITIVO</div>
+                                        <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "var(--accent-cyan, #00E5FF)" }}>{hwProbe.recommendedModelId}</div>
+                                        <div style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.6)", marginTop: "2px" }}>{hwProbe.reason}</div>
+                                    </div>
+                                    <button
+                                        onClick={() => handleSelectModel(hwProbe.recommendedModelId)}
+                                        style={{
+                                            marginLeft: "auto", padding: "5px 10px", borderRadius: "8px", fontSize: "0.68rem",
+                                            fontWeight: 900, background: "rgba(0,229,255,0.2)", border: "1px solid var(--accent-cyan)",
+                                            color: "var(--accent-cyan)", cursor: "pointer", whiteSpace: "nowrap"
+                                        }}
+                                    >
+                                        Seleccionar
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Sovereign Endpoint Card */}
@@ -1413,6 +1470,7 @@ export const AICopilotModal: React.FC = () => {
                             {availableModels.map(m => {
                                 const isCurrent = Boolean(activeModel && activeModel.isDownloaded && activeModel.id === m.id);
                                 const isDownloading = downloadingId === m.id;
+                                const isRecommended = hwProbe?.recommendedModelId === m.id;
                                 const size = m.fileSizeMb || m.size_mb || 0;
 
                                 return (
@@ -1420,10 +1478,10 @@ export const AICopilotModal: React.FC = () => {
                                         key={m.id}
                                         style={{
                                             padding: "16px", borderRadius: "16px",
-                                            background: isCurrent ? "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(10, 25, 45, 0.8) 100%)" : "rgba(255, 255, 255, 0.03)",
-                                            border: isCurrent ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                                            background: isCurrent ? "linear-gradient(135deg, rgba(0, 229, 255, 0.15) 0%, rgba(10, 25, 45, 0.8) 100%)" : isRecommended ? "linear-gradient(135deg, rgba(255, 200, 0, 0.06) 0%, rgba(10, 25, 45, 0.8) 100%)" : "rgba(255, 255, 255, 0.03)",
+                                            border: isCurrent ? "1.5px solid #00E5FF" : isRecommended ? "1.5px solid rgba(255, 200, 0, 0.5)" : "1px solid rgba(255, 255, 255, 0.08)",
                                             display: "flex", flexDirection: "column", gap: "8px",
-                                            boxShadow: isCurrent ? "0 0 20px rgba(0, 229, 255, 0.2)" : "none"
+                                            boxShadow: isCurrent ? "0 0 20px rgba(0, 229, 255, 0.2)" : isRecommended ? "0 0 14px rgba(255, 200, 0, 0.12)" : "none"
                                         }}
                                     >
                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -1439,6 +1497,14 @@ export const AICopilotModal: React.FC = () => {
                                                     background: "rgba(0, 230, 118, 0.15)", color: "#00E676", border: "1px solid rgba(0, 230, 118, 0.4)"
                                                 }}>
                                                     ACTIVO
+                                                </span>
+                                            )}
+                                            {isRecommended && !isCurrent && (
+                                                <span style={{
+                                                    fontSize: "0.6rem", fontWeight: 900, padding: "2px 8px", borderRadius: "6px",
+                                                    background: "rgba(255, 200, 0, 0.15)", color: "#FFC800", border: "1px solid rgba(255, 200, 0, 0.4)"
+                                                }}>
+                                                    ★ RECOMENDADO
                                                 </span>
                                             )}
                                         </div>

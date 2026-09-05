@@ -24,6 +24,14 @@ async function getTransformers() {
             tfMod.env.allowLocalModels = true;
             tfMod.env.allowRemoteModels = true;
             tfMod.env.useBrowserCache = true;
+
+            const origin = typeof self !== 'undefined' && self.location ? self.location.origin : '';
+            let modelsUrl = `${origin}/models/`;
+            if (typeof self !== 'undefined' && self.location && self.location.pathname.startsWith('/RED/')) {
+                modelsUrl = `${origin}/RED/models/`;
+            }
+            if (!modelsUrl.endsWith('/')) modelsUrl += '/';
+            tfMod.env.localModelPath = modelsUrl;
         } catch {
             return null;
         }
@@ -107,57 +115,71 @@ if (typeof self !== 'undefined') {
                 return;
             }
 
-            try {
-                const classifier = await getClassifier();
-                if (classifier) {
-                    const output = await classifier(text);
-                    if (Array.isArray(output) && output.length > 0) {
-                        const top = output[0];
-                        const isToxic = top.label === 'toxic' || top.score > 0.7;
-                        self.postMessage({
-                            id, type: 'CLASSIFY_SAFETY_RESULT', success: true,
-                            data: {
-                                isToxic,
-                                category: isToxic ? 'threat' : 'general',
-                                reason: isToxic ? `⛔ BLOQUEO RED NEURONAL ONNX: Toxicidad = ${(top.score * 100).toFixed(1)}%` : undefined,
-                                confidence: parseFloat(top.score.toFixed(2))
-                            },
-                            executionTimeMs: Math.round(performance.now() - start)
-                        });
-                        return;
+            const classifier = await getClassifier();
+            if (!classifier) {
+                throw new Error('Clasificador ONNX toxic-bert no disponible en el Worker');
+            }
+
+            const output: Array<{ label: string; score: number }> = await classifier(text, { topk: null });
+            if (!Array.isArray(output) || output.length === 0) {
+                throw new Error('Respuesta no válida del clasificador ONNX');
+            }
+
+            const TOXIC_LABELS = new Set(['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']);
+            let maxScore = 0;
+            let topLabel: 'general' | 'threat' | 'spam' | 'pii' | 'nsfw' = 'general';
+            let isToxicFlag = false;
+
+            for (const item of output) {
+                if (TOXIC_LABELS.has(item.label.toLowerCase())) {
+                    if (item.score > maxScore) {
+                        maxScore = item.score;
+                        topLabel = 'threat';
+                    }
+                    if (item.score >= 0.60) {
+                        isToxicFlag = true;
                     }
                 }
-            } catch {}
+            }
 
             self.postMessage({
                 id, type: 'CLASSIFY_SAFETY_RESULT', success: true,
-                data: { isToxic: false, category: 'general', confidence: 0.99 },
+                data: {
+                    isToxic: isToxicFlag,
+                    category: topLabel,
+                    reason: isToxicFlag ? `⛔ BLOQUEO RED NEURONAL ONNX: Toxicidad = ${(maxScore * 100).toFixed(1)}%` : undefined,
+                    confidence: parseFloat(maxScore.toFixed(2))
+                },
                 executionTimeMs: Math.round(performance.now() - start)
             });
 
         } else if (type === 'GENERATE_COPILOT') {
             const prompt = String(payload?.prompt || '').trim();
             const requestedModel = payload?.modelId || payload?.modelName;
-            let answer = '';
-            let topicCategory = 'Inferencia Neuronal Compacta';
+            if (!prompt) {
+                throw new Error('Prompt vacío para generación de copiloto');
+            }
 
-            try {
-                const generator = await getGenerator(requestedModel);
-                if (generator) {
-                    const genOutput = await generator(prompt, { max_new_tokens: 120, temperature: 0.7 });
-                    if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
-                        answer = `🤖 COPILOTO IA NEURONAL REAL (${currentGeneratorModel || 'ONNX WASM'})\n\n${genOutput[0].generated_text}`;
-                    }
-                }
-            } catch {}
+            const generator = await getGenerator(requestedModel);
+            if (!generator) {
+                throw new Error('Generador ONNX no disponible en el Worker');
+            }
+
+            const genOutput = await generator(prompt, { max_new_tokens: 180, temperature: 0.7, top_p: 0.9, do_sample: true });
+            let answer = '';
+            if (Array.isArray(genOutput) && genOutput[0]?.generated_text) {
+                answer = genOutput[0].generated_text;
+            } else if (genOutput && typeof genOutput === 'object' && (genOutput as any).generated_text) {
+                answer = (genOutput as any).generated_text;
+            }
 
             if (!answer) {
-                answer = `🤖 COPILOTO IA NEURONAL REAL (ONNX WASM Engine)\n\nConsulta procesada: "${prompt}"\n• Ejecución local en WebAssembly sin servidores externos.`;
+                throw new Error('Inferencia generativa no produjo respuesta');
             }
 
             self.postMessage({
                 id, type: 'GENERATE_COPILOT_RESULT', success: true,
-                data: { answer, topicCategory, confidence: 0.98, modelInfo: currentGeneratorModel || 'ONNX WASM Local' },
+                data: { answer, topicCategory: 'Inferencia Neuronal', confidence: 0.98, modelInfo: currentGeneratorModel || 'ONNX WASM Local' },
                 executionTimeMs: Math.round(performance.now() - start)
             });
 
@@ -204,19 +226,30 @@ if (typeof self !== 'undefined') {
             });
         } else if (type === 'TRANSCRIBE_AUDIO') {
             const audioData = payload?.audio;
-            let transcribedText = '';
-            try {
-                const asr = await getTranscriber();
-                if (asr && audioData) {
-                    const out = await asr(audioData, { language: 'spanish', task: 'transcribe' });
-                    transcribedText = typeof out === 'object' && out.text ? out.text.trim() : (Array.isArray(out) ? out[0]?.text : '');
-                }
-            } catch (asrErr: any) {
-                console.warn('[Worker] ASR error:', asrErr);
+            if (!audioData) {
+                throw new Error('No se recibieron datos de audio para transcripción');
             }
+            const asr = await getTranscriber();
+            if (!asr) {
+                throw new Error('Pipeline Whisper ASR no disponible en el Worker');
+            }
+            const out = await asr(audioData, {
+                chunk_length_s: 30,
+                stride_length_s: 5,
+                language: 'spanish',
+                task: 'transcribe'
+            });
+            const transcribedText = typeof out === 'object' && out && (out as any).text
+                ? (out as any).text.trim()
+                : (Array.isArray(out) ? (out as any)[0]?.text?.trim() : '');
+
+            if (!transcribedText) {
+                throw new Error('Whisper ASR no generó texto');
+            }
+
             self.postMessage({
                 id, type: 'TRANSCRIBE_AUDIO_RESULT', success: true,
-                data: { text: transcribedText || 'Transcripción de voz procesada.' },
+                data: { text: transcribedText },
                 executionTimeMs: Math.round(performance.now() - start)
             });
         }
