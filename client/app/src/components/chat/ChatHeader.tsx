@@ -29,6 +29,11 @@ interface ChatHeaderProps {
     avStyle: (hash: string) => any;
     isGroupChat?: boolean;
     onStartGroupCall?: (type: 'audio' | 'video') => void;
+    onOpenMediaGallery?: () => void;
+    onOpenStarredModal?: () => void;
+    onOpenWallpaperModal?: () => void;
+    onClearChat?: () => void;
+    onExportChat?: () => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -57,6 +62,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
     avStyle,
     isGroupChat,
     onStartGroupCall,
+    onOpenMediaGallery,
+    onOpenStarredModal,
+    onOpenWallpaperModal,
+    onClearChat,
+    onExportChat,
 }) => {
     const { navigate, preferences } = useRedStore();
     const { t } = useTranslation();
@@ -396,6 +406,57 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                     <button
                                         onClick={() => {
                                             setIsSecurityMenuOpen(false);
+                                            if (onOpenMediaGallery) onOpenMediaGallery();
+                                            else setIsContactProfileOpen(true);
+                                        }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "10px",
+                                            padding: "9px 12px", borderRadius: "8px", background: "transparent",
+                                            border: "none", color: "#FFFFFF", fontSize: "0.85rem", fontWeight: 500,
+                                            cursor: "pointer", textAlign: "left"
+                                        }}
+                                    >
+                                        <span>🖼️</span>
+                                        <span>Archivos, enlaces y docs</span>
+                                    </button>
+
+                                    {onOpenStarredModal && (
+                                        <button
+                                            onClick={() => {
+                                                setIsSecurityMenuOpen(false);
+                                                onOpenStarredModal();
+                                            }}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "10px",
+                                                padding: "9px 12px", borderRadius: "8px", background: "transparent",
+                                                border: "none", color: "#FFFFFF", fontSize: "0.85rem", fontWeight: 500,
+                                                cursor: "pointer", textAlign: "left"
+                                            }}
+                                        >
+                                            <span>⭐</span>
+                                            <span>Mensajes destacados</span>
+                                        </button>
+                                    )}
+
+                                    <button
+                                        onClick={() => {
+                                            setIsSecurityMenuOpen(false);
+                                            setSearchOpen(true);
+                                        }}
+                                        style={{
+                                            display: "flex", alignItems: "center", gap: "10px",
+                                            padding: "9px 12px", borderRadius: "8px", background: "transparent",
+                                            border: "none", color: "#FFFFFF", fontSize: "0.85rem", fontWeight: 500,
+                                            cursor: "pointer", textAlign: "left"
+                                        }}
+                                    >
+                                        <span>🔍</span>
+                                        <span>Buscar en el chat</span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => {
+                                            setIsSecurityMenuOpen(false);
                                             setBurnMenuOpen(true);
                                         }}
                                         style={{
@@ -408,6 +469,62 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                                         <span>⏱️</span>
                                         <span>Mensajes temporales {burnTimer ? `(${burnTimer}s)` : ""}</span>
                                     </button>
+
+                                    {onOpenWallpaperModal && (
+                                        <button
+                                            onClick={() => {
+                                                setIsSecurityMenuOpen(false);
+                                                onOpenWallpaperModal();
+                                            }}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "10px",
+                                                padding: "9px 12px", borderRadius: "8px", background: "transparent",
+                                                border: "none", color: "#FFFFFF", fontSize: "0.85rem", fontWeight: 500,
+                                                cursor: "pointer", textAlign: "left"
+                                            }}
+                                        >
+                                            <span>🎨</span>
+                                            <span>Fondo de pantalla</span>
+                                        </button>
+                                    )}
+
+                                    {onExportChat && (
+                                        <button
+                                            onClick={() => {
+                                                setIsSecurityMenuOpen(false);
+                                                onExportChat();
+                                            }}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "10px",
+                                                padding: "9px 12px", borderRadius: "8px", background: "transparent",
+                                                border: "none", color: "#FFFFFF", fontSize: "0.85rem", fontWeight: 500,
+                                                cursor: "pointer", textAlign: "left"
+                                            }}
+                                        >
+                                            <span>📄</span>
+                                            <span>Exportar chat</span>
+                                        </button>
+                                    )}
+
+                                    {onClearChat && (
+                                        <button
+                                            onClick={() => {
+                                                setIsSecurityMenuOpen(false);
+                                                onClearChat();
+                                            }}
+                                            style={{
+                                                display: "flex", alignItems: "center", gap: "10px",
+                                                padding: "9px 12px", borderRadius: "8px", background: "transparent",
+                                                border: "none", color: "#FF9800", fontSize: "0.85rem", fontWeight: 500,
+                                                cursor: "pointer", textAlign: "left"
+                                            }}
+                                        >
+                                            <span>🧹</span>
+                                            <span>Vaciar chat</span>
+                                        </button>
+                                    )}
+
+                                    <div style={{ height: "1px", background: "rgba(255,255,255,0.08)", margin: "4px 0" }} />
 
                                     <button
                                         onClick={() => {

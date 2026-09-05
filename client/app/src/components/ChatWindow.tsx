@@ -12,6 +12,9 @@ import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
 import { MessageForwardModal } from "./chat/MessageForwardModal";
 import { SafetyNumberModal } from "./chat/SafetyNumberModal";
 import { PollCreationModal } from "./chat/PollCreationModal";
+import { ContactShareModal } from "./chat/ContactShareModal";
+import { StarredMessagesModal } from "./chat/StarredMessagesModal";
+import { ChatWallpaperModal } from "./chat/ChatWallpaperModal";
 import { ContactProfileModal } from "./ContactProfileModal";
 import { GroupAdminModal } from "./GroupAdminModal";
 import { toast } from "./Toast";
@@ -128,6 +131,20 @@ export default function ChatWindow() {
     const [selectedMsgIds, setSelectedMsgIds] = useState<Set<string>>(new Set());
     const [showPollModal, setShowPollModal] = useState(false);
     const [viewportHeight, setViewportHeight] = useState<string | number>("100%");
+    const [isContactShareModalOpen, setIsContactShareModalOpen] = useState(false);
+    const [isStarredModalOpen, setIsStarredModalOpen] = useState(false);
+    const [isWallpaperModalOpen, setIsWallpaperModalOpen] = useState(false);
+    const [isClearChatConfirmOpen, setIsClearChatConfirmOpen] = useState(false);
+    const [activeWallpaper, setActiveWallpaper] = useState<string>("doodle_green");
+    const audioInputRef = useRef<HTMLInputElement | null>(null);
+    const isNativeRecorderRef = useRef(false);
+
+    useEffect(() => {
+        const saved = (peerHash ? localStorage.getItem(`red_wallpaper_${peerHash}`) : null) 
+            || localStorage.getItem("red_wallpaper_global") 
+            || (preferences?.chatWallpaper ?? "doodle_green");
+        setActiveWallpaper(saved);
+    }, [peerHash, preferences?.chatWallpaper, isWallpaperModalOpen]);
 
     useEffect(() => {
         if (typeof window === "undefined" || !window.visualViewport) return;
@@ -177,6 +194,22 @@ export default function ChatWindow() {
         if (first) setForwardingMsg(first);
         exitSelectionMode();
     }, [selectedMsgIds, exitSelectionMode]);
+
+    const copySelected = useCallback(() => {
+        const selected = convMessagesRef.current.filter(m => selectedMsgIds.has(m.id));
+        const text = selected.map(m => m.content).filter(Boolean).join("\n");
+        if (text && typeof navigator !== "undefined" && navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            toast.success(`${selected.length} mensaje(s) copiado(s)`);
+        }
+        exitSelectionMode();
+    }, [selectedMsgIds, exitSelectionMode]);
+
+    const starSelected = useCallback(() => {
+        selectedMsgIds.forEach(id => starMessage(id));
+        toast.success(`${selectedMsgIds.size} mensaje(s) destacado(s)`);
+        exitSelectionMode();
+    }, [selectedMsgIds, starMessage, exitSelectionMode]);
 
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const mediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -606,7 +639,38 @@ export default function ChatWindow() {
 
     const startRecording = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            let stream: MediaStream | null = null;
+            try {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                }
+            } catch (mediaErr) {
+                console.log("[ChatWindow] getUserMedia error, checking native fallback:", mediaErr);
+            }
+
+            if (!stream) {
+                const { Capacitor } = await import("@capacitor/core");
+                if (Capacitor.isNativePlatform()) {
+                    const { VoiceRecorder } = await import("capacitor-voice-recorder");
+                    const perm = await VoiceRecorder.requestAudioRecordingPermission();
+                    if (perm.value) {
+                        const res = await VoiceRecorder.startRecording();
+                        if (res.value) {
+                            isNativeRecorderRef.current = true;
+                            recordStartTimeRef.current = Date.now();
+                            setIsRecording(true);
+                            setRecordSec(0);
+                            recordTimerRef.current = setInterval(() => {
+                                setRecordSec(s => s + 1);
+                            }, 1000);
+                            return;
+                        }
+                    }
+                }
+                throw new Error("Permiso de micrófono denegado o no disponible");
+            }
+
+            isNativeRecorderRef.current = false;
             audioChunksRef.current = [];
             recordStartTimeRef.current = Date.now();
 
@@ -657,6 +721,32 @@ export default function ChatWindow() {
             clearInterval(recordTimerRef.current);
             recordTimerRef.current = null;
         }
+
+        if (isNativeRecorderRef.current) {
+            isNativeRecorderRef.current = false;
+            try {
+                const { VoiceRecorder } = await import("capacitor-voice-recorder");
+                const res = await VoiceRecorder.stopRecording();
+                if (res.value && res.value.recordDataBase64) {
+                    const rawB64 = res.value.recordDataBase64;
+                    const mimeType = res.value.mimeType || "audio/aac";
+                    const dataUrl = rawB64.startsWith("data:") ? rawB64 : `data:${mimeType};base64,${rawB64}`;
+                    const durMs = res.value.msDuration || Math.max(500, Date.now() - recordStartTimeRef.current);
+                    await sendMessage(dataUrl, {
+                        msg_type: "voice",
+                        mime_type: mimeType,
+                        duration_ms: durMs,
+                    });
+                    TacticalAudioEngine.playMessageSent();
+                    toast.success("Nota de voz enviada");
+                }
+            } catch (err) {
+                console.error("[ChatWindow] Error in native VoiceRecorder stop:", err);
+                toast.error("Error al guardar nota de voz");
+            }
+            return;
+        }
+
         const mr = mediaRecorderRef.current;
         if (mr && mr.state !== "inactive") {
             await new Promise<void>((resolve) => {
@@ -854,11 +944,20 @@ export default function ChatWindow() {
             if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
                 const lat = loc.lat!.toFixed(6);
                 const lon = loc.lon!.toFixed(6);
-                const altText = loc.alt !== undefined ? ` | Alt: ${loc.alt}m` : "";
-                const estText = loc.isEstimated ? " ⏳ (Última Posición Registrada)" : "";
-                const locText = `📍 Ubicación Táctica: ${lat}, ${lon}${altText}${estText}\ngeo:${lat},${lon}\nhttps://maps.google.com/?q=${lat},${lon}`;
-                await sendMessage(locText, { msg_type: "text" });
-                toast.success("Ubicación táctica enviada");
+                const geoUri = `geo:${lat},${lon}`;
+                const payload = {
+                    lat: Number(lat),
+                    lon: Number(lon),
+                    alt: loc.alt ? Math.round(loc.alt) : undefined,
+                    accuracy: loc.accuracy ? Math.round(loc.accuracy) : undefined,
+                    is_estimated: loc.isEstimated,
+                    label: loc.isEstimated ? "Posición Estimada (Último fix)" : "Posición Táctica en Tiempo Real",
+                    geo_uri: geoUri,
+                    timestamp: Date.now()
+                };
+                await sendMessage(JSON.stringify(payload), { msg_type: "location" });
+                TacticalAudioEngine.playMessageSent();
+                toast.success("Ubicación táctica compartida");
             } else {
                 toast.error("Sin señal satelital GNSS ni posición en memoria");
             }
@@ -866,6 +965,119 @@ export default function ChatWindow() {
             toast.error("Error al obtener ubicación");
         }
     };
+
+    const handleShareContact = async (contactData: { identity_hash: string; display_name: string; public_key?: string | null; avatar_url?: string | null }) => {
+        if (!peerHash) return;
+        try {
+            const payload = {
+                identity_hash: contactData.identity_hash,
+                display_name: contactData.display_name || "Contacto RED",
+                public_key: contactData.public_key || "",
+                avatar_url: contactData.avatar_url || ""
+            };
+            await sendMessage(JSON.stringify(payload), {
+                msg_type: "contact"
+            });
+            TacticalAudioEngine.playMessageSent();
+            toast.success(`Contacto "${contactData.display_name}" compartido`);
+            setIsContactShareModalOpen(false);
+        } catch {
+            toast.error("Error al compartir contacto");
+        }
+    };
+
+    const handleAudioFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !peerHash) return;
+        e.target.value = "";
+        if (file.size > 25 * 1024 * 1024) {
+            toast.error("El archivo de audio supera el límite de 25 MB");
+            return;
+        }
+        try {
+            let durationMs: number | undefined = undefined;
+            let waveform: number[] | undefined = undefined;
+            try {
+                const analysis = await TacticalVoiceAnalyzer.analyzeAudioBlob(file, 0, 28);
+                if (analysis && analysis.durationMs > 0) {
+                    durationMs = analysis.durationMs;
+                    waveform = analysis.waveform;
+                }
+            } catch {}
+
+            const reader = new FileReader();
+            reader.onload = async (ev) => {
+                if (ev.target?.result) {
+                    try {
+                        await sendMessage(ev.target.result as string, {
+                            msg_type: "audio",
+                            file_name: file.name,
+                            file_size: file.size,
+                            mime_type: file.type || "audio/mpeg",
+                            duration_ms: durationMs,
+                            waveform: waveform
+                        });
+                        TacticalAudioEngine.playMessageSent();
+                        toast.success(`Audio "${file.name}" enviado`);
+                    } catch {
+                        toast.error("Error al enviar archivo de audio");
+                    }
+                }
+            };
+            reader.readAsDataURL(file);
+        } catch {
+            toast.error("Error al procesar audio");
+        }
+    };
+
+    const handleExportChat = useCallback(() => {
+        if (convMessages.length === 0) {
+            toast.info("No hay mensajes para exportar");
+            return;
+        }
+        const lines = convMessages.map(m => {
+            const date = new Date((m.timestamp || m.created_at || Date.now()));
+            const dateStr = date.toLocaleDateString() + ", " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            const senderName = (m.is_mine || m.sender === "me") ? "Tú" : peerName;
+            let content = m.content || "";
+            if (m.msg_type === "image") content = "<Imagen adjunta>";
+            else if (m.msg_type === "video") content = "<Video adjunto>";
+            else if (m.msg_type === "voice" || m.msg_type === "audio") content = "<Nota de audio adjunta>";
+            else if (m.msg_type === "document") content = `<Documento: ${m.file_name || "adjunto"}>`;
+            else if (m.msg_type === "contact") content = `<Contacto compartido: ${m.content}>`;
+            else if (m.msg_type === "location") content = `<Ubicación compartida>`;
+            return `[${dateStr}] ${senderName}: ${content}`;
+        }).join("\n");
+
+        const fileName = `Chat_RED_${peerName.replace(/[^a-zA-Z0-9_-]/g, "_")}_${new Date().toISOString().slice(0, 10)}.txt`;
+        const blob = new Blob([lines], { type: "text/plain;charset=utf-8" });
+
+        if (typeof navigator !== "undefined" && navigator.share && navigator.canShare) {
+            const file = new File([blob], fileName, { type: "text/plain" });
+            if (navigator.canShare({ files: [file] })) {
+                navigator.share({
+                    files: [file],
+                    title: `Exportación de chat con ${peerName}`
+                }).catch(() => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = fileName;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                });
+                toast.success("Chat exportado correctamente");
+                return;
+            }
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success("Chat exportado correctamente");
+    }, [convMessages, peerName]);
 
     const handleReaction = async (msgId: string, emoji: string) => {
         if (!peerHash) return;
@@ -973,6 +1185,18 @@ export default function ChatWindow() {
                         });
                     }
                 }}
+                onOpenMediaGallery={() => {
+                    const lastMedia = [...convMessages].reverse().find(m => m.msg_type === "image" || m.msg_type === "video");
+                    if (lastMedia) {
+                        setSelectedViewerMedia(lastMedia);
+                    } else {
+                        toast.info("No hay fotos o videos compartidos en este chat");
+                    }
+                }}
+                onOpenStarredModal={() => setIsStarredModalOpen(true)}
+                onOpenWallpaperModal={() => setIsWallpaperModalOpen(true)}
+                onClearChat={() => setIsClearChatConfirmOpen(true)}
+                onExportChat={handleExportChat}
             />
 
             {/* Floating In-Chat Search HUD */}
@@ -1312,11 +1536,20 @@ export default function ChatWindow() {
             )}
 
             {/* Lista de Mensajes con Wallpaper Fijo */}
-            <div style={{ position: "relative", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: isFamiliar ? "#0B141A" : "transparent" }}>
-                {isFamiliar && preferences.chatWallpaper !== 'void_black' && (
+            <div style={{ 
+                position: "relative", 
+                flex: 1, 
+                display: "flex", 
+                flexDirection: "column", 
+                overflow: "hidden", 
+                background: isFamiliar 
+                    ? (activeWallpaper === "void_black" ? "#000000" : activeWallpaper === "emerald" ? "#061a14" : activeWallpaper === "slate" ? "#101a20" : "#0B141A")
+                    : "transparent" 
+            }}>
+                {isFamiliar && (activeWallpaper === "doodle_green" || activeWallpaper === "doodle_dark" || !activeWallpaper) && (
                     <WhatsAppDoodleBackground
                         opacity={0.06}
-                        variant={preferences.chatWallpaper === 'doodle_green' ? 'green' : 'dark'}
+                        variant={activeWallpaper === 'doodle_green' || !activeWallpaper ? 'green' : 'dark'}
                     />
                 )}
 
@@ -1511,6 +1744,7 @@ export default function ChatWindow() {
                                 showDate={index === 0 || !prevMsg || (() => { const a = msg.timestamp > 1e11 ? msg.timestamp / 1000 : msg.timestamp; const b = prevMsg.timestamp > 1e11 ? prevMsg.timestamp / 1000 : prevMsg.timestamp; const sameDay = new Date(a*1000).toDateString() === new Date(b*1000).toDateString(); return !sameDay; })()}
                                 peerName={peerName}
                                 starredMessages={starredMessages || []}
+                                onStar={(msgId) => starMessage(msgId)}
                                 searchQuery={searchQuery}
                                 isSearchHighlight={Boolean(searchQuery && msg.content?.toLowerCase().includes(searchQuery.toLowerCase()))}
                                 isSwiping={false}
@@ -1542,27 +1776,63 @@ export default function ChatWindow() {
                         position: "sticky", bottom: 0,
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         padding: "10px 16px",
-                        background: "rgba(14,16,30,0.98)", backdropFilter: "blur(16px)",
-                        borderTop: "1px solid rgba(0,229,255,0.2)",
-                        gap: "10px", zIndex: 50
+                        background: isFamiliar ? "#202C33" : "rgba(14,16,30,0.98)",
+                        backdropFilter: "blur(16px)",
+                        borderTop: isFamiliar ? "1px solid rgba(255,255,255,0.08)" : "1px solid rgba(0,229,255,0.2)",
+                        gap: "10px", zIndex: 50,
+                        boxShadow: "0 -4px 16px rgba(0,0,0,0.4)"
                     }}>
-                        <button
-                            onClick={exitSelectionMode}
-                            style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: "0.82rem", cursor: "pointer", padding: "6px 10px" }}
-                        >
-                            ✕ Cancelar
-                        </button>
-                        <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#fff" }}>
-                            {selectedMsgIds.size} seleccionado{selectedMsgIds.size !== 1 ? "s" : ""}
-                        </span>
-                        <div style={{ display: "flex", gap: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <button
+                                onClick={exitSelectionMode}
+                                style={{ background: "transparent", border: "none", color: isFamiliar ? "#8696A0" : "var(--text-muted)", fontSize: "0.85rem", cursor: "pointer", padding: "6px 8px" }}
+                            >
+                                ✕
+                            </button>
+                            <span style={{ fontSize: "0.9rem", fontWeight: 700, color: "#fff" }}>
+                                {selectedMsgIds.size}
+                            </span>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <button
+                                onClick={copySelected}
+                                disabled={selectedMsgIds.size === 0}
+                                style={{
+                                    padding: "6px 12px", borderRadius: "16px",
+                                    background: isFamiliar ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.06)",
+                                    border: isFamiliar ? "1px solid rgba(255,255,255,0.12)" : "1px solid var(--glass-border)",
+                                    color: "#E9EDEF", fontSize: "0.78rem", fontWeight: 600,
+                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer",
+                                    display: "flex", alignItems: "center", gap: "4px"
+                                }}
+                                title="Copiar texto"
+                            >
+                                📋 Copiar
+                            </button>
+                            <button
+                                onClick={starSelected}
+                                disabled={selectedMsgIds.size === 0}
+                                style={{
+                                    padding: "6px 12px", borderRadius: "16px",
+                                    background: isFamiliar ? "rgba(255, 186, 0, 0.15)" : "rgba(255, 186, 0, 0.12)",
+                                    border: "1px solid rgba(255, 186, 0, 0.3)",
+                                    color: "#FFBA00", fontSize: "0.78rem", fontWeight: 600,
+                                    cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer",
+                                    display: "flex", alignItems: "center", gap: "4px"
+                                }}
+                                title="Destacar mensajes"
+                            >
+                                ⭐ Destacar
+                            </button>
                             <button
                                 onClick={forwardSelected}
                                 disabled={selectedMsgIds.size === 0}
                                 style={{
-                                    padding: "7px 14px", borderRadius: "20px",
-                                    background: "rgba(0,229,255,0.12)", border: "1px solid rgba(0,229,255,0.3)",
-                                    color: "var(--accent-cyan, #00E5FF)", fontSize: "0.8rem", fontWeight: 700,
+                                    padding: "6px 12px", borderRadius: "16px",
+                                    background: isFamiliar ? "rgba(0,168,132,0.16)" : "rgba(0,229,255,0.12)",
+                                    border: isFamiliar ? "1px solid rgba(0,168,132,0.35)" : "1px solid rgba(0,229,255,0.3)",
+                                    color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)",
+                                    fontSize: "0.78rem", fontWeight: 600,
                                     cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer"
                                 }}
                             >
@@ -1572,9 +1842,9 @@ export default function ChatWindow() {
                                 onClick={deleteSelected}
                                 disabled={selectedMsgIds.size === 0}
                                 style={{
-                                    padding: "7px 14px", borderRadius: "20px",
+                                    padding: "6px 12px", borderRadius: "16px",
                                     background: "rgba(232,33,58,0.14)", border: "1px solid rgba(232,33,58,0.4)",
-                                    color: "#FF4B6B", fontSize: "0.8rem", fontWeight: 700,
+                                    color: "#FF4B6B", fontSize: "0.78rem", fontWeight: 600,
                                     cursor: selectedMsgIds.size === 0 ? "not-allowed" : "pointer"
                                 }}
                             >
@@ -1668,6 +1938,15 @@ export default function ChatWindow() {
                 onChange={handleDocumentSelected}
             />
 
+            {/* Hidden Audio Picker */}
+            <input
+                type="file"
+                ref={audioInputRef}
+                accept="audio/*"
+                style={{ display: "none" }}
+                onChange={handleAudioFileSelected}
+            />
+
             {/* Input Bar Táctica / Familiar */}
             <div style={{
                 position: "relative",
@@ -1685,8 +1964,10 @@ export default function ChatWindow() {
                     setEditingMsg={setEditingMsg}
                     handleCamera={handleCamera}
                     handleGallery={handleGallery}
+                    handleAudio={() => audioInputRef.current?.click()}
                     handleDocument={() => docInputRef.current?.click()}
                     handleLocation={handleLocation}
+                    handleShareContact={() => setIsContactShareModalOpen(true)}
                     handlePay={() => setIsPayModalOpen(true)}
                     setShowPollModal={setShowPollModal}
                     peerHash={peerHash}
@@ -1699,7 +1980,12 @@ export default function ChatWindow() {
                     cancelRecording={() => {
                         setIsRecording(false);
                         if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-                        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+                        if (isNativeRecorderRef.current) {
+                            isNativeRecorderRef.current = false;
+                            import("capacitor-voice-recorder").then(({ VoiceRecorder }) => {
+                                VoiceRecorder.stopRecording().catch(() => {});
+                            }).catch(() => {});
+                        } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
                             mediaRecorderRef.current.stop();
                             mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
                         }
@@ -1953,6 +2239,96 @@ export default function ChatWindow() {
                     onSend={handleConfirmMediaSend}
                     onCancel={() => setMediaSendPreviewData(null)}
                 />
+            )}
+
+            {/* Contact Share Modal */}
+            <ContactShareModal
+                isOpen={isContactShareModalOpen}
+                onClose={() => setIsContactShareModalOpen(false)}
+                onSelectContact={handleShareContact}
+            />
+
+            {/* Starred Messages Modal */}
+            <StarredMessagesModal
+                isOpen={isStarredModalOpen}
+                onClose={() => setIsStarredModalOpen(false)}
+                starredMessages={starredMessages || []}
+                messages={convMessages}
+                peerName={peerName}
+                onUnstar={(msgId) => starMessage(msgId)}
+                onJumpToMessage={(msgId) => {
+                    setIsStarredModalOpen(false);
+                    const el = document.querySelector(`[data-msgid="${msgId}"]`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        el.classList.add("highlight-flash");
+                        setTimeout(() => el.classList.remove("highlight-flash"), 2000);
+                    }
+                }}
+            />
+
+            {/* Chat Wallpaper Customizer Modal */}
+            <ChatWallpaperModal
+                isOpen={isWallpaperModalOpen}
+                onClose={() => setIsWallpaperModalOpen(false)}
+            />
+
+            {/* Clear Chat Confirmation Modal */}
+            {isClearChatConfirmOpen && (
+                <div
+                    style={{
+                        position: "fixed", inset: 0, zIndex: 10000,
+                        background: "rgba(0, 0, 0, 0.7)", backdropFilter: "blur(8px)",
+                        display: "flex", alignItems: "center", justifyContent: "center", padding: "16px"
+                    }}
+                    onClick={() => setIsClearChatConfirmOpen(false)}
+                >
+                    <div
+                        style={{
+                            width: "100%", maxWidth: "340px",
+                            background: isFamiliar ? "#202C33" : "rgba(18, 22, 38, 0.98)",
+                            borderRadius: "16px", padding: "20px",
+                            boxShadow: "0 12px 36px rgba(0,0,0,0.6)",
+                            border: isFamiliar ? "1px solid rgba(255,255,255,0.08)" : "1px solid var(--glass-border)",
+                            display: "flex", flexDirection: "column", gap: "14px"
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
+                            ¿Vaciar este chat?
+                        </div>
+                        <div style={{ fontSize: "0.85rem", color: isFamiliar ? "#8696A0" : "var(--text-muted)", lineHeight: 1.4 }}>
+                            Se eliminarán todos los mensajes de esta conversación en este dispositivo. Esta acción no se puede deshacer.
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "6px" }}>
+                            <button
+                                onClick={() => setIsClearChatConfirmOpen(false)}
+                                style={{
+                                    padding: "8px 16px", borderRadius: "8px",
+                                    background: "transparent", border: "none",
+                                    color: isFamiliar ? "#00A884" : "var(--text-muted)",
+                                    fontWeight: 600, fontSize: "0.85rem", cursor: "pointer"
+                                }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    await clearConversation();
+                                    setIsClearChatConfirmOpen(false);
+                                    toast.success("Chat vaciado");
+                                }}
+                                style={{
+                                    padding: "8px 16px", borderRadius: "8px",
+                                    background: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)",
+                                    color: "#EF4444", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer"
+                                }}
+                            >
+                                Vaciar chat
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

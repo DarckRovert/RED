@@ -30,8 +30,10 @@ export interface ChatInputProps {
     cancelRecording?: () => void;
     handleCamera?: () => void;
     handleGallery?: () => void;
+    handleAudio?: () => void;
     handleDocument?: () => void;
     handleLocation?: () => void;
+    handleShareContact?: () => void;
     handlePay?: () => void;
     setShowPollModal?: (show: boolean) => void;
 }
@@ -41,8 +43,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
     attachOpen, setAttachOpen, replyTo, setReplyTo, editingMsg, setEditingMsg, peerName, peerHash, burnTimer,
     isRecording = false, recordSec = 0,
     startRecording = () => {}, stopRecording = () => {}, cancelRecording = () => {},
-    handleCamera = () => {}, handleGallery = () => {}, handleDocument = () => {},
-    handleLocation = () => {}, handlePay = () => {}, setShowPollModal = () => {}
+    handleCamera = () => {}, handleGallery = () => {}, handleAudio = () => {}, handleDocument = () => {},
+    handleLocation = () => {}, handleShareContact = () => {}, handlePay = () => {}, setShowPollModal = () => {}
 }) => {
     const { t } = useTranslation();
     const { contacts, preferences } = useRedStore();
@@ -420,7 +422,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             position: "absolute",
                             bottom: "calc(100% + 8px)",
                             left: "12px",
-                            maxWidth: "340px",
+                            maxWidth: "380px",
                             width: "calc(100% - 24px)",
                             background: isFamiliar ? "#233138" : "rgba(14,18,34,0.98)",
                             backdropFilter: "blur(24px)",
@@ -438,18 +440,20 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             gap: "14px"
                         }}
                     >
-                        {/* Primary Everyday Actions Grid */}
+                        {/* Primary Everyday Actions Grid (4 columns WhatsApp style) */}
                         <div style={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(3, 1fr)",
-                            gap: "14px 10px",
+                            gridTemplateColumns: "repeat(4, 1fr)",
+                            gap: "14px 6px",
                             justifyItems: "center"
                         }}>
                             {[
                                 { icon: "📄", label: "Documento", bg: "linear-gradient(135deg, #5F66CD, #5157C4)", shadow: "rgba(95,102,205,0.5)", action: () => { setIsAttachOpen(false); handleDocument(); } },
                                 { icon: "📷", label: "Cámara", bg: "linear-gradient(135deg, #D3396D, #BE2D5E)", shadow: "rgba(211,57,109,0.5)", action: () => { setIsAttachOpen(false); handleCamera(); } },
                                 { icon: "🖼️", label: "Galería", bg: "linear-gradient(135deg, #AC44CF, #9732B8)", shadow: "rgba(172,68,207,0.5)", action: () => { setIsAttachOpen(false); handleGallery(); } },
+                                { icon: "🎵", label: "Audio", bg: "linear-gradient(135deg, #F07F26, #E06615)", shadow: "rgba(240,127,38,0.5)", action: () => { setIsAttachOpen(false); handleAudio(); } },
                                 { icon: "📍", label: "Ubicación", bg: "linear-gradient(135deg, #069F7B, #008767)", shadow: "rgba(6,159,123,0.5)", action: () => { setIsAttachOpen(false); handleLocation(); } },
+                                { icon: "👤", label: "Contacto", bg: "linear-gradient(135deg, #029AD4, #0280B3)", shadow: "rgba(2,154,212,0.5)", action: () => { setIsAttachOpen(false); handleShareContact(); } },
                                 { icon: "📊", label: "Encuesta", bg: "linear-gradient(135deg, #00A389, #008F79)", shadow: "rgba(0,163,137,0.5)", action: () => { setIsAttachOpen(false); setShowPollModal(true); } },
                                 { icon: "💸", label: "Pagar RED", bg: "linear-gradient(135deg, #00B0FF, #0091EA)", shadow: "rgba(0,176,255,0.5)", action: () => { setIsAttachOpen(false); handlePay(); } },
                             ].map((a, i) => (
@@ -460,26 +464,26 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                                     style={{
                                         display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
                                         background: "transparent", border: "none", color: "#fff", cursor: "pointer",
-                                        width: "76px",
+                                        width: "70px",
                                         animation: `contact-item-enter 0.25s ease both`,
-                                        animationDelay: `${i * 40}ms`,
+                                        animationDelay: `${i * 30}ms`,
                                         touchAction: "manipulation",
                                         pointerEvents: "auto"
                                     }}
                                 >
                                     <div style={{
-                                        width: 52, height: 52, borderRadius: "50%", background: a.bg,
+                                        width: 48, height: 48, borderRadius: "50%", background: a.bg,
                                         display: "flex", alignItems: "center", justifyContent: "center",
-                                        fontSize: "1.35rem",
-                                        boxShadow: `0 4px 18px ${a.shadow}`,
+                                        fontSize: "1.25rem",
+                                        boxShadow: `0 4px 16px ${a.shadow}`,
                                         transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s ease",
                                     }}
-                                        onMouseEnter={ev => { (ev.currentTarget as HTMLDivElement).style.transform = "scale(1.12)"; (ev.currentTarget as HTMLDivElement).style.boxShadow = `0 8px 28px ${a.shadow}`; }}
-                                        onMouseLeave={ev => { (ev.currentTarget as HTMLDivElement).style.transform = "scale(1)"; (ev.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 18px ${a.shadow}`; }}
+                                        onMouseEnter={ev => { (ev.currentTarget as HTMLDivElement).style.transform = "scale(1.12)"; (ev.currentTarget as HTMLDivElement).style.boxShadow = `0 8px 24px ${a.shadow}`; }}
+                                        onMouseLeave={ev => { (ev.currentTarget as HTMLDivElement).style.transform = "scale(1)"; (ev.currentTarget as HTMLDivElement).style.boxShadow = `0 4px 16px ${a.shadow}`; }}
                                     >
                                         {a.icon}
                                     </div>
-                                    <span style={{ fontSize: "0.75rem", color: isFamiliar ? "#D1D7DB" : "var(--text-muted)", fontWeight: 500 }}>
+                                    <span style={{ fontSize: "0.72rem", color: isFamiliar ? "#D1D7DB" : "var(--text-muted)", fontWeight: 500, textAlign: "center" }}>
                                         {a.label}
                                     </span>
                                 </button>

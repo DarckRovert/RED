@@ -33,6 +33,7 @@ interface MessageBubbleProps {
     onReaction: (msgId: string, emoji: string) => void;
     onVote: (msgId: string, optIdx: number) => void;
     onPin?: (msg: MessageItem) => void;
+    onStar?: (msgId: string) => void;
     onReply?: (msg: MessageItem) => void;
     onForward?: (msg: MessageItem) => void;
     onEdit?: (msg: MessageItem) => void;
@@ -148,10 +149,10 @@ const REACTIONS = ["❤️", "👍", "😂", "😮", "😢", "🔥"];
 
 // Context menu floating
 function ContextMenu({
-    x, y, isMine, isDeleted, onReply, onForward, onCopy, onPin, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onShowInfo, onClose
+    x, y, isMine, isDeleted, isStarred, onReply, onForward, onCopy, onPin, onStar, onEdit, onDeleteForEveryone, onDeleteLocal, onSelect, onReact, onTranslate, onAskCopilot, onSpeakMessage, onShowInfo, onClose
 }: {
-    x: number; y: number; isMine: boolean; isDeleted: boolean;
-    onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void;
+    x: number; y: number; isMine: boolean; isDeleted: boolean; isStarred?: boolean;
+    onReply: () => void; onForward?: () => void; onCopy: () => void; onPin?: () => void; onStar?: () => void;
     onEdit?: () => void; onDeleteForEveryone?: () => void; onDeleteLocal: () => void;
     onSelect?: () => void; onReact: (e: string) => void;
     onTranslate?: () => void; onAskCopilot?: () => void; onSpeakMessage?: () => void;
@@ -199,6 +200,7 @@ function ContextMenu({
             }}>
                 {[
                     ...(!isDeleted ? [{ label: t.chat_extended?.reply_to || "Responder", icon: "↩️", action: onReply }] : []),
+                    ...(!isDeleted && onStar ? [{ label: isStarred ? "Desmarcar destacado" : "Destacar", icon: "⭐", action: onStar }] : []),
                     ...(!isDeleted && onShowInfo ? [{ label: "Info. del mensaje", icon: "ℹ️", action: onShowInfo }] : []),
                     ...(!isDeleted && onSpeakMessage ? [{ label: "Escuchar mensaje", icon: "🔊", action: onSpeakMessage }] : []),
                     ...(!isDeleted && onTranslate ? [{ label: "Traducir con IA", icon: "🌐", action: onTranslate }] : []),
@@ -235,7 +237,7 @@ function ContextMenu({
 export const MessageBubble = memo(({
     msg, isMine, isFirst, isLast, showDate, peerName, starredMessages,
     searchQuery, isSearchHighlight, isSwiping, onTouchStart, onTouchMove, onTouchEnd,
-    onLongPress, onCancelLongPress, onReaction, onVote, onPin, onReply, onForward, onEdit, onDeleteForEveryone, onOpenMediaGallery,
+    onLongPress, onCancelLongPress, onReaction, onVote, onPin, onStar, onReply, onForward, onEdit, onDeleteForEveryone, onOpenMediaGallery,
     isSelectionMode = false, isSelected = false, onToggleSelect, onSelectMode,
     isGroupChat,
 }: MessageBubbleProps) => {
@@ -464,11 +466,36 @@ export const MessageBubble = memo(({
         );
     };
 
+    // Contact card detector
+    const isContactMessage = msg.msg_type === "contact" || (
+        typeof msg.content === "string" && msg.content.startsWith("{") && msg.content.includes('"identity_hash"') && msg.content.includes('"display_name"')
+    );
+    let contactData: any = null;
+    if (isContactMessage) {
+        try {
+            contactData = typeof msg.content === "string" ? JSON.parse(msg.content) : msg.content;
+        } catch {}
+    }
+
     // Location message detector
-    const isLocationMessage = typeof msg.content === "string" && msg.content.includes("📍 Ubicación Táctica:");
-    const locationCoords = isLocationMessage
-        ? msg.content.match(/📍 Ubicación Táctica:\s*([-\d.]+),\s*([-\d.]+)/)
-        : null;
+    const isLocationMessage = msg.msg_type === "location" || (typeof msg.content === "string" && (msg.content.includes("📍 Ubicación Táctica:") || (msg.content.startsWith("{") && msg.content.includes('"lat"') && msg.content.includes('"lon"'))));
+    let locData: { lat: number; lon: number; alt?: number; accuracy?: number; label?: string } | null = null;
+    if (isLocationMessage) {
+        if (typeof msg.content === "string" && msg.content.startsWith("{")) {
+            try {
+                const p = JSON.parse(msg.content);
+                if (typeof p.lat === "number" && typeof p.lon === "number") {
+                    locData = p;
+                }
+            } catch {}
+        }
+        if (!locData && typeof msg.content === "string") {
+            const match = msg.content.match(/📍 Ubicación Táctica:\s*([-\d.]+),\s*([-\d.]+)/);
+            if (match) {
+                locData = { lat: parseFloat(match[1]), lon: parseFloat(match[2]) };
+            }
+        }
+    }
 
     // Document detector
     const isDocumentMessage = msg.msg_type === "document" ||
@@ -557,11 +584,13 @@ export const MessageBubble = memo(({
             {contextMenu && (
                 <ContextMenu
                     x={contextMenu.x} y={contextMenu.y} isMine={isMine} isDeleted={isDeleted}
+                    isStarred={Boolean(starredMessages?.includes(msg.id))}
                     onClose={() => setContextMenu(null)}
                     onReply={() => onReply ? onReply(msg) : onLongPress({} as any, msg)}
                     onForward={onForward ? () => onForward(msg) : undefined}
                     onCopy={handleCopy}
                     onPin={onPin ? () => onPin(msg) : undefined}
+                    onStar={onStar ? () => onStar(msg.id) : undefined}
                     onEdit={onEdit ? () => onEdit(msg) : undefined}
                     onDeleteForEveryone={onDeleteForEveryone ? () => onDeleteForEveryone(msg.id) : undefined}
                     onDeleteLocal={() => onLongPress({} as any, msg)}
@@ -903,47 +932,157 @@ export const MessageBubble = memo(({
                                 </div>
                             )}
 
-                            {/* Tactical GPS Location Card */}
-                            {!isPaymentMessage && isLocationMessage && locationCoords && (
+                            {/* Contact Card (WhatsApp / RED vCard) */}
+                            {!isPaymentMessage && isContactMessage && contactData && (
                                 <div style={{
-                                    borderRadius: "10px", padding: "10px 12px",
-                                    background: "rgba(0, 0, 0, 0.32)",
-                                    border: `1px solid ${isMine ? "rgba(255, 60, 95, 0.35)" : "rgba(0,230,118,0.3)"}`,
-                                    display: "flex", flexDirection: "column", gap: "6px"
+                                    borderRadius: "14px", padding: "12px 14px",
+                                    background: isFamiliar ? "#182229" : "rgba(0, 0, 0, 0.4)",
+                                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(0, 229, 255, 0.3)",
+                                    display: "flex", flexDirection: "column", gap: "10px",
+                                    minWidth: "220px", maxWidth: "290px",
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.25)"
                                 }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 800, fontSize: "0.85rem", color: "var(--accent-emerald)" }}>
-                                        <span>📍</span>
-                                        <span>COORDENADA TÁCTICA GPS</span>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                        <div style={{
+                                            width: 44, height: 44, borderRadius: "50%",
+                                            background: isFamiliar ? "#00A884" : "var(--primary)",
+                                            color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontWeight: 800, fontSize: "1.1rem", flexShrink: 0
+                                        }}>
+                                            {(contactData.display_name || "🔴")[0]?.toUpperCase()}
+                                        </div>
+                                        <div style={{ minWidth: 0, flex: 1 }}>
+                                            <div style={{ fontWeight: 700, fontSize: "0.92rem", color: "#FFFFFF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                {contactData.display_name || "Operador RED"}
+                                            </div>
+                                            <div style={{ fontSize: "0.68rem", color: "#8696A0", fontFamily: "JetBrains Mono, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                DID: {contactData.identity_hash ? `${contactData.identity_hash.substring(0, 10)}...` : "Desconocido"}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.78rem", fontWeight: 700, color: "#FFFFFF" }}>
-                                        Lat: {locationCoords[1]}<br/>
-                                        Lon: {locationCoords[2]}
-                                    </div>
-                                    <div style={{ display: "flex", gap: "8px", marginTop: "2px" }}>
+                                    <div style={{ display: "flex", gap: "8px", borderTop: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid rgba(255, 255, 255, 0.08)", paddingTop: "8px" }}>
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard?.writeText(`${locationCoords[1]}, ${locationCoords[2]}`);
+                                                const store = useRedStore.getState();
+                                                store.navigate("chat", contactData.identity_hash);
                                             }}
                                             style={{
-                                                flex: 1, padding: "5px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.15)",
-                                                background: "rgba(255,255,255,0.1)",
-                                                color: "#FFFFFF", fontSize: "0.68rem", fontWeight: 700, cursor: "pointer"
+                                                flex: 1, padding: "7px 10px", borderRadius: "8px",
+                                                background: isFamiliar ? "#00A884" : "var(--accent-cyan)",
+                                                color: isFamiliar ? "#FFFFFF" : "#000000",
+                                                border: "none", fontSize: "0.74rem", fontWeight: 700, cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
                                             }}
                                         >
-                                            📋 Copiar
+                                            💬 Chatear
                                         </button>
-                                        <a
-                                            href={`https://maps.google.com/?q=${locationCoords[1]},${locationCoords[2]}`}
-                                            target="_blank"
-                                            rel="noreferrer"
+                                        <button
+                                            onClick={async () => {
+                                                const store = useRedStore.getState();
+                                                try {
+                                                    await store.addContact(contactData.identity_hash, contactData.display_name);
+                                                    toast.success(`✅ ${contactData.display_name} añadido a tus contactos`);
+                                                } catch (e: any) {
+                                                    toast.info("El contacto ya se encuentra en tu lista");
+                                                }
+                                            }}
                                             style={{
-                                                flex: 1, padding: "5px 8px", borderRadius: "6px", textAlign: "center", textDecoration: "none",
-                                                background: "var(--accent-emerald)",
-                                                color: "#000000", fontSize: "0.68rem", fontWeight: 800
+                                                flex: 1, padding: "7px 10px", borderRadius: "8px",
+                                                background: "rgba(255, 255, 255, 0.08)",
+                                                color: "#FFFFFF", border: "1px solid rgba(255, 255, 255, 0.12)",
+                                                fontSize: "0.74rem", fontWeight: 600, cursor: "pointer",
+                                                display: "flex", alignItems: "center", justifyContent: "center", gap: "4px"
                                             }}
                                         >
-                                            🗺️ Abrir Mapa
-                                        </a>
+                                            ➕ Guardar
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tactical GPS / Real-Time Location Card */}
+                            {!isPaymentMessage && isLocationMessage && locData && (
+                                <div style={{
+                                    borderRadius: "14px", overflow: "hidden",
+                                    background: isFamiliar ? "#182229" : "rgba(0, 0, 0, 0.4)",
+                                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.08)" : `1px solid ${isMine ? "rgba(255, 60, 95, 0.35)" : "rgba(0,230,118,0.3)"}`,
+                                    display: "flex", flexDirection: "column", minWidth: "240px", maxWidth: "300px",
+                                    boxShadow: "0 4px 16px rgba(0,0,0,0.25)"
+                                }}>
+                                    {/* Mini Map Canvas / Radar Header */}
+                                    <div style={{
+                                        height: "100px", position: "relative",
+                                        background: "radial-gradient(circle at center, #1B382B 0%, #0B1E15 65%, #05100B 100%)",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        borderBottom: "1px solid rgba(255,255,255,0.06)", overflow: "hidden"
+                                    }}>
+                                        {/* Concentric radar rings */}
+                                        <div style={{ position: "absolute", width: "140px", height: "140px", borderRadius: "50%", border: "1px dashed rgba(0, 230, 118, 0.25)" }} />
+                                        <div style={{ position: "absolute", width: "80px", height: "80px", borderRadius: "50%", border: "1px solid rgba(0, 230, 118, 0.35)" }} />
+                                        <div style={{ position: "absolute", width: "100%", height: "1px", background: "rgba(0, 230, 118, 0.18)" }} />
+                                        <div style={{ position: "absolute", height: "100%", width: "1px", background: "rgba(0, 230, 118, 0.18)" }} />
+                                        {/* Pin Marker */}
+                                        <div style={{
+                                            position: "relative", zIndex: 2,
+                                            animation: "pulse 1.8s infinite ease-in-out",
+                                            display: "flex", flexDirection: "column", alignItems: "center"
+                                        }}>
+                                            <span style={{ fontSize: "1.8rem", filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.8))" }}>📍</span>
+                                        </div>
+                                        <span style={{
+                                            position: "absolute", bottom: "6px", right: "8px",
+                                            fontSize: "0.58rem", color: "rgba(255,255,255,0.7)",
+                                            background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: "4px",
+                                            fontFamily: "JetBrains Mono, monospace"
+                                        }}>
+                                            GNSS FIX
+                                        </span>
+                                    </div>
+
+                                    {/* Location Info & Actions */}
+                                    <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 800, fontSize: "0.82rem", color: isFamiliar ? "#00A884" : "var(--accent-emerald)" }}>
+                                                <span>{locData.label || "Ubicación en tiempo real"}</span>
+                                            </div>
+                                            {locData.alt !== undefined && (
+                                                <span style={{ fontSize: "0.62rem", color: "#8696A0", fontFamily: "JetBrains Mono, monospace" }}>
+                                                    {locData.alt}m alt
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: "0.74rem", color: "#FFFFFF", opacity: 0.9 }}>
+                                            {locData.lat.toFixed(5)}, {locData.lon.toFixed(5)}
+                                        </div>
+
+                                        <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard?.writeText(`${locData?.lat}, ${locData?.lon}`);
+                                                    toast.success("📋 Coordenadas copiadas");
+                                                }}
+                                                style={{
+                                                    flex: 1, padding: "6px 8px", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.12)",
+                                                    background: "rgba(255,255,255,0.06)",
+                                                    color: "#FFFFFF", fontSize: "0.70rem", fontWeight: 600, cursor: "pointer"
+                                                }}
+                                            >
+                                                📋 Copiar
+                                            </button>
+                                            <a
+                                                href={`https://maps.google.com/?q=${locData.lat},${locData.lon}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                style={{
+                                                    flex: 1, padding: "6px 8px", borderRadius: "6px", textAlign: "center", textDecoration: "none",
+                                                    background: isFamiliar ? "#00A884" : "var(--accent-emerald)",
+                                                    color: isFamiliar ? "#FFFFFF" : "#000000", fontSize: "0.70rem", fontWeight: 700
+                                                }}
+                                            >
+                                                🗺️ Ver Mapa
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -1002,7 +1141,7 @@ export const MessageBubble = memo(({
                             )}
 
                             {/* Standard Text content — with URL & mention highlighting */}
-                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
+                            {!isPaymentMessage && !isVitalSignMessage && !isDocumentMessage && !isLocationMessage && !isContactMessage && msg.msg_type !== "voice" && msg.msg_type !== "audio" && msg.msg_type !== "poll" && msg.msg_type !== "image" && !resolvedImage && msg.msg_type !== "video" && msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Voice Note]") && !msg.content.startsWith("[Video]") && !msg.content.startsWith('{"text":') && (
                                 <div style={{ fontSize: "0.92rem", lineHeight: 1.48, fontWeight: 500, color: "#FFFFFF", wordBreak: "break-word" }}>
                                     {renderFormattedContent(msg.content, searchQuery)}
                                 </div>
@@ -1091,6 +1230,9 @@ export const MessageBubble = memo(({
                             <span style={{ opacity: 0.7, fontSize: "0.6rem" }}>↪ reenviado</span>
                         )}
                         {isEdited && !isDeleted && <span>(editado)</span>}
+                        {starredMessages?.includes(msg.id) && (
+                            <span title="Mensaje destacado" style={{ color: "#F0B90B", fontSize: "0.72rem", marginRight: "2px" }}>⭐</span>
+                        )}
                         <span>{timeStr(msg.timestamp)}</span>
                         {isMine && !isDeleted && (
                             <span style={{ display: "inline-flex", alignItems: "center", marginLeft: "4px" }}>

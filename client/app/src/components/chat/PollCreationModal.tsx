@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { toast } from "../Toast";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { TacticalAudioEngine } from "../../lib/TacticalAudioEngine";
+import { useRedStore } from "../../store/useRedStore";
 
 interface PollCreationModalProps {
     isOpen: boolean;
@@ -17,6 +18,8 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
     onCreatePoll,
 }) => {
     const { t } = useTranslation();
+    const { preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [question, setQuestion] = useState("");
     const [options, setOptions] = useState<string[]>(["", ""]);
     const [allowMultiple, setAllowMultiple] = useState(false);
@@ -91,13 +94,15 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
             onClick={onClose}
         >
             <div
-                className="card-tactical animate-enter"
+                className="animate-enter"
                 style={{
                     width: "100%",
                     maxWidth: "420px",
                     padding: "24px",
-                    boxShadow: "0 24px 64px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 229, 255, 0.15)",
-                    border: "1.5px solid rgba(0, 229, 255, 0.35)",
+                    background: isFamiliar ? "#202C33" : "rgba(10, 14, 28, 0.95)",
+                    boxShadow: isFamiliar ? "0 24px 64px rgba(0, 0, 0, 0.85)" : "0 24px 64px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 229, 255, 0.15)",
+                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.1)" : "1.5px solid rgba(0, 229, 255, 0.35)",
+                    borderRadius: "18px",
                     display: "flex",
                     flexDirection: "column",
                     gap: "18px",
@@ -112,17 +117,17 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
                         <span style={{ fontSize: "1.5rem" }}>📊</span>
                         <div>
                             <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 900, color: "#fff", letterSpacing: "0.2px" }}>
-                                Crear Encuesta P2P
+                                {isFamiliar ? "Crear Encuesta" : "Crear Encuesta P2P"}
                             </h2>
-                            <div style={{ fontSize: "0.72rem", color: "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
-                                VOTACIÓN DESCENTRALIZADA
+                            <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#00A884" : "var(--accent-cyan)", fontFamily: "JetBrains Mono, monospace" }}>
+                                {isFamiliar ? "VOTACIÓN EN EL CHAT" : "VOTACIÓN DESCENTRALIZADA"}
                             </div>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
                         className="btn-icon"
-                        style={{ width: 32, height: 32, fontSize: "0.9rem" }}
+                        style={{ width: 32, height: 32, fontSize: "0.9rem", color: "#8696A0" }}
                     >
                         ✕
                     </button>
@@ -250,16 +255,17 @@ export const PollCreationModal: React.FC<PollCreationModalProps> = ({
                     </button>
                     <button
                         onClick={handleSubmit}
-                        className="btn-tactical-primary"
                         style={{
                             flex: 1,
                             padding: "12px",
                             borderRadius: "12px",
                             fontSize: "0.85rem",
-                            fontWeight: 900,
-                            background: "linear-gradient(135deg, var(--accent-cyan) 0%, #0284C7 100%)",
-                            color: "#000",
-                            boxShadow: "0 0 16px rgba(0, 229, 255, 0.4)",
+                            fontWeight: 800,
+                            background: isFamiliar ? "#00A884" : "linear-gradient(135deg, var(--accent-cyan) 0%, #0284C7 100%)",
+                            color: isFamiliar ? "#FFFFFF" : "#000",
+                            border: "none",
+                            cursor: "pointer",
+                            boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.4)" : "0 0 16px rgba(0, 229, 255, 0.4)",
                         }}
                     >
                         📊 Publicar Encuesta
