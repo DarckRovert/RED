@@ -980,7 +980,7 @@ export const MessageBubble = memo(({
                                             onClick={async () => {
                                                 const store = useRedStore.getState();
                                                 try {
-                                                    await store.addContact(contactData.identity_hash, contactData.display_name);
+                                                    await store.addContact(contactData.identity_hash, contactData.display_name, contactData.public_key || null);
                                                     toast.success(`✅ ${contactData.display_name} añadido a tus contactos`);
                                                 } catch (e: any) {
                                                     toast.info("El contacto ya se encuentra en tu lista");

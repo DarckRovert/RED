@@ -16,21 +16,28 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
     onClose,
     onSelectContact,
 }) => {
-    const { contacts, preferences } = useRedStore();
+    const { contacts, preferences, identity } = useRedStore();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [searchQuery, setSearchQuery] = useState("");
 
     const filteredContacts = useMemo(() => {
-        const list = Array.isArray(contacts) ? contacts : [];
+        const list = Array.isArray(contacts) ? [...contacts] : [];
+        if (identity?.identity_hash && !list.some(c => c.identity_hash === identity.identity_hash)) {
+            list.unshift({
+                identity_hash: identity.identity_hash,
+                display_name: `${identity.display_name || 'Mi Tarjeta Personal'} (Tú)`,
+                public_key: identity.public_key || null,
+            } as any);
+        }
         if (!searchQuery.trim()) {
-            return [...list].sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
+            return list;
         }
         const q = searchQuery.toLowerCase().trim();
         return list.filter(c =>
             (c.display_name || "").toLowerCase().includes(q) ||
             (c.identity_hash || "").toLowerCase().includes(q)
-        ).sort((a, b) => (a.display_name || "").localeCompare(b.display_name || ""));
-    }, [contacts, searchQuery]);
+        );
+    }, [contacts, identity, searchQuery]);
 
     if (!isOpen) return null;
 
