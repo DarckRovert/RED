@@ -223,6 +223,7 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                 is_mine: true,
                 msg_type: options?.msg_type || (content?.startsWith('data:image') ? 'image' : content?.startsWith('data:audio') ? 'voice' : content?.startsWith('data:video') ? 'video' : 'text'),
                 media_data: detectedMediaData,
+                caption: options?.caption,
                 duration_ms: options?.duration_ms,
                 waveform:    options?.waveform,
                 latitude:    options?.latitude,
@@ -241,13 +242,13 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
             // 1. Optimistically update conversations list in store and localStorage
             const currentConvs = get().conversations || [];
             const msgType = optimisticMsg.msg_type;
-            const snippet = msgType === 'image' ? '📷 Foto' :
+            const snippet = msgType === 'image' ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                             msgType === 'voice' ? '🎤 Nota de voz' :
-                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
-                            (content?.startsWith('data:image') ? '📷 Foto' :
+                            (content?.startsWith('data:image') ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                              content?.startsWith('data:audio') ? '🎤 Nota de voz' :
-                             content?.startsWith('data:video') ? '📹 Video' :
+                             content?.startsWith('data:video') ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
                              content || 'Mensaje P2P');
 
             const canonicalPeer = isGroupConv ? cleanPeerHash : (meshRouter.getCanonicalId(cleanPeerHash) || cleanPeerHash);

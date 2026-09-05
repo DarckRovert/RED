@@ -21,6 +21,7 @@ import { SettingsManager } from "../lib/settingsManager";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { TacticalVoiceAnalyzer } from "../lib/audio/TacticalVoiceAnalyzer";
 import { WhatsAppDoodleBackground } from "./chat/WhatsAppDoodleBackground";
+import { MediaSendPreviewModal } from "./chat/MediaSendPreviewModal";
 
 /* ── Avatar helpers ───────────────────────────────────────────────────────── */
 const AVATAR_COLORS = [
@@ -492,6 +493,30 @@ export default function ChatWindow() {
     const recordStartTimeRef = useRef<number>(0);
     // Media preview state
     const [mediaPreview, setMediaPreview] = useState<{ dataUrl: string; type: "image" | "video"; mimeType: string; caption: string } | null>(null);
+    const [mediaSendPreviewData, setMediaSendPreviewData] = useState<{
+        file: File | null;
+        dataUrl: string;
+        type: "image" | "video";
+        mimeType: string;
+    } | null>(null);
+
+    const handleConfirmMediaSend = async (caption: string) => {
+        if (!mediaSendPreviewData || !peerHash) return;
+        const { dataUrl, type, mimeType } = mediaSendPreviewData;
+        setMediaSendPreviewData(null);
+        try {
+            await sendMessage(dataUrl, {
+                msg_type: type,
+                mime_type: mimeType,
+                media_data: dataUrl,
+                caption: caption || undefined,
+            });
+            TacticalAudioEngine.playMessageSent();
+            toast.success(type === "video" ? "Video enviado" : "Foto enviada");
+        } catch {
+            toast.error("Error al enviar multimedia");
+        }
+    };
 
     const isOnline = peerPresence?.[peerHash] === 'online' || peerPresence?.[peerHash] === 'nearby';
 
@@ -763,13 +788,12 @@ export default function ChatWindow() {
             if (photo.base64String) {
                 const mimeType = `image/${photo.format || 'jpeg'}`;
                 const dataUrl = `data:${mimeType};base64,${photo.base64String}`;
-                await sendMessage(dataUrl, {
-                    msg_type: "image",
-                    mime_type: mimeType,
-                    media_data: dataUrl
+                setMediaSendPreviewData({
+                    file: null,
+                    dataUrl,
+                    type: "image",
+                    mimeType
                 });
-                TacticalAudioEngine.playMessageSent();
-                toast.success("Foto enviada");
                 return;
             }
         } catch (err: any) {
@@ -798,25 +822,23 @@ export default function ChatWindow() {
                 reader.onload = async (ev) => {
                     if (ev.target?.result) {
                         const dataUrl = ev.target.result as string;
-                        await sendMessage(dataUrl, {
-                            msg_type: "video",
-                            mime_type: file.type || "video/mp4",
-                            media_data: dataUrl
+                        setMediaSendPreviewData({
+                            file,
+                            dataUrl,
+                            type: "video",
+                            mimeType: file.type || "video/mp4"
                         });
-                        TacticalAudioEngine.playMessageSent();
-                        toast.success("Video enviado");
                     }
                 };
                 reader.readAsDataURL(file);
             } else {
                 const compressedB64 = await compressImage(file);
-                await sendMessage(compressedB64, {
-                    msg_type: "image",
-                    mime_type: "image/jpeg",
-                    media_data: compressedB64
+                setMediaSendPreviewData({
+                    file,
+                    dataUrl: compressedB64,
+                    type: "image",
+                    mimeType: "image/jpeg"
                 });
-                TacticalAudioEngine.playMessageSent();
-                toast.success("Foto enviada");
             }
         } catch (err) {
             console.error("Error al procesar archivo:", err);
@@ -1038,28 +1060,75 @@ export default function ChatWindow() {
             )}
 
 
-            {/* Banner táctico de Agregar a Contactos si el interlocutor aún no está en la libreta */}
+            {/* Banner de Agregar a Contactos / Bloquear */}
             {!isGroupChat && !peerContact && peerHash && peerHash !== 'me' && peerHash !== 'local' && (
-                <div style={{
-                    padding: "8px 14px", margin: "6px 12px 0px 12px", borderRadius: "10px",
-                    background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"
-                }}>
-                    <div style={{ fontSize: "0.78rem", color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span>👤</span>
-                        <span>{t.sidebar?.no_contacts_desc || "Este interlocutor no está en tu lista de contactos."}</span>
+                isFamiliar ? (
+                    <div style={{
+                        padding: "10px 14px", margin: "6px 12px 0px 12px", borderRadius: "12px",
+                        background: "#182229", border: "1px solid rgba(255, 255, 255, 0.08)",
+                        display: "flex", flexDirection: "column", gap: "8px",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.3)"
+                    }}>
+                        <div style={{ fontSize: "0.82rem", color: "#8696A0", display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span>👤</span>
+                            <span>Este interlocutor no está en tu lista de contactos.</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                            <button
+                                onClick={async () => {
+                                    if (window.confirm(`¿Bloquear al interlocutor ${peerName}? No recibirás más mensajes.`)) {
+                                        await blockNode(peerHash);
+                                        toast.info(`Nodo bloqueado`);
+                                        goBack();
+                                    }
+                                }}
+                                style={{
+                                    padding: "6px 12px", fontSize: "0.75rem", fontWeight: 700,
+                                    borderRadius: "8px", background: "rgba(241, 92, 109, 0.12)",
+                                    border: "1px solid rgba(241, 92, 109, 0.3)", color: "#F15C6D",
+                                    cursor: "pointer"
+                                }}
+                            >
+                                🚫 Bloquear
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    await addContact(peerHash, peerName, peerPk);
+                                    toast.success(`🤝 ${peerName} guardado en contactos`);
+                                }}
+                                style={{
+                                    padding: "6px 14px", fontSize: "0.75rem", fontWeight: 700,
+                                    borderRadius: "8px", background: "#00A884",
+                                    border: "none", color: "#FFFFFF", cursor: "pointer",
+                                    boxShadow: "0 2px 8px rgba(0, 168, 132, 0.35)"
+                                }}
+                            >
+                                ➕ Añadir a contactos
+                            </button>
+                        </div>
                     </div>
-                    <button
-                        onClick={async () => {
-                            await addContact(peerHash, peerName, peerPk);
-                            toast.success(`🤝 ${peerName}`);
-                        }}
-                        className="btn-tactical-primary"
-                        style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}
-                    >
-                        ➕ {t.sidebar?.add_contact_btn || "GUARDAR CONTACTO"}
-                    </button>
-                </div>
+                ) : (
+                    <div style={{
+                        padding: "8px 14px", margin: "6px 12px 0px 12px", borderRadius: "10px",
+                        background: "rgba(0, 229, 255, 0.1)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px"
+                    }}>
+                        <div style={{ fontSize: "0.78rem", color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>👤</span>
+                            <span>{t.sidebar?.no_contacts_desc || "Este interlocutor no está en tu lista de contactos."}</span>
+                        </div>
+                        <button
+                            onClick={async () => {
+                                await addContact(peerHash, peerName, peerPk);
+                                toast.success(`🤝 ${peerName}`);
+                            }}
+                            className="btn-tactical-primary"
+                            style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: 800, whiteSpace: "nowrap", flexShrink: 0 }}
+                        >
+                            ➕ {t.sidebar?.add_contact_btn || "GUARDAR CONTACTO"}
+                        </button>
+                    </div>
+                )
             )}
 
             {/* Key-Change Warning Banner */}
@@ -1291,6 +1360,59 @@ export default function ChatWindow() {
                                     >
                                         🛡️ Verificar Safety Number
                                     </button>
+
+                                    {/* Quick Starters Familiares */}
+                                    <div style={{
+                                        display: "flex", flexWrap: "wrap", gap: "8px",
+                                        justifyContent: "center", marginTop: "10px"
+                                    }}>
+                                        <button
+                                            onClick={() => handleSendText("¡Hola! 👋")}
+                                            style={{
+                                                padding: "7px 14px", borderRadius: "20px",
+                                                background: "#202C33", border: "1px solid rgba(255, 255, 255, 0.1)",
+                                                color: "#E9EDEF", fontSize: "0.78rem", fontWeight: 600,
+                                                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
+                                            }}
+                                        >
+                                            👋 Decir Hola
+                                        </button>
+                                        <button
+                                            onClick={handleCamera}
+                                            style={{
+                                                padding: "7px 14px", borderRadius: "20px",
+                                                background: "#202C33", border: "1px solid rgba(255, 255, 255, 0.1)",
+                                                color: "#E9EDEF", fontSize: "0.78rem", fontWeight: 600,
+                                                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
+                                            }}
+                                        >
+                                            📷 Enviar foto
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (!peerHash) return;
+                                                setActiveCallType("audio");
+                                                useRedStore.setState({
+                                                    activeConversationId: peerHash,
+                                                    activeCallPeer: peerHash,
+                                                    activeCallOffer: null,
+                                                    activeCallId: `call_${Date.now()}`,
+                                                    incomingCall: null,
+                                                    activeCallSignal: null,
+                                                    callSignalQueue: []
+                                                });
+                                                navigate("call", peerHash);
+                                            }}
+                                            style={{
+                                                padding: "7px 14px", borderRadius: "20px",
+                                                background: "rgba(0, 168, 132, 0.18)", border: "1px solid rgba(0, 168, 132, 0.35)",
+                                                color: "#00A884", fontSize: "0.78rem", fontWeight: 600,
+                                                cursor: "pointer", display: "flex", alignItems: "center", gap: "6px"
+                                            }}
+                                        >
+                                            📞 Llamar
+                                        </button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="cyber-hologram-shield" style={{ maxWidth: "340px", width: "100%", textAlign: "center" }}>
@@ -1815,6 +1937,18 @@ export default function ChatWindow() {
                 onClose={() => setShowPollModal(false)}
                 onCreatePoll={handleCreatePoll}
             />
+
+            {/* WhatsApp Media Send Preview Modal */}
+            {mediaSendPreviewData && (
+                <MediaSendPreviewModal
+                    file={mediaSendPreviewData.file}
+                    dataUrl={mediaSendPreviewData.dataUrl}
+                    type={mediaSendPreviewData.type}
+                    recipientName={peerName}
+                    onSend={handleConfirmMediaSend}
+                    onCancel={() => setMediaSendPreviewData(null)}
+                />
+            )}
         </div>
     );
 }

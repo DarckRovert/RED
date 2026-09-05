@@ -977,7 +977,7 @@ body.scanner-active html,
 body.scanner-active .app-container,
 body.scanner-active .app-main,
 body.scanner-active .radar-window,
-body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder-overlay *) {
+body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder-overlay *):not(.contact-qr-scanner-overlay):not(.contact-qr-scanner-overlay *) {
   background: transparent !important;
 }
 

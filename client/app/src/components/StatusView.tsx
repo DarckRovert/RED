@@ -47,8 +47,9 @@ export default function StatusView() {
     const { t } = useTranslation();
     const {
         contacts, identity, goBack, peerStories,
-        myStories, liveStreams, navigate,
+        myStories, liveStreams, navigate, preferences
     } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
 
     const [modal, setModal] = useState<Modal | null>(null);
     const now = Date.now();
@@ -116,6 +117,298 @@ export default function StatusView() {
 
     if (modal?.type === "liveViewer") {
         return <LiveStreamViewer streamId={modal.streamId} onClose={() => setModal(null)} />;
+    }
+
+    if (isFamiliar) {
+        return (
+            <div style={{
+                width: "100%", height: "100%",
+                background: "#111B21", color: "#E9EDEF",
+                display: "flex", flexDirection: "column",
+                overflow: "hidden", position: "relative"
+            }}>
+                {/* WhatsApp Familiar Header */}
+                <header style={{
+                    padding: "16px 20px",
+                    height: "56px",
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    background: "#111B21",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
+                    zIndex: 10, flexShrink: 0,
+                }}>
+                    <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#E9EDEF", letterSpacing: "0.2px" }}>
+                        Novedades
+                    </div>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                        <button
+                            onClick={() => setModal({ type: "creator" })}
+                            style={{
+                                background: "transparent", border: "none",
+                                color: "#AEBAC1", fontSize: "1.2rem", cursor: "pointer"
+                            }}
+                            title="Buscar o publicar"
+                        >
+                            📷
+                        </button>
+                        <button
+                            onClick={() => setModal({ type: "broadcaster" })}
+                            style={{
+                                background: "rgba(232, 33, 58, 0.15)", border: "1px solid rgba(232, 33, 58, 0.3)",
+                                color: "#FF5252", fontSize: "0.74rem", fontWeight: 700,
+                                borderRadius: "14px", padding: "4px 10px", cursor: "pointer",
+                                display: "flex", alignItems: "center", gap: "4px"
+                            }}
+                            title="Transmitir en directo por la malla"
+                        >
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#FF5252", display: "inline-block" }} />
+                            EN VIVO
+                        </button>
+                    </div>
+                </header>
+
+                {/* Content Area */}
+                <div className="scroll-container" style={{ flex: 1, overflowY: "auto", paddingBottom: "100px" }}>
+                    <div style={{ maxWidth: "600px", margin: "0 auto", width: "100%" }}>
+                        
+                        {/* Estado Section */}
+                        <div style={{ padding: "16px 16px 8px 16px" }}>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF", marginBottom: "14px" }}>
+                                Estado
+                            </div>
+
+                            {/* Mi Estado Item */}
+                            <div
+                                style={{
+                                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                                    cursor: "pointer", padding: "8px 0"
+                                }}
+                            >
+                                <div
+                                    onClick={() => {
+                                        if (myValidStories.length > 0) {
+                                            setModal({
+                                                type: "viewer",
+                                                senderHash: identity?.identity_hash || "",
+                                                senderName: "Mi Estado",
+                                                stories: myValidStories.map(s => ({
+                                                    id: s.id, sender: identity?.identity_hash || "",
+                                                    is_mine: true,
+                                                    content: s.content, timestamp: Math.floor(s.timestamp / 1000),
+                                                    msg_type: ((s as any).msg_type || "story") as any
+                                                }))
+                                            });
+                                        } else {
+                                            setModal({ type: "creator" });
+                                        }
+                                    }}
+                                    style={{ display: "flex", alignItems: "center", gap: "14px", flex: 1 }}
+                                >
+                                    <div style={{ position: "relative", width: 52, height: 52, flexShrink: 0 }}>
+                                        <div style={{
+                                            width: 52, height: 52, borderRadius: "50%",
+                                            background: "linear-gradient(135deg, #00A884, #005C4B)",
+                                            display: "flex", alignItems: "center", justifyContent: "center",
+                                            fontWeight: 900, color: "#FFF", fontSize: "1.2rem",
+                                            border: myValidStories.length > 0 ? "2.5px solid #00A884" : "none",
+                                            padding: myValidStories.length > 0 ? "2px" : "0"
+                                        }}>
+                                            {identity?.nickname ? identity.nickname[0].toUpperCase() : "👤"}
+                                        </div>
+
+                                        {/* Badge '+' Verde si no tiene estados */}
+                                        {myValidStories.length === 0 && (
+                                            <div style={{
+                                                position: "absolute", bottom: 0, right: 0,
+                                                width: 20, height: 20, borderRadius: "50%",
+                                                background: "#00A884", border: "2px solid #111B21",
+                                                display: "flex", alignItems: "center", justifyContent: "center",
+                                                color: "#FFFFFF", fontSize: "0.85rem", fontWeight: 900
+                                            }}>
+                                                +
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <div style={{ fontSize: "0.98rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                            Mi estado
+                                        </div>
+                                        <div style={{ fontSize: "0.80rem", color: "#8696A0", marginTop: "2px" }}>
+                                            {myValidStories.length > 0
+                                                ? `${myValidStories.length} actualización(es) activa(s)`
+                                                : "Añade una actualización"}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {myValidStories.length > 0 && (
+                                    <button
+                                        onClick={() => setModal({ type: "creator" })}
+                                        style={{
+                                            width: 36, height: 36, borderRadius: "50%",
+                                            background: "rgba(255, 255, 255, 0.06)", border: "none",
+                                            color: "#00A884", fontSize: "1rem", cursor: "pointer",
+                                            display: "flex", alignItems: "center", justifyContent: "center"
+                                        }}
+                                        title="Publicar nuevo estado"
+                                    >
+                                        📷
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Directos Activos (Live Streams P2P) */}
+                        {activeLives.length > 0 && (
+                            <div style={{ padding: "8px 16px", marginTop: "4px" }}>
+                                <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#8696A0", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
+                                    Transmisiones en vivo ({activeLives.length})
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                    {activeLives.map(stream => (
+                                        <div
+                                            key={stream.stream_id}
+                                            onClick={() => setModal({ type: "liveViewer", streamId: stream.stream_id })}
+                                            style={{
+                                                padding: "12px 14px", borderRadius: "12px",
+                                                background: "#182229", border: "1px solid rgba(255, 255, 255, 0.05)",
+                                                display: "flex", justifyContent: "space-between", alignItems: "center",
+                                                cursor: "pointer"
+                                            }}
+                                        >
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#FF5252", boxShadow: "0 0 8px #FF5252" }} />
+                                                <div>
+                                                    <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>{stream.broadcaster_name}</div>
+                                                    <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>{stream.title || "Transmisión P2P"}</div>
+                                                </div>
+                                            </div>
+                                            <span style={{ fontSize: "0.76rem", fontWeight: 700, color: "#00A884" }}>
+                                                Ver en vivo ➔
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.05)", margin: "8px 0" }} />
+
+                        {/* Actualizaciones Recientes */}
+                        <div style={{ padding: "10px 16px" }}>
+                            <div style={{ fontSize: "0.74rem", fontWeight: 700, color: "#8696A0", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "12px" }}>
+                                Actualizaciones recientes
+                            </div>
+
+                            {peerSenders.length === 0 ? (
+                                <div style={{ padding: "30px 16px", textAlign: "center", color: "#8696A0" }}>
+                                    <div style={{ fontSize: "2rem", marginBottom: "8px" }}>⭕</div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                        Sin actualizaciones recientes
+                                    </div>
+                                    <div style={{ fontSize: "0.78rem", maxWidth: "280px", margin: "4px auto 0 auto", lineHeight: 1.45 }}>
+                                        Las historias compartidas por tus contactos durante las últimas 24 horas aparecerán aquí.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column" }}>
+                                    {peerSenders.map(senderHash => {
+                                        const senderStories = peerStoriesMap[senderHash] || [];
+                                        const latestStory = senderStories[senderStories.length - 1];
+                                        const contact = contacts.find((c: any) => c.identity_hash === senderHash);
+                                        const displayName = contact?.display_name || `${senderHash.substring(0, 10)}…`;
+                                        const storyTime = latestStory ? (latestStory.timestamp > 1e10 ? latestStory.timestamp : latestStory.timestamp * 1000) : Date.now();
+
+                                        return (
+                                            <div
+                                                key={senderHash}
+                                                onClick={() => setModal({
+                                                    type: "viewer",
+                                                    senderHash,
+                                                    senderName: displayName,
+                                                    stories: senderStories
+                                                })}
+                                                style={{
+                                                    display: "flex", alignItems: "center", gap: "14px",
+                                                    padding: "10px 0", cursor: "pointer",
+                                                    borderBottom: "1px solid rgba(255, 255, 255, 0.03)"
+                                                }}
+                                            >
+                                                {/* Story Ring Avatar */}
+                                                <div style={{
+                                                    width: 52, height: 52, borderRadius: "50%",
+                                                    border: "2.5px solid #00A884",
+                                                    padding: "2px", display: "flex", alignItems: "center", justifyContent: "center",
+                                                    flexShrink: 0
+                                                }}>
+                                                    <div style={{
+                                                        width: "100%", height: "100%", borderRadius: "50%",
+                                                        ...avStyle(senderHash),
+                                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                                        fontWeight: 700, color: "#FFF", fontSize: "1.1rem"
+                                                    }}>
+                                                        {displayName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                </div>
+
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{ fontSize: "0.96rem", fontWeight: 600, color: "#E9EDEF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {displayName}
+                                                    </div>
+                                                    <div style={{ fontSize: "0.78rem", color: "#8696A0", marginTop: "2px" }}>
+                                                        {formatRelativeTime(storyTime)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Floating Action Buttons (FABs) de WhatsApp */}
+                <div style={{
+                    position: "absolute", bottom: "24px", right: "20px",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: "14px",
+                    zIndex: 40
+                }}>
+                    {/* Small FAB Text */}
+                    <button
+                        onClick={() => setModal({ type: "creator" })}
+                        style={{
+                            width: "44px", height: "44px", borderRadius: "50%",
+                            background: "#202C33", border: "1px solid rgba(255, 255, 255, 0.1)",
+                            color: "#00A884", fontSize: "1.15rem", cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            boxShadow: "0 3px 10px rgba(0, 0, 0, 0.35)",
+                            transition: "transform 0.15s ease"
+                        }}
+                        title="Crear estado de texto"
+                    >
+                        ✏️
+                    </button>
+
+                    {/* Main Big FAB Camera */}
+                    <button
+                        onClick={() => setModal({ type: "creator" })}
+                        style={{
+                            width: "56px", height: "56px", borderRadius: "50%",
+                            background: "#00A884", border: "none",
+                            color: "#FFFFFF", fontSize: "1.35rem", cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            boxShadow: "0 4px 16px rgba(0, 168, 132, 0.45)",
+                            transition: "transform 0.15s ease"
+                        }}
+                        title="Tomar foto o video para estado"
+                    >
+                        📷
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     return (

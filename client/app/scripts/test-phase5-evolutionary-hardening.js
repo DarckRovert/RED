@@ -317,7 +317,7 @@ function cosineSimilarityInt8(a, b) {
     }
     const denom = Math.sqrt(normA) * Math.sqrt(normB);
     if (denom === 0) return 0;
-    return Math.max(0, Math.min(1, (dot / denom + 1) / 2));
+    return Math.max(0, Math.min(1, dot / denom));
 }
 
 runTest("RAG Vectorial INT8: Consulta Semántica Exacta TCCC (<5ms)", () => {

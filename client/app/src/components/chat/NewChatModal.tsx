@@ -6,6 +6,7 @@ import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
 import { avatarStyle } from "../sidebar/types";
 import { OfflineQrEngine } from "../../lib/qr/OfflineQrEngine";
+import { ContactQrModal } from "./ContactQrModal";
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -24,24 +25,13 @@ interface NewChatModalProps {
 export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) => {
     const { contacts, identity, navigate, addContact } = useRedStore();
     const [searchQuery, setSearchQuery] = useState("");
-    const [showMyQr, setShowMyQr] = useState(false);
-    const [qrDataUrl, setQrDataUrl] = useState<string>("");
+    const [qrModalTab, setQrModalTab] = useState<"my_qr" | "scan" | null>(null);
     const [manualOpen, setManualOpen] = useState(false);
     const [manualInput, setManualInput] = useState("");
     const [manualAlias, setManualAlias] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     // Tracks which nearby peer is currently being added (hash | null)
     const [addingPeerHash, setAddingPeerHash] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (showMyQr && identity?.identity_hash) {
-            OfflineQrEngine.generateDataUrl(`did:red:${identity.identity_hash}`, {
-                width: 200,
-                darkColor: "#000000",
-                lightColor: "#FFFFFF"
-            }).then(setQrDataUrl).catch(console.error);
-        }
-    }, [showMyQr, identity?.identity_hash]);
 
     // Nearby discovered peers in radio range
     const nearbyPeers = useMemo(() => {
@@ -266,7 +256,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
                         {/* 2. Escanear Código QR */}
                         <div
-                            onClick={() => { onClose(); navigate("radar"); }}
+                            onClick={() => setQrModalTab("scan")}
                             style={{
                                 display: "flex", alignItems: "center", gap: "16px",
                                 padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"
@@ -294,7 +284,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
 
                         {/* 3. Mi Código QR */}
                         <div
-                            onClick={() => setShowMyQr(v => !v)}
+                            onClick={() => setQrModalTab("my_qr")}
                             style={{
                                 display: "flex", alignItems: "center", gap: "16px",
                                 padding: "12px 20px", cursor: "pointer", transition: "background 0.15s"
@@ -320,33 +310,6 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                             </div>
                         </div>
                     </div>
-
-                    {/* My QR Popover / Expandable */}
-                    {showMyQr && (
-                        <div style={{
-                            margin: "12px 20px", padding: "16px",
-                            backgroundColor: "#1F2C34", borderRadius: "16px",
-                            display: "flex", flexDirection: "column", alignItems: "center", gap: "12px",
-                            animation: "fadeIn 0.2s ease"
-                        }}>
-                            <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#00A884" }}>
-                                TU CÓDIGO QR DE CONTACTO P2P
-                            </div>
-                            <div style={{
-                                backgroundColor: "#FFFFFF", padding: "12px", borderRadius: "12px",
-                                minWidth: 194, minHeight: 194, display: "flex", alignItems: "center", justifyContent: "center"
-                            }}>
-                                {qrDataUrl ? (
-                                    <img src={qrDataUrl} alt="QR de Identidad" style={{ width: 170, height: 170, display: "block" }} />
-                                ) : (
-                                    <div style={{ color: "#666", fontSize: "0.78rem" }}>Generando QR...</div>
-                                )}
-                            </div>
-                            <div style={{ fontSize: "0.72rem", color: "#8696A0", textAlign: "center", wordBreak: "break-all" }}>
-                                {identity?.nickname || "Mi Identidad"} • {identity?.identity_hash?.substring(0, 16)}…
-                            </div>
-                        </div>
-                    )}
 
                     {/* Section: Discovered Nearby Radio Nodes */}
                     {nearbyPeers.length > 0 && (
@@ -501,6 +464,13 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
                     </div>
                 </div>
             </div>
+
+            {/* Contact QR Modal (WhatsApp Style View & Scan) */}
+            <ContactQrModal
+                isOpen={qrModalTab !== null}
+                initialTab={qrModalTab || "my_qr"}
+                onClose={() => setQrModalTab(null)}
+            />
         </div>
     );
 };

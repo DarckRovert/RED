@@ -6,6 +6,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { MediaGalleryViewer } from "./chat/MediaGalleryViewer";
 import { toast } from "./Toast";
 import { SettingsManager } from "../lib/settingsManager";
+import { useRedStore } from "../store/useRedStore";
 
 interface ContactProfileModalProps {
     contact: any;
@@ -31,6 +32,8 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
     onBlockNode,
 }) => {
     const { t } = useTranslation();
+    const { preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
     const [activeTab, setActiveTab] = useState<MediaTab>("media");
     const [selectedViewerMedia, setSelectedViewerMedia] = useState<MessageItem | null>(null);
     const [isMuted, setIsMuted] = useState(false);
@@ -108,7 +111,8 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                 position: "fixed",
                 inset: 0,
                 zIndex: 99999,
-                background: "var(--bg-void)",
+                background: isFamiliar ? "#111B21" : "var(--bg-void)",
+                color: isFamiliar ? "#E9EDEF" : "var(--text-primary)",
                 display: "flex",
                 flexDirection: "column",
                 overflowY: "auto",
@@ -118,23 +122,23 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             {/* Header */}
             <header
                 style={{
-                    height: "var(--header-h)",
+                    height: isFamiliar ? "56px" : "var(--header-h)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
                     padding: "0 16px",
-                    borderBottom: "1px solid var(--glass-border)",
-                    background: "var(--glass-bg)",
-                    backdropFilter: "var(--glass-blur)",
+                    borderBottom: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid var(--glass-border)",
+                    background: isFamiliar ? "#111B21" : "var(--glass-bg)",
+                    backdropFilter: isFamiliar ? "none" : "var(--glass-blur)",
                     position: "sticky",
                     top: 0,
                     zIndex: 10,
                 }}
             >
-                <button onClick={onClose} className="btn-icon" style={{ width: 38, height: 38, fontSize: "1.1rem" }}>
+                <button onClick={onClose} style={{ background: "none", border: "none", color: "#AEBAC1", fontSize: "1.25rem", cursor: "pointer" }}>
                     ←
                 </button>
-                <span style={{ fontSize: "0.95rem", fontWeight: 900, color: "#fff" }}>Info del Contacto</span>
+                <span style={{ fontSize: "1rem", fontWeight: 700, color: "#E9EDEF" }}>Info del contacto</span>
                 <div style={{ width: 38 }} />
             </header>
 
@@ -142,7 +146,6 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
             <div style={{ maxWidth: "600px", margin: "0 auto", width: "100%", padding: "20px 16px", display: "flex", flexDirection: "column", gap: "18px" }}>
                 {/* Profile Header Card */}
                 <div
-                    className="card-tactical"
                     style={{
                         padding: "24px 20px",
                         display: "flex",
@@ -150,7 +153,9 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                         alignItems: "center",
                         textAlign: "center",
                         gap: "12px",
-                        background: "linear-gradient(180deg, rgba(232,33,58,0.08) 0%, rgba(10,12,22,0.95) 100%)",
+                        borderRadius: "14px",
+                        background: isFamiliar ? "#182229" : "linear-gradient(180deg, rgba(232,33,58,0.08) 0%, rgba(10,12,22,0.95) 100%)",
+                        border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid var(--glass-border)",
                     }}
                 >
                     <div
@@ -158,27 +163,27 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             width: "80px",
                             height: "80px",
                             borderRadius: "50%",
-                            background: "linear-gradient(135deg, var(--primary) 0%, #750010 100%)",
+                            background: isFamiliar ? "linear-gradient(135deg, #00A884 0%, #005C4B 100%)" : "linear-gradient(135deg, var(--primary) 0%, #750010 100%)",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            fontSize: "2rem",
+                            fontSize: "2.2rem",
                             fontWeight: 900,
                             color: "#fff",
-                            boxShadow: "0 0 24px var(--primary-glow)",
-                            border: "2px solid var(--primary-bright)",
+                            boxShadow: isFamiliar ? "0 4px 16px rgba(0, 168, 132, 0.35)" : "0 0 24px var(--primary-glow)",
+                            border: isFamiliar ? "none" : "2px solid var(--primary-bright)",
                         }}
                     >
                         {displayName.charAt(0).toUpperCase()}
                     </div>
 
                     <div>
-                        <h2 style={{ fontSize: "1.25rem", fontWeight: 900, color: "#fff", margin: 0 }}>{displayName}</h2>
+                        <h2 style={{ fontSize: "1.3rem", fontWeight: 700, color: "#E9EDEF", margin: 0 }}>{displayName}</h2>
                         <div
                             onClick={handleCopyDid}
                             style={{
                                 fontSize: "0.72rem",
-                                color: "var(--accent-cyan)",
+                                color: isFamiliar ? "#00A884" : "var(--accent-cyan)",
                                 fontFamily: "JetBrains Mono, monospace",
                                 marginTop: "4px",
                                 cursor: "pointer",
@@ -189,12 +194,12 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             did:red:{peerHash.substring(0, 16)}...{peerHash.substring(peerHash.length - 8)} 📋
                         </div>
                         {contact?.bio && (
-                            <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "6px", fontStyle: "italic" }}>
+                            <div style={{ fontSize: "0.82rem", color: isFamiliar ? "#8696A0" : "var(--text-secondary)", marginTop: "6px", fontStyle: "italic" }}>
                                 "{contact.bio}"
                             </div>
                         )}
                         {contact?.phone_number && (
-                            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "4px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
+                            <div style={{ fontSize: "0.75rem", color: "#8696A0", marginTop: "4px", display: "flex", alignItems: "center", justifyContent: "center", gap: "4px" }}>
                                 <span>📱</span> {contact.phone_number}
                             </div>
                         )}
@@ -204,26 +209,40 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                     <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
                         <button
                             onClick={() => { onClose(); onStartCall?.("audio"); }}
-                            className="btn-tactical-secondary"
-                            style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem" }}
+                            style={{
+                                padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem",
+                                borderRadius: "20px", border: isFamiliar ? "1px solid rgba(0, 168, 132, 0.4)" : "none",
+                                background: isFamiliar ? "rgba(0, 168, 132, 0.15)" : "var(--glass-bg)",
+                                color: isFamiliar ? "#00A884" : "#FFFFFF", cursor: "pointer", fontWeight: 700
+                            }}
                         >
-                            <span>📞</span> {t.chat?.call_btn || "Llamada de Voz"}
+                            <span>📞</span> {t.chat?.call_btn || "Llamada de voz"}
                         </button>
                         <button
                             onClick={() => { onClose(); onStartCall?.("video"); }}
-                            className="btn-tactical-pill active"
-                            style={{ padding: "10px 18px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem" }}
+                            style={{
+                                padding: "10px 20px", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem",
+                                borderRadius: "20px", border: "none",
+                                background: isFamiliar ? "#00A884" : "linear-gradient(135deg, var(--accent-cyan), #0097A7)",
+                                color: "#FFFFFF", cursor: "pointer", fontWeight: 700,
+                                boxShadow: isFamiliar ? "0 2px 10px rgba(0, 168, 132, 0.35)" : "none"
+                            }}
                         >
-                            <span>📹</span> {t.chat?.video_btn || "Videollamada HD"}
+                            <span>📹</span> {t.chat?.video_btn || "Videollamada"}
                         </button>
                     </div>
                 </div>
 
                 {/* Shared Media Tabs Header */}
-                <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                <div style={{
+                    padding: "14px 16px", display: "flex", flexDirection: "column", gap: "14px",
+                    borderRadius: "14px",
+                    background: isFamiliar ? "#182229" : "var(--bg-card)",
+                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid var(--glass-border)",
+                }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontSize: "0.88rem", fontWeight: 800, color: "#fff" }}>{t.chat_extended?.gallery_title || "Archivos & Medios Compartidos"}</span>
-                        <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
+                        <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#E9EDEF" }}>{t.chat_extended?.gallery_title || "Archivos & Medios Compartidos"}</span>
+                        <span style={{ fontSize: "0.72rem", color: "#8696A0", fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace" }}>
                             {messages.length} {t.nav?.chats ? t.nav.chats.toUpperCase() : "MENSAJES"}
                         </span>
                     </div>
@@ -235,17 +254,33 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                             { id: "docs", label: `Docs (${documents.length})`, icon: "📄" },
                             { id: "audio", label: `Voz (${voiceNotes.length})`, icon: "🎙️" },
                             { id: "links", label: `Links (${linksAndLocations.length})`, icon: "🔗" },
-                        ].map((t) => (
-                            <button
-                                key={t.id}
-                                onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab(t.id as MediaTab); }}
-                                className={`btn-tactical-pill ${activeTab === t.id ? "active" : ""}`}
-                                style={{ padding: "8px 2px", fontSize: "0.68rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px" }}
-                            >
-                                <span>{t.icon}</span>
-                                <span>{t.label}</span>
-                            </button>
-                        ))}
+                        ].map((tab) => {
+                            const isSelected = activeTab === tab.id;
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => { SettingsManager.triggerHaptic("light"); setActiveTab(tab.id as MediaTab); }}
+                                    style={{
+                                        padding: "8px 2px", fontSize: "0.68rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "2px",
+                                        borderRadius: "10px", cursor: "pointer",
+                                        background: isSelected 
+                                            ? (isFamiliar ? "rgba(0, 168, 132, 0.2)" : "var(--accent-cyan-subtle)") 
+                                            : (isFamiliar ? "rgba(255, 255, 255, 0.04)" : "transparent"),
+                                        border: isSelected 
+                                            ? (isFamiliar ? "1px solid #00A884" : "1px solid var(--accent-cyan)") 
+                                            : "1px solid transparent",
+                                        color: isSelected 
+                                            ? (isFamiliar ? "#00A884" : "var(--accent-cyan)") 
+                                            : "#8696A0",
+                                        fontWeight: isSelected ? 700 : 500,
+                                        transition: "all 0.15s ease"
+                                    }}
+                                >
+                                    <span>{tab.icon}</span>
+                                    <span>{tab.label}</span>
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {/* Media Tab Body */}
@@ -390,11 +425,16 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                 </div>
 
                 {/* Privacy & Chat Actions Card */}
-                <div className="card-tactical" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{
+                    padding: "14px 16px", display: "flex", flexDirection: "column", gap: "12px",
+                    borderRadius: "14px",
+                    background: isFamiliar ? "#182229" : "var(--bg-card)",
+                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid var(--glass-border)",
+                }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                         <div>
-                            <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#fff" }}>Silenciar Notificaciones</div>
-                            <div style={{ fontSize: "0.70rem", color: "var(--text-muted)" }}>Desactiva alertas de este chat</div>
+                            <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#E9EDEF" }}>Silenciar notificaciones</div>
+                            <div style={{ fontSize: "0.72rem", color: "#8696A0" }}>Desactiva alertas y sonidos de este chat</div>
                         </div>
                         <input
                             type="checkbox"
@@ -403,7 +443,7 @@ export const ContactProfileModal: React.FC<ContactProfileModalProps> = ({
                                 setIsMuted(e.target.checked);
                                 toast.info(e.target.checked ? "🔇 Chat silenciado" : "🔔 Notificaciones activadas");
                             }}
-                            style={{ width: 22, height: 22, accentColor: "var(--primary)" }}
+                            style={{ width: 22, height: 22, accentColor: "#00A884", cursor: "pointer" }}
                         />
                     </div>
 

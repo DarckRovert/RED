@@ -15,6 +15,7 @@ import StatusView from "../StatusView";
 import { CallsHistoryView } from "../call/CallsHistoryView";
 import { TacticalCommandCenter } from "../TacticalCommandCenter";
 import { SettingsModal } from "../SettingsModal";
+import { FamiliarSettingsView } from "../settings/FamiliarSettingsView";
 
 export type NavTab = "chats" | "status" | "calls" | "tools" | "settings";
 
@@ -269,7 +270,11 @@ export function MainNavigationShell({ isTablet }: MainNavigationShellProps) {
                 {activeTab === "status" && <StatusView />}
                 {activeTab === "calls" && <CallsHistoryView />}
                 {activeTab === "tools" && <TacticalCommandCenter />}
-                {activeTab === "settings" && <SettingsModal onClose={() => setActiveTab("chats")} />}
+                {activeTab === "settings" && (
+                    isFamiliar 
+                        ? <FamiliarSettingsView onClose={() => setActiveTab("chats")} />
+                        : <SettingsModal onClose={() => setActiveTab("chats")} />
+                )}
             </div>
 
             {/* Mobile Bottom Navigation Bar (WhatsApp Style) */}

@@ -78,6 +78,7 @@ export interface MessageItem {
     msg_type?: string;
     status?: 'Pending' | 'Sent' | 'Delivered' | 'Read' | 'Failed';
     media_data?: string;
+    caption?: string;
     mime_type?: string;
     duration_ms?: number;
     waveform?: number[];

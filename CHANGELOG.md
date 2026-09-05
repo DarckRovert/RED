@@ -1,5 +1,40 @@
 # Changelog
 
+## [90.0.0-familiar-whatsapp-and-pqc-master-edition] - 2026-09-05
+
+### 🚀 Modo Familiar WhatsApp & PQC Master Edition (Release Oficial v90.0.0)
+
+- **Modo Familiar (WhatsApp UX) 100% Funcional & Soberano:**
+  - **Intercambio de Contactos QR Soberano (`ContactQrModal.tsx`):**
+    - Pestaña "Mi código": Código QR vectorial autónomo generado localmente mediante `OfflineQrEngine`, avatar, apodo, botón Web Share nativo y copia en portapapeles.
+    - Pestaña "Escanear código": Escaneo de cámara nativa Capacitor (`@capacitor-community/barcode-scanner`) con visor verde animado, linterna, soporte de galería (HTML5 Canvas/`BarcodeDetector`), inserción instantánea a contactos (`addContact`) y difusión de enlace P2P (`meshRouter.broadcast`).
+    - Capa de transparencia CSS blindada (`.contact-qr-scanner-overlay`) para evitar pantallas negras en Android WebViews.
+  - **Previsualizador Multimedia WhatsApp (`MediaSendPreviewModal.tsx`):**
+    - Previsualización a pantalla completa para fotos y videos de cámara o galería.
+    - Soporte completo de pie de foto (`caption`) propagado de extremo a extremo a través de `MessageItem`, `sendMessage`, `meshRouter.send` y persistencia IndexedDB/Sled.
+    - Previsualización inteligente en la lista de chats (`📷 pie de foto` / `📹 pie de foto`).
+  - **Ventana de Chat & Quick-Starters:**
+    - Tarjeta de contacto no guardado (`#182229`) con acciones directas para añadir a contactos o bloquear nodo (`blockNode`).
+    - Iniciadores rápidos en conversaciones vacías: `👋 Decir Hola` (mensaje inmediato), `📷 Enviar foto` (cámara nativa) y `📞 Llamar` (llamada de voz P2P).
+    - Renderizado de notas de voz en forma de onda interactiva (28 barras) con paleta WhatsApp `#00A884` (propio) y `#53BDEB` (remoto).
+  - **Pestaña Novedades & Estados Efímeros (`StatusView.tsx`):**
+    - "Mi estado" con badge circular `+` o anillo verde `#00A884` de historias activas de 24h.
+    - "Actualizaciones recientes" con anillos de contacto y visualizador directo.
+    - Botones flotantes (FABs) de WhatsApp: lápiz ✏️ para estados de texto y cámara 📷 para multimedia.
+  - **Historial de Llamadas & Selector de Contactos (`CallsHistoryView.tsx`):**
+    - Selector estilo `#202C33` con buscador en tiempo real y disparadores instantáneos de llamadas de audio (`📞`) y video (`📹`) P2P WebRTC.
+  - **Panel de Ajustes Familiares (`FamiliarSettingsView.tsx`):**
+    - Perfil con avatar grande, apodo, estado y botón directo a código QR.
+    - Switch interactivo para alternar en caliente entre "Modo Familiar (WhatsApp)" y "Modo Táctico C4ISR".
+    - Categorías completas conectadas a sus respectivos subpaneles de configuración funcionales.
+- **Certificación Tri-Hardware v90.0.0:**
+  - Despliegue en limpio y verificación en hardware real:
+    - **Xiaomi Redmi Note 14 5G** (`6dife65ls485fega` / Android 15 / HyperOS)
+    - **Lenovo Tab** (`TB305XU` / Android 14)
+    - **Motorola Moto G22** (`ZT322B386P` / Android 12)
+  - Logcat confirmado: Sled DB, mDNS discovery, enlaces P2P libp2p activos en TCP 7331, cero crashes.
+- **Versión Oficial:** `90.0.0` / `versionCode 90000`.
+
 ## [89.0.0-worker-offthread-and-tri-hardware-edition] - 2026-09-04
 
 ### 🚀 WebAssembly Worker Off-Thread & Tri-Hardware Master Edition (Release Oficial v89.0.0)

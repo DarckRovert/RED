@@ -489,15 +489,15 @@ export class RedAPIClient {
             }
 
             const msgType = options?.msg_type;
-            const snippet = msgType === 'image' ? '📷 Foto' :
+            const snippet = msgType === 'image' ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                             msgType === 'voice' ? '🎤 Nota de voz' :
-                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
-                            (content?.startsWith('data:image') ? '📷 Foto' :
+                            (content?.startsWith('data:image') ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                              content?.startsWith('data:audio') ? '🎤 Nota de voz' :
-                             content?.startsWith('data:video') ? '📹 Video' :
+                             content?.startsWith('data:video') ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
                              (content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (content || 'Mensaje P2P')));
 
             // Update conversation list

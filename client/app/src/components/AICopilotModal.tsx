@@ -348,11 +348,16 @@ export const AICopilotModal: React.FC = () => {
         const startTime = performance.now();
 
         try {
-            const ragResults = await vectorKnowledgeStore.search(text, 1);
+            const cleanText = text.trim().toLowerCase();
+            const isConversational = /^(hola|buenos|buenas|saludos|hey|hi|hello|que tal|qué tal|quien eres|quién eres|que eres|qué eres|como estas|cómo estás|puedes entenderme|me entiendes|entiendes|me escuchas|puedes oirme|puedes oírme|estas ahi|estás ahí|gracias|adios|adiós|chao)\b/i.test(cleanText);
+
             let ragSnippet = "";
-            if (ragResults.length > 0 && ragResults[0].similarityScore >= 0.45) {
-                const topDoc = ragResults[0].document;
-                ragSnippet = `[RAG Táctico INT8: ${topDoc.title}]: ${topDoc.content}`;
+            if (!isConversational) {
+                const ragResults = await vectorKnowledgeStore.search(text, 1);
+                if (ragResults.length > 0 && ragResults[0].similarityScore >= 0.50) {
+                    const topDoc = ragResults[0].document;
+                    ragSnippet = `[RAG Táctico INT8: ${topDoc.title}]: ${topDoc.content}`;
+                }
             }
 
             let contextStr: string | undefined = undefined;

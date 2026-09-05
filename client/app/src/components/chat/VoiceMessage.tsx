@@ -5,6 +5,7 @@ import { MessageItem } from "../../lib/api";
 import { indexedMediaVault } from "../../lib/indexedMediaVault";
 import { LocalAIEngine } from "../../lib/localAiEngine";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { useRedStore } from "../../store/useRedStore";
 import { toast } from "../Toast";
 
 // ── Global Voice Note Coordinator (Single active audio & speed sync) ──────────
@@ -45,6 +46,8 @@ interface VoiceMessageProps {
 
 export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const { t } = useTranslation();
+    const { preferences } = useRedStore();
+    const isFamiliar = (preferences?.uiMode ?? 'familiar') !== 'tactical';
     const audioRef = useRef<HTMLAudioElement>(null);
     const waveContainerRef = useRef<HTMLDivElement>(null);
     const [playing, setPlaying] = useState(false);
@@ -281,8 +284,12 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
     const progressRatio = effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDuration)) : 0;
     const activeBarIndex = Math.floor(progressRatio * waveformBars.length);
 
-    const primaryColor = isMine ? "var(--primary-bright, #FF3355)" : "var(--accent-cyan, #00E5FF)";
-    const inactiveColor = isMine ? "rgba(255, 255, 255, 0.28)" : "rgba(0, 229, 255, 0.25)";
+    const primaryColor = isFamiliar
+        ? (isMine ? "#00A884" : "#53BDEB")
+        : (isMine ? "var(--primary-bright, #FF3355)" : "var(--accent-cyan, #00E5FF)");
+    const inactiveColor = isFamiliar
+        ? (isMine ? "rgba(255, 255, 255, 0.4)" : "rgba(255, 255, 255, 0.25)")
+        : (isMine ? "rgba(255, 255, 255, 0.28)" : "rgba(0, 229, 255, 0.25)");
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "6px", minWidth: 230, userSelect: "none" }}>
@@ -292,12 +299,18 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
                     onClick={togglePlay}
                     style={{
                         width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
-                        background: isMine ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 229, 255, 0.18)",
-                        border: `1.5px solid ${isMine ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 229, 255, 0.45)"}`,
+                        background: isFamiliar 
+                            ? (isMine ? "rgba(255, 255, 255, 0.15)" : "#00A884")
+                            : (isMine ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 229, 255, 0.18)"),
+                        border: isFamiliar
+                            ? (isMine ? "1.5px solid rgba(255, 255, 255, 0.35)" : "none")
+                            : `1.5px solid ${isMine ? "rgba(255, 255, 255, 0.35)" : "rgba(0, 229, 255, 0.45)"}`,
                         color: "#FFFFFF", cursor: "pointer",
                         display: "flex", alignItems: "center", justifyContent: "center",
                         fontSize: "1rem", fontWeight: 900,
-                        boxShadow: isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)",
+                        boxShadow: isFamiliar 
+                            ? (isMine ? "none" : "0 2px 8px rgba(0, 168, 132, 0.4)")
+                            : (isMine ? "0 0 10px rgba(255, 51, 85, 0.25)" : "0 0 12px rgba(0, 229, 255, 0.25)"),
                         transition: "transform 0.1s ease, background 0.2s ease"
                     }}
                     title={playing ? "Pausar" : "Reproducir"}

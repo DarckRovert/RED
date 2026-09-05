@@ -122,7 +122,7 @@ export class VectorKnowledgeStore {
 
         const denom = Math.sqrt(normA) * Math.sqrt(normB);
         if (denom === 0) return 0;
-        return Math.max(0, Math.min(1, (dot / denom + 1) / 2));
+        return Math.max(0, Math.min(1, dot / denom));
     }
 
     // ─── Búsqueda Semántica K-NN Offline ────────────────────────────────────────

@@ -721,11 +721,18 @@ class LocalAIEngineClass {
     /** RAG Táctico Offline: Búsqueda Semántica Vectorial Híbrida (Léxica + Embeddings INT8 / 384-D) */
     public async findTacticalContext(query: string): Promise<{ matchedFragment: KnowledgeFragment | null; similarity: number }> {
         try {
+            const clean = query.trim().toLowerCase();
+            // Filtrar saludos, cortesías y consultas conversacionales abiertas para evitar secuestro por protocolos tácticos
+            const isConversationalIntent = /^(hola|buenos|buenas|saludos|hey|hi|hello|que tal|qué tal|quien eres|quién eres|que eres|qué eres|como estas|cómo estás|puedes entenderme|me entiendes|entiendes|me escuchas|puedes oirme|puedes oírme|estas ahi|estás ahí|gracias|adios|adiós|chao)\b/i.test(clean);
+            if (isConversationalIntent) {
+                return { matchedFragment: null, similarity: 0 };
+            }
+
             // 1. Coincidencia vectorial semántica ultrarrápida INT8 (<5ms)
             try {
                 const { vectorKnowledgeStore } = await import('./VectorKnowledgeStore');
                 const vResults = await vectorKnowledgeStore.search(query, 1);
-                if (vResults.length > 0 && vResults[0].similarityScore >= 0.38) {
+                if (vResults.length > 0 && vResults[0].similarityScore >= 0.50) {
                     const top = vResults[0];
                     const matchedFromKb = EMERGENCY_KNOWLEDGE_BASE.find(f => f.id === top.document.id || f.title.toLowerCase().includes(top.document.title.toLowerCase().slice(0, 15)));
                     if (matchedFromKb) {
@@ -965,9 +972,11 @@ class LocalAIEngineClass {
                 { role: 'user', content: cleanQuery }
             ];
             const sovereignResp = await this.callSovereignLlm(sovereignMessages, { max_tokens: 280, temperature: 0.6 });
+            const isModelDownloaded = activeModel?.isDownloaded === true;
+
             if (sovereignResp) {
                 finalAnswer = sovereignResp;
-            } else {
+            } else if (isModelDownloaded) {
                 try {
                     const generator = await this.getGenerator();
                     if (generator) {
@@ -1151,6 +1160,14 @@ class LocalAIEngineClass {
                    `¿En qué puedo orientarte en este momento?`;
         }
 
+        // Comprensión y comunicación operativa
+        if (/puedes entenderme|me entiendes|entiendes|me escuchas|puedes oirme|puedes oírme|estas ahi|estás ahí|como estas|cómo estás/i.test(lowerQ)) {
+            return `¡Afirmativo, Operador! Te comprendo perfectamente en tiempo real.\n\n` +
+                   `Estoy completamente operativo en tu dispositivo como Copiloto Táctico Off-Grid de RED OS. ` +
+                   `Todo el procesamiento es 100% privado, local y no depende de conexión a internet ni de infraestructura externa.\n\n` +
+                   `¿En qué situación, protocolo de emergencia o procedimiento táctico puedo asistirte en este momento?`;
+        }
+
         // Consultas sobre capacidades o identidad
         if (/quien eres|quién eres|que eres|qué eres|que puedes hacer|qué puedes hacer|ayuda|capacidades/i.test(lowerQ)) {
             return `Soy el Copiloto de Inteligencia Artificial integrado en RED OS. Opero mediante modelos de lenguaje compactos (SLM) y un motor RAG vectorial multilingüe ejecutado localmente sobre WebAssembly en tu hardware.\n\n` +
@@ -1212,7 +1229,7 @@ class LocalAIEngineClass {
         try {
             const { vectorKnowledgeStore } = await import('./VectorKnowledgeStore');
             const vResults = await vectorKnowledgeStore.search(query, 1);
-            if (vResults.length > 0 && vResults[0].similarityScore >= 0.22) {
+            if (vResults.length > 0 && vResults[0].similarityScore >= 0.50) {
                 const doc = vResults[0].document;
                 return `🛡️ **${doc.title}**\n\n${doc.content}\n\n💡 *Respuesta recuperada directamente de la Base de Conocimiento Táctica Vectorial INT8 (100% Offline).*`;
             }

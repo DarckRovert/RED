@@ -865,6 +865,13 @@ export const MessageBubble = memo(({
                                 </div>
                             )}
 
+                            {/* Media Caption (WhatsApp Style) */}
+                            {!isPaymentMessage && (isImageMessage || msg.msg_type === "video") && Boolean((msg as any).caption || (msg.content && !msg.content.startsWith("data:") && !msg.content.startsWith("red_vault://") && !msg.content.startsWith("/9j/") && !msg.content.startsWith("iVBORw0") && !msg.content.startsWith("[Image]") && !msg.content.startsWith("[Video]"))) && (
+                                <div style={{ fontSize: "0.90rem", lineHeight: 1.45, fontWeight: 500, color: isFamiliar ? "#E9EDEF" : "#FFFFFF", padding: "4px 6px 2px 6px", wordBreak: "break-word" }}>
+                                    {renderFormattedContent((msg as any).caption || msg.content, searchQuery)}
+                                </div>
+                            )}
+
                             {/* Audio Voice */}
                             {!isPaymentMessage && (msg.msg_type === "voice" || msg.msg_type === "audio" || msg.media_data?.startsWith("data:audio") || msg.content?.startsWith("data:audio")) && (
                                 <VoiceMessage msg={msg} isMine={isMine} />

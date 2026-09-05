@@ -1849,15 +1849,15 @@ export async function dispatchIncomingMessage(
 
             // ── In-Memory & Storage Conversation List Update for Active Chat ──
             const msgType = normalizedItem.msg_type;
-            const snippet = msgType === 'image' ? '📷 Foto' :
+            const snippet = msgType === 'image' ? (normalizedItem.caption ? `📷 ${normalizedItem.caption}` : '📷 Foto') :
                             msgType === 'voice' ? '🎤 Nota de voz' :
-                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'video' ? (normalizedItem.caption ? `📹 ${normalizedItem.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
-                            (normalizedItem.content?.startsWith('data:image') ? '📷 Foto' :
+                            (normalizedItem.content?.startsWith('data:image') ? (normalizedItem.caption ? `📷 ${normalizedItem.caption}` : '📷 Foto') :
                              normalizedItem.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
-                             normalizedItem.content?.startsWith('data:video') ? '📹 Video' :
+                             normalizedItem.content?.startsWith('data:video') ? (normalizedItem.caption ? `📹 ${normalizedItem.caption}` : '📹 Video') :
                              (normalizedItem.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (normalizedItem.content || 'Mensaje P2P')));
 
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);
@@ -1941,15 +1941,15 @@ export async function dispatchIncomingMessage(
             const rawTs = (item as any).timestamp;
             const normTimestamp = rawTs ? (rawTs > 1e11 ? rawTs / 1000 : rawTs) : (Date.now() / 1000);
             const msgType = item.msg_type;
-            const snippet = msgType === 'image' ? '📷 Foto' :
+            const snippet = msgType === 'image' ? (item.caption ? `📷 ${item.caption}` : '📷 Foto') :
                             msgType === 'voice' ? '🎤 Nota de voz' :
-                            msgType === 'video' ? '📹 Video' :
+                            msgType === 'video' ? (item.caption ? `📹 ${item.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
-                            (item.content?.startsWith('data:image') ? '📷 Foto' :
+                            (item.content?.startsWith('data:image') ? (item.caption ? `📷 ${item.caption}` : '📷 Foto') :
                              item.content?.startsWith('data:audio') ? '🎤 Nota de voz' :
-                             item.content?.startsWith('data:video') ? '📹 Video' :
+                             item.content?.startsWith('data:video') ? (item.caption ? `📹 ${item.caption}` : '📹 Video') :
                              (item.content?.includes('"voucher_id"') ? '🪙 Pago RED P2P' : (item.content || 'Mensaje P2P')));
 
             const canonicalSender = meshRouter.getCanonicalId(item.sender) || normalizeIdentity(item.sender);

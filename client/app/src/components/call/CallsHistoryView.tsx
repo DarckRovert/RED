@@ -376,22 +376,27 @@ export function CallsHistoryView() {
                     <div
                         style={{
                             width: "100%", maxWidth: "420px", maxHeight: "80vh",
-                            background: "linear-gradient(180deg, #0F1428 0%, #080B18 100%)",
-                            borderRadius: "18px", border: "1px solid rgba(0, 229, 255, 0.3)",
-                            boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+                            background: isFamiliar ? "#202C33" : "linear-gradient(180deg, #0F1428 0%, #080B18 100%)",
+                            borderRadius: "18px",
+                            border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(0, 229, 255, 0.3)",
+                            boxShadow: isFamiliar ? "0 10px 40px rgba(0,0,0,0.6)" : "0 20px 60px rgba(0,0,0,0.8)",
                             display: "flex", flexDirection: "column",
                             overflow: "hidden"
                         }}
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Picker Header */}
-                        <div style={{ padding: "16px", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <div style={{ fontSize: "1rem", fontWeight: 900, color: "#00E5FF" }}>
-                                Iniciar Llamada Cifrada
+                        <div style={{
+                            padding: "16px",
+                            borderBottom: isFamiliar ? "1px solid rgba(255, 255, 255, 0.06)" : "1px solid rgba(255, 255, 255, 0.1)",
+                            display: "flex", justifyContent: "space-between", alignItems: "center"
+                        }}>
+                            <div style={{ fontSize: "1.05rem", fontWeight: 700, color: isFamiliar ? "#E9EDEF" : "#00E5FF" }}>
+                                {isFamiliar ? "Seleccionar contacto" : "Iniciar Llamada Cifrada"}
                             </div>
                             <button
                                 onClick={() => setIsPickerOpen(false)}
-                                style={{ background: "none", border: "none", color: "#AAA", fontSize: "1.1rem", cursor: "pointer" }}
+                                style={{ background: "none", border: "none", color: isFamiliar ? "#8696A0" : "#AAA", fontSize: "1.2rem", cursor: "pointer" }}
                             >
                                 ✕
                             </button>
@@ -403,12 +408,13 @@ export function CallsHistoryView() {
                                 type="text"
                                 value={pickerSearch}
                                 onChange={e => setPickerSearch(e.target.value)}
-                                placeholder="Buscar contacto o pegar hash DID..."
+                                placeholder={isFamiliar ? "Buscar contacto..." : "Buscar contacto o pegar hash DID..."}
                                 style={{
                                     width: "100%", padding: "10px 14px", borderRadius: "10px",
-                                    background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(0, 229, 255, 0.2)",
-                                    color: "#FFF", fontSize: "0.84rem", outline: "none",
-                                    fontFamily: "JetBrains Mono, monospace"
+                                    background: isFamiliar ? "#111B21" : "rgba(0, 0, 0, 0.4)",
+                                    border: isFamiliar ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(0, 229, 255, 0.2)",
+                                    color: "#FFF", fontSize: "0.85rem", outline: "none",
+                                    fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace"
                                 }}
                             />
                         </div>
@@ -426,22 +432,23 @@ export function CallsHistoryView() {
                                         style={{
                                             display: "flex", alignItems: "center", justifyContent: "space-between",
                                             padding: "10px 12px", borderRadius: "10px",
-                                            marginBottom: "4px", background: "rgba(255,255,255,0.02)"
+                                            marginBottom: "4px",
+                                            background: isFamiliar ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.02)"
                                         }}
                                     >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: "12px", minWidth: 0 }}>
                                             <div style={{
-                                                width: 36, height: 36, borderRadius: "50%",
+                                                width: 40, height: 40, borderRadius: "50%",
                                                 display: "flex", alignItems: "center", justifyContent: "center",
                                                 fontWeight: 900, color: "#FFF", ...avatarStyle(c.identity_hash || "peer")
                                             }}>
                                                 {(c.display_name || c.name || "C").charAt(0).toUpperCase()}
                                             </div>
                                             <div style={{ minWidth: 0 }}>
-                                                <div style={{ fontSize: "0.86rem", fontWeight: 800, color: "#FFF" }}>
+                                                <div style={{ fontSize: "0.92rem", fontWeight: 600, color: isFamiliar ? "#E9EDEF" : "#FFF" }}>
                                                     {c.display_name || c.name}
                                                 </div>
-                                                <div style={{ fontSize: "0.68rem", color: "#888", fontFamily: "JetBrains Mono, monospace" }}>
+                                                <div style={{ fontSize: "0.72rem", color: isFamiliar ? "#8696A0" : "#888", fontFamily: isFamiliar ? "inherit" : "JetBrains Mono, monospace" }}>
                                                     {(c.identity_hash || "").substring(0, 12)}…
                                                 </div>
                                             </div>
@@ -451,22 +458,30 @@ export function CallsHistoryView() {
                                             <button
                                                 onClick={() => startCallWithPeer(c.identity_hash, "audio")}
                                                 style={{
-                                                    padding: "6px 10px", borderRadius: "8px",
-                                                    background: "rgba(0, 230, 118, 0.15)", border: "1px solid rgba(0, 230, 118, 0.3)",
-                                                    color: "var(--accent-emerald, #00E676)", cursor: "pointer", fontSize: "0.8rem"
+                                                    width: 36, height: 36, borderRadius: "50%",
+                                                    background: isFamiliar ? "rgba(0, 168, 132, 0.18)" : "rgba(0, 230, 118, 0.15)",
+                                                    border: isFamiliar ? "none" : "1px solid rgba(0, 230, 118, 0.3)",
+                                                    color: isFamiliar ? "#00A884" : "var(--accent-emerald, #00E676)",
+                                                    cursor: "pointer", fontSize: "1.05rem",
+                                                    display: "flex", alignItems: "center", justifyContent: "center"
                                                 }}
+                                                title="Llamada de voz"
                                             >
-                                                📞 Audio
+                                                📞
                                             </button>
                                             <button
                                                 onClick={() => startCallWithPeer(c.identity_hash, "video")}
                                                 style={{
-                                                    padding: "6px 10px", borderRadius: "8px",
-                                                    background: "rgba(0, 229, 255, 0.15)", border: "1px solid rgba(0, 229, 255, 0.3)",
-                                                    color: "var(--accent-cyan, #00E5FF)", cursor: "pointer", fontSize: "0.8rem"
+                                                    width: 36, height: 36, borderRadius: "50%",
+                                                    background: isFamiliar ? "rgba(0, 168, 132, 0.18)" : "rgba(0, 229, 255, 0.15)",
+                                                    border: isFamiliar ? "none" : "1px solid rgba(0, 229, 255, 0.3)",
+                                                    color: isFamiliar ? "#00A884" : "var(--accent-cyan, #00E5FF)",
+                                                    cursor: "pointer", fontSize: "1.05rem",
+                                                    display: "flex", alignItems: "center", justifyContent: "center"
                                                 }}
+                                                title="Videollamada"
                                             >
-                                                📹 Video
+                                                📹
                                             </button>
                                         </div>
                                     </div>
@@ -477,27 +492,36 @@ export function CallsHistoryView() {
                             {pickerSearch.trim().length >= 8 && !filteredContacts.some(c => c.identity_hash === pickerSearch.trim()) && (
                                 <div style={{
                                     marginTop: "8px", padding: "12px", borderRadius: "10px",
-                                    background: "rgba(0, 229, 255, 0.08)", border: "1px dashed rgba(0, 229, 255, 0.3)",
+                                    background: isFamiliar ? "#182229" : "rgba(0, 229, 255, 0.08)",
+                                    border: isFamiliar ? "1px solid rgba(0, 168, 132, 0.3)" : "1px dashed rgba(0, 229, 255, 0.3)",
                                     display: "flex", alignItems: "center", justifyContent: "space-between"
                                 }}>
                                     <div>
-                                        <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#00E5FF" }}>
+                                        <div style={{ fontSize: "0.86rem", fontWeight: 700, color: isFamiliar ? "#00A884" : "#00E5FF" }}>
                                             Llamar a DID Directo
                                         </div>
-                                        <div style={{ fontSize: "0.68rem", color: "#AAA", fontFamily: "JetBrains Mono, monospace" }}>
+                                        <div style={{ fontSize: "0.70rem", color: isFamiliar ? "#8696A0" : "#AAA", fontFamily: "JetBrains Mono, monospace" }}>
                                             {pickerSearch.substring(0, 16)}…
                                         </div>
                                     </div>
                                     <div style={{ display: "flex", gap: "6px" }}>
                                         <button
                                             onClick={() => startCallWithPeer(pickerSearch.trim(), "audio")}
-                                            style={{ padding: "6px 10px", borderRadius: "6px", background: "var(--accent-emerald)", color: "#000", fontWeight: 800, border: "none", cursor: "pointer" }}
+                                            style={{
+                                                padding: "6px 12px", borderRadius: "8px",
+                                                background: "#00A884", color: "#FFF",
+                                                fontWeight: 800, border: "none", cursor: "pointer"
+                                            }}
                                         >
                                             📞
                                         </button>
                                         <button
                                             onClick={() => startCallWithPeer(pickerSearch.trim(), "video")}
-                                            style={{ padding: "6px 10px", borderRadius: "6px", background: "var(--accent-cyan)", color: "#000", fontWeight: 800, border: "none", cursor: "pointer" }}
+                                            style={{
+                                                padding: "6px 12px", borderRadius: "8px",
+                                                background: "#00A884", color: "#FFF",
+                                                fontWeight: 800, border: "none", cursor: "pointer"
+                                            }}
                                         >
                                             📹
                                         </button>

@@ -4,6 +4,7 @@ import { RED_VERSION } from "../../lib/version";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { avatarStyle } from "./types";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
+import { ContactQrModal } from "../chat/ContactQrModal";
 
 export type ChatFilterType = "all" | "unread" | "groups" | "contacts" | "channels";
 
@@ -48,6 +49,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     const { t } = useTranslation();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [quickMenuOpen, setQuickMenuOpen] = useState(false);
+    const [qrModalOpen, setQrModalOpen] = useState(false);
 
     const filters: { id: ChatFilterType; label: string; icon?: string; badge?: number }[] = [
         { id: "all", label: t('common.all') || "Todos" },
@@ -114,6 +116,22 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
 
                     {/* Right: Authentic Action Icons */}
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0, position: "relative" }}>
+                        {/* QR Code Exchange Icon */}
+                        <button
+                            onClick={() => setQrModalOpen(true)}
+                            style={{
+                                width: 38, height: 38, borderRadius: "50%",
+                                background: "transparent", border: "none",
+                                color: "#AEBAC1", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.15rem", transition: "background 0.15s ease"
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                            title="Mi Código QR / Escanear"
+                        >
+                            🪪
+                        </button>
+
                         {/* Status / Stories icon */}
                         <button
                             onClick={() => setStoryModal("creator")}
@@ -473,6 +491,20 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                             </button>
                             <div style={{ height: "1px", background: "rgba(255, 255, 255, 0.1)", margin: "4px 0" }} />
                             <button
+                                onClick={() => {
+                                    setQuickMenuOpen(false);
+                                    updatePreferences({ uiMode: 'familiar' });
+                                }}
+                                style={{
+                                    display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
+                                    background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.35)", borderRadius: "8px",
+                                    color: "#00A884", fontSize: "0.82rem", fontWeight: 800,
+                                    cursor: "pointer", textAlign: "left"
+                                }}
+                            >
+                                <span>💬</span> Cambiar a Modo Familiar (WhatsApp)
+                            </button>
+                            <button
                                 onClick={() => { setQuickMenuOpen(false); setMenuOpen(true); }}
                                 style={{
                                     display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px",
@@ -527,6 +559,12 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                     );
                 })}
             </div>
+
+            {/* Contact QR Modal (WhatsApp Style View & Scan) */}
+            <ContactQrModal
+                isOpen={qrModalOpen}
+                onClose={() => setQrModalOpen(false)}
+            />
         </div>
     );
 };
