@@ -1120,15 +1120,25 @@ textarea:focus {
 }
 
 /* ─── Barcode / Camera Scanner Transparent Layer ────────────────────────────── */
-body.scanner-active {
+html.scanner-active,
+body.scanner-active,
+html.scanner-active body,
+html.scanner-active .app-container,
+html.scanner-active .app-main,
+body.scanner-active .app-container,
+body.scanner-active .app-main,
+body.scanner-active .radar-window {
   background: transparent !important;
+  background-color: transparent !important;
   background-image: none !important;
 }
 
-body.scanner-active html,
-body.scanner-active .app-container,
-body.scanner-active .app-main,
-body.scanner-active .radar-window,
+/* Hide underlying background content so it does not bleed into the camera viewport */
+html.scanner-active .app-container > *:not(.scanner-viewfinder-overlay):not(.contact-qr-scanner-overlay):not(.contact-qr-modal-root),
+body.scanner-active .app-container > *:not(.scanner-viewfinder-overlay):not(.contact-qr-scanner-overlay):not(.contact-qr-modal-root) {
+  visibility: hidden !important;
+}
+
 body.scanner-active div:not(.scanner-viewfinder-overlay):not(.scanner-viewfinder-overlay *):not(.contact-qr-scanner-overlay):not(.contact-qr-scanner-overlay *) {
   background: transparent !important;
 }

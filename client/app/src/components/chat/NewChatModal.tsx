@@ -5,9 +5,9 @@ import { useRedStore } from "../../store/useRedStore";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
 import { avatarStyle } from "../sidebar/types";
-import { OfflineQrEngine } from "../../lib/qr/OfflineQrEngine";
 import { ContactQrModal } from "./ContactQrModal";
 import { NewContactModal } from "./NewContactModal";
+import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmationModal";
 
 interface NewChatModalProps {
     isOpen: boolean;
@@ -32,6 +32,7 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
     const [manualAlias, setManualAlias] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [newContactOpen, setNewContactOpen] = useState(false);
+    const [webPairingCode, setWebPairingCode] = useState<string | null>(null);
     // Tracks which nearby peer is currently being added (hash | null)
     const [addingPeerHash, setAddingPeerHash] = useState<string | null>(null);
 
@@ -97,10 +98,15 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
         const alias = manualAlias.trim();
         if (!input) return;
 
-        // Detection of Web Companion pairing code
-        if (input.startsWith("RED_PAIR:1:")) {
-            onClose();
-            navigate("webCompanionLink");
+        // Detection of Web Companion pairing code (Any variant: RED_PAIR:1:, RED_PAIR:2:, RED_PAIR:, RED_VAULT:1:)
+        if (
+            input.startsWith("RED_PAIR:1:") ||
+            input.startsWith("RED_PAIR:2:") ||
+            input.startsWith("RED_PAIR:") ||
+            input.startsWith("RED_VAULT:1:")
+        ) {
+            window.dispatchEvent(new CustomEvent("red:pair_web_companion", { detail: input }));
+            setWebPairingCode(input);
             return;
         }
 
@@ -509,6 +515,17 @@ export const NewChatModal: React.FC<NewChatModalProps> = ({ isOpen, onClose }) =
             isOpen={newContactOpen}
             onClose={() => setNewContactOpen(false)}
         />
+
+        {/* Web Companion Pair Confirmation Modal */}
+        {webPairingCode && (
+            <WebCompanionPairConfirmationModal
+                qrData={webPairingCode}
+                onClose={() => {
+                    setWebPairingCode(null);
+                    onClose();
+                }}
+            />
+        )}
     </>
     );
 };

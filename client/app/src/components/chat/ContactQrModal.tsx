@@ -6,6 +6,7 @@ import { OfflineQrEngine } from "../../lib/qr/OfflineQrEngine";
 import { meshRouter } from "../../lib/mesh/meshRouter";
 import { toast } from "../Toast";
 import { avatarStyle } from "../sidebar/types";
+import { WebCompanionPairConfirmationModal } from "../WebCompanionPairConfirmationModal";
 
 interface ContactQrModalProps {
     isOpen?: boolean;
@@ -18,11 +19,18 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
     onClose,
     initialTab = "my_qr"
 }) => {
-    const { identity, addContact, navigate } = useRedStore();
+    const { identity, contacts, addContact, navigate } = useRedStore();
     const [activeTab, setActiveTab] = useState<"my_qr" | "scan">(initialTab);
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
     const [isTorchOn, setIsTorchOn] = useState(false);
     const [isScanningNative, setIsScanningNative] = useState(false);
+    const [pendingWebPairingCode, setPendingWebPairingCode] = useState<string | null>(null);
+    const [detectedContact, setDetectedContact] = useState<{
+        hash: string;
+        pk?: string;
+        name: string;
+        alreadyContact: boolean;
+    } | null>(null);
     const [isWebCamActive, setIsWebCamActive] = useState(false);
     const [scanError, setScanError] = useState<string | null>(null);
     const [isProcessingCode, setIsProcessingCode] = useState(false);
@@ -79,6 +87,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
         setIsScanningNative(false);
         stopWebCam();
         if (typeof document !== "undefined") {
+            document.documentElement.classList.remove("scanner-active");
             document.body.classList.remove("scanner-active");
         }
         try {
@@ -133,16 +142,44 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 } catch {}
             }
 
-            // Case B: did:red:<hash>
+            // Case B: did:red:<hash>:<pk>:<name>
             if (!targetHash && trimmed.toLowerCase().startsWith("did:red:")) {
-                targetHash = trimmed.replace(/^did:red:/i, "").trim();
+                const withoutScheme = trimmed.replace(/^did:red:/i, "").trim();
+                const parts = withoutScheme.split(":");
+                targetHash = parts[0]?.trim() || "";
+                if (parts.length >= 2 && parts[1]?.trim() && !targetPk) {
+                    targetPk = parts[1].trim();
+                }
+                if (parts.length >= 3 && parts[2]?.trim() && !targetName) {
+                    try {
+                        targetName = decodeURIComponent(parts[2].trim());
+                    } catch {
+                        targetName = parts[2].trim();
+                    }
+                }
             }
 
-            // Case C: Web Companion pair code
-            if (trimmed.startsWith("RED_PAIR:1:")) {
+            // Case B.2: RED_ID_VAULT:<base64>
+            if (!targetHash && trimmed.startsWith("RED_ID_VAULT:")) {
+                try {
+                    const encoded = trimmed.split(":")[1];
+                    const decoded = JSON.parse(atob(encoded));
+                    targetHash = (decoded.did || "").replace(/^did:red:/i, "").trim();
+                    if (decoded.pk && !targetPk) targetPk = decoded.pk;
+                    if (decoded.name && !targetName) targetName = decoded.name;
+                } catch {}
+            }
+
+            // Case C: Web Companion pair code (Any variant: RED_PAIR:1:, RED_PAIR:2:, RED_PAIR:, RED_VAULT:1:)
+            if (
+                trimmed.startsWith("RED_PAIR:1:") ||
+                trimmed.startsWith("RED_PAIR:2:") ||
+                trimmed.startsWith("RED_PAIR:") ||
+                trimmed.startsWith("RED_VAULT:1:")
+            ) {
                 await stopCamera();
-                onClose();
-                navigate("webCompanionLink");
+                window.dispatchEvent(new CustomEvent("red:pair_web_companion", { detail: trimmed }));
+                setPendingWebPairingCode(trimmed);
                 return;
             }
 
@@ -152,16 +189,36 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             }
 
             if (!targetHash) {
-                toast.warning("Código QR no reconocido como contacto de RED.");
+                toast.warning("Código QR no reconocido como contacto ni sesión Web de RED.");
                 setIsProcessingCode(false);
                 return;
             }
 
-            // Add contact to store
+            await stopCamera();
             const finalName = targetName || `Contacto ${targetHash.substring(0, 8)}`;
-            await addContact(targetHash, finalName, targetPk || undefined);
+            const isAlready = contacts.some((c: any) => c.identity_hash === targetHash || c.short_id === targetHash);
+            setDetectedContact({
+                hash: targetHash,
+                pk: targetPk,
+                name: finalName,
+                alreadyContact: isAlready
+            });
+        } catch (err: any) {
+            console.error("[ContactQrModal] Error processing code:", err);
+            toast.error("Error al procesar el código QR");
+        } finally {
+            setIsProcessingCode(false);
+        }
+    };
 
-            // Announce handshake over mesh
+    /** Confirms and commits the detected contact to the local store and mesh */
+    const handleCommitContact = async (openChat = true) => {
+        if (!detectedContact) return;
+        setIsProcessingCode(true);
+        try {
+            const { hash, name, pk } = detectedContact;
+            await addContact(hash, name, pk || undefined);
+
             try {
                 const payload = new TextEncoder().encode(JSON.stringify({
                     type: "contact_request",
@@ -173,13 +230,16 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 meshRouter.broadcast(payload);
             } catch {}
 
-            await stopCamera();
-            toast.success(`✅ Conectado con ${finalName}`);
-            onClose();
-            navigate("chat", targetHash);
+            toast.success(`✅ Conectado con ${name}`);
+            if (openChat) {
+                onClose();
+                navigate("chat", hash);
+            } else {
+                setDetectedContact(prev => prev ? { ...prev, alreadyContact: true } : null);
+            }
         } catch (err: any) {
-            console.error("[ContactQrModal] Error processing code:", err);
-            toast.error("Error al procesar el código QR");
+            console.error("[ContactQrModal] Error committing contact:", err);
+            toast.error("Error al guardar el contacto");
         } finally {
             setIsProcessingCode(false);
         }
@@ -205,9 +265,16 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
             video.srcObject = stream;
             await video.play();
 
-            // BarcodeDetector loop
+            // BarcodeDetector loop with ZXing fallback
             const hasBD = "BarcodeDetector" in window;
             const detector = hasBD ? new (window as any).BarcodeDetector({ formats: ["qr_code"] }) : null;
+            let zxingReader: any = null;
+            if (!hasBD) {
+                try {
+                    const { BrowserQRCodeReader } = await import("@zxing/library");
+                    zxingReader = new BrowserQRCodeReader();
+                } catch {}
+            }
 
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
@@ -226,6 +293,15 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                 await handleCodeDetected(codes[0].rawValue);
                                 return;
                             }
+                        } else if (zxingReader) {
+                            try {
+                                const zResult = await zxingReader.decodeFromVideoElement(video);
+                                if (zResult && zResult.getText()) {
+                                    stopWebCam();
+                                    await handleCodeDetected(zResult.getText());
+                                    return;
+                                }
+                            } catch {}
                         }
                     } catch { /* BarcodeDetector may throw on empty frame */ }
                 }
@@ -269,6 +345,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                 }
 
                 if (typeof document !== "undefined") {
+                    document.documentElement.classList.add("scanner-active");
                     document.body.classList.add("scanner-active");
                 }
                 setIsScanningNative(true);
@@ -370,6 +447,17 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                             } catch {}
                         }
 
+                        // Pure JS / Offline fallback via @zxing/library
+                        try {
+                            const { BrowserQRCodeReader } = await import("@zxing/library");
+                            const zxingReader = new BrowserQRCodeReader();
+                            const zResult = await zxingReader.decodeFromImageElement(img);
+                            if (zResult && zResult.getText()) {
+                                handleCodeDetected(zResult.getText());
+                                return;
+                            }
+                        } catch {}
+
                         toast.warning("No se detectó un código QR legible en esta imagen. Intenta con un enfoque más nítido.");
                     } catch {
                         toast.error("Error al procesar imagen");
@@ -387,7 +475,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
 
     return (
         <div
-            className={isScanningNative ? "contact-qr-scanner-overlay" : ""}
+            className={isScanningNative ? "contact-qr-scanner-overlay contact-qr-modal-root" : "contact-qr-modal-root"}
             style={{
                 position: "fixed",
                 inset: 0,
@@ -691,9 +779,105 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    justifyContent: "center"
+                    justifyContent: "center",
+                    padding: detectedContact ? "20px" : 0
                 }}>
-                    {isScanningNative ? (
+                    {detectedContact ? (
+                        /* Previsualización de Contacto Detectado (Preview Card Estilo WhatsApp) */
+                        <div style={{
+                            maxWidth: "360px",
+                            width: "100%",
+                            background: "#182229",
+                            borderRadius: "24px",
+                            padding: "28px 24px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            textAlign: "center",
+                            gap: "16px",
+                            border: "1px solid rgba(0, 168, 132, 0.4)",
+                            boxShadow: "0 20px 50px rgba(0, 0, 0, 0.6)"
+                        }}>
+                            <div style={{
+                                width: 80, height: 80, borderRadius: "50%",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "2.2rem", fontWeight: 700, color: "#FFFFFF",
+                                ...avatarStyle(detectedContact.hash),
+                                boxShadow: "0 8px 24px rgba(0,0,0,0.4)"
+                            }}>
+                                {detectedContact.name.charAt(0).toUpperCase()}
+                            </div>
+
+                            <div>
+                                <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#E9EDEF" }}>
+                                    {detectedContact.name}
+                                </div>
+                                <div style={{ fontSize: "0.78rem", color: "#00A884", fontFamily: "JetBrains Mono, monospace", marginTop: "4px" }}>
+                                    did:red:{detectedContact.hash.substring(0, 18)}…
+                                </div>
+                                {detectedContact.alreadyContact && (
+                                    <span style={{
+                                        display: "inline-block", marginTop: "8px",
+                                        padding: "3px 10px", borderRadius: "12px",
+                                        background: "rgba(0, 168, 132, 0.15)", color: "#00A884",
+                                        fontSize: "0.75rem", fontWeight: 600
+                                    }}>
+                                        ✓ Ya está en tus contactos
+                                    </span>
+                                )}
+                            </div>
+
+                            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
+                                {!detectedContact.alreadyContact ? (
+                                    <button
+                                        onClick={() => handleCommitContact(true)}
+                                        disabled={isProcessingCode}
+                                        style={{
+                                            width: "100%", padding: "12px", borderRadius: "24px",
+                                            background: "#00A884", color: "#FFFFFF", border: "none",
+                                            fontSize: "0.95rem", fontWeight: 700, cursor: "pointer",
+                                            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                            boxShadow: "0 4px 14px rgba(0, 168, 132, 0.35)"
+                                        }}
+                                    >
+                                        <span>➕</span> Añadir y Chatear
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => {
+                                            onClose();
+                                            navigate("chat", detectedContact.hash);
+                                        }}
+                                        style={{
+                                            width: "100%", padding: "12px", borderRadius: "24px",
+                                            background: "#00A884", color: "#FFFFFF", border: "none",
+                                            fontSize: "0.95rem", fontWeight: 700, cursor: "pointer",
+                                            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
+                                            boxShadow: "0 4px 14px rgba(0, 168, 132, 0.35)"
+                                        }}
+                                    >
+                                        <span>💬</span> Abrir conversación
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setDetectedContact(null);
+                                        setIsScanningNative(false);
+                                        setIsWebCamActive(false);
+                                    }}
+                                    style={{
+                                        width: "100%", padding: "10px", borderRadius: "24px",
+                                        background: "transparent", color: "#8696A0",
+                                        border: "1px solid rgba(255, 255, 255, 0.12)",
+                                        fontSize: "0.85rem", fontWeight: 600, cursor: "pointer"
+                                    }}
+                                >
+                                    🔄 Escanear otro código
+                                </button>
+                            </div>
+                        </div>
+                    ) : isScanningNative ? (
                         /* Native Camera Overlay Frame */
                         <div style={{
                             position: "relative",
@@ -712,7 +896,7 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                                 position: "relative",
                                 border: "2px solid rgba(0, 168, 132, 0.4)",
                                 borderRadius: "24px",
-                                boxShadow: "0 0 0 4000px rgba(0, 0, 0, 0.55)",
+                                boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.82)",
                                 display: "flex",
                                 alignItems: "center",
                                 justifyContent: "center"
@@ -898,6 +1082,17 @@ export const ContactQrModal: React.FC<ContactQrModalProps> = ({
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* Modal de confirmación para Web Companion si se escaneó un código de escritorio */}
+            {pendingWebPairingCode && (
+                <WebCompanionPairConfirmationModal
+                    qrData={pendingWebPairingCode}
+                    onClose={() => {
+                        setPendingWebPairingCode(null);
+                        onClose();
+                    }}
+                />
             )}
         </div>
     );

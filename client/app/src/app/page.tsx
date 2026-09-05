@@ -66,6 +66,7 @@ const CalculatorScreen     = dynamic(() => import("../components/CalculatorScree
 const SecurityReportModal  = dynamic(() => import("../components/SecurityReportModal").then(m => ({ default: m.SecurityReportModal })),  { ssr: false, loading: () => <AppLoader /> });
 const BackupRestoreModal   = dynamic(() => import("../components/BackupRestoreModal").then(m => ({ default: m.BackupRestoreModal })),   { ssr: false, loading: () => <AppLoader /> });
 const WebCompanionLinkModal = dynamic(() => import("../components/WebCompanionLinkModal").then(m => ({ default: m.WebCompanionLinkModal })), { ssr: false, loading: () => <AppLoader /> });
+const LinkedDevicesView     = dynamic(() => import("../components/settings/LinkedDevicesView").then(m => ({ default: m.LinkedDevicesView })), { ssr: false, loading: () => <AppLoader /> });
 const SettingsModal        = dynamic(() => import("../components/SettingsModal").then(m => ({ default: m.SettingsModal })),        { ssr: false, loading: () => <AppLoader /> });
 const UpdateModal          = dynamic(() => import("../components/UpdateModal").then(m => ({ default: m.UpdateModal })),          { ssr: false, loading: () => <AppLoader /> });
 const CommercialHubModal   = dynamic(() => import("../components/CommercialHubModal").then(m => ({ default: m.CommercialHubModal })),   { ssr: false, loading: () => <AppLoader /> });
@@ -314,7 +315,7 @@ function TacticalTabletWorkspace({ onOpenTool }: { onOpenTool: (screen: any) => 
 }
 
 export default function AppRouter() {
-  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate, activeMiniAppBundle, launchMiniApp } = useRedStore();
+  const { currentScreen, activeConversationId, identity, activeLiveStreamId, liveStreams, goBack, navigate, activeMiniAppBundle, launchMiniApp, preferences } = useRedStore();
   const [mounted, setMounted] = useState(false);
   const [isTablet, setIsTablet] = useState(false);
   const [needsProfile, setNeedsProfile] = useState<boolean | null>(null);
@@ -589,7 +590,15 @@ export default function AppRouter() {
                 {(currentScreen === "nodeLogs" || currentScreen === "logs") && <NodeLogsModal onClose={goBack} />}
                 {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
                 {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
-                {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && <WebCompanionLinkModal onClose={goBack} />}
+                {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && (
+                  (preferences?.uiMode ?? 'familiar') === 'familiar' ? (
+                    <div style={{ position: "fixed", inset: 0, zIndex: 99999 }}>
+                      <LinkedDevicesView onClose={goBack} />
+                    </div>
+                  ) : (
+                    <WebCompanionLinkModal onClose={goBack} />
+                  )
+                )}
                 {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
                 {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
                 {currentScreen === "globalShield" && <GlobalShieldPanel />}
@@ -688,7 +697,15 @@ export default function AppRouter() {
               {currentScreen === "calculator" && <CalculatorScreen onUnlock={handleCalculatorUnlock} />}
               {currentScreen === "secReport" && <SecurityReportModal onClose={goBack} />}
               {currentScreen === "backup" && <BackupRestoreModal onClose={goBack} />}
-              {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && <WebCompanionLinkModal onClose={goBack} />}
+              {(currentScreen === "webCompanionLink" || currentScreen === "companionLink") && (
+                (preferences?.uiMode ?? 'familiar') === 'familiar' ? (
+                  <div style={{ position: "fixed", inset: 0, zIndex: 99999 }}>
+                    <LinkedDevicesView onClose={goBack} />
+                  </div>
+                ) : (
+                  <WebCompanionLinkModal onClose={goBack} />
+                )
+              )}
               {currentScreen === "settings" && <SettingsModal onClose={goBack} />}
               {currentScreen === "updater" && <UpdateModal onClose={goBack} />}
               {currentScreen === "globalShield" && <GlobalShieldPanel />}

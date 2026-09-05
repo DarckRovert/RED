@@ -1,5 +1,31 @@
 # Changelog
 
+## [92.0.0-web-companion-and-tri-hardware-sync-edition] - 2026-09-05
+
+### 🚀 Web Companion, Tri-Hardware QR & Offline Multi-Device Sync Edition (Release Oficial v92.0.0)
+
+- **Experiencia Completa WhatsApp Web UX en Dispositivos Vinculados (`LinkedDevicesView.tsx`):**
+  - Vista dedicada de dispositivos vinculados con estado de sincronización en tiempo real, plataforma, navegador e IP local.
+  - Desvinculación remota en 1 toque que revoca de inmediato la sesión del cliente web emparejado.
+  - Botón de acción primaria flotante ("Vincular un dispositivo") con soporte para cámara nativa, alternador de linterna con apagado automático y selector de imágenes QR locales.
+  - Exportación de cápsula criptográfica Air-Gap protegida con PBKDF2 y AES-256-GCM para intercambio fuera de banda.
+
+- **Desacoplamiento de Variantes de Códigos QR:**
+  - **Variante A (Web Companion / Device Linking):** Emparejamiento de bóveda criptográfica P-256 + AES-256-GCM con soporte omnicanal (`RED_PAIR:1:`, `RED_PAIR:2:`, `RED_VAULT:1:`).
+  - **Variante B (Intercambio de Contacto DID):** Escaneo de identidades `did:red:...` con tarjeta de previsualización (Preview Card) con avatar, alias, DID y acción de añadir antes de persistir.
+  - **Variante C (Nodo Web Independiente en Escritorio):** Onboarding en `AuthWall.tsx` con disposición de 2 columnas y botón explícito para operar como nodo soberano local con PIN de 6 dígitos sin requerir teléfono móvil.
+
+- **Erradicación de Deuda Técnica en Escáneres y Enrutamiento:**
+  - `ContactQrModal`, `NewChatModal`, `NewContactModal` y `RadarWindow` preservan la carga útil y conmutan al modal de vinculación sin perder el token.
+  - Eliminación de elemento `<video>` redundante en `RadarWindow.tsx` para garantizar enlace limpio con la referencia de cámara.
+
+- **Certificación Tri-Hardware Concurrente:**
+  - Despliegue en limpio verificado con `adb logcat` en:
+    - **Xiaomi Redmi Note 14 5G** (`6dife65ls485fega` / Android 15 / HyperOS — Renderizado a ~60 FPS)
+    - **Lenovo Tab M11** (`HA2CHKZ2` / Android 14)
+    - **Motorola Moto G22** (`ZT322B386P` / Android 12)
+- **Versión Oficial:** `92.0.0` / `versionCode 92000`.
+
 ## [91.0.0-tri-hardware-and-carrier-sense-edition] - 2026-09-05
 
 ### 🚀 Excelencia Tri-Hardware & Carrier Sense Edition (Release Oficial v91.0.0)

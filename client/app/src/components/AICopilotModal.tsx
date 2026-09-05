@@ -354,7 +354,7 @@ export const AICopilotModal: React.FC = () => {
             let ragSnippet = "";
             if (!isConversational) {
                 const ragResults = await vectorKnowledgeStore.search(text, 1);
-                if (ragResults.length > 0 && ragResults[0].similarityScore >= 0.50) {
+                if (ragResults.length > 0 && ragResults[0].similarityScore >= 0.45) {
                     const topDoc = ragResults[0].document;
                     ragSnippet = `[RAG Táctico INT8: ${topDoc.title}]: ${topDoc.content}`;
                 }

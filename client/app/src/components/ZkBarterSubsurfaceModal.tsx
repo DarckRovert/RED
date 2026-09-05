@@ -74,6 +74,7 @@ export function ZkBarterSubsurfaceModal() {
     const stopZkCamera = async () => {
         shouldScanZkRef.current = false;
         if (typeof document !== "undefined") {
+            document.documentElement.classList.remove("scanner-active");
             document.body.classList.remove("scanner-active");
         }
         setIsScanningZk(false);
@@ -107,6 +108,9 @@ export function ZkBarterSubsurfaceModal() {
                 if (!shouldScanZkRef.current) {
                     await stopZkCamera();
                     return;
+                }
+                if (typeof document !== "undefined") {
+                    document.documentElement.classList.add("scanner-active");
                 }
                 document.body.classList.add("scanner-active");
                 setIsScanningZk(true);
@@ -197,9 +201,68 @@ export function ZkBarterSubsurfaceModal() {
 
     return (
         <div className="modal-viewport-adaptive" style={{
-            background: "#050812", color: "#FFF",
+            background: isScanningZk ? "transparent" : "#050812", color: "#FFF",
             fontFamily: "JetBrains Mono, monospace"
         }}>
+            {isScanningZk && (
+                <div className="scanner-viewfinder-overlay" style={{
+                    position: "fixed", inset: 0, zIndex: 99999,
+                    background: "rgba(0,0,0,0.5)",
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "space-between",
+                    padding: "calc(var(--safe-top, 20px) + 20px) 20px calc(var(--safe-bottom, 20px) + 20px)",
+                    pointerEvents: "auto"
+                }}>
+                    <div style={{
+                        padding: "12px 20px", borderRadius: "16px",
+                        background: "rgba(6, 10, 24, 0.92)",
+                        border: "1.5px solid var(--accent-cyan)",
+                        color: "#FFFFFF", textAlign: "center",
+                        boxShadow: "0 0 20px rgba(0,229,255,0.3)",
+                        maxWidth: "340px", width: "90%"
+                    }}>
+                        <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--accent-cyan)" }}>
+                            📷 ESCANEAR PRUEBA ZK
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.75)", marginTop: "4px" }}>
+                            Apunta al código QR de la prueba de conocimiento cero
+                        </div>
+                    </div>
+
+                    <div className="scanner-target-box" style={{
+                        width: "260px", height: "260px",
+                        border: "2px solid var(--accent-emerald)",
+                        borderRadius: "24px",
+                        boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.82), 0 0 24px rgba(0, 230, 118, 0.4)",
+                        position: "relative", overflow: "hidden",
+                        display: "flex", alignItems: "center", justifyContent: "center"
+                    }}>
+                        <div className="scanner-laser-line" style={{
+                            width: "100%", height: "2px",
+                            background: "linear-gradient(90deg, transparent, #00E676, #00E5FF, transparent)",
+                            boxShadow: "0 0 12px #00E676",
+                            position: "absolute", top: 0,
+                            animation: "scanLaser 2s infinite ease-in-out"
+                        }} />
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "90%", maxWidth: "340px" }}>
+                        <button
+                            onClick={stopZkCamera}
+                            style={{
+                                width: "100%", padding: "14px",
+                                background: "rgba(232, 33, 58, 0.85)",
+                                border: "1px solid #FF3355",
+                                borderRadius: "14px", color: "#FFFFFF",
+                                fontWeight: 900, fontSize: "0.9rem",
+                                cursor: "pointer", boxShadow: "0 0 16px rgba(232,33,58,0.4)"
+                            }}
+                        >
+                            ✕ CANCELAR ESCANEO
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* Header */}
             <div style={{
                 padding: "12px 16px", background: "rgba(10, 15, 30, 0.95)",

@@ -162,7 +162,10 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
     // ── Control de Cámara para Escaneo en Móvil ──────────────────────────────
     const stopCamera = async () => {
         shouldScanRef.current = false;
-        document.body.classList.remove("scanner-active");
+        if (typeof document !== "undefined") {
+            document.documentElement.classList.remove("scanner-active");
+            document.body.classList.remove("scanner-active");
+        }
         isScanningRef.current = false;
         try {
             const { Capacitor } = await import("@capacitor/core");
@@ -195,6 +198,9 @@ export const WebCompanionLinkModal: React.FC<WebCompanionLinkModalProps> = ({ on
                 if (!shouldScanRef.current) {
                     await stopCamera();
                     return;
+                }
+                if (typeof document !== "undefined") {
+                    document.documentElement.classList.add("scanner-active");
                 }
                 document.body.classList.add("scanner-active");
                 isScanningRef.current = true;

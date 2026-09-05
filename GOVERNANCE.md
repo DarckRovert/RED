@@ -1,4 +1,4 @@
-﻿# ðŸ¤– RULESET AUTÃ“MATA RED v90.0.0 â€” FLUJO INTEGRAL DE GOBERNANZA
+# ðŸ¤– RULESET AUTÃ“MATA RED v90.0.0 â€” FLUJO INTEGRAL DE GOBERNANZA
 
 ## **NIVEL 0: PRE-COMMIT (Git Hooks & Validation)**
 
@@ -615,30 +615,65 @@ main (stable)
 1. Revert tag: `git push -d origin vX.Y.Z`
 2. Revert commits: `git revert -n HEAD~N..HEAD` (N = nÃºmero de commits)
 3. Crear release `X.Y.Z-rollback`
-4. CI/CD valida versiÃ³n anterior
-
-### Regla 11.3: Security Incident
-**Si vulnerabilidad descubierta:**
-1. NO publicar detalles pÃºblicamente
-2. Crear private security advisory en GitHub
-3. Fix en rama privada `security/cve-XXXX`
-4. Audit por security expert
-5. Patch release (X.Y.Z+1)
-6. Publicar advisory con crÃ©ditos
+**Para release a producción:**
+- ✅ GDPR: No almacenar datos personales sin consentimiento
+- ✅ License compliance: Todos los deps tienen compatible licenses
+- ✅ Accessibility: WCAG 2.1 AA para UI web
+- ✅ Security: Zero critical/high vulns en dependencies
+- ✅ Performance: API response time < 500ms (p95)
+- ✅ Availability: Uptime >= 99.5% (si es servicio)
 
 ---
 
-## **RESUMIDO: PIPELINE AUTOMATIZADO (PSEUDOCÃ“DIGO)**
+## **NIVEL 9: SOBERANÍA ABSOLUTA & CERO TELEMETRÍA PUBLICITARIA**
+
+- ❌ **Prohibición de SDKs de Publicidad y Rastreo**: Ninguna versión contendrá Google AdMob, Firebase Analytics, trackers ni telemetría externa.
+- ❌ **Prohibición de IDs de Redes Publicitarias**: `AndroidManifest.xml` y `capacitor.config.ts` no contendrán metadatos ni IDs publicitarios.
+- ✅ **Monetización Soberana Exclusiva**: Financiación y canje mediante minería Proof-of-Relay y vales criptográficos $RED locales.
+
+---
+
+## **NIVEL 10: SEGURIDAD ZERO-TRUST EN APIS & PROTECCIÓN DE BÓVEDAS**
+
+- ❌ **Cero Claves en Texto Claro**: Queda prohibido almacenar PIN maestro, de pánico o señuelo en `localStorage` o `sessionStorage`.
+- ❌ **Prohibición de Bypasses Inseguros**: Prohibido eludir autenticación local basándose en cabeceras manipulables (`X-Forwarded-For`).
+- ❌ **Prohibición de CORS Permisivo**: Servidores Axum locales deben restringir CORS a orígenes locales autorizados (`capacitor://localhost`, `127.0.0.1:7333`, etc.).
+- ✅ **Unificación de Cabeceras**: Cliente y servidores deben utilizar uniformemente `X-API-Key` validada en tiempo constante.
+- ❌ **Prohibición de Puertas Traseras**: Cero PINs hardcodeados en código fuente (`password === '9999'`).
+
+---
+
+## **NIVEL 11: INTEGRIDAD DE EMPAQUETADO & COMPILACIÓN ANDROID**
+
+- ❌ **Prohibición de Firma Debug en Release**: Bloque `release` en Gradle no debe referenciar `signingConfigs.debug`.
+- ✅ **Protección JNI en R8**: Reglas ProGuard deben proteger explícitamente `-keep class f.red.app.** { *; }`.
+- ❌ **Prohibición de Cleartext Global**: `usesCleartextTraffic="true"` debe reemplazarse por permisos acotados en `network_security_config.xml`.
+
+---
+
+## **NIVEL 12: COMPATIBILIDAD MULTIPLATAFORMA DE RADIOS**
+
+- ✅ **BLE Dual Addressing**: Todo motor BLE debe procesar indistintamente direcciones MAC de Android y UUIDs CoreBluetooth de iOS.
+
+---
+
+## **NIVEL 13: VERIFICACIÓN EMPÍRICA DE PRUEBAS**
+
+- ❌ **Prohibición de Tests Cosméticos**: Suites de pruebas deben ejecutar código en runtime y no limitarse a `fs.readFileSync` de strings.
+
+---
+
+## **RESUMIDO: PIPELINE AUTOMATIZADO (PSEUDOCÓDIGO)**
 
 ```
 ON COMMIT TO FEATURE BRANCH:
-  âœ… Pre-commit hooks:
+  ✅ Pre-commit hooks:
     - Validar estructura archivos
     - Validar path segregation
     - Ejecutar fmt + lint
     - Validar Markdown links
   
-  âœ… Push a remote:
+  ✅ Push a remote:
     - Trigger GitHub Actions
     - Run linting jobs (Rust + JS)
     - Run security audits
@@ -648,57 +683,32 @@ ON COMMIT TO FEATURE BRANCH:
     - Comment results en PR
 
 ON PULL REQUEST:
-  âœ… Require:
-    - âœ… All CI checks pass
-    - âœ… 2+ code reviews
-    - âœ… No merge conflicts
-    - âœ… Commit message format valid
-    - âœ… Coverage improved or maintained
+  ✅ Require:
+    - ✅ All CI checks pass
+    - ✅ 2+ code reviews
+    - ✅ No merge conflicts
+    - ✅ Commit message format valid
+    - ✅ Coverage improved or maintained
 
 ON MERGE TO DEVELOP:
-  âœ… Auto update CHANGELOG draft
-  âœ… Run full test suite (redundant pero safe)
+  ✅ Auto update CHANGELOG draft
+  ✅ Run full test suite (redundant pero safe)
 
 ON MERGE TO MAIN:
-  âœ… Trigger semantic-release
-  âœ… Auto bump version
-  âœ… Generate release notes
-  âœ… Create git tag
-  âœ… Build release artifacts
-  âœ… Upload to release-assets/
-  âœ… Generate SBOM
-  âœ… Scan with Trivy
-  âœ… Deploy to staging (if applicable)
-  âœ… Run smoke tests
-  âœ… Create GitHub Release
-  âœ… Post to changelog
+  ✅ Trigger semantic-release
+  ✅ Auto bump version
+  ✅ Generate release notes
+  ✅ Create git tag
+  ✅ Build release artifacts
+  ✅ Upload to release-assets/
+  ✅ Generate SBOM
+  ✅ Scan with Trivy
+  ✅ Deploy to staging (if applicable)
+  ✅ Run smoke tests
+  ✅ Create GitHub Release
+  ✅ Post to changelog
 
 ON RELEASE TAG:
-  âœ… Docker build & push
-  âœ… Update website/docs
-  âœ… Notify community
-  âœ… Archive old releases (keep 5 latest)
-```
-
----
-
-## **NIVEL 9: SOBERANÃA ABSOLUTA & CERO TELEMETRÃA PUBLICITARIA**
-
-- âŒ **ProhibiciÃ³n de SDKs de Publicidad y Rastreo**: Ninguna versiÃ³n contendrÃ¡ Google AdMob, Firebase Analytics, trackers ni telemetrÃ­a externa.
-- âŒ **ProhibiciÃ³n de IDs de Redes Publicitarias**: `AndroidManifest.xml` y `capacitor.config.ts` no contendrÃ¡n metadatos ni IDs publicitarios.
-- âœ… **MonetizaciÃ³n Soberana Exclusiva**: FinanciaciÃ³n y canje mediante minerÃ­a Proof-of-Relay y vales criptogrÃ¡ficos $RED locales.
-
----
-
-## **NIVEL 10: SEGURIDAD ZERO-TRUST EN APIS & PROTECCIÃ“N DE BÃ“VEDAS**
-
-- âŒ **Cero Claves en Texto Claro**: Queda prohibido almacenar PIN maestro, de pÃ¡nico o seÃ±uelo en `localStorage` o `sessionStorage`.
-- âŒ **ProhibiciÃ³n de Bypasses Inseguros**: Prohibido eludir autenticaciÃ³n local basÃ¡ndose en cabeceras manipulables (`X-Forwarded-For`).
-- âŒ **ProhibiciÃ³n de CORS Permisivo**: Servidores Axum locales deben restringir CORS a orÃ­genes locales autorizados (`capacitor://localhost`, `127.0.0.1:7333`, etc.).
-- âœ… **UnificaciÃ³n de Cabeceras**: Cliente y servidores deben utilizar uniformemente `X-API-Key` validada en tiempo constante.
-- âŒ **ProhibiciÃ³n de Puertas Traseras**: Cero PINs hardcodeados en cÃ³digo fuente (`password === '9999'`).
-
----
 
 ## **NIVEL 11: INTEGRIDAD DE EMPAQUETADO & COMPILACIÃ“N ANDROID**
 

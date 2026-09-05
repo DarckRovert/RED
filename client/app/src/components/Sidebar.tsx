@@ -91,8 +91,17 @@ export default function Sidebar() {
 
     React.useEffect(() => {
         const handler = () => setAddContactOpen(true);
+        const pairHandler = (e: any) => {
+            if (e?.detail && typeof e.detail === "string") {
+                setWebPairingCode(e.detail);
+            }
+        };
         window.addEventListener("red:open_new_chat", handler);
-        return () => window.removeEventListener("red:open_new_chat", handler);
+        window.addEventListener("red:pair_web_companion" as any, pairHandler);
+        return () => {
+            window.removeEventListener("red:open_new_chat", handler);
+            window.removeEventListener("red:pair_web_companion" as any, pairHandler);
+        };
     }, []);
 
     const unreadTotal = useMemo(() => {

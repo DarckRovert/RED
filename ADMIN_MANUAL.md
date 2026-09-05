@@ -1,6 +1,6 @@
 ﻿# ðŸ”´ RED - Manual del Administrador (Node Ops v90.0.0)
 
-Este manual estÃ¡ dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v91.0.0, con soporte para interconexiÃ³n P2P Web $\leftrightarrow$ Mobile, suite de Respaldo Soberano en 1 Toque, llaves biomÃ©tricas universales, enrutamiento autÃ³nomo multicapa LQS, validaciÃ³n Proof-of-Stake / Staking, actuadores de hardware nativos, autenticaciÃ³n Zero-Trust en loopback sin bypass, y arquitectura de eventos en tiempo real SSE unificada sin polling.
+Este manual estÃ¡ dirigido a operadores de nodos, desarrolladores e integradores que deseen desplegar, mantener o extender la infraestructura de RED v92.0.0, con soporte para interconexiÃ³n P2P Web $\leftrightarrow$ Mobile, suite de Respaldo Soberano en 1 Toque, llaves biomÃ©tricas universales, enrutamiento autÃ³nomo multicapa LQS, validaciÃ³n Proof-of-Stake / Staking, actuadores de hardware nativos, autenticaciÃ³n Zero-Trust en loopback sin bypass, y arquitectura de eventos en tiempo real SSE unificada sin polling.
 
 ---
 
@@ -26,7 +26,7 @@ npm install
 PORT=3001 node server.js
 ```
 
-### CaracterÃ­sticas del Servidor de SeÃ±alizaciÃ³n v91.0.0:
+### CaracterÃ­sticas del Servidor de SeÃ±alizaciÃ³n v92.0.0:
 - **Capacidad de Sala Ampliada:** Soporta hasta **50 pares P2P simultÃ¡neos** por sala (`roomId = sort([DID1, DID2]).join("-")`).
 - **Zero-Knowledge Metadata:** No almacena ni inspecciona mensajes; solo enruta paquetes de negociaciÃ³n de red y relÃ© ciego (`mesh-relay`).
 - **Health Check HTTP:** Monitoreo en vivo vÃ­a `GET /health` (`status`, `uptime`, `peers`, `rooms`).

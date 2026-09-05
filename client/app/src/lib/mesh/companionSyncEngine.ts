@@ -977,6 +977,20 @@ class CompanionSyncEngineClass {
     }
 
     /**
+     * Obtiene la sesión compañera activa actual si existe.
+     */
+    public getActiveSession(): ActiveCompanionSession | null {
+        return this.activeSession;
+    }
+
+    /**
+     * Alias para cerrar y desvincular la sesión activa.
+     */
+    public closeSession() {
+        this.unpairSession();
+    }
+
+    /**
      * Exporta la bóveda soberana como un token blindado Air-Gap cifrado con AES-256-GCM.
      * Inmune a cortes de red o búnkeres sin conectividad.
      */

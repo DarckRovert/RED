@@ -14,6 +14,8 @@ import {
     hasSecurePin, 
     verifySecurePin 
 } from "../lib/crypto/BiometricLockEngine";
+import { companionSyncEngine, PairingSession, CompanionSyncPayload } from "../lib/mesh/companionSyncEngine";
+import { OfflineQrEngine } from "../lib/qr/OfflineQrEngine";
 
 /**
  * Authentication Wall — RED Unified Tactical Lockscreen & Biometric Sentinel
@@ -28,7 +30,7 @@ type AuthMode = "checking" | "onboarding" | "unlock";
 
 export default function AuthWall({ children }: { children: React.ReactNode }) {
     const { t } = useTranslation();
-    const { isAuthenticated, login } = useRedStore();
+    const { isAuthenticated, login, restoreCompanionVault } = useRedStore();
 
     const [mode, setMode] = useState<AuthMode>("checking");
     const [pin, setPin] = useState("");
@@ -46,6 +48,143 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
     const [createdPinTemp, setCreatedPinTemp] = useState("");
     const [failedAttempts, setFailedAttempts] = useState(0);
     const [lockoutRemaining, setLockoutRemaining] = useState(0);
+
+    // Desktop Web Companion Onboarding State
+    const [isDesktopWeb, setIsDesktopWeb] = useState(false);
+    const [webOnboardingTab, setWebOnboardingTab] = useState<"qr_link" | "independent_pin">("qr_link");
+    const [desktopQrDataUrl, setDesktopQrDataUrl] = useState<string>("");
+    const [desktopTimeLeft, setDesktopTimeLeft] = useState<number>(120);
+    const [desktopQrStatus, setDesktopQrStatus] = useState<"connecting" | "ready" | "paired" | "expired" | "error">("connecting");
+    const [desktopIsP2pOffline, setDesktopIsP2pOffline] = useState(false);
+    const [desktopRawPayload, setDesktopRawPayload] = useState<string>("");
+    const [desktopAirGapOpen, setDesktopAirGapOpen] = useState(false);
+    const [desktopAirGapToken, setDesktopAirGapToken] = useState("");
+    const [desktopAirGapPin, setDesktopAirGapPin] = useState("");
+    const [desktopIsImporting, setDesktopIsImporting] = useState(false);
+    const [sessionTrigger, setSessionTrigger] = useState(0);
+
+    // Detection of Desktop Web environment
+    useEffect(() => {
+        let isMounted = true;
+        const checkPlatform = async () => {
+            try {
+                const { Capacitor } = await import("@capacitor/core");
+                if (isMounted) {
+                    const isNative = Capacitor.isNativePlatform();
+                    const isDesktop = !isNative && typeof window !== "undefined" && window.innerWidth >= 768;
+                    setIsDesktopWeb(isDesktop);
+                }
+            } catch {
+                if (isMounted) {
+                    const isDesktop = typeof window !== "undefined" && window.innerWidth >= 768;
+                    setIsDesktopWeb(isDesktop);
+                }
+            }
+        };
+        checkPlatform();
+        const handleResize = () => {
+            if (typeof window !== "undefined") {
+                setIsDesktopWeb(window.innerWidth >= 768);
+            }
+        };
+        window.addEventListener("resize", handleResize);
+        return () => {
+            isMounted = false;
+            window.removeEventListener("resize", handleResize);
+        };
+    }, []);
+
+    // Live Web Companion QR Session for Desktop Onboarding
+    useEffect(() => {
+        if (!isDesktopWeb || mode !== "onboarding" || webOnboardingTab !== "qr_link") {
+            return;
+        }
+
+        let currentSession: PairingSession | null = null;
+        let timerInterval: any = null;
+        let isMounted = true;
+
+        const startSession = async () => {
+            try {
+                setDesktopQrStatus("connecting");
+                const session = await companionSyncEngine.createWebPairingSession(
+                    async (payload: CompanionSyncPayload) => {
+                        if (!isMounted) return;
+                        setDesktopQrStatus("paired");
+                        await restoreCompanionVault(payload);
+                    },
+                    (err) => {
+                        if (!isMounted) return;
+                        setDesktopQrStatus("error");
+                    }
+                );
+
+                if (!isMounted) {
+                    session.cleanup();
+                    return;
+                }
+
+                currentSession = session;
+                setDesktopRawPayload(session.qrPayload);
+                setDesktopIsP2pOffline(session.qrPayload.startsWith("RED_PAIR:2:"));
+
+                const url = await OfflineQrEngine.generateDataUrl(session.qrPayload, {
+                    width: 280,
+                    margin: 2,
+                    darkColor: "#111B21",
+                    lightColor: "#FFFFFF"
+                });
+
+                if (isMounted) {
+                    setDesktopQrDataUrl(url);
+                    setDesktopQrStatus("ready");
+                    setDesktopTimeLeft(Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000)));
+
+                    timerInterval = setInterval(() => {
+                        const remaining = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000));
+                        setDesktopTimeLeft(remaining);
+                        if (remaining <= 0) {
+                            clearInterval(timerInterval);
+                            setDesktopQrStatus("expired");
+                        }
+                    }, 1000);
+                }
+            } catch (e) {
+                if (isMounted) {
+                    setDesktopQrStatus("error");
+                }
+            }
+        };
+
+        startSession();
+
+        return () => {
+            isMounted = false;
+            if (timerInterval) clearInterval(timerInterval);
+            if (currentSession) currentSession.cleanup();
+        };
+    }, [isDesktopWeb, mode, webOnboardingTab, sessionTrigger, restoreCompanionVault]);
+
+    const handleDesktopImportAirGap = async () => {
+        if (!desktopAirGapToken.trim()) {
+            toast.warning("Ingresa el token de la cápsula RED_VAULT:1:");
+            return;
+        }
+        if (!desktopAirGapPin || desktopAirGapPin.length < 6) {
+            toast.warning("Ingresa el PIN de 6 dígitos de la cápsula");
+            return;
+        }
+
+        setDesktopIsImporting(true);
+        try {
+            const payload = await companionSyncEngine.importAirGapVaultToken(desktopAirGapToken.trim(), desktopAirGapPin);
+            await restoreCompanionVault(payload);
+        } catch (err: any) {
+            toast.error(err?.message || "Error al descifrar la cápsula Air-Gap");
+        } finally {
+            setDesktopIsImporting(false);
+        }
+    };
 
     // Rate-limiting lockout timer
     useEffect(() => {
@@ -311,6 +450,310 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
 
     const currentDigits = mode === "onboarding" ? (step === "enter" ? pin : confirmPin) : pin;
 
+    // ── VISTA ESPECIALIZADA: ONBOARDING RED WEB EN ESCRITORIO (ESTILO WHATSAPP WEB) ──
+    if (isDesktopWeb && mode === "onboarding" && webOnboardingTab === "qr_link") {
+        return (
+            <div style={{
+                position: "fixed", inset: 0, zIndex: 99999,
+                background: "#111B21", color: "#E9EDEF",
+                display: "flex", flexDirection: "column",
+                overflowY: "auto", minHeight: "100vh"
+            }}>
+                {/* Top Green Accent Bar */}
+                <div style={{ height: "128px", background: "#00A884", width: "100%", position: "absolute", top: 0, left: 0, zIndex: 0 }} />
+
+                {/* Main Content Card Container */}
+                <div style={{
+                    position: "relative", zIndex: 1,
+                    maxWidth: "1000px", width: "94%", margin: "40px auto 40px auto",
+                    display: "flex", flexDirection: "column", gap: "20px"
+                }}>
+                    {/* Header with Brand */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                            <div style={{
+                                width: 42, height: 42, borderRadius: "12px",
+                                background: "#FFFFFF", color: "#111B21",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.4rem", fontWeight: 900, boxShadow: "0 4px 16px rgba(0,0,0,0.3)"
+                            }}>
+                                R
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#FFFFFF", letterSpacing: "0.5px" }}>
+                                    RED OS WEB
+                                </div>
+                                <div style={{ fontSize: "0.74rem", color: "rgba(255,255,255,0.85)" }}>
+                                    Red Soberana de Comunicaciones Cifradas P2P
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{
+                            padding: "6px 14px", borderRadius: "20px",
+                            background: "rgba(0, 0, 0, 0.25)", backdropFilter: "blur(8px)",
+                            color: "#FFFFFF", fontSize: "0.76rem", fontWeight: 600,
+                            display: "flex", alignItems: "center", gap: "6px"
+                        }}>
+                            <span>🔒</span> Cifrado E2E ECDH P-256 + AES-256-GCM
+                        </div>
+                    </div>
+
+                    {/* 2-Column WhatsApp Web Style Card */}
+                    <div style={{
+                        background: "#182229",
+                        borderRadius: "18px",
+                        border: "1px solid rgba(255, 255, 255, 0.08)",
+                        boxShadow: "0 24px 60px rgba(0, 0, 0, 0.6)",
+                        display: "grid",
+                        gridTemplateColumns: "1.2fr 0.8fr",
+                        overflow: "hidden"
+                    }}>
+                        {/* Left Column: Instructions */}
+                        <div style={{ padding: "44px 40px", display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "28px" }}>
+                            <div>
+                                <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: "#E9EDEF", margin: "0 0 20px 0", lineHeight: 1.25 }}>
+                                    Usa RED OS en tu computadora
+                                </h1>
+
+                                <ol style={{
+                                    margin: 0, paddingLeft: "20px",
+                                    display: "flex", flexDirection: "column", gap: "16px",
+                                    color: "#AEBAC1", fontSize: "1rem", lineHeight: 1.5
+                                }}>
+                                    <li>
+                                        Abre <strong style={{ color: "#E9EDEF" }}>RED OS</strong> en tu teléfono móvil.
+                                    </li>
+                                    <li>
+                                        Toca <strong style={{ color: "#E9EDEF" }}>Menú (⋮)</strong> en la barra superior o ve a <strong style={{ color: "#E9EDEF" }}>Ajustes (⚙️)</strong>.
+                                    </li>
+                                    <li>
+                                        Selecciona <strong style={{ color: "#00A884" }}>Dispositivos vinculados</strong> y presiona <strong style={{ color: "#00A884" }}>Vincular un dispositivo</strong>.
+                                    </li>
+                                    <li>
+                                        Apunta la cámara de tu teléfono a este código QR para sincronizar tu identidad y conversaciones de forma cifrada.
+                                    </li>
+                                </ol>
+                            </div>
+
+                            {/* Option for Independent Web Node */}
+                            <div style={{
+                                padding: "18px", borderRadius: "14px",
+                                background: "rgba(255, 255, 255, 0.03)",
+                                border: "1px solid rgba(255, 255, 255, 0.07)",
+                                display: "flex", flexDirection: "column", gap: "10px"
+                            }}>
+                                <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#E9EDEF" }}>
+                                    ¿No tienes un teléfono móvil disponible?
+                                </div>
+                                <p style={{ fontSize: "0.8rem", color: "#8696A0", margin: 0, lineHeight: 1.45 }}>
+                                    Puedes crear una cuenta de nodo local totalmente independiente con PIN maestro y usar RED exclusivamente desde este navegador.
+                                </p>
+                                <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: "4px", flexWrap: "wrap" }}>
+                                    <button
+                                        onClick={() => setWebOnboardingTab("independent_pin")}
+                                        style={{
+                                            padding: "10px 18px", borderRadius: "20px",
+                                            background: "rgba(0, 168, 132, 0.15)", border: "1px solid rgba(0, 168, 132, 0.4)",
+                                            color: "#00A884", fontSize: "0.84rem", fontWeight: 700, cursor: "pointer",
+                                            transition: "background 0.15s"
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.background = "rgba(0, 168, 132, 0.25)"}
+                                        onMouseLeave={e => e.currentTarget.style.background = "rgba(0, 168, 132, 0.15)"}
+                                    >
+                                        Crear cuenta local independiente con PIN ➔
+                                    </button>
+                                    <button
+                                        onClick={() => setShowRestoreModal(true)}
+                                        style={{
+                                            background: "transparent", border: "none",
+                                            color: "#8696A0", fontSize: "0.8rem", fontWeight: 600,
+                                            cursor: "pointer", textDecoration: "underline"
+                                        }}
+                                    >
+                                        Restaurar copia de seguridad
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right Column: Dynamic Live QR Session */}
+                        <div style={{
+                            background: "#111B21", padding: "40px 32px",
+                            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                            borderLeft: "1px solid rgba(255, 255, 255, 0.06)", gap: "18px", textAlign: "center"
+                        }}>
+                            {desktopQrStatus === "connecting" && (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", padding: "40px 0" }}>
+                                    <div style={{
+                                        width: 50, height: 50, borderRadius: "50%",
+                                        border: "3px solid rgba(0, 168, 132, 0.2)",
+                                        borderTopColor: "#00A884", animation: "spin 1s linear infinite"
+                                    }} />
+                                    <div style={{ fontSize: "0.85rem", color: "#8696A0" }}>
+                                        Generando canal criptográfico seguro…
+                                    </div>
+                                </div>
+                            )}
+
+                            {desktopQrStatus === "ready" && (
+                                <>
+                                    <div style={{
+                                        background: "#FFFFFF", padding: "14px", borderRadius: "18px",
+                                        boxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)",
+                                        position: "relative", display: "inline-block"
+                                    }}>
+                                        {desktopQrDataUrl && (
+                                            <img
+                                                src={desktopQrDataUrl}
+                                                alt="RED Web Companion QR"
+                                                style={{ width: 240, height: 240, display: "block", borderRadius: "8px" }}
+                                            />
+                                        )}
+                                    </div>
+
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        <div style={{
+                                            fontSize: "0.78rem", fontWeight: 700,
+                                            color: desktopIsP2pOffline ? "#00E5FF" : "#00A884",
+                                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px"
+                                        }}>
+                                            <span>{desktopIsP2pOffline ? "📡" : "🌐"}</span>
+                                            <span>{desktopIsP2pOffline ? "CANAL P2P LOCAL (OFFLINE)" : "CANAL SEGURO E2E WAN"}</span>
+                                        </div>
+                                        <div style={{ fontSize: "0.72rem", color: "#8696A0" }}>
+                                            Expira en {desktopTimeLeft}s · Se renueva automáticamente
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+
+                            {desktopQrStatus === "expired" && (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", padding: "20px 0" }}>
+                                    <div style={{ fontSize: "2.5rem" }}>⏳</div>
+                                    <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#E9EDEF" }}>
+                                        El código QR ha expirado
+                                    </div>
+                                    <div style={{ fontSize: "0.75rem", color: "#8696A0" }}>
+                                        Por motivos de seguridad, los códigos de vinculación se renuevan periódicamente.
+                                    </div>
+                                    <button
+                                        onClick={() => setSessionTrigger(t => t + 1)}
+                                        style={{
+                                            padding: "10px 20px", borderRadius: "20px",
+                                            background: "#00A884", color: "#FFFFFF", border: "none",
+                                            fontSize: "0.85rem", fontWeight: 700, cursor: "pointer"
+                                        }}
+                                    >
+                                        🔄 Generar nuevo código QR
+                                    </button>
+                                </div>
+                            )}
+
+                            {desktopQrStatus === "paired" && (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "14px", padding: "30px 0" }}>
+                                    <div style={{
+                                        width: 60, height: 60, borderRadius: "50%",
+                                        background: "#00A884", color: "#FFFFFF",
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: "2rem"
+                                    }}>✓</div>
+                                    <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#E9EDEF" }}>
+                                        ¡Dispositivo Vinculado!
+                                    </div>
+                                    <div style={{ fontSize: "0.8rem", color: "#8696A0" }}>
+                                        Cargando tus mensajes y contactos…
+                                    </div>
+                                </div>
+                            )}
+
+                            {desktopQrStatus === "error" && (
+                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", padding: "20px 0" }}>
+                                    <div style={{ fontSize: "2rem" }}>⚠️</div>
+                                    <div style={{ fontSize: "0.9rem", color: "#FF5555", fontWeight: 600 }}>
+                                        Error al generar sesión
+                                    </div>
+                                    <button
+                                        onClick={() => setSessionTrigger(t => t + 1)}
+                                        style={{
+                                            padding: "8px 16px", borderRadius: "16px",
+                                            background: "rgba(255,255,255,0.1)", color: "#FFFFFF", border: "none",
+                                            fontSize: "0.8rem", cursor: "pointer"
+                                        }}
+                                    >
+                                        Reintentar
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Fallback Air-Gap / Manual Code link */}
+                            <div style={{ marginTop: "10px" }}>
+                                <button
+                                    onClick={() => setDesktopAirGapOpen(open => !open)}
+                                    style={{
+                                        background: "transparent", border: "none",
+                                        color: "#8696A0", fontSize: "0.78rem", cursor: "pointer",
+                                        textDecoration: "underline"
+                                    }}
+                                >
+                                    {desktopAirGapOpen ? "Ocultar opciones manuales" : "¿Problemas con la cámara? Usar cápsula Air-Gap"}
+                                </button>
+
+                                {desktopAirGapOpen && (
+                                    <div style={{
+                                        marginTop: "12px", padding: "14px", borderRadius: "12px",
+                                        background: "rgba(255, 255, 255, 0.04)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                        display: "flex", flexDirection: "column", gap: "10px", width: "100%", maxWidth: "260px"
+                                    }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Pegar token RED_VAULT:1:..."
+                                            value={desktopAirGapToken}
+                                            onChange={e => setDesktopAirGapToken(e.target.value)}
+                                            style={{
+                                                padding: "8px 10px", borderRadius: "8px",
+                                                background: "#111B21", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                                color: "#E9EDEF", fontSize: "0.75rem"
+                                            }}
+                                        />
+                                        <input
+                                            type="password"
+                                            maxLength={6}
+                                            placeholder="PIN de la cápsula (6 dígitos)"
+                                            value={desktopAirGapPin}
+                                            onChange={e => setDesktopAirGapPin(e.target.value)}
+                                            style={{
+                                                padding: "8px 10px", borderRadius: "8px",
+                                                background: "#111B21", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                                color: "#E9EDEF", fontSize: "0.75rem", textAlign: "center"
+                                            }}
+                                        />
+                                        <button
+                                            onClick={handleDesktopImportAirGap}
+                                            disabled={desktopIsImporting}
+                                            style={{
+                                                padding: "8px", borderRadius: "8px",
+                                                background: "#00A884", color: "#FFFFFF", border: "none",
+                                                fontSize: "0.78rem", fontWeight: 700, cursor: "pointer"
+                                            }}
+                                        >
+                                            {desktopIsImporting ? "Importando..." : "Descifrar e Importar"}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Modal de Restauración */}
+                {showRestoreModal && (
+                    <BackupRestoreModal onClose={() => setShowRestoreModal(false)} />
+                )}
+            </div>
+        );
+    }
+
     return (
         <div style={{
             position: "fixed", inset: 0, zIndex: 99999,
@@ -319,6 +762,22 @@ export default function AuthWall({ children }: { children: React.ReactNode }) {
             padding: "24px 20px", overflowY: "auto"
         }}>
             <div style={{ maxWidth: "340px", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+
+                {/* Botón para regresar al QR si está en Web Desktop Onboarding */}
+                {isDesktopWeb && mode === "onboarding" && (
+                    <button
+                        onClick={() => setWebOnboardingTab("qr_link")}
+                        style={{
+                            background: "transparent", border: "none",
+                            color: "#00A884", fontSize: "0.82rem", fontWeight: 700,
+                            cursor: "pointer", display: "flex", alignItems: "center", gap: "6px",
+                            padding: "6px 14px", borderRadius: "14px",
+                            backgroundColor: "rgba(0, 168, 132, 0.12)"
+                        }}
+                    >
+                        ← Volver a Vincular con Teléfono (QR)
+                    </button>
+                )}
 
                 {/* Insignia y Título */}
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>

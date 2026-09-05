@@ -15,12 +15,13 @@ import { PrivacyTab } from "./PrivacyTab";
 import { StorageTab } from "./StorageTab";
 import { MeshTab } from "./MeshTab";
 import { UpdatesTab } from "./UpdatesTab";
+import { LinkedDevicesView } from "./LinkedDevicesView";
 
 interface FamiliarSettingsViewProps {
     onClose?: () => void;
 }
 
-type SubSection = "identity" | "appearance" | "calls" | "privacy" | "storage" | "mesh" | "updates" | null;
+type SubSection = "identity" | "linked_devices" | "appearance" | "calls" | "privacy" | "storage" | "mesh" | "updates" | null;
 
 export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onClose }) => {
     const { t } = useTranslation();
@@ -204,6 +205,29 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                             <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
                         </div>
 
+                        {/* 1.5. Dispositivos Vinculados (WhatsApp Web UX) */}
+                        <div
+                            onClick={() => setActiveSection("linked_devices")}
+                            style={{
+                                display: "flex", alignItems: "center", justifyContent: "space-between",
+                                padding: "14px 16px", cursor: "pointer",
+                                borderBottom: "1px solid rgba(255, 255, 255, 0.04)"
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                                <span style={{ fontSize: "1.3rem" }}>💻</span>
+                                <div>
+                                    <div style={{ fontSize: "0.92rem", fontWeight: 600, color: "#E9EDEF" }}>
+                                        Dispositivos vinculados
+                                    </div>
+                                    <div style={{ fontSize: "0.74rem", color: "#8696A0" }}>
+                                        RED Web, Desktop y sincronización P2P
+                                    </div>
+                                </div>
+                            </div>
+                            <span style={{ color: "#8696A0", fontSize: "0.9rem" }}>➔</span>
+                        </div>
+
                         {/* 2. Chats y Apariencia */}
                         <div
                             onClick={() => setActiveSection("appearance")}
@@ -372,6 +396,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
                         }}>
                             <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "#E9EDEF" }}>
                                 {activeSection === "identity" && "Identidad & Perfil"}
+                                {activeSection === "linked_devices" && "Dispositivos vinculados"}
                                 {activeSection === "appearance" && "Chats & Apariencia"}
                                 {activeSection === "privacy" && "Privacidad & Seguridad"}
                                 {activeSection === "calls" && "Llamadas & Audio"}
@@ -389,6 +414,7 @@ export const FamiliarSettingsView: React.FC<FamiliarSettingsViewProps> = ({ onCl
 
                         <div style={{ flex: 1, overflowY: "auto", padding: "16px" }}>
                             {activeSection === "identity" && <IdentityTab />}
+                            {activeSection === "linked_devices" && <LinkedDevicesView onClose={() => setActiveSection(null)} hideHeader={true} />}
                             {activeSection === "appearance" && <AppearanceTab />}
                             {activeSection === "privacy" && <PrivacyTab />}
                             {activeSection === "calls" && <CallsTab />}

@@ -602,8 +602,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
                             }}>
                                 {formatTimer(recordSec)}
                             </span>
-                            {/* Live audio visualizer bars */}
-                            <div style={{ display: "flex", alignItems: "center", gap: "3px", height: "18px" }}>
+                            {/* Visualizador de audio animado en vivo */}
+                            <div aria-label="Visualizador de audio animado en vivo" style={{ display: "flex", alignItems: "center", gap: "3px", height: "18px" }}>
                                 {[7, 14, 9, 16, 8, 13, 15, 6, 11].map((h, idx) => (
                                     <span
                                         key={idx}

@@ -78,6 +78,20 @@ export const NewContactModal: React.FC<NewContactModalProps> = ({ isOpen, onClos
             setDidError("El identificador RED es obligatorio.");
             return;
         }
+
+        // Si el usuario por error pegó un código de vinculación Web Companion
+        if (
+            cleanDid.startsWith("RED_PAIR:1:") ||
+            cleanDid.startsWith("RED_PAIR:2:") ||
+            cleanDid.startsWith("RED_PAIR:") ||
+            cleanDid.startsWith("RED_VAULT:1:")
+        ) {
+            window.dispatchEvent(new CustomEvent("red:pair_web_companion", { detail: cleanDid }));
+            toast.info("💻 Código de RED Web detectado. Abriendo vinculación...");
+            onClose();
+            return;
+        }
+
         const err = validateDid(cleanDid);
         if (err) {
             setDidError(err);
