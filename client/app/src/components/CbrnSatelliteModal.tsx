@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { cbrnRadiation, RadiationTelemetry, CbrnSimulationScenario } from "../lib/sensors/CbrnRadiationEngine";
 import { satelliteMeshGateway, SatelliteGatewayTelemetry, SatellitePass } from "../lib/mesh/SatelliteMeshGatewayEngine";
 import { cbrnPlumeDispersionEngine, PlumeHazardZone, CbrnIncidentSource } from "../lib/tactical/CbrnPlumeDispersionEngine";
+import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
@@ -41,29 +42,23 @@ export function CbrnSatelliteModal() {
     // Compositor Satelital SBD
     const [satMessageText, setSatMessageText] = useState<string>("ALERTA CBRN: EVACUACION ACTIVA. SOLICITO ENLACE MEDICO.");
 
-    // Video preview element ref for CMOS camera
-    const videoRef = useRef<HTMLVideoElement>(null);
-
     useEffect(() => {
         cbrnRadiation.startMonitoring();
         const unsubCbrn = cbrnRadiation.subscribe(setCbrn);
         const unsubSat = satelliteMeshGateway.subscribe(setSat);
 
-        // Ubicación GPS en tiempo real
-        let unsubGps: (() => void) | null = null;
-        import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
-            unsubGps = TacticalLocationEngine.watchLocation((loc) => {
-                if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
-                    const lat = loc.lat!;
-                    const lon = loc.lon!;
-                    satelliteMeshGateway.setObserverLocation(lat, lon);
-                    setOperatorPos({ lat, lon });
-                }
-            });
+        // Ubicación GPS síncrona en tiempo real con cleanup garantizado
+        const unsubGps = TacticalLocationEngine.watchLocation((loc) => {
+            if (TacticalLocationEngine.isValidCoordinates(loc.lat, loc.lon)) {
+                const lat = loc.lat!;
+                const lon = loc.lon!;
+                satelliteMeshGateway.setObserverLocation(lat, lon);
+                setOperatorPos({ lat, lon });
+            }
         });
 
         return () => {
-            if (unsubGps) (unsubGps as any)();
+            if (unsubGps) unsubGps();
             unsubCbrn();
             unsubSat();
             cbrnRadiation.stopCmosCameraCapture();
