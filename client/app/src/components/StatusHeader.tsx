@@ -6,6 +6,7 @@ import { useTranslation } from "../lib/i18n/i18nEngine";
 import { RedAPI } from "../lib/api";
 import { KineticDutyGovernor } from "../lib/sensors/KineticDutyGovernor";
 import { SwarmHealthHUD } from "./SwarmHealthHUD";
+import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/SatelliteMeshGatewayEngine";
 
 export default function StatusHeader() {
     const { nodeOnline, status, navigate, preferences, updatePreferences } = useRedStore();
@@ -14,6 +15,7 @@ export default function StatusHeader() {
     // Telemetry & Mesh state
     const [meshCounts, setMeshCounts] = useState({ wifi: 0, ble: 0, lora: 0, sound: 0, total: 0 });
     const [loraActive, setLoraActive] = useState(false);
+    const [satTelem, setSatTelem] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
     const [batteryInfo, setBatteryInfo] = useState<{ level: number; charging: boolean; profile: string }>({
         level: 100,
         charging: false,
@@ -77,8 +79,12 @@ export default function StatusHeader() {
         setLoraActive(typeof window !== "undefined" && localStorage.getItem("red_lora_enabled") === "true");
         syncTelemetry();
 
+        const unsubSat = satelliteMeshGateway.subscribe(setSatTelem);
         const timer = setInterval(syncTelemetry, 3500);
-        return () => clearInterval(timer);
+        return () => {
+            clearInterval(timer);
+            unsubSat();
+        };
     }, [syncTelemetry]);
 
     const activeNetwork = (() => {
@@ -87,6 +93,7 @@ export default function StatusHeader() {
         if (meshCounts.ble > 0) return "BLE GATT";
         if (meshCounts.sound > 0) return "SOUNDMESH";
         if ((status?.peer_count ?? 0) > 0) return "P2P MESH";
+        if (satTelem.isUplinkAvailable) return "SAT LEO";
         return "STANDALONE";
     })();
 
@@ -96,6 +103,7 @@ export default function StatusHeader() {
         "BLE GATT":    "var(--accent-cyan, #00E5FF)",
         "SOUNDMESH":   "var(--accent-amber, #FFB300)",
         "P2P MESH":    "var(--accent-cyan, #00E5FF)",
+        "SAT LEO":     "var(--accent-cyan, #00E5FF)",
         "STANDALONE":  "var(--accent-crimson, #FF3355)",
     };
 
@@ -244,6 +252,47 @@ export default function StatusHeader() {
 
                 {/* ── Right: Real Hardware Telemetry & Tactical Actions ── */}
                 <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+                    {/* Orbital LEO Gateway Satellite Badge */}
+                    <button
+                        type="button"
+                        onClick={() => navigate("cbrnSatellite")}
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            background: satTelem.isUplinkAvailable ? "linear-gradient(135deg, rgba(0, 229, 255, 0.22) 0%, rgba(10, 25, 45, 0.8) 100%)" : "rgba(0, 0, 0, 0.55)",
+                            border: `1px solid ${satTelem.isUplinkAvailable ? "#00E5FF" : "rgba(255, 255, 255, 0.12)"}`,
+                            padding: "4px 8px",
+                            borderRadius: "9px",
+                            fontSize: "10px",
+                            cursor: "pointer",
+                            boxShadow: satTelem.isUplinkAvailable ? "0 0 10px rgba(0, 229, 255, 0.35)" : "none",
+                            color: satTelem.isUplinkAvailable ? "#00E5FF" : "#94A3B8",
+                            fontFamily: "JetBrains Mono, monospace",
+                            fontWeight: 800,
+                            flexShrink: 0,
+                            transition: "all 0.15s ease"
+                        }}
+                        title={satTelem.isUplinkAvailable
+                            ? `🛰️ Satélite LEO en AOS: ${satTelem.bestAvailableSatellite?.satelliteId} (${satTelem.bestAvailableSatellite?.constellation}) · Huella ~${satTelem.activeFootprintRadiusKm}km`
+                            : `🛰️ Satélites LEO en seguimiento orbital · Próximo AOS en ${satTelem.activePasses[0]?.timeToAosSec || 0}s`
+                        }
+                    >
+                        <span style={{ fontSize: "11px" }}>🛰️</span>
+                        <span style={{ color: satTelem.isUplinkAvailable ? "#FFFFFF" : "#AAA", letterSpacing: "0.4px" }}>
+                            {satTelem.isUplinkAvailable ? "LEO AOS" : "LEO"}
+                        </span>
+                        {satTelem.isUplinkAvailable && (
+                            <span style={{
+                                width: 6, height: 6, borderRadius: "50%",
+                                background: "#00E5FF",
+                                boxShadow: "0 0 6px #00E5FF",
+                                display: "inline-block",
+                                animation: "pulse 1.2s infinite"
+                            }} />
+                        )}
+                    </button>
+
                     {/* Live Hardware Battery Gauge */}
                     <div 
                         onClick={() => navigate("ecoMesh")}

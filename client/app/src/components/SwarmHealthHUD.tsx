@@ -30,6 +30,11 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             toast.info(`Portador ${b} listo para transmisión táctica`);
             return;
         }
+        if (b === 'SATELLITE_LEO') {
+            dynamicBearerGovernor.forceSwitchBearer(b);
+            toast.success("🛰️ Portador primario conmutado a: Pasarela Satelital LEO");
+            return;
+        }
         dynamicBearerGovernor.forceSwitchBearer(b);
         toast.success(`Portador de enjambre conmutado a: ${b}`);
     };
@@ -41,6 +46,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             case "LORA_RF": return "📻";
             case "SOUNDMESH": return "🔊";
             case "LIFI_OPTICAL": return "⚡";
+            case "SATELLITE_LEO": return "🛰️";
             default: return "🌐";
         }
     };
@@ -52,6 +58,7 @@ export function SwarmHealthHUD({ onClose }: { onClose?: () => void }) {
             case "BLE": return "var(--accent-cyan, #00E5FF)";
             case "LORA_RF": return "var(--accent-purple, #B388FF)";
             case "SOUNDMESH": return "var(--accent-amber, #FFB300)";
+            case "SATELLITE_LEO": return "var(--accent-cyan, #00E5FF)";
             default: return "#38BDF8";
         }
     };

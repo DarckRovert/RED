@@ -6,8 +6,9 @@
  */
 
 import { RedAPI } from '../../api';
+import { satelliteMeshGateway } from './SatelliteMeshGatewayEngine';
 
-export type TacticalBearerType = 'BLE' | 'WIFI_DIRECT' | 'LORA_RF' | 'SOUNDMESH' | 'LIFI_OPTICAL';
+export type TacticalBearerType = 'BLE' | 'WIFI_DIRECT' | 'LORA_RF' | 'SOUNDMESH' | 'LIFI_OPTICAL' | 'SATELLITE_LEO';
 
 export interface BearerQuality {
     bearer: TacticalBearerType;
@@ -57,7 +58,7 @@ export class DynamicBearerGovernor {
     private pollingInterval: any = null;
 
     private constructor() {
-        const bearers: TacticalBearerType[] = ['WIFI_DIRECT', 'BLE', 'LORA_RF', 'SOUNDMESH', 'LIFI_OPTICAL'];
+        const bearers: TacticalBearerType[] = ['WIFI_DIRECT', 'BLE', 'LORA_RF', 'SOUNDMESH', 'LIFI_OPTICAL', 'SATELLITE_LEO'];
         bearers.forEach(b => {
             this.bearerStats.set(b, {
                 sent: 0,
@@ -68,7 +69,7 @@ export class DynamicBearerGovernor {
                 rssi: null,
                 peerCount: 0,
                 throughputKbps: 0,
-                statusLabel: b === 'WIFI_DIRECT' || b === 'BLE' ? 'EN ESPERA' : 'DESCONECTADO',
+                statusLabel: b === 'WIFI_DIRECT' || b === 'BLE' ? 'EN ESPERA' : (b === 'SATELLITE_LEO' ? 'BUSCANDO PASO ORBITAL' : 'DESCONECTADO'),
             });
         });
 
@@ -174,6 +175,29 @@ export class DynamicBearerGovernor {
                 lifiStat.statusLabel = 'INACTIVO (CAM/FLASH EN REPOSO)';
             }
 
+            // 6. Satélite LEO (Iridium / Starlink Direct-to-Cell / Orbcomm)
+            const satStat = this.bearerStats.get('SATELLITE_LEO');
+            if (satStat) {
+                try {
+                    const satTelem = satelliteMeshGateway.getTelemetry();
+                    const isAos = satTelem.isUplinkAvailable;
+                    satStat.isOnline = isAos;
+                    satStat.peerCount = satTelem.activePasses.filter(p => p.isInAos).length;
+                    satStat.throughputKbps = isAos ? 24 : 0;
+                    const bestSat = satTelem.bestAvailableSatellite;
+                    satStat.statusLabel = isAos 
+                        ? `AOS ACTIVO (${bestSat?.satelliteId || 'LEO'})` 
+                        : (satTelem.activePasses[0]?.timeToAosSec ? `EN ESPERA (AOS EN ${satTelem.activePasses[0].timeToAosSec}s)` : 'SIN PASO EN VENTANA');
+                    if (isAos) {
+                        satStat.latencies.push(35);
+                        if (satStat.latencies.length > 10) satStat.latencies.shift();
+                    }
+                } catch {
+                    satStat.isOnline = false;
+                    satStat.statusLabel = 'MÓDULO SATELITAL INACTIVO';
+                }
+            }
+
             // Determinar primaryBearer real
             if (wifiPeers > 0) {
                 this.primaryBearer = 'WIFI_DIRECT';
@@ -181,6 +205,8 @@ export class DynamicBearerGovernor {
                 this.primaryBearer = 'BLE';
             } else if (loraPeers > 0) {
                 this.primaryBearer = 'LORA_RF';
+            } else if (satStat?.isOnline) {
+                this.primaryBearer = 'SATELLITE_LEO';
             }
 
             this.notify();

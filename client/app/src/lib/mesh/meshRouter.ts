@@ -1591,6 +1591,26 @@ class MeshRouter {
       } catch {}
     }
 
+    // ─── 6. AUTONOMOUS LEO SATELLITE GATEWAY FALLBACK & ORBITAL UPLINK ───
+    // If no terrestrial routes succeeded, dispatch via LEO Satellite Gateway if in AOS or priority packet:
+    if (!anySent) {
+      try {
+        const { satelliteMeshGateway } = await import('./SatelliteMeshGatewayEngine');
+        const satTelem = satelliteMeshGateway.getTelemetry();
+        if (satTelem.isUplinkAvailable || packet.flags === 0x01 || isBroadcast) {
+          const payloadStr = new TextDecoder().decode(packet.payload);
+          satelliteMeshGateway.enqueueOutboundUplink(payloadStr, 8);
+          if (satTelem.isUplinkAvailable) {
+            satelliteMeshGateway.triggerSatelliteBurst();
+            console.log(`[MeshRouter] 🛰️ LEO Satellite Gateway Fallback: Dispatched packet via orbital uplink to ${satTelem.bestAvailableSatellite?.satelliteId || 'LEO'}`);
+            anySent = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[MeshRouter] Satellite gateway fallback error:', err);
+      }
+    }
+
     if (!anySent) {
       // Enqueue in persistent DTN store-and-forward storage
       dtnStorage.enqueue(packet);

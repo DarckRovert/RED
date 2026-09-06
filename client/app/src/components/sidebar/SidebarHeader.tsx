@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRedStore } from "../../store/useRedStore";
 import { RED_VERSION } from "../../lib/version";
 import { meshRouter } from "../../lib/mesh/meshRouter";
@@ -6,6 +6,7 @@ import { avatarStyle } from "./types";
 import { useTranslation } from "../../lib/i18n/i18nEngine";
 import { ContactQrModal } from "../chat/ContactQrModal";
 import { NewContactModal } from "../chat/NewContactModal";
+import { satelliteMeshGateway } from "../../lib/mesh/SatelliteMeshGatewayEngine";
 
 export type ChatFilterType = "all" | "unread" | "groups" | "contacts" | "channels";
 
@@ -52,6 +53,11 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     const [quickMenuOpen, setQuickMenuOpen] = useState(false);
     const [qrModalOpen, setQrModalOpen] = useState(false);
     const [newContactOpen, setNewContactOpen] = useState(false);
+    const [satAos, setSatAos] = useState(() => satelliteMeshGateway.getTelemetry().isUplinkAvailable);
+
+    useEffect(() => {
+        return satelliteMeshGateway.subscribe(t => setSatAos(t.isUplinkAvailable));
+    }, []);
 
     const filters: { id: ChatFilterType; label: string; icon?: string; badge?: number }[] = [
         { id: "all", label: t('common.all') || "Todos" },
@@ -112,7 +118,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
                                     background: nodeOnline ? "#00A884" : "#FF3355",
                                     display: "inline-block"
                                 }} />
-                                <span>{nodeOnline ? `Malla activa (${meshRouter.peers.size})` : "Desconectado"}</span>
+                                <span>{nodeOnline ? `Malla activa (${meshRouter.peers.size})` : "Desconectado"}{satAos ? " · 🛰️ LEO AOS" : ""}</span>
                             </div>
                         </div>
                     </div>
