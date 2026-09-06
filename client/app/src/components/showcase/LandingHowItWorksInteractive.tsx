@@ -52,7 +52,7 @@ export const LandingHowItWorksInteractive: React.FC = () => {
             title: "El Mensaje Salta de Teléfono en Teléfono Cifrado",
             shortDesc: "Si el destinatario está a kilómetros de distancia, tu mensaje salta de forma invisible y anónima a través de celulares intermediarios hasta encontrar al destinatario. Los nodos puente NO pueden leer tu mensaje.",
             technicalDetails: [
-                "Protocolo Gossip P2P con algoritmo anti-bucles por Hash SHA-256",
+                "Protocolo Gossip P2P con algoritmo anti-bucles por Hash BLAKE3",
                 "Double Ratchet Protocol: Cifrado con cambio de llave por cada mensaje",
                 "Enrutamiento DTN (Delay-Tolerant Networking) con almacenamiento en tránsito",
                 "Proof-of-Relay: Créditos locales para recompensar a nodos retransmisores"

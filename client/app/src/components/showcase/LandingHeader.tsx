@@ -25,12 +25,14 @@ export const LandingHeader: React.FC<LandingHeaderProps> = ({
     const navItems = [
         { id: "hero", label: "Inicio" },
         { id: "how-it-works", label: "¿Cómo Funciona?" },
-        { id: "scenarios", label: "Escenarios B2B/B2G" },
-        { id: "calculator", label: "Calculadora Ahorro" },
+        { id: "architecture", label: "Arquitectura" },
+        { id: "scenarios", label: "Escenarios" },
+        { id: "calculator", label: "Calculadora" },
         { id: "bento", label: "Pilares" },
         { id: "matrix-comparison", label: "Benchmark" },
         { id: "live-mesh-demo", label: "Malla en Vivo" },
         { id: "modules", label: "Módulos (49)" },
+        { id: "contribute", label: "Contribuir" },
         { id: "download", label: "Descarga" },
         { id: "faq", label: "FAQ & Legal" },
     ];

@@ -205,7 +205,7 @@ export const LandingFooterAndModals: React.FC<LandingFooterAndModalsProps> = ({
                         <div>
                             <div style={{ fontSize: "14px", fontWeight: 800, color: "#FFF" }}>Arquitectura Zero-Cloud & Privacidad</div>
                             <div style={{ fontSize: "12px", color: "#94A3B8", lineHeight: 1.4 }}>
-                                Cero permisos de internet requeridos para comunicación de radio. Datos almacenados en bóveda local cifrada SQLite.
+                                Cero permisos de internet requeridos para comunicación de radio. Datos almacenados en bóveda local cifrada en disco mediante motor transaccional Sled (Rust) e IndexedDB.
                             </div>
                         </div>
                     </div>

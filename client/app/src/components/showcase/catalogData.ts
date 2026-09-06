@@ -9,7 +9,7 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     icon: "📻",
     summary: "Subcanales temáticos de escuadrón (#general, #sos, #logistica) sobre broadcast Gossipsub.",
     badge: "Multi-Topic",
-    techStack: "LibP2P Gossipsub / SQLite",
+    techStack: "Rust Mesh Kernel / Sled DB",
     details: "Permite la creación de salas de mensajería efímeras o persistentes por temas dentro del rango de radio de la malla local. Los mensajes son propagados por todos los nodos cercanos y deduplicados por 72 horas.",
     latency: "< 45ms",
     encryption: "Noise XK + ChaCha20-Poly1305"
@@ -256,7 +256,7 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     techStack: "Merkle Trees / PoS Consensus",
     details: "Visualizador de la micro-cadena distribuida del ecosistema RED que registra las operaciones críticas de estado, revocaciones de identidad y recompensas de retransmisión sin consumir gigabytes.",
     latency: "< 50ms",
-    encryption: "SHA-256 Merkle DAG"
+    encryption: "BLAKE3 Merkle DAG / ChaCha20-Poly1305"
   },
   {
     id: "webCompanionLink",
@@ -478,7 +478,7 @@ export const TACTICAL_MODULES_CATALOG: TacticalModule[] = [
     summary: "Consola de eventos en streaming directo desde el socket HTTP /api/events.",
     badge: "SSE Stream",
     techStack: "EventSource / Axum",
-    details: "Terminal de registro en tiempo real que transmite los eventos internos de LibP2P, handshakes Bluetooth LE y operaciones de base de datos SQLite directamente a la pantalla.",
+    details: "Terminal de registro en tiempo real que transmite los eventos internos de LibP2P, handshakes Bluetooth LE y operaciones de base de datos transaccional Sled directamente a la pantalla.",
     latency: "< 10ms",
     encryption: "Local Loopback"
   },
