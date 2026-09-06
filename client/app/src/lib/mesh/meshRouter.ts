@@ -39,6 +39,7 @@ import { slottedGossip } from './SlottedGossipEngine';
 import { DnsTunnelEngine } from '../network/dnsTunnelEngine';
 import { cognitiveArbiter } from './CognitiveRadioArbiter';
 import { SoundMeshEngine } from '../audio/SoundMeshEngine';
+import { globalShield } from '../network/GlobalShieldEngine';
 
 const DEDUP_WINDOW_MS = 72 * 60 * 60 * 1000;     // 72h — control/protocol packets (replay prevention)
 const DEDUP_WINDOW_MSG_MS = 30 * 60 * 1000;       // 30m  — chat messages (reduces Map size ~95% in long sessions)
@@ -1120,12 +1121,14 @@ class MeshRouter {
 
     if (!packet) {
       console.warn('[MeshRouter] Received malformed packet, ignoring');
+      try { globalShield.recordMalformedPacket(fromTransportId || 'UNKNOWN'); } catch {}
       return;
     }
 
     // Dedup check
     if (this.isDuplicate(packet.nonce)) {
       slottedGossip.recordHeardFromPeer(packet.nonce);
+      try { globalShield.recordReplayAttack(packet.nonce, packet.sender || fromTransportId || 'PEER'); } catch {}
       return; // Already seen this packet — drop silently
     }
     this.markSeen(packet.nonce);

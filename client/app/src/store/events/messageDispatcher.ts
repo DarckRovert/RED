@@ -11,6 +11,7 @@ import { StateIntegrityEngine } from '../../lib/storage/StateIntegrityEngine';
 import { indexedMediaVault } from '../../lib/storage/indexedMediaVault';
 import { toast } from '../../components/Toast';
 import { MonetizationEngine } from '../../lib/network/MonetizationEngine';
+import { globalShield } from '../../lib/network/GlobalShieldEngine';
 import { companionSyncEngine } from '../../lib/mesh/companionSyncEngine';
 import { getSecureStored, setSecureStored } from '../../api/core';
 import { mediaChunker } from '../../lib/mesh/mediaChunker';
@@ -110,14 +111,29 @@ export async function dispatchIncomingMessage(
             if (!item.id) item.id = dedupId;
         }
 
-        // Anti-spam PoW verification for incoming peer messages
+        // 0.1 Stateful Packet Inspection (SPI) Firewall verification via GlobalShield
         const rawPacket = data as any;
-        if (rawPacket?.pow && item.sender && !item.is_mine) {
-            MeshProofOfWork.verifyProof(item.content || '', item.sender, rawPacket.pow).then((res) => {
-                if (!res.valid) {
-                    console.warn(`[RED-MeshPoW] Dropping invalid spam packet from ${item.sender}: ${res.reason}`);
+        if (item.sender && !item.is_mine) {
+            const isEncrypted = !!(item.encrypted || rawPacket?.is_encrypted || (typeof item.content === 'string' && (item.content.startsWith('ENC:') || item.content.startsWith('PQC_NOISE:') || item.content.startsWith('PQC:'))));
+            
+            try {
+                const verdict = await globalShield.inspectIncomingPacket({
+                    sender: item.sender,
+                    content: item.content || '',
+                    pow: rawPacket?.pow,
+                    nonce: dedupId || undefined,
+                    timestamp: typeof item.timestamp === 'number' ? item.timestamp : Date.now(),
+                    isEncrypted,
+                    payloadLength: (item.content || '').length
+                });
+
+                if (!verdict.allowed) {
+                    console.warn(`[GlobalShield Firewall] Inbound packet dropped from ${item.sender}: ${verdict.reason}`);
+                    return; // Packet rejected by active DEFCON firewall policy
                 }
-            }).catch(() => {});
+            } catch (err) {
+                console.warn('[GlobalShield Firewall] Inspection error:', err);
+            }
         }
 
         const { activeConversationId, messages, typingTimeout } = get();

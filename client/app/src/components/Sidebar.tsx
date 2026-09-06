@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useRedStore, ScreenView } from "../store/useRedStore";
 import { toast } from "./Toast";
 import { GlobalSearchModal } from "./GlobalSearchModal";
@@ -9,6 +9,7 @@ import StoryCreator from "./stories/StoryCreator";
 import StoryViewer from "./stories/StoryViewer";
 import { RED_VERSION } from "../lib/version";
 import { meshRouter } from "../lib/mesh/meshRouter";
+import { globalShield } from "../lib/network/GlobalShieldEngine";
 import { WebCompanionPairConfirmationModal } from "./WebCompanionPairConfirmationModal";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { SidebarHeader, ChatFilterType } from "./sidebar/SidebarHeader";
@@ -40,6 +41,11 @@ export default function Sidebar() {
     const groups = Array.isArray(rawGrps) ? rawGrps : [];
     const pendingContactRequests = Array.isArray(rawPending) ? rawPending : [];
     const pendingCount = pendingContactRequests.length;
+
+    const [shieldTelemetry, setShieldTelemetry] = useState(() => globalShield.getTelemetry());
+    useEffect(() => {
+        return globalShield.subscribe(setShieldTelemetry);
+    }, []);
 
     const peerNameIndex = useMemo(() => {
         const map = new Map<string, string>();
@@ -265,8 +271,8 @@ export default function Sidebar() {
             desc: "Matriz DEFCON 1-5, Detector Radiológico CMOS, Satélite LEO, Apagón y DMS",
             icon: "🛡️",
             primaryAction: "globalShield",
-            badge: "DEFCON 1",
-            badgeColor: "#FF3355",
+            badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
+            badgeColor: shieldTelemetry.activeProfile.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : '#00E5FF'),
             tools: [
                 { icon: "🛡️", label: "Escudo Global DEFCON", action: "globalShield" },
                 { icon: "☢️", label: "Detector Radiológico & Satélite", action: "cbrnSatellite" },

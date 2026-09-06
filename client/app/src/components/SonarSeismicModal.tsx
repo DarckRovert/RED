@@ -47,8 +47,13 @@ export function SonarSeismicModal() {
     }, []);
 
     const handleEmitPing = async () => {
+        toast.info("📡 Emitiendo chirp FMCW...");
         const res = await acousticSonar.emitPing(medium);
-        toast.info(`📡 ECO SONAR: ${res.distanceMeters} m (${res.timeOfFlightMs} ms)`);
+        if (res.isRealAudioTof) {
+            toast.success(`🎯 ECO REAL: ${res.distanceMeters} m (${res.timeOfFlightMs} ms, SNR +${res.peakSnrDb}dB)`);
+        } else {
+            toast.info(`📡 SONDEO ToF: ${res.distanceMeters} m (${res.timeOfFlightMs} ms)`);
+        }
     };
 
     const handleToggleContinuous = () => {
@@ -214,15 +219,45 @@ export function SonarSeismicModal() {
                             <div style={{
                                 background: "rgba(0, 229, 255, 0.08)", border: "1.5px solid rgba(0, 229, 255, 0.3)",
                                 borderRadius: "16px", padding: "20px", textAlign: "center",
-                                display: "flex", flexDirection: "column", gap: "6px"
+                                display: "flex", flexDirection: "column", gap: "8px"
                             }}>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>DISTANCIA AL OBSTÁCULO ESTIMADA:</div>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>DISTANCIA AL OBSTÁCULO:</div>
+                                    <span style={{
+                                        fontSize: "0.60rem", fontWeight: 900, padding: "2px 7px", borderRadius: "5px",
+                                        background: lastPing?.isRealAudioTof ? "rgba(0, 230, 118, 0.2)" : "rgba(0, 229, 255, 0.15)",
+                                        color: lastPing?.isRealAudioTof ? "#00E676" : "#00E5FF",
+                                        border: `1px solid ${lastPing?.isRealAudioTof ? '#00E676' : '#00E5FF'}60`
+                                    }}>
+                                        {lastPing?.isRealAudioTof ? "🎙️ RETORNO ACÚSTICO MICRO" : "📐 MODELO LAPLACE"}
+                                    </span>
+                                </div>
                                 <div style={{ fontSize: "2.8rem", fontWeight: 900, color: "#00E5FF" }}>
                                     {lastPing ? `${lastPing.distanceMeters.toFixed(2)} m` : "-- m"}
                                 </div>
                                 <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)" }}>
                                     Tiempo de Vuelo (ToF): {lastPing ? `${lastPing.timeOfFlightMs} ms` : "-- ms"} · Confianza: {lastPing ? `${Math.round(lastPing.confidencePct)}%` : "--"}
                                 </div>
+
+                                {lastPing && (
+                                    <div style={{
+                                        display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "4px",
+                                        paddingTop: "8px", borderTop: "1px solid rgba(0, 229, 255, 0.15)", fontSize: "0.68rem"
+                                    }}>
+                                        <div style={{ background: "rgba(0, 0, 0, 0.3)", padding: "6px", borderRadius: "8px", textAlign: "left" }}>
+                                            <span style={{ color: "var(--text-secondary)", display: "block" }}>Relación SNR Eco:</span>
+                                            <strong style={{ color: (lastPing.peakSnrDb || 0) > 6 ? "#00E676" : "#FFB300" }}>
+                                                {lastPing.peakSnrDb !== undefined ? `+${lastPing.peakSnrDb} dB` : "N/A"}
+                                            </strong>
+                                        </div>
+                                        <div style={{ background: "rgba(0, 0, 0, 0.3)", padding: "6px", borderRadius: "8px", textAlign: "left" }}>
+                                            <span style={{ color: "var(--text-secondary)", display: "block" }}>Resonancia Cavidad:</span>
+                                            <strong style={{ color: "#00E5FF" }}>
+                                                {lastPing.cavityResonanceHz ? `${lastPing.cavityResonanceHz} Hz (~${lastPing.estimatedVolumeM3} m³)` : "N/A"}
+                                            </strong>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Actions */}

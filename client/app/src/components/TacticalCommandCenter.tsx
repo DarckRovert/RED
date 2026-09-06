@@ -34,7 +34,13 @@ export const TacticalCommandCenter: React.FC = () => {
     const [activeSosCount, setActiveSosCount] = useState<number>(0);
     const [sigintTelemetry, setSigintTelemetry] = useState<SigintTelemetry>(() => rfSigintWatchdog.getTelemetry());
     const [swarmTelemetry, setSwarmTelemetry] = useState<SwarmHealthTelemetry>(() => dynamicBearerGovernor.getTelemetry());
+    const [shieldTelemetry, setShieldTelemetry] = useState(() => globalShield.getTelemetry());
     const [showSwarmHUD, setShowSwarmHUD] = useState<boolean>(false);
+
+    useEffect(() => {
+        const unsub = globalShield.subscribe(setShieldTelemetry);
+        return unsub;
+    }, []);
 
     useEffect(() => {
         const updateSos = () => setActiveSosCount(meshSosBeacon.getActiveDistressCount());
@@ -78,8 +84,6 @@ export const TacticalCommandCenter: React.FC = () => {
         } catch {}
         toast.info(favoriteModules.includes(modId) ? "Módulo quitado de favoritos" : "⭐ Módulo fijado en favoritos");
     };
-
-    const shieldTelemetry = globalShield.getTelemetry();
 
     const modulesByDomain: Record<Exclude<CommandDomain, 'favs'>, ModuleCardItem[]> = {
         comms: [
@@ -395,9 +399,9 @@ export const TacticalCommandCenter: React.FC = () => {
                 icon: '🛡️',
                 title: 'Escudo Global DEFCON',
                 subtitle: 'Monitoreo de integridad perimetral, firewall local y detección de ataques.',
-                badge: 'DEFCON 1',
-                badgeColor: '#FF3355',
-                accentGlow: 'rgba(255, 51, 85, 0.2)'
+                badge: `DEFCON ${shieldTelemetry.currentDefcon}`,
+                badgeColor: shieldTelemetry.activeProfile.color || (shieldTelemetry.currentDefcon === 1 ? 'var(--accent-crimson)' : shieldTelemetry.currentDefcon === 2 ? '#FF8008' : shieldTelemetry.currentDefcon === 3 ? '#FFB300' : '#00E5FF'),
+                accentGlow: shieldTelemetry.currentDefcon === 1 ? 'rgba(255, 51, 85, 0.2)' : shieldTelemetry.currentDefcon === 2 ? 'rgba(255, 128, 8, 0.2)' : 'rgba(0, 229, 255, 0.2)'
             },
             {
                 id: 'c4isrEmpDrill',
