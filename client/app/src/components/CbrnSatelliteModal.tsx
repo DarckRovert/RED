@@ -54,6 +54,27 @@ export function CbrnSatelliteModal() {
                 const lon = loc.lon!;
                 satelliteMeshGateway.setObserverLocation(lat, lon);
                 setOperatorPos({ lat, lon });
+
+                // Si el incidente tiene las coordenadas por defecto (-12.0464), adaptarlo dinámicamente
+                // a 400m hacia barlovento (contra el viento) de la posición real del operador
+                setIncidentSource(prev => {
+                    if (Math.abs(prev.lat - (-12.0464)) < 0.0001 && Math.abs(prev.lon - (-77.0428)) < 0.0001) {
+                        const upwindBearing = (prev.windDirectionDegrees + 180) % 360;
+                        const R = 6371000;
+                        const d = 400 / R;
+                        const brng = upwindBearing * (Math.PI / 180);
+                        const lat1 = lat * (Math.PI / 180);
+                        const lon1 = lon * (Math.PI / 180);
+                        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+                        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+                        return {
+                            ...prev,
+                            lat: lat2 * (180 / Math.PI),
+                            lon: lon2 * (180 / Math.PI)
+                        };
+                    }
+                    return prev;
+                });
             }
         });
 
@@ -603,6 +624,55 @@ export function CbrnSatelliteModal() {
                                             style={{ width: "100%" }}
                                         />
                                     </div>
+                                </div>
+
+                                {/* Ajuste Geográfico Real del Foco respecto al GPS */}
+                                <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                                    <button
+                                        onClick={() => {
+                                            const upwindBearing = (incidentSource.windDirectionDegrees + 180) % 360;
+                                            const R = 6371000;
+                                            const d = 400 / R;
+                                            const brng = upwindBearing * (Math.PI / 180);
+                                            const lat1 = operatorPos.lat * (Math.PI / 180);
+                                            const lon1 = operatorPos.lon * (Math.PI / 180);
+                                            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(d) + Math.cos(lat1) * Math.sin(d) * Math.cos(brng));
+                                            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d) * Math.cos(lat1), Math.cos(d) - Math.sin(lat1) * Math.sin(lat2));
+                                            setIncidentSource(prev => ({
+                                                ...prev,
+                                                lat: lat2 * (180 / Math.PI),
+                                                lon: lon2 * (180 / Math.PI)
+                                            }));
+                                            toast.success("📍 Foco fijado a 400m barlovento de tu posición GPS");
+                                        }}
+                                        style={{
+                                            flex: 1, padding: "8px", borderRadius: "8px",
+                                            background: "rgba(0, 229, 255, 0.12)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                            color: "#00E5FF", fontSize: "0.68rem", fontWeight: 800, cursor: "pointer"
+                                        }}
+                                    >
+                                        📍 400M BARLOVENTO (GPS)
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIncidentSource(prev => ({
+                                                ...prev,
+                                                lat: operatorPos.lat,
+                                                lon: operatorPos.lon
+                                            }));
+                                            toast.warning("🎯 Foco posicionado en tu ubicación GPS actual");
+                                        }}
+                                        style={{
+                                            flex: 1, padding: "8px", borderRadius: "8px",
+                                            background: "rgba(255, 51, 85, 0.12)", border: "1px solid rgba(255, 51, 85, 0.3)",
+                                            color: "#FF3355", fontSize: "0.68rem", fontWeight: 800, cursor: "pointer"
+                                        }}
+                                    >
+                                        🎯 EN MI POSICIÓN (GPS)
+                                    </button>
+                                </div>
+                                <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)", textAlign: "center" }}>
+                                    Foco: {incidentSource.lat.toFixed(5)}, {incidentSource.lon.toFixed(5)} · Operador: {operatorPos.lat.toFixed(5)}, {operatorPos.lon.toFixed(5)}
                                 </div>
                             </div>
 
