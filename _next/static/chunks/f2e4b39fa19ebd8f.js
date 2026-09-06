@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,12904,e=>{e.v(e=>Promise.resolve().then(()=>e(87864)))}]);
