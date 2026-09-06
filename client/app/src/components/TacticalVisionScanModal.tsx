@@ -102,11 +102,18 @@ export function TacticalVisionScanModal() {
             animFrameRef.current = null;
         }
         if (streamRef.current) {
+            const track = streamRef.current.getVideoTracks()[0];
+            if (track) {
+                try {
+                    (track as any).applyConstraints({ advanced: [{ torch: false }] });
+                } catch (_) {}
+            }
             streamRef.current.getTracks().forEach(t => t.stop());
             streamRef.current = null;
         }
         tacticalEdgeVision.destroy();
         setCameraActive(false);
+        setTorchOn(false);
     };
 
     const startProcessingLoop = () => {

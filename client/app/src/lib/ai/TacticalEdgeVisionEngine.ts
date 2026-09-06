@@ -227,9 +227,10 @@ export class TacticalEdgeVisionEngine {
                 // A. HEURÍSTICA DE FUEGO REAL (Crominancia estricta + Núcleo Incandescente)
                 // =========================================================================
                 // Una superficie naranja inerte (cojín, lapicero, madera) tiene r alto pero g y b apagados, sin núcleo caliente.
-                // Una llama real tiene alta luminancia (lum > 140), r > 200, g > 90, b < 90 y r > g * 1.25
+                // Una llama real tiene alta luminancia (lum > 130), r > 205, g > 95, b < 85 y r > g * 1.25.
+                // El núcleo incandescente de llama (amarillo-blanco caliente) exige fuerte deficiencia de azul (r - b > 50, b < 140) para no confundirse con focos LED blancos.
                 const isFlameColor = (r > 205 && g > 95 && b < 85 && (r - g) > 40 && lum > 130);
-                const isIncandescentCore = (r > 235 && g > 190 && b > 90 && lum > 185);
+                const isIncandescentCore = (r > 235 && g > 180 && b < 140 && (r - b) > 50 && lum > 185);
 
                 if (isFlameColor || isIncandescentCore) {
                     firePixels++;
@@ -269,8 +270,11 @@ export class TacticalEdgeVisionEngine {
         const globalMotionRatio = totalSampledPixels > 0 ? globalMotionPixels / totalSampledPixels : 0;
         const isCameraPanning = globalMotionRatio > 0.32;
 
-        // Actualizar búfer previo
-        this.prevFrameData = new Uint8ClampedArray(data);
+        // Actualizar búfer previo en memoria contigua existente (Zero Allocations a 60 FPS)
+        if (!this.prevFrameData || this.prevFrameData.length !== data.length) {
+            this.prevFrameData = new Uint8ClampedArray(data.length);
+        }
+        this.prevFrameData.set(data);
 
         const currentDetections: DetectedVisionObject[] = [];
 
