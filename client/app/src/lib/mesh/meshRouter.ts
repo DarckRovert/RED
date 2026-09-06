@@ -1221,6 +1221,13 @@ class MeshRouter {
         }
       }
 
+      // 1.5. LEO Satellite Mesh Relay Downlink Ingest
+      if (payloadStr.includes('SAT_RELAY_V1|')) {
+        import('./SatelliteMeshGatewayEngine').then(({ satelliteMeshGateway }) => {
+          satelliteMeshGateway.processIncomingDownlink(payloadStr);
+        }).catch(() => {});
+      }
+
       // Check if this payload has an internal message ID
       if (payloadStr.startsWith('{')) {
         try {

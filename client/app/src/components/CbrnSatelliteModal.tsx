@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { cbrnRadiation, RadiationTelemetry, CbrnSimulationScenario } from "../lib/sensors/CbrnRadiationEngine";
-import { satelliteMeshGateway, SatelliteGatewayTelemetry, SatellitePass } from "../lib/mesh/SatelliteMeshGatewayEngine";
+import { satelliteMeshGateway, SatelliteGatewayTelemetry, SatellitePass, SatelliteRelayMode } from "../lib/mesh/SatelliteMeshGatewayEngine";
 import { cbrnPlumeDispersionEngine, PlumeHazardZone, CbrnIncidentSource } from "../lib/tactical/CbrnPlumeDispersionEngine";
 import { TacticalLocationEngine } from "../lib/sensors/TacticalLocationEngine";
 import { useRedStore } from "../store/useRedStore";
@@ -39,8 +39,10 @@ export function CbrnSatelliteModal() {
         cbrnPlumeDispersionEngine.calculatePlumeDispersion(incidentSource, operatorPos.lat, operatorPos.lon)
     );
 
-    // Compositor Satelital SBD
+    // Compositor Satelital SBD y Repetidor Orbital
     const [satMessageText, setSatMessageText] = useState<string>("ALERTA CBRN: EVACUACION ACTIVA. SOLICITO ENLACE MEDICO.");
+    const [satelliteRelayMode, setSatelliteRelayMode] = useState<SatelliteRelayMode>("BENT_PIPE");
+    const [targetMeshId, setTargetMeshId] = useState<string>("MESH-GLOBAL-ALL");
 
     useEffect(() => {
         cbrnRadiation.startMonitoring();
@@ -127,6 +129,18 @@ export function CbrnSatelliteModal() {
         if (!satMessageText.trim()) return;
         const res = satelliteMeshGateway.composeAndEnqueueSbd(satMessageText, 9);
         toast.success(`🛰️ Paquete SBD encolado: ${res.id}`);
+    };
+
+    const handleEnqueueRelayMessage = () => {
+        if (!satMessageText.trim()) return;
+        const res = satelliteMeshGateway.composeAndEnqueueRelay(
+            satMessageText,
+            targetMeshId,
+            "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            satelliteRelayMode,
+            9
+        );
+        toast.success(`🛰️ Retransmisión [${satelliteRelayMode}] encolada para ${targetMeshId}: ${res.relayId}`);
     };
 
     const handleTriggerSatBurst = () => {
@@ -708,17 +722,17 @@ export function CbrnSatelliteModal() {
                     {activeTab === "satellite" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                             
-                            {/* Banner de Estado de Enlace LEO */}
+                            {/* Banner de Estado de Enlace LEO & Repetidor */}
                             <div style={{
                                 background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.3)",
                                 borderRadius: "16px", padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"
                             }}>
                                 <div>
                                     <div style={{ fontSize: "0.84rem", fontWeight: 900, color: "#00E5FF" }}>
-                                        {sat.isUplinkAvailable ? "ENLACE CENITAL AOS ACTIVO" : "BUSCANDO SATÉLITE EN CENIT"}
+                                        {sat.isUplinkAvailable ? "🛰️ ENLACE CENITAL & REPETIDOR AOS ACTIVO" : "🛰️ BUSCANDO PASO ORBITAL"}
                                     </div>
-                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
-                                        {sat.queuedOutboundPackets} paquetes en cola · {sat.totalUplinksTransmitted} uplinks completados
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                                        Huella: ~{sat.activeFootprintRadiusKm} km · {sat.totalRelaysUplinked} relays subidos · {sat.totalRelaysDownlinked} bajadas · {sat.queuedOutboundPackets} en cola
                                     </div>
                                 </div>
                                 <button
@@ -735,7 +749,7 @@ export function CbrnSatelliteModal() {
                                 </button>
                             </div>
 
-                            {/* Radar SkyView Polar SVG */}
+                            {/* Radar SkyView Polar SVG con Huella Orbital */}
                             <div style={{
                                 background: "rgba(10, 15, 30, 0.95)",
                                 border: "1.5px solid rgba(0, 229, 255, 0.3)",
@@ -744,10 +758,10 @@ export function CbrnSatelliteModal() {
                             }}>
                                 <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                     <span style={{ fontSize: "0.76rem", color: "#00E5FF", fontWeight: 900 }}>
-                                        BÓVEDA CELESTE SKYVIEW (ELEVACIÓN & AZIMUT)
+                                        BÓVEDA CELESTE SKYVIEW & HUELLA DE COBERTURA
                                     </span>
                                     <span style={{ fontSize: "0.66rem", color: "var(--text-secondary)" }}>
-                                        AOS: Elevación &gt; 25°
+                                        AOS: Elevación &gt; 25° · Huella ~{sat.activeFootprintRadiusKm}km
                                     </span>
                                 </div>
 
@@ -775,10 +789,14 @@ export function CbrnSatelliteModal() {
                                         return (
                                             <g key={s.satelliteId}>
                                                 {s.isInAos && (
-                                                    <circle cx={px} cy={py} r="10" fill="none" stroke={satColor} strokeWidth="1.5" opacity="0.6">
-                                                        <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite" />
-                                                        <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s" repeatCount="indefinite" />
-                                                    </circle>
+                                                    <>
+                                                        {/* Cono de Huella Terrestre del Repetidor */}
+                                                        <circle cx={px} cy={py} r="26" fill="rgba(0, 229, 255, 0.08)" stroke={satColor} strokeWidth="1" strokeDasharray="3 3" opacity="0.7" />
+                                                        <circle cx={px} cy={py} r="10" fill="none" stroke={satColor} strokeWidth="1.5" opacity="0.6">
+                                                            <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite" />
+                                                            <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s" repeatCount="indefinite" />
+                                                        </circle>
+                                                    </>
                                                 )}
                                                 <circle cx={px} cy={py} r="5" fill={satColor} />
                                                 <text x={px + 7} y={py + 3} fill="#FFF" fontSize="8" fontWeight="bold">
@@ -794,18 +812,78 @@ export function CbrnSatelliteModal() {
                                 </div>
                             </div>
 
-                            {/* Compositor de Mensaje Satelital SBD */}
+                            {/* Compositor de Mensaje Satelital & Repetidor Orbital */}
                             <div style={{
                                 background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)",
                                 borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px"
                             }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                     <span style={{ fontSize: "0.76rem", color: "#00E5FF", fontWeight: 900 }}>
-                                        COMPOSITOR DE RÁFAGA SATELITAL SBD
+                                        COMPOSITOR DE MENSAJE & REPETIDOR ORBITAL
                                     </span>
                                     <span style={{ fontSize: "0.66rem", color: satMessageText.length > 200 ? "#FF3355" : "var(--text-secondary)" }}>
                                         {satMessageText.length}/240 caracteres
                                     </span>
+                                </div>
+
+                                {/* Selector de Modo de Enlace */}
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                                    <button
+                                        onClick={() => setSatelliteRelayMode("BENT_PIPE")}
+                                        style={{
+                                            padding: "6px 4px", borderRadius: "8px", fontSize: "0.66rem", fontWeight: 800,
+                                            background: satelliteRelayMode === "BENT_PIPE" ? "rgba(0, 229, 255, 0.25)" : "rgba(255,255,255,0.04)",
+                                            color: satelliteRelayMode === "BENT_PIPE" ? "#00E5FF" : "#888",
+                                            border: satelliteRelayMode === "BENT_PIPE" ? "1px solid #00E5FF" : "1px solid transparent",
+                                            cursor: "pointer"
+                                        }}
+                                    >
+                                        🛰️ BENT-PIPE
+                                    </button>
+                                    <button
+                                        onClick={() => setSatelliteRelayMode("STORE_AND_FORWARD")}
+                                        style={{
+                                            padding: "6px 4px", borderRadius: "8px", fontSize: "0.66rem", fontWeight: 800,
+                                            background: satelliteRelayMode === "STORE_AND_FORWARD" ? "rgba(179, 136, 255, 0.25)" : "rgba(255,255,255,0.04)",
+                                            color: satelliteRelayMode === "STORE_AND_FORWARD" ? "#B388FF" : "#888",
+                                            border: satelliteRelayMode === "STORE_AND_FORWARD" ? "1px solid #B388FF" : "1px solid transparent",
+                                            cursor: "pointer"
+                                        }}
+                                    >
+                                        📦 STORE & FWD
+                                    </button>
+                                    <button
+                                        onClick={() => setSatelliteRelayMode("BENT_PIPE")}
+                                        style={{
+                                            padding: "6px 4px", borderRadius: "8px", fontSize: "0.66rem", fontWeight: 800,
+                                            background: "rgba(255,255,255,0.04)",
+                                            color: "#888", border: "1px solid transparent", cursor: "pointer"
+                                        }}
+                                    >
+                                        📡 SBD DIRECTO
+                                    </button>
+                                </div>
+
+                                {/* Selector de Malla Destino para Repetidor */}
+                                <div>
+                                    <label style={{ fontSize: "0.66rem", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
+                                        MALLA DESTINO REPETIDOR:
+                                    </label>
+                                    <select
+                                        value={targetMeshId}
+                                        onChange={(e) => setTargetMeshId(e.target.value)}
+                                        style={{
+                                            width: "100%", padding: "8px", background: "rgba(0, 0, 0, 0.5)",
+                                            border: "1px solid rgba(0, 229, 255, 0.25)", borderRadius: "8px",
+                                            color: "#00E5FF", fontSize: "0.74rem", fontFamily: "JetBrains Mono, monospace"
+                                        }}
+                                    >
+                                        <option value="MESH-GLOBAL-ALL">🌐 MESH-GLOBAL-ALL (Difusión Continental Total)</option>
+                                        <option value="MESH-LIMA-01">📍 MESH-LIMA-01 (Sector Central)</option>
+                                        <option value="MESH-CUSCO-02">📍 MESH-CUSCO-02 (Sector Sur / Andes)</option>
+                                        <option value="MESH-IQUITOS-03">📍 MESH-IQUITOS-03 (Sector Selva Amazónica)</option>
+                                        <option value="MESH-VALPARAISO-04">📍 MESH-VALPARAISO-04 (Sector Costero Sur)</option>
+                                    </select>
                                 </div>
 
                                 <textarea
@@ -824,11 +902,22 @@ export function CbrnSatelliteModal() {
 
                                 <div style={{ display: "flex", gap: "10px" }}>
                                     <button
+                                        onClick={handleEnqueueRelayMessage}
+                                        style={{
+                                            flex: 2, padding: "10px", borderRadius: "8px",
+                                            background: "linear-gradient(135deg, rgba(0, 229, 255, 0.3) 0%, rgba(179, 136, 255, 0.3) 100%)",
+                                            border: "1px solid #00E5FF",
+                                            color: "#00E5FF", fontWeight: 900, fontSize: "0.76rem", cursor: "pointer"
+                                        }}
+                                    >
+                                        🛰️ ENCOLAR REPETIDOR ORBITAL
+                                    </button>
+                                    <button
                                         onClick={handleEnqueueSbdMessage}
                                         style={{
                                             flex: 1, padding: "10px", borderRadius: "8px",
-                                            background: "rgba(0, 229, 255, 0.15)", border: "1px solid #00E5FF",
-                                            color: "#00E5FF", fontWeight: 900, fontSize: "0.76rem", cursor: "pointer"
+                                            background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                            color: "#FFF", fontWeight: 700, fontSize: "0.72rem", cursor: "pointer"
                                         }}
                                     >
                                         📥 ENCOLAR PAQUETE SBD
@@ -845,6 +934,37 @@ export function CbrnSatelliteModal() {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Consola de Tráfico de Repetidor Satelital */}
+                            {sat.recentRelays.length > 0 && (
+                                <div style={{
+                                    background: "rgba(10, 15, 30, 0.9)", border: "1px solid rgba(0, 229, 255, 0.2)",
+                                    borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px"
+                                }}>
+                                    <div style={{ fontSize: "0.72rem", color: "#00E5FF", fontWeight: 900 }}>
+                                        TRÁFICO DE REPETIDOR ORBITAL RECIENTE ({sat.recentRelays.length}):
+                                    </div>
+                                    <div style={{ maxHeight: "140px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                        {sat.recentRelays.slice(0, 5).map(r => (
+                                            <div
+                                                key={r.relayId}
+                                                style={{
+                                                    background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", padding: "8px",
+                                                    fontSize: "0.68rem", display: "flex", justifyContent: "space-between", alignItems: "center"
+                                                }}
+                                            >
+                                                <div>
+                                                    <span style={{ color: "#00E5FF", fontWeight: 800 }}>[{r.mode}]</span> {r.satelliteId} · <span style={{ color: "#FFB300" }}>{r.targetMeshId}</span>
+                                                    <div style={{ color: "#AAA", fontSize: "0.64rem" }}>{r.payload}</div>
+                                                </div>
+                                                <span style={{ fontSize: "0.60rem", color: "#666" }}>
+                                                    Huella {r.footprintRadiusKm}km
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Lista de Satélites en Orbita */}
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
