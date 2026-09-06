@@ -2,19 +2,27 @@
  * CbrnRadiationEngine.ts — RED Tactical CBRN Nuclear Radiation & Dosimetry Telemetry Engine
  * 
  * Provides real-time dose rate measurement (uSv/h & CPM), cumulative biological dose tracking (mSv),
- * safe stay-time calculation (T_stay), and Acute Radiation Sickness (ARS) risk assessment for civilian/tactical survival.
+ * safe stay-time calculation (T_stay), Acute Radiation Sickness (ARS) risk assessment, and
+ * real camera CMOS silicon sensor photon impact detection with optical darkness validation.
  */
 
 export type CbrnThreatLevel = 'SAFE_BACKGROUND' | 'ELEVATED' | 'HAZARDOUS' | 'LETHAL';
 
+export type CbrnSimulationScenario = 'NONE' | 'BACKGROUND' | 'ELEVATED' | 'HOT_ZONE' | 'LETHAL';
+
 export interface RadiationTelemetry {
-    doseRateUsVh: number;       // MicroSieverts por hora (0.05 - 0.25 normal background)
-    countsPerMinuteCpm: number;  // CPM estimado
-    cumulativeDoseMsv: number;   // Dosis biológica acumulada en miliSieverts
-    safeStayTimeMinutes: number; // Tiempo seguro antes de alcanzar el límite de 50 mSv
+    doseRateUsVh: number;           // MicroSieverts por hora (0.05 - 0.25 normal background)
+    countsPerMinuteCpm: number;      // CPM estimado
+    cumulativeDoseMsv: number;       // Dosis biológica acumulada en miliSieverts
+    safeStayTimeMinutes: number;     // Tiempo seguro antes de alcanzar el límite de 50 mSv
     threatLevel: CbrnThreatLevel;
     arsRiskDescription: string;
     isSensorOnline: boolean;
+    isCameraCmosActive: boolean;
+    isLensCovered: boolean;
+    averageLuminance: number;
+    hotPixelHitsLastFrame: number;
+    activeSimulationScenario: CbrnSimulationScenario;
 }
 
 export class CbrnRadiationEngine {
@@ -25,6 +33,18 @@ export class CbrnRadiationEngine {
     private isRunning: boolean = false;
     private isManualOverride: boolean = false;
     private timer: any = null;
+
+    // CMOS Camera Video Capture Pipeline
+    private videoStream: MediaStream | null = null;
+    private videoElement: HTMLVideoElement | null = null;
+    private canvasElement: HTMLCanvasElement | null = null;
+    private canvasCtx: CanvasRenderingContext2D | null = null;
+    private isCameraActive: boolean = false;
+    private isLensCovered: boolean = false;
+    private averageLuminance: number = 0;
+    private hotPixelHitsLastFrame: number = 0;
+    private cmosScanInterval: any = null;
+    private activeSimulationScenario: CbrnSimulationScenario = 'NONE';
 
     private listeners: Set<(t: RadiationTelemetry) => void> = new Set();
 
@@ -58,6 +78,165 @@ export class CbrnRadiationEngine {
         this.listeners.forEach(cb => {
             try { cb(t); } catch {}
         });
+    }
+
+    /**
+     * Inicia la captura física de la cámara trasera para análisis fotónico CMOS
+     */
+    public async startCmosCameraCapture(): Promise<boolean> {
+        if (typeof window === 'undefined' || !navigator?.mediaDevices?.getUserMedia) {
+            return false;
+        }
+
+        try {
+            if (this.videoStream) {
+                this.stopCmosCameraCapture();
+            }
+
+            this.videoStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            });
+
+            if (!this.videoElement) {
+                this.videoElement = document.createElement('video');
+                this.videoElement.setAttribute('playsinline', 'true');
+                this.videoElement.muted = true;
+            }
+
+            this.videoElement.srcObject = this.videoStream;
+            await this.videoElement.play().catch(() => {});
+
+            if (!this.canvasElement) {
+                this.canvasElement = document.createElement('canvas');
+                this.canvasElement.width = 160; // Resolución optimizada para rendimiento móvil continuo
+                this.canvasElement.height = 120;
+                this.canvasCtx = this.canvasElement.getContext('2d', { willReadFrequently: true });
+            }
+
+            this.isCameraActive = true;
+
+            // Escaneo continuo a ~20 FPS (50ms interval)
+            if (this.cmosScanInterval) clearInterval(this.cmosScanInterval);
+            this.cmosScanInterval = setInterval(() => {
+                this.processCmosFrame(50);
+            }, 50);
+
+            this.notify();
+            return true;
+        } catch (err) {
+            console.warn('[CbrnRadiationEngine] No se pudo activar la cámara CMOS:', err);
+            this.isCameraActive = false;
+            this.notify();
+            return false;
+        }
+    }
+
+    /**
+     * Procesa un frame de video capturado por el sensor CMOS
+     */
+    private processCmosFrame(frameIntervalMs: number): void {
+        if (!this.videoElement || !this.canvasCtx || !this.canvasElement || !this.isCameraActive) return;
+        if (this.videoElement.readyState < 2) return;
+
+        try {
+            const w = this.canvasElement.width;
+            const h = this.canvasElement.height;
+            this.canvasCtx.drawImage(this.videoElement, 0, 0, w, h);
+            const imgData = this.canvasCtx.getImageData(0, 0, w, h);
+            const pixels = imgData.data;
+            const totalPixels = w * h;
+
+            let totalBrightness = 0;
+            let hotPixels = 0;
+
+            // 1. Medir nivel de luminancia media para verificar lente tapado
+            for (let i = 0; i < pixels.length; i += 16) { // Muestreo rápido de iluminación
+                const r = pixels[i];
+                const g = pixels[i + 1];
+                const b = pixels[i + 2];
+                totalBrightness += (0.299 * r + 0.587 * g + 0.114 * b);
+            }
+            const avgLum = Math.round((totalBrightness / (totalPixels / 4)) * 10) / 10;
+            this.averageLuminance = avgLum;
+
+            // El lente está cubierto si la luminancia promedio es menor a 20 (oscuridad requerida)
+            this.isLensCovered = avgLum < 20.0;
+
+            if (this.isLensCovered) {
+                // 2. Con lente cubierto, cualquier punto luminoso aislado es un impacto de fotón ionizante
+                // Umbral alto de intensidad: píxeles individuales con valor > 200 en rojo/verde/azul
+                for (let i = 0; i < pixels.length; i += 4) {
+                    const r = pixels[i];
+                    const g = pixels[i + 1];
+                    const b = pixels[i + 2];
+                    if (r > 200 || g > 200 || b > 200) {
+                        hotPixels++;
+                    }
+                }
+
+                this.hotPixelHitsLastFrame = hotPixels;
+
+                // Solo actualizar si no hay escenario de simulación manual forzado
+                if (this.activeSimulationScenario === 'NONE' && !this.isManualOverride) {
+                    this.recordCmosPhotonHits(hotPixels, frameIntervalMs);
+                }
+            } else {
+                this.hotPixelHitsLastFrame = 0;
+            }
+
+            this.notify();
+        } catch {}
+    }
+
+    public stopCmosCameraCapture(): void {
+        if (this.cmosScanInterval) {
+            clearInterval(this.cmosScanInterval);
+            this.cmosScanInterval = null;
+        }
+        if (this.videoStream) {
+            try {
+                this.videoStream.getTracks().forEach(t => t.stop());
+            } catch {}
+            this.videoStream = null;
+        }
+        if (this.videoElement) {
+            this.videoElement.srcObject = null;
+        }
+        this.isCameraActive = false;
+        this.isLensCovered = false;
+        this.hotPixelHitsLastFrame = 0;
+        this.notify();
+    }
+
+    /**
+     * Configura un escenario de simulación táctica para pruebas y simulacros
+     */
+    public setSimulationScenario(scenario: CbrnSimulationScenario): void {
+        this.activeSimulationScenario = scenario;
+        switch (scenario) {
+            case 'BACKGROUND':
+                this.setDoseRate(0.12, false);
+                break;
+            case 'ELEVATED':
+                this.setDoseRate(4.8, true);
+                break;
+            case 'HOT_ZONE':
+                this.setDoseRate(85.0, true);
+                break;
+            case 'LETHAL':
+                this.setDoseRate(1450.0, true);
+                break;
+            case 'NONE':
+            default:
+                this.isManualOverride = false;
+                this.setDoseRate(0.12, false);
+                break;
+        }
     }
 
     public recordCmosPhotonHits(hotPixelCount: number, exposureTimeMs = 33.3): void {
@@ -105,6 +284,7 @@ export class CbrnRadiationEngine {
 
     public destroy(): void {
         this.stopMonitoring();
+        this.stopCmosCameraCapture();
         this.listeners.clear();
     }
 
@@ -165,6 +345,11 @@ export class CbrnRadiationEngine {
             threatLevel,
             arsRiskDescription: arsDesc,
             isSensorOnline: true,
+            isCameraCmosActive: this.isCameraActive,
+            isLensCovered: this.isLensCovered,
+            averageLuminance: this.averageLuminance,
+            hotPixelHitsLastFrame: this.hotPixelHitsLastFrame,
+            activeSimulationScenario: this.activeSimulationScenario
         };
     }
 }

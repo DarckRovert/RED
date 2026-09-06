@@ -2,11 +2,13 @@
  * SatelliteMeshGatewayEngine.ts — RED LEO Satellite Store-and-Forward Mesh Gateway
  * 
  * Computes orbital pass geometry (Elevation >= 25 deg AOS) for Iridium-NEXT, Orbcomm, and Direct-to-Cell
- * constellations to automatically inject queued DTN emergency beacons, SITREPs, and tactical telemetry.
+ * constellations, provides polar SkyView coordinates (Azimuth/Elevation projection), and manages
+ * Short Burst Data (SBD) emergency queues for automated LEO satellite uplinks.
  */
 
 import { meshRouter } from './meshRouter';
 import { dtnStorage } from './dtnStorage';
+import { cbrnRadiation } from '../sensors/CbrnRadiationEngine';
 
 export interface SatellitePass {
     satelliteId: string;
@@ -17,14 +19,28 @@ export interface SatellitePass {
     timeToAosSec: number;
     passDurationSec: number;
     uplinkFrequencyMhz: number;
+    polarX: number; // Coordenada X normalizada (-1 a +1) para Radar SkyView
+    polarY: number; // Coordenada Y normalizada (-1 a +1) para Radar SkyView
+}
+
+export interface OutboundSatellitePacket {
+    id: string;
+    payload: string;
+    timestamp: number;
+    priority: number;
+    targetConstellation?: string;
 }
 
 export interface SatelliteGatewayTelemetry {
     activePasses: SatellitePass[];
     queuedOutboundPackets: number;
+    outboundQueue: OutboundSatellitePacket[];
     totalUplinksTransmitted: number;
     bestAvailableSatellite: SatellitePass | null;
     isUplinkAvailable: boolean;
+    observerLat: number;
+    observerLon: number;
+    lastUplinkTimestamp: number | null;
 }
 
 interface ConstellationConfig {
@@ -70,8 +86,9 @@ const CONSTELLATIONS: ConstellationConfig[] = [
 export class SatelliteMeshGatewayEngine {
     private static instance: SatelliteMeshGatewayEngine | null = null;
 
-    private outboundQueue: Array<{ id: string; payload: string; timestamp: number; priority: number }> = [];
+    private outboundQueue: OutboundSatellitePacket[] = [];
     private totalUplinks: number = 0;
+    private lastUplinkTimestamp: number | null = null;
     private listeners: Set<(t: SatelliteGatewayTelemetry) => void> = new Set();
     private updateInterval: any = null;
     private observerLat: number = 0;
@@ -91,8 +108,8 @@ export class SatelliteMeshGatewayEngine {
     }
 
     public setObserverLocation(lat: number, lon: number): void {
-        this.observerLat = lat;
-        this.observerLon = lon;
+        this.observerLat = (typeof lat === 'number' && isFinite(lat)) ? lat : 0;
+        this.observerLon = (typeof lon === 'number' && isFinite(lon)) ? lon : 0;
         this.satellites = this.calculateOrbitalPasses(Date.now());
         this.notify();
     }
@@ -110,6 +127,15 @@ export class SatelliteMeshGatewayEngine {
             const passDurationSec = isInAos ? Math.max(10, Math.round(((Math.PI * 0.35) / (2 * Math.PI)) * config.periodSec)) : 0;
             const satNumber = 100 + (index * 42) + Math.floor((epochSec / config.periodSec) % 66);
 
+            // Proyección Polar SkyView:
+            // Centro = Cenit (Elev 90° => r = 0).
+            // Borde = Horizonte (Elev 0° => r = 1.0).
+            const r = Math.max(0, Math.min(1, (90 - elevationDeg) / 90));
+            // Ángulo azimut: 0° es Norte (hacia arriba, y negativo en SVG), 90° es Este (x positivo)
+            const azRad = (azimuthDeg - 90) * (Math.PI / 180);
+            const polarX = Math.round((r * Math.cos(azRad)) * 1000) / 1000;
+            const polarY = Math.round((r * Math.sin(azRad)) * 1000) / 1000;
+
             return {
                 satelliteId: `${config.namePrefix}-${satNumber}`,
                 constellation: config.constellation,
@@ -119,6 +145,8 @@ export class SatelliteMeshGatewayEngine {
                 timeToAosSec,
                 passDurationSec,
                 uplinkFrequencyMhz: config.freqMhz,
+                polarX,
+                polarY,
             };
         });
     }
@@ -159,9 +187,36 @@ export class SatelliteMeshGatewayEngine {
         return id;
     }
 
+    /**
+     * Empaqueta y encola un mensaje táctico en formato Short Burst Data (SBD) con telemetría de campo
+     */
+    public composeAndEnqueueSbd(message: string, priority: number = 8): { id: string; packetPayload: string } {
+        const cleanMsg = (typeof message === 'string' && message.trim().length > 0)
+            ? message.trim().slice(0, 240)
+            : 'SITREP CBRN DE EMERGENCIA';
+
+        const cbrnRate = cbrnRadiation.getTelemetry().doseRateUsVh;
+        const latStr = this.observerLat.toFixed(5);
+        const lonStr = this.observerLon.toFixed(5);
+        const sbdPayload = `SBD_V1|LOC:${latStr},${lonStr}|RAD:${cbrnRate}uSv/h|TS:${Date.now()}|MSG:${cleanMsg}`;
+
+        const id = this.enqueueOutboundUplink(sbdPayload, priority);
+        return { id, packetPayload: sbdPayload };
+    }
+
+    public clearOutboundQueue(): void {
+        this.outboundQueue = [];
+        this.notify();
+    }
+
     public triggerSatelliteBurst(): boolean {
         const best = this.satellites.find(s => s.isInAos);
         if (!best) return false;
+
+        if (this.outboundQueue.length === 0) {
+            // Si la cola está vacía, generamos un beacon de pulso orbital automático
+            this.composeAndEnqueueSbd('PULSO AUTOMATICO DE ENLACE LEO', 3);
+        }
 
         for (const item of this.outboundQueue) {
             try {
@@ -185,6 +240,7 @@ export class SatelliteMeshGatewayEngine {
         }
 
         this.totalUplinks += Math.max(1, this.outboundQueue.length);
+        this.lastUplinkTimestamp = Date.now();
         this.outboundQueue = [];
         this.notify();
         return true;
@@ -196,9 +252,13 @@ export class SatelliteMeshGatewayEngine {
         return {
             activePasses: [...this.satellites],
             queuedOutboundPackets: this.outboundQueue.length,
+            outboundQueue: [...this.outboundQueue],
             totalUplinksTransmitted: this.totalUplinks,
             bestAvailableSatellite: best,
             isUplinkAvailable: best !== null,
+            observerLat: this.observerLat,
+            observerLon: this.observerLon,
+            lastUplinkTimestamp: this.lastUplinkTimestamp,
         };
     }
 }

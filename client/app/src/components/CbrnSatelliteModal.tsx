@@ -1,38 +1,55 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { cbrnRadiation, RadiationTelemetry } from "../lib/sensors/CbrnRadiationEngine";
-import { satelliteMeshGateway, SatelliteGatewayTelemetry } from "../lib/mesh/SatelliteMeshGatewayEngine";
-import { cbrnPlumeDispersionEngine, PlumeHazardZone } from "../lib/tactical/CbrnPlumeDispersionEngine";
+import React, { useState, useEffect, useRef } from "react";
+import { cbrnRadiation, RadiationTelemetry, CbrnSimulationScenario } from "../lib/sensors/CbrnRadiationEngine";
+import { satelliteMeshGateway, SatelliteGatewayTelemetry, SatellitePass } from "../lib/mesh/SatelliteMeshGatewayEngine";
+import { cbrnPlumeDispersionEngine, PlumeHazardZone, CbrnIncidentSource } from "../lib/tactical/CbrnPlumeDispersionEngine";
 import { useRedStore } from "../store/useRedStore";
 import { toast } from "./Toast";
+import { useTranslation } from "../lib/i18n/i18nEngine";
 
 export function CbrnSatelliteModal() {
     const { navigate, identity, goBack } = useRedStore();
+    const { t } = useTranslation();
 
+    const [activeTab, setActiveTab] = useState<"cbrn" | "plume" | "satellite">("cbrn");
     const [cbrn, setCbrn] = useState<RadiationTelemetry>(() => cbrnRadiation.getTelemetry());
     const [sat, setSat] = useState<SatelliteGatewayTelemetry>(() => satelliteMeshGateway.getTelemetry());
-    const [activeTab, setActiveTab] = useState<"cbrn" | "satellite" | "plume">("cbrn");
-    const [plumeZone, setPlumeZone] = useState<PlumeHazardZone>(() => 
-        cbrnPlumeDispersionEngine.calculatePlumeDispersion({
-            id: `INCIDENT-${Date.now()}`,
-            lat: 0,
-            lon: 0,
-            hazardType: 'RADIOACTIVE_FALLOUT',
-            releaseRateKgSec: 10,
-            windSpeedKmh: 15,
-            windDirectionDegrees: 45,
-            stabilityClass: 'D',
-            timestamp: Date.now()
-        }, 0, 0)
+
+    // Estado Interactivo de la Pluma Atmosférica
+    const [incidentSource, setIncidentSource] = useState<CbrnIncidentSource>({
+        id: `INCIDENT-${Date.now()}`,
+        lat: -12.0464,
+        lon: -77.0428,
+        hazardType: "RADIOACTIVE_FALLOUT",
+        releaseRateKgSec: 15,
+        windSpeedKmh: 18,
+        windDirectionDegrees: 45,
+        stabilityClass: "D",
+        timestamp: Date.now()
+    });
+
+    const [operatorPos, setOperatorPos] = useState<{ lat: number; lon: number }>({
+        lat: -12.0440,
+        lon: -77.0400
+    });
+
+    const [plumeZone, setPlumeZone] = useState<PlumeHazardZone>(() =>
+        cbrnPlumeDispersionEngine.calculatePlumeDispersion(incidentSource, operatorPos.lat, operatorPos.lon)
     );
+
+    // Compositor Satelital SBD
+    const [satMessageText, setSatMessageText] = useState<string>("ALERTA CBRN: EVACUACION ACTIVA. SOLICITO ENLACE MEDICO.");
+
+    // Video preview element ref for CMOS camera
+    const videoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
         cbrnRadiation.startMonitoring();
         const unsubCbrn = cbrnRadiation.subscribe(setCbrn);
         const unsubSat = satelliteMeshGateway.subscribe(setSat);
 
-        // Live GPS location for plume and satellite orbital calculation
+        // Ubicación GPS en tiempo real
         let unsubGps: (() => void) | null = null;
         import("../lib/sensors/TacticalLocationEngine").then(({ TacticalLocationEngine }) => {
             unsubGps = TacticalLocationEngine.watchLocation((loc) => {
@@ -40,17 +57,7 @@ export function CbrnSatelliteModal() {
                     const lat = loc.lat!;
                     const lon = loc.lon!;
                     satelliteMeshGateway.setObserverLocation(lat, lon);
-                    setPlumeZone(cbrnPlumeDispersionEngine.calculatePlumeDispersion({
-                        id: `INCIDENT-${Date.now()}`,
-                        lat,
-                        lon,
-                        hazardType: 'RADIOACTIVE_FALLOUT',
-                        releaseRateKgSec: 10,
-                        windSpeedKmh: 15,
-                        windDirectionDegrees: 45,
-                        stabilityClass: 'D',
-                        timestamp: Date.now()
-                    }, lat + 0.002, lon + 0.002));
+                    setOperatorPos({ lat, lon });
                 }
             });
         });
@@ -59,321 +66,761 @@ export function CbrnSatelliteModal() {
             if (unsubGps) (unsubGps as any)();
             unsubCbrn();
             unsubSat();
+            cbrnRadiation.stopCmosCameraCapture();
             cbrnRadiation.stopMonitoring();
         };
     }, []);
 
+    // Recalcular pluma cuando cambian parámetros del incidente o posición
+    useEffect(() => {
+        const calculated = cbrnPlumeDispersionEngine.calculatePlumeDispersion(
+            incidentSource,
+            operatorPos.lat,
+            operatorPos.lon
+        );
+        setPlumeZone(calculated);
+    }, [incidentSource, operatorPos]);
+
+    // Handlers para Cámara CMOS
+    const handleToggleCmosCamera = async () => {
+        if (cbrn.isCameraCmosActive) {
+            cbrnRadiation.stopCmosCameraCapture();
+            toast.info("Sensor fotónico CMOS apagado");
+        } else {
+            toast.info("Iniciando cámara CMOS... Cubra el lente para medir radiación");
+            const success = await cbrnRadiation.startCmosCameraCapture();
+            if (success) {
+                toast.success("📷 Sensor CMOS activo. Cubra el lente contra una mesa o con cinta negra");
+            } else {
+                toast.error("No se pudo acceder a la cámara trasera. Verifique permisos");
+            }
+        }
+    };
+
+    const handleSelectSimulationScenario = (sc: CbrnSimulationScenario) => {
+        cbrnRadiation.setSimulationScenario(sc);
+        if (sc === 'NONE') {
+            toast.info("Simulación desactivada. Modo sensor real restaurado");
+        } else {
+            toast.warning(`Escenario táctico aplicado: ${sc}`);
+        }
+    };
+
+    // Handlers para Satélite
+    const handleEnqueueSbdMessage = () => {
+        if (!satMessageText.trim()) return;
+        const res = satelliteMeshGateway.composeAndEnqueueSbd(satMessageText, 9);
+        toast.success(`🛰️ Paquete SBD encolado: ${res.id}`);
+    };
+
     const handleTriggerSatBurst = () => {
         const success = satelliteMeshGateway.triggerSatelliteBurst();
         if (success) {
-            toast.success("🛰️ Ráfaga DTN inyectada a la constelación LEO exitosamente");
+            toast.success("🛰️ Ráfaga SBD transmitida con éxito a la constelación LEO");
         } else {
             toast.error("Sin satélites en rango cenital (Elevación < 25°)");
         }
     };
 
+    // Color temático de amenaza radiológica
+    const getThreatColor = (level: string) => {
+        switch (level) {
+            case "LETHAL": return "#FF3355";
+            case "HAZARDOUS": return "#FF8008";
+            case "ELEVATED": return "#FFB300";
+            default: return "#00E676";
+        }
+    };
+
     return (
         <div className="modal-viewport-adaptive" style={{
-            background: "#050812", color: "#FFF",
+            background: "linear-gradient(180deg, #050814 0%, #03050B 100%)",
+            color: "#FFFFFF",
             fontFamily: "JetBrains Mono, monospace"
         }}>
-            {/* Header */}
-            <div style={{
-                padding: "12px 16px", background: "rgba(10, 15, 30, 0.95)",
-                borderBottom: "1px solid rgba(0, 229, 255, 0.3)",
-                display: "flex", justifyContent: "space-between", alignItems: "center"
+            {/* Header Táctico C4ISR */}
+            <header style={{
+                padding: "calc(8px + var(--safe-top, 0px)) 16px 8px 16px",
+                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.98) 0%, rgba(6, 8, 20, 0.99) 100%)",
+                borderBottom: "1.5px solid rgba(0, 229, 255, 0.35)",
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+                zIndex: 10, flexShrink: 0
             }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "1.2rem" }}>☢️</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <button
+                        onClick={goBack}
+                        style={{
+                            width: 34, height: 34, borderRadius: "9px",
+                            background: "rgba(255, 255, 255, 0.08)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                            color: "#FFFFFF", cursor: "pointer", fontSize: "1.1rem", fontWeight: 900,
+                            display: "flex", alignItems: "center", justifyContent: "center"
+                        }}
+                    >
+                        ‹
+                    </button>
+                    <div style={{
+                        width: 38, height: 38, borderRadius: "12px",
+                        background: "linear-gradient(135deg, rgba(255, 179, 0, 0.25) 0%, rgba(255, 51, 85, 0.15) 100%)",
+                        border: "1px solid rgba(255, 179, 0, 0.5)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: "1.25rem", boxShadow: "0 0 15px rgba(255, 179, 0, 0.25)"
+                    }}>☢️</div>
                     <div>
-                        <div style={{ fontSize: "0.9rem", fontWeight: 900, color: "#00E5FF", display: "flex", alignItems: "center", gap: "6px" }}>
-                            TELEMETRÍA CBRN & ENLACE SATELITAL LEO
+                        <div style={{ fontSize: "0.96rem", fontWeight: 900, color: "#FFFFFF", display: "flex", alignItems: "center", gap: "6px" }}>
+                            CBRN DEFENSE & SAT-LEO
                             <span style={{
-                                fontSize: "0.55rem", fontWeight: 800, letterSpacing: "0.08em",
-                                background: "rgba(0, 230, 118, 0.18)", color: "#00E676",
-                                border: "1px solid rgba(0, 230, 118, 0.4)",
-                                borderRadius: "3px", padding: "1px 5px"
-                            }}>📡 TELEMETRÍA EN VIVO</span>
+                                fontSize: "0.58rem", fontWeight: 900, letterSpacing: "0.08em",
+                                background: cbrn.isCameraCmosActive ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 179, 0, 0.2)",
+                                color: cbrn.isCameraCmosActive ? "#00E676" : "#FFB300",
+                                border: `1px solid ${cbrn.isCameraCmosActive ? '#00E676' : '#FFB300'}60`,
+                                borderRadius: "4px", padding: "2px 6px"
+                            }}>
+                                {cbrn.isCameraCmosActive ? "CMOS ACTIVO" : "FÍSICO STANDBY"}
+                            </span>
                         </div>
-                        <div style={{ fontSize: "0.65rem", color: "#AAA" }}>
-                            Dosimetría Nuclear y Pasarela Espacial DTN Store-and-Forward
+                        <div style={{ fontSize: "0.66rem", color: "var(--text-secondary)" }}>
+                            Dosimetría Nuclear CMOS · Pluma Atmosférica · Pasarela LEO
                         </div>
                     </div>
                 </div>
-                <button
-                    onClick={goBack}
-                    style={{
 
-                        background: "rgba(232, 33, 58, 0.2)", border: "1px solid #E8213A",
-                        color: "#FFF", padding: "6px 12px", borderRadius: "8px",
-                        cursor: "pointer", fontWeight: 800, fontSize: "0.75rem"
-                    }}
-                >
-                    ✕ CERRAR
-                </button>
-            </div>
+                <div style={{ display: "flex", gap: "6px" }}>
+                    <span style={{
+                        fontSize: "0.62rem", fontWeight: 900, padding: "4px 8px", borderRadius: "6px",
+                        background: sat.isUplinkAvailable ? "rgba(0, 229, 255, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                        color: sat.isUplinkAvailable ? "#00E5FF" : "var(--text-secondary)",
+                        border: `1px solid ${sat.isUplinkAvailable ? '#00E5FF' : 'rgba(255,255,255,0.1)'}60`
+                    }}>
+                        {sat.isUplinkAvailable ? `🛰️ AOS LEO (${sat.activePasses.filter(s => s.isInAos).length})` : "🛰️ BUSCANDO PASO"}
+                    </span>
+                </div>
+            </header>
 
-            {/* Tab Selector */}
-            <div style={{ display: "flex", background: "rgba(15, 23, 42, 0.8)", padding: "6px 16px", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            {/* Selector de Pestañas Tácticas */}
+            <div style={{
+                display: "flex", background: "rgba(8, 10, 20, 0.95)",
+                padding: "8px 16px", gap: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+                flexShrink: 0
+            }}>
                 <button
                     onClick={() => setActiveTab("cbrn")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
-                        background: activeTab === "cbrn" ? "#FFB300" : "transparent",
-                        color: activeTab === "cbrn" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                        flex: 1, padding: "8px 10px", borderRadius: "10px",
+                        background: activeTab === "cbrn" ? "linear-gradient(135deg, rgba(255, 179, 0, 0.25) 0%, rgba(180, 120, 0, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "cbrn" ? "1.5px solid #FFB300" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "cbrn" ? "#FFB300" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.74rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
                     }}
                 >
-                    ☢️ Dosimetría
+                    <span>☢️</span> DOSIMETRÍA {cbrn.threatLevel !== "SAFE_BACKGROUND" && "⚠️"}
                 </button>
                 <button
                     onClick={() => setActiveTab("plume")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
-                        background: activeTab === "plume" ? "#FF3355" : "transparent",
-                        color: activeTab === "plume" ? "#FFF" : "#AAA", border: "none", cursor: "pointer"
+                        flex: 1, padding: "8px 10px", borderRadius: "10px",
+                        background: activeTab === "plume" ? "linear-gradient(135deg, rgba(255, 51, 85, 0.25) 0%, rgba(180, 20, 40, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "plume" ? "1.5px solid #FF3355" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "plume" ? "#FF3355" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.74rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
                     }}
                 >
-                    ☣️ Pluma & Escape
+                    <span>☣️</span> PLUMA & ESCAPE
                 </button>
                 <button
                     onClick={() => setActiveTab("satellite")}
                     style={{
-                        flex: 1, padding: "8px", borderRadius: "8px", fontSize: "0.72rem", fontWeight: 800,
-                        background: activeTab === "satellite" ? "#00E5FF" : "transparent",
-                        color: activeTab === "satellite" ? "#000" : "#AAA", border: "none", cursor: "pointer"
+                        flex: 1, padding: "8px 10px", borderRadius: "10px",
+                        background: activeTab === "satellite" ? "linear-gradient(135deg, rgba(0, 229, 255, 0.25) 0%, rgba(10, 35, 60, 0.1) 100%)" : "rgba(255, 255, 255, 0.03)",
+                        border: activeTab === "satellite" ? "1.5px solid #00E5FF" : "1px solid rgba(255, 255, 255, 0.08)",
+                        color: activeTab === "satellite" ? "#00E5FF" : "var(--text-secondary)",
+                        fontWeight: 900, fontSize: "0.74rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
                     }}
                 >
-                    🛰️ Satélite ({sat.activePasses.filter(s => s.isInAos).length})
+                    <span>🛰️</span> RADAR LEO ({sat.activePasses.filter(s => s.isInAos).length})
                 </button>
             </div>
 
-            {/* Content Body */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "14px", maxWidth: "640px", margin: "0 auto", width: "100%", boxSizing: "border-box" }}>
-                
-                {/* ── TAB 1: CBRN NUCLEAR DOSIMETRY ── */}
-                {activeTab === "cbrn" && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        {/* Radiation Rate Display */}
-                        <div style={{
-                            background: "rgba(0, 0, 0, 0.5)", border: `1.5px solid ${cbrn.threatLevel === "LETHAL" ? "#FF3355" : cbrn.threatLevel === "HAZARDOUS" ? "#FF9100" : cbrn.threatLevel === "ELEVATED" ? "#FFD600" : "#00E676"}`,
-                            borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px"
-                        }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: "0.74rem", color: "#AAA", fontWeight: 800 }}>TASA DE DOSIS INSTANTÁNEA</span>
-                                <span style={{
-                                    fontSize: "0.68rem", fontWeight: 900, padding: "2px 8px", borderRadius: "6px",
-                                    background: cbrn.threatLevel === "SAFE_BACKGROUND" ? "rgba(0,230,118,0.2)" : "rgba(232,33,58,0.3)",
-                                    color: cbrn.threatLevel === "SAFE_BACKGROUND" ? "#00E676" : "#FF3355"
+            {/* Contenido Principal */}
+            <div className="scroll-container" style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div style={{ maxWidth: "680px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    
+                    {/* ════════════════════════════════════════════════════════════════
+                        TAB 1: DOSIMETRÍA NUCLEAR & SENSOR CMOS REAL
+                    ════════════════════════════════════════════════════════════════ */}
+                    {activeTab === "cbrn" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                            
+                            {/* Panel Maestro de Tasa de Dosis */}
+                            <div style={{
+                                background: "linear-gradient(180deg, rgba(14, 18, 38, 0.95) 0%, rgba(6, 8, 20, 0.98) 100%)",
+                                border: `1.5px solid ${getThreatColor(cbrn.threatLevel)}`,
+                                borderRadius: "20px", padding: "20px",
+                                display: "flex", flexDirection: "column", gap: "12px",
+                                boxShadow: `0 8px 32px ${getThreatColor(cbrn.threatLevel)}25`
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontWeight: 900 }}>
+                                        TASA DE RADIACIÓN IONIZANTE (H*10)
+                                    </div>
+                                    <span style={{
+                                        fontSize: "0.66rem", fontWeight: 900, padding: "3px 9px", borderRadius: "6px",
+                                        background: `${getThreatColor(cbrn.threatLevel)}25`,
+                                        color: getThreatColor(cbrn.threatLevel),
+                                        border: `1px solid ${getThreatColor(cbrn.threatLevel)}`
+                                    }}>
+                                        {cbrn.threatLevel}
+                                    </span>
+                                </div>
+
+                                <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
+                                    <span style={{ fontSize: "3.2rem", fontWeight: 900, color: "#FFFFFF", lineHeight: 1 }}>
+                                        {cbrn.doseRateUsVh.toFixed(2)}
+                                    </span>
+                                    <span style={{ fontSize: "1.15rem", color: "#FFB300", fontWeight: 900 }}>
+                                        µSv/h
+                                    </span>
+                                    <span style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginLeft: "auto", fontWeight: 800 }}>
+                                        {cbrn.countsPerMinuteCpm} CPM
+                                    </span>
+                                </div>
+
+                                {/* Barra de Tasa Segmentada */}
+                                <div style={{ width: "100%", height: "8px", background: "rgba(255, 255, 255, 0.08)", borderRadius: "4px", overflow: "hidden" }}>
+                                    <div style={{
+                                        width: `${Math.min(100, (cbrn.doseRateUsVh / 50) * 100)}%`,
+                                        height: "100%",
+                                        background: `linear-gradient(90deg, #00E676 0%, #FFB300 50%, #FF3355 100%)`,
+                                        transition: "width 0.4s ease"
+                                    }} />
+                                </div>
+
+                                <div style={{ fontSize: "0.74rem", color: "#DDD", lineHeight: 1.4 }}>
+                                    {cbrn.arsRiskDescription}
+                                </div>
+                            </div>
+
+                            {/* Sensor de Cámara CMOS Hardware */}
+                            <div style={{
+                                background: "rgba(10, 15, 30, 0.9)",
+                                border: "1.5px solid rgba(0, 229, 255, 0.3)",
+                                borderRadius: "18px", padding: "16px",
+                                display: "flex", flexDirection: "column", gap: "12px"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <div>
+                                        <div style={{ fontSize: "0.86rem", fontWeight: 900, color: "#00E5FF" }}>
+                                            DETECTOR RADIOLÓGICO CMOS (CÁMARA)
+                                        </div>
+                                        <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                            Detección de pares electrón-hueco en matriz de silicio con lente cubierto
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleToggleCmosCamera}
+                                        style={{
+                                            padding: "8px 14px", borderRadius: "10px",
+                                            background: cbrn.isCameraCmosActive ? "rgba(255, 51, 85, 0.2)" : "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)",
+                                            color: cbrn.isCameraCmosActive ? "#FF3355" : "#000000",
+                                            fontWeight: 900, fontSize: "0.76rem", border: cbrn.isCameraCmosActive ? "1px solid #FF3355" : "none",
+                                            cursor: "pointer"
+                                        }}
+                                    >
+                                        {cbrn.isCameraCmosActive ? "⏹️ DETENER" : "📷 ACTIVAR CÁMARA"}
+                                    </button>
+                                </div>
+
+                                {cbrn.isCameraCmosActive && (
+                                    <div style={{
+                                        padding: "12px", borderRadius: "12px",
+                                        background: cbrn.isLensCovered ? "rgba(0, 230, 118, 0.12)" : "rgba(255, 179, 0, 0.12)",
+                                        border: `1px solid ${cbrn.isLensCovered ? '#00E676' : '#FFB300'}`,
+                                        display: "flex", alignItems: "center", gap: "10px"
+                                    }}>
+                                        <span style={{ fontSize: "1.4rem" }}>{cbrn.isLensCovered ? "🟢" : "⚠️"}</span>
+                                        <div style={{ fontSize: "0.72rem", color: "#FFFFFF", lineHeight: 1.4 }}>
+                                            {cbrn.isLensCovered ? (
+                                                <>
+                                                    <strong style={{ color: "#00E676" }}>Lente Cubierto:</strong> Escaneando fotones gamma en matriz de silicio ({cbrn.hotPixelHitsLastFrame} hits/frame).
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <strong style={{ color: "#FFB300" }}>Luz Ambiente Detectada (Lum: {cbrn.averageLuminance}):</strong> Cubra el lente de la cámara trasera contra una mesa o con cinta negra opaca para aislar impactos radiactivos.
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Dosis Acumulada & T_stay */}
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                <div style={{
+                                    background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                    borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "4px"
                                 }}>
-                                    {cbrn.threatLevel}
-                                </span>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 800 }}>DOSIS BIOLÓGICA ACUMULADA</div>
+                                    <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#00E5FF" }}>
+                                        {cbrn.cumulativeDoseMsv.toFixed(4)} mSv
+                                    </div>
+                                    <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)" }}>
+                                        Límite rescate: 50 mSv ({((cbrn.cumulativeDoseMsv / 50) * 100).toFixed(1)}%)
+                                    </div>
+                                    <button
+                                        onClick={() => cbrnRadiation.resetCumulativeDose()}
+                                        style={{
+                                            marginTop: "6px", padding: "5px 8px", borderRadius: "6px",
+                                            background: "rgba(255, 255, 255, 0.06)", border: "1px solid rgba(255, 255, 255, 0.15)",
+                                            color: "#AAA", fontSize: "0.62rem", cursor: "pointer", fontWeight: 700
+                                        }}
+                                    >
+                                        ↺ Reiniciar Dosis
+                                    </button>
+                                </div>
+
+                                <div style={{
+                                    background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                    borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "4px"
+                                }}>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)", fontWeight: 800 }}>TIEMPO SEGURO (T_stay)</div>
+                                    <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#00E676" }}>
+                                        {cbrn.safeStayTimeMinutes > 9999 ? "∞" : `${cbrn.safeStayTimeMinutes} min`}
+                                    </div>
+                                    <div style={{ fontSize: "0.64rem", color: "var(--text-secondary)" }}>
+                                        Permanencia hasta umbral ARS de 50 mSv
+                                    </div>
+                                </div>
                             </div>
-                            <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-                                <span style={{ fontSize: "2.4rem", fontWeight: 900, color: "#FFF" }}>
-                                    {cbrn.doseRateUsVh}
-                                </span>
-                                <span style={{ fontSize: "1rem", color: "#FFB300", fontWeight: 800 }}>
-                                    µSv/h
-                                </span>
-                                <span style={{ fontSize: "0.85rem", color: "#888", marginLeft: "auto" }}>
-                                    {cbrn.countsPerMinuteCpm} CPM
-                                </span>
-                            </div>
-                            <div style={{ fontSize: "0.72rem", color: "#DDD", lineHeight: "1.4" }}>
-                                {cbrn.arsRiskDescription}
+
+                            {/* Simulador Táctico de Escenarios para Ejercicios */}
+                            <div style={{
+                                background: "rgba(255, 179, 0, 0.06)", border: "1px solid rgba(255, 179, 0, 0.25)",
+                                borderRadius: "14px", padding: "14px", display: "flex", flexDirection: "column", gap: "8px"
+                            }}>
+                                <div style={{ fontSize: "0.72rem", color: "#FFB300", fontWeight: 900 }}>
+                                    SIMULADOR TÁCTICO DE DRILLS CBRN
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "6px" }}>
+                                    <button
+                                        onClick={() => handleSelectSimulationScenario('NONE')}
+                                        style={{
+                                            padding: "8px 4px", borderRadius: "8px", fontSize: "0.65rem", fontWeight: 800,
+                                            background: cbrn.activeSimulationScenario === 'NONE' ? "#FFB300" : "rgba(255,255,255,0.04)",
+                                            color: cbrn.activeSimulationScenario === 'NONE' ? "#000" : "#AAA",
+                                            border: "none", cursor: "pointer"
+                                        }}
+                                    >
+                                        REAL
+                                    </button>
+                                    <button
+                                        onClick={() => handleSelectSimulationScenario('ELEVATED')}
+                                        style={{
+                                            padding: "8px 4px", borderRadius: "8px", fontSize: "0.65rem", fontWeight: 800,
+                                            background: cbrn.activeSimulationScenario === 'ELEVATED' ? "#FFB300" : "rgba(255,255,255,0.04)",
+                                            color: cbrn.activeSimulationScenario === 'ELEVATED' ? "#000" : "#AAA",
+                                            border: "none", cursor: "pointer"
+                                        }}
+                                    >
+                                        4.8 µSv
+                                    </button>
+                                    <button
+                                        onClick={() => handleSelectSimulationScenario('HOT_ZONE')}
+                                        style={{
+                                            padding: "8px 4px", borderRadius: "8px", fontSize: "0.65rem", fontWeight: 800,
+                                            background: cbrn.activeSimulationScenario === 'HOT_ZONE' ? "#FF8008" : "rgba(255,255,255,0.04)",
+                                            color: cbrn.activeSimulationScenario === 'HOT_ZONE' ? "#FFF" : "#AAA",
+                                            border: "none", cursor: "pointer"
+                                        }}
+                                    >
+                                        85 µSv
+                                    </button>
+                                    <button
+                                        onClick={() => handleSelectSimulationScenario('LETHAL')}
+                                        style={{
+                                            padding: "8px 4px", borderRadius: "8px", fontSize: "0.65rem", fontWeight: 800,
+                                            background: cbrn.activeSimulationScenario === 'LETHAL' ? "#FF3355" : "rgba(255,255,255,0.04)",
+                                            color: cbrn.activeSimulationScenario === 'LETHAL' ? "#FFF" : "#AAA",
+                                            border: "none", cursor: "pointer"
+                                        }}
+                                    >
+                                        1.4 mSv
+                                    </button>
+                                </div>
                             </div>
                         </div>
+                    )}
 
-                        {/* Cumulative Dose & Safe Stay Time */}
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                            <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "10px", padding: "12px" }}>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>DOSIS ACUMULADA</div>
-                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#00E5FF" }}>
-                                    {cbrn.cumulativeDoseMsv} mSv
+                    {/* ════════════════════════════════════════════════════════════════
+                        TAB 2: PLUMA GAUSSIANA & VECTOR DE ESCAPE 90°
+                    ════════════════════════════════════════════════════════════════ */}
+                    {activeTab === "plume" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                            
+                            {/* HUD Maestro de Vector de Escape */}
+                            <div style={{
+                                padding: "18px", borderRadius: "18px",
+                                background: plumeZone.escapeVector.isInDangerZone ? "rgba(255, 51, 85, 0.22)" : "rgba(0, 230, 118, 0.15)",
+                                border: `1.5px solid ${plumeZone.escapeVector.isInDangerZone ? "#FF3355" : "#00E676"}`,
+                                display: "flex", alignItems: "center", justifyContent: "space-between"
+                            }}>
+                                <div>
+                                    <div style={{ fontSize: "0.72rem", color: "var(--text-secondary)", fontWeight: 800 }}>ESTADO EN CONO DE PLUMA</div>
+                                    <div style={{ fontSize: "1.8rem", fontWeight: 900, color: plumeZone.escapeVector.isInDangerZone ? "#FF3355" : "#00E676" }}>
+                                        {plumeZone.escapeVector.currentDangerLevel}
+                                    </div>
+                                    <div style={{ fontSize: "0.76rem", fontWeight: 800, color: "#FFB300", marginTop: "2px" }}>
+                                        Agente: {incidentSource.hazardType}
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "0.62rem", color: "#888" }}>Límite civil: 50 mSv</div>
-                            </div>
-                            <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "10px", padding: "12px" }}>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>TIEMPO SEGURO (T_stay)</div>
-                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#00E676" }}>
-                                    {cbrn.safeStayTimeMinutes > 9999 ? "∞" : `${cbrn.safeStayTimeMinutes} min`}
+                                <div style={{ textAlign: "right" }}>
+                                    <div style={{ fontSize: "0.70rem", color: "var(--text-secondary)", fontWeight: 800 }}>RUMBO ÓPTIMO DE ESCAPE</div>
+                                    <div style={{ fontSize: "2.2rem", fontWeight: 900, color: "#00E5FF", lineHeight: 1.1 }}>
+                                        {plumeZone.escapeVector.recommendedAzimuthDegrees}°
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                        {plumeZone.escapeVector.distanceToSafetyMeters}m a zona fría ({plumeZone.escapeVector.estimatedWalkTimeMinutes} min)
+                                    </div>
                                 </div>
-                                <div style={{ fontSize: "0.62rem", color: "#888" }}>Hasta umbral de riesgo</div>
                             </div>
-                        </div>
 
-                        {/* Sensor State Banner */}
-                        <div style={{
-                            padding: "10px 14px",
-                            background: "rgba(0, 230, 118, 0.06)",
-                            border: "1px solid rgba(0, 230, 118, 0.25)",
-                            borderRadius: "10px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px"
-                        }}>
-                            <span style={{ fontSize: "1.1rem" }}>📷</span>
-                            <div style={{ fontSize: "0.70rem", color: "#DDD", lineHeight: 1.3 }}>
-                                <strong style={{ color: "#00E676" }}>Sensor CMOS Activo:</strong> Detección fotónica de radiación ionizante por análisis de ruido en matriz de píxeles.
-                            </div>
-                        </div>
-                    </div>
-                )}
+                            {/* Radar SVG Táctico de Dispersión Atmosférica */}
+                            <div style={{
+                                background: "rgba(10, 15, 30, 0.95)",
+                                border: "1.5px solid rgba(0, 229, 255, 0.3)",
+                                borderRadius: "18px", padding: "16px",
+                                display: "flex", flexDirection: "column", alignItems: "center", gap: "10px"
+                            }}>
+                                <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ fontSize: "0.74rem", color: "#00E5FF", fontWeight: 900 }}>
+                                        RADAR DE CONO DE DISPERSIÓN SOTAVENTO
+                                    </span>
+                                    <span style={{ fontSize: "0.66rem", color: "var(--text-secondary)" }}>
+                                        Viento: {incidentSource.windSpeedKmh} km/h @ {incidentSource.windDirectionDegrees}°
+                                    </span>
+                                </div>
 
-                {/* ── TAB 2: SATELLITE LEO GATEWAY ── */}
-                {activeTab === "satellite" && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        <div style={{
-                            background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.2)",
-                            borderRadius: "12px", padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center"
-                        }}>
-                            <div>
-                                <div style={{ fontSize: "0.82rem", fontWeight: 900, color: "#00E5FF" }}>
-                                    UPLINK SATELITAL DISPONIBLE
-                                </div>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>
-                                    {sat.queuedOutboundPackets} paquetes encolados · {sat.totalUplinksTransmitted} ráfagas enviadas
+                                <svg width="240" height="240" viewBox="-120 -120 240 240" style={{ overflow: "visible" }}>
+                                    {/* Círculos de distancia */}
+                                    <circle cx="0" cy="0" r="100" fill="none" stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
+                                    <circle cx="0" cy="0" r="60" fill="none" stroke="rgba(255,255,255,0.12)" />
+                                    <circle cx="0" cy="0" r="25" fill="none" stroke="rgba(255,255,255,0.15)" />
+
+                                    {/* Ejes Cardinales */}
+                                    <line x1="0" y1="-110" x2="0" y2="110" stroke="rgba(255,255,255,0.1)" />
+                                    <line x1="-110" y1="0" x2="110" y2="0" stroke="rgba(255,255,255,0.1)" />
+                                    <text x="0" y="-112" fill="#AAA" fontSize="9" textAnchor="middle" fontWeight="bold">N</text>
+                                    <text x="114" y="3" fill="#AAA" fontSize="9" textAnchor="start" fontWeight="bold">E</text>
+                                    <text x="0" y="120" fill="#AAA" fontSize="9" textAnchor="middle" fontWeight="bold">S</text>
+                                    <text x="-114" y="3" fill="#AAA" fontSize="9" textAnchor="end" fontWeight="bold">O</text>
+
+                                    {/* Cono de la Pluma Tóxica a Sotavento */}
+                                    {(() => {
+                                        const windRad = (incidentSource.windDirectionDegrees - 90) * (Math.PI / 180);
+                                        const coneSpreadRad = 35 * (Math.PI / 180);
+                                        const coneLength = 95;
+                                        const x1 = coneLength * Math.cos(windRad - coneSpreadRad);
+                                        const y1 = coneLength * Math.sin(windRad - coneSpreadRad);
+                                        const x2 = coneLength * Math.cos(windRad + coneSpreadRad);
+                                        const y2 = coneLength * Math.sin(windRad + coneSpreadRad);
+                                        return (
+                                            <polygon
+                                                points={`0,0 ${x1},${y1} ${x2},${y2}`}
+                                                fill="rgba(255, 128, 8, 0.28)"
+                                                stroke="#FF8008"
+                                                strokeWidth="1.5"
+                                            />
+                                        );
+                                    })()}
+
+                                    {/* Zona Caliente Inmediata (Centro Foco) */}
+                                    <circle cx="0" cy="0" r="22" fill="rgba(255, 51, 85, 0.5)" stroke="#FF3355" strokeWidth="2" />
+                                    <text x="0" y="3" fill="#FFF" fontSize="10" textAnchor="middle">☢️</text>
+
+                                    {/* Flecha Vector de Escape Óptimo (90° Perpendicular) */}
+                                    {(() => {
+                                        const escRad = (plumeZone.escapeVector.recommendedAzimuthDegrees - 90) * (Math.PI / 180);
+                                        const escX = 75 * Math.cos(escRad);
+                                        const escY = 75 * Math.sin(escRad);
+                                        return (
+                                            <g>
+                                                <line x1="0" y1="0" x2={escX} y2={escY} stroke="#00E676" strokeWidth="3" markerEnd="url(#arrow)" />
+                                                <circle cx={escX} cy={escY} r="5" fill="#00E676" />
+                                            </g>
+                                        );
+                                    })()}
+                                </svg>
+
+                                <div style={{ fontSize: "0.68rem", color: "#AAA", textAlign: "center" }}>
+                                    <span style={{ color: "#FF3355" }}>● Foco</span> · <span style={{ color: "#FF8008" }}>▲ Cono Pluma</span> · <span style={{ color: "#00E676" }}>➜ Vector Escape (90° Crosswind)</span>
                                 </div>
                             </div>
+
+                            {/* Configuración Táctica del Incidente */}
+                            <div style={{
+                                background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                borderRadius: "14px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px"
+                            }}>
+                                <div style={{ fontSize: "0.76rem", color: "#FFB300", fontWeight: 900 }}>
+                                    PARÁMETROS DEL INCIDENTE CBRN
+                                </div>
+
+                                <div>
+                                    <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
+                                        AGENTE AMENAZA:
+                                    </label>
+                                    <select
+                                        value={incidentSource.hazardType}
+                                        onChange={(e: any) => setIncidentSource(prev => ({ ...prev, hazardType: e.target.value }))}
+                                        style={{
+                                            width: "100%", padding: "10px", background: "rgba(0,0,0,0.5)",
+                                            border: "1px solid rgba(255,255,255,0.15)", borderRadius: "8px",
+                                            color: "#FFF", fontSize: "0.80rem", fontFamily: "JetBrains Mono, monospace"
+                                        }}
+                                    >
+                                        <option value="RADIOACTIVE_FALLOUT">☢️ Fallout Radiactivo (Cesio-137 / Yodo-131)</option>
+                                        <option value="CHLORINE_GAS">🧪 Gas Cloro Industrial (Cl₂)</option>
+                                        <option value="AMMONIA_TOXIC">🏭 Amoníaco Anhidro Tóxico (NH₃)</option>
+                                        <option value="SARIN_ORGANOPHOSPHATE">☠️ Gas Nervioso Sarín (GB)</option>
+                                        <option value="INDUSTRIAL_SMOKE">🌫️ Humo Químico Asfixiante</option>
+                                    </select>
+                                </div>
+
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                                    <div>
+                                        <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
+                                            DIRECCIÓN VIENTO: {incidentSource.windDirectionDegrees}°
+                                        </label>
+                                        <input
+                                            type="range" min="0" max="359"
+                                            value={incidentSource.windDirectionDegrees}
+                                            onChange={(e) => setIncidentSource(prev => ({ ...prev, windDirectionDegrees: parseInt(e.target.value, 10) }))}
+                                            style={{ width: "100%" }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label style={{ fontSize: "0.68rem", color: "var(--text-secondary)", display: "block", marginBottom: "4px" }}>
+                                            VELOCIDAD VIENTO: {incidentSource.windSpeedKmh} km/h
+                                        </label>
+                                        <input
+                                            type="range" min="2" max="60"
+                                            value={incidentSource.windSpeedKmh}
+                                            onChange={(e) => setIncidentSource(prev => ({ ...prev, windSpeedKmh: parseInt(e.target.value, 10) }))}
+                                            style={{ width: "100%" }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Botón Transmisión SOS a la Malla */}
                             <button
-                                onClick={handleTriggerSatBurst}
+                                onClick={async () => {
+                                    const { meshSosBeacon } = await import("../lib/emergency/MeshSosBeaconEngine");
+                                    const callerId = identity?.identity_hash ? `did:red:${identity.identity_hash.slice(0, 8)}` : "CBRN_UNIT";
+                                    const callerName = identity?.nickname || "Oficial CBRN";
+                                    await meshSosBeacon.activateSosBeacon({
+                                        distressType: "NATURAL_DISASTER",
+                                        triageColor: "RED",
+                                        note: `EVACUACION CBRN [${incidentSource.hazardType}]: Escape por rumbo ${plumeZone.escapeVector.recommendedAzimuthDegrees}°. Salir a 90° del viento (${incidentSource.windDirectionDegrees}°). Zona caliente: ${plumeZone.hotZoneRadiusMeters}m.`,
+                                        batteryLevel: 90
+                                    }, callerId, callerName);
+                                    toast.success("🚨 Vector de escape y orden de evacuación transmitidos a la malla");
+                                }}
                                 style={{
-                                    padding: "10px 16px", borderRadius: "8px",
-                                    background: sat.isUplinkAvailable ? "#00E5FF" : "rgba(255,255,255,0.1)",
-                                    color: sat.isUplinkAvailable ? "#000" : "#888",
-                                    fontWeight: 900, fontSize: "0.76rem", border: "none", cursor: "pointer"
+                                    padding: "14px", borderRadius: "12px",
+                                    background: "linear-gradient(135deg, #FF3355, #D50000)",
+                                    color: "#FFFFFF", fontWeight: 900, fontSize: "0.84rem", border: "none", cursor: "pointer",
+                                    boxShadow: "0 8px 24px rgba(255, 51, 85, 0.4)"
                                 }}
                             >
-                                ⚡ DISPARAR UPLINK
+                                🚨 TRANSMITIR VECTOR DE ESCAPE A LA MALLA SOS
                             </button>
                         </div>
+                    )}
 
-                        {/* Visible Satellites Pass List */}
-                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                            <div style={{ fontSize: "0.7rem", color: "#AAA", fontWeight: 800 }}>CONSTELACIONES EN SEGUIMIENTO ORBITAL:</div>
-                            {sat.activePasses.map(s => (
-                                <div
-                                    key={s.satelliteId}
+                    {/* ════════════════════════════════════════════════════════════════
+                        TAB 3: RADAR SATELITAL SKYVIEW LEO & UPLINK SBD
+                    ════════════════════════════════════════════════════════════════ */}
+                    {activeTab === "satellite" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                            
+                            {/* Banner de Estado de Enlace LEO */}
+                            <div style={{
+                                background: "rgba(0, 229, 255, 0.08)", border: "1px solid rgba(0, 229, 255, 0.3)",
+                                borderRadius: "16px", padding: "16px", display: "flex", justifyContent: "space-between", alignItems: "center"
+                            }}>
+                                <div>
+                                    <div style={{ fontSize: "0.84rem", fontWeight: 900, color: "#00E5FF" }}>
+                                        {sat.isUplinkAvailable ? "ENLACE CENITAL AOS ACTIVO" : "BUSCANDO SATÉLITE EN CENIT"}
+                                    </div>
+                                    <div style={{ fontSize: "0.68rem", color: "var(--text-secondary)" }}>
+                                        {sat.queuedOutboundPackets} paquetes en cola · {sat.totalUplinksTransmitted} uplinks completados
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleTriggerSatBurst}
                                     style={{
-                                        padding: "10px 12px", borderRadius: "10px",
-                                        background: s.isInAos ? "rgba(0, 229, 255, 0.08)" : "rgba(255, 255, 255, 0.02)",
-                                        border: `1px solid ${s.isInAos ? "#00E5FF" : "rgba(255, 255, 255, 0.08)"}`,
-                                        display: "flex", justifyContent: "space-between", alignItems: "center"
+                                        padding: "10px 18px", borderRadius: "10px",
+                                        background: sat.isUplinkAvailable ? "linear-gradient(135deg, #00E5FF 0%, #00897B 100%)" : "rgba(255,255,255,0.06)",
+                                        color: sat.isUplinkAvailable ? "#000000" : "#666",
+                                        fontWeight: 900, fontSize: "0.78rem", border: "none", cursor: "pointer",
+                                        boxShadow: sat.isUplinkAvailable ? "0 0 20px rgba(0, 229, 255, 0.35)" : "none"
                                     }}
                                 >
-                                    <div>
-                                        <div style={{ fontWeight: 800, fontSize: "0.8rem", color: s.isInAos ? "#00E5FF" : "#FFF" }}>
-                                            {s.satelliteId} ({s.constellation})
+                                    ⚡ DISPARAR UPLINK
+                                </button>
+                            </div>
+
+                            {/* Radar SkyView Polar SVG */}
+                            <div style={{
+                                background: "rgba(10, 15, 30, 0.95)",
+                                border: "1.5px solid rgba(0, 229, 255, 0.3)",
+                                borderRadius: "18px", padding: "18px",
+                                display: "flex", flexDirection: "column", alignItems: "center", gap: "12px"
+                            }}>
+                                <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ fontSize: "0.76rem", color: "#00E5FF", fontWeight: 900 }}>
+                                        BÓVEDA CELESTE SKYVIEW (ELEVACIÓN & AZIMUT)
+                                    </span>
+                                    <span style={{ fontSize: "0.66rem", color: "var(--text-secondary)" }}>
+                                        AOS: Elevación &gt; 25°
+                                    </span>
+                                </div>
+
+                                <svg width="240" height="240" viewBox="-120 -120 240 240" style={{ overflow: "visible" }}>
+                                    {/* Anillos de Elevación: 0° (borde), 30°, 60°, 90° (centro) */}
+                                    <circle cx="0" cy="0" r="100" fill="rgba(0, 229, 255, 0.02)" stroke="rgba(0, 229, 255, 0.2)" />
+                                    <circle cx="0" cy="0" r="66" fill="none" stroke="rgba(0, 229, 255, 0.25)" strokeDasharray="3 3" />
+                                    <circle cx="0" cy="0" r="33" fill="none" stroke="rgba(0, 229, 255, 0.35)" strokeDasharray="3 3" />
+                                    <circle cx="0" cy="0" r="72" fill="rgba(0, 230, 118, 0.04)" stroke="#00E676" strokeWidth="1" strokeDasharray="2 2" />
+
+                                    {/* Ejes Cardinales */}
+                                    <line x1="0" y1="-105" x2="0" y2="105" stroke="rgba(255,255,255,0.12)" />
+                                    <line x1="-105" y1="0" x2="105" y2="0" stroke="rgba(255,255,255,0.12)" />
+                                    <text x="0" y="-110" fill="#00E5FF" fontSize="10" textAnchor="middle" fontWeight="bold">N</text>
+                                    <text x="114" y="3" fill="#00E5FF" fontSize="10" textAnchor="start" fontWeight="bold">E</text>
+                                    <text x="0" y="120" fill="#00E5FF" fontSize="10" textAnchor="middle" fontWeight="bold">S</text>
+                                    <text x="-114" y="3" fill="#00E5FF" fontSize="10" textAnchor="end" fontWeight="bold">W</text>
+                                    <text x="0" y="4" fill="rgba(255,255,255,0.4)" fontSize="8" textAnchor="middle">ZENIT</text>
+
+                                    {/* Satélites graficados en coordenadas polares */}
+                                    {sat.activePasses.map(s => {
+                                        const px = s.polarX * 100;
+                                        const py = s.polarY * 100;
+                                        const satColor = s.constellation === 'IRIDIUM_NEXT' ? '#00E5FF' : s.constellation === 'DIRECT_TO_CELL' ? '#B388FF' : '#00E676';
+                                        return (
+                                            <g key={s.satelliteId}>
+                                                {s.isInAos && (
+                                                    <circle cx={px} cy={py} r="10" fill="none" stroke={satColor} strokeWidth="1.5" opacity="0.6">
+                                                        <animate attributeName="r" values="8;16;8" dur="2s" repeatCount="indefinite" />
+                                                        <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2s" repeatCount="indefinite" />
+                                                    </circle>
+                                                )}
+                                                <circle cx={px} cy={py} r="5" fill={satColor} />
+                                                <text x={px + 7} y={py + 3} fill="#FFF" fontSize="8" fontWeight="bold">
+                                                    {s.satelliteId.split('-')[0]}
+                                                </text>
+                                            </g>
+                                        );
+                                    })}
+                                </svg>
+
+                                <div style={{ fontSize: "0.68rem", color: "#AAA", textAlign: "center" }}>
+                                    <span style={{ color: "#00E5FF" }}>● Iridium-NEXT</span> · <span style={{ color: "#B388FF" }}>● Starlink D2C</span> · <span style={{ color: "#00E676" }}>● Orbcomm OG2</span>
+                                </div>
+                            </div>
+
+                            {/* Compositor de Mensaje Satelital SBD */}
+                            <div style={{
+                                background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)",
+                                borderRadius: "16px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px"
+                            }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ fontSize: "0.76rem", color: "#00E5FF", fontWeight: 900 }}>
+                                        COMPOSITOR DE RÁFAGA SATELITAL SBD
+                                    </span>
+                                    <span style={{ fontSize: "0.66rem", color: satMessageText.length > 200 ? "#FF3355" : "var(--text-secondary)" }}>
+                                        {satMessageText.length}/240 caracteres
+                                    </span>
+                                </div>
+
+                                <textarea
+                                    value={satMessageText}
+                                    onChange={(e) => setSatMessageText(e.target.value)}
+                                    maxLength={240}
+                                    rows={3}
+                                    placeholder="Redacte mensaje de telemetría de emergencia o coordenadas..."
+                                    style={{
+                                        width: "100%", padding: "10px", background: "rgba(0, 0, 0, 0.5)",
+                                        border: "1px solid rgba(0, 229, 255, 0.25)", borderRadius: "8px",
+                                        color: "#FFF", fontSize: "0.76rem", outline: "none", resize: "none",
+                                        fontFamily: "JetBrains Mono, monospace"
+                                    }}
+                                />
+
+                                <div style={{ display: "flex", gap: "10px" }}>
+                                    <button
+                                        onClick={handleEnqueueSbdMessage}
+                                        style={{
+                                            flex: 1, padding: "10px", borderRadius: "8px",
+                                            background: "rgba(0, 229, 255, 0.15)", border: "1px solid #00E5FF",
+                                            color: "#00E5FF", fontWeight: 900, fontSize: "0.76rem", cursor: "pointer"
+                                        }}
+                                    >
+                                        📥 ENCOLAR PAQUETE SBD
+                                    </button>
+                                    <button
+                                        onClick={() => satelliteMeshGateway.clearOutboundQueue()}
+                                        style={{
+                                            padding: "10px 14px", borderRadius: "8px",
+                                            background: "rgba(255, 255, 255, 0.05)", border: "1px solid rgba(255, 255, 255, 0.1)",
+                                            color: "#888", fontWeight: 700, fontSize: "0.76rem", cursor: "pointer"
+                                        }}
+                                    >
+                                        Vaciar
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Lista de Satélites en Orbita */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                                <div style={{ fontSize: "0.70rem", color: "var(--text-secondary)", fontWeight: 900 }}>
+                                    CONSTELACIONES EN SEGUIMIENTO ORBITAL:
+                                </div>
+                                {sat.activePasses.map(s => (
+                                    <div
+                                        key={s.satelliteId}
+                                        style={{
+                                            padding: "10px 14px", borderRadius: "12px",
+                                            background: s.isInAos ? "rgba(0, 229, 255, 0.08)" : "rgba(255, 255, 255, 0.02)",
+                                            border: `1px solid ${s.isInAos ? "#00E5FF" : "rgba(255, 255, 255, 0.06)"}`,
+                                            display: "flex", justifyContent: "space-between", alignItems: "center"
+                                        }}
+                                    >
+                                        <div>
+                                            <div style={{ fontWeight: 900, fontSize: "0.82rem", color: s.isInAos ? "#00E5FF" : "#FFF" }}>
+                                                {s.satelliteId} ({s.constellation})
+                                            </div>
+                                            <div style={{ fontSize: "0.66rem", color: "var(--text-secondary)" }}>
+                                                Az: {s.azimuthDeg}° · Elev: {s.elevationDeg}° · {s.uplinkFrequencyMhz} MHz
+                                            </div>
                                         </div>
-                                        <div style={{ fontSize: "0.65rem", color: "#888" }}>
-                                            Az: {s.azimuthDeg}° · Elev: {s.elevationDeg}° · {s.uplinkFrequencyMhz} MHz
+                                        <div>
+                                            <span style={{
+                                                fontSize: "0.65rem", fontWeight: 900, padding: "3px 8px", borderRadius: "5px",
+                                                background: s.isInAos ? "rgba(0, 230, 118, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                                                color: s.isInAos ? "#00E676" : "#888",
+                                                border: `1px solid ${s.isInAos ? '#00E676' : 'rgba(255,255,255,0.1)'}`
+                                            }}>
+                                                {s.isInAos ? `AOS (${s.passDurationSec}s)` : `En: ${s.timeToAosSec}s`}
+                                            </span>
                                         </div>
                                     </div>
-                                    <div style={{ textAlign: "right" }}>
-                                        <span style={{
-                                            fontSize: "0.65rem", fontWeight: 900, padding: "2px 6px", borderRadius: "4px",
-                                            background: s.isInAos ? "rgba(0,230,118,0.2)" : "rgba(255,255,255,0.05)",
-                                            color: s.isInAos ? "#00E676" : "#AAA"
-                                        }}>
-                                            {s.isInAos ? `AOS (${s.passDurationSec}s)` : `Próximo: ${s.timeToAosSec}s`}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* ── TAB 3: CBRN GAUSSIAN PLUME & SAFE ESCAPE CORRIDOR ── */}
-                {activeTab === "plume" && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                        <div style={{ background: "rgba(255, 51, 85, 0.08)", border: "1px solid rgba(255, 51, 85, 0.3)", borderRadius: "12px", padding: "12px", fontSize: "0.74rem", color: "#DDD" }}>
-                            Modelo de dispersión atmosférica Pasquill-Gifford. Calcula el cono de peligro de viento a sotavento y genera el rumbo de escape a 90° barlovento para salir de la pluma tóxica.
-                        </div>
-
-                        {/* Escape Vector Master HUD */}
-                        <div style={{
-                            padding: "16px", borderRadius: "14px",
-                            background: plumeZone.escapeVector.isInDangerZone ? "rgba(255, 51, 85, 0.25)" : "rgba(0, 230, 118, 0.15)",
-                            border: `1.5px solid ${plumeZone.escapeVector.isInDangerZone ? "#FF3355" : "#00E676"}`,
-                            display: "flex", alignItems: "center", justifyContent: "space-between"
-                        }}>
-                            <div>
-                                <div style={{ fontSize: "0.72rem", color: "#AAA", fontWeight: 800 }}>ESTADO DE PELIGRO EN PLUMA</div>
-                                <div style={{ fontSize: "1.8rem", fontWeight: 900, color: plumeZone.escapeVector.isInDangerZone ? "#FF3355" : "#00E676" }}>
-                                    {plumeZone.escapeVector.currentDangerLevel}
-                                </div>
-                                <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#FFB300" }}>
-                                    Agente: {plumeZone.source.hazardType}
-                                </div>
-                            </div>
-                            <div style={{ textAlign: "right" }}>
-                                <div style={{ fontSize: "0.7rem", color: "#AAA" }}>RUMBO DE ESCAPE</div>
-                                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: "#00E5FF" }}>
-                                    {plumeZone.escapeVector.recommendedAzimuthDegrees}°
-                                </div>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>
-                                    {plumeZone.escapeVector.distanceToSafetyMeters}m a zona segura ({plumeZone.escapeVector.estimatedWalkTimeMinutes} min)
-                                </div>
+                                ))}
                             </div>
                         </div>
+                    )}
 
-                        {/* Plume Metrics Grid */}
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>ZONA CALIENTE (LETAL)</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FF3355" }}>{plumeZone.hotZoneRadiusMeters} m radio</div>
-                            </div>
-                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>LONGITUD PLUMA TIBIA</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FFB300" }}>{plumeZone.warmZoneLengthMeters} m</div>
-                            </div>
-                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>VIENTO SOTAVENTO</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#38BDF8" }}>{plumeZone.source.windSpeedKmh} km/h @ {plumeZone.source.windDirectionDegrees}°</div>
-                            </div>
-                            <div style={{ padding: "12px", background: "rgba(10, 18, 36, 0.6)", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.1)" }}>
-                                <div style={{ fontSize: "0.68rem", color: "#AAA" }}>PERÍMETRO SEGURO</div>
-                                <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#00E676" }}>&gt; {plumeZone.coldZonePerimeterMeters} m</div>
-                            </div>
-                        </div>
-
-                        {/* Broadcast Escape Vector to Mesh */}
-                        <button
-                            onClick={async () => {
-                                const { meshSosBeacon } = await import("../lib/emergency/MeshSosBeaconEngine");
-                                let batt = 100;
-                                if (typeof window !== 'undefined' && typeof (window as any).__red_last_battery === 'number') {
-                                    batt = (window as any).__red_last_battery;
-                                } else if (typeof navigator !== 'undefined' && 'getBattery' in navigator) {
-                                    try {
-                                        const b: any = await (navigator as any).getBattery();
-                                        if (b && typeof b.level === 'number') batt = Math.round(b.level * 100);
-                                    } catch {}
-                                }
-                                const callerId = identity?.identity_hash ? `did:red:${identity.identity_hash.slice(0, 8)}` : "CBRN_COMMAND";
-                                const callerName = identity?.nickname || "Oficial de Seguridad CBRN";
-                                await meshSosBeacon.activateSosBeacon({
-                                    distressType: "NATURAL_DISASTER",
-                                    triageColor: "RED",
-                                    note: `ALERTA EVACUACIÓN CBRN: Escape por Rumbo ${plumeZone.escapeVector.recommendedAzimuthDegrees}°. Zona Caliente: ${plumeZone.hotZoneRadiusMeters}m. Salir del cono de viento inmediatamente.`,
-                                    batteryLevel: batt
-                                }, callerId, callerName);
-                                toast.success("🚨 Corredor de Evacuación y Vector de Escape transmitido por la Malla SOS");
-                            }}
-                            style={{
-                                padding: "14px", borderRadius: "10px",
-                                background: "linear-gradient(135deg, #FF3355, #E8213A)",
-                                color: "#FFF", fontWeight: 900, fontSize: "0.82rem", border: "none", cursor: "pointer",
-                                display: "flex", alignItems: "center", justifyContent: "center", gap: "8px"
-                            }}
-                        >
-                            <span>🚨</span>
-                            <span>TRANSMITIR VECTOR DE ESCAPE A LA MALLA</span>
-                        </button>
-                    </div>
-                )}
-
+                </div>
             </div>
         </div>
     );
