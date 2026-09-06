@@ -7,7 +7,7 @@ import {
 import { fetchWithFallback, getStored, setStored, hashStringSha256, sha256Hex, STORAGE_KEYS, getSessionToken, invalidateSessionTokenCache } from './core';
 import { PeerItem, RustLogEntry, SystemHealthResponse } from './types';
 import { getP2PWallet, createP2PVoucher, redeemP2PVoucher } from './economy';
-import { getRfMetrics, triggerChannelHop, setRfFecMode } from './sensors';
+import { getRfMetrics, triggerChannelHop, setRfFecMode, getProximityNodes } from './sensors';
 import { getStegoCapsules, saveStegoCapsule, deleteStegoCapsule } from './economy';
 import { getEmergencyBeacons, broadcastEmergencyBeacon, cancelEmergencyBeacon, getTriageReports, saveTriageReport, deleteTriageReport } from './emergency';
 import { pingDmsActivity, panicWipe } from './sensors';
@@ -37,6 +37,12 @@ export class RedAPIClient {
     async pingDmsActivity(): Promise<any> { return pingDmsActivity(); }
     async panicWipe(): Promise<any> { return panicWipe(); }
     async configureHardwareLoRa(config: any): Promise<any> { return fetchWithFallback('/api/network/lora/config', { method: 'POST', body: JSON.stringify(config) }, () => ({ ok: true, config })); }
+    async getNetworkIp(): Promise<{ ok: boolean; local_ip: string }> {
+        return fetchWithFallback<{ ok: boolean; local_ip: string }>('/api/network/ip', undefined, () => ({ ok: true, local_ip: '127.0.0.1' }));
+    }
+    async getProximityNodes(): Promise<any[]> {
+        return getProximityNodes();
+    }
     private readonly baseURL = 'http://127.0.0.1:7333/api';
 
     private getFallbackURL() {
@@ -493,6 +499,8 @@ export class RedAPIClient {
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'contact' ? '👤 Contacto' :
+                            msgType === 'poll' ? '📊 Encuesta' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
                             (content?.startsWith('data:image') ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :

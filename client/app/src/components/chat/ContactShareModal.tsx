@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRedStore } from "../../store/useRedStore";
 import { ContactItem } from "../../api/types";
 import { avatarStyle } from "../sidebar/types";
@@ -19,6 +20,25 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
     const { contacts, preferences, identity } = useRedStore();
     const isFamiliar = (preferences?.uiMode ?? 'familiar') === 'familiar';
     const [searchQuery, setSearchQuery] = useState("");
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose();
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.body.style.overflow = originalOverflow;
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [isOpen, onClose]);
 
     const filteredContacts = useMemo(() => {
         const list = Array.isArray(contacts) ? [...contacts] : [];
@@ -39,9 +59,9 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
         );
     }, [contacts, identity, searchQuery]);
 
-    if (!isOpen) return null;
+    if (!isOpen || !mounted || typeof document === "undefined") return null;
 
-    return (
+    return createPortal(
         <div
             style={{
                 position: "fixed",
@@ -225,6 +245,9 @@ export const ContactShareModal: React.FC<ContactShareModalProps> = ({
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };
+
+export default ContactShareModal;

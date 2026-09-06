@@ -103,7 +103,9 @@ export function VoiceMessage({ msg, isMine }: VoiceMessageProps) {
         if (dataStr.startsWith("AAAA")) return `data:audio/mp4;base64,${dataStr}`;
         if (dataStr.startsWith("UklG")) return `data:audio/wav;base64,${dataStr}`;
         if (dataStr.startsWith("T2dn")) return `data:audio/ogg;base64,${dataStr}`;
-        return `data:audio/webm;base64,${dataStr}`;
+        if (dataStr.startsWith("SUQz") || dataStr.startsWith("//M") || dataStr.startsWith("//OE")) return `data:audio/mpeg;base64,${dataStr}`;
+        const mime = msg.mime_type || "audio/webm";
+        return `data:${mime};base64,${dataStr}`;
     };
 
     const rawData = msg.media_data || (msg.content && !msg.content.startsWith("[") ? msg.content : undefined);

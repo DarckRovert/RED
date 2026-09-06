@@ -246,6 +246,8 @@ export const createChatSlice: StateCreator<RedStore, [], [], Partial<RedStore>> 
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'contact' ? '👤 Contacto' :
+                            msgType === 'poll' ? '📊 Encuesta' :
                             (content?.startsWith('data:image') ? (options?.caption ? `📷 ${options.caption}` : '📷 Foto') :
                              content?.startsWith('data:audio') ? '🎤 Nota de voz' :
                              content?.startsWith('data:video') ? (options?.caption ? `📹 ${options.caption}` : '📹 Video') :

@@ -1,5 +1,32 @@
 # Changelog
 
+## [93.0.0-tactical-primitives-and-hardened-sync-edition] - 2026-09-06
+
+### 🚀 Tactical UI Primitives, Dynamic Portals & Hardened Mesh Sync Edition (Release Oficial v93.0.0)
+
+- **Primitivos UI Tácticos & Aislamiento de Stacking Context:**
+  - **`Tooltip.tsx` de Precisión Geométrica:** Renderizado mediante `createPortal(..., document.body)` para desacoplar coordenadas del contexto de transformación o recorte de contenedores padres. Composición bidireccional de `ref` sin colisiones, subscripciones activas a eventos de `scroll` y `resize`, y cálculo dinámico de `arrowOffset` con alineación continua al centro del disparador ante clamping de viewport.
+  - **`ConfirmDialog.tsx` Accesible & Anti-Bleed:** Inyección desacoplada con `createPortal`, bloqueo idempotente de scroll en `document.body` (`overflow: hidden`), y trampa de foco por teclado (`Tab`/`Shift+Tab` y `Escape`).
+  - **`ContactShareModal.tsx`:** Migración completa a `createPortal`, soporte de tecla `Escape` y bloqueo de scroll.
+  - **Primitivos UI SSOT:** `Badge`, `LoadingSpinner`, `ProgressBar`, `EmptyState`, `SkeletonCard`, `ErrorBanner` consolidados en `components/ui/index.ts`.
+
+- **Interacción Gestual y Contextual en Mensajería:**
+  - **Swipe-to-Reply Táctico (`MessageBubble.tsx`):** Física elástica táctil con umbral dinámico de 65px, respuesta háptica y anclaje automático del mensaje citado en el campo de entrada.
+  - **Selector de Reacciones & Menú Flotante:** Overlay flotante contextual accesible mediante pulsación prolongada (500ms) o clic derecho, con soporte para reacciones rápidas (`['👍', '❤️', '🔥', '😂', '😮', '⚡', '🛡️']`), copiado, reenvío y fijado.
+
+- **Telemetría RF y Paneles de Enjambre:**
+  - **`NearbyDevicesPanel.tsx`:** Radar angular con blips en vivo calculados según distancia y azimut, conectado al endpoint `GET /api/proximity` y con validación rigurosa de niveles RSSI (`rssi == null`).
+  - **`NetworkPanel.tsx`:** Tarjetas de telemetría de topología Swarm (desglose WiFi, BLE, LoRa, TCP, QUIC) y panel espectral RF con salto de canal interactivo.
+  - **`SecurityPanel.tsx` & `GroupsPanel.tsx`:** Estadísticas consolidadas del motor Guardian AI (`messages_blocked`, `messages_analyzed`) y badges de mensajes no leídos.
+
+- **Blindaje de Memoria en Android (`AndroidManifest.xml`):**
+  - Incorporación de `android:largeHeap="true"` y `android:hardwareAccelerated="true"` para prevenir terminaciones abruptas del proceso de renderizado por el Low Memory Killer (LMK) en dispositivos con recursos compartidos.
+
+- **Certificación Multi-Hardware Concurrente:**
+  - **Lenovo Tab M11** (`HA2CHKZ2` / Android 14) — Arranque de motor nativo y renderizado a resolución nativa verificado con `adb logcat`.
+  - **Motorola Moto G22** (`ZT322B386P` / Android 12) — Despliegue en limpio, JNI nativo funcional y flujo de bienvenida validado sin excepciones.
+- **Versión Oficial:** `93.0.0` / `versionCode 93000`.
+
 ## [92.0.0-web-companion-and-tri-hardware-sync-edition] - 2026-09-05
 
 ### 🚀 Web Companion, Tri-Hardware QR & Offline Multi-Device Sync Edition (Release Oficial v92.0.0)

@@ -14,7 +14,7 @@ if (!fs.existsSync(apkSrc)) {
 const versionTsPath = path.join(rootDir, 'client', 'app', 'src', 'lib', 'version.ts');
 let versionTs = fs.readFileSync(versionTsPath, 'utf8');
 const versionMatch = versionTs.match(/RED_VERSION\s*=\s*"([^"]+)"/);
-const currentVersion = versionMatch ? versionMatch[1] : '92.0.0';
+const currentVersion = versionMatch ? versionMatch[1] : '93.0.0';
 
 const versionApk = path.join(releaseDir, `red-v${currentVersion}-release.apk`);
 const latestApk = path.join(releaseDir, 'red-latest.apk');

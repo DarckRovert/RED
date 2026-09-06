@@ -171,6 +171,8 @@ pub struct ConversationItem {
     pub disappearing_timer: Option<u32>,
     /// Número de mensajes recibidos que el usuario no ha visto aún
     pub unread_count: usize,
+    /// Indica si la conversación es un grupo/escuadrón P2P
+    pub is_group: bool,
 }
 
 #[derive(Serialize)]
@@ -1136,8 +1138,15 @@ async fn handle_socket(socket: WebSocket) {
 async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoResponse {
     let node = state.node.lock().await;
     match node.get_sync_payload().await {
-        Ok((_, _, conversations)) => {
+        Ok((_, groups, conversations)) => {
             let my_hash = node.identity_hash();
+            // Build a fast lookup set of group IDs (as raw 32-byte arrays)
+            // to detect group conversations in O(1) per item.
+            let group_id_set: std::collections::HashSet<[u8; 32]> = groups
+                .iter()
+                .map(|g| g.id.0)
+                .collect();
+
             let items: Vec<ConversationItem> = conversations.iter().map(|c| {
                 let msgs = c.messages();
                 let last_msg = msgs.last().and_then(|m| {
@@ -1158,7 +1167,9 @@ async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoRe
                 };
                 // Read actual unread count explicitly saved in the Conversation struct
                 let unread_count = c.unread_count;
-                
+                // Detect group conversations: their_identity bytes match a known GroupId
+                let is_group = group_id_set.contains(c.their_identity.as_bytes());
+
                 ConversationItem {
                     id: format!("{}-{}", c.our_identity.short(), c.their_identity.short()),
                     peer,
@@ -1167,6 +1178,7 @@ async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoRe
                     last_timestamp,
                     disappearing_timer: c.disappearing_timer,
                     unread_count,
+                    is_group,
                 }
             }).collect();
             Json(items).into_response()

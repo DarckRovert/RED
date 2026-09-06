@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
@@ -10,6 +10,8 @@ import { SecurityReportModal } from "./SecurityReportModal";
 import { BackupRestoreModal } from "./BackupRestoreModal";
 import { WebCompanionLinkModal } from "./WebCompanionLinkModal";
 import { RED_VERSION_NAME } from "../lib/version";
+import { getGuardianStatus } from "../api/ai";
+import { GuardianStatus } from "../api/types";
 
 const RedDisguise = registerPlugin<any>("RedDisguise");
 
@@ -41,6 +43,35 @@ export default function SecurityPanel() {
     const [reportModalOpen, setReportModalOpen] = useState(false);
     const [backupModalOpen, setBackupModalOpen] = useState(false);
     const [companionModalOpen, setCompanionModalOpen] = useState(false);
+
+    // ── Guardian AI Status (Live Polling) ──────────────────────────────────────
+    const [guardianStatus, setGuardianStatus] = useState<GuardianStatus | null>(null);
+    const [guardianLoading, setGuardianLoading] = useState(true);
+    const [guardianPulse, setGuardianPulse] = useState(false);
+
+    const refreshGuardian = useCallback(async () => {
+        try {
+            const status = await getGuardianStatus();
+            setGuardianStatus(prev => {
+                // Trigger visual pulse if threat score changed
+                if (prev && prev.stats?.messages_blocked !== status.stats?.messages_blocked) {
+                    setGuardianPulse(true);
+                    setTimeout(() => setGuardianPulse(false), 1200);
+                }
+                return status;
+            });
+        } catch {
+            // Guardian offline — non-fatal
+        } finally {
+            setGuardianLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshGuardian();
+        const interval = setInterval(refreshGuardian, 4000);
+        return () => clearInterval(interval);
+    }, [refreshGuardian]);
 
     useEffect(() => {
         const savedPrivacy = localStorage.getItem("red_privacy_screen") === "true";
@@ -232,6 +263,71 @@ export default function SecurityPanel() {
             {/* Contenido Principal con Scroll */}
             <div className="scroll-container" style={{ flex: 1, padding: "16px 16px 80px 16px", display: "flex", flexDirection: "column", gap: "16px" }}>
                 <div style={{ maxWidth: "720px", width: "100%", margin: "0 auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+
+                    {/* ── Guardian AI Live Status Card ──────────────────────── */}
+                    <div style={{
+                        padding: "14px 16px",
+                        borderRadius: "14px",
+                        background: guardianStatus?.active
+                            ? "linear-gradient(135deg, rgba(0,230,118,0.08) 0%, rgba(0,229,255,0.05) 100%)"
+                            : "rgba(232,33,58,0.08)",
+                        border: `1px solid ${guardianStatus?.active ? "rgba(0,230,118,0.35)" : "rgba(232,33,58,0.35)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+                        animation: guardianPulse ? "red-glow-pulse 0.8s ease" : undefined,
+                        transition: "border-color 0.4s ease, background 0.4s ease",
+                    }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px", flex: 1 }}>
+                            <div style={{
+                                width: 42, height: 42, borderRadius: "12px", flexShrink: 0,
+                                background: guardianStatus?.active
+                                    ? "linear-gradient(135deg,#009624,#00E676)"
+                                    : "linear-gradient(135deg,#c01830,#FF3355)",
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: "1.2rem",
+                                boxShadow: guardianStatus?.active
+                                    ? "0 0 18px rgba(0,230,118,0.4)"
+                                    : "0 0 18px rgba(232,33,58,0.4)",
+                            }}>
+                                {guardianLoading ? "⏳" : guardianStatus?.active ? "🛡️" : "⛔"}
+                            </div>
+                            <div>
+                                <div style={{ fontSize: "0.90rem", fontWeight: 900, color: "#fff" }}>
+                                    Guardian AI Firewall
+                                    {" "}
+                                    <span style={{
+                                        fontSize: "0.60rem", padding: "1px 6px", borderRadius: "4px",
+                                        background: guardianStatus?.active ? "rgba(0,230,118,0.2)" : "rgba(232,33,58,0.2)",
+                                        color: guardianStatus?.active ? "#00E676" : "#FF3355",
+                                        fontFamily: "JetBrains Mono, monospace", fontWeight: 800,
+                                        border: `1px solid ${guardianStatus?.active ? "rgba(0,230,118,0.4)" : "rgba(232,33,58,0.4)"}`,
+                                    }}>
+                                        {guardianStatus?.mode?.toUpperCase() || "OFFLINE"}
+                                    </span>
+                                </div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: "2px", fontFamily: "JetBrains Mono, monospace" }}>
+                                    {guardianLoading
+                                        ? "Sincronizando motor local…"
+                                        : `${guardianStatus?.stats?.messages_analyzed ?? 0} analizados · ${guardianStatus?.stats?.messages_blocked ?? 0} bloqueados`
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
+                            <button
+                                onClick={refreshGuardian}
+                                title="Forzar sincronización del Guardian"
+                                style={{
+                                    width: 30, height: 30, borderRadius: "8px",
+                                    background: "rgba(255,255,255,0.06)", border: "1px solid var(--glass-border)",
+                                    color: "var(--text-muted)", fontSize: "0.8rem", cursor: "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                }}
+                            >↻</button>
+                            <span style={{ fontSize: "0.60rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono" }}>
+                                {guardianStatus?.model?.split("(")[0].trim().slice(0, 18) || "LOCAL"}
+                            </span>
+                        </div>
+                    </div>
 
                     {/* Acciones Rápidas Superiores */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>

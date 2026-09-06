@@ -19,6 +19,8 @@ export default function NetworkPanel() {
     const [loraPort, setLoraPort] = useState("/dev/ttyUSB0");
     const [loraBaud, setLoraBaud] = useState("115200");
     const [peersByTransport, setPeersByTransport] = useState<Record<string, number>>({ wifi: 0, ble: 0, lorawan: 0, tcp: 0, quic: 0 });
+    const [rfMetrics, setRfMetrics] = useState<any>(null);
+    const [hoppingChannel, setHoppingChannel] = useState(false);
     
     // AI Coverage Diagnostic States
     const [aiNetworkDiag, setAiNetworkDiag] = useState<string | null>(null);
@@ -32,6 +34,21 @@ export default function NetworkPanel() {
     // Covert Channel Dynamic Tunnel States
     const [tunnelTesting, setTunnelTesting] = useState(false);
     const [testResult, setTestResult] = useState<string | null>(null);
+
+    const handleChannelHop = async () => {
+        setHoppingChannel(true);
+        try {
+            const nextCh = ((rfMetrics?.current_channel || 1) % 8) + 1;
+            await RedAPI.triggerChannelHop(nextCh);
+            toast.success(`⚡ Salto ejecutado a Canal ${nextCh}`);
+            const rf = await RedAPI.getRfMetrics();
+            if (rf) setRfMetrics(rf);
+        } catch {
+            toast.error("Error al ejecutar salto de canal");
+        } finally {
+            setHoppingChannel(false);
+        }
+    };
 
     const handleTestTunnel = async () => {
         setTunnelTesting(true);
@@ -84,8 +101,8 @@ export default function NetworkPanel() {
 
         const fetchIp = async () => {
             try {
-                const res = await fetch("http://127.0.0.1:7333/api/network/ip", { signal: AbortSignal.timeout(2000) });
-                if (res.ok) { const d = await res.json(); setLocalIp(d.local_ip || d.ip || "127.0.0.1"); return; }
+                const d = await RedAPI.getNetworkIp();
+                if (d && d.local_ip) { setLocalIp(d.local_ip); return; }
             } catch {}
             setLocalIp("No Disponible (Offline)");
         };
@@ -97,13 +114,17 @@ export default function NetworkPanel() {
                 const counts: Record<string, number> = { wifi: 0, ble: 0, lorawan: 0, tcp: 0, quic: 0 };
                 for (const p of peers) {
                     const t = (p.transport || "").toLowerCase();
-                    if (t === "wifi_direct" || t === "websocket") counts.wifi++;
+                    if (t === "wifi_direct" || t === "websocket" || t === "wifi") counts.wifi++;
                     else if (t === "ble") counts.ble++;
                     else if (t === "lorawan" || t === "lora") counts.lorawan++;
                     else if (t === "tcp") counts.tcp++;
                     else if (t === "quic") counts.quic++;
                 }
                 setPeersByTransport(counts);
+            } catch {}
+            try {
+                const rf = await RedAPI.getRfMetrics();
+                if (rf) setRfMetrics(rf);
             } catch {}
         };
         updateTransportMetrics();
@@ -206,6 +227,88 @@ export default function NetworkPanel() {
                             </div>
                         </div>
                         <span className="badge-tactical badge-tactical-emerald">PUERTO 7333</span>
+                    </div>
+
+                    {/* Desglose de Nodos por Transporte (Swarm Topology) */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                                <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-cyan)" }}>
+                                    📡 Topología Swarm — Nodos por Capa Física
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    Total de enlaces concurrentes: {Object.values(peersByTransport).reduce((a, b) => a + b, 0)} pares
+                                </div>
+                            </div>
+                            <span className="badge-tactical badge-tactical-cyan">MULTI-BEARER</span>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: "8px" }}>
+                            <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(0, 229, 255, 0.06)", border: "1px solid rgba(0, 229, 255, 0.2)", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>WIFI DIRECT</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--accent-cyan)" }}>{peersByTransport.wifi}</div>
+                            </div>
+                            <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(0, 230, 118, 0.06)", border: "1px solid rgba(0, 230, 118, 0.2)", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>BLE MESH</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--accent-emerald)" }}>{peersByTransport.ble}</div>
+                            </div>
+                            <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(179, 136, 255, 0.06)", border: "1px solid rgba(179, 136, 255, 0.2)", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>LORAWAN</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--accent-purple, #B388FF)" }}>{peersByTransport.lorawan}</div>
+                            </div>
+                            <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(255, 171, 0, 0.06)", border: "1px solid rgba(255, 171, 0, 0.2)", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>TCP MULTI</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--accent-amber)" }}>{peersByTransport.tcp}</div>
+                            </div>
+                            <div style={{ padding: "10px", borderRadius: "8px", background: "rgba(255, 64, 129, 0.06)", border: "1px solid rgba(255, 64, 129, 0.2)", textAlign: "center" }}>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 700 }}>QUIC TUNNEL</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "var(--accent-crimson)" }}>{peersByTransport.quic}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Telemetría RF y Anti-Jamming */}
+                    <div className="card-tactical animate-enter" style={{ padding: "18px 16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <div>
+                                <div style={{ fontSize: "0.90rem", fontWeight: 800, color: "var(--accent-emerald)" }}>
+                                    📻 Telemetría Espectral RF & Anti-Jamming
+                                </div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                    Canal activo: {rfMetrics?.channel_label || `Canal ${rfMetrics?.current_channel || 1}`} ({rfMetrics?.frequency_mhz || 915.0} MHz)
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleChannelHop}
+                                disabled={hoppingChannel}
+                                className="btn-tactical-primary"
+                                style={{ padding: "6px 12px", fontSize: "0.75rem", background: "linear-gradient(135deg, #00E676 0%, #00B0FF 100%)", color: "#000" }}
+                            >
+                                {hoppingChannel ? "Saltando..." : "⚡ Salto de Canal"}
+                            </button>
+                        </div>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px", fontFamily: "JetBrains Mono, monospace" }}>
+                            <div style={{ padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.03)" }}>
+                                <div style={{ fontSize: "0.64rem", color: "var(--text-muted)" }}>SNR PROMEDIO</div>
+                                <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "var(--accent-emerald)" }}>+{rfMetrics?.average_snr_db ?? 18.4} dB</div>
+                            </div>
+                            <div style={{ padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.03)" }}>
+                                <div style={{ fontSize: "0.64rem", color: "var(--text-muted)" }}>PISO DE RUIDO</div>
+                                <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "var(--accent-cyan)" }}>{rfMetrics?.noise_floor_db ?? -95} dBm</div>
+                            </div>
+                            <div style={{ padding: "8px", borderRadius: "6px", background: "rgba(255,255,255,0.03)" }}>
+                                <div style={{ fontSize: "0.64rem", color: "var(--text-muted)" }}>TASA ERROR (PER)</div>
+                                <div style={{ fontSize: "0.92rem", fontWeight: 800, color: (rfMetrics?.packet_error_rate ?? 0.002) < 0.01 ? "var(--accent-emerald)" : "var(--accent-amber)" }}>
+                                    {((rfMetrics?.packet_error_rate ?? 0.002) * 100).toFixed(2)}%
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.72rem", color: "var(--text-muted)", paddingTop: "4px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                            <span>FEC: <strong style={{ color: "#fff" }}>{rfMetrics?.fec_rate || "Reed-Solomon 1/2"}</strong></span>
+                            <span>Saltos registrados: <strong style={{ color: "var(--accent-cyan)" }}>{rfMetrics?.hops_count ?? 0}</strong></span>
+                        </div>
                     </div>
 
                     {/* Conectar a Par Manualmente */}

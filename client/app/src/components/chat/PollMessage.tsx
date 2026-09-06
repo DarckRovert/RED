@@ -17,14 +17,23 @@ export function PollMessage({ msg, onVote }: PollMessageProps) {
     let pd = msg.poll_data;
     if (!pd && msg.content) {
         try {
-            const parsed = JSON.parse(msg.content);
+            const parsed = typeof msg.content === "string" ? JSON.parse(msg.content) : msg.content;
             if (parsed && parsed.question && Array.isArray(parsed.options)) {
                 pd = parsed;
             }
         } catch {}
     }
 
-    if (!pd || !pd.question || !Array.isArray(pd.options)) return null;
+    if (!pd || !pd.question || !Array.isArray(pd.options)) {
+        return (
+            <div style={{ minWidth: 200, padding: "8px 12px", background: "rgba(0,0,0,0.25)", borderRadius: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#FFF", display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>📊</span>
+                    <span>{typeof msg.content === "string" && !msg.content.startsWith("{") ? msg.content : "Encuesta P2P"}</span>
+                </div>
+            </div>
+        );
+    }
 
     const votesMap = pd.votes || {};
     const totalVotes = Object.keys(votesMap).length;

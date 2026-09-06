@@ -4,12 +4,12 @@ import React, { useState, useEffect } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { localTransport } from "../lib/mesh/localTransport";
 import { meshRouter, MeshPeer, normalizeIdentity, isNameSimilar } from "../lib/mesh/meshRouter";
-import { RedAPI } from "../lib/api";
+import { RedAPI, getProximityNodes } from "../lib/api";
 import { useTranslation } from "../lib/i18n/i18nEngine";
 import { toast } from "./Toast";
 
-function RssiBar({ rssi }: { rssi?: number }) {
-    if (!rssi) return null;
+function RssiBar({ rssi }: { rssi?: number | null }) {
+    if (rssi == null) return null;
     const pct = Math.max(0, Math.min(100, ((rssi + 100) / 60) * 100));
     const color = rssi > -65 ? "var(--accent-emerald)" : rssi > -80 ? "var(--accent-amber)" : "var(--accent-crimson)";
     return (
@@ -27,10 +27,12 @@ interface UnifiedDevice {
     canonicalId: string;     // Resolved canonical identity_hash
     name: string;
     transports: string[];
-    rssi?: number;
+    rssi?: number | null;
     isContact: boolean;
     isOnline: boolean;
     rawBleId?: string;
+    distance_meters?: number | null;
+    azimuth?: number | null;
 }
 
 export default function NearbyDevicesPanel() {
@@ -67,8 +69,10 @@ export default function NearbyDevicesPanel() {
                 rawId: string,
                 initialName: string,
                 transport: string,
-                rssi?: number,
-                rawBleId?: string
+                rssi?: number | null,
+                rawBleId?: string,
+                distance_meters?: number | null,
+                azimuth?: number | null
             ) => {
                 const normId = normalizeIdentity(rawId);
                 let resolvedCanonical = meshRouter.getCanonicalId(normId) || normId;
@@ -110,6 +114,12 @@ export default function NearbyDevicesPanel() {
                     if (rssi != null && (existing.rssi == null || rssi > existing.rssi)) {
                         existing.rssi = rssi;
                     }
+                    if (distance_meters != null) {
+                        existing.distance_meters = distance_meters;
+                    }
+                    if (azimuth != null) {
+                        existing.azimuth = azimuth;
+                    }
                     if (rawBleId && !existing.rawBleId) {
                         existing.rawBleId = rawBleId;
                     }
@@ -138,6 +148,8 @@ export default function NearbyDevicesPanel() {
                         name: finalName,
                         transports: [transport],
                         rssi,
+                        distance_meters,
+                        azimuth,
                         isContact,
                         isOnline: true,
                         rawBleId: rawBleId || (transport === 'ble' ? rawId : undefined)
@@ -171,6 +183,14 @@ export default function NearbyDevicesPanel() {
                 const apiPeers = await RedAPI.getPeers().catch(() => []);
                 for (const ap of apiPeers) {
                     registerOrMergeDevice(ap.id, ap.name || '', 'wifi');
+                }
+            } catch {}
+
+            // 4. Process Proximity Radar nodes from Rust core (/api/proximity)
+            try {
+                const proxNodes = await getProximityNodes().catch(() => []);
+                for (const pn of proxNodes) {
+                    registerOrMergeDevice(pn.id, pn.name, pn.transport || 'mesh', pn.rssi, undefined, pn.distance_meters, pn.azimuth);
                 }
             } catch {}
 
@@ -284,7 +304,41 @@ export default function NearbyDevicesPanel() {
                                 background: `conic-gradient(from ${scanAngle}deg at 50% 50%, rgba(0,229,255,0.4) 0deg, transparent 60deg, transparent 360deg)`
                             }} />
 
-                            <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px #fff" }} />
+                            {/* Detected Devices Radar Blips */}
+                            {devices.map((dev, idx) => {
+                                const angle = (dev.azimuth ?? ((idx * (360 / Math.max(devices.length, 1)) + 30) % 360)) * (Math.PI / 180);
+                                const maxR = 74;
+                                const minR = 24;
+                                const r = dev.distance_meters != null
+                                    ? Math.min(maxR, Math.max(minR, (dev.distance_meters / 40) * maxR))
+                                    : dev.rssi != null
+                                        ? Math.min(maxR, Math.max(minR, ((Math.abs(dev.rssi) - 40) / 60) * maxR))
+                                        : minR + ((idx * 17) % (maxR - minR));
+                                const x = 90 + r * Math.cos(angle);
+                                const y = 90 + r * Math.sin(angle);
+                                const isGreen = dev.isContact;
+                                return (
+                                    <div
+                                        key={dev.id}
+                                        title={`${dev.name} ${dev.distance_meters != null ? `(${dev.distance_meters.toFixed(1)}m)` : dev.rssi != null ? `(${dev.rssi}dBm)` : ''}`}
+                                        style={{
+                                            position: "absolute",
+                                            left: `${x}px`,
+                                            top: `${y}px`,
+                                            transform: "translate(-50%, -50%)",
+                                            width: 8,
+                                            height: 8,
+                                            borderRadius: "50%",
+                                            background: isGreen ? "var(--accent-emerald, #00E676)" : "var(--accent-cyan, #00E5FF)",
+                                            boxShadow: isGreen ? "0 0 10px #00E676" : "0 0 10px #00E5FF",
+                                            zIndex: 5,
+                                            transition: "all 0.5s ease"
+                                        }}
+                                    />
+                                );
+                            })}
+
+                            <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#fff", boxShadow: "0 0 10px #fff", zIndex: 6 }} />
                         </div>
 
                         <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--accent-cyan)" }}>

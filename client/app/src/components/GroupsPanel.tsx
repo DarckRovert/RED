@@ -1,21 +1,50 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useRedStore } from "../store/useRedStore";
 import { RedAPI } from "../lib/api";
 import { GroupAdminModal } from "./GroupAdminModal";
 import { toast } from "./Toast";
 import { useTranslation } from "../lib/i18n/i18nEngine";
+import { Badge } from "./ui/Badge";
 
 export default function GroupsPanel() {
-    const { contacts: rawContacts, groups: rawGroups, goBack, navigate, fetchData } = useRedStore();
+    const { contacts: rawContacts, groups: rawGroups, conversations: rawConvs, goBack, navigate, fetchData } = useRedStore();
     const { t } = useTranslation();
     const contacts = Array.isArray(rawContacts) ? rawContacts : [];
     const groups = Array.isArray(rawGroups) ? rawGroups : [];
+    const conversations = Array.isArray(rawConvs) ? rawConvs : [];
     const [groupName, setGroupName] = useState("");
     const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
     const [creationStatus, setCreationStatus] = useState("");
     const [adminGroup, setAdminGroup] = useState<any | null>(null);
+
+    // Build unread + last message index from conversations for groups
+    const groupConvIndex = useMemo(() => {
+        const idx = new Map<string, { unread: number; snippet: string; ts: number }>();
+        for (const conv of conversations) {
+            const key = (conv.peer || conv.id || '').toLowerCase();
+            if (!key) continue;
+            let snippet = '';
+            const lm = (conv as any).last_message;
+            if (lm) {
+                const content = typeof lm === 'object' ? lm.content : lm;
+                const msgType = typeof lm === 'object' ? lm.msg_type : null;
+                if (msgType === 'image' || content?.startsWith('data:image')) snippet = '📷 Foto';
+                else if (msgType === 'voice' || msgType === 'audio') snippet = '🎤 Voz';
+                else if (msgType === 'video') snippet = '📹 Video';
+                else if (content && !content.startsWith('data:') && !content.startsWith('{'))
+                    snippet = content.length > 40 ? content.slice(0, 40) + '…' : content;
+                else snippet = 'Mensaje cifrado';
+            }
+            idx.set(key, {
+                unread: (conv as any).unread_count || 0,
+                snippet,
+                ts: (conv as any).last_timestamp || 0,
+            });
+        }
+        return idx;
+    }, [conversations]);
 
     const toggleContact = (hash: string) => {
         if (selectedContacts.includes(hash)) {
@@ -181,55 +210,70 @@ export default function GroupsPanel() {
                             </div>
                         ) : (
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                {groups.map((g: any) => (
-                                    <div
-                                        key={g.id}
-                                        onClick={() => navigate("chat", g.id)}
-                                        className="card-tactical-interactive"
-                                        style={{ padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                                    >
-                                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                {groups.map((g: any) => {
+                                    const convData = groupConvIndex.get((g.id || '').toLowerCase());
+                                    const unread = convData?.unread ?? 0;
+                                    const snippet = convData?.snippet || 'Canal cifrado SenderKey';
+                                    const memberCount = Array.isArray(g.members) ? g.members.length : 0;
+                                    // Deterministic color from group id
+                                    const hue = (g.id || '').split('').reduce((a: number, c: string) => a + c.charCodeAt(0), 0) % 360;
+                                    return (
+                                        <div
+                                            key={g.id}
+                                            onClick={() => navigate("chat", g.id)}
+                                            className="card-tactical-interactive"
+                                            style={{
+                                                padding: "12px 14px",
+                                                display: "flex", alignItems: "center", gap: "12px",
+                                                border: unread > 0 ? '1px solid rgba(124,77,255,0.4)' : '1px solid var(--glass-border)',
+                                                background: unread > 0 ? 'rgba(124,77,255,0.06)' : undefined,
+                                            }}
+                                        >
+                                            {/* Group Avatar */}
                                             <div style={{
-                                                width: 38, height: 38, borderRadius: "10px",
-                                                background: "linear-gradient(135deg, #7C4DFF, #5E35B1)",
+                                                width: 44, height: 44, borderRadius: "12px", flexShrink: 0,
+                                                background: `linear-gradient(135deg, hsl(${hue},70%,35%), hsl(${hue},80%,55%))`,
                                                 display: "flex", alignItems: "center", justifyContent: "center",
-                                                fontWeight: 900, color: "white", fontSize: "1.1rem"
+                                                fontWeight: 900, color: "white", fontSize: "1.15rem",
+                                                boxShadow: `0 4px 12px hsla(${hue},70%,40%,0.4)`,
                                             }}>
-                                                #
+                                                {(g.name || '#').charAt(0).toUpperCase()}
                                             </div>
-                                            <div>
-                                                <div style={{ fontSize: "0.92rem", fontWeight: 800, color: "var(--text-primary)" }}>{g.name}</div>
-                                                <div style={{ fontSize: "0.70rem", color: "var(--text-muted)", fontFamily: "JetBrains Mono, monospace" }}>
-                                                    {Array.isArray(g.members) ? g.members.length : 0} miembros
+
+                                            {/* Group Info */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
+                                                    <span style={{ fontSize: "0.92rem", fontWeight: 800, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {g.name}
+                                                    </span>
+                                                    <Badge variant="neutral" size="xs" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                                                        {memberCount} {memberCount === 1 ? 'miembro' : 'miembros'}
+                                                    </Badge>
+                                                </div>
+                                                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                    {snippet}
+                                                </div>
+                                            </div>
+
+                                            {/* Right actions */}
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-end", flexShrink: 0 }}>
+                                                {unread > 0 && (
+                                                    <Badge variant="purple" count={unread} pulse size="xs" />
+                                                )}
+                                                <div style={{ display: "flex", gap: "6px" }}>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setAdminGroup(g); }}
+                                                        className="btn-icon"
+                                                        title="Gestionar Miembros & Ajustes del Grupo"
+                                                        style={{ width: 30, height: 30 }}
+                                                    >
+                                                        ⚙️
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
-
-                                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setAdminGroup(g);
-                                                }}
-                                                className="btn-icon"
-                                                title="Gestionar Miembros & Ajustes del Grupo"
-                                                style={{ width: 34, height: 34 }}
-                                            >
-                                                ⚙️
-                                            </button>
-                                            <button
-                                                className="btn-tactical-secondary"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigate("chat", g.id);
-                                                }}
-                                                style={{ padding: "6px 14px", fontSize: "0.76rem" }}
-                                            >
-                                                Entrar ➔
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

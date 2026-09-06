@@ -789,8 +789,37 @@ async fn handle_send_message(
         msg_type_str.to_string()
     };
 
-    let content = if detected_msg_type != "text" && (is_media_data || detected_media_data.is_some()) {
-        // Encode rich metadata as JSON in the content field
+    let content = if let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(&req.content) {
+        if parsed.get("msg_type").is_some() {
+            if parsed.get("latitude").is_none() && req.latitude.is_some() {
+                parsed["latitude"] = serde_json::json!(req.latitude);
+            }
+            if parsed.get("longitude").is_none() && req.longitude.is_some() {
+                parsed["longitude"] = serde_json::json!(req.longitude);
+            }
+            if parsed.get("accuracy").is_none() && req.accuracy.is_some() {
+                parsed["accuracy"] = serde_json::json!(req.accuracy);
+            }
+            parsed.to_string()
+        } else if detected_msg_type != "text" && (is_media_data || detected_media_data.is_some() || req.latitude.is_some() || detected_msg_type == "location") {
+            let text_caption = if req.content.starts_with("data:") { "" } else { &req.content };
+            serde_json::json!({
+                "text": text_caption,
+                "msg_type": detected_msg_type,
+                "media_data": detected_media_data,
+                "mime_type": req.mime_type,
+                "width": req.width,
+                "height": req.height,
+                "duration_ms": req.duration_ms,
+                "latitude": req.latitude,
+                "longitude": req.longitude,
+                "accuracy": req.accuracy,
+                "target_message_id": req.target_message_id,
+            }).to_string()
+        } else {
+            req.content.clone()
+        }
+    } else if detected_msg_type != "text" && (is_media_data || detected_media_data.is_some() || req.latitude.is_some() || detected_msg_type == "location") {
         let text_caption = if req.content.starts_with("data:") { "" } else { &req.content };
         serde_json::json!({
             "text": text_caption,
@@ -804,8 +833,7 @@ async fn handle_send_message(
             "longitude": req.longitude,
             "accuracy": req.accuracy,
             "target_message_id": req.target_message_id,
-        })
-        .to_string()
+        }).to_string()
     } else {
         req.content.clone()
     };
@@ -910,7 +938,21 @@ async fn handle_list_conversations(State(state): State<ApiState>) -> impl IntoRe
                             // Strip JSON wrapper if present
                             if let Ok(meta) = serde_json::from_str::<serde_json::Value>(text) {
                                 if let Some(t) = meta["text"].as_str() {
-                                    return Some(t.chars().take(60).collect::<String>());
+                                    if !t.is_empty() {
+                                        return Some(t.chars().take(60).collect::<String>());
+                                    }
+                                }
+                                if let Some(mt) = meta["msg_type"].as_str() {
+                                    let label = match mt {
+                                        "location" => "📍 Ubicación",
+                                        "contact" => "👤 Contacto",
+                                        "poll" => "📊 Encuesta",
+                                        "voice" | "audio" => "🎤 Nota de voz",
+                                        "image" => "📷 Foto",
+                                        "video" => "📹 Video",
+                                        _ => "Mensaje",
+                                    };
+                                    return Some(label.to_string());
                                 }
                             }
                             Some(text.chars().take(60).collect::<String>())
@@ -989,17 +1031,19 @@ async fn handle_get_messages(
                             ) = if let MessageType::Text(text) = &m.content {
                                 if let Ok(meta) = serde_json::from_str::<serde_json::Value>(text) {
                                     if meta.get("msg_type").is_some() {
+                                        let raw_text = meta.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                                        let final_content = if raw_text.is_empty() { text.clone() } else { raw_text.to_string() };
                                         (
-                                            meta["text"].as_str().unwrap_or("").to_string(),
+                                            final_content,
                                             meta["msg_type"].as_str().unwrap_or("text").to_string(),
                                             meta["media_data"].as_str().map(String::from),
                                             meta["mime_type"].as_str().map(String::from),
                                             meta["width"].as_u64().map(|v| v as u32),
                                             meta["height"].as_u64().map(|v| v as u32),
                                             meta["duration_ms"].as_u64(),
-                                            meta["latitude"].as_f64(),
-                                            meta["longitude"].as_f64(),
-                                            meta["accuracy"].as_f64(),
+                                            meta.get("latitude").and_then(|v| v.as_f64()).or_else(|| meta.get("lat").and_then(|v| v.as_f64())),
+                                            meta.get("longitude").and_then(|v| v.as_f64()).or_else(|| meta.get("lon").and_then(|v| v.as_f64())),
+                                            meta.get("accuracy").and_then(|v| v.as_f64()),
                                             meta["target_message_id"].as_str().map(String::from),
                                         )
                                     } else if text.starts_with("data:image") || text.starts_with("/9j/") || text.starts_with("iVBORw0") {
@@ -1637,21 +1681,26 @@ async fn handle_sse(
                         continue;
                     }
 
-                    let (content, msg_type, media_data, mime_type) = match &msg.content {
+                    let (content, msg_type, media_data, mime_type, lat_sse, lon_sse, acc_sse) = match &msg.content {
                         MessageType::Text(text) => {
                             if let Ok(meta) = serde_json::from_str::<serde_json::Value>(text) {
                                 if meta.get("msg_type").is_some() {
+                                    let raw_text = meta.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                                    let final_content = if raw_text.is_empty() { text.clone() } else { raw_text.to_string() };
                                     (
-                                        meta["text"].as_str().unwrap_or("").to_string(),
+                                        final_content,
                                         meta["msg_type"].as_str().unwrap_or("text").to_string(),
                                         meta.get("media_data").and_then(|v| v.as_str()).map(String::from),
                                         meta.get("mime_type").and_then(|v| v.as_str()).map(String::from),
+                                        meta.get("latitude").and_then(|v| v.as_f64()).or_else(|| meta.get("lat").and_then(|v| v.as_f64())),
+                                        meta.get("longitude").and_then(|v| v.as_f64()).or_else(|| meta.get("lon").and_then(|v| v.as_f64())),
+                                        meta.get("accuracy").and_then(|v| v.as_f64()),
                                     )
                                 } else {
-                                    (text.clone(), "text".into(), None, None)
+                                    (text.clone(), "text".into(), None, None, None, None, None)
                                 }
                             } else {
-                                (text.clone(), "text".into(), None, None)
+                                (text.clone(), "text".into(), None, None, None, None, None)
                             }
                         }
                         MessageType::SocialPost(payload) => {
@@ -1660,9 +1709,9 @@ async fn handle_sse(
                             } else {
                                 "{}".to_string()
                             };
-                            (json_str, "social_post".into(), None, None)
+                            (json_str, "social_post".into(), None, None, None, None, None)
                         }
-                        _ => ("[media]".into(), "file".into(), None, None),
+                        _ => ("[media]".into(), "file".into(), None, None, None, None, None),
                     };
 
                     // Parse extra meta fields for SSE
@@ -1678,7 +1727,7 @@ async fn handle_sse(
                     ).to_hex();
 
                     // Full message_item payload — mirrors the frontend MessageItem interface
-                    let message_item = serde_json::json!({
+                    let mut message_item = serde_json::json!({
                         "id": msg.id.to_hex(),
                         "sender": msg.sender.short(),
                         "content": content,
@@ -1693,6 +1742,15 @@ async fn handle_sse(
                         "conversation_id": conv_id_sse,
                         "reply_to": reply_to_sse,
                     });
+                    if let Some(lat) = lat_sse {
+                        message_item["latitude"] = serde_json::json!(lat);
+                    }
+                    if let Some(lon) = lon_sse {
+                        message_item["longitude"] = serde_json::json!(lon);
+                    }
+                    if let Some(acc) = acc_sse {
+                        message_item["accuracy"] = serde_json::json!(acc);
+                    }
 
                     let mut data = serde_json::json!({
                         "from": msg.sender.short(),

@@ -416,13 +416,14 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                                 <div style={{
                                     width: 44, height: 44, borderRadius: "50%",
                                     display: "flex", alignItems: "center", justifyContent: "center",
-                                    fontSize: "1.1rem", fontWeight: 800, color: "#fff",
+                                    fontSize: c.is_group ? "1.25rem" : "1.1rem", fontWeight: 800, color: "#fff",
                                     ...avatarStyle(c.peer),
                                     boxShadow: isPeerOnline ? "0 0 10px rgba(0, 230, 118, 0.4)" : undefined,
                                     border: isPeerOnline ? "2px solid rgba(0, 230, 118, 0.7)" : "2px solid rgba(255,255,255,0.08)",
                                 }}>
-                                    {resolvePeerName(c.peer).charAt(0).toUpperCase()}
+                                    {c.is_group ? "👥" : resolvePeerName(c.peer).charAt(0).toUpperCase()}
                                 </div>
+
                                 {isPeerOnline && (
                                     <span
                                         className="online-dot online-dot--tactical"

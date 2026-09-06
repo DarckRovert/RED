@@ -302,13 +302,29 @@ export default function ChatWindow() {
         const isProtocolPacket = (m: MessageItem): boolean => {
             if (m.msg_type && PROTOCOL_MSG_TYPES.has(m.msg_type)) return true;
             if (!isGroupConv && (m.msg_type === 'group_message' || m.msg_type === 'squad_msg')) return true;
+            if (m.msg_type === 'location' || m.msg_type === 'contact' || m.msg_type === 'poll' || m.msg_type === 'voice' || m.msg_type === 'audio' || m.msg_type === 'image' || m.msg_type === 'video' || m.msg_type === 'document' || m.msg_type === 'p2p_payment' || m.msg_type === 'p2p_voucher') return false;
             if (typeof m.content === 'string' && isJsonSignaling(m.content)) return true;
             return false;
         };
 
         const list: MessageItem[] = Array.isArray(messages) ? messages : ((messages as any)?.[activeConversationId || ""] || []);
         const validMsgs = list.filter((m: MessageItem) => {
-            if (!m || !m.content) return false;
+            if (!m) return false;
+            const hasPayload = Boolean(
+                m.content ||
+                m.media_data ||
+                (m.latitude !== undefined && m.longitude !== undefined) ||
+                (m as any).lat !== undefined ||
+                m.msg_type === 'location' ||
+                m.msg_type === 'contact' ||
+                m.msg_type === 'poll' ||
+                m.msg_type === 'voice' ||
+                m.msg_type === 'audio' ||
+                m.msg_type === 'image' ||
+                m.msg_type === 'video' ||
+                m.msg_type === 'document'
+            );
+            if (!hasPayload) return false;
             if (isProtocolPacket(m)) return false;
             return true;
         }).map((m: MessageItem) => {
@@ -338,11 +354,13 @@ export default function ChatWindow() {
             if (m.id && seenIds.has(m.id)) continue;
 
             const mTs = m.timestamp ? (m.timestamp > 1e11 ? m.timestamp / 1000 : m.timestamp) : 0;
-            const contentKey = `${m.is_mine ? '1' : '0'}_${(m.content || '').trim()}`;
+            const mLat = (m as any).latitude ?? (m as any).lat ?? '';
+            const mLon = (m as any).longitude ?? (m as any).lon ?? '';
+            const contentKey = `${m.is_mine ? '1' : '0'}_${m.msg_type || 'text'}_${(m.content || '').trim()}_${mLat}_${mLon}`;
             
             const existingEntry = contentWindowMap.get(contentKey);
-            if (existingEntry && Math.abs(existingEntry.ts - mTs) < 30) {
-                // Duplicate within 30s window — skip redundant render bubble
+            if (existingEntry && Math.abs(existingEntry.ts - mTs) < 15 && (!m.id || m.id === deduped[existingEntry.index]?.id)) {
+                // Duplicate within 15s window — skip redundant render bubble
                 continue;
             }
 
@@ -945,9 +963,14 @@ export default function ChatWindow() {
                 const lat = loc.lat!.toFixed(6);
                 const lon = loc.lon!.toFixed(6);
                 const geoUri = `geo:${lat},${lon}`;
+                const textFallback = `📍 Ubicación Táctica: ${lat}, ${lon}\n${geoUri}\nhttps://maps.google.com/?q=${lat},${lon}`;
                 const payload = {
+                    msg_type: "location",
+                    text: textFallback,
                     lat: Number(lat),
                     lon: Number(lon),
+                    latitude: Number(lat),
+                    longitude: Number(lon),
                     alt: loc.alt ? Math.round(loc.alt) : undefined,
                     accuracy: loc.accuracy ? Math.round(loc.accuracy) : undefined,
                     is_estimated: loc.isEstimated,
@@ -955,7 +978,15 @@ export default function ChatWindow() {
                     geo_uri: geoUri,
                     timestamp: Date.now()
                 };
-                await sendMessage(JSON.stringify(payload), { msg_type: "location" });
+                await sendMessage(JSON.stringify(payload), {
+                    msg_type: "location",
+                    latitude: Number(lat),
+                    longitude: Number(lon),
+                    accuracy: loc.accuracy ? Math.round(loc.accuracy) : undefined,
+                    caption: textFallback,
+                    lat: Number(lat),
+                    lon: Number(lon)
+                });
                 TacticalAudioEngine.playMessageSent();
                 toast.success("Ubicación táctica compartida");
             } else {
@@ -969,14 +1000,18 @@ export default function ChatWindow() {
     const handleShareContact = async (contactData: { identity_hash: string; display_name: string; public_key?: string | null; avatar_url?: string | null }) => {
         if (!peerHash) return;
         try {
+            const textFallback = `👤 Contacto RED: ${contactData.display_name || "Contacto"}\nID: ${contactData.identity_hash}`;
             const payload = {
+                msg_type: "contact",
+                text: textFallback,
                 identity_hash: contactData.identity_hash,
                 display_name: contactData.display_name || "Contacto RED",
                 public_key: contactData.public_key || "",
                 avatar_url: contactData.avatar_url || ""
             };
             await sendMessage(JSON.stringify(payload), {
-                msg_type: "contact"
+                msg_type: "contact",
+                caption: textFallback
             });
             TacticalAudioEngine.playMessageSent();
             toast.success(`Contacto "${contactData.display_name}" compartido`);
@@ -1124,7 +1159,10 @@ export default function ChatWindow() {
     const handleCreatePoll = async (pollData: { question: string; options: string[]; allowMultiple?: boolean }) => {
         if (!peerHash) return;
         try {
+            const textFallback = `📊 Encuesta: ${pollData.question}`;
             const payload = {
+                msg_type: "poll",
+                text: textFallback,
                 question: pollData.question,
                 options: (pollData.options ?? []).map((text, idx) => ({ id: idx, text, votes: 0 })),
                 allow_multiple: Boolean(pollData.allowMultiple),
@@ -1132,6 +1170,7 @@ export default function ChatWindow() {
             };
             await sendMessage(JSON.stringify(payload), {
                 msg_type: "poll",
+                caption: textFallback
             });
             TacticalAudioEngine.playMessageSent();
         } catch {

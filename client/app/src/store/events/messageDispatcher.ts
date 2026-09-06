@@ -1853,6 +1853,8 @@ export async function dispatchIncomingMessage(
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (normalizedItem.caption ? `📹 ${normalizedItem.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'contact' ? '👤 Contacto' :
+                            msgType === 'poll' ? '📊 Encuesta' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
                             (normalizedItem.content?.startsWith('data:image') ? (normalizedItem.caption ? `📷 ${normalizedItem.caption}` : '📷 Foto') :
@@ -1945,6 +1947,8 @@ export async function dispatchIncomingMessage(
                             msgType === 'voice' ? '🎤 Nota de voz' :
                             msgType === 'video' ? (item.caption ? `📹 ${item.caption}` : '📹 Video') :
                             msgType === 'location' ? '📍 Ubicación' :
+                            msgType === 'contact' ? '👤 Contacto' :
+                            msgType === 'poll' ? '📊 Encuesta' :
                             msgType === 'p2p_payment' ? '🪙 Pago RED P2P' :
                             msgType === 'p2p_voucher' ? '🪙 Vale RED P2P' :
                             (item.content?.startsWith('data:image') ? (item.caption ? `📷 ${item.caption}` : '📷 Foto') :
